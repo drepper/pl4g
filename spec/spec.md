@@ -227,20 +227,26 @@ The attributes that mark them are:
 The three kinds of test are one attribute with a parameter rather than three attributes, because they are three answers to one
 question.  These attributes exclude one another: a function is one of these things or none of them.
 
-The startup function takes no parameters and returns `i32`:
+The startup function takes no parameters and returns `u8`:
 
 ```
 @[startup]
-fn main() → i32:
+fn main() → u8:
     0
 ```
 
 The value it returns becomes the exit status of the process.  Control is transferred to it without arguments, so a signature with
-parameters would leave the arguments undefined, and a signature returning something else would leave the exit status undefined.
+parameters would leave the arguments undefined.
 
-Compare C, where `main` has two accepted signatures and an implicit `return 0`; Go, where `main` returns nothing and the status is
-set by calling into the library; and Rust, where `main` may return any type implementing a trait that decides the status.  The
-choice here is the most explicit of these: one signature, and the status is the returned value and nothing else.
+The return type is `u8` because that is how wide an exit status is.  What a program hands to the system is truncated to eight bits
+before anything can observe it, so a wider type would let a program state a status that cannot arrive -- written with a wider type,
+`return 256` would compile and the process would exit with 0, which is precisely the kind of surprising interpretation of a value
+this language does not admit.  With `u8` the literal is out of range and the compiler says so, where it is written.
+
+Compare C, where `main` returns `int` and the value is silently truncated; Go, where `main` returns nothing and the status is set
+by calling into the library with an `int` that is likewise truncated; and Rust, whose `ExitCode` is built on a `u8` for this same
+reason.  The choice here is the most explicit of these: one signature, the status is the returned value and nothing else, and the
+type says what a status can actually be.
 
 A constructor and a destructor take no parameters and return `void`, because the sequence that calls them has nothing to pass and
 nowhere to put a result.

@@ -3,5 +3,5 @@
 
 ※ Control is transferred to the startup function without arguments.
 @[startup]
-fn main(count: i32) → i32:
+fn main(count: i32) → u8:
     0

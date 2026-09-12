@@ -5,7 +5,7 @@
 ※ Compilation covers the whole program, so two definitions of one name clash
 ※ even when they are in different files.
 @[startup]
-fn main() → i32:
+fn main() → u8:
     0
 
 fn main() → i32:

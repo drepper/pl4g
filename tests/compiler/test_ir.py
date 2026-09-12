@@ -9,15 +9,15 @@ from pypl4g.ir.inst import (BinaryInst, BinOp, BlockTarget, CmpInst, CmpPred,
 from pypl4g.ir.module import Module
 from pypl4g.ir.printer import render_module
 from pypl4g.ir.reader import IRSyntaxError, read_module
-from pypl4g.ir.types import BOOL, I32
+from pypl4g.ir.types import BOOL, I32, U8
 from pypl4g.ir.verify import verify
 
 EXIT0 = """; pl4g-ir 1
 module "exit0.pl4g" triple "x86_64-linux-none"
 
-fn @main() \N{RIGHTWARDS ARROW} i32 internal cconv(pl4g.v0) special(startup) {
+fn @main() \N{RIGHTWARDS ARROW} u8 internal cconv(pl4g.v0) special(startup) {
 block0:
-  ret.i32 0
+  ret.u8 0
 }
 """
 
@@ -38,9 +38,9 @@ block1(%3: i32, %4: i32):
 def build_exit0() -> Module:
     """A module holding the smallest conforming program."""
     module = Module("exit0.pl4g")
-    func = Function("main", module.types.func_type((), I32),
+    func = Function("main", module.types.func_type((), U8),
                     FuncAttrs(special=SpecialKind.STARTUP))
-    func.add_block().append(RetInst(module.int_const(I32, 0)))
+    func.add_block().append(RetInst(module.int_const(U8, 0)))
     module.add_function(func)
     module.startup = func
     return module
@@ -101,7 +101,7 @@ def test_verifier_rejects_two_terminators() -> None:
     """A block ends in exactly one terminator."""
     module = build_exit0()
     block = module.functions["main"].blocks[0]
-    block.append(RetInst(module.int_const(I32, 0)))
+    block.append(RetInst(module.int_const(U8, 0)))
     with pytest.raises(InternalError, match="terminator"):
         verify(module)
 
@@ -140,7 +140,7 @@ def test_verifier_rejects_a_constant_out_of_range() -> None:
     """A constant that its type cannot represent is a defect, not a wrap-around."""
     module = build_exit0()
     block = module.functions["main"].blocks[0]
-    block.insts = [RetInst(module.int_const(I32, 1 << 40))]
+    block.insts = [RetInst(module.int_const(U8, 1 << 40))]
     with pytest.raises(InternalError, match="does not fit"):
         verify(module)
 

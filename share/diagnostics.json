@@ -988,8 +988,13 @@
       "number": 4404,
       "name": "LANG_FUNCDEF_SPECIAL_BAD_SIGNATURE",
       "severity": "error",
-      "message": "the startup function must have the signature 'fn NAME() → i32', but '{name}' {problem}",
+      "message": "the startup function must have the signature 'fn NAME() → {type}', but '{name}' {problem}",
       "args": [
+        {
+          "name": "type",
+          "type": "string",
+          "description": "the type a startup function must return"
+        },
         {
           "name": "name",
           "type": "string",
@@ -1001,11 +1006,11 @@
           "description": "how the signature differs"
         }
       ],
-      "cause": "Control is transferred to the startup function without arguments, and the value it returns becomes the exit status of the process.  A different signature would leave either the arguments or the exit status undefined.",
+      "cause": "Control is transferred to the startup function without arguments, and the value it returns becomes the exit status of the process.  A signature with parameters would leave the arguments undefined.  The return type is the width of an exit status and nothing wider: what a program passes to the system is truncated to eight bits before anything can observe it, so a wider type would let a program state a status that cannot arrive.",
       "spec": {
         "document": "spec/spec.md",
         "section": "The Language / File Structure / Function Definition / Special Functions",
-        "requirement": "the startup function.  This is the function control is transferred to after the startup phase is completed."
+        "requirement": "The startup function takes no parameters and returns `u8`, the width of an exit status."
       },
       "since": "0.1",
       "default_enabled": true,

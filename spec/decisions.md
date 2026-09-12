@@ -71,7 +71,7 @@ reported by a warning that is off by default, since it is accepted usage and not
 
 ## 2026-09-12T19:40+02:00 — language
 
-**The startup function takes no parameters, returns `i32`, and its result is the exit status**
+**The startup function takes no parameters and its result is the exit status**
 
 Considered: C's two accepted signatures for `main` with an implicit `return 0`; Go's `main`, which returns nothing and sets the
 status through a library call; Rust's `main`, which may return any type implementing a trait that decides the status.
@@ -79,9 +79,10 @@ status through a library call; Rust's `main`, which may return any type implemen
 Chosen as the most explicit of these.  Control is transferred to the startup function without arguments, so parameters would be
 undefined, and the status is the returned value and nothing else.
 
+The return type was `i32` in the first version; see the entry of 2026-09-13, which replaced it.
+
 **Open:** the specification makes every operation that can fail return a sum type.  Whether the startup function's return type
-eventually becomes such a sum, with the error variant deciding a non-zero status, is not settled.  `i32` is what the first version
-uses.
+eventually becomes such a sum, with the error variant deciding a non-zero status, is not settled.
 
 ## 2026-09-12T19:40+02:00 — language
 
@@ -291,6 +292,27 @@ model does not require one, which is the point of classes being a registry rathe
 Nothing narrower than a full register exists either: an `i32` lives in a sixty-four bit register, sign extended, and it is the
 instruction that says how wide the operation is.  The unit and view model accommodates a unit with exactly one view without any
 special case.
+
+## 2026-09-13T00:20+02:00 — language
+
+**The startup function returns `u8`**
+
+Decided on the user's direction, replacing the `i32` the first version used.
+
+An exit status is eight bits wide.  What a program hands to the system is truncated to eight bits before anything can observe it,
+so a wider return type lets a program name a status that cannot arrive: written with `i32`, `return 256` compiles and the process
+exits with 0.  That is exactly the surprising interpretation of a value the specification rules out, and it is silent.  With `u8`
+the literal is out of range and the compiler says so, at the point where it is written.
+
+Considered: `i32` as in C, where the truncation is silent; a dedicated `status` type, which would need a conversion from every
+integer and buys nothing over the type that already means "eight bits, unsigned"; and a sum type whose error variant decides the
+status, which remains open and is not what a first version needs.
+
+Nothing changed in code generation.  A value of eight bits is returned in the same register the wider type used, because that is
+where the calling convention puts a narrow value on all three architectures; only the type the compiler checks against changed.
+
+The compiler enforces it: a startup function that returns anything else is diagnostic 4404, whose message now names the required
+type rather than spelling it in prose, so that the catalog and the compiler cannot come to disagree about what it is.
 
 ---
 

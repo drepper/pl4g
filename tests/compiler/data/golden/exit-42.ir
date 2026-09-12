@@ -1,7 +1,7 @@
 ; pl4g-ir 1
 module "exit-42.pl4g" triple "x86_64-linux-none"
 
-fn @main() → i32 internal cconv(pl4g.v0) special(startup) {
+fn @main() → u8 internal cconv(pl4g.v0) special(startup) {
 block0:
-  ret.i32 42
+  ret.u8 42
 }

@@ -20,8 +20,12 @@ from ..source.location import Span
 from .attributes import (AttrSpec, AttrTarget, BoundAttr, SPECIAL_OF_TEST_KIND,
                          TARGET_NAMES, lookup)
 
-#: The signature every startup function must have.
-STARTUP_RETURN_TYPE_NAME = "i32"
+#: The type every startup function must return.
+#:
+#: The exit status of a process is eight bits wide: what a program passes to the
+#: system is truncated to that before anything can observe it.  A wider type
+#: would let a program state a status that cannot arrive.
+STARTUP_RETURN_TYPE_NAME = "u8"
 
 
 @dataclass(slots=True)
@@ -110,7 +114,7 @@ class Checker:
                 pass
 
     def _check_startup_signature(self, func: Function, node: ast.FuncDef) -> None:
-        """Check that the startup function takes nothing and returns i32."""
+        """Check that the startup function takes nothing and returns the status."""
         expected = BUILTIN_TYPES[STARTUP_RETURN_TYPE_NAME]
         problem: str | None = None
         if func.ty.params:
@@ -119,7 +123,8 @@ class Checker:
             problem = "".join(("returns '", func.ty.ret.render(), "'"))
         if problem is not None:
             self._diags.emit(D.LANG_FUNCDEF_SPECIAL_BAD_SIGNATURE, node.name_span,
-                             name=func.name, problem=problem)
+                             name=func.name, type=STARTUP_RETURN_TYPE_NAME,
+                             problem=problem)
 
     def _check_ctor_signature(self, func: Function, node: ast.FuncDef, kind: str) -> None:
         """Check that a constructor or destructor takes nothing and returns void."""

@@ -3,5 +3,5 @@
 
 ※ A function cannot be both the startup function and a destructor.
 @[startup, destructor]
-fn main() → i32:
+fn main() → u8:
     0

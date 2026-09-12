@@ -18,7 +18,7 @@ from conftest import (ARCH_TOOLS, architecture_of, compiler_targets, describe,
 
 SOURCE = """\N{REFERENCE MARK} A program that exits with status 0.
 @[startup]
-fn main() \N{RIGHTWARDS ARROW} i32:
+fn main() \N{RIGHTWARDS ARROW} u8:
     0
 """
 

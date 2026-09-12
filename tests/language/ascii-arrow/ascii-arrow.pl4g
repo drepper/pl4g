@@ -8,5 +8,5 @@
 ※ more than one character and so claims no character for itself.  The warning
 ※ is off by default; this test asks for it.
 @[startup]
-fn main() -> i32:
+fn main() -> u8:
     0

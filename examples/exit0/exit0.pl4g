@@ -5,5 +5,5 @@
 ※※ exit status of the process.
 
 @[startup]
-fn main() → i32:
+fn main() → u8:
     0

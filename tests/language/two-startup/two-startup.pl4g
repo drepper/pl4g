@@ -4,9 +4,9 @@
 
 ※ Exactly one function may be marked as the startup function.
 @[startup]
-fn first() → i32:
+fn first() → u8:
     0
 
 @[startup]
-fn second() → i32:
+fn second() → u8:
     0

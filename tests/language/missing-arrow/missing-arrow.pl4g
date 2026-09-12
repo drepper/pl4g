@@ -3,5 +3,5 @@
 
 ※ A function header names its return type after an arrow.
 @[startup]
-fn main() i32:
+fn main() u8:
     0

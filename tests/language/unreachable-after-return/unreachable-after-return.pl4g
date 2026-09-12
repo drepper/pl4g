@@ -4,6 +4,6 @@
 
 ※ Statements after a return can never run.
 @[startup]
-fn main() → i32:
+fn main() → u8:
     return 3
     4

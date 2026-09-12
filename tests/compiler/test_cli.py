@@ -14,7 +14,7 @@ from conftest import run_compiler
 from pypl4g.driver.options import ExitCode, load_option_table
 
 GOOD = """@[startup]
-fn main() \N{RIGHTWARDS ARROW} i32:
+fn main() \N{RIGHTWARDS ARROW} u8:
     0
 """
 
@@ -106,7 +106,7 @@ def test_unknown_warning_name_is_reported(source: Path, tmp_path: Path) -> None:
 def test_warnings_can_be_turned_off_and_made_errors(tmp_path: Path) -> None:
     """A warning is controlled by the option its catalog entry declares."""
     source = tmp_path / "t.pl4g"
-    source.write_text("@[startup]\nfn main() \N{RIGHTWARDS ARROW} i32:\n    return 0\n",
+    source.write_text("@[startup]\nfn main() \N{RIGHTWARDS ARROW} u8:\n    return 0\n",
                       encoding="utf-8")
     output = tmp_path / "out"
     plain = run_compiler(["-o", str(output), str(source)])

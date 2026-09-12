@@ -3,5 +3,5 @@
 
 ※ An unrecognized attribute is an error, never a silently ignored annotation.
 @[startup, entrypoint]
-fn main() → i32:
+fn main() → u8:
     0
