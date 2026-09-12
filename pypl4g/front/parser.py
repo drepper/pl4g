@@ -15,7 +15,7 @@ from .token import COMMENT_GLYPH, TokKind, Token
 
 #: Tokens at which error recovery stops, because a new definition can begin there.
 _RECOVERY: Final[frozenset[TokKind]] = frozenset(
-    (TokKind.KW_FN, TokKind.KW_VAR, TokKind.KW_TYPE, TokKind.AT_LBRACKET, TokKind.EOF))
+    (TokKind.KW_FN, TokKind.KW_LET, TokKind.KW_TYPE, TokKind.AT_LBRACKET, TokKind.EOF))
 
 
 class _Bail(Exception):
@@ -118,7 +118,7 @@ class Parser:
         self._skip_newlines()
         if self._check(TokKind.KW_FN):
             return self._parse_function(attrs, doc)
-        if self._check(TokKind.KW_VAR):
+        if self._check(TokKind.KW_LET):
             return self._parse_variable(attrs, doc)
         self._diags.emit(D.LANG_FILESTRUCT_UNEXPECTED_TOPLEVEL, self._current.span,
                          construct=self._current.describe())
@@ -126,13 +126,13 @@ class Parser:
 
     def _parse_variable(self, attrs: tuple[ast.Attribute, ...] = (),
                         doc: str | None = None) -> ast.VarDef:
-        """Parse ``var NAME ':' [TYPE] '=' VALUE``.
+        """Parse ``let NAME ':' [TYPE] '=' VALUE``.
 
         The colon is always there; what varies is whether a type follows it.
         Written without one and without a space the two characters read as
         ``:=``, but they are the same two tokens either way.
         """
-        start = self._expect(TokKind.KW_VAR).span
+        start = self._expect(TokKind.KW_LET).span
         name_token = self._expect(TokKind.IDENT)
         self._expect(TokKind.COLON, D.LANG_VARDEF_EXPECTED_COLON)
         declared: ast.TypeRef | None = None
@@ -306,7 +306,7 @@ class Parser:
 
     def _parse_statement(self) -> ast.Stmt:
         """Parse one statement."""
-        if self._check(TokKind.KW_VAR):
+        if self._check(TokKind.KW_LET):
             return self._parse_variable()
         if self._check(TokKind.KW_RETURN):
             start = self._advance().span

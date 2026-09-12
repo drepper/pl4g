@@ -84,6 +84,7 @@ IMPL_BACKEND_UNENCODABLE: Final[DiagID] = 8502
 
 # 9000-9499: image generation and incremental compilation
 IMPL_IMAGE_UNDEFINED_SYMBOL: Final[DiagID] = 9001
+IMPL_IMAGE_VALUE_OUT_OF_RANGE: Final[DiagID] = 9002
 
 # 9900-9999: internal compiler errors
 IMPL_INTERNAL_ERROR: Final[DiagID] = 9901

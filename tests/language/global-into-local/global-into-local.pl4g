@@ -4,9 +4,9 @@
 
 ※ Reading a variable that lives in memory, and binding the result to one that
 ※ does not.
-var stored: u8 = 5u8
+let stored: u8 = 5u8
 
 @[startup]
 fn main() → u8:
-    var status: u8 = stored
+    let status: u8 = stored
     status

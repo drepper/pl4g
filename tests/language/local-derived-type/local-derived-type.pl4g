@@ -7,5 +7,5 @@
 ※ as ':=', but they are the same two tokens either way.
 @[startup]
 fn main() → u8:
-    var status := 9u8
+    let status := 9u8
     status

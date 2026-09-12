@@ -347,7 +347,9 @@ the same string without anything being passed along.
 
 ## 2026-09-13T03:00+02:00 — language
 
-**A variable is defined with `var NAME: TYPE = VALUE`, and the colon is always written**
+**A variable is defined with `NAME: TYPE = VALUE` after a keyword, and the colon is always written**
+
+*The keyword was `var` when this was written; see the entry of 2026-09-13T11:00, which replaced it with `let`.*
 
 Decided on the user's direction.  The type after the colon may be left out, in which case it is the type of the value; written
 without a space the two characters read as `:=`, but they are the same two tokens and `var x : = 3u8` is the same definition.
@@ -356,7 +358,7 @@ Considered: `x: u8 = 3u8` with `x := 3u8`, after Go and Odin, which is terse but
 ambiguous between a definition, an assignment and an expression until the parser has looked past the name; and `let`, after Rust,
 Swift and ML, which parses as easily but in every language that has it binds something that does not change.
 
-The keyword was kept for the reason `@[` was chosen for attributes: a parser commits on the first token, which is what keeps the
+A keyword was kept for the reason `@[` was chosen for attributes: a parser commits on the first token, which is what keeps the
 grammar context-free and the compilation parallelizable.  Keeping the colon in both forms is what makes them one construct with a
 part left out, rather than two constructs that happen to resemble each other.
 
@@ -438,6 +440,46 @@ The second was a gap that would have become a defect: the pair of instructions R
 independent halves, because the second is measured from the first.  A fixup can now say what it is measured from.
 
 Both are checked against words taken from the GNU linker, with its relaxation switched off so that the pair survives to be read.
+
+## 2026-09-13T11:00+02:00 — language
+
+**The definition keyword is `let`, not `var`**
+
+Decided on the user's direction, replacing the `var` chosen earlier the same day.
+
+The argument made against `let` at the time was that in Rust, Swift and ML it binds something that does not change, so using it for
+an assignable variable would make the word say the opposite of what it does.  That argument was answered by the language itself.
+The specification calls for a predominantly functional style with pure functions, curried functions and combinators; assignment is
+not part of the language and may never be the ordinary way to write it.  A word whose whole history is in that tradition -- ML,
+Haskell, Rust, Swift, and mathematical writing before any of them -- is the right one for a language of that shape, and the
+objection only has force in a language where reassignment is the default, which this is not.
+
+What `let` gives up is the pairing with `var` that Kotlin and Scala use to distinguish the two.  If the language later wants a form
+that can be reassigned, the pair is available: `let` for the definition and something else for the other, which is the direction
+Rust took with `let mut` rather than the one Kotlin took.  That choice belongs with the rules on purity and effects it interacts
+with, which are not specified.
+
+Nothing else changed.  The construct, the colon that is always written, and the type that may be left out are all as they were; the
+intermediate representation uses the same word, since it denotes the same thing and two spellings would only invite a reader to
+look for a difference.
+
+## 2026-09-13T11:00+02:00 — language
+
+**A value too large for its type is an error, at every point where a value meets a type**
+
+Confirmed and extended on the user's direction.  A program that stored 300 in a `u8` and read back 44 would not be behaving as it
+reads, and no rule about which bits survive would make it so.  C and Go narrow silently here; C++ does unless the initializer is
+braced; Rust rejects a literal that does not fit but wraps a conversion unless it is asked not to.
+
+The semantic analysis already refused every such value a program can write, in a literal or in the value a variable is defined
+with, and tests now cover each way of writing one -- with the type declared, with it derived from a suffix, with a literal that has
+no suffix, and at the boundary of every integer type.
+
+What was missing was underneath.  Three places turned a value into bytes by masking it to a width: the initial contents of a
+variable, an immediate in an instruction, and a patched displacement.  None of them can be reached by a program that compiled, so
+each is now an error reporting a defect in the compiler rather than a silent wrap -- which is the same rule, applied where it is
+least likely to be noticed if it is broken.  The displacement case had a further consequence: a branch too far to reach was
+wrapping rather than being reported, on the one architecture whose relocations had no range check.
 
 ---
 

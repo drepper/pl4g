@@ -10,7 +10,7 @@ targets -- how an address is computed and how a value of a given width is loaded
 -- is in each backend.
 """
 
-from ..ir.layout import DataLayout, align_of, size_of
+from ..ir.layout import DataLayout, align_of, encode_scalar, size_of
 from ..ir.module import GlobalVar, Module
 from ..ir.value import BoolConst, IntConst
 from ..mc.asmbuilder import Assembler
@@ -50,14 +50,17 @@ def symbol_of(var: GlobalVar) -> str:
 
 
 def initial_bytes(var: GlobalVar, layout: DataLayout) -> bytes:
-    """The bytes a variable starts out holding."""
-    size = size_of(var.value_type, layout)
+    """The bytes a variable starts out holding.
+
+    A value too large for the variable's type is refused, never stored with its
+    upper bits dropped: a program that began with a value other than the one it
+    named would not be behaving as it reads.
+    """
     initializer = var.initializer
-    order = "little" if layout.little_endian else "big"
     match initializer:
         case IntConst():
-            return (initializer.value & ((1 << (size * 8)) - 1)).to_bytes(size, order)  # type: ignore[arg-type]
+            return encode_scalar(initializer.value, var.value_type, layout)
         case BoolConst():
-            return (1 if initializer.value else 0).to_bytes(size, order)  # type: ignore[arg-type]
+            return encode_scalar(1 if initializer.value else 0, var.value_type, layout)
         case _:
-            return bytes(size)
+            return bytes(size_of(var.value_type, layout))

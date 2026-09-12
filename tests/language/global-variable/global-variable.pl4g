@@ -3,7 +3,7 @@
 ※ pl4g-test: diag=none
 
 ※ A variable at the top level lives in the image and is read from memory.
-var counter: u8 = 42u8
+let counter: u8 = 42u8
 
 @[startup]
 fn main() → u8:

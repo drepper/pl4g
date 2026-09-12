@@ -1,8 +1,8 @@
 ※ pl4g-test: compile=fail
 ※ pl4g-test: expect-diag 2006 LANG_SYNTAX_INTEGER_RANGE
 
-let counter: u8 = 300u8
-
+※ The type comes from the declaration, and the value still has to fit it.
 @[startup]
 fn main() → u8:
-    counter
+    let status: u8 = 300
+    status

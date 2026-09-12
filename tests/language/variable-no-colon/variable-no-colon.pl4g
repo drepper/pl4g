@@ -4,5 +4,5 @@
 ※ The colon is what marks the construct as a definition, and is always there.
 @[startup]
 fn main() → u8:
-    var status = 3u8
+    let status = 3u8
     status

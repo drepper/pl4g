@@ -1,0 +1,15 @@
+※ pl4g-test: compile=ok opt=0,1
+※ pl4g-test: run=native,qemu exit=255
+※ pl4g-test: diag=none
+
+※ The largest value of each type is accepted; one more would not be.
+let byte_max: u8 = 255u8
+let half_max: u16 = 65535u16
+let word_max: u32 = 4294967295u32
+let wide_max: u64 = 18446744073709551615u64
+let signed_byte_max: i8 = 127i8
+let signed_wide_max: i64 = 9223372036854775807i64
+
+@[startup]
+fn main() → u8:
+    byte_max

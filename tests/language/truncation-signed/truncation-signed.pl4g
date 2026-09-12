@@ -1,8 +1,9 @@
 ※ pl4g-test: compile=fail
 ※ pl4g-test: expect-diag 2006 LANG_SYNTAX_INTEGER_RANGE
 
-let counter: u8 = 300u8
+※ 200 fits in a u8 but not in an i8; the range is the type's, not the width's.
+let value: i8 = 200i8
 
 @[startup]
 fn main() → u8:
-    counter
+    1u8

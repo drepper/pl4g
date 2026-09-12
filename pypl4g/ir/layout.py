@@ -81,8 +81,28 @@ def _align_up(value: int, alignment: int) -> int:
     return value if remainder == 0 else value + alignment - remainder
 
 
+class ValueOutOfRangeError(Exception):
+    """A value does not fit the room its type gives it."""
+
+    def __init__(self, value: int, ty: Type) -> None:
+        super().__init__("".join((str(value), " does not fit in '", ty.render(), "'")))
+        self.value = value
+        self.ty = ty
+
+
 def encode_scalar(value: int, ty: Type, layout: DataLayout) -> bytes:
-    """The bytes a scalar occupies in memory."""
+    """The bytes a scalar occupies in memory.
+
+    A value that does not fit is refused rather than stored with its upper bits
+    dropped.  The semantic analysis has already refused every one a program can
+    write, so reaching this is a defect in the compiler -- but a wrapped value
+    is exactly the kind of quiet reinterpretation the language rules out, and it
+    would be as wrong here as anywhere.
+    """
     size = size_of(ty, layout)
+    low = -(1 << (size * 8 - 1)) if size else 0
+    high = (1 << (size * 8)) - 1 if size else 0
+    if not low <= value <= high:
+        raise ValueOutOfRangeError(value, ty)
     order = "little" if layout.little_endian else "big"
     return (value & ((1 << (size * 8)) - 1)).to_bytes(size, order)  # type: ignore[arg-type]

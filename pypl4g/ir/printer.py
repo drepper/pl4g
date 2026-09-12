@@ -155,7 +155,7 @@ def render_global(var: object, out: list[str]) -> None:
     assert isinstance(var, GlobalVar)
     initializer = var.initializer
     text = str(initializer.value) if isinstance(initializer, _IntConst) else "undef"
-    out.append("".join(("var @", var.name, ": ", var.value_type.render(), " ",
+    out.append("".join(("let @", var.name, ": ", var.value_type.render(), " ",
                         var.linkage.value, " = ", text)))
 
 

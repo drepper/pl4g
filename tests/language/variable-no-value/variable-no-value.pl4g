@@ -4,5 +4,5 @@
 ※ There is no form that leaves a variable without a value.
 @[startup]
 fn main() → u8:
-    var status: u8
+    let status: u8
     status

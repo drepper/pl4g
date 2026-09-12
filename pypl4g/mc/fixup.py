@@ -155,10 +155,15 @@ def apply_little_endian(data: bytearray, offset: int, fixup: MCFixup,
     """Store *value* as a little-endian field of the kind's width.
 
     This is how a byte-stream architecture patches: the field holds nothing but
-    the value, so it is overwritten outright.
+    the value, so it is overwritten outright.  A value the field cannot hold is
+    refused -- a displacement stored with its upper bits dropped would branch
+    somewhere other than where the program said.
     """
     size = fixup.kind.size
-    data[offset:offset + size] = (value & ((1 << (size * 8)) - 1)).to_bytes(size, "little")
+    bits = size * 8
+    if not -(1 << (bits - 1)) <= value < (1 << bits):
+        raise FixupRangeError(fixup.kind, value)
+    data[offset:offset + size] = (value & ((1 << bits) - 1)).to_bytes(size, "little")
 
 
 def signed_fits(value: int, bits: int) -> bool:

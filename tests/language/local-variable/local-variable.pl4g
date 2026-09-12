@@ -5,5 +5,5 @@
 ※ A variable inside a function, with its type stated.
 @[startup]
 fn main() → u8:
-    var status: u8 = 7u8
+    let status: u8 = 7u8
     status

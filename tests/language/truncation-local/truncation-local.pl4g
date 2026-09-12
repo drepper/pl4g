@@ -1,8 +1,7 @@
 ※ pl4g-test: compile=fail
 ※ pl4g-test: expect-diag 2006 LANG_SYNTAX_INTEGER_RANGE
 
-let counter: u8 = 300u8
-
 @[startup]
 fn main() → u8:
-    counter
+    let status: u8 = 256u8
+    status

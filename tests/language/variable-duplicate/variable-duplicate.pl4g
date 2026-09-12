@@ -4,6 +4,6 @@
 
 @[startup]
 fn main() → u8:
-    var status := 1u8
-    var status := 2u8
+    let status := 1u8
+    let status := 2u8
     status

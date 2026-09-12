@@ -7,23 +7,23 @@
 ※
 ※ The signed ones hold positive values: writing a negative literal needs a
 ※ unary minus, which the expression syntax does not have yet.
-var unsigned_byte: u8 = 200u8
-var signed_byte: i8 = 3i8
-var unsigned_half: u16 = 40000u16
-var signed_half: i16 = 300i16
-var unsigned_word: u32 = 3000000000u32
-var signed_word: i32 = 70000i32
-var unsigned_wide: u64 = 42u64
-var signed_wide: i64 = 42i64
+let unsigned_byte: u8 = 200u8
+let signed_byte: i8 = 3i8
+let unsigned_half: u16 = 40000u16
+let signed_half: i16 = 300i16
+let unsigned_word: u32 = 3000000000u32
+let signed_word: i32 = 70000i32
+let unsigned_wide: u64 = 42u64
+let signed_wide: i64 = 42i64
 
 @[startup]
 fn main() → u8:
-    var a: u8 = unsigned_byte
-    var b: i8 = signed_byte
-    var c: u16 = unsigned_half
-    var d: i16 = signed_half
-    var e: u32 = unsigned_word
-    var f: i32 = signed_word
-    var g: u64 = unsigned_wide
-    var h: i64 = signed_wide
+    let a: u8 = unsigned_byte
+    let b: i8 = signed_byte
+    let c: u16 = unsigned_half
+    let d: i16 = signed_half
+    let e: u32 = unsigned_word
+    let f: i32 = signed_word
+    let g: u64 = unsigned_wide
+    let h: i64 = signed_wide
     1u8

@@ -306,6 +306,12 @@ narrow value as it reads it.  On the two fixed-width architectures no instructio
 two steps and then read through.  The two differ in how: one computes the page the address lies in and then adds the offset within
 it, and the other adds an upper and a lower half, with the second instruction measuring from the first rather than from itself.
 
+Nothing narrows a value without saying so.  The semantic analysis refuses every one a program can write that does not fit its
+type, and the three places further down that turn a value into bytes -- the initial contents of a variable, an immediate in an
+instruction, and a patched displacement -- refuse one too rather than storing it with its upper bits dropped.  Those cannot be
+reached from a program that compiled, so reaching one reports a defect in the compiler; a wrapped value would be the same quiet
+reinterpretation there as anywhere, and it would be harder to notice.
+
 There is no register allocator, so every value a function computes goes to the register a result is returned in.  That is correct
 exactly while no two values are live at once, and the backend checks it: a function that would need two is reported as beyond what
 this compiler generates rather than compiled wrongly.

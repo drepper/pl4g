@@ -57,6 +57,10 @@ class Checker:
         self._name_spans: dict[str, Span] = {}
         #: The names bound inside the function being checked, innermost last.
         self._scopes: list[dict[str, _Local]] = []
+        #: The variable being given a value, while one is being checked.  It is
+        #: what lets a type that does not match say which variable it is about
+        #: rather than borrow the wording of a return.
+        self._initializing: str | None = None
 
     # -- entry point -----------------------------------------------------------
 
@@ -514,7 +518,11 @@ class Checker:
             # mention of it from reporting the same thing again as undefined.
             self._bind_local(node.name, UndefConst(ERROR), node.name_span)
             return
-        value = self._lower_expr(builder, node.value, declared)
+        self._initializing = node.name
+        try:
+            value = self._lower_expr(builder, node.value, declared)
+        finally:
+            self._initializing = None
         self._bind_local(node.name, value, node.name_span)
 
     def _lower_return(self, builder: IRBuilder, stmt: ast.ReturnStmt,
@@ -609,6 +617,11 @@ class Checker:
         value reaches would add nothing.
         """
         if found is ERROR or expected is ERROR:
+            return
+        if self._initializing is not None:
+            self._diags.emit(D.LANG_TYPE_INITIALIZER_MISMATCH, span,
+                             name=self._initializing, expected=expected.render(),
+                             found=found.render())
             return
         self._diags.emit(D.LANG_TYPE_RETURN_MISMATCH, span, found=found.render(),
                          expected=expected.render())

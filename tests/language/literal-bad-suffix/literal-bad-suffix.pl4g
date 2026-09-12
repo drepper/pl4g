@@ -4,5 +4,5 @@
 ※ The suffix names an integer type; nothing else means anything there.
 @[startup]
 fn main() → u8:
-    var status := 3bool
+    let status := 3bool
     status

@@ -70,7 +70,7 @@ def test_a_variable_is_named_by_its_own_name() -> None:
     assert symbol_of(var) == "text.utf8.counter"
 
 
-SOURCE = """var counter: u8 = 42u8
+SOURCE = """let counter: u8 = 42u8
 
 @[startup]
 fn main() \N{RIGHTWARDS ARROW} u8:
@@ -147,11 +147,92 @@ def test_more_than_one_value_at_a_time_is_refused(tmp_path) -> None:  # noqa: AN
     to do while every value the compiler produces goes to the same register.
     """
     source = tmp_path / "t.pl4g"
-    source.write_text("var a: u8 = 1u8\nvar b: u8 = 2u8\n"
+    source.write_text("let a: u8 = 1u8\nlet b: u8 = 2u8\n"
                       "@[startup]\nfn main() \N{RIGHTWARDS ARROW} u8:\n"
-                      "    var first: u8 = a\n    var second: u8 = b\n    first\n",
+                      "    let first: u8 = a\n    let second: u8 = b\n    first\n",
                       encoding="utf-8")
     proc = run_compiler(["-o", str(tmp_path / "out"), str(source)])
     assert proc.returncode != 0
     assert "[PL4G-8501]" in proc.stderr, proc.stderr
     assert "register allocator" in proc.stderr
+
+
+# -- nothing narrows a value without saying so ---------------------------------
+
+def test_encoding_a_value_that_does_not_fit_is_refused() -> None:
+    """A wrapped value would make a program start with a number it never named."""
+    from pypl4g.ir.layout import ValueOutOfRangeError, encode_scalar
+
+    assert encode_scalar(255, U8, LAYOUT) == b"\xff"
+    assert encode_scalar(-128, I32, LAYOUT) == b"\x80\xff\xff\xff"
+    with pytest.raises(ValueOutOfRangeError):
+        encode_scalar(256, U8, LAYOUT)
+    with pytest.raises(ValueOutOfRangeError):
+        encode_scalar(-129, U8, LAYOUT)
+
+
+def test_a_variable_whose_value_does_not_fit_is_refused() -> None:
+    """The same holds for the bytes a variable starts out with."""
+    from pypl4g.ir.layout import ValueOutOfRangeError
+
+    module = Module("t")
+    var = GlobalVar("v", U8, module.types.ptr_type(U8), module.int_const(U8, 300))
+    with pytest.raises(ValueOutOfRangeError):
+        initial_bytes(var, LAYOUT)
+
+
+def test_an_immediate_that_does_not_fit_its_field_is_refused() -> None:
+    """An instruction must not come to mean a number the program never named."""
+    from pypl4g.mc.desc import InstrTable
+    from pypl4g.mc.inst import MCInst
+    from pypl4g.mc.operand import MCImm, MCReg
+    from pypl4g.target.x86_64.encoder import EncodingError, encode
+    from pypl4g.target.x86_64.opcodes import X86_INSTRS
+    from pypl4g.target.x86_64.regs import reg
+
+    table = InstrTable(X86_INSTRS)
+    operands = (MCReg(reg("eax")), MCImm(1 << 33, 32, signed=False))
+    with pytest.raises(EncodingError, match="does not fit"):
+        encode(MCInst(table.select("mov", operands), operands))
+
+
+def test_a_displacement_that_does_not_fit_is_refused() -> None:
+    """A branch stored with its upper bits dropped would go somewhere else."""
+    from pypl4g.mc.fixup import (PCREL32, FixupRangeError, MCFixup,
+                                 apply_little_endian)
+    from pypl4g.mc.operand import ConstExpr
+
+    data = bytearray(4)
+    fixup = MCFixup(offset=0, kind=PCREL32, target=ConstExpr(0))
+    apply_little_endian(data, 0, fixup, -1)
+    assert bytes(data) == b"\xff\xff\xff\xff"
+    with pytest.raises(FixupRangeError):
+        apply_little_endian(data, 0, fixup, 1 << 33)
+
+
+@pytest.mark.parametrize(("declared", "value"), [
+    ("u8", "256u8"), ("u8", "300"), ("i8", "128i8"), ("u16", "65536u16"),
+    ("i16", "32768i16"), ("u32", "4294967296u32"),
+])
+def test_an_oversized_initializer_is_refused(compile_source, declared: str,  # noqa: ANN001
+                                             value: str) -> None:
+    """No value is quietly narrowed to fit the variable it is given to."""
+    proc, _ = compile_source("".join((
+        "@[startup]\nfn main() \N{RIGHTWARDS ARROW} u8:\n    let v: ", declared,
+        " = ", value, "\n    1u8\n")))
+    assert proc.returncode != 0, proc.stdout
+    assert "[PL4G-2006]" in proc.stderr, proc.stderr
+    assert "does not fit" in proc.stderr
+
+
+@pytest.mark.parametrize(("declared", "value"), [
+    ("u8", "255u8"), ("i8", "127i8"), ("u16", "65535u16"),
+    ("u64", "18446744073709551615u64"),
+])
+def test_the_largest_value_of_a_type_is_accepted(compile_source, declared: str,  # noqa: ANN001
+                                                 value: str) -> None:
+    """The boundary is where the type says, not one short of it."""
+    proc, _ = compile_source("".join((
+        "let v: ", declared, " = ", value,
+        "\n@[startup]\nfn main() \N{RIGHTWARDS ARROW} u8:\n    1u8\n")))
+    assert proc.returncode == 0, describe(proc)

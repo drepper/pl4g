@@ -170,6 +170,9 @@ class Driver:
         except ImageError as exc:
             if exc.symbol is not None:
                 self.diags.emit(D.IMPL_IMAGE_UNDEFINED_SYMBOL, name=exc.symbol)
+            elif exc.out_of_range is not None:
+                value, field = exc.out_of_range
+                self.diags.emit(D.IMPL_IMAGE_VALUE_OUT_OF_RANGE, value=value, field=field)
             else:
                 self.diags.internal(exc.detail)
             return ExitCode.ERRORS

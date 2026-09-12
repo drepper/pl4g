@@ -5,5 +5,5 @@
 ※ ':=' is not one token, so it may be written apart.
 @[startup]
 fn main() → u8:
-    var status : = 3u8
+    let status : = 3u8
     status

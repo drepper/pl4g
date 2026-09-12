@@ -281,7 +281,7 @@ def read_module(text: str) -> Module:
             module = Module(name=name, triple=triple)
             index += 1
             continue
-        if stripped.startswith("var @"):
+        if stripped.startswith("let @"):
             if module is None:
                 raise IRSyntaxError(number, "a variable before the module line")
             _read_global(module, stripped, number)
@@ -308,8 +308,8 @@ def read_module(text: str) -> Module:
 
 
 def _read_global(module: Module, line: str, number: int) -> None:
-    """Parse one ``var @name: type linkage = value`` line."""
-    head, _, initializer = line.removeprefix("var @").partition("=")
+    """Parse one ``let @name: type linkage = value`` line."""
+    head, _, initializer = line.removeprefix("let @").partition("=")
     name, _, rest = head.strip().partition(":")
     words = rest.split()
     ty = _parse_type(words[0], module.types, number)

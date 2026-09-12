@@ -714,11 +714,11 @@
       "name": "LANG_VARDEF_EXPECTED_COLON",
       "severity": "error",
       "message": "expected ':' after the name of the variable",
-      "cause": "A variable definition always carries a colon, whether or not the type is written after it: `var x: u8 = 3u8` states the type, and `var x := 3u8` leaves it to be taken from the value.  The colon is what marks the construct as a definition.",
+      "cause": "A variable definition always carries a colon, whether or not the type is written after it: `let x: u8 = 3u8` states the type, and `let x := 3u8` leaves it to be taken from the value.  The colon is what marks the construct as a definition.",
       "spec": {
         "document": "spec/spec.md",
         "section": "The Language / File Structure / Variable Definition",
-        "requirement": "A variable is defined with `var NAME: TYPE = VALUE`.  The type may be left out, in which case it is the type of the value.  There is no definition without a value."
+        "requirement": "A variable is defined with `let NAME: TYPE = VALUE`.  The type may be left out, in which case it is the type of the value.  There is no definition without a value."
       },
       "since": "0.1",
       "default_enabled": true,
@@ -740,7 +740,7 @@
       "spec": {
         "document": "spec/spec.md",
         "section": "The Language / File Structure / Variable Definition",
-        "requirement": "A variable is defined with `var NAME: TYPE = VALUE`.  The type may be left out, in which case it is the type of the value.  There is no definition without a value."
+        "requirement": "A variable is defined with `let NAME: TYPE = VALUE`.  The type may be left out, in which case it is the type of the value.  There is no definition without a value."
       },
       "since": "0.1",
       "default_enabled": true,
@@ -1279,6 +1279,33 @@
         "document": "spec/details.md",
         "section": "Implementation",
         "requirement": "At least for the time being there is only whole-program compilation.  There is no equivalent of object files."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 9002,
+      "name": "IMPL_IMAGE_VALUE_OUT_OF_RANGE",
+      "severity": "error",
+      "message": "a value of {value} does not fit the {field} field that must hold it",
+      "args": [
+        {
+          "name": "value",
+          "type": "string",
+          "description": "the value that does not fit"
+        },
+        {
+          "name": "field",
+          "type": "string",
+          "description": "the kind of field"
+        }
+      ],
+      "cause": "A displacement, an address or an initial value has to fit the field the instruction or the image reserves for it.  One that does not is reported rather than stored with its upper bits dropped: a program that branched to an address other than the one it named, or started with a value other than the one it was given, would be behaving otherwise than it reads.  A branch too far to reach is the usual cause, and needs a longer form of the instruction, which this compiler does not choose yet.  That a value fits where it is stored is one of the checks the compiler always performs, rather than one it leaves to the reader to have made.",
+      "spec": {
+        "document": "spec/details.md",
+        "section": "Implementation",
+        "requirement": "The compiler predominently has to be fast while at the same time always perform all conformance checks and generating small code."
       },
       "since": "0.1",
       "default_enabled": true,

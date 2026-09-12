@@ -154,7 +154,10 @@ unsized `int`/`long` of C.  The chosen spelling is that of Rust, Zig, Odin, WebA
 unambiguous form, and it is short enough to repeat in every diagnostic and every dump of the intermediate representation without
 making them harder to read.
 
-A literal that its type cannot represent is an error rather than a truncation or a wrap-around.
+A value that its type cannot represent is an error, wherever it appears: a literal, the value a variable is defined with, or a
+value the compiler works out for itself.  Nothing is truncated and nothing wraps around.  This is the no-surprises rule applied to
+numbers -- a program that stored 300 in a `u8` and read back 44 would not be behaving as it reads, and no rule about which bits
+survive would make it so.
 
 ### File Structure
 
@@ -207,15 +210,15 @@ parameters remains self-describing.
 A variable is defined with:
 
 ```
-var NAME: TYPE = VALUE
+let NAME: TYPE = VALUE
 ```
 
 The colon is always written.  The type after it may be left out, in which case the variable's type is the type of its value:
 
 ```
-var counter: u64 = 0u64     ※ the type is stated
-var total := 42u8           ※ the type is the value's, which its suffix names
-var spaced : = 42u8         ※ the same; ':=' is two tokens, not one
+let counter: u64 = 0u64     ※ the type is stated
+let total := 42u8           ※ the type is the value's, which its suffix names
+let spaced : = 42u8         ※ the same; ':=' is two tokens, not one
 ```
 
 **A variable is always given a value where it is defined.**  There is no form that leaves one uninitialized.  A variable without a
@@ -227,10 +230,17 @@ program does and lives in the image; one inside a function exists while the func
 
 Assignment to a variable after its definition is not specified yet.
 
-Considered for the notation: `x: u8 = 3u8` with `x := 3u8` as the short form, after Go and Odin; and `let`, after Rust, Swift and
-ML.  The keyword was kept because it lets a parser commit on the first token of a definition, which is what keeps the grammar
-context-free and the compilation parallelizable -- the same reason `@[` introduces an attribute.  `let` was not used because in
-every language that has it, it binds something that does not change.
+**A value too large for the variable's type is an error, not a truncation.**  `let small: u8 = 300u8` does not compile.  The value a
+program writes is the value the variable holds, or the program does not compile; there is no width at which a number quietly
+becomes a different number.  C and Go both narrow silently here, and C++ does unless the initializer is braced.
+
+Considered for the notation: `x: u8 = 3u8` with `x := 3u8` as the short form, after Go and Odin, which is terse but leaves a
+statement beginning with an identifier ambiguous until the parser has looked past the name.  A keyword lets a parser commit on the
+first token of a definition, which is what keeps the grammar context-free and the compilation parallelizable -- the same reason
+`@[` introduces an attribute.
+
+`let` is that keyword, as in ML, Haskell, Rust, Swift and ordinary mathematical writing.  It says that a name is being given a
+meaning, which is what a definition does.
 
 #### Function Definition
 

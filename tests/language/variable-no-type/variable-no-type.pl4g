@@ -5,5 +5,5 @@
 ※ untyped value.  The specification describes those; this compiler has none yet.
 @[startup]
 fn main() → u8:
-    var status := 42
+    let status := 42
     status

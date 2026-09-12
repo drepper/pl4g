@@ -34,7 +34,7 @@ class TokKind(StrEnum):
 
     KW_FN = "'fn'"
     KW_RETURN = "'return'"
-    KW_VAR = "'var'"
+    KW_LET = "'let'"
     KW_TYPE = "'type'"
     KW_TRUE = "'true'"
     KW_FALSE = "'false'"
@@ -69,7 +69,7 @@ INTEGER_TYPE_NAMES: Final[frozenset[str]] = frozenset(
 KEYWORDS: Final[dict[str, TokKind]] = {
     "fn": TokKind.KW_FN,
     "return": TokKind.KW_RETURN,
-    "var": TokKind.KW_VAR,
+    "let": TokKind.KW_LET,
     "type": TokKind.KW_TYPE,
     "true": TokKind.KW_TRUE,
     "false": TokKind.KW_FALSE,

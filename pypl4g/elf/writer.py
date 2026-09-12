@@ -11,8 +11,8 @@ matter of comparing two buffers.
 from dataclasses import dataclass
 from typing import Final, Sequence
 
-from ..mc.fixup import (FixupApplier, MCFixup, UnresolvedSymbol,
-                        apply_little_endian, fixup_value)
+from ..mc.fixup import (FixupApplier, FixupRangeError, MCFixup,
+                        UnresolvedSymbol, apply_little_endian, fixup_value)
 from ..mc.fragment import (MCDataFragment, MCFragment, MCInstFragment,
                            MCPaddingFragment)
 from ..mc.layout import (layout_section, resolve_symbol_offsets,
@@ -46,10 +46,13 @@ _KINDS: Final[dict[SymKind, int]] = {
 class ImageError(Exception):
     """The image cannot be produced."""
 
-    def __init__(self, detail: str, symbol: str | None = None) -> None:
+    def __init__(self, detail: str, symbol: str | None = None,
+                 out_of_range: tuple[str, str] | None = None) -> None:
         super().__init__(detail)
         self.detail = detail
         self.symbol = symbol
+        #: The value and the field, where a value did not fit the field.
+        self.out_of_range = out_of_range
 
 
 @dataclass(frozen=True, slots=True)
@@ -404,7 +407,11 @@ class ElfWriter:
                         raise ImageError("".join((
                             "'", exc.name, "' is referenced but never defined")),
                             exc.name) from exc
-                    self._apply_fixup(target, fixup.offset, fixup, value)
+                    try:
+                        self._apply_fixup(target, fixup.offset, fixup, value)
+                    except FixupRangeError as exc:
+                        raise ImageError(str(exc), out_of_range=(
+                            str(exc.value), exc.kind.name)) from exc
 
 
 def write_image(settings: ImageSettings, sections: Sequence[MCSection],

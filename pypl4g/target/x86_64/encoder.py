@@ -169,9 +169,17 @@ def _emit_memory(out: bytearray, fixups: list[MCFixup], mem: MCMem, reg_field: i
 
 
 def _emit_imm(out: bytearray, operand: MCOperand, bits: int, span: Span | None) -> None:
-    """Emit an immediate of the given width."""
+    """Emit an immediate of the given width.
+
+    A value the field cannot hold is refused.  Storing it with its upper bits
+    dropped would make the instruction mean a number the program never named.
+    """
     if not isinstance(operand, MCImm):
         raise EncodingError("an immediate operand was expected", span)
+    if not (-(1 << (bits - 1)) <= operand.value < (1 << bits)):
+        raise EncodingError("".join((
+            "an immediate of ", str(operand.value), " does not fit the ", str(bits),
+            "-bit field of this instruction")), span)
     size = bits // 8
     out += (operand.value & ((1 << bits) - 1)).to_bytes(size, "little")
 

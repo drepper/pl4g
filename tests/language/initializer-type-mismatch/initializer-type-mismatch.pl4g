@@ -1,8 +1,8 @@
 ※ pl4g-test: compile=fail
 ※ pl4g-test: expect-diag 4203 LANG_TYPE_INITIALIZER_MISMATCH
 
-※ A literal that names its type must name the one the variable was declared.
+※ There is no conversion that would hide the difference between the two.
 @[startup]
 fn main() → u8:
-    let status: u8 = 3i32
-    status
+    let flag: bool = 3
+    1u8

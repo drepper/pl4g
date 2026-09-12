@@ -1,6 +1,8 @@
 ※ pl4g-test: compile=fail
 ※ pl4g-test: expect-diag 2006 LANG_SYNTAX_INTEGER_RANGE
 
+※ A value too large for its type is refused.  Storing it with its upper bits
+※ dropped would start the program with a number it never named.
 let counter: u8 = 300u8
 
 @[startup]

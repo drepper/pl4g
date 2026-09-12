@@ -1,7 +1,7 @@
 ; pl4g-ir 1
 module "global-variable.pl4g" triple "x86_64-linux-none"
 
-var @counter: u8 internal = 42
+let @counter: u8 internal = 42
 
 fn @main() → u8 internal cconv(pl4g.v0) special(startup) {
 block0:
