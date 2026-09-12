@@ -706,46 +706,9 @@ program exports does not reach it, and every tool that inspects a binary expects
 Open questions
 --------------
 
-These are recorded so they are not lost.  None of them blocks the current version.
+Questions that are open, and tasks not yet done, are kept in the to-do lists rather than here:
+[TODO-language.md](../TODO-language.md) for the language and [TODO-pypl4g.md](../TODO-pypl4g.md) for the compiler, with a list of
+its own for each further tool as one is needed.
 
-- **Patching a binary while it is in use.**  `spec/details.md` asks for hooks into the system that controls binary creation so that
-  a binary can be changed while it is being used.  Linux refuses to write to a running executable's file.  Doing this needs a
-  concrete mechanism -- writing to the process's memory, a `memfd`-backed scheme, or a supervisor built into the generated runtime
-  -- and none has been chosen.
-
-- **The error path before `io_uring` exists.**  The specification requires a message when a required CPU or operating system
-  feature is missing, forbids depending on any system runtime, and routes all input and output through `io_uring` -- whose own
-  setup can fail before any object exists to report through.  The bootstrap path for that first message needs specifying.
-
-- **A garbled sentence in the specification.**  "the grammar has to be context-free, there is no process definitions in order" is
-  read as "there is no *need to* process definitions in order", so a forward reference at the top level is legal.  The semantic
-  analysis collects every top-level definition before checking any body, which is what makes that reading true.
-
-- **Comparison.**  `=` is reserved for it and nothing implements it.
-
-- **A value written to a variable at the top level that nothing reads.**  The same rule would apply, but whether anything reads one
-  is a question for a pass over the whole program rather than for the scope that defines it.
-
-- **A constant wider than one instruction.**  Materializing one needs a sequence -- two move-wide instructions on one
-  architecture, an upper-immediate load and an add on another -- and none is generated, so such a constant is reported.
-
-- **Read-only data.**  A variable that cannot be changed is still placed in writable memory.  Putting one in a section that is
-  mapped read-only would cost a third loadable segment and would turn a compiler defect into a fault rather than a silent write;
-  nothing requires it, since the language already refuses every write a program can express.
-
-- **A unary minus.**  A negative number cannot be written: `-3i8` is a negation of a literal rather than a literal, and the
-  expression syntax has no unary operators.
-
-- **Naming a symbol outright.**  A function following a foreign convention keeps its bare name, which covers calling into another
-  world.  There is no way to say what a function should be called without also saying how it is called -- an attribute naming the
-  symbol directly.  Nothing needs it yet.
-
-- **Materializing the address of a symbol on RISC-V.**  The rule adopted for position-independent code is that an address is only
-  ever produced by one helper that emits a program-counter-relative computation.  On x86-64 that is one instruction and on AArch64
-  a pair whose two halves are independent.  On RISC-V the pair is not independent: the second instruction's relocation refers to
-  the label of the first rather than to its own address.  Nothing emits an address yet, so rather than implement half of it the
-  backend has neither relocation, and the two instructions are present only in the form that takes a plain immediate.
-
-- **The RISC-V header flags.**  The ELF header of a RISC-V image carries flags saying which extensions the code uses and which
-  floating-point convention it follows.  Zero is correct while only the base integer set is emitted; emitting floating point will
-  mean setting them, and the image writer has no field for them yet.
+This file records decisions that were made.  A decision that leaves something open says so in its own entry, and the thing left
+open belongs in a list.

@@ -1,0 +1,42 @@
+To Do List for the pypl4g compiler
+==================================
+
+[x] By default, all functions and variables are not visible to the outside, including when used as a module.  The `@[export]` attribute
+    can be attached to a function or variable.  This also determines ELF symbol visibility.
+
+[x] implement the `@[ignore(NUMBER)]` attribute which is defined as current `@[expect(NUMBER)]` is implemented.  The latter is similarly
+    defined except that it is an error if the error/warning is not present
+
+[ ] global variables not defined `mut` are truly constants and should be defined in the `.rodata` section in the ELF file.  In addition,
+    non-`mut` local variables for which no reference is kept (new concept, will be implemented soon) can be entirely dropped and eventually
+    be replaced with an definition as constant expression in the debug information.
+    Note: a read-only section that is neither writable nor executable needs a third loadable segment, since a segment carries one
+    set of permissions for all of it and two segments may not share a page.
+
+[ ] implement module system.  A module is loaded at compile-time.  The syntax is `let modname := import("somename")` where `modname`
+    is the name the module is known as in the compilation unit and `somename` is the name of the module.  There will be built-in
+    modules in future, at some point.  For now modules are PL4G source files which are loaded.  They are searched for by a path
+    and depending on whether the `somename` string (implement strings) contains a `/`.
+    - the directory of the file
+
+[ ] patching a binary while it is in use.  spec/details.md asks for hooks into the system that controls binary creation so that a
+    binary can be changed while it is being used.  Linux refuses to write to a running executable's file, so this needs a concrete
+    mechanism -- writing to the process's memory, a `memfd`-backed scheme, or a supervisor built into the generated runtime -- and
+    none has been chosen.
+
+[ ] report a value written to a variable at the top level that nothing reads.  The rule that catches one inside a function should
+    apply, but whether anything reads a variable at the top level is a question for a pass over the whole program rather than for
+    the scope that defines it.
+
+[ ] materialize a constant wider than one instruction can carry.  It needs a sequence -- two move-wide instructions on one
+    architecture, an upper-immediate load and an add on another -- and none is generated, so such a constant is reported instead.
+
+[ ] materialize the address of a symbol on RISC-V.  The rule adopted for position-independent code is that an address is only ever
+    produced by one helper emitting a program-counter-relative computation.  On x86-64 that is one instruction and on AArch64 a
+    pair whose halves are independent; on RISC-V the pair is not, since the second instruction's relocation refers to the label of
+    the first rather than to its own address.  The backend has neither relocation rather than half of the pair, and the two
+    instructions are present only in the form taking a plain immediate.
+
+[ ] set the RISC-V header flags.  The ELF header of a RISC-V image carries flags saying which extensions the code uses and which
+    floating-point convention it follows.  Zero is correct while only the base integer set is emitted; emitting floating point
+    will mean setting them, and the image writer has no field for them yet.
