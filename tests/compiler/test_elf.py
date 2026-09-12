@@ -48,10 +48,22 @@ EXPECTED = {
         "svc #0x0",
         "brk #0x1",
     ]),
+    "riscv64": (243, [
+        "li a0,0",
+        "ret",
+        "li s0,0",
+        "li ra,0",
+        "jal <main>",
+        "li a7,94",
+        "ecall",
+        "unimp",
+    ]),
 }
 
-#: Instructions that are only padding between functions.
-FILLER = {"int3", "udf", "nop", "(bad)"}
+#: What a disassembler shows for the padding between functions.  One spells the
+#: bytes out, the others collapse a run of zeros into a marker that carries no
+#: mnemonic and is skipped before this is consulted.
+FILLER = {"int3", "udf", "(bad)"}
 
 
 @dataclass(frozen=True, slots=True)

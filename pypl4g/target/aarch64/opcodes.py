@@ -7,12 +7,9 @@ were checked against the GNU assembler, and a test keeps checking them.
 from typing import Final
 
 from ...mc.desc import InstFlags, OperandKind, OperandSpec
-from .desc import A64InstDesc, Field, FieldKind
+from .desc import A64InstDesc, Field, FieldKind, INSTRUCTION_SIZE
 from .fixups import ADD_LO12, ADR_PAGE21, BRANCH26
 from .regs import GPR, NZCV, X30
-
-#: Every instruction is one word.
-INSTRUCTION_SIZE: Final[int] = 4
 
 #: The word the architecture reserves as permanently undefined.  It is what
 #: padding is filled with, so that falling into padding traps.

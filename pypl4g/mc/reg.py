@@ -136,6 +136,15 @@ class RegisterInfo:
         self._next_virtual += 1
         return reg
 
+    def add_alias(self, name: str, reg: PhysReg) -> PhysReg:
+        """Register another name for a register that already exists.
+
+        The same object is stored under both names, so that two spellings of one
+        register compare as the same register rather than merely as equal ones.
+        """
+        self.registers[name] = reg
+        return reg
+
     def view(self, unit: RegUnit, bits: int, byte_off: int = 0) -> PhysReg:
         """The view onto *unit* of the given width, at the given byte offset."""
         for reg in self.registers.values():

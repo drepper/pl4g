@@ -7,8 +7,10 @@ is therefore a read, an insert and a write back, and never an overwrite.
 
 from typing import Callable, Final
 
+from ...mc.fixedwidth import insert_bits
 from ...mc.fixup import (FixupBase, FixupKind, FixupRangeError, MCFixup,
                          signed_fits)
+from .desc import INSTRUCTION_SIZE
 
 #: An unconditional branch or a call: a signed offset in units of four bytes,
 #: measured from the instruction, in the low twenty-six bits.
@@ -26,21 +28,9 @@ ADR_PAGE21: Final[FixupKind] = FixupKind("aarch64_adr_page21", 4, FixupBase.FIEL
 ADD_LO12: Final[FixupKind] = FixupKind("aarch64_add_lo12", 4)
 
 
-def _read(data: bytearray, offset: int) -> int:
-    """The instruction word at *offset*."""
-    return int.from_bytes(data[offset:offset + 4], "little")
-
-
-def _write(data: bytearray, offset: int, word: int) -> None:
-    """Store the instruction word at *offset*."""
-    data[offset:offset + 4] = (word & 0xFFFFFFFF).to_bytes(4, "little")
-
-
 def _insert(data: bytearray, offset: int, value: int, lsb: int, width: int) -> None:
-    """Put *value* into a run of bits of the word at *offset*."""
-    word = _read(data, offset)
-    mask = (1 << width) - 1
-    _write(data, offset, (word & ~(mask << lsb)) | ((value & mask) << lsb))
+    """Put *value* into a run of bits of the instruction word at *offset*."""
+    insert_bits(data, offset, INSTRUCTION_SIZE, value, lsb, width)
 
 
 def _branch(width: int, lsb: int) -> Callable[[bytearray, int, MCFixup, int], None]:

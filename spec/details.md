@@ -137,11 +137,13 @@ lowers that itself, so the same calls serve x86-64, aarch64 and RISC-V.
 
 The descriptor is split in two.  What an instruction *is* -- its name, the
 operands it accepts, the registers it touches besides those operands -- is shared;
-how it is spelled in memory is not, because the two architectures have nothing in
-common there.  x86-64 describes an encoding as a byte stream with prefixes, an
-opcode map and a ModRM byte; AArch64 describes it as one 32-bit template plus the
-bits each operand occupies.  Each target extends the shared descriptor with the
-fields its own encoder reads, and nothing outside that encoder looks at them.
+how it is spelled in memory is not.  x86-64 describes an encoding as a byte stream
+with prefixes, an opcode map and a ModRM byte.  A fixed-width architecture
+describes it as one 32-bit template plus the bits each operand occupies, and that
+second shape is itself shared, because more than one architecture has it: AArch64
+and RISC-V use the same encoder, differing only in their tables and in their
+relocations.  Each target extends the shared descriptor with the fields its own
+encoder reads, and nothing outside that encoder looks at them.
 
 Three parts of the interface are built to be extended:
 
@@ -171,8 +173,9 @@ only then are the fixups patched.  The rule for turning a symbol's address into 
 encoder never computes a displacement itself.
 
 *Storing* that number is a separate question, and one only the target can answer.  A displacement on x86-64 occupies a field of its
-own and is simply overwritten; a branch offset on AArch64 shares its word with the opcode and the destination register, is measured
-in units of four bytes, and in one case is split across two runs of bits.  A fixup kind therefore says how its value is computed --
+own and is simply overwritten.  A branch offset on AArch64 shares its word with the opcode and the destination register, is measured
+in units of four bytes, and in one case is split across two runs of bits.  A jump offset on RISC-V is scattered across four separate
+runs of bits of its word, with the sign bit at the top and the rest out of order.  A fixup kind therefore says how its value is computed --
 absolutely, from the end of the field, or from the start of it -- and each target says how its own kinds are stored.  Kinds are
 values rather than members of one enumeration, for the same reason operations are: a target registers the ones it needs.
 
@@ -190,8 +193,8 @@ without the executable bit, whose absence would give the program an executable s
 
 The load address is the same on every target so far, but the alignment of the loadable segment is not: it is the largest page size
 a kernel for that architecture may be configured with, so that one image loads whatever the running kernel chose.  That is 4 KiB on
-x86-64 and 64 KiB on AArch64.  Padding is filled with a byte that traps rather than falls through, which is also target-specific: a
-breakpoint on x86-64, and the word the architecture reserves as permanently undefined on AArch64.
+x86-64 and RISC-V, and 64 KiB on AArch64.  Padding is filled with a byte that traps rather than falls through, which is also
+target-specific: a breakpoint on x86-64, and on both fixed-width architectures a zero word, which neither of them leaves defined.
 
 The section headers and the symbol table are kept.  They are what lets a disassembler and a debugger show the generated code, and
 the disassembler is the independent check on the encoder.  More importantly, a symbol table with accurate addresses and sizes *is*
@@ -250,7 +253,7 @@ substrate for the requirement that a program can handle the errors and warnings 
 Targets
 -------
 
-Two architectures have backends: x86-64 and AArch64.  RISC-V is next.
+Three architectures have backends: x86-64, AArch64 and RISC-V (64-bit).
 
 The backend for an architecture is `pypl4g/target/<arch>/`, holding its register
 file, its operations, its encoding table, its encoder, its relocations, its
@@ -261,15 +264,18 @@ anything else -- a build system, the examples -- learns which ones exist.
 What the two backends do differently is worth stating, because it is what the
 shared layers had to be able to express:
 
-| | x86-64 | AArch64 |
-|---|---|---|
-| Instruction length | one to fifteen bytes | always four |
-| Encoding described as | prefixes, opcode map, opcode, ModRM, SIB, immediate | a template plus the bits each operand occupies |
-| Choosing between rows | by encoded size; several forms of one instruction differ in length | by table order; every row is the same size |
-| Immediate matching | by the declared width, which is what selects the shorter form | by whether the value fits, since there is no shorter form |
-| Relocation storage | overwrite a field of its own | insert into a word that already holds the opcode |
-| Three-address operations | lowered to two operands with a move | native |
-| Register 31 | nothing special | the zero register or the stack pointer, depending on the instruction |
-| Exit system call | number 231 in `eax`, arguments from `edi` | number 94 in `x8`, arguments from `x0` |
-| Padding | `int3` | the permanently undefined word |
-| Segment alignment | 4 KiB | 64 KiB |
+| | x86-64 | AArch64 | RISC-V 64 |
+|---|---|---|---|
+| Instruction length | one to fifteen bytes | always four | always four, with the compressed forms unused |
+| Encoding described as | prefixes, opcode map, opcode, ModRM, SIB, immediate | a template plus the bits each operand occupies | the same |
+| Choosing between rows | by encoded size; several forms of one instruction differ in length | by table order; every row is the same size | the same |
+| Immediate matching | by the declared width, which is what selects the shorter form | by whether the value fits, since there is no shorter form | the same |
+| Relocation storage | overwrite a field of its own | insert into a word, split in two for an address | insert into a word, scattered over four runs of bits |
+| Three-address operations | lowered to two operands with a move | native | native |
+| Narrow values | a narrower view of the same register | a narrower view of the same register | a full register, sign extended, with a different instruction |
+| Condition flags | a register, written as a side effect | a register, written as a side effect | none; a comparison and its branch are one instruction |
+| Register naming | one name each | one name each | a number and a role name, both the same register |
+| The zero register | none | shares its number with the stack pointer | a register of its own |
+| Exit system call | number 231 in `eax`, arguments from `edi` | number 94 in `x8`, arguments from `x0` | number 94 in `a7`, arguments from `a0` |
+| Padding | `int3` | a zero word | a zero word |
+| Segment alignment | 4 KiB | 64 KiB | 4 KiB |

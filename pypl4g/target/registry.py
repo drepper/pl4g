@@ -46,10 +46,21 @@ register("x86_64-linux-none", _x86_64_factory)
 register("x86_64-linux", _x86_64_factory, canonical=False)
 register("x86_64", _x86_64_factory, canonical=False)
 
+def _riscv64_factory() -> Target:
+    """Build the RISC-V 64-bit backend."""
+    from .riscv64.target import RISCV64Target
+
+    return RISCV64Target()
+
+
 register("aarch64-linux-none", _aarch64_factory)
 register("aarch64-linux", _aarch64_factory, canonical=False)
 register("aarch64", _aarch64_factory, canonical=False)
 register("arm64", _aarch64_factory, canonical=False)
+
+register("riscv64-linux-none", _riscv64_factory)
+register("riscv64-linux", _riscv64_factory, canonical=False)
+register("riscv64", _riscv64_factory, canonical=False)
 
 DEFAULT_TRIPLE: Final[str] = "x86_64-linux-none"
 

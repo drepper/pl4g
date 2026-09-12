@@ -247,6 +247,51 @@ examples build one binary per line of that output; adding this backend needed no
 Only canonical triples are reported.  The abbreviations a triple may also be spelled with are still accepted on the command line,
 but listing them would make a build system produce the same binary several times.
 
+## 2026-09-12T23:30+02:00 — implementation
+
+**Fixed-width encoding is shared between the architectures that have it**
+
+Adding RISC-V made it plain that describing an encoding as "a template plus the bits each operand occupies" is not AArch64's own
+idea: it is what a fixed-width architecture is.  The description, the field model and the encoding loop moved into the shared
+layer, and the AArch64 backend was moved onto them with no change in what it produces.
+
+What stays with each target is its table, its relocations and the code that stores a relocated value -- which is exactly the part
+the two do differently, since neither's scattered fields resemble the other's.
+
+This does not undo the earlier split.  There are two encoding shapes, not one: a byte stream with prefixes, and a fixed-width word.
+The descriptor a target extends still says only what an instruction *is*.
+
+## 2026-09-12T23:30+02:00 — implementation
+
+**The compressed instructions are not used**
+
+RISC-V has sixteen-bit forms of its most common instructions.  They are not emitted, so every instruction is one word.
+
+A fixed width keeps the image layout exact and keeps the padding between functions a whole number of instructions, and the
+specification asks for small code rather than for the smallest possible code.  Enabling them later needs no new mechanism: rows
+whose encoded size differs are what the table's shortest-encoding rule already handles, and it is the rule x86-64 relies on
+throughout.
+
+## 2026-09-12T23:30+02:00 — implementation
+
+**A RISC-V register has two names and one identity**
+
+The architecture gives each register a number and the calling convention gives it a role name; `a0` and `x10` are the same
+register.  Both names resolve to the same object, so two spellings of one register compare as the same register rather than as two
+equal ones -- which matters, because instruction selection asks whether a move's source is already its destination.
+
+## 2026-09-12T23:30+02:00 — implementation
+
+**RISC-V has no condition-code register, and the model does not invent one**
+
+A comparison and the branch that acts on it are one instruction, so nothing writes flags.  The other two backends declare a flags
+register and record which instructions write it, precisely so a pass can ask; here there is no such class at all.  The register
+model does not require one, which is the point of classes being a registry rather than a fixed list.
+
+Nothing narrower than a full register exists either: an `i32` lives in a sixty-four bit register, sign extended, and it is the
+instruction that says how wide the operation is.  The unit and view model accommodates a unit with exactly one view without any
+special case.
+
 ---
 
 Open questions
@@ -269,3 +314,13 @@ These are recorded so they are not lost.  None of them blocks the current versio
 
 - **Symbol mangling.**  Names are currently emitted unmangled.  A scheme is needed before foreign interfaces exist, or a PL4G name
   and a C name will collide.
+
+- **Materializing the address of a symbol on RISC-V.**  The rule adopted for position-independent code is that an address is only
+  ever produced by one helper that emits a program-counter-relative computation.  On x86-64 that is one instruction and on AArch64
+  a pair whose two halves are independent.  On RISC-V the pair is not independent: the second instruction's relocation refers to
+  the label of the first rather than to its own address.  Nothing emits an address yet, so rather than implement half of it the
+  backend has neither relocation, and the two instructions are present only in the form that takes a plain immediate.
+
+- **The RISC-V header flags.**  The ELF header of a RISC-V image carries flags saying which extensions the code uses and which
+  floating-point convention it follows.  Zero is correct while only the base integer set is emitted; emitting floating point will
+  mean setting them, and the image writer has no field for them yet.

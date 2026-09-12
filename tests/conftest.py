@@ -34,6 +34,8 @@ ARCH_TOOLS: dict[str, dict[str, str]] = {
                "qemu": "qemu-x86_64", "flavour": "intel"},
     "aarch64": {"objdump": "/usr/bin/aarch64-linux-gnu-objdump", "machine": "aarch64",
                 "qemu": "qemu-aarch64", "flavour": ""},
+    "riscv64": {"objdump": "/usr/bin/riscv64-linux-gnu-objdump", "machine": "riscv:rv64",
+                "qemu": "qemu-riscv64", "flavour": ""},
 }
 
 HOST_ARCH = platform.machine()
