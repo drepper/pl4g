@@ -1,15 +1,16 @@
 """Instruction descriptors and the table that holds them.
 
-An encoding is described by data, not by code: a row states which prefixes it
-needs, which opcode map it lives in, how its operands map onto ModRM and which
-immediate it carries.  One generic emitter walks a fixed sequence of phases over
-that data, so adding an operation is a row, and adding a whole new prefix family
--- VEX, EVEX, the APX two-byte REX -- is one more emitter in the prefix phase
-plus optional fields here.
+A descriptor says what an instruction *is*: its name, the operands it accepts,
+the registers it touches besides those operands, and roughly how large it
+encodes.  How it is encoded is not described here, because that differs entirely
+between architectures -- a byte stream with prefixes and a ModRM byte on one, a
+fixed-width word with bitfields on another.  Each target therefore extends this
+descriptor with the fields its own encoder needs, and everything in this module
+works on the part they have in common.
 """
 
-from dataclasses import dataclass
-from enum import Enum, Flag, auto
+from dataclasses import dataclass, field
+from enum import Flag, auto
 from typing import Iterable, Sequence
 
 from .operand import MCImm, MCMem, MCOperand, MCReg, MCSymRef
@@ -33,8 +34,14 @@ class OperandSpec:
     kinds: OperandKind
     rclass: RegClass | None = None
     bits: int | None = None
-    #: A slot that is always one particular register, such as cl for a shift.
+    #: A slot that is always one particular register, such as the zero register
+    #: or the register a shift count must be held in.
     fixed: PhysReg | None = None
+    #: The largest value an immediate slot accepts, where the encoding can hold
+    #: less than its width suggests.
+    imm_max: int | None = None
+    #: The smallest value an immediate slot accepts.
+    imm_min: int | None = None
 
     def matches(self, operand: MCOperand) -> bool:
         """Whether *operand* may be used in this slot."""
@@ -55,51 +62,15 @@ class OperandSpec:
                     return False
                 if self.bits is not None and operand.bits > self.bits:
                     return False
+                if self.imm_max is not None and operand.value > self.imm_max:
+                    return False
+                if self.imm_min is not None and operand.value < self.imm_min:
+                    return False
                 return True
             case MCSymRef():
                 return bool(self.kinds & (OperandKind.REL | OperandKind.SYM))
             case _:
                 return False
-
-
-class EncKind(Enum):
-    """Which prefix family an encoding belongs to."""
-
-    LEGACY = "legacy"
-    REX2 = "rex2"
-    VEX = "vex"
-    EVEX = "evex"
-
-
-class OpMap(Enum):
-    """Which opcode map the opcode byte lives in.
-
-    The numbering is the one the VEX and EVEX ``mmmmm`` field uses, so those
-    encodings reuse this field unchanged.
-    """
-
-    PRIMARY = 0
-    M0F = 1
-    M0F38 = 2
-    M0F3A = 3
-
-
-class OpSize(Enum):
-    """Which operand size the encoding selects."""
-
-    DEFAULT = "default"
-    P66 = "p66"
-    REXW = "rexw"
-
-
-class ModRMUse(Enum):
-    """How the ModRM byte is filled in, if there is one."""
-
-    NONE = "none"
-    #: ModRM.reg names an operand, ModRM.rm names another.
-    REG_RM = "reg_rm"
-    #: ModRM.reg holds a fixed extension digit, ModRM.rm names an operand.
-    EXT_RM = "ext_rm"
 
 
 class InstFlags(Flag):
@@ -111,49 +82,29 @@ class InstFlags(Flag):
     BARRIER = auto()
     MAY_LOAD = auto()
     MAY_STORE = auto()
-    #: A 32-bit write clears the upper half of the 64-bit register.
+    #: A write of the narrow view clears the rest of the register.  True of a
+    #: 32-bit write on both x86-64 and AArch64, and worth recording because a
+    #: peephole that widens a value depends on it.
     ZEXT32 = auto()
     LOCKABLE = auto()
 
 
 @dataclass(frozen=True, slots=True)
-class VexInfo:
-    """Reserved: the extra fields a VEX or EVEX encoding needs."""
-
-    length: int = 128
-    vvvv_op: int | None = None
-    mask_op: int | None = None
-    broadcast: bool = False
-
-
-@dataclass(frozen=True, slots=True)
 class InstDesc:
-    """One row of the encoding table."""
+    """What an instruction is, without saying how it is encoded.
+
+    A target subclasses this and adds the fields its encoder reads.  Nothing
+    outside a target's own encoder looks at those fields.
+    """
 
     mnemonic: str
-    operands: tuple[OperandSpec, ...]
-    opcode: int
-    map: OpMap = OpMap.PRIMARY
-    enc: EncKind = EncKind.LEGACY
-    opsize: OpSize = OpSize.DEFAULT
-    #: A prefix byte that selects the instruction rather than the operand size.
-    mandatory_prefix: int | None = None
-    modrm: ModRMUse = ModRMUse.NONE
-    #: The digit stored in ModRM.reg for an EXT_RM encoding.
-    ext: int | None = None
-    reg_op: int | None = None
-    rm_op: int | None = None
-    #: The low three bits of the register are added to the opcode byte.
-    plus_reg: bool = False
-    imm_op: int | None = None
-    imm_bits: int | None = None
-    rel_op: int | None = None
-    rel_bits: int | None = None
+    operands: tuple[OperandSpec, ...] = ()
     implicit_defs: tuple[PhysReg, ...] = ()
     implicit_uses: tuple[PhysReg, ...] = ()
     flags: InstFlags = InstFlags.NONE
-    vex: VexInfo | None = None
-    #: A rough encoded size, used to choose between overlapping rows.
+    #: The encoded size in bytes, used to choose between rows that overlap.  On
+    #: a fixed-width architecture every row states the same number, and the
+    #: choice falls through to the order the rows are written in.
     est_size: int = 0
 
     def matches(self, operands: Sequence[MCOperand]) -> bool:
@@ -198,7 +149,9 @@ class InstrTable:
         Preferring the shortest encoding is a policy of the assembler rather than
         a decision made at the call site: the compiler must generate small code,
         and nothing that builds an instruction should have to know that one form
-        of ``mov`` is four bytes shorter than another.
+        of an instruction is shorter than another.  Where two rows encode to the
+        same size the one written first wins, so a table states its preference by
+        its order.
         """
         candidates = [r for r in self._rows.get(mnemonic, ()) if r.matches(operands)]
         if not candidates:

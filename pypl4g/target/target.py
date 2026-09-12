@@ -6,7 +6,7 @@ from typing import Protocol
 from ..diag.engine import DiagEngine
 from ..ir.module import Module
 from ..mc.asmbuilder import Assembler, InstructionSelector
-from ..mc.fixup import MCFixup
+from ..mc.fixup import FixupApplier, MCFixup
 from ..mc.inst import MCInst
 from ..mc.reg import RegisterInfo
 from ..mc.streamer import MCStreamer
@@ -51,6 +51,11 @@ class Target(Protocol):
 
     def encode(self, inst: MCInst) -> tuple[bytes, list[MCFixup]]:
         """Encode one instruction."""
+        ...
+
+    @property
+    def apply_fixup(self) -> FixupApplier:
+        """How this target stores a fixup's value into the bytes that hold it."""
         ...
 
     def selector(self, streamer: MCStreamer) -> InstructionSelector:

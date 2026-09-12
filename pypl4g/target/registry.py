@@ -35,9 +35,21 @@ def _x86_64_factory() -> Target:
     return X86_64Target()
 
 
+def _aarch64_factory() -> Target:
+    """Build the AArch64 backend."""
+    from .aarch64.target import AArch64Target
+
+    return AArch64Target()
+
+
 register("x86_64-linux-none", _x86_64_factory)
 register("x86_64-linux", _x86_64_factory, canonical=False)
 register("x86_64", _x86_64_factory, canonical=False)
+
+register("aarch64-linux-none", _aarch64_factory)
+register("aarch64-linux", _aarch64_factory, canonical=False)
+register("aarch64", _aarch64_factory, canonical=False)
+register("arm64", _aarch64_factory, canonical=False)
 
 DEFAULT_TRIPLE: Final[str] = "x86_64-linux-none"
 

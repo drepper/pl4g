@@ -193,6 +193,60 @@ Markdown beside it.
 Chosen on the user's decision.  Markdown is readable in the repository and in every diff, and being unlike the compiler's own JSON
 decision log keeps the two from being confused.
 
+## 2026-09-12T22:10+02:00 — implementation
+
+**The instruction descriptor is split: what an instruction is, and how it is encoded**
+
+Adding the AArch64 backend showed that the descriptor written for x86-64 was partly x86-64's own: opcode maps, prefixes and a ModRM
+byte mean nothing on a fixed-width architecture, where an encoding is one template with operand fields written into it.
+
+The shared descriptor now holds only what an instruction *is* -- its name, the operands it accepts, the registers it touches
+besides those operands, its flags and its encoded size.  Each target subclasses it with the fields its own encoder reads, and
+nothing outside that encoder looks at them.  Selection, the table and the operand model are unchanged and are genuinely shared.
+
+Considered instead: one descriptor with every architecture's fields present and unused where they do not apply, as some
+retargetable assemblers do.  Rejected because the unused fields are not merely wasteful, they are misleading: a row would claim to
+have a ModRM byte on an architecture that has none.
+
+## 2026-09-12T22:10+02:00 — implementation
+
+**A fixup kind says how its value is computed; each target says how it is stored**
+
+On x86-64 a displacement occupies a field of its own and is overwritten.  On AArch64 a branch offset shares its word with the
+opcode and the registers, is measured in units of four bytes, and for an address computation is split across two runs of bits.
+There is no single way to store a fixup, so a kind now states only what its value is measured from -- the address itself, the end
+of the field, or the start of it -- and the target supplies the code that puts it into the bytes.
+
+Kinds became values rather than members of one enumeration, matching the treatment operations already had, so that a target
+registers the ones it needs without the shared module knowing about them.
+
+## 2026-09-12T22:10+02:00 — implementation
+
+**An immediate operand is matched by declared width on x86-64 and by value on AArch64**
+
+On x86-64 the declared width is what chooses between two encodings of one instruction, so a 64-bit constant must not silently pick
+the 32-bit form.  On AArch64 there is no shorter form to fall back to, so what matters is only whether the value fits the field.
+The operand specification supports both, and each table states which it means.
+
+## 2026-09-12T22:10+02:00 — implementation
+
+**The zero register and the stack pointer are two units that share a number**
+
+AArch64 spells both as register 31, and which one is meant depends on the instruction.  They are modelled as separate storage
+units with the same encoding, because that is what they are: writing the stack pointer changes something and writing the zero
+register does not.  It also keeps the interference rule honest -- the two do not interfere, which a single unit would have claimed
+they do.
+
+## 2026-09-12T22:10+02:00 — implementation
+
+**`--print-targets`, and the examples take their architecture list from it**
+
+A build system that carries its own list of architectures is a list that rots.  The compiler reports the targets it has, and the
+examples build one binary per line of that output; adding this backend needed no edit anywhere in `examples`.
+
+Only canonical triples are reported.  The abbreviations a triple may also be spelled with are still accepted on the command line,
+but listing them would make a build system produce the same binary several times.
+
 ---
 
 Open questions

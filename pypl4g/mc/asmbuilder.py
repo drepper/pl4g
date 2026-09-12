@@ -86,11 +86,15 @@ class Assembler:
     """Builds the symbolic representation of one image."""
 
     def __init__(self, selector: InstructionSelector, streamer: MCStreamer,
-                 function_alignment: int = 16,
+                 function_alignment: int = 16, pad_byte: int = 0xCC,
                  machine_passes: Sequence["MachinePass"] = ()) -> None:
         self._selector = selector
         self._streamer = streamer
         self._alignment = function_alignment
+        #: What padding is filled with.  It must trap rather than fall through,
+        #: so each architecture names a byte of its own: a breakpoint on one, a
+        #: permanently undefined word on another.
+        self._pad_byte = pad_byte
         #: Rewrites applied to each function before its registers are assigned.
         #: This is where the register allocator and the scheduler will also run.
         self._machine_passes = list(machine_passes)
@@ -115,7 +119,7 @@ class Assembler:
 
     def align(self, alignment: int) -> None:
         """Pad to the next multiple of *alignment*."""
-        self._streamer.emit_align(alignment)
+        self._streamer.emit_align(alignment, self._pad_byte)
 
     # -- functions -------------------------------------------------------------
 
@@ -142,7 +146,7 @@ class Assembler:
         for machine_pass in self._machine_passes:
             machine_pass.run(function)
         self._assign_registers(function)
-        self._streamer.emit_align(self._alignment)
+        self._streamer.emit_align(self._alignment, self._pad_byte)
         binding = SymBinding.GLOBAL if function.exported else SymBinding.LOCAL
         symbol = self._streamer.define_symbol(function.name, binding, SymKind.FUNC)
         for block in function.blocks:
@@ -152,7 +156,7 @@ class Assembler:
             self._streamer.emit_insts(block.insts)
         self._streamer.set_symbol_size(symbol)
         if function.padding > 0:
-            self._streamer.emit_padding(function.padding)
+            self._streamer.emit_padding(function.padding, self._pad_byte)
         self._function = None
         self._block = None
         return symbol

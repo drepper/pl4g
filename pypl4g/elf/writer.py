@@ -11,7 +11,8 @@ matter of comparing two buffers.
 from dataclasses import dataclass
 from typing import Final, Sequence
 
-from ..mc.fixup import UnresolvedSymbol, encode_fixup
+from ..mc.fixup import (FixupApplier, MCFixup, UnresolvedSymbol,
+                        apply_little_endian, fixup_value)
 from ..mc.fragment import (MCDataFragment, MCFragment, MCInstFragment,
                            MCPaddingFragment)
 from ..mc.layout import (layout_section, resolve_symbol_offsets,
@@ -70,11 +71,14 @@ class ElfWriter:
     """Turns the assembled sections into an ELF executable."""
 
     def __init__(self, settings: ImageSettings, sections: Sequence[MCSection],
-                 symbols: Sequence[MCSymbol], source_paths: Sequence[str]) -> None:
+                 symbols: Sequence[MCSymbol], source_paths: Sequence[str],
+                 apply_fixup: FixupApplier = apply_little_endian) -> None:
         self._settings = settings
         self._sections = [s for s in sections if s.fragments]
         self._symbols = list(symbols)
         self._source_paths = list(source_paths)
+        #: How this target stores a fixup's value once it has been computed.
+        self._apply_fixup = apply_fixup
 
     # -- planning --------------------------------------------------------------
 
@@ -355,22 +359,23 @@ class ElfWriter:
                 if not isinstance(fragment, (MCInstFragment, MCDataFragment)):
                     continue
                 base = section.vaddr + fragment.offset
+                target = fragment.encoded if isinstance(fragment, MCInstFragment) \
+                    else fragment.contents
                 for fixup in fragment.fixups:
                     try:
-                        data = encode_fixup(fixup, base + fixup.offset)
+                        value = fixup_value(fixup, base + fixup.offset)
                     except UnresolvedSymbol as exc:
                         raise ImageError("".join((
                             "'", exc.name, "' is referenced but never defined")),
                             exc.name) from exc
-                    target = fragment.encoded if isinstance(fragment, MCInstFragment) \
-                        else fragment.contents
-                    target[fixup.offset:fixup.offset + len(data)] = data
+                    self._apply_fixup(target, fixup.offset, fixup, value)
 
 
 def write_image(settings: ImageSettings, sections: Sequence[MCSection],
-                symbols: Sequence[MCSymbol],
-                source_paths: Sequence[str]) -> tuple[bytes, ImageLayout]:
+                symbols: Sequence[MCSymbol], source_paths: Sequence[str],
+                apply_fixup: FixupApplier = apply_little_endian
+                ) -> tuple[bytes, ImageLayout]:
     """Plan and write the image, returning the bytes and the layout."""
-    writer = ElfWriter(settings, sections, symbols, source_paths)
+    writer = ElfWriter(settings, sections, symbols, source_paths, apply_fixup)
     layout = writer.plan()
     return writer.materialize(layout), layout

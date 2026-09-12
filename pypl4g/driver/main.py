@@ -165,7 +165,8 @@ class Driver:
                                  kind=ImageKind.EXECUTABLE)
         try:
             image, _ = write_image(settings, list(streamer.sections.values()),
-                                   list(streamer.symbols.values()), module.source_paths)
+                                   list(streamer.symbols.values()), module.source_paths,
+                                   target.apply_fixup)
         except ImageError as exc:
             if exc.symbol is not None:
                 self.diags.emit(D.IMPL_IMAGE_UNDEFINED_SYMBOL, name=exc.symbol)

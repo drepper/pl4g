@@ -1,4 +1,4 @@
-"""The x86-64 backend."""
+"""The AArch64 backend."""
 
 from typing import Final
 
@@ -7,38 +7,35 @@ from ...diag.engine import DiagEngine
 from ...ir.module import Module
 from ...mc.asmbuilder import Assembler
 from ...mc.desc import InstrTable
-from ...mc.fixup import FixupApplier, MCFixup, apply_little_endian
+from ...mc.fixup import FixupApplier, MCFixup
 from ...mc.inst import MCInst
 from ...mc.reg import RegisterInfo
 from ...mc.streamer import MCStreamer
 from ..target import ImageDefaults
 from .abi import lookup as lookup_cconv
 from .encoder import EncodingError, encode
-from .isel import UnsupportedOperation, X86Selector, lower_function
-from .opcodes import X86_INSTRS
-from .peephole import passes_for
+from .fixups import apply_fixup
+from .isel import A64Selector, UnsupportedOperation, lower_function
+from .opcodes import AARCH64_INSTRS, PAD_BYTE
 from .regs import INFO
 from .startup import ENTRY_SYMBOL, emit_start
 
-
-#: EM_X86_64, loaded at the address a fixed-address executable conventionally
-#: uses on this architecture.
-#: int3.  Falling into padding traps rather than drifting into the next function.
-PAD_BYTE: Final[int] = 0xCC
-
+#: EM_AARCH64.  The page size is the largest a kernel may be configured with, so
+#: that one image loads whatever the running kernel chose; the congruence the
+#: format requires between a segment's offset and its address holds for it.
 IMAGE_DEFAULTS: Final[ImageDefaults] = ImageDefaults(
-    machine=62, base_vaddr=0x400000, page_size=0x1000, text_alignment=16,
+    machine=183, base_vaddr=0x400000, page_size=0x10000, text_alignment=16,
     function_alignment=16)
 
 
-class X86_64Target:
-    """Code generation for x86-64."""
+class AArch64Target:
+    """Code generation for AArch64."""
 
     def __init__(self) -> None:
-        self.triple: str = "x86_64-linux-none"
+        self.triple: str = "aarch64-linux-none"
         self.pointer_bits: int = 64
         self.registers: RegisterInfo = INFO
-        self.table = InstrTable(X86_INSTRS)
+        self.table = InstrTable(AARCH64_INSTRS)
 
     def encode(self, inst: MCInst) -> tuple[bytes, list[MCFixup]]:
         """Encode one instruction."""
@@ -46,13 +43,13 @@ class X86_64Target:
 
     @property
     def apply_fixup(self) -> FixupApplier:
-        """A displacement occupies its whole field, so it is simply overwritten."""
-        return apply_little_endian
+        """A relocation shares its word with the opcode, so it is inserted."""
+        return apply_fixup
 
-    def selector(self, streamer: MCStreamer) -> X86Selector:
+    def selector(self, streamer: MCStreamer) -> A64Selector:
         """The instruction selector for this target."""
         del streamer
-        return X86Selector(self.table)
+        return A64Selector(self.table)
 
     def image_defaults(self) -> ImageDefaults:
         """The layout constants the image writer needs."""
@@ -60,22 +57,17 @@ class X86_64Target:
 
     def new_assembler(self, streamer: MCStreamer, opt_level: int) -> Assembler:
         """Build an assembler that emits for this target."""
+        del opt_level
         return Assembler(self.selector(streamer), streamer,
-                         function_alignment=self.image_defaults().function_alignment,
-                         pad_byte=PAD_BYTE,
-                         machine_passes=passes_for(self.table, opt_level))
+                         function_alignment=IMAGE_DEFAULTS.function_alignment,
+                         pad_byte=PAD_BYTE)
 
     def generate(self, module: Module, asm: Assembler, diags: DiagEngine,
                  opt_level: int) -> None:
-        """Generate the whole image for *module*.
-
-        The entry point is emitted last so that the functions it calls are
-        already defined; nothing depends on that order, since emission never
-        waits for a symbol, but it keeps the image in a readable order.
-        """
+        """Generate the whole image for *module*."""
         del opt_level
         asm.section(".text", executable=True,
-                    alignment=self.image_defaults().text_alignment)
+                    alignment=IMAGE_DEFAULTS.text_alignment)
         for func in module.functions.values():
             if func.is_declaration:
                 continue

@@ -11,8 +11,8 @@ the fields a legacy encoding uses.
 
 from typing import Final, Sequence
 
-from ...mc.desc import (EncKind, InstDesc, ModRMUse, OpMap, OpSize)
-from ...mc.fixup import FixupKind, MCFixup
+from .desc import EncKind, ModRMUse, OpMap, OpSize, X86InstDesc
+from ...mc.fixup import MCFixup, PCREL8, PCREL32
 from ...mc.inst import MCInst
 from ...mc.operand import MCImm, MCMem, MCOperand, MCReg, MCSymRef
 from ...mc.reg import PhysReg, Reg, VirtReg
@@ -70,7 +70,7 @@ def _reg_of(operand: MCOperand, span: Span | None) -> PhysReg:
     return _physical(operand.reg, span)
 
 
-def _mem_operand(desc: InstDesc, operands: Sequence[MCOperand]) -> MCMem | None:
+def _mem_operand(desc: X86InstDesc, operands: Sequence[MCOperand]) -> MCMem | None:
     """The memory operand of the instruction, if it has one."""
     for operand in operands:
         if isinstance(operand, MCMem):
@@ -78,7 +78,7 @@ def _mem_operand(desc: InstDesc, operands: Sequence[MCOperand]) -> MCMem | None:
     return None
 
 
-def _rex_bits(desc: InstDesc, operands: Sequence[MCOperand],
+def _rex_bits(desc: X86InstDesc, operands: Sequence[MCOperand],
               span: Span | None) -> tuple[int, int, int, int, bool]:
     """Compute the W, R, X and B bits and whether a REX prefix is needed."""
     w = 1 if desc.opsize is OpSize.REXW else 0
@@ -127,7 +127,7 @@ def _emit_memory(out: bytearray, fixups: list[MCFixup], mem: MCMem, reg_field: i
     if mem.rip_relative:
         _emit_modrm(out, 0, reg_field, _RBP_ENC)
         if mem.disp_sym is not None:
-            fixups.append(MCFixup(offset=len(out), kind=FixupKind.PCREL32,
+            fixups.append(MCFixup(offset=len(out), kind=PCREL32,
                                   target=mem.disp_sym, trailing=trailing,
                                   span=span if span is not None else INVALID_SPAN))
             out += b"\x00\x00\x00\x00"
@@ -181,7 +181,7 @@ def _emit_rel(out: bytearray, fixups: list[MCFixup], operand: MCOperand, bits: i
     """Emit a branch displacement, leaving a fixup to patch it later."""
     if not isinstance(operand, MCSymRef):
         raise EncodingError("a symbol reference was expected as the branch target", span)
-    kind = FixupKind.PCREL32 if bits == 32 else FixupKind.PCREL8
+    kind = PCREL32 if bits == 32 else PCREL8
     fixups.append(MCFixup(offset=len(out), kind=kind, target=operand.expr,
                           trailing=0, span=span if span is not None else INVALID_SPAN))
     out += bytes(bits // 8)
@@ -190,6 +190,7 @@ def _emit_rel(out: bytearray, fixups: list[MCFixup], operand: MCOperand, bits: i
 def encode(inst: MCInst) -> tuple[bytes, list[MCFixup]]:
     """Encode one instruction into bytes and the fixups it leaves behind."""
     desc = inst.desc
+    assert isinstance(desc, X86InstDesc)
     operands = inst.operands
     span = inst.span if inst.span.is_valid else None
     out = bytearray()

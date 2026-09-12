@@ -6,6 +6,7 @@ apart.  Those tests drive the compiler only through its command line, so they
 will still be valid once the final compiler replaces this one.
 """
 
+import platform
 import shutil
 import subprocess
 import sys
@@ -25,6 +26,43 @@ DIRECTIVE = "\N{REFERENCE MARK} pl4g-test:"
 #: cannot determine for a raw instruction blob, so the tests name the one they
 #: need directly.
 OBJDUMP = "/usr/bin/objdump"
+
+#: The disassembler and the emulator for each architecture.  A test that needs
+#: one is skipped where it is not installed rather than failing.
+ARCH_TOOLS: dict[str, dict[str, str]] = {
+    "x86_64": {"objdump": "/usr/bin/objdump", "machine": "i386:x86-64",
+               "qemu": "qemu-x86_64", "flavour": "intel"},
+    "aarch64": {"objdump": "/usr/bin/aarch64-linux-gnu-objdump", "machine": "aarch64",
+                "qemu": "qemu-aarch64", "flavour": ""},
+}
+
+HOST_ARCH = platform.machine()
+
+
+def architecture_of(triple: str) -> str:
+    """The architecture a triple names, which is its first component."""
+    return triple.split("-", 1)[0]
+
+
+def runner_for(triple: str) -> list[str]:
+    """How to run a binary built for *triple*: directly, or through an emulator."""
+    arch = architecture_of(triple)
+    if arch == HOST_ARCH:
+        return []
+    return [ARCH_TOOLS.get(arch, {}).get("qemu", "".join(("qemu-", arch)))]
+
+
+def compiler_targets() -> list[str]:
+    """The targets the compiler reports, asked once per session."""
+    global _TARGETS
+    if _TARGETS is None:
+        proc = run_compiler(["--print-targets"])
+        assert proc.returncode == 0, describe(proc)
+        _TARGETS = proc.stdout.split()
+    return _TARGETS
+
+
+_TARGETS: list[str] | None = None
 
 
 @dataclass(slots=True)
@@ -98,23 +136,37 @@ class PL4GFile(pytest.File):
     """A ``.pl4g`` file, collected as one test."""
 
     def collect(self):  # noqa: ANN201
-        """Yield one test item per optimization level the file asks for."""
+        """Yield one item per optimization level, and per target where it runs.
+
+        A program that is expected to run is built and run for every target, so
+        a backend that miscompiles it fails here.  A program that is expected
+        not to compile is checked once: a diagnostic does not depend on the
+        target.
+        """
         text = self.path.read_text(encoding="utf-8")
         expectations = parse_directives(text)
+        runs = expectations.compiles and (expectations.run_native
+                                          or expectations.run_qemu)
+        triples = compiler_targets() if runs else [compiler_targets()[0]]
         for level in expectations.opt_levels:
-            yield PL4GItem.from_parent(
-                self, name="".join((self.path.stem, "-O", str(level))),
-                expectations=expectations, opt_level=level)
+            for triple in triples:
+                suffix = "".join(("-O", str(level)))
+                if runs:
+                    suffix = "".join((suffix, "-", architecture_of(triple)))
+                yield PL4GItem.from_parent(
+                    self, name="".join((self.path.stem, suffix)),
+                    expectations=expectations, opt_level=level, triple=triple)
 
 
 class PL4GItem(pytest.Item):
     """One run of the compiler over one language test file."""
 
-    def __init__(self, *, expectations: Expectations, opt_level: int,
+    def __init__(self, *, expectations: Expectations, opt_level: int, triple: str,
                  **kwargs: object) -> None:
         super().__init__(**kwargs)  # type: ignore[arg-type]
         self.expectations = expectations
         self.opt_level = opt_level
+        self.triple = triple
 
     def runtest(self) -> None:
         """Compile the file and check everything it expects."""
@@ -122,17 +174,19 @@ class PL4GItem(pytest.Item):
             pytest.xfail(self.expectations.xfail)
         source = Path(str(self.path))
         output = Path(str(self.config.rootpath)) / ".pytest_cache" / "bin" / \
-            "".join((source.stem, "-O", str(self.opt_level)))
+            self.triple / "".join((source.stem, "-O", str(self.opt_level)))
         output.parent.mkdir(parents=True, exist_ok=True)
         proc = run_compiler(["-o", str(output), "".join(("-O", str(self.opt_level))),
+                             "".join(("--target=", self.triple)),
                              *self.expectations.extra_args, str(source)])
         self._check_compile(proc)
         if not self.expectations.compiles:
             return
-        if self.expectations.run_native:
-            self._check_run([str(output)], "natively")
-        if self.expectations.run_qemu and shutil.which("qemu-x86_64"):
-            self._check_run(["qemu-x86_64", str(output)], "under qemu")
+        runner = runner_for(self.triple)
+        if runner and not shutil.which(runner[0]):
+            pytest.skip("".join((runner[0], " is not installed")))
+        how = "natively" if not runner else "".join(("under ", runner[0]))
+        self._check_run([*runner, str(output)], how)
 
     def _check_compile(self, proc: subprocess.CompletedProcess[str]) -> None:
         """Check the compilation itself against what the file expects."""

@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from conftest import describe, run_compiler
+from conftest import architecture_of, compiler_targets, describe, run_compiler
 from pypl4g.ir.printer import render_module
 from pypl4g.ir.reader import read_module
 
@@ -55,11 +55,19 @@ def test_ir_round_trip_is_a_fixed_point(name: str) -> None:
     assert render_module(read_module(text)) == text
 
 
+@pytest.mark.parametrize("triple", compiler_targets())
 @pytest.mark.parametrize("name", CASES)
-def test_asm_matches_golden(root: Path, name: str, tmp_path: Path) -> None:
-    """Instruction selection produces what the golden dump records."""
+def test_asm_matches_golden(root: Path, name: str, triple: str,
+                            tmp_path: Path) -> None:
+    """Instruction selection produces what the golden dump records.
+
+    There is one dump per architecture, so a change in either backend has to be
+    acknowledged rather than slipping through.
+    """
     output = tmp_path / "out.asm"
     proc = run_compiler(["-o", str(output), "--emit=asm", "-O1",
+                         "".join(("--target=", triple)),
                          str(_language_test(root, name))])
     assert proc.returncode == 0, describe(proc)
-    _compare(GOLDEN / "".join((name, ".asm")), output.read_text(encoding="utf-8"))
+    golden = GOLDEN / "".join((name, ".", architecture_of(triple), ".asm"))
+    _compare(golden, output.read_text(encoding="utf-8"))
