@@ -400,6 +400,7 @@ class Checker:
             self._diags.emit(D.LANG_FUNCDEF_SPECIAL_NO_STARTUP)
 
 
+
 def check(module: Module, units: Sequence[ast.SourceUnit], diags: DiagEngine) -> Module:
     """Check *units* and lower them into *module*."""
     return Checker(module, diags).run(units)

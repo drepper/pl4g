@@ -252,6 +252,39 @@ A constructor and a destructor take no parameters and return `void`, because the
 nowhere to put a result.
 
 
+#### Names in the Generated Program
+
+The name a function is known by in the generated program is its signature written out: the name, the parameter types in
+parentheses separated by commas, and then the result type.
+
+```
+fn main() → u8                            main()u8
+fn absdiff(a: i32, b: i32) → i32          absdiff(i32,i32)i32
+fn take(p: ptr<u8>, n: u64) → void        take(ptr<u8>,u64)void
+fn apply(f: fn(i32) → i32, x: i32) → i32  apply(fn(i32)i32,i32)i32
+```
+
+A function belonging to a module is named within it, the module name first and separated by a full stop:
+`text.utf8.decode(ptr<u8>)u32`.
+
+The type names are the normalized ones: the same names the language uses, with no spaces and no glyphs, so that a name stays one
+word.  A composite type is written out structurally, with its fields in the order they were declared -- the compiler may reorder
+the *layout* of a product type, but the declaration is what identifies the type.
+
+**Nothing is encoded.**  There is no substitution table, no length prefix and no abbreviation for a type that appears twice.  The
+name is longer than an encoded one and it is readable exactly as it stands, which is the trade this language makes: a symbol table
+listing, a disassembly, a profile and a backtrace all show the signature without a tool in between, and no demangler exists because
+there is nothing to undo.  Compare C++, whose encoding compresses a name to the point where reading one requires a program to do
+it; Rust and Swift, which encode similarly; Go, which writes a readable name but leaves the types out of it; and C, which uses the
+bare name and so cannot tell two functions apart at all.
+
+The bare name is used in one case: a function that declares a foreign calling convention keeps it.  The point of declaring one is
+to be reachable from a world that has never heard of this language, and that world knows the function by the name it was given.
+
+Because the result type is part of the name, two functions that differ only in what they return are different names.  Nothing
+depends on that yet; it is what would let a result take part in choosing between functions of one name, which is not specified.
+
+
 Runtime
 -------
 

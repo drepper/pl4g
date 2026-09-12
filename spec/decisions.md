@@ -314,6 +314,37 @@ where the calling convention puts a narrow value on all three architectures; onl
 The compiler enforces it: a startup function that returns anything else is diagnostic 4404, whose message now names the required
 type rather than spelling it in prose, so that the catalog and the compiler cannot come to disagree about what it is.
 
+## 2026-09-13T01:30+02:00 — language
+
+**A function's symbol is its signature written out, with nothing encoded**
+
+Decided on the user's direction.  The name a function carries in the generated program is its name, the parameter types in
+parentheses separated by commas, and then the result type: `main()u8`, `absdiff(i32,i32)i32`, `take(ptr<u8>,u64)void`.  A module
+name prefixes it, separated by a full stop.
+
+Considered: the encoding C++ uses, which substitutes repeated components and prefixes lengths, and which Rust and Swift follow in
+spirit; Go's, which is readable but carries no types and so cannot distinguish two functions of one name; and C's, which is the
+bare name and distinguishes nothing.
+
+Chosen because the readable form costs only length, and length in a symbol table is not where a program's size lies.  What it buys
+is that every tool that shows a symbol -- a disassembler, a symbol table listing, a profiler, a debugger's backtrace -- shows the
+signature with nothing in between, and that the compiler needs no demangler, because there is nothing to undo.  The encoded forms
+exist to keep names short for linkers that once cared; that is not a constraint here, where the compiler writes the image itself.
+
+The result type is part of the name, so two functions differing only in what they return are different symbols.  Nothing depends on
+that yet.  It is the piece that would let a result take part in choosing between functions of one name, and it costs nothing to
+have now rather than to retrofit into every symbol later.
+
+A function that declares a foreign calling convention keeps its bare name: declaring one is declaring how a world that has never
+heard of this language already knows the function.
+
+Two functions cannot share a symbol.  Today that cannot be stated in source -- differing signatures mangle differently, and
+identical ones are already refused as one name defined twice -- so the check is in the verifier, where a failure reports a defect
+in the compiler rather than in the program.  It becomes the real check if functions of one name are ever allowed to differ.
+
+The symbol is computed from the intermediate representation alone and is stored nowhere, so every stage that needs it arrives at
+the same string without anything being passed along.
+
 ---
 
 Open questions
@@ -334,8 +365,9 @@ These are recorded so they are not lost.  None of them blocks the current versio
   read as "there is no *need to* process definitions in order", so a forward reference at the top level is legal.  The semantic
   analysis collects every top-level definition before checking any body, which is what makes that reading true.
 
-- **Symbol mangling.**  Names are currently emitted unmangled.  A scheme is needed before foreign interfaces exist, or a PL4G name
-  and a C name will collide.
+- **Naming a symbol outright.**  A function following a foreign convention keeps its bare name, which covers calling into another
+  world.  There is no way to say what a function should be called without also saying how it is called -- an attribute naming the
+  symbol directly.  Nothing needs it yet.
 
 - **Materializing the address of a symbol on RISC-V.**  The rule adopted for position-independent code is that an address is only
   ever produced by one helper that emits a program-counter-relative computation.  On x86-64 that is one instruction and on AArch64

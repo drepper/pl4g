@@ -105,6 +105,9 @@ class Function:
     blocks: list[BasicBlock] = field(default_factory=list)
     span: Span = INVALID_SPAN
     source_path: str = ""
+    #: The module the function belongs to, which prefixes its symbol name.
+    #: Modules are not specified yet, so this is empty for now.
+    module: str = ""
 
     @property
     def is_declaration(self) -> bool:

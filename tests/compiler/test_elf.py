@@ -24,6 +24,11 @@ fn main() \N{RIGHTWARDS ARROW} u8:
 
 READELF = "eu-readelf"
 
+#: The symbol the startup function above is known by.  A mangled name is the
+#: signature written out, so it needs no demangler to read -- which is the point
+#: of it, and is why the expectations below can simply state it.
+MAIN = "main()u8"
+
 #: What each backend is expected to emit for the program above, and the machine
 #: number the image must carry.  Writing the instructions out is the point: a
 #: change in code generation should have to be acknowledged here.
@@ -32,7 +37,7 @@ EXPECTED = {
         "xor eax,eax",
         "ret",
         "xor ebp,ebp",
-        "call <main>",
+        "".join(("call <", MAIN, ">")),
         "mov edi,eax",
         "mov eax,0xe7",
         "syscall",
@@ -43,7 +48,7 @@ EXPECTED = {
         "ret",
         "mov x29, xzr",
         "mov x30, xzr",
-        "bl <main>",
+        "".join(("bl <", MAIN, ">")),
         "mov x8, #0x5e",
         "svc #0x0",
         "brk #0x1",
@@ -53,7 +58,7 @@ EXPECTED = {
         "ret",
         "li s0,0",
         "li ra,0",
-        "jal <main>",
+        "".join(("jal <", MAIN, ">")),
         "li a7,94",
         "ecall",
         "unimp",
@@ -139,11 +144,15 @@ def test_the_loaded_segment_is_congruent_with_its_address(built: Built) -> None:
 
 
 def test_sections_and_symbols_are_present(built: Built) -> None:
-    """The symbol table is the map an incremental rebuild will read back."""
+    """The symbol table is the map an incremental rebuild will read back.
+
+    The function appears under its mangled name, which is readable as it stands:
+    a symbol table listing shows the signature without a demangler.
+    """
     assert [s.name for s in built.image.sections] == \
         ["", ".text", ".shstrtab", ".symtab", ".strtab"]
     start = built.image.symbol("_start")
-    main = built.image.symbol("main")
+    main = built.image.symbol(MAIN)
     assert start is not None and main is not None
     assert start.value == built.image.e_entry
     assert main.size > 0 and start.size > 0

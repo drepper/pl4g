@@ -10,6 +10,7 @@ returning to anything.
 
 from typing import Final
 
+from ...ir.mangle import symbol_name
 from ...ir.module import Module
 from ...mc import ops
 from ...mc.asmbuilder import Assembler
@@ -42,15 +43,15 @@ def emit_start(asm: Assembler, module: Module, cconv: CallConvDesc) -> None:
     asm.loadreg(FP, asm.reg(ZERO))
     asm.loadreg(RA, asm.reg(ZERO))
     for ctor in module.ctors:
-        asm.call(ctor.name)
-    asm.call(startup.name)
+        asm.call(symbol_name(ctor))
+    asm.call(symbol_name(startup))
     # The value a function returns is already in the register a system call
     # takes its first argument in, so nothing has to be moved -- unless a
     # destructor runs in between and is free to clobber it.
     if module.dtors:
         asm.loadreg(S1, asm.reg(status))
         for dtor in module.dtors:
-            asm.call(dtor.name)
+            asm.call(symbol_name(dtor))
         asm.loadreg(status, asm.reg(S1))
     asm.loadreg(A7, asm.imm(NR_EXIT_GROUP, 12))
     asm.op(rvops.ENVIRONMENT_CALL)

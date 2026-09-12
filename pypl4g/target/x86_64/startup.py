@@ -11,6 +11,7 @@ leaves through a system call rather than by returning to anything.
 
 from typing import Final
 
+from ...ir.mangle import symbol_name
 from ...ir.module import Module
 from ...mc import ops
 from ...mc.asmbuilder import Assembler
@@ -41,13 +42,13 @@ def emit_start(asm: Assembler, module: Module, cconv: CallConvDesc) -> None:
     # debugger unwinding the stack knows where to stop.
     asm.op(ops.XOR, EBP, asm.reg(EBP), asm.reg(EBP))
     for ctor in module.ctors:
-        asm.call(ctor.name)
-    asm.call(startup.name)
+        asm.call(symbol_name(ctor))
+    asm.call(symbol_name(startup))
     # The status is moved out of the return register before the destructors run,
     # because a destructor is an ordinary call and may use that register.
     asm.loadreg(EDI, asm.reg(status32))
     for dtor in module.dtors:
-        asm.call(dtor.name)
+        asm.call(symbol_name(dtor))
     asm.loadreg(EAX, asm.imm(NR_EXIT_GROUP, 32, signed=False))
     asm.op(x86ops.SYSCALL)
     # exit_group does not return; trapping makes that explicit rather than

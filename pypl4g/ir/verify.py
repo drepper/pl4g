@@ -10,6 +10,7 @@ from typing import Iterable
 
 from ..diag.engine import InternalError
 from .function import BasicBlock, Function, SpecialKind
+from .mangle import symbol_name
 from .inst import (BinaryInst, BlockTarget, CmpInst, Instruction, RetInst,
                    Terminator, UnaryInst)
 from .module import Module
@@ -40,6 +41,30 @@ class Verifier:
     # -- module level ----------------------------------------------------------
 
     def _check_module(self) -> None:
+        """Check the properties the whole module must have."""
+        self._check_symbols_are_distinct()
+        self._check_special_caches()
+
+    def _check_symbols_are_distinct(self) -> None:
+        """Check that no two functions end up under one symbol.
+
+        Two functions whose signatures differ mangle to different names, and two
+        that agree are already refused as one name defined twice.  So this can
+        only fail if the mangling itself is wrong, which is a defect in the
+        compiler and not in the program.
+        """
+        seen: dict[str, str] = {}
+        for func in self._module.functions.values():
+            symbol = symbol_name(func)
+            previous = seen.get(symbol)
+            if previous is not None:
+                self._fail("module", "".join((
+                    "'", previous, "' and '", func.name,
+                    "' are both known by the symbol '", symbol, "'")))
+                continue
+            seen[symbol] = func.name
+
+    def _check_special_caches(self) -> None:
         """Check that the special-function caches agree with the attributes."""
         startups = [f for f in self._module.functions.values()
                     if f.attrs.special is SpecialKind.STARTUP]

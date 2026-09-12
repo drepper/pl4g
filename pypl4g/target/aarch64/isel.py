@@ -113,10 +113,12 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
                    registers: "RegisterInfo") -> None:
     """Build the machine form of one IR function."""
     from ...ir.inst import RetInst
+    from ...ir.mangle import symbol_name
     from ...ir.types import IntType
     from ...ir.value import IntConst
 
-    asm.begin_function(func.name, exported=func.linkage.value == "exported")
+    asm.begin_function(symbol_name(func),
+                       exported=func.linkage.value == "exported")
     for block in func.blocks:
         for inst in block.insts:
             span = inst.span if inst.span.is_valid else None

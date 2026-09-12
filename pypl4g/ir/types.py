@@ -17,6 +17,15 @@ class Type:
         """The name of this type in the textual form of the IR."""
         raise NotImplementedError
 
+    def mangled(self) -> str:
+        """The normalized name of this type, for use inside a symbol name.
+
+        It differs from ``render`` only in carrying no spaces and no glyphs, so
+        that a symbol stays one word.  For every primitive type the two are the
+        same string.
+        """
+        return self.render()
+
 
 @dataclass(frozen=True, slots=True)
 class VoidType(Type):
@@ -87,6 +96,10 @@ class PtrType(Type):
         """The name of this type in the textual form of the IR."""
         return "".join(("ptr<", self.pointee.render(), ">"))
 
+    def mangled(self) -> str:
+        """The normalized name of this type, for use inside a symbol name."""
+        return "".join(("ptr<", self.pointee.mangled(), ">"))
+
 
 @dataclass(frozen=True, slots=True)
 class FuncType(Type):
@@ -99,6 +112,15 @@ class FuncType(Type):
         """The name of this type in the textual form of the IR."""
         inner = ", ".join(p.render() for p in self.params)
         return "".join(("fn(", inner, ") \N{RIGHTWARDS ARROW} ", self.ret.render()))
+
+    def mangled(self) -> str:
+        """The normalized name of this type, for use inside a symbol name.
+
+        A function type is spelled the way a function symbol is: the parameters
+        in parentheses, then the result.
+        """
+        inner = ",".join(p.mangled() for p in self.params)
+        return "".join(("fn(", inner, ")", self.ret.mangled()))
 
 
 @dataclass(frozen=True, slots=True)
@@ -127,6 +149,16 @@ class ProductType(Type):
         inner = ", ".join("".join((n, ": ", t.render())) for n, t in self.fields)
         return "".join(("{", inner, "}"))
 
+    def mangled(self) -> str:
+        """The normalized name of this type, for use inside a symbol name.
+
+        The fields appear in the order they were declared.  A later pass may
+        reorder the *layout* for efficiency, but the declaration is what
+        identifies the type, so that is what the name records.
+        """
+        inner = ",".join("".join((n, ":", t.mangled())) for n, t in self.fields)
+        return "".join(("{", inner, "}"))
+
 
 @dataclass(frozen=True, slots=True)
 class SumType(Type):
@@ -137,6 +169,11 @@ class SumType(Type):
     def render(self) -> str:
         """The name of this type in the textual form of the IR."""
         inner = " | ".join("".join((n, ": ", t.render())) for n, t in self.variants)
+        return "".join(("<", inner, ">"))
+
+    def mangled(self) -> str:
+        """The normalized name of this type, for use inside a symbol name."""
+        inner = "|".join("".join((n, ":", t.mangled())) for n, t in self.variants)
         return "".join(("<", inner, ">"))
 
 
