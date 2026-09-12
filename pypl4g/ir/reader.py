@@ -40,7 +40,10 @@ def _parse_type(text: str, types: TypeContext, line_number: int) -> Type:
     if text == "mem":
         return MEM
     if text.startswith("ptr<") and text.endswith(">"):
-        return types.ptr_type(_parse_type(text[4:-1], types, line_number))
+        inner = text[4:-1]
+        mutable = inner.startswith("mut ")
+        return types.ptr_type(_parse_type(inner.removeprefix("mut "), types, line_number),
+                              mutable=mutable)
     found = BUILTIN_TYPES.get(text)
     if found is None:
         raise IRSyntaxError(line_number, "".join(("unknown type '", text, "'")))
@@ -316,19 +319,21 @@ def read_module(text: str) -> Module:
 
 def _read_global(module: Module, line: str, number: int) -> None:
     """Parse one ``let @name: type linkage = value`` line."""
-    body = line.removeprefix("let ")
-    mutable = body.startswith("mut ")
-    head, _, initializer = body.removeprefix("mut ").removeprefix("@").partition("=")
+    head, _, initializer = line.removeprefix("let @").partition("=")
     name, _, rest = head.strip().partition(":")
     words = rest.split()
+    mutable = words[0] == "mut"
+    if mutable:
+        words = words[1:]
     ty = _parse_type(words[0], module.types, number)
     linkage = Linkage(words[1]) if len(words) > 1 else Linkage.INTERNAL
     from .types import IntType
 
     text = initializer.strip()
     value = module.int_const(ty, int(text, 0)) if isinstance(ty, IntType) else None
-    module.add_global(GlobalVar(name.strip(), ty, module.types.ptr_type(ty), value,
-                                linkage, mutable=mutable))
+    module.add_global(GlobalVar(name.strip(), ty,
+                                module.types.ptr_type(ty, mutable=mutable), value,
+                                linkage))
 
 
 def _rebuild_caches(module: Module) -> None:

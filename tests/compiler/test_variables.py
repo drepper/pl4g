@@ -61,6 +61,17 @@ def test_a_variable_starts_out_holding_its_value(ty: object, value: int,
     assert initial_bytes(var, LAYOUT) == expected
 
 
+def test_mutability_is_part_of_the_pointer_type() -> None:
+    """A value is a value; it is the place that is writable or not."""
+    module = Module("t")
+    plain = GlobalVar("a", U8, module.types.ptr_type(U8))
+    writable = GlobalVar("b", U8, module.types.ptr_type(U8, mutable=True))
+    assert not plain.mutable and writable.mutable
+    assert plain.ty.render() == "ptr<u8>"
+    assert writable.ty.render() == "ptr<mut u8>"
+    assert plain.value_type is writable.value_type, "the value's type is the same"
+
+
 def test_a_variable_is_named_by_its_own_name() -> None:
     """Nothing distinguishes two variables but their names, so nothing is added."""
     module = Module("t")
@@ -240,7 +251,7 @@ def test_the_largest_value_of_a_type_is_accepted(compile_source, declared: str, 
 
 # -- changing a variable -------------------------------------------------------
 
-ASSIGN = """let mut counter: u8 = 1u8
+ASSIGN = """let counter: mut u8 = 1u8
 
 @[startup]
 fn main() \N{RIGHTWARDS ARROW} u8:
@@ -256,7 +267,7 @@ def test_a_local_assignment_writes_nothing(compile_source, tmp_path) -> None:  #
     """
     proc, output = compile_source(
         "@[startup]\nfn main() \N{RIGHTWARDS ARROW} u8:\n"
-        "    let mut x: u8 = 3u8\n    x \N{LEFTWARDS ARROW} 5u8\n    x\n",
+        "    let x: mut u8 = 3u8\n    x \N{LEFTWARDS ARROW} 5u8\n    x\n",
         "--emit=ir")
     assert proc.returncode == 0, describe(proc)
     text = output.read_text(encoding="utf-8")
@@ -270,7 +281,7 @@ def test_a_global_assignment_is_a_store_the_token_orders(compile_source,  # noqa
     proc, output = compile_source(ASSIGN, "--emit=ir")
     assert proc.returncode == 0, describe(proc)
     text = output.read_text(encoding="utf-8")
-    assert "let mut @counter" in text, text
+    assert "let @counter: mut u8" in text, text
     assert "%0 = mem.start" in text, text
     assert "%1 = store.u8 %0, @counter, 7" in text, text
     assert "%2 = load.u8 %1, @counter" in text, "the read is not ordered after the write"
@@ -308,7 +319,68 @@ def test_the_verifier_refuses_a_store_into_something_immutable() -> None:
     block.append(RetInst(module.int_const(U8, 0)))
     module.add_function(func)
     module.startup = func
-    with pytest.raises(InternalError, match="not a mutable variable"):
+    with pytest.raises(InternalError, match="does not allow it"):
         verify(module)
-    var.mutable = True
+
+    # The same module with the variable's pointer allowing the write.
+    var.ty = module.types.ptr_type(U8, mutable=True)
     verify(module)
+
+
+# -- an assignment stands for the variable it changed ---------------------------
+
+def test_an_assignment_is_the_result_when_it_is_last(compile_source) -> None:  # noqa: ANN001
+    """A read follows the write, and the token is what puts it after."""
+    proc, output = compile_source(
+        "let counter: mut u8 = 1u8\n@[startup]\n"
+        "fn main() \N{RIGHTWARDS ARROW} u8:\n    counter \N{LEFTWARDS ARROW} 42u8\n",
+        "--emit=ir")
+    assert proc.returncode == 0, describe(proc)
+    text = output.read_text(encoding="utf-8")
+    assert "%1 = store.u8 %0, @counter, 42" in text, text
+    assert "%2 = load.u8 %1, @counter" in text, text
+    assert "ret.u8 %2" in text, text
+
+
+def test_a_discarded_assignment_reads_nothing_back(compile_source) -> None:  # noqa: ANN001
+    """Reading a place nothing looks at would be an instruction nobody asked for."""
+    proc, output = compile_source(
+        "let counter: mut u8 = 1u8\n@[startup]\n"
+        "fn main() \N{RIGHTWARDS ARROW} u8:\n    counter \N{LEFTWARDS ARROW} 42u8\n"
+        "    3u8\n", "--emit=ir")
+    assert proc.returncode == 0, describe(proc)
+    text = output.read_text(encoding="utf-8")
+    assert "store.u8" in text, text
+    assert "load" not in text, text
+
+
+def test_a_local_assignment_as_the_result_touches_no_memory(compile_source) -> None:  # noqa: ANN001
+    """A local is a value, so there is nothing to read back."""
+    proc, output = compile_source(
+        "@[startup]\nfn main() \N{RIGHTWARDS ARROW} u8:\n"
+        "    let status: mut u8 = 3u8\n    status \N{LEFTWARDS ARROW} 9u8\n",
+        "--emit=ir")
+    assert proc.returncode == 0, describe(proc)
+    text = output.read_text(encoding="utf-8")
+    assert "ret.u8 9" in text, text
+    assert "store" not in text and "load" not in text, text
+
+
+@pytest.mark.parametrize("source", [
+    "let v: mut u8 = 1u8",
+    "let v: mut = 1u8",
+])
+def test_mut_stands_where_the_type_does(compile_source, source: str) -> None:  # noqa: ANN001
+    """Either part after the colon may be left out; the qualifier has a place."""
+    proc, _ = compile_source("".join((
+        source, "\n@[startup]\nfn main() \N{RIGHTWARDS ARROW} u8:\n"
+        "    v \N{LEFTWARDS ARROW} 5u8\n")))
+    assert proc.returncode == 0, describe(proc)
+
+
+def test_mut_before_the_name_is_no_longer_the_syntax(compile_source) -> None:  # noqa: ANN001
+    """It qualifies the type, so it does not stand before the name."""
+    proc, _ = compile_source(
+        "@[startup]\nfn main() \N{RIGHTWARDS ARROW} u8:\n"
+        "    let mut v: u8 = 1u8\n    v\n")
+    assert proc.returncode != 0

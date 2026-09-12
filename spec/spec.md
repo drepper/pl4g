@@ -215,7 +215,7 @@ A variable is defined with:
 
 ```
 let NAME: TYPE = VALUE
-let mut NAME: TYPE = VALUE
+let NAME: mut TYPE = VALUE
 ```
 
 The colon is always written.  The type after it may be left out, in which case the variable's type is the type of its value:
@@ -226,18 +226,33 @@ let total := 42u8           ※ the type is the value's, which its suffix names
 let spaced : = 42u8         ※ the same; ':=' is two tokens, not one
 ```
 
-**A variable cannot be changed unless its definition says `mut`.**  That is the default, and it is the one worth having by
-default: a name that keeps its value can be reasoned about wherever it appears, which is what the language's functional style calls
-for, and a name that does not is worth marking where it is introduced.
+**A variable cannot be changed unless its type says `mut`.**  That is the default, and it is the one worth having by default: a
+name that keeps its value can be reasoned about wherever it appears, which is what the language's functional style calls for, and a
+name that does not is worth marking where it is introduced.
 
 ```
 let limit: u8 = 255u8       ※ keeps its value
-let mut count: u8 = 0u8     ※ may be changed
+let count: mut u8 = 0u8     ※ may be changed
 ```
 
-The word is Rust's, and so is the arrangement: one keyword for a definition, with `mut` where the definition admits change.
-Compare Kotlin and Scala, which use two keywords (`val` and `var`) and so make the two look like different constructs; C and Go,
-where everything may change and `const`/no marker is the exception; and ML and Haskell, where nothing may.
+**`mut` qualifies the type, not the name.**  It stands where the type stands, after the colon, and either part may be left out:
+
+```
+let count: mut u8 = 0u8     ※ the qualifier and the type
+let count: mut = 0u8        ※ the qualifier; the type is the value's
+let count: u8 = 0u8         ※ the type; the variable keeps its value
+let count := 0u8            ※ neither
+```
+
+Whether a thing may be changed is a property of the thing, not of the name it is reached by, which is why it belongs to the type.
+The distinction is not merely tidiness: a value is a value, and it is the *place* that is writable or not -- so when a variable is
+an address, as one at the top level is, what carries the qualifier is the pointer.  That is what will make `ptr<mut u8>` and
+`ptr<u8>` different types once pointers can be written down, and what keeps the rule in one place rather than in two.
+
+The word is Rust's.  The placement differs: Rust writes `let mut x: u8`, qualifying the binding, and spells the type-level form
+`&mut u8` only for references.  Compare C and C++, where `const` qualifies the type and the default is the other way round; Kotlin
+and Scala, which use two keywords (`val` and `var`) and so make the two look like different constructs; Go, where everything may
+change; and ML and Haskell, where nothing may.
 
 **A variable is always given a value where it is defined.**  There is no form that leaves one uninitialized.  A variable without a
 value would have to hold something the program never named, and no rule about what that something is would make it named; C leaves
@@ -255,11 +270,32 @@ NAME ← VALUE
 ```
 
 ```
-let mut count: u8 = 0u8
+let count: mut u8 = 0u8
 count ← 7u8
 ```
 
 The value must have the variable's type, and -- as everywhere -- must fit it: `count ← 300u8` does not compile.
+
+**An assignment stands for the variable it changed.**  It refers to the variable, not to the value that was written, so reading it
+gives what the variable now holds.  As the last statement of a function it is therefore the function's result, the way any other
+last statement is:
+
+```
+let counter: mut u8 = 1u8
+
+@[startup]
+fn main() → u8:
+    counter ← 42u8     ※ the program exits with status 42
+```
+
+That it refers to the variable rather than to the written value is what makes this the same rule as everywhere else rather than a
+special case: the last statement of a function is its result, and this statement's result is the variable.  Where the result is not
+wanted, nothing reads the variable back.
+
+Compare C and C++, where an assignment is an expression yielding the value assigned, which is what allows `a = b = 0` and also
+`if (x = 0)`; Python and Go, where an assignment is a statement and has no value at all; and Algol 68, where it yields the
+variable, as here.  An assignment is a statement here too and cannot appear inside an expression, so the C hazard does not arise;
+what it has is a result, which only the last statement of a block is in a position to use.
 
 **Assignment is written `←`, not `=`.**  `=` is reserved for comparison, which is not specified yet.
 

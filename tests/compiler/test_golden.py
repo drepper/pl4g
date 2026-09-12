@@ -15,7 +15,8 @@ from pypl4g.ir.reader import read_module
 
 GOLDEN = Path(__file__).resolve().parent / "data" / "golden"
 CASES = ["exit0", "exit-42", "explicit-block", "local-variable",
-         "global-variable", "assign-global"]
+         "global-variable", "assign-global",
+         "assign-is-the-result"]
 
 
 def _language_test(root: Path, name: str) -> Path:

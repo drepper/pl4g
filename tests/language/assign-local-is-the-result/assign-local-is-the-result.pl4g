@@ -1,0 +1,10 @@
+※ pl4g-test: compile=ok opt=0,1
+※ pl4g-test: run=native,qemu exit=9
+※ pl4g-test: diag=none
+
+※ The same for a local, which is a value: nothing is read back because nothing
+※ was written anywhere.
+@[startup]
+fn main() → u8:
+    let status: mut u8 = 3u8
+    status ← 9u8

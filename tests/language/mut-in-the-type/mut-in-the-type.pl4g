@@ -1,0 +1,14 @@
+※ pl4g-test: compile=ok opt=0,1
+※ pl4g-test: run=native,qemu exit=12
+※ pl4g-test: diag=none
+
+※ 'mut' qualifies the type, so it stands after the colon where the type does.
+※ Either part may be left out: without a type the variable's type is its
+※ value's, and the qualifier still has a place to stand.
+let first: mut u8 = 1u8
+let second: mut = 2u8
+
+@[startup]
+fn main() → u8:
+    let third: mut = 3u8
+    third ← 12u8

@@ -126,16 +126,19 @@ class Parser:
 
     def _parse_variable(self, attrs: tuple[ast.Attribute, ...] = (),
                         doc: str | None = None) -> ast.VarDef:
-        """Parse ``let NAME ':' [TYPE] '=' VALUE``.
+        """Parse ``let NAME ':' ['mut'] [TYPE] '=' VALUE``.
 
-        The colon is always there; what varies is whether a type follows it.
-        Written without one and without a space the two characters read as
-        ``:=``, but they are the same two tokens either way.
+        The colon is always there; what varies is what follows it.  Written with
+        neither a qualifier nor a type, and without a space, the two characters
+        read as ``:=``, but they are the same two tokens either way.
         """
         start = self._expect(TokKind.KW_LET).span
-        mutable = self._accept(TokKind.KW_MUT) is not None
         name_token = self._expect(TokKind.IDENT)
         self._expect(TokKind.COLON, D.LANG_VARDEF_EXPECTED_COLON)
+        # 'mut' qualifies the type, so it stands where the type does.  Either
+        # part may be left out: the type is then the value's, and without 'mut'
+        # the variable keeps whatever it was given.
+        mutable = self._accept(TokKind.KW_MUT) is not None
         declared: ast.TypeRef | None = None
         if self._check(TokKind.IDENT):
             type_token = self._advance()

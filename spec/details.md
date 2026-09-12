@@ -306,12 +306,22 @@ narrow value as it reads it.  On the two fixed-width architectures no instructio
 two steps and then read through.  The two differ in how: one computes the page the address lies in and then adds the offset within
 it, and the other adds an upper and a lower half, with the second instruction measuring from the first rather than from itself.
 
+Whether a place may be written is part of the pointer's type: the address of a variable defined with `mut` is a `ptr<mut T>` and
+the address of one without is a `ptr<T>`.  The verifier asks the pointer rather than the variable, so the rule holds for any place
+a pointer can reach and not only for a name the source wrote down.  A local has no pointer and no place; its mutability is a
+property of the binding and appears nowhere in the representation.
+
 Assigning to a local writes nothing: a local is a value, so the name is bound to a new one and the function that results is the
 same as if the final value had been written in the first place.  Where control flow arrives, a block parameter will carry the new
 value across a branch, which is what block parameters were chosen for; a local will not need memory even then.
 
 Assigning to a variable at the top level is a store, which takes the memory token and produces a new one, so a read that follows it
 is ordered after it and a read that does not provably is not.
+
+An assignment stands for the variable it changed, so where its result is wanted a load follows the store and takes the new token --
+which is what makes what comes back be what was written, by the ordinary rule rather than by a special one.  Where the result is
+not wanted no load is emitted, since reading a place nothing looks at would be an instruction the program never asked for.  For a
+local there is nothing to read back: the result is the value the name was just bound to.
 
 A store needs two things at once -- the address and the value -- which the one register the compiler has is not enough for.  Each
 fixed-width backend therefore sets aside two registers for it, chosen from the ones the calling convention leaves to the caller to

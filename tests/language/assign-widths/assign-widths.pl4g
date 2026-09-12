@@ -8,10 +8,10 @@
 ※ The values stay within what one instruction can carry on every target: the
 ※ tightest is the twelve-bit signed immediate of one of them, so a larger
 ※ constant would need a sequence this compiler does not generate yet.
-let mut byte_value: u8 = 0u8
-let mut half_value: u16 = 0u16
-let mut word_value: u32 = 0u32
-let mut wide_value: u64 = 0u64
+let byte_value: mut u8 = 0u8
+let half_value: mut u16 = 0u16
+let word_value: mut u32 = 0u32
+let wide_value: mut u64 = 0u64
 
 @[startup]
 fn main() → u8:

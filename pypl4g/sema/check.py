@@ -121,8 +121,9 @@ class Checker:
         if ty is None:
             ty = ERROR
         self._module.add_global(GlobalVar(
-            name=node.name, value_type=ty, ptr_type=self._module.types.ptr_type(ty),
-            initializer=initializer, span=node.span, mutable=node.mutable))
+            name=node.name, value_type=ty,
+            ptr_type=self._module.types.ptr_type(ty, mutable=node.mutable),
+            initializer=initializer, span=node.span))
 
     def _variable_type(self, node: ast.VarDef) -> Type | None:
         """The type of a variable: the one declared, or the one its value has."""
@@ -506,7 +507,17 @@ class Checker:
             case ast.VarDef():
                 self._lower_local(builder, stmt)
             case ast.AssignStmt():
-                self._lower_assignment(builder, stmt)
+                # An assignment stands for the variable it changed, so it can be
+                # a function's result the way any other last statement can.
+                wants_value = is_last and func.ty.ret is not VOID
+                result = self._lower_assignment(builder, stmt, wants_value)
+                if wants_value and result is not None:
+                    # The mismatch here is between what the statement produced
+                    # and what the function returns, which is what a return
+                    # mismatch says; the assignment itself was already checked.
+                    if result.ty is not func.ty.ret:
+                        self._report_mismatch(stmt.span, result.ty, func.ty.ret)
+                    builder.ret(result, stmt.span)
             case ast.ExprStmt():
                 # The value of the last statement is the function's result, which
                 # is why the canonical form of the language omits the keyword.
@@ -543,29 +554,38 @@ class Checker:
         self._bind_local(node.name, self._as_declared(value, declared), node.name_span,
                          node.mutable)
 
-    def _lower_assignment(self, builder: IRBuilder, node: ast.AssignStmt) -> None:
+    def _lower_assignment(self, builder: IRBuilder, node: ast.AssignStmt,
+                          wants_value: bool = False) -> Value | None:
         """Lower an assignment to a variable that already exists.
 
         A local is a value, so assigning to one rebinds the name and nothing is
         written.  A variable at the top level is an address, so assigning to one
         is a store, which the memory token then orders after.
+
+        The result is the variable the assignment named, read back.  For a local
+        that is the value just bound; for one in memory it is a load, which the
+        token orders after the store -- so what comes back is what was written,
+        by the same rule that governs any other read.  The load is emitted only
+        where the result is wanted, since reading a place nothing looks at would
+        be an instruction the program never asked for.
         """
         local = self._find_local(node.name)
         if local is not None:
             if not self._check_mutable(node, local.mutable, local.span):
-                return
+                return None
             value = self._checked_value(builder, node, local.value.ty)
             local.value = value
-            return
+            return value
         target = self._module.globals.get(node.name)
         if target is None:
             self._diags.emit(D.LANG_FILESTRUCT_UNDEFINED_NAME, node.name_span,
                              name=node.name)
-            return
+            return None
         if not self._check_mutable(node, target.mutable, target.span):
-            return
+            return None
         value = self._checked_value(builder, node, target.value_type)
         builder.store(target, value, node.span)
+        return builder.load(target, node.span) if wants_value else None
 
     def _check_mutable(self, node: ast.AssignStmt, mutable: bool, where: Span) -> bool:
         """Report an assignment to something whose definition did not allow it."""

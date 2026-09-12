@@ -88,17 +88,26 @@ class FloatType(Type):
 
 @dataclass(frozen=True, slots=True)
 class PtrType(Type):
-    """A pointer to a value of another type."""
+    """A pointer to a value of another type.
+
+    Whether what it points at may be changed is part of the pointer's type, not
+    of the thing it points at: a value is a value, and it is the *place* that is
+    writable or not.  A variable in memory is a pointer, so this is where the
+    language's ``mut`` ends up.
+    """
 
     pointee: Type
+    mutable: bool = False
 
     def render(self) -> str:
         """The name of this type in the textual form of the IR."""
-        return "".join(("ptr<", self.pointee.render(), ">"))
+        return "".join(("ptr<", "mut " if self.mutable else "",
+                        self.pointee.render(), ">"))
 
     def mangled(self) -> str:
         """The normalized name of this type, for use inside a symbol name."""
-        return "".join(("ptr<", self.pointee.mangled(), ">"))
+        return "".join(("ptr<", "mut " if self.mutable else "",
+                        self.pointee.mangled(), ">"))
 
 
 @dataclass(frozen=True, slots=True)
@@ -221,7 +230,7 @@ class TypeContext:
     """Interns constructed types so that identity comparison is valid."""
 
     def __init__(self) -> None:
-        self._pointers: dict[Type, PtrType] = {}
+        self._pointers: dict[tuple[Type, bool], PtrType] = {}
         self._functions: dict[tuple[tuple[Type, ...], Type], FuncType] = {}
         self._integers: dict[tuple[int, bool], IntType] = {
             (t.bits, t.signed): t for t in (I8, I16, I32, I64, U8, U16, U32, U64)}
@@ -235,12 +244,13 @@ class TypeContext:
             self._integers[key] = found
         return found
 
-    def ptr_type(self, pointee: Type) -> PtrType:
+    def ptr_type(self, pointee: Type, mutable: bool = False) -> PtrType:
         """Return the pointer type to *pointee*."""
-        found = self._pointers.get(pointee)
+        key = (pointee, mutable)
+        found = self._pointers.get(key)
         if found is None:
-            found = PtrType(pointee)
-            self._pointers[pointee] = found
+            found = PtrType(pointee, mutable)
+            self._pointers[key] = found
         return found
 
     def func_type(self, params: tuple[Type, ...], ret: Type) -> FuncType:

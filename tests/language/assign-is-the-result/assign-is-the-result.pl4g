@@ -1,0 +1,11 @@
+※ pl4g-test: compile=ok opt=0,1
+※ pl4g-test: run=native,qemu exit=42
+※ pl4g-test: diag=none
+
+※ An assignment stands for the variable it changed, so as the last statement it
+※ is the function's result -- here, the exit status.
+let counter: mut u8 = 1u8
+
+@[startup]
+fn main() → u8:
+    counter ← 42u8

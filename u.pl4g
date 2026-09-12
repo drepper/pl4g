@@ -1,4 +1,0 @@
-@[startup]
-fn main() → u8:
-  let mut a : u8 = 5
-  a ← 4

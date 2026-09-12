@@ -3,7 +3,7 @@
 ※ pl4g-test: diag=none
 
 ※ Each assignment supersedes the one before it.
-let mut counter: u8 = 1u8
+let counter: mut u8 = 1u8
 
 @[startup]
 fn main() → u8:

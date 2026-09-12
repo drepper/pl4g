@@ -483,10 +483,12 @@ wrapping rather than being reported, on the one architecture whose relocations h
 
 ## 2026-09-13T14:00+02:00 — language
 
-**A variable can be changed only if its definition says `mut`**
+**A variable can be changed only if `mut` says so**
 
-Decided on the user's direction, in Rust's arrangement: one keyword for a definition, with `mut` where the definition admits
-change.  Unchanging is the default.
+*`mut` stood before the name when this was written; see the entry of 2026-09-13T16:00, which moved it into the type.*
+
+Decided on the user's direction, taking the word from Rust: one keyword for a definition, with `mut` where change is admitted.
+Unchanging is the default.
 
 Considered: Kotlin's and Scala's two keywords, `val` and `var`, which make the two look like different constructs when they differ
 in one property; C's and Go's arrangement, where everything may change and the exception is marked; and ML's and Haskell's, where
@@ -552,6 +554,46 @@ memory is written.  Conflating the two made a perfectly ordinary store of a smal
 
 A constant larger than one instruction can carry -- twelve signed bits on one architecture, sixteen on another -- is reported
 rather than assembled from a sequence, which this compiler does not generate yet.
+
+## 2026-09-13T16:00+02:00 — language
+
+**`mut` qualifies the type, not the name**
+
+Decided on the user's direction, replacing the placement chosen earlier the same day.  `let count: mut u8 = 0u8`, with the
+qualifier where the type stands; either part after the colon may be left out, so `let count: mut = 0u8` is the form with the type
+derived from the value.
+
+Whether a thing may be changed is a property of the thing, not of the name it is reached by.  That is not merely tidiness, and the
+implementation is what shows it: a value is a value, and it is the *place* that is writable or not, so when a variable is an
+address -- as one at the top level is -- what carries the qualifier is the pointer.  `ptr<mut u8>` and `ptr<u8>` are now different
+types, the verifier asks the pointer rather than the variable, and the rule therefore holds for any place a pointer can reach
+rather than only for a name the source wrote down.  With the qualifier on the name there would have been two rules to keep in step.
+
+Rust, whose word this is, places it the other way -- `let mut x: u8` qualifies the binding, and the type-level form `&mut u8`
+exists only for references.  C and C++ place `const` in the type, with the default the other way round.
+
+A local keeps no pointer and no place, so its mutability is a property of the binding and appears nowhere in the representation.
+
+## 2026-09-13T16:00+02:00 — language
+
+**An assignment stands for the variable it changed**
+
+Decided on the user's direction.  An assignment refers to the variable rather than to the value written, so reading it gives what
+the variable now holds; as the last statement of a function it is the function's result, the way any other last statement is.  For
+the startup function that means an assignment to a `u8` variable ends the program with that variable's value.
+
+Referring to the variable rather than to the written value is what makes this the ordinary rule rather than a special case: the
+last statement of a block is its result, and this statement's result is the variable.  In the representation the read is a load
+that takes the token the store produced, so what comes back is what was written by the same rule that governs every other read --
+nothing had to be said about assignment in particular.
+
+Compare C and C++, where an assignment is an expression yielding the value assigned, which allows `a = b = 0` and equally
+`if (x = 0)`; Python and Go, where an assignment is a statement with no value; and Algol 68, where it yields the variable, as here.
+An assignment remains a statement and cannot appear inside an expression, so the hazard C has does not arise; what it has is a
+result, which only the last statement of a block is in a position to use.
+
+Where the result is not wanted, no load is emitted: reading a place nothing looks at would be an instruction the program never
+asked for.
 
 ---
 

@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 
 from ..source.location import INVALID_SPAN, Span
 from .function import Function, Linkage
-from .types import BoolType, IntType, MEM, Type, TypeContext
+from .types import BoolType, IntType, MEM, PtrType, Type, TypeContext
 from .value import BoolConst, IntConst, Value
 
 
@@ -17,14 +17,12 @@ class GlobalVar(Value):
     name.
     """
 
-    __slots__ = ("name", "value_type", "linkage", "initializer", "span", "module",
-                 "mutable")
+    __slots__ = ("name", "value_type", "linkage", "initializer", "span", "module")
 
     def __init__(self, name: str, value_type: Type, ptr_type: Type,
                  initializer: Value | None = None,
                  linkage: Linkage = Linkage.INTERNAL,
-                 span: Span = INVALID_SPAN, module: str = "",
-                 mutable: bool = False) -> None:
+                 span: Span = INVALID_SPAN, module: str = "") -> None:
         super().__init__(ptr_type, name)
         self.name = name
         #: The type of what the variable holds, not of the variable itself.
@@ -34,9 +32,16 @@ class GlobalVar(Value):
         self.initializer = initializer
         self.span = span
         self.module = module
-        #: Whether the program may change it.  It is a property of the variable
-        #: rather than of any one access, which is why it is recorded here.
-        self.mutable = mutable
+
+    @property
+    def mutable(self) -> bool:
+        """Whether the program may change it.
+
+        It is read from the pointer rather than stored beside it, because that
+        is where the language puts it: ``mut`` qualifies the type, and the type
+        of a variable in memory is a pointer.
+        """
+        return isinstance(self.ty, PtrType) and self.ty.mutable
 
     def __repr__(self) -> str:
         return "".join(("GlobalVar(@", self.name, ")"))

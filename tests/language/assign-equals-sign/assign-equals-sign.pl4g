@@ -5,6 +5,6 @@
 ※ language teaches is answered with the rule rather than with a parse error.
 @[startup]
 fn main() → u8:
-    let mut status := 3u8
+    let status: mut = 3u8
     status = 5u8
     status

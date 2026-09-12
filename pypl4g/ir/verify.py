@@ -168,10 +168,11 @@ class Verifier:
                         self._fail(where, "".join((
                             "storing ", stored.render(), " through a pointer to ",
                             target.ty.pointee.render())))
-                    if isinstance(target, GlobalVar) and not target.mutable:
+                    if isinstance(target.ty, PtrType) and not target.ty.mutable:
+                        named = target.name if isinstance(target, GlobalVar) else "a place"
                         self._fail(where, "".join((
-                            "storing into '", target.name,
-                            "', which is not a mutable variable")))
+                            "storing into '", named,
+                            "', through a pointer that does not allow it")))
             case LoadInst():
                 if len(inst.operands) != 2:
                     self._fail(where, "a load takes a memory token and an address")

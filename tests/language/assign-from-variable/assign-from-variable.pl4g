@@ -4,7 +4,7 @@
 
 ※ Reading one variable and writing another: a load, then a store.
 let source: u8 = 23u8
-let mut target: u8 = 0u8
+let target: mut u8 = 0u8
 
 @[startup]
 fn main() → u8:
