@@ -1,0 +1,8 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 3006 LANG_VARDEF_EXPECTED_COLON
+
+※ The colon is what marks the construct as a definition, and is always there.
+@[startup]
+fn main() → u8:
+    var status = 3u8
+    status

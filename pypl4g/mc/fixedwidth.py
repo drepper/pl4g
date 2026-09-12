@@ -62,6 +62,9 @@ class Field:
     signed: bool = False
     #: For a relocation field, the kind of fixup to record.
     reloc: FixupKind | None = None
+    #: Added to the address a relocated value is measured from.  It is what lets
+    #: the second instruction of a pair measure from the first.
+    base_adjust: int = 0
 
     @property
     def mask(self) -> int:
@@ -140,6 +143,7 @@ def _relocation(operand: MCOperand, field: Field, span: Span | None) -> MCFixup:
     if field.reloc is None:
         raise EncodingError("a relocation field names no relocation kind", span)
     return MCFixup(offset=0, kind=field.reloc, target=operand.expr,
+                   base_adjust=field.base_adjust,
                    span=span if span is not None else INVALID_SPAN)
 
 

@@ -1,0 +1,8 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 3007 LANG_VARDEF_MISSING_INITIALIZER
+
+※ There is no form that leaves a variable without a value.
+@[startup]
+fn main() → u8:
+    var status: u8
+    status

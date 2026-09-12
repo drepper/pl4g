@@ -12,8 +12,8 @@ from ..diag import ids as D
 from ..diag.engine import DiagEngine
 from ..source.location import Span
 from ..source.manager import SourceFile
-from .token import (ARROW_ASCII, ARROW_GLYPH, COMMENT_GLYPH, KEYWORDS, TokKind,
-                    Token)
+from .token import (ARROW_ASCII, ARROW_GLYPH, COMMENT_GLYPH, INTEGER_TYPE_NAMES,
+                    KEYWORDS, TokKind, Token)
 
 _SIMPLE: Final[dict[str, TokKind]] = {
     "(": TokKind.LPAREN,
@@ -245,7 +245,14 @@ class Lexer:
         self._emit(KEYWORDS.get(text, TokKind.IDENT), start)
 
     def _lex_number(self, start: int) -> None:
-        """Lex an integer literal, in decimal or with a base prefix."""
+        """Lex an integer literal, in decimal or with a base prefix.
+
+        A literal may name its type with a suffix: ``3u8`` is a ``u8``.  The
+        suffix is the type's own name, so there is nothing to look up, and it
+        cannot be mistaken for the digits: no name of an integer type begins
+        with one, and none of the letters a hexadecimal literal uses starts one
+        either.
+        """
         radix = 10
         digits = "0123456789_"
         if self._peek() == "0" and self._peek(1).lower() in _DIGITS:
@@ -253,17 +260,33 @@ class Lexer:
             radix = _RADIX[marker]
             digits = _DIGITS[marker]
             self._pos += 2
+        digits_start = self._pos
         while self._peek() in digits and self._peek() != "":
             self._pos += 1
+        body = self._text[digits_start:self._pos]
+        suffix = self._lex_literal_suffix()
         text = self._text[start:self._pos]
-        body = text if radix == 10 else text[2:]
         try:
             value = int(body.replace("_", ""), radix)
         except ValueError:
             self._diags.emit(D.LANG_SYNTAX_UNEXPECTED_CHAR, self._span(start, self._pos),
                              char="".join(("'", text, "'")))
             value = 0
-        self._emit(TokKind.INT, start, int_value=value)
+        self._emit(TokKind.INT, start, int_value=value, int_type=suffix)
+
+    def _lex_literal_suffix(self) -> str | None:
+        """Read the type a literal names, if it names one."""
+        if not _is_ident_start(self._peek()):
+            return None
+        start = self._pos
+        while _is_ident_continue(self._peek()):
+            self._pos += 1
+        suffix = self._text[start:self._pos]
+        if suffix not in INTEGER_TYPE_NAMES:
+            self._diags.emit(D.LANG_SYNTAX_BAD_LITERAL_SUFFIX,
+                             self._span(start, self._pos), suffix=suffix)
+            return None
+        return suffix
 
     def _lex_string(self, start: int) -> None:
         """Lex a string literal with C-style escapes."""

@@ -35,6 +35,12 @@ class FixupBase(Enum):
     #: The start of the patched field, which on a fixed-width architecture is
     #: the address of the instruction itself.
     FIELD_START = "field-start"
+    #: The four-kilobyte page the target lies in, relative to the page the
+    #: instruction lies in.  An instruction that computes an address a page at a
+    #: time needs the difference of the *pages*, which is not the difference of
+    #: the addresses shifted down: two addresses twelve bytes apart may still
+    #: lie in different pages.
+    PAGE_4K = "page-4k"
 
 
 @dataclass(frozen=True, slots=True)
@@ -79,6 +85,10 @@ class MCFixup:
     #: A displacement measured from the end of the field has to account for an
     #: immediate that follows it.
     trailing: int = 0
+    #: Added to the address the value is measured from.  It is what lets the
+    #: second instruction of a pair measure from the first, which is how one
+    #: architecture computes an address in two steps.
+    base_adjust: int = 0
     span: Span = INVALID_SPAN
 
 
@@ -127,9 +137,13 @@ def fixup_value(fixup: MCFixup, fixup_vaddr: int) -> int:
         case FixupBase.ABSOLUTE:
             return target
         case FixupBase.FIELD_END:
-            return target - (fixup_vaddr + fixup.kind.size + fixup.trailing)
+            return target - (fixup_vaddr + fixup.kind.size + fixup.trailing
+                             + fixup.base_adjust)
         case FixupBase.FIELD_START:
-            return target - fixup_vaddr
+            return target - (fixup_vaddr + fixup.base_adjust)
+        case FixupBase.PAGE_4K:
+            base = fixup_vaddr + fixup.base_adjust
+            return (target & ~0xFFF) - (base & ~0xFFF)
 
 
 #: How a target stores a computed fixup value into the bytes it was found in.

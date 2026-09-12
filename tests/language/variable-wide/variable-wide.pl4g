@@ -1,0 +1,29 @@
+※ pl4g-test: compile=ok opt=0,1
+※ pl4g-test: run=native,qemu exit=1
+※ pl4g-test: diag=none
+
+※ A variable of every integer width, each one read at run time, so that every
+※ load the backends know is exercised on every architecture.
+※
+※ The signed ones hold positive values: writing a negative literal needs a
+※ unary minus, which the expression syntax does not have yet.
+var unsigned_byte: u8 = 200u8
+var signed_byte: i8 = 3i8
+var unsigned_half: u16 = 40000u16
+var signed_half: i16 = 300i16
+var unsigned_word: u32 = 3000000000u32
+var signed_word: i32 = 70000i32
+var unsigned_wide: u64 = 42u64
+var signed_wide: i64 = 42i64
+
+@[startup]
+fn main() → u8:
+    var a: u8 = unsigned_byte
+    var b: i8 = signed_byte
+    var c: u16 = unsigned_half
+    var d: i16 = signed_half
+    var e: u32 = unsigned_word
+    var f: i32 = signed_word
+    var g: u64 = unsigned_wide
+    var h: i64 = signed_wide
+    1u8

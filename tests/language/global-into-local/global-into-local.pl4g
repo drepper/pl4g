@@ -1,0 +1,12 @@
+※ pl4g-test: compile=ok opt=0,1
+※ pl4g-test: run=native,qemu exit=5
+※ pl4g-test: diag=none
+
+※ Reading a variable that lives in memory, and binding the result to one that
+※ does not.
+var stored: u8 = 5u8
+
+@[startup]
+fn main() → u8:
+    var status: u8 = stored
+    status

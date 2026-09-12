@@ -21,8 +21,10 @@ BRANCH19: Final[FixupKind] = FixupKind("aarch64_branch19", 4, FixupBase.FIELD_ST
 
 #: The page an address lies in, relative to the page the instruction lies in.
 #: Together with the next kind this is how an address is materialized, since the
-#: architecture has no instruction that loads one in a single step.
-ADR_PAGE21: Final[FixupKind] = FixupKind("aarch64_adr_page21", 4, FixupBase.FIELD_START)
+#: architecture has no instruction that loads one in a single step.  The value is
+#: the difference of the two *pages*: an instruction twelve bytes before its
+#: target may still be a page away from it.
+ADR_PAGE21: Final[FixupKind] = FixupKind("aarch64_adr_page21", 4, FixupBase.PAGE_4K)
 
 #: The offset of an address within its page, for the add that follows the above.
 ADD_LO12: Final[FixupKind] = FixupKind("aarch64_add_lo12", 4)

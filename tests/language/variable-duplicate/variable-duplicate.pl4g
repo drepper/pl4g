@@ -1,0 +1,9 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4001 LANG_FILESTRUCT_DUPLICATE_DEFINITION
+※ pl4g-test: expect-diag 4002 LANG_FILESTRUCT_PREVIOUS_DEFINITION
+
+@[startup]
+fn main() → u8:
+    var status := 1u8
+    var status := 2u8
+    status

@@ -139,6 +139,21 @@ class MemType(Type):
 
 
 @dataclass(frozen=True, slots=True)
+class ErrorType(Type):
+    """Stands in for a type that could not be worked out.
+
+    It exists so that one mistake is reported once: a value of this type matches
+    anything, so nothing downstream reports a second complaint about a value
+    that was already the subject of a first.  It never appears in a module that
+    verified, because a module containing one has already failed to compile.
+    """
+
+    def render(self) -> str:
+        """The name of this type in the textual form of the IR."""
+        return "<error>"
+
+
+@dataclass(frozen=True, slots=True)
 class ProductType(Type):
     """A record.  The field order here is the declaration order, not a layout."""
 
@@ -180,6 +195,7 @@ class SumType(Type):
 VOID: Final[VoidType] = VoidType()
 BOOL: Final[BoolType] = BoolType()
 MEM: Final[MemType] = MemType()
+ERROR: Final[ErrorType] = ErrorType()
 
 I8: Final[IntType] = IntType(8, True)
 I16: Final[IntType] = IntType(16, True)

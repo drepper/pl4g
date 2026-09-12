@@ -1,0 +1,9 @@
+※ pl4g-test: compile=ok opt=0,1
+※ pl4g-test: run=native,qemu exit=7
+※ pl4g-test: diag=none
+
+※ A variable inside a function, with its type stated.
+@[startup]
+fn main() → u8:
+    var status: u8 = 7u8
+    status

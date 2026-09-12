@@ -59,6 +59,13 @@ class TokKind(StrEnum):
     EOF = "end of file"
 
 
+#: The types an integer literal may name with its suffix.  Taken from the type
+#: table rather than listed again, so that the two cannot disagree.
+INTEGER_TYPE_NAMES: Final[frozenset[str]] = frozenset(
+    "".join((prefix, str(bits)))
+    for prefix in ("i", "u") for bits in (8, 16, 32, 64))
+
+
 KEYWORDS: Final[dict[str, TokKind]] = {
     "fn": TokKind.KW_FN,
     "return": TokKind.KW_RETURN,
@@ -78,6 +85,8 @@ class Token:
     text: str = ""
     #: Value of an integer literal, or ``None`` for every other kind.
     int_value: int | None = None
+    #: The type an integer literal named with its suffix, if it named one.
+    int_type: str | None = None
     #: Decoded value of a string literal, or ``None`` for every other kind.
     str_value: str | None = None
 

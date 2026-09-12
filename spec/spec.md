@@ -86,6 +86,24 @@ Indentation and explicit syntax cannot be mixed for individual blocks but proper
 Strings are written as in C/C++ and many other languages enclosed in `"` and supporting an escape notation like modern C and C++ for
 special characters as well as the Unicode notation.
 
+#### Integer Literals
+
+An integer literal may be written in decimal, or in hexadecimal, octal or binary with a `0x`, `0o` or `0b` prefix.  Underscores may
+separate the digits anywhere.
+
+A literal states its type with a suffix naming that type: `3u8` is a `u8`, `42i32` is an `i32`, `0x1fu8` is thirty-one as a `u8`.
+The suffix is the type's own name, so there is nothing to look up.  No ambiguity arises: no name of an integer type begins with a
+digit, and none of the letters a hexadecimal literal uses begins one either, so `0x1fu8` splits where it looks like it does.
+
+A literal without a suffix takes its type from the context it appears in.  Where there is a context *and* a suffix they must agree.
+
+Where there is neither, the literal is an **untyped** value: a number of no particular width, which takes the type of wherever it
+ends up, as in Odin.  Untyped values are described here and are not implemented yet; a literal that would be one is reported as a
+feature the compiler lacks rather than given a width by some default rule.  That the compiler says so is the point -- the
+alternative, as C and Rust and Go all take it, is that a rule the reader has to know decides the width silently.
+
+Compare C's `42U` and `42L`, Rust's `42u8`, and C#'s `42L`; the form here is Rust's, and the fallback is Odin's.
+
 #### Comments
 
 A comment is introduced by `※` (U+203B REFERENCE MARK) and runs to the end of the line.  A comment introduced by `※※` is a
@@ -183,6 +201,36 @@ construct uses: a parser can commit on the first character, which keeps the gram
 feature.  Parametrization follows Python and C#, so that the common one-argument case stays terse while an attribute with several
 parameters remains self-describing.
 
+
+#### Variable Definition
+
+A variable is defined with:
+
+```
+var NAME: TYPE = VALUE
+```
+
+The colon is always written.  The type after it may be left out, in which case the variable's type is the type of its value:
+
+```
+var counter: u64 = 0u64     ※ the type is stated
+var total := 42u8           ※ the type is the value's, which its suffix names
+var spaced : = 42u8         ※ the same; ':=' is two tokens, not one
+```
+
+**A variable is always given a value where it is defined.**  There is no form that leaves one uninitialized.  A variable without a
+value would have to hold something the program never named, and no rule about what that something is would make it named; C leaves
+it undefined, Go and Java fill it with zeroes, and both answers are ones a reader has to know rather than read.
+
+The same form defines a variable at the top level and inside a function.  A variable at the top level exists for as long as the
+program does and lives in the image; one inside a function exists while the function does.  Naming either yields its value.
+
+Assignment to a variable after its definition is not specified yet.
+
+Considered for the notation: `x: u8 = 3u8` with `x := 3u8` as the short form, after Go and Odin; and `let`, after Rust, Swift and
+ML.  The keyword was kept because it lets a parser commit on the first token of a definition, which is what keeps the grammar
+context-free and the compilation parallelizable -- the same reason `@[` introduces an attribute.  `let` was not used because in
+every language that has it, it binds something that does not change.
 
 #### Function Definition
 

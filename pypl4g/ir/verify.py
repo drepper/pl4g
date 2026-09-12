@@ -11,10 +11,10 @@ from typing import Iterable
 from ..diag.engine import InternalError
 from .function import BasicBlock, Function, SpecialKind
 from .mangle import symbol_name
-from .inst import (BinaryInst, BlockTarget, CmpInst, Instruction, RetInst,
-                   Terminator, UnaryInst)
-from .module import Module
-from .types import IntType, VOID
+from .inst import (BinaryInst, BlockTarget, CmpInst, Instruction, LoadInst,
+                   RetInst, Terminator, UnaryInst)
+from .module import GlobalVar, Module
+from .types import IntType, MEM, PtrType, VOID
 from .value import Const, IntConst, Value
 
 
@@ -154,6 +154,19 @@ class Verifier:
             case CmpInst():
                 if inst.operands[0].ty != inst.operands[1].ty:
                     self._fail(where, "comparison of operands of different types")
+            case LoadInst():
+                if len(inst.operands) != 2:
+                    self._fail(where, "a load takes a memory token and an address")
+                elif inst.operands[0].ty is not MEM:
+                    self._fail(where, "a load's first operand is not a memory token")
+                else:
+                    address = inst.operands[1].ty
+                    if not isinstance(address, PtrType):
+                        self._fail(where, "a load's address is not a pointer")
+                    elif address.pointee != inst.ty:
+                        self._fail(where, "".join((
+                            "loading ", inst.ty.render(), " through a pointer to ",
+                            address.pointee.render())))
             case _:
                 pass
         if isinstance(inst, Terminator):
@@ -231,7 +244,10 @@ class Verifier:
 
         def check_use(user_block: BasicBlock, user_index: int, value: Value) -> None:
             """Check one use of *value*."""
-            if isinstance(value, Const):
+            # A constant and a global are available everywhere: neither is
+            # produced by an instruction, so neither has a definition that
+            # could fail to dominate a use.
+            if isinstance(value, (Const, GlobalVar)):
                 return
             home = defining_block.get(id(value))
             if home is None:

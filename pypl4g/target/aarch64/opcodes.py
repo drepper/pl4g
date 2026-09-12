@@ -44,6 +44,16 @@ def _reg_field(operand: int, lsb: int) -> Field:
     return Field(FieldKind.REGISTER, operand, lsb)
 
 
+def _off(scale: int) -> OperandSpec:
+    """The offset of a load, which the encoding holds divided by the access size."""
+    return OperandSpec(OperandKind.IMM, imm_min=0, imm_max=0xFFF << scale)
+
+
+def _offset_field(operand: int, scale: int) -> Field:
+    """The twelve bits a load's offset occupies, scaled by the access size."""
+    return Field(FieldKind.IMMEDIATE, operand, 10, 12, shift=scale)
+
+
 #: Rd, Rn and Rm always sit in the same places.
 _RD = 0
 _RN = 5
@@ -122,6 +132,37 @@ AARCH64_INSTRS: Final[tuple[A64InstDesc, ...]] = (
                 fields=(_reg_field(0, _RD), _reg_field(1, _RN),
                         Field(FieldKind.RELOCATION, 2, 10, 12, reloc=ADD_LO12)),
                 est_size=INSTRUCTION_SIZE),
+    # The loads.  The immediate offset is scaled by the size of the access, so
+    # each row states its own shift; an offset that is not a multiple of that
+    # size has no encoding and is refused rather than rounded.
+    # ldrb Wt, [Xn, #imm12]
+    A64InstDesc("ldrb", (_r(32), _r(64), _off(0)), template=0x39400000,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN), _offset_field(2, 0)),
+                flags=InstFlags.MAY_LOAD | InstFlags.ZEXT32, est_size=INSTRUCTION_SIZE),
+    # ldrsb Wt, [Xn, #imm12]
+    A64InstDesc("ldrsb", (_r(32), _r(64), _off(0)), template=0x39C00000,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN), _offset_field(2, 0)),
+                flags=InstFlags.MAY_LOAD, est_size=INSTRUCTION_SIZE),
+    # ldrh Wt, [Xn, #imm12]
+    A64InstDesc("ldrh", (_r(32), _r(64), _off(1)), template=0x79400000,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN), _offset_field(2, 1)),
+                flags=InstFlags.MAY_LOAD | InstFlags.ZEXT32, est_size=INSTRUCTION_SIZE),
+    # ldrsh Wt, [Xn, #imm12]
+    A64InstDesc("ldrsh", (_r(32), _r(64), _off(1)), template=0x79C00000,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN), _offset_field(2, 1)),
+                flags=InstFlags.MAY_LOAD, est_size=INSTRUCTION_SIZE),
+    # ldr Wt, [Xn, #imm12]
+    A64InstDesc("ldr", (_r(32), _r(64), _off(2)), template=0xB9400000,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN), _offset_field(2, 2)),
+                flags=InstFlags.MAY_LOAD | InstFlags.ZEXT32, est_size=INSTRUCTION_SIZE),
+    # ldrsw Xt, [Xn, #imm12]
+    A64InstDesc("ldrsw", (_r(64), _r(64), _off(2)), template=0xB9800000,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN), _offset_field(2, 2)),
+                flags=InstFlags.MAY_LOAD, est_size=INSTRUCTION_SIZE),
+    # ldr Xt, [Xn, #imm12]
+    A64InstDesc("ldr", (_r(64), _r(64), _off(3)), template=0xF9400000,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN), _offset_field(2, 3)),
+                flags=InstFlags.MAY_LOAD, est_size=INSTRUCTION_SIZE),
     # bl label
     A64InstDesc("bl", (_sym(),), template=0x94000000,
                 fields=(Field(FieldKind.RELOCATION, 0, 0, 26, shift=2, signed=True,

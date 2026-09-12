@@ -110,6 +110,10 @@ class MCMem:
     rip_relative: bool = False
     #: The width of the access, where the instruction does not imply it.
     size_bits: int | None = None
+    #: Whether a value narrower than the register it lands in arrives widened by
+    #: its sign rather than by zeroes.  It is a property of the access, which is
+    #: what this operand describes, and not of the address.
+    signed: bool = False
 
     def render(self) -> str:
         """A readable form, for the debugging dump."""

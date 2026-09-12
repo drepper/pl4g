@@ -1,0 +1,9 @@
+※ pl4g-test: compile=ok
+※ pl4g-test: run=native exit=3
+※ pl4g-test: diag=none
+
+※ ':=' is not one token, so it may be written apart.
+@[startup]
+fn main() → u8:
+    var status : = 3u8
+    status

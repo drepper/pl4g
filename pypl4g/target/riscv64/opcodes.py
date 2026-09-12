@@ -15,7 +15,7 @@ from typing import Final
 
 from ...mc.desc import InstFlags, OperandKind, OperandSpec
 from .desc import INSTRUCTION_SIZE, Field, FieldKind, RVInstDesc
-from .fixups import JAL
+from .fixups import JAL, PCREL_HI20, PCREL_LO12_I, PCREL_PAIR_DISTANCE
 from .regs import GPR, RA
 
 #: The word the architecture leaves undefined, which is what padding is filled
@@ -110,6 +110,42 @@ RISCV_INSTRS: Final[tuple[RVInstDesc, ...]] = (
                fields=(_reg(0, _RD),
                        Field(FieldKind.IMMEDIATE, 1, _IMM20, 20)),
                est_size=INSTRUCTION_SIZE),
+    # auipc rd, %pcrel_hi(symbol)
+    RVInstDesc("auipc.hi20", (_r(), _sym()), template=0x00000017,
+               fields=(_reg(0, _RD),
+                       Field(FieldKind.RELOCATION, 1, _IMM20, 20, reloc=PCREL_HI20)),
+               est_size=INSTRUCTION_SIZE),
+    # addi rd, rs1, %pcrel_lo(the auipc above)
+    RVInstDesc("addi.lo12", (_r(), _r(), _sym()), template=0x00000013,
+               fields=(_reg(0, _RD), _reg(1, _RS1),
+                       Field(FieldKind.RELOCATION, 2, _IMM12, 12,
+                             reloc=PCREL_LO12_I,
+                             base_adjust=-PCREL_PAIR_DISTANCE)),
+               est_size=INSTRUCTION_SIZE),
+    # The loads.  The offset is a signed twelve-bit immediate, unscaled, and the
+    # instruction says whether a narrow value arrives widened by its sign or by
+    # zeroes -- there being no narrower register to leave it in.
+    RVInstDesc("lbu", (_r(), _r(), _imm12()), template=0x00004003,
+               fields=(_reg(0, _RD), _reg(1, _RS1), _imm(2, _IMM12, 12)),
+               flags=InstFlags.MAY_LOAD, est_size=INSTRUCTION_SIZE),
+    RVInstDesc("lb", (_r(), _r(), _imm12()), template=0x00000003,
+               fields=(_reg(0, _RD), _reg(1, _RS1), _imm(2, _IMM12, 12)),
+               flags=InstFlags.MAY_LOAD, est_size=INSTRUCTION_SIZE),
+    RVInstDesc("lhu", (_r(), _r(), _imm12()), template=0x00005003,
+               fields=(_reg(0, _RD), _reg(1, _RS1), _imm(2, _IMM12, 12)),
+               flags=InstFlags.MAY_LOAD, est_size=INSTRUCTION_SIZE),
+    RVInstDesc("lh", (_r(), _r(), _imm12()), template=0x00001003,
+               fields=(_reg(0, _RD), _reg(1, _RS1), _imm(2, _IMM12, 12)),
+               flags=InstFlags.MAY_LOAD, est_size=INSTRUCTION_SIZE),
+    RVInstDesc("lwu", (_r(), _r(), _imm12()), template=0x00006003,
+               fields=(_reg(0, _RD), _reg(1, _RS1), _imm(2, _IMM12, 12)),
+               flags=InstFlags.MAY_LOAD, est_size=INSTRUCTION_SIZE),
+    RVInstDesc("lw", (_r(), _r(), _imm12()), template=0x00002003,
+               fields=(_reg(0, _RD), _reg(1, _RS1), _imm(2, _IMM12, 12)),
+               flags=InstFlags.MAY_LOAD, est_size=INSTRUCTION_SIZE),
+    RVInstDesc("ld", (_r(), _r(), _imm12()), template=0x00003003,
+               fields=(_reg(0, _RD), _reg(1, _RS1), _imm(2, _IMM12, 12)),
+               flags=InstFlags.MAY_LOAD, est_size=INSTRUCTION_SIZE),
     # jal ra, label      (the return address register is part of the template)
     RVInstDesc("jal", (_sym(),), template=0x000000EF,
                fields=(Field(FieldKind.RELOCATION, 0, 12, 20, reloc=JAL),),

@@ -121,6 +121,19 @@ class Assembler:
         """Pad to the next multiple of *alignment*."""
         self._streamer.emit_align(alignment, self._pad_byte)
 
+    def bytes(self, data: bytes) -> None:
+        """Emit literal bytes, as the initial contents of a variable."""
+        self._streamer.emit_bytes(data)
+
+    def label(self, name: str, *, binding: SymBinding = SymBinding.LOCAL,
+              kind: SymKind = SymKind.NOTYPE) -> MCSymbol:
+        """Define a symbol at the current position of the current section."""
+        return self._streamer.define_symbol(name, binding, kind)
+
+    def end_label(self, symbol: MCSymbol) -> None:
+        """Record how far the definition of *symbol* extends."""
+        self._streamer.set_symbol_size(symbol)
+
     # -- functions -------------------------------------------------------------
 
     def begin_function(self, name: str, *, exported: bool = False,

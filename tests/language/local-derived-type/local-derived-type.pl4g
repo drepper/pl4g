@@ -1,0 +1,11 @@
+※ pl4g-test: compile=ok opt=0,1
+※ pl4g-test: run=native,qemu exit=9
+※ pl4g-test: diag=none
+
+※ The colon stays when the type is left out; the suffix on the value is what
+※ the type is taken from.  Written without a space the two characters read
+※ as ':=', but they are the same two tokens either way.
+@[startup]
+fn main() → u8:
+    var status := 9u8
+    status

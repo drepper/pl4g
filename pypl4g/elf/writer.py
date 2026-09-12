@@ -92,30 +92,32 @@ class ElfWriter:
             layout_section(section)
             resolve_symbol_offsets(section, self._symbols)
 
-        alloc_sections = [s for s in self._sections if s.alloc]
-        phnum = 2
+        # Sections that are mapped are grouped by the permissions they need,
+        # because a segment carries one set of permissions for all of it.
+        readonly = [s for s in self._sections if s.alloc and not s.writable]
+        writable = [s for s in self._sections if s.alloc and s.writable]
+        phnum = 2 + (1 if writable else 0)
         offset = EHDR_SIZE + phnum * PHDR_SIZE
 
         self._add_chunk(layout, "ehdr", EHDR_SIZE, 1, 0)
         self._add_chunk(layout, "phdrs", phnum * PHDR_SIZE, 1, EHDR_SIZE)
 
-        # The allocated sections follow the headers in the same load segment, so
-        # that the headers themselves are mapped and the file needs one segment.
-        for section in alloc_sections:
-            offset = align_up(offset, max(section.alignment, 1))
-            plan = SectionPlan(name=section.name, sh_type=SHT_PROGBITS,
-                               sh_flags=self._section_flags(section),
-                               sh_addralign=max(section.alignment, 1), alloc=True)
-            plan.offset = offset
-            plan.addr = settings.base_vaddr + offset
-            plan.size = section.size
-            section.vaddr = plan.addr
-            layout.sections.append(plan)
-            self._add_chunk(layout, section.name, section.size,
-                            max(section.alignment, 1), offset)
-            offset += section.size
-
-        load_filesz = offset
+        # The read-only sections follow the headers in one segment, so that the
+        # headers themselves are mapped and the common case needs one segment.
+        loads: list[SegmentPlan] = []
+        offset = self._place_group(layout, readonly, offset, settings.base_vaddr,
+                                   PF_R | PF_X, settings.page_size, loads)
+        if writable:
+            # A writable segment starts on a page of its own: two segments that
+            # shared one would have to be mapped with one set of permissions,
+            # and which they got would depend on the order they were mapped in.
+            end_vaddr = loads[-1].p_vaddr + loads[-1].p_memsz if loads \
+                else settings.base_vaddr
+            page = settings.page_size
+            offset = align_up(offset, max(s.alignment for s in writable))
+            base = align_up(end_vaddr, page) + (offset % page)
+            offset = self._place_group(layout, writable, offset, base - offset,
+                                       PF_R | PF_W, page, loads)
         self._place_symbols()
         layout.functions = self._function_extents(layout)
 
@@ -144,9 +146,7 @@ class ElfWriter:
             offset += (len(layout.sections) + 1) * SHDR_SIZE
 
         layout.segments = [
-            SegmentPlan(p_type=PT_LOAD, p_flags=PF_R | PF_X, p_align=settings.page_size,
-                        p_offset=0, p_vaddr=settings.base_vaddr,
-                        p_filesz=load_filesz, p_memsz=load_filesz),
+            *loads,
             # Its presence without the executable bit is what makes the stack
             # non-executable; a missing PT_GNU_STACK gives an executable stack.
             SegmentPlan(p_type=PT_GNU_STACK, p_flags=PF_R | PF_W, p_align=0x10),
@@ -156,6 +156,42 @@ class ElfWriter:
         self._shstrtab = shstrtab
         self._strtab = strtab
         return layout
+
+    def _place_group(self, layout: ImageLayout, sections: Sequence[MCSection],
+                     offset: int, bias: int, flags: int, page_size: int,
+                     loads: list[SegmentPlan]) -> int:
+        """Place one group of sections and the segment that maps them.
+
+        *bias* is what turns a file offset into an address.  Because it is the
+        same for every section of a group, the congruence the format requires
+        between a segment's offset and its address holds for the whole group as
+        soon as it holds for its start.
+        """
+        if not sections:
+            return offset
+        start = offset
+        for section in sections:
+            offset = align_up(offset, max(section.alignment, 1))
+            plan = SectionPlan(name=section.name, sh_type=SHT_PROGBITS,
+                               sh_flags=self._section_flags(section),
+                               sh_addralign=max(section.alignment, 1), alloc=True)
+            plan.offset = offset
+            plan.addr = offset + bias
+            plan.size = section.size
+            section.vaddr = plan.addr
+            layout.sections.append(plan)
+            self._add_chunk(layout, section.name, section.size,
+                            max(section.alignment, 1), offset)
+            offset += section.size
+        # The first segment begins at the start of the file so that the headers
+        # are mapped with it; a later one begins where its own sections do.
+        segment_start = 0 if not loads else start
+        size = offset - segment_start
+        loads.append(SegmentPlan(p_type=PT_LOAD, p_flags=flags, p_align=page_size,
+                                 p_offset=segment_start,
+                                 p_vaddr=segment_start + bias,
+                                 p_filesz=size, p_memsz=size))
+        return offset
 
     def _section_flags(self, section: MCSection) -> int:
         """The section header flags for *section*."""

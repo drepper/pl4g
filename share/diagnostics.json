@@ -543,6 +543,28 @@
       "option": null
     },
     {
+      "number": 2007,
+      "name": "LANG_SYNTAX_BAD_LITERAL_SUFFIX",
+      "severity": "error",
+      "message": "'{suffix}' is not an integer type, so it cannot be the suffix of a literal",
+      "args": [
+        {
+          "name": "suffix",
+          "type": "string",
+          "description": "the suffix as written"
+        }
+      ],
+      "cause": "The suffix of an integer literal is the name of the integer type the literal has: one of i8, i16, i32, i64, u8, u16, u32 and u64.  Any other name, including the name of a type that is not an integer, has no meaning there.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Syntax",
+        "requirement": "An integer literal states its type with a suffix naming that type."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 2101,
       "name": "LANG_SYNTAX_INCONSISTENT_INDENT",
       "severity": "error",
@@ -682,6 +704,43 @@
         "document": "spec/spec.md",
         "section": "The Language / File Structure / Function Definition",
         "requirement": "fn NAME(ARG1: TYPE1, [ARGN: TYPEN]) → RETVALTYPE BLOCK"
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 3006,
+      "name": "LANG_VARDEF_EXPECTED_COLON",
+      "severity": "error",
+      "message": "expected ':' after the name of the variable",
+      "cause": "A variable definition always carries a colon, whether or not the type is written after it: `var x: u8 = 3u8` states the type, and `var x := 3u8` leaves it to be taken from the value.  The colon is what marks the construct as a definition.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Variable Definition",
+        "requirement": "A variable is defined with `var NAME: TYPE = VALUE`.  The type may be left out, in which case it is the type of the value.  There is no definition without a value."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 3007,
+      "name": "LANG_VARDEF_MISSING_INITIALIZER",
+      "severity": "error",
+      "message": "'{name}' is defined without a value",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the variable"
+        }
+      ],
+      "cause": "A variable is given its value where it is defined; there is no form that leaves one uninitialized.  A variable that had no value would have to hold something the program never named, which is exactly the kind of unstated meaning this language does not admit -- and no rule about what that something is would make it stated.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Variable Definition",
+        "requirement": "A variable is defined with `var NAME: TYPE = VALUE`.  The type may be left out, in which case it is the type of the value.  There is no definition without a value."
       },
       "since": "0.1",
       "default_enabled": true,
@@ -923,6 +982,38 @@
       "spec": {
         "document": "spec/spec.md",
         "section": "The Language / File Structure / Function Definition",
+        "requirement": "the code behaves, when executed, exactly as the code describes it. No undefined behavior, no surprising interpretation of inputs."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4203,
+      "name": "LANG_TYPE_INITIALIZER_MISMATCH",
+      "severity": "error",
+      "message": "initializing '{name}', which is of type '{expected}', with a value of type '{found}'",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the variable"
+        },
+        {
+          "name": "expected",
+          "type": "string",
+          "description": "the declared type"
+        },
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type of the value"
+        }
+      ],
+      "cause": "The value a variable is given must have the variable's type; the language performs no conversion that would hide a difference between them.  Either change the declared type, leave it out so that it is taken from the value, or convert the value explicitly.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Variable Definition",
         "requirement": "the code behaves, when executed, exactly as the code describes it. No undefined behavior, no surprising interpretation of inputs."
       },
       "since": "0.1",
@@ -1209,6 +1300,29 @@
       "spec": {
         "document": "spec/details.md",
         "section": "Implementation"
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "internal": true,
+      "option": null
+    },
+    {
+      "number": 9902,
+      "name": "IMPL_UNIMPLEMENTED_FEATURE",
+      "severity": "fatal",
+      "message": "{feature} is not implemented yet",
+      "args": [
+        {
+          "name": "feature",
+          "type": "string",
+          "description": "the feature the specification describes but the compiler lacks"
+        }
+      ],
+      "cause": "The specification describes this, and the compiler does not implement it yet.  It reports a gap in the compiler rather than a defect in the program: the same program will compile once the feature exists.",
+      "spec": {
+        "document": "spec/details.md",
+        "section": "Implementation",
+        "requirement": "It does not have to be able to handle the entire language as per the specification as long as it can compile the code of the actual compiler."
       },
       "since": "0.1",
       "default_enabled": true,

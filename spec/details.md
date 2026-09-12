@@ -279,3 +279,33 @@ shared layers had to be able to express:
 | Exit system call | number 231 in `eax`, arguments from `edi` | number 94 in `x8`, arguments from `x0` | number 94 in `a7`, arguments from `a0` |
 | Padding | `int3` | a zero word | a zero word |
 | Segment alignment | 4 KiB | 64 KiB | 4 KiB |
+
+
+Variables
+---------
+
+A variable inside a function is a *value*, not a place.  The name is bound to whatever its initializer produced and nothing is
+reserved in memory, because nothing can take its address; when the language lets a name be assigned, a block parameter is what
+carries the new value across a branch, which is why the representation has them and why a local will not need memory then either.
+
+A variable at the top level is a value of *pointer* type: naming one yields its address, and reading it is a load.  That is what
+keeps every access to memory visible in the dataflow graph instead of implied by a name.  Every load takes a memory token and every
+store produces one, so the chain has to start somewhere; a `mem.start` instruction is where.  It is an instruction rather than a
+parameter of the function, so that the function's type says nothing about memory.
+
+How much room a value takes and where it must start is computed from a type, never held in one: a size stored in a type would throw
+away the freedom the specification gives the compiler to reorder the fields of a product type.  It is computed against a target,
+because the width of a pointer is the target's business.
+
+Variables go in a writable section, which the image maps with a second loadable segment.  That segment begins on a page of its own:
+two segments sharing a page would have to be mapped with one set of permissions, and which they got would depend on the order they
+were mapped in.
+
+Reading a variable is one instruction on x86-64, which can name a place in memory relative to the program counter and widen a
+narrow value as it reads it.  On the two fixed-width architectures no instruction can name an address outright, so one is built in
+two steps and then read through.  The two differ in how: one computes the page the address lies in and then adds the offset within
+it, and the other adds an upper and a lower half, with the second instruction measuring from the first rather than from itself.
+
+There is no register allocator, so every value a function computes goes to the register a result is returned in.  That is correct
+exactly while no two values are live at once, and the backend checks it: a function that would need two is reported as beyond what
+this compiler generates rather than compiled wrongly.

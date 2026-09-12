@@ -345,6 +345,100 @@ in the compiler rather than in the program.  It becomes the real check if functi
 The symbol is computed from the intermediate representation alone and is stored nowhere, so every stage that needs it arrives at
 the same string without anything being passed along.
 
+## 2026-09-13T03:00+02:00 — language
+
+**A variable is defined with `var NAME: TYPE = VALUE`, and the colon is always written**
+
+Decided on the user's direction.  The type after the colon may be left out, in which case it is the type of the value; written
+without a space the two characters read as `:=`, but they are the same two tokens and `var x : = 3u8` is the same definition.
+
+Considered: `x: u8 = 3u8` with `x := 3u8`, after Go and Odin, which is terse but leaves a statement beginning with an identifier
+ambiguous between a definition, an assignment and an expression until the parser has looked past the name; and `let`, after Rust,
+Swift and ML, which parses as easily but in every language that has it binds something that does not change.
+
+The keyword was kept for the reason `@[` was chosen for attributes: a parser commits on the first token, which is what keeps the
+grammar context-free and the compilation parallelizable.  Keeping the colon in both forms is what makes them one construct with a
+part left out, rather than two constructs that happen to resemble each other.
+
+## 2026-09-13T03:00+02:00 — language
+
+**A variable is always given a value where it is defined**
+
+There is no form that leaves one uninitialized.  C leaves the contents undefined and Go and Java fill them with zeroes; both are
+answers a reader has to know rather than read, and the first is exactly the unstated meaning this language rules out.  Nothing is
+lost: a value has to come from somewhere, and saying where is no longer than not saying.
+
+## 2026-09-13T03:00+02:00 — language
+
+**An integer literal names its type with a suffix: `3u8`**
+
+Decided on the user's direction.  The suffix is the type's own name, so there is nothing to learn and nothing to look up, and no
+ambiguity arises: no integer type's name begins with a digit, and none of the letters a hexadecimal literal uses begins one either.
+
+Considered: `3_u8`, which Rust also accepts and which makes the boundary explicit at the cost of a character on every typed literal
+and of two spellings for one thing; and `3:u8`, which reads as "of type" and generalizes beyond literals, but spends the colon that
+already ends a function header and opens a block.
+
+A literal takes its type from its suffix, or from the context where it has none.  Where it has both they must agree.
+
+## 2026-09-13T03:00+02:00 — language
+
+**A literal with neither a suffix nor a context is an untyped value, which is not implemented**
+
+Decided on the user's direction.  Such a literal is a number of no particular width that takes the type of wherever it ends up, as
+in Odin, and the same will hold for floating-point literals.  That is not implemented, and a literal that would be one is reported
+as a feature the compiler lacks.
+
+Considered and rejected: defaulting to `i32`, as Rust, Go and C# do.  It is convenient, and it makes the width of a value depend on
+a rule the reader has to know -- `var c := 3000000000` would mean something other than it appears to, silently.  Saying the
+compiler does not implement this yet is true; picking a width would not be.
+
+## 2026-09-13T03:00+02:00 — implementation
+
+**A local variable is a value; a variable at the top level is an address**
+
+A local is bound to whatever its initializer produced, with nothing reserved in memory, because nothing can take its address.  When
+assignment arrives, a block parameter carries the new value across a branch, which is what block parameters were chosen for.
+
+One at the top level is a value of pointer type, so naming it yields its address and reading it is a load.  Every access to memory
+is therefore an instruction in the graph rather than something a name implies, which is what the memory tokens are there to order.
+The chain starts at a `mem.start` instruction rather than at a parameter of the function, so that a function's type says nothing
+about memory.
+
+## 2026-09-13T03:00+02:00 — implementation
+
+**Layout is computed from a type and never held in one**
+
+The size of a value, and the boundary it must start on, are computed by a pass of their own against a particular target.  A size
+stored in a type would throw away the freedom the specification gives the compiler to reorder the fields of a product type, and the
+width of a pointer is the target's business rather than the type's.  Product types are laid out in declaration order for now;
+choosing a better one belongs in that pass, where no type has to change for it.
+
+## 2026-09-13T03:00+02:00 — implementation
+
+**Every value goes to one register, and a function needing two at once is refused**
+
+There is no register allocator.  Every value a function computes is put in the register a result is returned in, which is correct
+exactly while no two values are live at the same time.  The backend checks that: a value must be read by the instruction directly
+after it, or by nothing at all.
+
+A function that would need two at once is reported as beyond what this compiler generates.  Refusing is the only honest thing to
+do; the alternative is code that is wrong in a way nothing would catch.
+
+## 2026-09-13T03:00+02:00 — implementation
+
+**Two relocation defects, found by checking against the linker rather than by reading the manual**
+
+Implementing addresses turned up a defect that had been in the AArch64 backend since it was written.  The instruction that computes
+an address a page at a time needs the difference of the two *pages*; the code computed the difference of the two addresses and
+shifted it down.  Those agree only when the instruction is itself page-aligned, which it happened to be in every test until now.
+Fixup kinds gained a base that says "the page this lies in", so the computation is stated once, where every other one is.
+
+The second was a gap that would have become a defect: the pair of instructions RISC-V uses to compute an address is not two
+independent halves, because the second is measured from the first.  A fixup can now say what it is measured from.
+
+Both are checked against words taken from the GNU linker, with its relaxation switched off so that the pair survives to be read.
+
 ---
 
 Open questions
@@ -364,6 +458,12 @@ These are recorded so they are not lost.  None of them blocks the current versio
 - **A garbled sentence in the specification.**  "the grammar has to be context-free, there is no process definitions in order" is
   read as "there is no *need to* process definitions in order", so a forward reference at the top level is legal.  The semantic
   analysis collects every top-level definition before checking any body, which is what makes that reading true.
+
+- **Assignment.**  A variable is given a value where it is defined and cannot be assigned to afterwards.  Nothing needs it yet,
+  and it is what will first make a store necessary.
+
+- **A unary minus.**  A negative number cannot be written: `-3i8` is a negation of a literal rather than a literal, and the
+  expression syntax has no unary operators.
 
 - **Naming a symbol outright.**  A function following a foreign convention keeps its bare name, which covers calling into another
   world.  There is no way to say what a function should be called without also saying how it is called -- an attribute naming the

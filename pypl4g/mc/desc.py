@@ -56,7 +56,15 @@ class OperandSpec:
                     return False
                 return self.bits is None or reg.bits == self.bits
             case MCMem():
-                return OperandKind.MEM in self.kinds
+                if OperandKind.MEM not in self.kinds:
+                    return False
+                # Where the access states its width and the slot states one
+                # too, they must agree: several instructions differ only in how
+                # much of memory they read, and the order of the rows is not
+                # what should decide between them.
+                if self.bits is not None and operand.size_bits is not None:
+                    return operand.size_bits == self.bits
+                return True
             case MCImm():
                 if OperandKind.IMM not in self.kinds:
                     return False

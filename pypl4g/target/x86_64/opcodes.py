@@ -91,6 +91,25 @@ X86_INSTRS: Final[tuple[X86InstDesc, ...]] = (
     X86InstDesc("sub", (_rm(64), _r(64)), opcode=0x29, opsize=OpSize.REXW,
                 modrm=ModRMUse.REG_RM, reg_op=1, rm_op=0, implicit_defs=(EFLAGS,),
                 est_size=3),
+    # movzx r32, r/m8                    0F B6 /r
+    X86InstDesc("movzx", (_r(32), _rm(8)), opcode=0xB6, map=OpMap.M0F,
+                modrm=ModRMUse.REG_RM, reg_op=0, rm_op=1, flags=InstFlags.ZEXT32,
+                est_size=3),
+    # movzx r32, r/m16                   0F B7 /r
+    X86InstDesc("movzx", (_r(32), _rm(16)), opcode=0xB7, map=OpMap.M0F,
+                modrm=ModRMUse.REG_RM, reg_op=0, rm_op=1, flags=InstFlags.ZEXT32,
+                est_size=3),
+    # movsx r32, r/m8                    0F BE /r
+    X86InstDesc("movsx", (_r(32), _rm(8)), opcode=0xBE, map=OpMap.M0F,
+                modrm=ModRMUse.REG_RM, reg_op=0, rm_op=1, flags=InstFlags.ZEXT32,
+                est_size=3),
+    # movsx r32, r/m16                   0F BF /r
+    X86InstDesc("movsx", (_r(32), _rm(16)), opcode=0xBF, map=OpMap.M0F,
+                modrm=ModRMUse.REG_RM, reg_op=0, rm_op=1, flags=InstFlags.ZEXT32,
+                est_size=3),
+    # movsxd r64, r/m32                  REX.W 63 /r
+    X86InstDesc("movsxd", (_r(64), _rm(32)), opcode=0x63, opsize=OpSize.REXW,
+                modrm=ModRMUse.REG_RM, reg_op=0, rm_op=1, est_size=4),
     # lea r64, m                         REX.W 8D /r
     X86InstDesc("lea", (_r(64), _mem()), opcode=0x8D, opsize=OpSize.REXW,
                 modrm=ModRMUse.REG_RM, reg_op=0, rm_op=1, est_size=7),

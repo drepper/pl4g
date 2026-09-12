@@ -1,0 +1,8 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 2007 LANG_SYNTAX_BAD_LITERAL_SUFFIX
+
+※ The suffix names an integer type; nothing else means anything there.
+@[startup]
+fn main() → u8:
+    var status := 3bool
+    status

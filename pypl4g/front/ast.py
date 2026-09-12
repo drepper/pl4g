@@ -93,9 +93,14 @@ class Expr(Node):
 
 @dataclass(frozen=True, slots=True)
 class IntLit(Expr):
-    """An integer literal."""
+    """An integer literal.
+
+    ``type_name`` is the type the literal named with its suffix, if it named
+    one.  Without it the literal takes its type from the context it appears in.
+    """
 
     value: int
+    type_name: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -143,6 +148,23 @@ class ExprStmt(Stmt):
 
 
 @dataclass(frozen=True, slots=True)
+class VarDef(Stmt):
+    """A variable definition, at the top level or inside a block.
+
+    The colon is always written.  ``type`` is what follows it, and is ``None``
+    where the type is to be taken from the value instead.  There is no form
+    without a value, so ``value`` is never ``None`` in a tree that parsed.
+    """
+
+    name: str
+    name_span: Span
+    type: TypeRef | None
+    value: Expr
+    attrs: tuple[Attribute, ...] = ()
+    doc: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class Block(Node):
     """A sequence of statements in one of the two notations."""
 
@@ -173,9 +195,12 @@ class FuncDef(Node):
     doc: str | None = None
 
 
+type Definition = FuncDef | VarDef
+
+
 @dataclass(frozen=True, slots=True)
 class SourceUnit(Node):
     """Everything the parser found in one source file."""
 
     path: str
-    items: tuple[FuncDef, ...] = ()
+    items: tuple[Definition, ...] = ()

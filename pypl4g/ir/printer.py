@@ -10,8 +10,8 @@ from typing import Sequence
 
 from .function import BasicBlock, Function
 from .inst import (BinaryInst, BlockTarget, BrInst, CastInst, CmpInst, CondBrInst,
-                   Instruction, RetInst, SwitchInst, Terminator, UnaryInst,
-                   UnreachableInst)
+                   Instruction, LoadInst, MemStartInst, RetInst, SwitchInst,
+                   Terminator, UnaryInst, UnreachableInst)
 from .module import Module
 from .types import VOID
 from .value import BoolConst, IntConst, UndefConst, Value
@@ -45,7 +45,11 @@ class Numbering:
 
 
 def render_operand(value: Value, numbers: Numbering) -> str:
-    """Render one operand: a literal for a constant, ``%N`` otherwise."""
+    """Render one operand: a literal for a constant, ``@name`` for a global."""
+    from .module import GlobalVar
+
+    if isinstance(value, GlobalVar):
+        return "".join(("@", value.name))
     if isinstance(value, IntConst):
         return str(value.value)
     if isinstance(value, BoolConst):
@@ -90,6 +94,10 @@ def _render_inst(inst: Instruction, numbers: Numbering) -> str:
         case CmpInst():
             suffix = inst.operands[0].ty.render() if inst.operands else "void"
             return "".join((inst.opcode, ".", suffix, " ", operands))
+        case MemStartInst():
+            return inst.opcode
+        case LoadInst():
+            return "".join((inst.opcode, ".", inst.ty.render(), " ", operands))
         case BinaryInst() | UnaryInst() | CastInst():
             return "".join((inst.opcode, ".", inst.ty.render(), " ", operands))
         case _:
@@ -139,10 +147,26 @@ def render_function(func: Function, out: list[str]) -> None:
     out.append("}")
 
 
+def render_global(var: object, out: list[str]) -> None:
+    """Append the textual form of one global variable to *out*."""
+    from .module import GlobalVar
+    from .value import IntConst as _IntConst
+
+    assert isinstance(var, GlobalVar)
+    initializer = var.initializer
+    text = str(initializer.value) if isinstance(initializer, _IntConst) else "undef"
+    out.append("".join(("var @", var.name, ": ", var.value_type.render(), " ",
+                        var.linkage.value, " = ", text)))
+
+
 def render_module(module: Module) -> str:
     """Return the textual form of *module*."""
     out: list[str] = ["".join(("; pl4g-ir ", str(IR_VERSION)))]
     out.append("".join(("module \"", module.name, "\" triple \"", module.triple, "\"")))
+    if module.globals:
+        out.append("")
+        for var in module.globals.values():
+            render_global(var, out)
     for func in module.functions.values():
         out.append("")
         render_function(func, out)

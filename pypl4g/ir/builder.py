@@ -8,10 +8,10 @@ generated rather than only when the verifier runs.
 from ..source.location import INVALID_SPAN, Span
 from .function import BasicBlock, Function
 from .inst import (BinaryInst, BinOp, BlockTarget, BrInst, CastInst, CastKind,
-                   CmpInst, CmpPred, CondBrInst, Instruction, RetInst, Terminator,
-                   UnaryInst, UnOp, UnreachableInst)
+                   CmpInst, CmpPred, CondBrInst, Instruction, LoadInst, MemStartInst,
+                   RetInst, Terminator, UnaryInst, UnOp, UnreachableInst)
 from .module import Module
-from .types import BOOL, IntType, Type
+from .types import BOOL, IntType, PtrType, Type
 from .value import Value
 
 
@@ -22,6 +22,7 @@ class IRBuilder:
         self._module = module
         self._func = func
         self._block: BasicBlock | None = func.entry
+        self._memory: Value | None = None
 
     @property
     def module(self) -> Module:
@@ -86,6 +87,22 @@ class IRBuilder:
              span: Span = INVALID_SPAN) -> Value:
         """Append a conversion."""
         return self._append(CastInst(kind, value, target, span))
+
+    def memory(self) -> Value:
+        """The memory token at this point of the function.
+
+        A function that never touches memory has none; the first load is what
+        starts the chain, and a store will later extend it.
+        """
+        if self._memory is None:
+            self._memory = self._append(MemStartInst())
+        return self._memory
+
+    def load(self, address: Value, span: Span = INVALID_SPAN) -> Value:
+        """Append a load of whatever *address* points at."""
+        pointee = address.ty
+        assert isinstance(pointee, PtrType)
+        return self._append(LoadInst(pointee.pointee, (self.memory(), address), span))
 
     def ret(self, value: Value | None = None, span: Span = INVALID_SPAN) -> Terminator:
         """Append a return."""

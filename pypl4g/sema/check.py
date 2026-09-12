@@ -6,16 +6,16 @@ compilation be parallelized and what makes a forward reference legal.
 """
 
 from dataclasses import dataclass
-from typing import Sequence
+from typing import Final, Sequence
 
 from ..diag import ids as D
 from ..diag.engine import DiagEngine
 from ..front import ast
 from ..ir.builder import IRBuilder
 from ..ir.function import (FuncAttrs, Function, InlineHint, Linkage, SpecialKind)
-from ..ir.module import Module
-from ..ir.types import BOOL, BUILTIN_TYPES, IntType, Type, VOID
-from ..ir.value import Value
+from ..ir.module import GlobalVar, Module
+from ..ir.types import BOOL, BUILTIN_TYPES, ERROR, IntType, Type, VOID
+from ..ir.value import UndefConst, Value
 from ..source.location import Span
 from .attributes import (AttrSpec, AttrTarget, BoundAttr, SPECIAL_OF_TEST_KIND,
                          TARGET_NAMES, lookup)
@@ -30,11 +30,20 @@ STARTUP_RETURN_TYPE_NAME = "u8"
 
 @dataclass(slots=True)
 class _Collected:
-    """A top-level definition and the attributes bound to it."""
+    """A top-level function definition and the attributes bound to it."""
 
     node: ast.FuncDef
     attrs: list[BoundAttr]
     func: Function
+
+
+@dataclass(slots=True)
+class _Local:
+    """A name bound inside a function body, and the value it stands for."""
+
+    name: str
+    value: Value
+    span: Span
 
 
 class Checker:
@@ -44,8 +53,10 @@ class Checker:
         self._module = module
         self._diags = diags
         self._defined: dict[str, tuple[Span, str]] = {}
-        #: Where each function's name is written, for pointing at it in a note.
+        #: Where each definition's name is written, for pointing at it in a note.
         self._name_spans: dict[str, Span] = {}
+        #: The names bound inside the function being checked, innermost last.
+        self._scopes: list[dict[str, _Local]] = []
 
     # -- entry point -----------------------------------------------------------
 
@@ -55,26 +66,164 @@ class Checker:
         for unit in units:
             self._module.source_paths.append(unit.path)
             for item in unit.items:
-                gathered = self._collect_function(item, unit.path)
-                if gathered is not None:
-                    collected.append(gathered)
+                match item:
+                    case ast.FuncDef():
+                        gathered = self._collect_function(item, unit.path)
+                        if gathered is not None:
+                            collected.append(gathered)
+                    case ast.VarDef():
+                        self._collect_global(item)
+                    case _:
+                        self._diags.internal("unknown kind of top-level definition")
         for entry in collected:
             self._lower_function(entry)
         self._check_program()
         return self._module
 
+    # -- variables -------------------------------------------------------------
+
+    def _declare(self, name: str, span: Span, path: str = "") -> bool:
+        """Record a top-level name, reporting one that is already taken."""
+        previous = self._defined.get(name)
+        if previous is not None:
+            self._diags.emit(D.LANG_FILESTRUCT_DUPLICATE_DEFINITION, span,
+                             name=name).note(
+                D.LANG_FILESTRUCT_PREVIOUS_DEFINITION, previous[0], name=name)
+            return False
+        self._defined[name] = (span, path)
+        self._name_spans[name] = span
+        return True
+
+    def _collect_global(self, node: ast.VarDef) -> None:
+        """Register one variable defined at the top level.
+
+        A variable whose type or value could not be worked out is registered
+        anyway, with a stand-in type.  The error has been reported once; every
+        later mention of the name would otherwise report it again as undefined,
+        which says nothing the first message did not.
+        """
+        if not self._declare(node.name, node.name_span):
+            return
+        self._bind_attributes(node.attrs, AttrTarget.VARIABLE)
+        ty = self._variable_type(node)
+        initializer = self._constant_value(node, ty) if ty is not None else None
+        if ty is None:
+            ty = ERROR
+        self._module.add_global(GlobalVar(
+            name=node.name, value_type=ty, ptr_type=self._module.types.ptr_type(ty),
+            initializer=initializer, span=node.span))
+
+    def _variable_type(self, node: ast.VarDef) -> Type | None:
+        """The type of a variable: the one declared, or the one its value has."""
+        if node.type is not None:
+            return self._resolve_type(node.type)
+        derived = self._type_of(node.value)
+        if derived is None:
+            return None
+        return derived
+
+    def _type_of(self, expr: ast.Expr) -> Type | None:
+        """The type an expression has on its own, without a context to take one from."""
+        match expr:
+            case ast.IntLit():
+                if expr.type_name is None:
+                    # A literal with no suffix and no context is an untyped
+                    # value, which the specification describes and this compiler
+                    # does not have yet.
+                    self._diags.emit(
+                        D.IMPL_UNIMPLEMENTED_FEATURE, expr.span,
+                        feature=("an integer literal with neither a type suffix nor a "
+                                 "context that gives it a type"))
+                    return None
+                found = BUILTIN_TYPES.get(expr.type_name)
+                return found
+            case ast.BoolLit():
+                return BOOL
+            case ast.NameRef():
+                resolved = self._lookup(expr)
+                return None if resolved is None else self._value_type_of(resolved)
+            case _:
+                self._diags.emit(
+                    D.IMPL_UNIMPLEMENTED_FEATURE, expr.span,
+                    feature="deriving the type of a variable from this kind of value")
+                return None
+
+    def _value_type_of(self, value: Value) -> Type:
+        """The type naming *value* yields: what a global holds, not its address."""
+        if isinstance(value, GlobalVar):
+            return value.value_type
+        return value.ty
+
+    def _constant_value(self, node: ast.VarDef, ty: Type) -> Value | None:
+        """The value a top-level variable is given, which must be a constant."""
+        match node.value:
+            case ast.IntLit() if isinstance(ty, IntType):
+                if not self._literal_matches(node, ty):
+                    return None
+                if not ty.holds(node.value.value):
+                    self._diags.emit(D.LANG_SYNTAX_INTEGER_RANGE, node.value.span,
+                                     literal=str(node.value.value), type=ty.render())
+                    return None
+                return self._module.int_const(ty, node.value.value)
+            case ast.BoolLit() if ty is BOOL:
+                return self._module.bool_const(BOOL, node.value.value)
+            case _:
+                self._diags.emit(
+                    D.IMPL_UNIMPLEMENTED_FEATURE, node.value.span,
+                    feature="a top-level variable whose value is not a literal")
+                return None
+
+    def _literal_matches(self, node: ast.VarDef, ty: Type) -> bool:
+        """Check a suffixed literal against the type the variable was declared."""
+        literal = node.value
+        if not isinstance(literal, ast.IntLit) or literal.type_name is None:
+            return True
+        named = BUILTIN_TYPES.get(literal.type_name)
+        if named is not None and named is not ty:
+            self._diags.emit(D.LANG_TYPE_INITIALIZER_MISMATCH, literal.span,
+                             name=node.name, expected=ty.render(), found=named.render())
+            return False
+        return True
+
+    # -- scopes ----------------------------------------------------------------
+
+    def _push_scope(self) -> None:
+        """Enter a nested scope."""
+        self._scopes.append({})
+
+    def _pop_scope(self) -> None:
+        """Leave the innermost scope."""
+        self._scopes.pop()
+
+    def _bind_local(self, name: str, value: Value, span: Span) -> None:
+        """Bind a name in the innermost scope, reporting one already bound there."""
+        scope = self._scopes[-1]
+        previous = scope.get(name)
+        if previous is not None:
+            self._diags.emit(D.LANG_FILESTRUCT_DUPLICATE_DEFINITION, span,
+                             name=name).note(
+                D.LANG_FILESTRUCT_PREVIOUS_DEFINITION, previous.span, name=name)
+            return
+        scope[name] = _Local(name=name, value=value, span=span)
+
+    def _lookup(self, ref: ast.NameRef) -> Value | None:
+        """Resolve a name: the innermost binding first, then the top level."""
+        for scope in reversed(self._scopes):
+            found = scope.get(ref.name)
+            if found is not None:
+                return found.value
+        found_global = self._module.globals.get(ref.name)
+        if found_global is not None:
+            return found_global
+        self._diags.emit(D.LANG_FILESTRUCT_UNDEFINED_NAME, ref.span, name=ref.name)
+        return None
+
     # -- collection ------------------------------------------------------------
 
     def _collect_function(self, node: ast.FuncDef, path: str) -> _Collected | None:
         """Register one function definition without looking at its body."""
-        previous = self._defined.get(node.name)
-        if previous is not None:
-            self._diags.emit(D.LANG_FILESTRUCT_DUPLICATE_DEFINITION, node.name_span,
-                             name=node.name).note(
-                D.LANG_FILESTRUCT_PREVIOUS_DEFINITION, previous[0], name=node.name)
+        if not self._declare(node.name, node.name_span, path):
             return None
-        self._defined[node.name] = (node.name_span, path)
-        self._name_spans[node.name] = node.name_span
         attrs = self._bind_attributes(node.attrs, AttrTarget.FUNCTION)
         params = tuple(self._resolve_type(p.type) for p in node.params)
         ret = self._resolve_type(node.ret_type)
@@ -302,10 +451,13 @@ class Checker:
         if node.body is None:
             return
         block = func.add_block()
-        for index, param in enumerate(node.params):
-            block.add_param(func.ty.params[index], param.name)
         builder = IRBuilder(self._module, func)
+        self._push_scope()
+        for index, param in enumerate(node.params):
+            value = block.add_param(func.ty.params[index], param.name)
+            self._bind_local(param.name, value, node.params[index].span)
         self._lower_block(builder, node.body, func)
+        self._pop_scope()
         if not builder.is_terminated:
             if func.ty.ret is VOID:
                 builder.ret()
@@ -332,6 +484,8 @@ class Checker:
                 if stmt.explicit and is_last:
                     self._diags.emit(D.LANG_FUNCDEF_RETURN_REDUNDANT, stmt.span)
                 self._lower_return(builder, stmt, func)
+            case ast.VarDef():
+                self._lower_local(builder, stmt)
             case ast.ExprStmt():
                 # The value of the last statement is the function's result, which
                 # is why the canonical form of the language omits the keyword.
@@ -342,6 +496,26 @@ class Checker:
                     self._lower_expr(builder, stmt.value, None)
             case _:
                 self._diags.internal("unknown statement kind in lowering")
+
+    def _lower_local(self, builder: IRBuilder, node: ast.VarDef) -> None:
+        """Lower a variable defined inside a function body.
+
+        A local is a value, not a place: the name is bound to whatever the
+        initializer produced.  Nothing is reserved in memory, because nothing
+        can take its address yet -- and where the language later lets a name be
+        assigned, a block parameter is what carries the new value across a
+        branch, which is why the representation has them.
+        """
+        self._bind_attributes(node.attrs, AttrTarget.VARIABLE)
+        declared = (self._resolve_type(node.type) if node.type is not None
+                    else self._variable_type(node))
+        if declared is None or not self._literal_matches(node, declared):
+            # The error is reported; binding the name anyway keeps every later
+            # mention of it from reporting the same thing again as undefined.
+            self._bind_local(node.name, UndefConst(ERROR), node.name_span)
+            return
+        value = self._lower_expr(builder, node.value, declared)
+        self._bind_local(node.name, value, node.name_span)
 
     def _lower_return(self, builder: IRBuilder, stmt: ast.ReturnStmt,
                       func: Function) -> None:
@@ -363,32 +537,79 @@ class Checker:
         """Lower an expression, checking it against the expected type."""
         match expr:
             case ast.IntLit():
-                ty = expected if isinstance(expected, IntType) else BUILTIN_TYPES["i32"]
-                assert isinstance(ty, IntType)
+                ty = self._literal_type(expr, expected)
+                if ty is None:
+                    return UndefConst(ERROR)
                 if not ty.holds(expr.value):
                     self._diags.emit(D.LANG_SYNTAX_INTEGER_RANGE, expr.span,
                                      literal=str(expr.value), type=ty.render())
                     return builder.int_const(ty, 0)
-                if expected is not None and expected is not ty:
-                    self._report_mismatch(expr.span, ty, expected)
                 return builder.int_const(ty, expr.value)
             case ast.BoolLit():
                 if expected is not None and expected is not BOOL:
                     self._report_mismatch(expr.span, BOOL, expected)
                 return builder.bool_const(expr.value)
             case ast.NameRef():
-                self._diags.emit(D.LANG_FILESTRUCT_UNDEFINED_NAME, expr.span, name=expr.name)
-                return builder.int_const(BUILTIN_TYPES["i32"], 0)  # type: ignore[arg-type]
+                return self._lower_name(builder, expr, expected)
             case ast.StringLit():
                 self._diags.emit(D.LANG_TYPE_RETURN_MISMATCH, expr.span, found="string",
                                  expected=expected.render() if expected is not None else "void")
-                return builder.int_const(BUILTIN_TYPES["i32"], 0)  # type: ignore[arg-type]
+                return UndefConst(ERROR)
             case _:
                 self._diags.internal("unknown expression kind in lowering")
-                return builder.int_const(BUILTIN_TYPES["i32"], 0)  # type: ignore[arg-type]
+                return UndefConst(ERROR)
+
+    def _literal_type(self, expr: ast.IntLit, expected: Type | None) -> IntType | None:
+        """The type an integer literal has, from its suffix or from the context.
+
+        A suffix says what the literal is; a context says what is wanted.  Where
+        both are present they must agree, and where neither is the literal is an
+        untyped value, which this compiler does not have yet.
+        """
+        named = BUILTIN_TYPES.get(expr.type_name) if expr.type_name is not None else None
+        if named is not None and expected is not None and named is not expected:
+            self._report_mismatch(expr.span, named, expected)
+            return None
+        chosen = named if named is not None else expected
+        if chosen is None:
+            self._diags.emit(
+                D.IMPL_UNIMPLEMENTED_FEATURE, expr.span,
+                feature=("an integer literal with neither a type suffix nor a context "
+                         "that gives it a type"))
+            return None
+        if not isinstance(chosen, IntType):
+            self._report_mismatch(expr.span, BUILTIN_TYPES["i32"], chosen)
+            return None
+        return chosen
+
+    def _lower_name(self, builder: IRBuilder, ref: ast.NameRef,
+                    expected: Type | None) -> Value:
+        """Lower a reference to a name.
+
+        A local stands for the value it was bound to.  A global stands for its
+        address, so reading one is a load -- which is what keeps every access to
+        memory visible in the graph instead of hidden behind a name.
+        """
+        resolved = self._lookup(ref)
+        if resolved is None:
+            return UndefConst(ERROR)
+        if isinstance(resolved, GlobalVar) and resolved.value_type is ERROR:
+            return UndefConst(ERROR)
+        if isinstance(resolved, GlobalVar):
+            resolved = builder.load(resolved, ref.span)
+        if expected is not None and resolved.ty != expected:
+            self._report_mismatch(ref.span, resolved.ty, expected)
+        return resolved
 
     def _report_mismatch(self, span: Span, found: Type, expected: Type) -> None:
-        """Report a type that does not match what the context requires."""
+        """Report a type that does not match what the context requires.
+
+        A type that could not be worked out matches anything: the mistake behind
+        it has been reported once already, and saying so again at every place the
+        value reaches would add nothing.
+        """
+        if found is ERROR or expected is ERROR:
+            return
         self._diags.emit(D.LANG_TYPE_RETURN_MISMATCH, span, found=found.render(),
                          expected=expected.render())
 

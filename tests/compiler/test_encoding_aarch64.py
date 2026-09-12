@@ -64,6 +64,21 @@ SAMPLES = [
     ("adrp x0, .", "adrp", MCReg(reg("x0")), MCSymRef(SymExpr(MCSymbol("s")))),
     ("add x0, x1, #0", "add.lo12", MCReg(reg("x0")), MCReg(reg("x1")),
      MCSymRef(SymExpr(MCSymbol("s")))),
+    ("ldrb w0, [x1]", "ldrb", MCReg(reg("w0")), MCReg(reg("x1")), MCImm(0, 12, False)),
+    ("ldrb w0, [x1, #3]", "ldrb", MCReg(reg("w0")), MCReg(reg("x1")),
+     MCImm(3, 12, False)),
+    ("ldrsb w0, [x1]", "ldrsb", MCReg(reg("w0")), MCReg(reg("x1")),
+     MCImm(0, 12, False)),
+    ("ldrh w0, [x1, #4]", "ldrh", MCReg(reg("w0")), MCReg(reg("x1")),
+     MCImm(4, 12, False)),
+    ("ldrsh w0, [x1]", "ldrsh", MCReg(reg("w0")), MCReg(reg("x1")),
+     MCImm(0, 12, False)),
+    ("ldr w0, [x1, #8]", "ldr", MCReg(reg("w0")), MCReg(reg("x1")),
+     MCImm(8, 12, False)),
+    ("ldrsw x0, [x1]", "ldrsw", MCReg(reg("x0")), MCReg(reg("x1")),
+     MCImm(0, 12, False)),
+    ("ldr x0, [x1, #16]", "ldr", MCReg(reg("x0")), MCReg(reg("x1")),
+     MCImm(16, 12, False)),
     ("bl .", "bl", MCSymRef(SymExpr(MCSymbol("s")))),
     ("ret", "ret"),
     ("svc #0", "svc", MCImm(0, 16, False)),
@@ -127,6 +142,15 @@ def test_padding_word_is_permanently_undefined() -> None:
     assert UDF_WORD == 0
 
 
+def test_a_load_offset_must_be_a_multiple_of_the_access_size() -> None:
+    """The encoding holds the offset divided by the size, so an odd one has none."""
+    assert assemble("ldrh", MCReg(reg("w0")), MCReg(reg("x1")), MCImm(4, 12, False))
+    with pytest.raises(EncodingError, match="does not fit"):
+        assemble("ldrh", MCReg(reg("w0")), MCReg(reg("x1")), MCImm(3, 12, False))
+    with pytest.raises(EncodingError, match="does not fit"):
+        assemble("ldr", MCReg(reg("x0")), MCReg(reg("x1")), MCImm(4, 12, False))
+
+
 def test_immediate_out_of_range_is_refused() -> None:
     """An immediate the field cannot hold has no encoding, so none is invented."""
     with pytest.raises(SelectionError):
@@ -171,6 +195,24 @@ def test_branch_offset_out_of_range_is_refused() -> None:
         fixups.apply_fixup(data, 0, fixup, 1 << 28)
     with pytest.raises(FixupRangeError, match="does not fit"):
         fixups.apply_fixup(data, 0, fixup, 2)
+
+
+def test_the_page_relocation_takes_the_difference_of_pages() -> None:
+    """An address a page away is a page away even if the two are bytes apart.
+
+    Both words here are what the GNU linker produces for 'adrp x0, target'
+    twelve bytes before a target that lies in the next page but one.
+    """
+    from pypl4g.mc.fixup import fixup_value
+    from pypl4g.mc.operand import ConstExpr
+
+    fixup = MCFixup(offset=0, kind=fixups.ADR_PAGE21, target=ConstExpr(0x411008))
+    assert fixup_value(fixup, 0x400FFC) == 17 << 12, "the pages, not the addresses"
+
+    data = bytearray(assemble("adrp", MCReg(reg("x0")),
+                              MCSymRef(SymExpr(MCSymbol("target")))))
+    fixups.apply_fixup(data, 0, fixup, fixup_value(fixup, 0x400FFC))
+    assert word_of(bytes(data)) == 0xB0000080
 
 
 def test_relocations_are_inserted_not_overwritten() -> None:

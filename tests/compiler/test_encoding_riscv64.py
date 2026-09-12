@@ -60,6 +60,16 @@ SAMPLES = [
     ("xor a0, a1, a2", "xor", MCReg(reg("a0")), MCReg(reg("a1")), MCReg(reg("a2"))),
     ("lui a0, 0", "lui", MCReg(reg("a0")), MCImm(0, 20, False)),
     ("auipc a0, 0", "auipc", MCReg(reg("a0")), MCImm(0, 20, False)),
+    ("auipc a0, 0", "auipc.hi20", MCReg(reg("a0")), MCSymRef(SymExpr(MCSymbol("s")))),
+    ("addi a0, a0, 0", "addi.lo12", MCReg(reg("a0")), MCReg(reg("a0")),
+     MCSymRef(SymExpr(MCSymbol("s")))),
+    ("lbu a0, 0(a1)", "lbu", MCReg(reg("a0")), MCReg(reg("a1")), MCImm(0, 12)),
+    ("lb a0, 0(a1)", "lb", MCReg(reg("a0")), MCReg(reg("a1")), MCImm(0, 12)),
+    ("lhu a0, 0(a1)", "lhu", MCReg(reg("a0")), MCReg(reg("a1")), MCImm(0, 12)),
+    ("lh a0, 0(a1)", "lh", MCReg(reg("a0")), MCReg(reg("a1")), MCImm(0, 12)),
+    ("lwu a0, 0(a1)", "lwu", MCReg(reg("a0")), MCReg(reg("a1")), MCImm(0, 12)),
+    ("lw a0, 0(a1)", "lw", MCReg(reg("a0")), MCReg(reg("a1")), MCImm(0, 12)),
+    ("ld a0, 8(a1)", "ld", MCReg(reg("a0")), MCReg(reg("a1")), MCImm(8, 12)),
     ("jal ra, .", "jal", MCSymRef(SymExpr(MCSymbol("s")))),
     ("ret", "ret"),
     ("ecall", "ecall"),
@@ -187,6 +197,42 @@ def test_jump_offset_out_of_range_is_refused() -> None:
         fixups.apply_fixup(data, 0, fixup, 1 << 21)
     with pytest.raises(FixupRangeError):
         fixups.apply_fixup(data, 0, fixup, 1)
+
+
+def test_the_address_pair_matches_the_linker() -> None:
+    """Two instructions compute an address; both words are the linker's own.
+
+    They come from 'auipc a0, %pcrel_hi(target)' followed by
+    'addi a0, a0, %pcrel_lo(...)' twelve bytes before the target's page, linked
+    with relaxation switched off so the pair survives.
+    """
+    from pypl4g.mc.fixup import fixup_value
+    from pypl4g.mc.operand import ConstExpr
+
+    pc, target = 0x400FFC, 0x411008
+    symbol = MCSymRef(SymExpr(MCSymbol("target")))
+
+    high = bytearray(assemble("auipc.hi20", MCReg(reg("a0")), symbol))
+    fixup = MCFixup(offset=0, kind=fixups.PCREL_HI20, target=ConstExpr(target))
+    fixups.apply_fixup(high, 0, fixup, fixup_value(fixup, pc))
+    assert word_of(bytes(high)) == 0x00010517
+
+    low = bytearray(assemble("addi.lo12", MCReg(reg("a0")), MCReg(reg("a0")), symbol))
+    paired = MCFixup(offset=0, kind=fixups.PCREL_LO12_I, target=ConstExpr(target),
+                     base_adjust=-fixups.PCREL_PAIR_DISTANCE)
+    fixups.apply_fixup(low, 0, paired, fixup_value(paired, pc + 4))
+    assert word_of(bytes(low)) == 0x00C50513
+
+
+def test_the_second_half_of_the_pair_measures_from_the_first() -> None:
+    """Its own address is four bytes on, which would give a different answer."""
+    from pypl4g.mc.fixup import fixup_value
+    from pypl4g.mc.operand import ConstExpr
+
+    paired = MCFixup(offset=0, kind=fixups.PCREL_LO12_I, target=ConstExpr(0x1000),
+                     base_adjust=-fixups.PCREL_PAIR_DISTANCE)
+    alone = MCFixup(offset=0, kind=fixups.PCREL_LO12_I, target=ConstExpr(0x1000))
+    assert fixup_value(paired, 0x104) == fixup_value(alone, 0x100)
 
 
 def test_branch_offset_is_reassembled_correctly() -> None:

@@ -11,9 +11,9 @@ from typing import Sequence
 from .function import (BasicBlock, FuncAttrs, Function, InlineHint, Linkage,
                        SpecialKind)
 from .inst import (BinaryInst, BinOp, BlockTarget, BrInst, CastInst, CastKind,
-                   CmpInst, CmpPred, CondBrInst, RetInst, UnaryInst, UnOp,
-                   UnreachableInst)
-from .module import Module
+                   CmpInst, CmpPred, CondBrInst, LoadInst, MemStartInst, RetInst,
+                   UnaryInst, UnOp, UnreachableInst)
+from .module import GlobalVar, Module
 from .printer import IR_VERSION
 from .types import BOOL, BUILTIN_TYPES, MEM, Type, TypeContext, VOID
 from .value import Value
@@ -189,6 +189,11 @@ class _FunctionReader:
             if found is None:
                 raise IRSyntaxError(number, "".join(("undefined value '", text, "'")))
             return found
+        if text.startswith("@"):
+            found_global = self._module.globals.get(text[1:])
+            if found_global is None:
+                raise IRSyntaxError(number, "".join(("undefined global '", text, "'")))
+            return found_global
         if text == "true" or text == "false":
             return self._module.bool_const(BOOL, text == "true")
         from .types import IntType
@@ -212,6 +217,14 @@ class _FunctionReader:
         """Build the instruction named by *opcode* and append it to *block*."""
         if opcode == "unreachable":
             return block.append(UnreachableInst())
+        if opcode == "mem.start":
+            return block.append(MemStartInst())
+        if opcode.startswith("load."):
+            ty = _parse_type(opcode[len("load."):], self._module.types, number)
+            parts = _split_top(rest)
+            token = self._value(parts[0], MEM, number)
+            address = self._value(parts[1], self._module.types.ptr_type(ty), number)
+            return block.append(LoadInst(ty, (token, address)))
         if opcode == "ret.void":
             return block.append(RetInst())
         if opcode.startswith("ret."):
@@ -268,6 +281,12 @@ def read_module(text: str) -> Module:
             module = Module(name=name, triple=triple)
             index += 1
             continue
+        if stripped.startswith("var @"):
+            if module is None:
+                raise IRSyntaxError(number, "a variable before the module line")
+            _read_global(module, stripped, number)
+            index += 1
+            continue
         if stripped.startswith("fn @"):
             if module is None:
                 raise IRSyntaxError(number, "function before the module line")
@@ -286,6 +305,21 @@ def read_module(text: str) -> Module:
         raise IRSyntaxError(1, "no module line")
     _rebuild_caches(module)
     return module
+
+
+def _read_global(module: Module, line: str, number: int) -> None:
+    """Parse one ``var @name: type linkage = value`` line."""
+    head, _, initializer = line.removeprefix("var @").partition("=")
+    name, _, rest = head.strip().partition(":")
+    words = rest.split()
+    ty = _parse_type(words[0], module.types, number)
+    linkage = Linkage(words[1]) if len(words) > 1 else Linkage.INTERNAL
+    from .types import IntType
+
+    text = initializer.strip()
+    value = module.int_const(ty, int(text, 0)) if isinstance(ty, IntType) else None
+    module.add_global(GlobalVar(name.strip(), ty, module.types.ptr_type(ty), value,
+                                linkage))
 
 
 def _rebuild_caches(module: Module) -> None:

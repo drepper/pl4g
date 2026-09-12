@@ -4,20 +4,37 @@ from dataclasses import dataclass, field
 
 from ..source.location import INVALID_SPAN, Span
 from .function import Function, Linkage
-from .types import Type, TypeContext
-from .value import BoolConst, IntConst
-from .types import BoolType, IntType
+from .types import BoolType, IntType, MEM, Type, TypeContext
+from .value import BoolConst, IntConst, Value
 
 
-@dataclass(slots=True, eq=False)
-class GlobalVar:
-    """A variable with static storage duration."""
+class GlobalVar(Value):
+    """A variable that exists for as long as the program does.
 
-    name: str
-    ty: Type
-    linkage: Linkage = Linkage.INTERNAL
-    initializer: object | None = None
-    span: Span = INVALID_SPAN
+    It is a *value* of pointer type, not a value of the type it holds: naming
+    one yields its address, and reading it is a load.  That is what keeps every
+    access to memory visible in the dataflow graph rather than implied by a
+    name.
+    """
+
+    __slots__ = ("name", "value_type", "linkage", "initializer", "span", "module")
+
+    def __init__(self, name: str, value_type: Type, ptr_type: Type,
+                 initializer: Value | None = None,
+                 linkage: Linkage = Linkage.INTERNAL,
+                 span: Span = INVALID_SPAN, module: str = "") -> None:
+        super().__init__(ptr_type, name)
+        self.name = name
+        #: The type of what the variable holds, not of the variable itself.
+        self.value_type = value_type
+        self.linkage = linkage
+        #: A variable is always given a value where it is defined.
+        self.initializer = initializer
+        self.span = span
+        self.module = module
+
+    def __repr__(self) -> str:
+        return "".join(("GlobalVar(@", self.name, ")"))
 
 
 @dataclass(slots=True, eq=False)
@@ -47,6 +64,11 @@ class Module:
         """Register *func* in this module."""
         self.functions[func.name] = func
         return func
+
+    def add_global(self, var: GlobalVar) -> GlobalVar:
+        """Register *var* in this module."""
+        self.globals[var.name] = var
+        return var
 
     def int_const(self, ty: IntType, value: int) -> IntConst:
         """Return the interned constant *value* of type *ty*."""

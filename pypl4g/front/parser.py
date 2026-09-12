@@ -95,7 +95,7 @@ class Parser:
 
     def parse_unit(self) -> ast.SourceUnit:
         """Parse a whole source file."""
-        items: list[ast.FuncDef] = []
+        items: list[ast.Definition] = []
         start = self._current.span
         while not self._check(TokKind.EOF):
             self._skip_newlines()
@@ -111,16 +111,42 @@ class Parser:
         end = self._current.span
         return ast.SourceUnit(span=start.to(end), path=self._path, items=tuple(items))
 
-    def _parse_item(self) -> ast.FuncDef | None:
+    def _parse_item(self) -> ast.Definition | None:
         """Parse one top-level definition together with what precedes it."""
         doc = self._parse_doc_comments()
         attrs = self._parse_attributes()
         self._skip_newlines()
         if self._check(TokKind.KW_FN):
             return self._parse_function(attrs, doc)
+        if self._check(TokKind.KW_VAR):
+            return self._parse_variable(attrs, doc)
         self._diags.emit(D.LANG_FILESTRUCT_UNEXPECTED_TOPLEVEL, self._current.span,
                          construct=self._current.describe())
         raise _Bail()
+
+    def _parse_variable(self, attrs: tuple[ast.Attribute, ...] = (),
+                        doc: str | None = None) -> ast.VarDef:
+        """Parse ``var NAME ':' [TYPE] '=' VALUE``.
+
+        The colon is always there; what varies is whether a type follows it.
+        Written without one and without a space the two characters read as
+        ``:=``, but they are the same two tokens either way.
+        """
+        start = self._expect(TokKind.KW_VAR).span
+        name_token = self._expect(TokKind.IDENT)
+        self._expect(TokKind.COLON, D.LANG_VARDEF_EXPECTED_COLON)
+        declared: ast.TypeRef | None = None
+        if self._check(TokKind.IDENT):
+            type_token = self._advance()
+            declared = ast.TypeRef(span=type_token.span, name=type_token.text)
+        if self._accept(TokKind.EQUALS) is None:
+            self._diags.emit(D.LANG_VARDEF_MISSING_INITIALIZER, name_token.span,
+                             name=name_token.text)
+            raise _Bail()
+        value = self._parse_expression()
+        return ast.VarDef(span=start.to(value.span), name=name_token.text,
+                          name_span=name_token.span, type=declared, value=value,
+                          attrs=attrs, doc=doc)
 
     def _parse_doc_comments(self) -> str | None:
         """Collect the documentation comments preceding a definition."""
@@ -280,6 +306,8 @@ class Parser:
 
     def _parse_statement(self) -> ast.Stmt:
         """Parse one statement."""
+        if self._check(TokKind.KW_VAR):
+            return self._parse_variable()
         if self._check(TokKind.KW_RETURN):
             start = self._advance().span
             if self._check(TokKind.NEWLINE) or self._check(TokKind.SEMICOLON) \
@@ -301,7 +329,8 @@ class Parser:
             case TokKind.INT:
                 self._advance()
                 assert token.int_value is not None
-                return ast.IntLit(span=token.span, value=token.int_value)
+                return ast.IntLit(span=token.span, value=token.int_value,
+                                  type_name=token.int_type)
             case TokKind.STRING:
                 self._advance()
                 assert token.str_value is not None

@@ -10,7 +10,7 @@ from enum import Enum
 from typing import Sequence
 
 from ..source.location import INVALID_SPAN, Span
-from .types import Type, VOID
+from .types import MEM, Type, VOID
 from .value import Value
 
 
@@ -182,6 +182,26 @@ class AllocaInst(Instruction):
     def opcode(self) -> str:
         """The mnemonic used in the textual form."""
         return "alloca"
+
+
+class MemStartInst(Instruction):
+    """The state of memory where a function begins.
+
+    Every load takes a memory token and every store produces one, so the chain
+    has to start somewhere; this is where.  It is an instruction rather than a
+    parameter of the function so that the function's type says nothing about
+    memory, which is the caller's business and not part of the signature.
+    """
+
+    __slots__ = ()
+
+    def __init__(self, span: Span = INVALID_SPAN) -> None:
+        super().__init__(MEM, (), span)
+
+    @property
+    def opcode(self) -> str:
+        """The mnemonic used in the textual form."""
+        return "mem.start"
 
 
 class LoadInst(Instruction):

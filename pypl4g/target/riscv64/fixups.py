@@ -22,6 +22,20 @@ JAL: Final[FixupKind] = FixupKind("riscv_jal", INSTRUCTION_SIZE, FixupBase.FIELD
 BRANCH: Final[FixupKind] = FixupKind("riscv_branch", INSTRUCTION_SIZE,
                                      FixupBase.FIELD_START)
 
+#: The upper twenty bits of a program-counter-relative address, for the first
+#: instruction of the pair that computes one.
+PCREL_HI20: Final[FixupKind] = FixupKind("riscv_pcrel_hi20", INSTRUCTION_SIZE,
+                                         FixupBase.FIELD_START)
+
+#: The lower twelve bits, for the second instruction of that pair.  It is
+#: measured from the *first* instruction, not from itself, which is what the
+#: fixup's base adjustment is for.
+PCREL_LO12_I: Final[FixupKind] = FixupKind("riscv_pcrel_lo12_i", INSTRUCTION_SIZE,
+                                           FixupBase.FIELD_START)
+
+#: How far the second instruction of the pair sits after the first.
+PCREL_PAIR_DISTANCE: Final[int] = INSTRUCTION_SIZE
+
 
 def _apply_jal(data: bytearray, offset: int, fixup: MCFixup, value: int) -> None:
     """Store a jump offset, which the instruction keeps in four pieces."""
@@ -49,10 +63,31 @@ def _apply_branch(data: bytearray, offset: int, fixup: MCFixup, value: int) -> N
     insert_bits(data, offset, INSTRUCTION_SIZE, (value >> 11) & 0x1, 7, 1)
 
 
+def _apply_pcrel_hi20(data: bytearray, offset: int, fixup: MCFixup,
+                      value: int) -> None:
+    """Store the upper bits of an address, rounded so the lower half can be signed.
+
+    The instruction that follows adds a twelve-bit *signed* immediate, so half
+    the time it subtracts.  Adding half a page here is what makes the two halves
+    come to the right sum either way.
+    """
+    del fixup
+    insert_bits(data, offset, INSTRUCTION_SIZE, (value + 0x800) >> 12, 12, 20)
+
+
+def _apply_pcrel_lo12(data: bytearray, offset: int, fixup: MCFixup,
+                      value: int) -> None:
+    """Store the lower twelve bits of an address."""
+    del fixup
+    insert_bits(data, offset, INSTRUCTION_SIZE, value & 0xFFF, 20, 12)
+
+
 #: How each of this target's relocations is stored.
 APPLIERS: Final[dict[FixupKind, Callable[[bytearray, int, MCFixup, int], None]]] = {
     JAL: _apply_jal,
     BRANCH: _apply_branch,
+    PCREL_HI20: _apply_pcrel_hi20,
+    PCREL_LO12_I: _apply_pcrel_lo12,
 }
 
 

@@ -11,6 +11,8 @@ from ...mc.fixup import FixupApplier, MCFixup, apply_little_endian
 from ...mc.inst import MCInst
 from ...mc.reg import RegisterInfo
 from ...mc.streamer import MCStreamer
+from ...ir.layout import DataLayout
+from ..globals import emit_globals
 from ..target import ImageDefaults
 from .abi import lookup as lookup_cconv
 from .encoder import EncodingError, encode
@@ -74,6 +76,7 @@ class X86_64Target:
         waits for a symbol, but it keeps the image in a readable order.
         """
         del opt_level
+        emit_globals(asm, module, DataLayout(pointer_size=self.pointer_bits // 8))
         asm.section(".text", executable=True,
                     alignment=self.image_defaults().text_alignment)
         for func in module.functions.values():
