@@ -1,9 +1,10 @@
 """Saying what a construct raises, so that it is not reported.
 
-The attribute is `expect` rather than `allow` or `suppress`, and it behaves as
-the name reads: it says the construct raises the diagnostic, and an expectation
-nothing meets is itself reported.  Rust draws the same distinction between
-`#[allow]` and `#[expect]`.
+There are two attributes, and the difference between them is what happens when
+the diagnostic does not arise.  `ignore` merely keeps it quiet.  `expect`
+asserts that the construct raises it, so one that nothing meets is an error.
+Rust draws the same distinction between `#[allow]` and `#[expect]`, though it
+reports the stale case as a warning rather than an error.
 """
 
 import pytest
@@ -45,12 +46,21 @@ def test_an_absorbed_error_is_remembered() -> None:
     assert not engine.failed, "an absorbed diagnostic does not fail the compilation"
 
 
-def test_an_expectation_nothing_meets_is_reported() -> None:
+def test_an_assertion_nothing_meets_is_reported() -> None:
     """A stale one hides nothing and says something untrue."""
+    engine, _ = collecting_engine()
+    numbers = frozenset({D.LANG_VARDEF_VALUE_UNUSED})
+    scope = engine.expect(numbers, required=numbers)
+    engine.release(scope)
+    assert scope.unmet == [D.LANG_VARDEF_VALUE_UNUSED]
+
+
+def test_merely_allowing_one_is_never_reported() -> None:
+    """'ignore' says the diagnostic may arise, not that it does."""
     engine, _ = collecting_engine()
     scope = engine.expect(frozenset({D.LANG_VARDEF_VALUE_UNUSED}))
     engine.release(scope)
-    assert scope.unmet == [D.LANG_VARDEF_VALUE_UNUSED]
+    assert scope.unmet == [], "an allowance nothing met was reported"
 
 
 def test_the_innermost_expectation_takes_it() -> None:
@@ -151,3 +161,71 @@ def test_the_new_diagnostics_are_in_the_catalog(number: int) -> None:
     """They are part of the contract between implementations like every other."""
     entry = load_catalog().by_number[number]
     assert entry.cause and entry.spec.requirement
+
+
+# -- ignore, which allows without asserting ------------------------------------
+
+def test_ignore_keeps_it_quiet(compile_source) -> None:  # noqa: ANN001
+    """The suppressing half, without the assertion."""
+    proc, _ = compile_source(WASTEFUL.replace("    let a:", "    @[ignore(4006)]\n    let a:"))
+    assert proc.returncode == 0, describe(proc)
+    assert proc.stderr.strip() == "", proc.stderr
+
+
+def test_ignore_says_nothing_when_the_diagnostic_does_not_arise(compile_source) -> None:  # noqa: ANN001
+    """This is the whole difference between the two attributes."""
+    quiet = "".join((
+        "@[startup]\nfn main() ", ARROW, " u8:\n",
+        "    @[ignore(4006)]\n    let a: u8 = 5u8\n    a\n"))
+    proc, _ = compile_source(quiet)
+    assert proc.returncode == 0, describe(proc)
+    assert proc.stderr.strip() == "", proc.stderr
+
+
+def test_expect_is_an_error_when_the_diagnostic_does_not_arise(compile_source) -> None:  # noqa: ANN001
+    """It asserts, so a stale one says something about the program that is false."""
+    asserted = "".join((
+        "@[startup]\nfn main() ", ARROW, " u8:\n",
+        "    @[expect(4006)]\n    let a: u8 = 5u8\n    a\n"))
+    proc, _ = compile_source(asserted)
+    assert proc.returncode != 0
+    assert "[PL4G-3206]" in proc.stderr, proc.stderr
+    assert "error:" in proc.stderr, "it is no longer a warning"
+
+
+def test_ignore_also_discards_on_an_error(compile_source) -> None:  # noqa: ANN001
+    """What is kept quiet still cannot be compiled."""
+    proc, output = compile_source("".join((
+        "@[ignore(4201)]\nfn helper() ", ARROW, " nosuch:\n    1u8\n\n",
+        "@[startup]\nfn main() ", ARROW, " u8:\n    1u8\n")), "--emit=ir")
+    assert proc.returncode == 0, describe(proc)
+    assert "helper" not in output.read_text(encoding="utf-8")
+
+
+def test_both_attributes_may_be_mixed(compile_source) -> None:  # noqa: ANN001
+    """One names one diagnostic, so a construct raising several says so several
+    times, and may assert some while merely allowing others."""
+    proc, _ = compile_source("".join((
+        "@[startup]\nfn main() ", ARROW, " u8:\n",
+        "    @[ignore(5002)]\n    @[expect(4006)]\n    let a: mut u8 = 5u8\n",
+        "    a ", ASSIGN, " 4u8\n")))
+    assert proc.returncode == 0, describe(proc)
+    assert proc.stderr.strip() == "", proc.stderr
+
+
+def test_the_two_are_declared_alike_apart_from_the_assertion() -> None:
+    """They differ in one thing, and the registry says so."""
+    from pypl4g.sema.attributes import lookup
+
+    ignore, expect = lookup("ignore"), lookup("expect")
+    assert ignore is not None and expect is not None
+    assert ignore.targets == expect.targets
+    assert ignore.repeatable and expect.repeatable
+    assert [p.name for p in ignore.params] == [p.name for p in expect.params]
+
+
+def test_the_stale_assertion_is_an_error_in_the_catalog() -> None:
+    """Its number did not change when its severity did, which is the rule."""
+    entry = load_catalog().by_number[3206]
+    assert entry.severity == "error"
+    assert entry.option is None, "an error cannot be turned off"

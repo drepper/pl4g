@@ -612,6 +612,9 @@ anything does is a question for a pass over the whole program rather than for th
 
 **`@[expect(NUMBER)]` says what a construct raises, and the diagnostic is not reported**
 
+*This was the only such attribute when it was written; see the entry of 2026-09-13T20:00, which added `ignore` beside it and made
+a stale `expect` an error rather than a warning.*
+
 Decided on the user's direction, with the syntax and the number the user proposed.
 
 The word is `expect`, not `allow` or `suppress`, and it behaves as it reads: an expectation nothing meets is itself reported.  That
@@ -647,6 +650,24 @@ lexically -- an attribute on a definition could not cover the very diagnostic it
 A value nothing reads is found by the scope rather than by a pass: a binding records whether anything has read what it stands for.
 That is exact for straight-line code, which is all the language has.  When control flow arrives it becomes a liveness analysis over
 the graph, and where it is reported from will move with it.
+
+## 2026-09-13T20:00+02:00 — language
+
+**`@[ignore(NUMBER)]` quiets a diagnostic; `@[expect(NUMBER)]` asserts it, and a stale assertion is an error**
+
+Decided on the user's direction.  The two attributes differ in one thing: what happens where the diagnostic does not arise.
+`ignore` says nothing.  `expect` reports it, and reports it as an error rather than as the warning it was.
+
+The severity is the point of having two.  An attribute that merely permits can outlive what it permitted with nothing to notice,
+which is the state every C and C++ codebase with a long-lived `#pragma GCC diagnostic ignored` is in.  An attribute that asserts is
+worth relying on only if the compiler checks it, and a claim about a program is either so or it is not -- there is no degree of
+staleness that makes a false statement a warning.  Where the intent is only quiet, `ignore` says exactly that and nothing further.
+
+Rust has the same pair, `#[allow]` and `#[expect]`, and reports the stale case as a warning.  The difference here follows from what
+the two words are for: `allow` grants permission, which cannot be wrong; `expect` makes a claim, which can be.
+
+The number of the stale-assertion diagnostic did not change when its severity did.  That is the rule the catalog is built on, and
+it is what lets a program react to a number without having to know how seriously the compiler currently takes it.
 
 ---
 

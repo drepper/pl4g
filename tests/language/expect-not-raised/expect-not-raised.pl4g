@@ -1,9 +1,9 @@
-※ pl4g-test: compile=ok
-※ pl4g-test: run=native exit=5
+※ pl4g-test: compile=fail
 ※ pl4g-test: expect-diag 3206 LANG_ATTR_EXPECT_NOT_RAISED
 
-※ An expectation nothing meets is stale: it hides nothing and says something
-※ untrue.  Here the value is read, so no warning was there to suppress.
+※ 'expect' asserts that the construct raises the diagnostic, so one that nothing
+※ meets is a statement about the program that is not true.  Here the value is
+※ read, so no warning was there to suppress.
 @[startup]
 fn main() → u8:
     @[expect(4006)]

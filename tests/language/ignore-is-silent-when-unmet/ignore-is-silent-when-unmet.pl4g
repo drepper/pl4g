@@ -1,0 +1,11 @@
+※ pl4g-test: compile=ok
+※ pl4g-test: run=native exit=5
+※ pl4g-test: diag=none
+
+※ Where the diagnostic does not arise, 'ignore' says nothing -- which is the
+※ whole difference between it and 'expect'.
+@[startup]
+fn main() → u8:
+    @[ignore(4006)]
+    let a: u8 = 5u8
+    a

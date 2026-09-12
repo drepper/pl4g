@@ -348,7 +348,9 @@ this compiler generates rather than compiled wrongly.
 Expectations
 ------------
 
-A construct that says what it raises puts an *expectation* in force while it is checked.  The diagnostic engine consults the
+A construct that says what it raises puts an *expectation* in force while it is checked.  It holds two sets: the diagnostics it
+quiets, and the subset of those it asserts are raised.  `ignore` adds to the first, `expect` to both, and the difference is visible
+only where nothing meets them.  The diagnostic engine consults the
 expectations in force before it reports anything, innermost first; one that matches absorbs the diagnostic, records that it was
 raised, and -- where what it absorbed was an error -- records that too, since a construct that raises an error cannot be compiled
 whether or not anyone was told.

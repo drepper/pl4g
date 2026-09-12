@@ -38,6 +38,17 @@ class _Collected:
     expectation: Expectation | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class _Expected:
+    """One thing a construct said about a diagnostic it may raise."""
+
+    number: int
+    span: Span
+    #: Whether the construct asserted that it is raised, rather than merely
+    #: allowing it to be.
+    asserted: bool
+
+
 @dataclass(slots=True)
 class _Local:
     """A name bound inside a function body, and the value it stands for.
@@ -61,7 +72,7 @@ class _Local:
     #: variable exists, since not every such diagnostic is raised while the
     #: definition itself is being read.
     expectation: Expectation | None = None
-    expected_pairs: list[tuple[int, Span]] = field(default_factory=list)
+    expected_pairs: list[_Expected] = field(default_factory=list)
 
 
 class Checker:
@@ -86,7 +97,7 @@ class Checker:
         #: belongs to is discarded rather than half built.
         self._discard_function: bool = False
         #: What each top-level definition says it raises, and where it says so.
-        self._expected_pairs: dict[str, list[tuple[int, Span]]] = {}
+        self._expected_pairs: dict[str, list[_Expected]] = {}
 
     # -- entry point -----------------------------------------------------------
 
@@ -228,25 +239,32 @@ class Checker:
 
     # -- expectations ----------------------------------------------------------
 
-    def _expected_numbers(self, attrs: Sequence[BoundAttr]) -> list[tuple[int, Span]]:
-        """The diagnostics a construct says it raises, and where it says so."""
-        found: list[tuple[int, Span]] = []
+    def _expected_numbers(self, attrs: Sequence[BoundAttr]) -> list[_Expected]:
+        """What a construct says about the diagnostics it raises.
+
+        ``expect`` asserts that one is raised; ``ignore`` only keeps it quiet.
+        Both suppress it, and the difference shows where nothing meets them.
+        """
+        found: list[_Expected] = []
         for attr in attrs:
-            if attr.name != "expect":
+            if attr.name not in ("expect", "ignore"):
                 continue
             number = attr.as_int("number")
             if number not in self._diags.catalog.by_number:
                 self._diags.emit(D.LANG_ATTR_EXPECT_UNKNOWN_NUMBER, attr.node.span,
                                  number=number)
                 continue
-            found.append((number, attr.node.span))
+            found.append(_Expected(number=number, span=attr.node.span,
+                                   asserted=attr.name == "expect"))
         return found
 
-    def _begin_expecting(self, pairs: Sequence[tuple[int, Span]]) -> Expectation | None:
-        """Put the expectations of a construct in force."""
+    def _begin_expecting(self, pairs: Sequence["_Expected"]) -> Expectation | None:
+        """Put what a construct said about its diagnostics in force."""
         if not pairs:
             return None
-        return self._diags.expect(frozenset(number for number, _ in pairs))
+        return self._diags.expect(
+            frozenset(item.number for item in pairs),
+            frozenset(item.number for item in pairs if item.asserted))
 
     def _end_expecting(self, expectation: Expectation | None) -> None:
         """Take them out of force, without yet deciding whether they were met."""
@@ -254,13 +272,13 @@ class Checker:
             self._diags.release(expectation)
 
     def _settle_expecting(self, expectation: Expectation | None,
-                          pairs: Sequence[tuple[int, Span]]) -> bool:
-        """Report the expectations nothing met, and say whether what was absorbed
+                          pairs: Sequence["_Expected"]) -> bool:
+        """Report the assertions nothing met, and say whether what was absorbed
         prevents the construct from being compiled."""
         if expectation is None:
             return False
         for number in expectation.unmet:
-            where = next(span for raised, span in pairs if raised == number)
+            where = next(item.span for item in pairs if item.number == number)
             self._diags.emit(D.LANG_ATTR_EXPECT_NOT_RAISED, where, number=number)
         return expectation.saw_error
 

@@ -201,10 +201,15 @@ Each attribute declares the kinds of object it accepts and the parameters it tak
 the names and the kinds of the arguments.  An attribute name the compiler does not know is an error, never an ignored annotation:
 a misspelling must not be able to silently drop a property the program depends on.
 
-##### Expecting a Diagnostic
+##### Quieting a Diagnostic
 
-`@[expect(NUMBER)]` says that the construct it is attached to raises the diagnostic with that number.  The diagnostic is then not
-reported.
+Two attributes keep a diagnostic from being reported for the construct they are attached to.  They differ in one thing: what
+happens when the diagnostic does not arise.
+
+```
+@[ignore(NUMBER)]     ※ the diagnostic is not reported, whether or not it arises
+@[expect(NUMBER)]     ※ the same, and the construct is asserted to raise it
+```
 
 ```
 @[startup]
@@ -215,21 +220,28 @@ fn main() → u8:
 ```
 
 In the layout notation the attribute stands on its own line, indented with the statement it belongs to; that indentation is what
-says which statement that is.  In the brace notation it simply precedes the statement.  It may be given more than once, since one
-expectation names one diagnostic and a construct may raise several, and the number must be one the compiler can emit.
+says which statement that is.  In the brace notation it simply precedes the statement.  Either may be given more than once, since
+one of them names one diagnostic and a construct may raise several, and the number must be one the compiler can emit.
 
-An expectation covers the construct it is attached to.  For a definition it also covers the variable being defined for as long as
+What is said covers the construct it is attached to.  For a definition it also covers the variable being defined for as long as
 that variable exists, because not everything a definition raises is raised while the definition is being read: that nothing ever
 reads the value it gives is only known once the variable is gone.
 
-**An expectation that nothing meets is itself reported.**  The attribute says what a construct raises, so that a reader knows why
-it is there and so that the compiler can tell when it no longer is.  One that is never met is stale -- the code changed, or the
-number was wrong -- and it now hides nothing while saying something untrue.  This is why the word is `expect` and not `allow`:
-Rust draws the same distinction between `#[allow]`, which permits, and `#[expect]`, which asserts.
+**An assertion that nothing meets is an error.**  `expect` says what a construct raises, so that a reader knows why it is there and
+so that the compiler can tell when it no longer is.  One that is never met is stale -- the code changed, or the number was wrong --
+and it now hides nothing while saying something false.  It is an error rather than a warning because the attribute exists to be
+relied upon: what it claims is either so or it is not.
 
-**An error may be expected too, but the construct it is attached to is then discarded.**  A definition that raises an error cannot
-be compiled, and half of one would be worse than none: the function or the variable is left out of the program entirely.  What
-follows from leaving it out is not itself hidden -- discarding the only startup function is still reported as there being none.
+Where the intent is only to keep a diagnostic quiet, whether or not it arises, `ignore` is what says that and says nothing further.
+
+Rust draws the same distinction, between `#[allow]` and `#[expect]`; it reports the stale case as a warning.  C, C++ and their
+compilers have only the permitting form -- `#pragma GCC diagnostic ignored` and the like -- which is why a suppression there can
+outlive what it suppressed with nothing to notice.
+
+**An error may be quieted too, by either attribute, but the construct it is attached to is then discarded.**  A definition that
+raises an error cannot be compiled, and half of one would be worse than none: the function or the variable is left out of the
+program entirely.  What follows from leaving it out is not itself hidden -- discarding the only startup function is still reported
+as there being none.
 
 Considered were `#[...]` (Rust), `[[...]]` with namespaces (C++11, and the aspect clauses of Ada), `{. .}` pragmas (Nim),
 `@(...)` (Odin), a bare `@name` in the manner of a decorator (Python, Java, D), `pragma` statements (Ada), and magic comments

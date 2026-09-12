@@ -124,6 +124,10 @@ REGISTRY: Final[Mapping[str, AttrSpec]] = {
                  doc="places the object in the named section of the image"),
         AttrSpec("packed", AttrTarget.TYPE,
                  doc="requests a layout without padding between fields"),
+        AttrSpec("ignore", AttrTarget.STATEMENT | AttrTarget.FUNCTION
+                 | AttrTarget.VARIABLE,
+                 (_param("number", "integer"),), repeatable=True,
+                 doc="this diagnostic is not reported for the construct"),
         AttrSpec("expect", AttrTarget.STATEMENT | AttrTarget.FUNCTION
                  | AttrTarget.VARIABLE,
                  (_param("number", "integer"),), repeatable=True,

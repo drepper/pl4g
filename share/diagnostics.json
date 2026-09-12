@@ -889,7 +889,7 @@
     {
       "number": 3206,
       "name": "LANG_ATTR_EXPECT_NOT_RAISED",
-      "severity": "warning",
+      "severity": "error",
       "message": "no diagnostic {number} was raised here, though one was expected",
       "args": [
         {
@@ -898,15 +898,15 @@
           "description": "the number expected"
         }
       ],
-      "cause": "The attribute says what the construct it is attached to reports, so that a reader knows why it is there and so that the compiler can tell when it no longer is.  An expectation that is never met is stale: the code was changed, or the number was wrong to begin with, and either way the attribute now hides nothing and says something untrue.  Remove it, or correct the number.",
+      "cause": "`expect` asserts that the construct raises the diagnostic, so an expectation nothing meets is a statement about the program that is not true.  It is an error rather than a warning because the attribute exists to be relied upon: a reader takes it as saying what the construct does, and a stale one says something false while hiding nothing.  Where the intent is only to keep a diagnostic quiet, whether or not it arises, that is what `@[ignore(NUMBER)]` is for.",
       "spec": {
         "document": "spec/spec.md",
         "section": "The Language / File Structure / Attributes",
-        "requirement": "`@[expect(NUMBER)]` says that the construct it is attached to raises the diagnostic with that number, and keeps it from being reported."
+        "requirement": "`@[ignore(NUMBER)]` keeps the diagnostic with that number from being reported.  `@[expect(NUMBER)]` does the same and is an error where the diagnostic is not raised."
       },
       "since": "0.1",
       "default_enabled": true,
-      "option": "expect-not-raised"
+      "option": null
     },
     {
       "number": 3207,
@@ -920,11 +920,11 @@
           "description": "the number given"
         }
       ],
-      "cause": "The number must be one the compiler can emit.  They are four digits, they are the same in every implementation, and the definitive list of them is the shared catalog; a number that is not in it can never be raised, so expecting it could only ever be a mistake.",
+      "cause": "The number must be one the compiler can emit.  They are four digits, they are the same in every implementation, and the definitive list of them is the shared catalog; a number that is not in it can never be raised, so naming it could only ever be a mistake.",
       "spec": {
         "document": "spec/spec.md",
         "section": "The Language / File Structure / Attributes",
-        "requirement": "`@[expect(NUMBER)]` says that the construct it is attached to raises the diagnostic with that number, and keeps it from being reported."
+        "requirement": "`@[ignore(NUMBER)]` keeps the diagnostic with that number from being reported.  `@[expect(NUMBER)]` does the same and is an error where the diagnostic is not raised."
       },
       "since": "0.1",
       "default_enabled": true,

@@ -76,14 +76,17 @@ class Expectation:
     """
 
     numbers: frozenset[DiagID]
+    #: The subset that the construct asserts is raised, rather than merely
+    #: allowing.  Only these are worth reporting when nothing meets them.
+    required: frozenset[DiagID] = frozenset()
     raised: set[DiagID] = field(default_factory=set)
     #: Whether anything it absorbed prevents a construct from being compiled.
     saw_error: bool = False
 
     @property
     def unmet(self) -> list[DiagID]:
-        """The numbers that were expected and not raised."""
-        return sorted(self.numbers - self.raised)
+        """The numbers that were asserted and not raised."""
+        return sorted(self.required - self.raised)
 
 
 @dataclass(slots=True)
@@ -145,9 +148,10 @@ class DiagEngine:
         diag._engine = self
         return diag
 
-    def expect(self, numbers: frozenset[DiagID]) -> Expectation:
+    def expect(self, numbers: frozenset[DiagID],
+               required: frozenset[DiagID] = frozenset()) -> Expectation:
         """Put a new expectation in force until ``release`` is called with it."""
-        expectation = Expectation(numbers)
+        expectation = Expectation(numbers, required)
         self._expectations.append(expectation)
         return expectation
 

@@ -1,0 +1,13 @@
+※ pl4g-test: compile=ok
+※ pl4g-test: run=native exit=1
+※ pl4g-test: diag=none
+
+※ An error may be kept quiet too, and the construct it is attached to is then
+※ discarded, exactly as with 'expect'.
+@[ignore(4201)]
+fn helper() → nosuchtype:
+    1u8
+
+@[startup]
+fn main() → u8:
+    1u8
