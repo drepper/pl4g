@@ -196,6 +196,12 @@ a kernel for that architecture may be configured with, so that one image loads w
 x86-64 and RISC-V, and 64 KiB on AArch64.  Padding is filled with a byte that traps rather than falls through, which is also
 target-specific: a breakpoint on x86-64, and on both fixed-width architectures a zero word, which neither of them leaves defined.
 
+A symbol carries a binding and a visibility, and what a program exports decides both.  What is exported is bound globally and left
+visible; what is not is bound locally and marked hidden.  Within a single linked image the binding alone would do, since a local
+symbol cannot be named from outside it -- the visibility is what still says so if the symbol is ever made global by something
+later, and it is what a relocatable or shared object would need.  The entry point is the compiler's own rather than something the
+program declared, and stays visible: every tool that inspects a binary expects to find it.
+
 The section headers and the symbol table are kept.  They are what lets a disassembler and a debugger show the generated code, and
 the disassembler is the independent check on the encoder.  More importantly, a symbol table with accurate addresses and sizes *is*
 the map of where every function lives -- which is exactly what incremental recompilation needs, readable back out of the

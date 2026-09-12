@@ -201,6 +201,35 @@ Each attribute declares the kinds of object it accepts and the parameters it tak
 the names and the kinds of the arguments.  An attribute name the compiler does not know is an error, never an ignored annotation:
 a misspelling must not be able to silently drop a property the program depends on.
 
+##### Exporting
+
+**Nothing a program defines is visible outside it.**  A function or a variable is reachable only from the program that defines it,
+including when that program is used as a module, unless it says otherwise:
+
+```
+@[export]
+let shared: u8 = 7u8        ※ reachable from outside
+
+let private: u8 = 8u8       ※ not
+
+@[export]
+fn reachable() → u8:
+    1u8
+```
+
+The attribute applies to a function and to a variable alike, and nothing else changes what is visible.
+
+The default is the one worth having by default.  What a program exports is its interface, and an interface is worth stating; what
+it does not export it can change freely, and nothing outside can have come to depend on.  C has the opposite default, with `static`
+as the exception, which is why a name that was never meant to be part of an interface so often becomes one by accident.  Compare
+Rust, Go and Java, which all keep things in by default and have a way to say otherwise, and C++20 modules, which were added to give
+C++ the same.
+
+This decides two things about a name in the generated program: how widely its symbol is bound, and how far it is visible.  Those
+are different questions -- the binding says whether the name is one among many in this program or one the whole program shares, and
+the visibility is the part that still says so if something later makes the symbol global.  What is exported is bound globally and
+left visible; what is not is bound locally *and* marked hidden.
+
 ##### Quieting a Diagnostic
 
 Two attributes keep a diagnostic from being reported for the construct they are attached to.  They differ in one thing: what

@@ -17,12 +17,13 @@ from ..mc.fragment import (MCDataFragment, MCFragment, MCInstFragment,
                            MCPaddingFragment)
 from ..mc.layout import (layout_section, resolve_symbol_offsets,
                          section_bytes)
-from ..mc.symbol import MCSection, MCSymbol, SymBinding, SymKind
+from ..mc.symbol import MCSection, MCSymbol, SymBinding, SymKind, SymVisibility
 from .const import (ET_EXEC, PF_R, PF_W, PF_X, PT_GNU_STACK, PT_LOAD, SHF_ALLOC,
                     SHF_EXECINSTR, SHF_WRITE, SHN_ABS, SHN_UNDEF, SHT_NULL,
                     SHT_PROGBITS, SHT_STRTAB, SHT_SYMTAB, STB_GLOBAL, STB_LOCAL,
                     STB_WEAK, STT_FILE, STT_FUNC, STT_NOTYPE, STT_OBJECT,
-                    STV_DEFAULT, EHDR_SIZE, PHDR_SIZE, SHDR_SIZE, SYM_SIZE, st_info)
+                    STV_DEFAULT, STV_HIDDEN, STV_INTERNAL, STV_PROTECTED,
+                    EHDR_SIZE, PHDR_SIZE, SHDR_SIZE, SYM_SIZE, st_info)
 from .layout import (Chunk, FunctionExtent, ImageKind, ImageLayout, SectionPlan,
                      SegmentPlan, SymbolPlan, align_up)
 from .strtab import StringTable
@@ -32,6 +33,13 @@ _BINDINGS: Final[dict[SymBinding, int]] = {
     SymBinding.LOCAL: STB_LOCAL,
     SymBinding.GLOBAL: STB_GLOBAL,
     SymBinding.WEAK: STB_WEAK,
+}
+
+_VISIBILITIES: Final[dict[SymVisibility, int]] = {
+    SymVisibility.DEFAULT: STV_DEFAULT,
+    SymVisibility.INTERNAL: STV_INTERNAL,
+    SymVisibility.HIDDEN: STV_HIDDEN,
+    SymVisibility.PROTECTED: STV_PROTECTED,
 }
 
 _KINDS: Final[dict[SymKind, int]] = {
@@ -309,7 +317,8 @@ class ElfWriter:
             plan = SymbolPlan(name=symbol.name, value=symbol.vaddr, size=symbol.size,
                               binding=_BINDINGS[symbol.binding],
                               kind=_KINDS[symbol.kind],
-                              shndx=indices.get(symbol.section.name, SHN_UNDEF))
+                              shndx=indices.get(symbol.section.name, SHN_UNDEF),
+                              visibility=_VISIBILITIES[symbol.visibility])
             (locals_ if plan.binding == STB_LOCAL else globals_).append(plan)
         entries.extend(locals_)
         entries.extend(globals_)
@@ -364,7 +373,8 @@ class ElfWriter:
         for symbol in layout.symbols:
             out[position:position + SYM_SIZE] = pack_sym(
                 st_name=self._strtab.add(symbol.name),
-                st_info=st_info(symbol.binding, symbol.kind), st_other=STV_DEFAULT,
+                st_info=st_info(symbol.binding, symbol.kind),
+                st_other=symbol.visibility,
                 st_shndx=symbol.shndx, st_value=symbol.value, st_size=symbol.size)
             position += SYM_SIZE
 

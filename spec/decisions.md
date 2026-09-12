@@ -669,6 +669,38 @@ the two words are for: `allow` grants permission, which cannot be wrong; `expect
 The number of the stale-assertion diagnostic did not change when its severity did.  That is the rule the catalog is built on, and
 it is what lets a program react to a number without having to know how seriously the compiler currently takes it.
 
+## 2026-09-13T21:00+02:00 — language
+
+**Nothing is visible outside a program unless `@[export]` says so**
+
+Decided on the user's direction.  The attribute applies to a function and to a variable alike, and nothing else changes what is
+visible.
+
+The default is the one worth having by default: what a program exports is its interface and is worth stating, and what it does not
+export it can change freely with nothing outside able to have depended on it.  C has the opposite default, with `static` as the
+exception, which is why a name never meant to be part of an interface so often becomes one by accident.  Rust, Go and Java all keep
+things in by default; C++20 modules were added to give C++ the same.
+
+The attribute already existed and already worked for a function.  For a variable it was parsed, checked and then dropped -- the
+result of binding the attributes was discarded -- so `@[export]` on a variable did nothing at all.  Both now go through one place
+that answers the question.
+
+## 2026-09-13T21:00+02:00 — implementation
+
+**Exporting decides both the binding and the visibility of a symbol**
+
+They are different questions.  The binding says whether a name is one among many in this image or one the whole program shares; the
+visibility says whether anything outside may reach it.  What is exported is bound globally and left visible, and what is not is
+bound locally *and* marked hidden.
+
+Within a single linked image the binding alone would be enough, since a local symbol cannot be named from outside it, and the
+format itself says visibility is not meaningful for one.  Marking it anyway is not redundant for long: the visibility is the part
+that still says so if the symbol is ever made global by something later, and it is what a relocatable or a shared object would
+need.  Saying it once, where the program says it, is cheaper than working it out again when those exist.
+
+The entry point stays visible.  It is the compiler's own rather than something the program declared, so the rule about what a
+program exports does not reach it, and every tool that inspects a binary expects to find it.
+
 ---
 
 Open questions

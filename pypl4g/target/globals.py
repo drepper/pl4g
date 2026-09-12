@@ -14,7 +14,7 @@ from ..ir.layout import DataLayout, align_of, encode_scalar, size_of
 from ..ir.module import GlobalVar, Module
 from ..ir.value import BoolConst, IntConst
 from ..mc.asmbuilder import Assembler
-from ..mc.symbol import SymBinding, SymKind
+from ..mc.symbol import SymBinding, SymKind, SymVisibility
 
 #: Where the program's variables live.
 DATA_SECTION = ".data"
@@ -29,10 +29,12 @@ def emit_globals(asm: Assembler, module: Module, layout: DataLayout) -> None:
     asm.section(DATA_SECTION, writable=True, alignment=alignment)
     for var in module.globals.values():
         asm.align(align_of(var.value_type, layout))
+        exported = var.linkage.value == "exported"
         symbol = asm.label(symbol_of(var),
-                           binding=(SymBinding.GLOBAL if var.linkage.value == "exported"
-                                    else SymBinding.LOCAL),
-                           kind=SymKind.OBJECT)
+                           binding=SymBinding.GLOBAL if exported else SymBinding.LOCAL,
+                           kind=SymKind.OBJECT,
+                           visibility=(SymVisibility.DEFAULT if exported
+                                       else SymVisibility.HIDDEN))
         asm.bytes(initial_bytes(var, layout))
         asm.end_label(symbol)
 

@@ -59,6 +59,7 @@ class Symbol:
     shndx: int
     value: int
     size: int
+    other: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,6 +82,10 @@ class Image:
     def symbol(self, name: str) -> Symbol | None:
         """The symbol called *name*, if there is one."""
         return next((s for s in self.symbols if s.name == name), None)
+
+    def visibility_of(self, symbol: Symbol) -> int:
+        """How far a symbol is visible, which lives in the low bits of st_other."""
+        return symbol.other & 0x3
 
 
 def _string_at(data: bytes, base: int, offset: int) -> str:
@@ -125,7 +130,8 @@ def parse(data: bytes) -> Image:
                 data, symtab.sh_offset + index * SYM.size)
             entries.append(Symbol(name=_string_at(data, strtab.sh_offset, st_name),
                                   binding=st_info >> 4, kind=st_info & 0xF,
-                                  shndx=st_shndx, value=st_value, size=st_size))
+                                  shndx=st_shndx, value=st_value, size=st_size,
+                                  other=_other))
         symbols = tuple(entries)
 
     return Image(data=data, e_type=e_type, e_machine=e_machine, e_entry=e_entry,

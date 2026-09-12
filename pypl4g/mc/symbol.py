@@ -12,6 +12,21 @@ class SymBinding(Enum):
     WEAK = "weak"
 
 
+class SymVisibility(Enum):
+    """How far a symbol is visible outside the image it is defined in.
+
+    It is a separate question from the binding.  A binding says whether the
+    symbol is one name among many in this image or a name the whole program
+    shares; visibility says whether anything outside may reach it, and it is the
+    one that survives a symbol being made global by something later on.
+    """
+
+    DEFAULT = "default"
+    INTERNAL = "internal"
+    HIDDEN = "hidden"
+    PROTECTED = "protected"
+
+
 class SymKind(Enum):
     """What a symbol names."""
 
@@ -39,6 +54,7 @@ class MCSymbol:
     size: int = 0
     defined: bool = False
     binding: SymBinding = SymBinding.LOCAL
+    visibility: SymVisibility = SymVisibility.DEFAULT
     kind: SymKind = SymKind.NOTYPE
     #: Temporary labels are used for control flow and are not put in the symbol
     #: table of the image.

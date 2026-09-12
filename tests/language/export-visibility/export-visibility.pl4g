@@ -1,0 +1,21 @@
+※ pl4g-test: compile=ok opt=0,1
+※ pl4g-test: run=native,qemu exit=7
+※ pl4g-test: diag=none
+
+※ Nothing is visible outside the program unless it says so.  What says so is
+※ the export attribute, on a function or on a variable alike.
+@[export]
+let shared: u8 = 7u8
+
+let private: u8 = 8u8
+
+@[export]
+fn reachable() → u8:
+    1u8
+
+fn unreachable() → u8:
+    2u8
+
+@[startup]
+fn main() → u8:
+    shared

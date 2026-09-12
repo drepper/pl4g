@@ -86,6 +86,7 @@ class SymbolPlan:
     binding: int = 0
     kind: int = 0
     shndx: int = 0
+    visibility: int = 0
 
 
 @dataclass(slots=True)

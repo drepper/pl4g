@@ -32,7 +32,7 @@ from .operand import MCImm, MCMem, MCOperand, MCReg, MCSymRef, RelocKind, SymExp
 from .ops import Op
 from .reg import Reg
 from .streamer import MCStreamer
-from .symbol import MCSection, MCSymbol, SymBinding, SymKind
+from .symbol import MCSection, MCSymbol, SymBinding, SymKind, SymVisibility
 
 
 class InstructionSelector(Protocol):
@@ -131,9 +131,10 @@ class Assembler:
         self._streamer.emit_bytes(data)
 
     def label(self, name: str, *, binding: SymBinding = SymBinding.LOCAL,
-              kind: SymKind = SymKind.NOTYPE) -> MCSymbol:
+              kind: SymKind = SymKind.NOTYPE,
+              visibility: SymVisibility = SymVisibility.DEFAULT) -> MCSymbol:
         """Define a symbol at the current position of the current section."""
-        return self._streamer.define_symbol(name, binding, kind)
+        return self._streamer.define_symbol(name, binding, kind, visibility=visibility)
 
     def end_label(self, symbol: MCSymbol) -> None:
         """Record how far the definition of *symbol* extends."""
@@ -165,8 +166,14 @@ class Assembler:
             machine_pass.run(function)
         self._assign_registers(function)
         self._streamer.emit_align(self._alignment, self._pad_byte)
+        # What is not exported is kept in twice over: bound locally, so nothing
+        # outside this image can name it, and marked hidden, which is the part
+        # that still says so if it is ever made global by something later.
         binding = SymBinding.GLOBAL if function.exported else SymBinding.LOCAL
-        symbol = self._streamer.define_symbol(function.name, binding, SymKind.FUNC)
+        visibility = (SymVisibility.DEFAULT if function.exported
+                      else SymVisibility.HIDDEN)
+        symbol = self._streamer.define_symbol(function.name, binding, SymKind.FUNC,
+                                              visibility=visibility)
         for block in function.blocks:
             if block.label in self._streamer.symbols or self._is_branch_target(function, block):
                 self._streamer.define_symbol(block.label, SymBinding.LOCAL,

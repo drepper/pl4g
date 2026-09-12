@@ -59,6 +59,9 @@ STT_SECTION: Final[int] = 3
 STT_FILE: Final[int] = 4
 
 STV_DEFAULT: Final[int] = 0
+STV_INTERNAL: Final[int] = 1
+STV_HIDDEN: Final[int] = 2
+STV_PROTECTED: Final[int] = 3
 
 EHDR_SIZE: Final[int] = 64
 PHDR_SIZE: Final[int] = 56

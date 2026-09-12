@@ -146,6 +146,7 @@ class Checker:
         if not self._declare(node.name, node.name_span):
             return
         attrs = self._bind_attributes(node.attrs, AttrTarget.VARIABLE)
+        linkage = self._linkage_of(attrs)
         pairs = self._expected_numbers(attrs)
         expectation = self._begin_expecting(pairs)
         try:
@@ -163,7 +164,7 @@ class Checker:
         self._module.add_global(GlobalVar(
             name=node.name, value_type=ty,
             ptr_type=self._module.types.ptr_type(ty, mutable=node.mutable),
-            initializer=initializer, span=node.span))
+            initializer=initializer, linkage=linkage, span=node.span))
 
     def _variable_type(self, node: ast.VarDef) -> Type | None:
         """The type of a variable: the one declared, or the one its value has."""
@@ -544,13 +545,23 @@ class Checker:
             return None
         return actual
 
+    def _linkage_of(self, bound: Sequence[BoundAttr]) -> Linkage:
+        """How widely a definition is visible.
+
+        Nothing is visible outside the program unless it says so, which is why
+        the default is the one that keeps it in.
+        """
+        if any(attr.name == "export" for attr in bound):
+            return Linkage.EXPORTED
+        return Linkage.INTERNAL
+
     def _function_attrs(self, bound: Sequence[BoundAttr]) -> tuple[FuncAttrs, Linkage]:
         """Turn checked attributes into the form the IR carries."""
         special: SpecialKind | None = None
         priority: int | None = None
         inline = InlineHint.DEFAULT
         abi: str | None = None
-        linkage = Linkage.INTERNAL
+        linkage = self._linkage_of(bound)
         extra: dict[str, int | str | bool] = {}
         for attr in bound:
             match attr.name:
@@ -570,8 +581,6 @@ class Checker:
                 case "abi":
                     abi = attr.as_str("name")
                     extra["variadic"] = attr.as_bool("variadic")
-                case "export":
-                    linkage = Linkage.EXPORTED
                 case "align":
                     extra["align"] = attr.as_int("bytes")
                 case "section":

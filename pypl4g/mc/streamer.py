@@ -8,7 +8,7 @@ from .fixup import MCFixup
 from .fragment import (MCAlignFragment, MCDataFragment, MCFragment,
                        MCInstFragment, MCPaddingFragment)
 from .inst import MCInst
-from .symbol import MCSection, MCSymbol, SymBinding, SymKind
+from .symbol import MCSection, MCSymbol, SymBinding, SymKind, SymVisibility
 
 #: Encodes one instruction into bytes and the fixups it leaves behind.
 type Encoder = Callable[[MCInst], tuple[bytes, list[MCFixup]]]
@@ -49,8 +49,8 @@ class MCStreamer:
         return found
 
     def define_symbol(self, name: str, binding: SymBinding = SymBinding.LOCAL,
-                      kind: SymKind = SymKind.NOTYPE,
-                      temporary: bool = False) -> MCSymbol:
+                      kind: SymKind = SymKind.NOTYPE, temporary: bool = False,
+                      visibility: SymVisibility = SymVisibility.DEFAULT) -> MCSymbol:
         """Define a symbol at the current position of the current section."""
         assert self.current is not None
         sym = self.symbol(name)
@@ -58,6 +58,7 @@ class MCStreamer:
         sym.fragment_index = len(self.current.fragments)
         sym.defined = True
         sym.binding = binding
+        sym.visibility = visibility
         sym.kind = kind
         sym.temporary = temporary
         self.defined_order.append(sym)
