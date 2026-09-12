@@ -69,3 +69,10 @@ To Do List for the pypl4g compiler
 [ ] set the RISC-V header flags.  The ELF header of a RISC-V image carries flags saying which extensions the code uses and which
     floating-point convention it follows.  Zero is correct while only the base integer set is emitted; emitting floating point
     will mean setting them, and the image writer has no field for them yet.
+
+
+Optimizations
+-------------
+
+[ ] Implement value range propagation.  The result is obviously usable in many situations, including:
+    [ ] skip overflow/underflow checking of arithmetic operations
