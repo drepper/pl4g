@@ -18,7 +18,13 @@ To Do List for the pypl4g compiler
 [ ] a local that was dropped should be defined as a constant expression in the debug information, so that a debugger can still
     show it.  Waits on there being any debug information at all.
 
-[ ] functions not called, not exported, and not referenced can be dropped and should not appear in the binary.
+[x] functions not called, not exported, and not referenced can be dropped and should not appear in the binary.  Done: reachability
+    is computed forwards from roots -- the startup function, the constructors, the destructors, the tests and everything exported --
+    following what each instruction says it names, and runs at every optimization level.
+
+[ ] a variable at the top level that nothing reaches should be dropped as well.  Dropping a function can leave the only reader of
+    a variable gone, and the variable then stays in the image.  The same reachability walk answers it; what it needs first is for a
+    function to record the variables it names, the way it records the functions it calls.
 
 [ ] implement module system.  A module is loaded at compile-time.  The syntax is `let modname := import("somename")` where `modname`
     is the name the module is known as in the compilation unit and `somename` is the name of the module.  There will be built-in

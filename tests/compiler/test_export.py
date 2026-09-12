@@ -21,13 +21,20 @@ ARROW = "\N{RIGHTWARDS ARROW}"
 SOURCE = """@[export]
 let shared: u8 = 7u8
 
-let private: u8 = 8u8
+let private: mut u8 = 8u8
 
 @[export]
 fn reachable() \N{RIGHTWARDS ARROW} u8:
     1u8
 
-fn unreachable() \N{RIGHTWARDS ARROW} u8:
+\N{REFERENCE MARK} Not exported, but the entry point calls it, so it is in the image
+\N{REFERENCE MARK} and this says what a name that is kept in looks like.
+@[constructor]
+fn prepare() \N{RIGHTWARDS ARROW} void:
+    private \N{LEFTWARDS ARROW} 8u8
+
+\N{REFERENCE MARK} Neither exported nor reached from anywhere, so nothing can call it.
+fn unreached() \N{RIGHTWARDS ARROW} u8:
     2u8
 
 @[startup]
@@ -73,13 +80,24 @@ def test_what_is_exported_is_bound_globally_and_visible(image: Built, name: str)
     assert image.image.visibility_of(symbol) == STV_DEFAULT
 
 
-@pytest.mark.parametrize("name", ["private", "unreachable()u8", "main()u8"])
+@pytest.mark.parametrize("name", ["private", "prepare()void", "main()u8"])
 def test_what_is_not_exported_is_kept_in(image: Built, name: str) -> None:
     """Twice over: bound locally, and marked as not visible."""
     symbol = image.image.symbol(name)
     assert symbol is not None, "".join((name, " is not in the symbol table"))
     assert symbol.binding == STB_LOCAL
     assert image.image.visibility_of(symbol) == STV_HIDDEN
+
+
+def test_what_nothing_reaches_is_not_there_at_all(image: Built) -> None:
+    """Not exported and called from nowhere means callable from nowhere.
+
+    Compilation covers the whole program, so this is not a guess about what the
+    program might do later: nothing can ever reach the function, and bytes no
+    program can run do not belong in the image.
+    """
+    assert image.image.symbol("unreached()u8") is None, \
+        "a function nothing can reach is still in the image"
 
 
 def test_the_startup_function_is_not_exported_either(image: Built) -> None:
@@ -114,9 +132,11 @@ def test_it_still_runs(image: Built) -> None:
 def test_export_is_the_only_thing_that_changes_it(compile_source) -> None:  # noqa: ANN001
     """Without the attribute a definition is kept in, whatever else it says."""
     proc, output = compile_source("".join((
-        "@[align(16)]\nfn helper() ", ARROW, " u8:\n    1u8\n\n",
+        "let g: mut u8 = 0u8\n\n",
+        "@[align(16), constructor]\nfn helper() ", ARROW, " void:\n",
+        "    g \N{LEFTWARDS ARROW} 1u8\n\n",
         "@[startup]\nfn main() ", ARROW, " u8:\n    1u8\n")))
     assert proc.returncode == 0, describe(proc)
     parsed = elfcheck.parse(output.read_bytes())
-    symbol = parsed.symbol("helper()u8")
+    symbol = parsed.symbol("helper()void")
     assert symbol is not None and symbol.binding == STB_LOCAL

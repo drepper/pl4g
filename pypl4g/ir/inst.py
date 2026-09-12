@@ -97,6 +97,16 @@ class Instruction(Value):
         """
         return False
 
+    def references(self) -> Sequence[object]:
+        """The functions this instruction names.
+
+        Calling one is naming it, and for now that is the only way there is.
+        When a function can be a value -- a pointer to one, a table of them --
+        the shape that does it answers here too, and what decides whether a
+        function is reachable does not have to change.
+        """
+        return ()
+
 
 class BinaryInst(Instruction):
     """An arithmetic or bitwise operation on two values of the same type."""
@@ -183,6 +193,10 @@ class CallInst(Instruction):
                  span: Span = INVALID_SPAN) -> None:
         super().__init__(result_ty, args, span)
         self.callee = callee
+
+    def references(self) -> Sequence[object]:
+        """The callee, where the call names one rather than computing it."""
+        return (self.callee,)
 
     @property
     def opcode(self) -> str:

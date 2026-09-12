@@ -778,6 +778,40 @@ The remaining piece is the one the task called eventual: a local that has been d
 information, defined as the constant expression it was.  There is no debug information yet, so there is nothing to put it in; it
 stays on the list.
 
+## 2026-09-14T01:30+02:00 — implementation
+
+**A function nothing can reach is left out, and reachability is computed forwards from roots**
+
+A function that is not exported and that nothing calls cannot be called at all.  That is not a guess: compilation covers the whole
+program and there is no equivalent of an object file, so there is no later stage at which something else could refer to it.  Bytes
+no program can run do not belong in the image.
+
+It is computed forwards from a set of roots, not by asking of each function whether anything calls it.  The two differ exactly
+where it matters: a function called only from another function that is itself unreachable has a caller and is still unreachable,
+and only the forward computation sees that.  The roots are the ways into the program from outside it -- the startup function, the
+constructors and the destructors, which the entry point calls; the tests; and everything exported.
+
+A test is a root although nothing calls one today.  What calls a test is the testing machinery, which the specification describes
+and nobody has written; dropping a test because its caller does not exist yet would be dropping it for a reason that has nothing to
+do with the program.
+
+What counts as naming a function is answered by the instruction, as with effects.  A call names its callee.  Nothing else can name
+one yet, because a function is not a value in the representation; when it becomes one -- a pointer to a function, a table of them
+-- the shape that holds it says so and the reachability computation does not change.
+
+This runs at every optimization level, unlike the dead-code sweep decided earlier.  The distinction is that dropping a local is
+about code the program can still run and merely does not use, where keeping it at `-O0` buys debuggability; a function nothing can
+reach is code the program cannot run at all, and keeping it buys nothing.  Generating small code is a stated requirement, and this
+is the cheapest kind of small there is.
+
+What other languages do.  C and C++ leave it to the linker, with `--gc-sections` and one section per function, because a
+translation unit is compiled without knowing what else will be linked; the information this compiler has at the point of decision
+is what the linker has to be handed separately there.  Rust does the same through LLVM and the linker.  Go's linker drops unreached
+functions by the same forward reachability, and is able to be more aggressive precisely because it, too, sees the whole program.
+
+Left for later, and on the list: a variable nothing reads is not dropped, even when the only thing that read it was a function that
+has just been dropped.
+
 ---
 
 Open questions

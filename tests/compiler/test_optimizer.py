@@ -3,14 +3,15 @@
 import pytest
 
 from conftest import describe
-from pypl4g.ir.function import FuncAttrs, Function, SpecialKind
+from pypl4g.ir.function import FuncAttrs, Function, Linkage, SpecialKind
 from pypl4g.ir.inst import (BinaryInst, BinOp, CallInst, LoadInst, MemStartInst,
                             RetInst, StoreInst)
 from pypl4g.ir.module import GlobalVar, Module
-from pypl4g.ir.types import U8
+from pypl4g.ir.types import U8, VOID
 from pypl4g.ir.verify import verify
 from pypl4g.opt.pass_ import pipeline_for
 from pypl4g.opt.passes.dce import DeadCodeElimination
+from pypl4g.opt.passes.dropunused import DropUnusedFunctions
 
 
 def _startup(module: Module) -> Function:
@@ -141,10 +142,150 @@ def test_dropping_it_does_not_take_the_warning_with_it(compile_source) -> None: 
 
 
 @pytest.mark.parametrize("level", [0, 1, 2, 3])
-def test_the_sweep_runs_wherever_anything_is_optimized(level: int) -> None:
-    """It runs last, since both of the other passes can leave dead code."""
+def test_the_sweep_runs_where_anything_is_optimized(level: int) -> None:
+    """It runs after the two that can leave dead code, and not before -O1."""
     pipeline = pipeline_for(level)
     if level == 0:
-        assert pipeline == ()
+        assert "dce" not in pipeline
     else:
-        assert pipeline[-1] == "dce"
+        assert pipeline.index("dce") > pipeline.index("simplifycfg")
+
+
+# -- functions nothing can reach -----------------------------------------------
+
+def _helper(module: Module, name: str, *, exported: bool = False) -> Function:
+    """A function returning a constant, added to *module*."""
+    func = Function(name, module.types.func_type((), U8),
+                    linkage=Linkage.EXPORTED if exported else Linkage.INTERNAL)
+    block = func.add_block()
+    block.append(RetInst(module.int_const(U8, 1)))
+    module.add_function(func)
+    return func
+
+
+def test_a_function_no_root_reaches_is_dropped() -> None:
+    """Whole-program compilation makes unreached and uncallable the same thing."""
+    module = Module("t")
+    _helper(module, "orphan")
+    func = _startup(module)
+    block = func.entry
+    assert block is not None
+    block.append(RetInst(module.int_const(U8, 0)))
+    assert DropUnusedFunctions().run(module)
+    assert list(module.functions) == ["main"]
+    verify(module)
+
+
+def test_what_a_kept_function_calls_is_kept() -> None:
+    """Reachability is transitive, so the whole chain from a root survives."""
+    module = Module("t")
+    inner = _helper(module, "inner")
+    outer = Function("outer", module.types.func_type((), U8))
+    block = outer.add_block()
+    block.append(CallInst(inner, (), U8))
+    block.append(RetInst(module.int_const(U8, 1)))
+    module.add_function(outer)
+    func = _startup(module)
+    entry = func.entry
+    assert entry is not None
+    entry.append(CallInst(outer, (), U8))
+    entry.append(RetInst(module.int_const(U8, 0)))
+    assert not DropUnusedFunctions().run(module)
+    assert set(module.functions) == {"inner", "outer", "main"}
+
+
+def test_being_called_only_from_something_unreachable_is_not_being_called() -> None:
+    """Which is why this asks what the roots reach, not what has a caller."""
+    module = Module("t")
+    inner = _helper(module, "inner")
+    outer = Function("outer", module.types.func_type((), U8))
+    block = outer.add_block()
+    block.append(CallInst(inner, (), U8))
+    block.append(RetInst(module.int_const(U8, 1)))
+    module.add_function(outer)
+    func = _startup(module)
+    entry = func.entry
+    assert entry is not None
+    entry.append(RetInst(module.int_const(U8, 0)))
+    assert DropUnusedFunctions().run(module)
+    assert list(module.functions) == ["main"]
+
+
+def test_what_the_program_exports_is_a_root() -> None:
+    """It is callable from outside, so nothing here can know it is unreachable."""
+    module = Module("t")
+    _helper(module, "shared", exported=True)
+    func = _startup(module)
+    entry = func.entry
+    assert entry is not None
+    entry.append(RetInst(module.int_const(U8, 0)))
+    assert not DropUnusedFunctions().run(module)
+    assert set(module.functions) == {"shared", "main"}
+
+
+@pytest.mark.parametrize("special", [
+    SpecialKind.CONSTRUCTOR, SpecialKind.DESTRUCTOR, SpecialKind.TEST_SUITE,
+])
+def test_a_function_the_program_takes_part_through_is_a_root(
+        special: SpecialKind) -> None:
+    """The entry point calls the first two; the testing machinery will the third.
+
+    A test has no caller yet only because what calls one is not written, which
+    would be the wrong reason to drop it.
+    """
+    module = Module("t")
+    func = Function("side", module.types.func_type((), VOID),
+                    FuncAttrs(special=special))
+    func.add_block().append(RetInst())
+    module.add_function(func)
+    if special is SpecialKind.CONSTRUCTOR:
+        module.ctors.append(func)
+    elif special is SpecialKind.DESTRUCTOR:
+        module.dtors.append(func)
+    else:
+        module.tests.append(func)
+    start = _startup(module)
+    entry = start.entry
+    assert entry is not None
+    entry.append(RetInst(module.int_const(U8, 0)))
+    assert not DropUnusedFunctions().run(module)
+    assert set(module.functions) == {"side", "main"}
+
+
+def test_a_declaration_nothing_calls_goes_too() -> None:
+    """A name for something elsewhere that nothing names is nothing at all."""
+    module = Module("t")
+    module.add_function(Function("foreign", module.types.func_type((), U8),
+                                 linkage=Linkage.IMPORTED))
+    func = _startup(module)
+    entry = func.entry
+    assert entry is not None
+    entry.append(RetInst(module.int_const(U8, 0)))
+    assert DropUnusedFunctions().run(module)
+    assert list(module.functions) == ["main"]
+
+
+UNREACHED = """let g: mut u8 = 0u8
+
+@[constructor]
+fn prepare() \N{RIGHTWARDS ARROW} void:
+    g \N{LEFTWARDS ARROW} 7u8
+
+fn unreached() \N{RIGHTWARDS ARROW} u8:
+    2u8
+
+@[startup]
+fn main() \N{RIGHTWARDS ARROW} u8:
+    g
+"""
+
+
+@pytest.mark.parametrize("level", ["-O0", "-O1"])
+def test_an_unreachable_function_is_gone_at_every_level(compile_source,  # noqa: ANN001
+                                                        level: str) -> None:
+    """Dropping it is not an optimization, so it does not wait to be asked for."""
+    proc, output = compile_source(UNREACHED, level, "--emit=ir")
+    assert proc.returncode == 0, describe(proc)
+    text = output.read_text(encoding="utf-8")
+    assert "@unreached" not in text, text
+    assert "@prepare" in text and "@main" in text, text

@@ -54,21 +54,28 @@ class PassManager:
 
 def pipeline_for(level: int) -> Sequence[str]:
     """The names of the passes to run at optimization level *level*."""
+    # Dropping what nothing can reach is not an optimization and so does not
+    # wait for one to be asked for: compilation covers the whole program, so a
+    # function nothing reaches is one nothing can ever call, and keeping it
+    # would put bytes in the image that no program can run.  It goes last,
+    # since a pass before it can be what makes something unreachable.
     if level <= 0:
-        return ()
-    # Dead code is swept last, since both of the others can leave some behind.
-    return ("constfold", "simplifycfg", "dce")
+        return ("dropunused",)
+    # Dead code is swept before that, since both of the others leave some.
+    return ("constfold", "simplifycfg", "dce", "dropunused")
 
 
 def build_manager(level: int) -> PassManager:
     """Build the pass manager for optimization level *level*."""
     from .passes.constfold import ConstantFolding
     from .passes.dce import DeadCodeElimination
+    from .passes.dropunused import DropUnusedFunctions
     from .passes.simplifycfg import SimplifyCFG
 
     available: dict[str, Pass] = {
         "constfold": ConstantFolding(),
         "dce": DeadCodeElimination(),
+        "dropunused": DropUnusedFunctions(),
         "simplifycfg": SimplifyCFG(),
     }
     manager = PassManager()

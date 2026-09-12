@@ -113,6 +113,15 @@ deliberately.  A write, a call and a terminator have one.  A read does not: ever
 so a read nobody looks at is one nobody can tell happened, and a place where reading is itself an action would have to say so on
 the instruction.
 
+A function nothing can reach is left out of the image altogether.  Compilation covers the whole program, so what nothing in the
+program reaches is what nothing can ever reach: such a function is not merely unused but unusable, and that is not a judgement that
+waits for an optimization level to be asked for.  Reachability is computed forwards from roots rather than by asking of each
+function whether it has a caller, since a caller that is itself unreachable is no caller.  The roots are the ways into the program
+from outside it: the startup function and the constructors and destructors, which the entry point the compiler writes calls; the
+tests, which the testing machinery will call once there is any; and whatever the program exports, which by definition can be called
+from somewhere this compilation cannot see.  From a root it follows what each instruction says it names -- today only the callee of
+a call, and tomorrow whatever new shape can hold a function.
+
 There is a canonical textual form, written by `--emit=ir` and read back by the compiler's own reader.  Values are numbered by
 position, so a module always prints the same text; printing, reading and printing again is a fixed point, and that property is
 asserted for every stored example.  The form is a testing facility rather than a serialization format: a persistent form, if one
