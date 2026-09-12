@@ -2,13 +2,21 @@
 
 Every variable is given a value where it is defined, so every one of them is
 initialized data: there is nothing for a section of zeroes to hold, and none is
-produced.  They go in a writable section because that is what a variable is,
-even while the language has no way to assign to one yet.
+produced.
+
+Where a variable goes follows from its type.  One declared ``mut`` can be
+assigned to, so it needs a writable section; one that is not is a constant for
+the whole run of the program, and putting it in a read-only section is what
+makes that guarantee hold against the program itself and not merely against the
+type checker.  The two kinds cannot share a section, because a segment carries
+one set of permissions for everything mapped through it.
 
 This is the same for every target, so it is written once.  What differs between
 targets -- how an address is computed and how a value of a given width is loaded
 -- is in each backend.
 """
+
+from collections.abc import Sequence
 
 from ..ir.layout import DataLayout, align_of, encode_scalar, size_of
 from ..ir.module import GlobalVar, Module
@@ -16,18 +24,33 @@ from ..ir.value import BoolConst, IntConst
 from ..mc.asmbuilder import Assembler
 from ..mc.symbol import SymBinding, SymKind, SymVisibility
 
-#: Where the program's variables live.
+#: Where a variable lives that the program can assign to.
 DATA_SECTION = ".data"
+
+#: Where a variable lives that nothing can assign to.
+RODATA_SECTION = ".rodata"
 
 
 def emit_globals(asm: Assembler, module: Module, layout: DataLayout) -> None:
-    """Emit every variable of *module* into the data section."""
-    if not module.globals:
+    """Emit every variable of *module* into the section its type calls for."""
+    variables = list(module.globals.values())
+    _emit_group(asm, [v for v in variables if not v.mutable], RODATA_SECTION,
+                False, layout)
+    _emit_group(asm, [v for v in variables if v.mutable], DATA_SECTION, True, layout)
+
+
+def _emit_group(asm: Assembler, variables: Sequence[GlobalVar], name: str,
+                writable: bool, layout: DataLayout) -> None:
+    """Emit *variables* into the section *name*.
+
+    The section is only created when something goes in it: an empty section
+    would still cost a segment, and a segment costs a page.
+    """
+    if not variables:
         return
-    alignment = max(align_of(var.value_type, layout)
-                    for var in module.globals.values())
-    asm.section(DATA_SECTION, writable=True, alignment=alignment)
-    for var in module.globals.values():
+    alignment = max(align_of(var.value_type, layout) for var in variables)
+    asm.section(name, writable=writable, alignment=alignment)
+    for var in variables:
         asm.align(align_of(var.value_type, layout))
         exported = var.linkage.value == "exported"
         symbol = asm.label(symbol_of(var),

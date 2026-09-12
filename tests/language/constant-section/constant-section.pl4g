@@ -1,0 +1,14 @@
+※ pl4g-test: compile=ok opt=0,1
+※ pl4g-test: run=native,qemu exit=42
+※ pl4g-test: diag=none
+
+※ A variable that is not `mut` cannot change while the program runs, so it is
+※ put where the hardware refuses a write rather than beside the ones that can.
+※ The two kinds therefore live in different sections and different segments.
+let limit: u8 = 42u8
+
+let counter: mut u8 = 1u8
+
+@[startup]
+fn main() → u8:
+    counter ← limit

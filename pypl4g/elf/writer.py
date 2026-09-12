@@ -104,31 +104,39 @@ class ElfWriter:
             resolve_symbol_offsets(section, self._symbols)
 
         # Sections that are mapped are grouped by the permissions they need,
-        # because a segment carries one set of permissions for all of it.
-        readonly = [s for s in self._sections if s.alloc and not s.writable]
-        writable = [s for s in self._sections if s.alloc and s.writable]
-        phnum = 2 + (1 if writable else 0)
+        # because a segment carries one set of permissions for all of it.  A
+        # group that needs nothing gets no segment: an empty one would still
+        # cost a page, since no two groups may share one.
+        groups = [(self._mapped(executable=False, writable=False), PF_R),
+                  (self._mapped(executable=True, writable=False), PF_R | PF_X),
+                  (self._mapped(executable=False, writable=True), PF_R | PF_W)]
+        groups = [(sections, flags) for sections, flags in groups if sections]
+        placed = sum(len(sections) for sections, _ in groups)
+        if placed != sum(1 for s in self._sections if s.alloc):
+            # The only combination left is writable and executable, which no
+            # loader should be asked to grant and which nothing here produces.
+            raise ImageError("a mapped section asks for permissions no segment gives")
+        phnum = len(groups) + 1
         offset = EHDR_SIZE + phnum * PHDR_SIZE
 
         self._add_chunk(layout, "ehdr", EHDR_SIZE, 1, 0)
         self._add_chunk(layout, "phdrs", phnum * PHDR_SIZE, 1, EHDR_SIZE)
 
-        # The read-only sections follow the headers in one segment, so that the
-        # headers themselves are mapped and the common case needs one segment.
+        # The first group follows the headers in the file and its segment starts
+        # at the start of the file, so that the headers themselves are mapped.
+        # Every later group starts on a page of its own: two groups that shared
+        # a page would have to be mapped with one set of permissions, and which
+        # they got would depend on the order the segments were mapped in.
         loads: list[SegmentPlan] = []
-        offset = self._place_group(layout, readonly, offset, settings.base_vaddr,
-                                   PF_R | PF_X, settings.page_size, loads)
-        if writable:
-            # A writable segment starts on a page of its own: two segments that
-            # shared one would have to be mapped with one set of permissions,
-            # and which they got would depend on the order they were mapped in.
-            end_vaddr = loads[-1].p_vaddr + loads[-1].p_memsz if loads \
-                else settings.base_vaddr
-            page = settings.page_size
-            offset = align_up(offset, max(s.alignment for s in writable))
-            base = align_up(end_vaddr, page) + (offset % page)
-            offset = self._place_group(layout, writable, offset, base - offset,
-                                       PF_R | PF_W, page, loads)
+        page = settings.page_size
+        bias = settings.base_vaddr
+        for sections, flags in groups:
+            if loads:
+                end_vaddr = loads[-1].p_vaddr + loads[-1].p_memsz
+                offset = align_up(offset, max(s.alignment for s in sections))
+                bias = align_up(end_vaddr, page) + (offset % page) - offset
+            offset = self._place_group(layout, sections, offset, bias, flags,
+                                       page, loads)
         self._place_symbols()
         layout.functions = self._function_extents(layout)
 
@@ -167,6 +175,11 @@ class ElfWriter:
         self._shstrtab = shstrtab
         self._strtab = strtab
         return layout
+
+    def _mapped(self, *, executable: bool, writable: bool) -> list[MCSection]:
+        """The mapped sections that need exactly these permissions."""
+        return [s for s in self._sections
+                if s.alloc and s.executable == executable and s.writable == writable]
 
     def _place_group(self, layout: ImageLayout, sections: Sequence[MCSection],
                      offset: int, bias: int, flags: int, page_size: int,

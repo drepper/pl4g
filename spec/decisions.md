@@ -720,6 +720,31 @@ nothing.
 All hundred and two binaries the tests currently produce, across the three architectures, pass it as they stand; nothing had to be
 fixed.
 
+## 2026-09-13T23:30+02:00 — implementation
+
+**A constant goes in a read-only section, which the image maps with a third segment**
+
+A variable not defined `mut` cannot be assigned to, and until now that was a promise only the front end kept: the value sat in
+`.data` beside the ones that can change, mapped writable, so anything that reached it another way -- a pointer the type checker had
+been argued out of, a bug in the compiler itself, a write from another thread of the program's own making -- would simply have
+worked.  Putting it in `.rodata` makes the fault happen where the mistake is.
+
+The cost is a third loadable segment.  A segment carries one set of permissions for everything mapped through it, so read-only,
+read-and-execute and read-and-write cannot share one, and two of them may not share a page either: which permissions the shared
+page ended up with would depend on the order the segments were mapped in.  The grouping in the image writer is therefore by the
+permissions a section asks for rather than by a writable flag alone, and a group with nothing in it gets no segment, since an empty
+one would still cost a page.  A program with no constants and no variables still has exactly one loadable segment.
+
+What other languages do.  C and C++ reach the same place from the other direction: `const` at file scope is a promise about the
+type, and whether the object lands in `.rodata` is the implementation's choice, one that every serious implementation makes when it
+can prove the initializer is constant.  Rust's `static` is read-only and `static mut` is not, which is the same split under
+different names.  Go puts its constants nowhere at all -- they exist only at compile time.  Zig's `const` at container scope may be
+elided entirely.  PL4G takes the C++ position for now, since a constant still has an address and a name, and the second half of the
+same question -- dropping a constant nothing refers to -- waits on a notion of a reference the language does not yet have.
+
+The headers now fall in the read-only segment rather than the executable one, which is what modern linkers also do and means the
+executable segment covers the code and nothing else.
+
 ---
 
 Open questions

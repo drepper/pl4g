@@ -1,6 +1,6 @@
 ※ symbolic assembler dump; internal form, not a syntax
 
-section .data writable
+section .rodata
 counter:
                              ※ align 1
     2a                       ※ data

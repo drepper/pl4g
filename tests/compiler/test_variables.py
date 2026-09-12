@@ -82,10 +82,11 @@ def test_a_variable_is_named_by_its_own_name() -> None:
 
 
 SOURCE = """let counter: u8 = 42u8
+let touched: mut u8 = 7u8
 
 @[startup]
 fn main() \N{RIGHTWARDS ARROW} u8:
-    counter
+    touched \N{LEFTWARDS ARROW} counter
 """
 
 
@@ -105,7 +106,7 @@ def image(request: pytest.FixtureRequest,
 
 
 def test_the_variable_is_in_a_writable_section(image: tuple) -> None:
-    """A variable is writable even while nothing can yet assign to one."""
+    """A variable that can be assigned to needs a section that can be written."""
     _, parsed, _ = image
     data = parsed.section(".data")
     assert data is not None
@@ -113,25 +114,45 @@ def test_the_variable_is_in_a_writable_section(image: tuple) -> None:
     assert data.sh_flags & 0x2, "the section holding a variable is not mapped"
 
 
-def test_the_writable_segment_is_separate_and_not_executable(image: tuple) -> None:
+def test_a_constant_is_in_a_read_only_section(image: tuple) -> None:
+    """Not being assignable is a guarantee the image itself can keep.
+
+    A variable that is not ``mut`` cannot change while the program runs, so it
+    is put where the hardware refuses a write rather than where only the type
+    checker does.
+    """
+    _, parsed, _ = image
+    rodata = parsed.section(".rodata")
+    assert rodata is not None, "a constant was not put in a read-only section"
+    assert not rodata.sh_flags & 0x1, "a constant sits in a writable section"
+    assert rodata.sh_flags & 0x2, "the section holding a constant is not mapped"
+
+
+def test_each_kind_of_section_gets_a_segment_of_its_own(image: tuple) -> None:
     """Two segments sharing a page would have to share its permissions."""
     _, parsed, _ = image
     loads = [s for s in parsed.segments if s.p_type == elfcheck.PT_LOAD]
-    assert len(loads) == 2
-    text, data = loads
+    assert len(loads) == 3
+    rodata, text, data = loads
+    assert rodata.p_flags == elfcheck.PF_R, "the constants are writable or executable"
     assert text.p_flags & elfcheck.PF_X and not text.p_flags & elfcheck.PF_W
     assert data.p_flags & elfcheck.PF_W and not data.p_flags & elfcheck.PF_X
-    page = text.p_align
-    assert text.p_vaddr // page != data.p_vaddr // page, "they share a page"
-    assert data.p_offset % data.p_align == data.p_vaddr % data.p_align
+    page = loads[0].p_align
+    pages = [s.p_vaddr // page for s in loads]
+    assert len(set(pages)) == len(pages), "two segments share a page"
+    for segment in loads:
+        assert segment.p_offset % segment.p_align == segment.p_vaddr % segment.p_align
 
 
 def test_the_value_is_in_the_image(image: tuple) -> None:
     """The byte the program named is the byte the file holds."""
     _, parsed, _ = image
+    rodata = parsed.section(".rodata")
+    assert rodata is not None
+    assert parsed.data[rodata.sh_offset:rodata.sh_offset + 1] == b"\x2a"
     data = parsed.section(".data")
     assert data is not None
-    assert parsed.data[data.sh_offset:data.sh_offset + 1] == b"\x2a"
+    assert parsed.data[data.sh_offset:data.sh_offset + 1] == b"\x07"
 
 
 def test_the_variable_has_a_symbol_of_object_kind(image: tuple) -> None:

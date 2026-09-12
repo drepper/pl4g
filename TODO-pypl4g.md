@@ -7,11 +7,15 @@ To Do List for the pypl4g compiler
 [x] implement the `@[ignore(NUMBER)]` attribute which is defined as current `@[expect(NUMBER)]` is implemented.  The latter is similarly
     defined except that it is an error if the error/warning is not present
 
-[ ] global variables not defined `mut` are truly constants and should be defined in the `.rodata` section in the ELF file.  In addition,
-    non-`mut` local variables for which no reference is kept (new concept, will be implemented soon) can be entirely dropped and eventually
-    be replaced with an definition as constant expression in the debug information.
-    Note: a read-only section that is neither writable nor executable needs a third loadable segment, since a segment carries one
-    set of permissions for all of it and two segments may not share a page.
+[x] global variables not defined `mut` are truly constants and should be defined in the `.rodata` section in the ELF file.  Done: the
+    image writer groups the mapped sections by the permissions they need rather than by a writable flag, so a read-only section that
+    is neither writable nor executable gets a loadable segment and a page of its own.
+
+[ ] non-`mut` local variables for which no reference is kept (new concept, will be implemented soon) can be entirely dropped and
+    eventually be replaced with a definition as a constant expression in the debug information.  This is the second half of the item
+    above and waits on the notion of a reference.
+
+[ ] functions not called, not exported, and not referenced can be dropped and should not appear in the binary.
 
 [ ] implement module system.  A module is loaded at compile-time.  The syntax is `let modname := import("somename")` where `modname`
     is the name the module is known as in the compilation unit and `somename` is the name of the module.  There will be built-in

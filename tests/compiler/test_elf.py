@@ -257,3 +257,32 @@ def test_disassembles_to_the_expected_code(built: Built) -> None:
 def test_the_image_is_small(built: Built) -> None:
     """Generating small code is a stated priority; this notices a regression."""
     assert built.path.stat().st_size < 1024
+
+
+def test_a_group_with_nothing_in_it_costs_no_segment(built: Built) -> None:
+    """An empty segment would still take a page, so it is not produced.
+
+    The program above has neither constants nor variables, so the code is all
+    there is to map and one loadable segment covers it.
+    """
+    loads = [s for s in built.image.segments if s.p_type == elfcheck.PT_LOAD]
+    assert len(loads) == 1
+    assert loads[0].p_flags == elfcheck.PF_R | elfcheck.PF_X
+
+
+def test_a_section_both_writable_and_executable_is_refused() -> None:
+    """No segment grants that combination, so nothing may ask for it.
+
+    Dropping such a section instead would produce an image whose code referred
+    to bytes that were never written, which is worse than refusing it.
+    """
+    from pypl4g.elf.writer import ElfWriter, ImageError, ImageSettings
+    from pypl4g.mc.fragment import MCDataFragment
+    from pypl4g.mc.symbol import MCSection
+
+    section = MCSection(name=".text", alloc=True, writable=True, executable=True,
+                        fragments=[MCDataFragment(contents=bytearray(b"\x00"))])
+    writer = ElfWriter(ImageSettings(machine=62, base_vaddr=0x400000, page_size=0x1000,
+                                     entry_symbol="_start"), [section], [], [])
+    with pytest.raises(ImageError, match="permissions"):
+        writer.plan()

@@ -188,8 +188,11 @@ The Generated Image
 -------------------
 
 The image is a statically linked `ET_EXEC` executable at a fixed address, with no interpreter, no dynamic section and nothing from
-the system's runtime.  It has two program headers: one loadable segment covering the headers and the code, and a `PT_GNU_STACK`
-without the executable bit, whose absence would give the program an executable stack.
+the system's runtime.  Its program headers are a `PT_GNU_STACK` without the executable bit, whose absence would give the program an
+executable stack, and one loadable segment for each set of permissions the program actually needs: read-only, read and execute, and
+read and write.  A segment carries one set of permissions for everything mapped through it, so what needs different permissions
+cannot share one, and no two of them may share a page either -- which permissions a shared page ended up with would depend on the
+order the segments were mapped in.  A group with nothing in it gets no segment, since an empty one would still cost a page.
 
 The load address is the same on every target so far, but the alignment of the loadable segment is not: it is the largest page size
 a kernel for that architecture may be configured with, so that one image loads whatever the running kernel chose.  That is 4 KiB on
@@ -312,9 +315,10 @@ How much room a value takes and where it must start is computed from a type, nev
 away the freedom the specification gives the compiler to reorder the fields of a product type.  It is computed against a target,
 because the width of a pointer is the target's business.
 
-Variables go in a writable section, which the image maps with a second loadable segment.  That segment begins on a page of its own:
-two segments sharing a page would have to be mapped with one set of permissions, and which they got would depend on the order they
-were mapped in.
+Where a variable goes follows from its type.  One defined `mut` can be assigned to, so it goes in `.data`, which is mapped writable.
+One that is not cannot change while the program runs, so it goes in `.rodata`, which is mapped neither writable nor executable: the
+guarantee then holds against the program rather than only against the type checker, and a write that got past the front end faults
+instead of taking effect.  The two need different permissions, so they are in different sections and in different segments.
 
 Reading a variable is one instruction on x86-64, which can name a place in memory relative to the program counter and widen a
 narrow value as it reads it.  On the two fixed-width architectures no instruction can name an address outright, so one is built in
