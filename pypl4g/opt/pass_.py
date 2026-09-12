@@ -56,16 +56,19 @@ def pipeline_for(level: int) -> Sequence[str]:
     """The names of the passes to run at optimization level *level*."""
     if level <= 0:
         return ()
-    return ("constfold", "simplifycfg")
+    # Dead code is swept last, since both of the others can leave some behind.
+    return ("constfold", "simplifycfg", "dce")
 
 
 def build_manager(level: int) -> PassManager:
     """Build the pass manager for optimization level *level*."""
     from .passes.constfold import ConstantFolding
+    from .passes.dce import DeadCodeElimination
     from .passes.simplifycfg import SimplifyCFG
 
     available: dict[str, Pass] = {
         "constfold": ConstantFolding(),
+        "dce": DeadCodeElimination(),
         "simplifycfg": SimplifyCFG(),
     }
     manager = PassManager()

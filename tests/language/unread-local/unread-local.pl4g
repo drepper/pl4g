@@ -1,0 +1,14 @@
+※ pl4g-test: compile=ok opt=0,1
+※ pl4g-test: run=native,qemu exit=5
+※ pl4g-test: diag=none
+
+※ A local is a value, so one nothing refers to is an instruction nothing uses,
+※ and an optimized build leaves nothing of it behind.  The program says the
+※ same thing either way, which is what this checks.
+let g: u8 = 3u8
+
+@[startup]
+fn main() → u8:
+    @[ignore(4006)]
+    let unread: u8 = g
+    5u8

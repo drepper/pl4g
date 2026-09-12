@@ -29,3 +29,7 @@ To Do List for the PL4g language
 [ ] there is no way to say what symbol a function should be known by without also saying how it is called.  A function
     declaring a foreign calling convention keeps its bare name, which covers calling into another world; an attribute naming the
     symbol directly would cover the rest.  Nothing needs it yet.
+
+[ ] decide whether a local variable nothing reads should be an error rather than a warning.  Go refuses to compile one, Rust and
+    C warn.  PL4G warns (4006) and an optimized build drops the variable.  Since the language is meant to be generated rather than
+    written, refusing one may catch a generator bug that a warning would let through.

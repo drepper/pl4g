@@ -11,9 +11,12 @@ To Do List for the pypl4g compiler
     image writer groups the mapped sections by the permissions they need rather than by a writable flag, so a read-only section that
     is neither writable nor executable gets a loadable segment and a page of its own.
 
-[ ] non-`mut` local variables for which no reference is kept (new concept, will be implemented soon) can be entirely dropped and
-    eventually be replaced with a definition as a constant expression in the debug information.  This is the second half of the item
-    above and waits on the notion of a reference.
+[x] non-`mut` local variables for which no reference is kept can be entirely dropped.  Done: a dead-code sweep removes any
+    instruction nothing uses and that has no effect, which is the same question and stays right once a reference to a local can be
+    kept, since a reference will be a use.  Each instruction shape says for itself whether it has an effect.
+
+[ ] a local that was dropped should be defined as a constant expression in the debug information, so that a debugger can still
+    show it.  Waits on there being any debug information at all.
 
 [ ] functions not called, not exported, and not referenced can be dropped and should not appear in the binary.
 

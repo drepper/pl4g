@@ -85,6 +85,18 @@ class Instruction(Value):
         """Whether this instruction defines a value that can be named."""
         return self.ty is not VOID
 
+    @property
+    def has_effects(self) -> bool:
+        """Whether removing this instruction would change what the program does.
+
+        An instruction that has none and that nothing uses can be dropped, so
+        this is the question a dead-code pass asks.  Each shape answers for
+        itself rather than a pass keeping a list, so a shape added later cannot
+        be forgotten -- and answering "no" has to be a deliberate act, which is
+        the safe way round.
+        """
+        return False
+
 
 class BinaryInst(Instruction):
     """An arithmetic or bitwise operation on two values of the same type."""
@@ -158,6 +170,15 @@ class CallInst(Instruction):
 
     __slots__ = ("callee",)
 
+    @property
+    def has_effects(self) -> bool:
+        """A call does whatever the callee does, which is not known here.
+
+        When purity is inferred or declared, a call to a function that has no
+        effects will be able to say so; until then every call is kept.
+        """
+        return True
+
     def __init__(self, callee: object, args: Sequence[Value], result_ty: Type,
                  span: Span = INVALID_SPAN) -> None:
         super().__init__(result_ty, args, span)
@@ -205,7 +226,13 @@ class MemStartInst(Instruction):
 
 
 class LoadInst(Instruction):
-    """Reads memory.  Operands are the memory token and the address."""
+    """Reads memory.  Operands are the memory token and the address.
+
+    Reading has no effect: every place the language can name is the program's
+    own, so a read nobody looks at is one nobody can tell happened.  A place
+    where reading is itself an action -- a device register -- would have to say
+    so on the instruction, and none exists.
+    """
 
     __slots__ = ()
 
@@ -229,6 +256,11 @@ class StoreInst(Instruction):
     def __init__(self, token: Value, address: Value, value: Value,
                  span: Span = INVALID_SPAN) -> None:
         super().__init__(MEM, (token, address, value), span)
+
+    @property
+    def has_effects(self) -> bool:
+        """A write is visible after the function that made it has returned."""
+        return True
 
     @property
     def opcode(self) -> str:
@@ -309,6 +341,11 @@ class Terminator(Instruction):
     """The last instruction of a block, and the only one that may transfer control."""
 
     __slots__ = ()
+
+    @property
+    def has_effects(self) -> bool:
+        """Where control goes next is the effect; a block without one is broken."""
+        return True
 
     def successors(self) -> Sequence[BlockTarget]:
         """The destinations control may reach from here."""

@@ -745,6 +745,39 @@ same question -- dropping a constant nothing refers to -- waits on a notion of a
 The headers now fall in the read-only segment rather than the executable one, which is what modern linkers also do and means the
 executable segment covers the code and nothing else.
 
+## 2026-09-14T00:30+02:00 — implementation
+
+**A local nothing refers to is dropped by asking about uses, not about variables**
+
+The other half of the constant question: a local that is not `mut` and that nothing refers to can be removed entirely.  A local is
+already a value rather than a place, so one whose initializer is a constant never reaches the representation at all; what was left
+was the case where the initializer computes something -- a read of a variable at the top level, say -- and the instruction stayed
+in the image although nothing used its result.
+
+It is removed by a dead-code sweep over the representation rather than by a rule about variables in the front end.  The two would
+drop the same things today, and the difference is what happens when the language can keep a reference to a local, which is the
+"new concept" the task itself names as coming.  A reference is a use like any other, so a local that one points at simply stops
+being dead, and the pass needs to learn nothing.  A front-end rule would have to be told.
+
+Whether an instruction may go when nothing uses it is answered by the instruction.  A pass holding the list would be a list to
+forget to update; a property on the shape makes "this has no effect" something each new shape has to state.  A read states it: the
+only memory the language can name is the program's own, so a read nobody looks at is one nobody can tell happened.  A device
+register, where reading is itself an action, would have to say so on the instruction, and the language has none.
+
+The sweep runs from `-O1` and last, since constant folding and control-flow simplification both leave dead code behind.  An
+unoptimized build keeps what the program wrote, which is what makes stepping through one match the source.  Dropping it is
+permitted, not required; what is *required* is the warning that nothing reads the value, and that is issued at both levels, long
+before any pass runs.
+
+What other languages do.  C and C++ leave this to the optimizer entirely and warn separately, which is the arrangement here.  Rust
+warns about an unused binding and expects the back end to remove it.  Go refuses to compile an unused local at all -- a stronger
+rule, and one worth considering for PL4G later, but a change to the language rather than to the compiler, so it belongs in the
+language list and not here.
+
+The remaining piece is the one the task called eventual: a local that has been dropped should still appear in the debug
+information, defined as the constant expression it was.  There is no debug information yet, so there is nothing to put it in; it
+stays on the list.
+
 ---
 
 Open questions

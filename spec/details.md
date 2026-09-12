@@ -107,6 +107,12 @@ address and a value, and produces a new token.  Two operations whose tokens are 
 which is what turns the requirement that no implicit dependency such as memory aliasing may force an order into something a pass
 can check rather than merely assume.
 
+Whether an instruction may be removed when nothing uses it is answered by the instruction rather than by the pass that asks: each
+shape says whether it has an effect, so a shape added later cannot be overlooked, and the answer "none" has to be given
+deliberately.  A write, a call and a terminator have one.  A read does not: every place the language can name is the program's own,
+so a read nobody looks at is one nobody can tell happened, and a place where reading is itself an action would have to say so on
+the instruction.
+
 There is a canonical textual form, written by `--emit=ir` and read back by the compiler's own reader.  Values are numbered by
 position, so a module always prints the same text; printing, reading and printing again is a fixed point, and that property is
 asserted for every stored example.  The form is a testing facility rather than a serialization format: a persistent form, if one
@@ -305,6 +311,12 @@ Variables
 A variable inside a function is a *value*, not a place.  The name is bound to whatever its initializer produced and nothing is
 reserved in memory, because nothing can take its address; when the language lets a name be assigned, a block parameter is what
 carries the new value across a branch, which is why the representation has them and why a local will not need memory then either.
+
+Because a local is a value, a local nothing refers to is an instruction nothing uses, and an optimized build keeps nothing of it:
+the ordinary dead-code sweep removes it, together with whatever it alone used.  Asking the question that way -- about uses rather
+than about variables -- is what makes the rule still hold once the language can keep a reference to a local, since a reference will
+be a use like any other.  An unoptimized build keeps it, so that stepping through one matches the source; the warning that nothing
+reads it is issued either way, long before any pass runs.
 
 A variable at the top level is a value of *pointer* type: naming one yields its address, and reading it is a load.  That is what
 keeps every access to memory visible in the dataflow graph instead of implied by a name.  Every load takes a memory token and every
