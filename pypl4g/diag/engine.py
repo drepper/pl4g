@@ -67,6 +67,26 @@ class _Args(dict[str, object]):
 
 
 @dataclass(slots=True)
+class Expectation:
+    """A set of diagnostics a construct says it raises.
+
+    While one is in force the diagnostics it names are not reported, and it
+    records which of them were raised -- so that an expectation nothing meets
+    can be reported in its turn, rather than quietly hiding nothing.
+    """
+
+    numbers: frozenset[DiagID]
+    raised: set[DiagID] = field(default_factory=set)
+    #: Whether anything it absorbed prevents a construct from being compiled.
+    saw_error: bool = False
+
+    @property
+    def unmet(self) -> list[DiagID]:
+        """The numbers that were expected and not raised."""
+        return sorted(self.numbers - self.raised)
+
+
+@dataclass(slots=True)
 class WarningControl:
     """Which warnings are enabled, and whether they count as errors."""
 
@@ -91,6 +111,8 @@ class DiagEngine:
         self._catalog = cat
         self.error_count: int = 0
         self.warning_count: int = 0
+        #: The expectations in force, innermost last.
+        self._expectations: list[Expectation] = []
 
     @property
     def catalog(self) -> Catalog:
@@ -123,10 +145,41 @@ class DiagEngine:
         diag._engine = self
         return diag
 
+    def expect(self, numbers: frozenset[DiagID]) -> Expectation:
+        """Put a new expectation in force until ``release`` is called with it."""
+        expectation = Expectation(numbers)
+        self._expectations.append(expectation)
+        return expectation
+
+    def resume(self, expectation: Expectation) -> Expectation:
+        """Put an expectation back in force, keeping what it has absorbed.
+
+        A definition is checked in two passes, and what it says it raises holds
+        for both of them.
+        """
+        self._expectations.append(expectation)
+        return expectation
+
+    def release(self, expectation: Expectation) -> Expectation:
+        """Take an expectation out of force and return what it absorbed."""
+        self._expectations.remove(expectation)
+        return expectation
+
+    def _absorb(self, info: DiagInfo) -> bool:
+        """Whether an expectation takes this diagnostic instead of reporting it."""
+        for expectation in reversed(self._expectations):
+            if info.number in expectation.numbers:
+                expectation.raised.add(info.number)
+                expectation.saw_error = expectation.saw_error or info.is_error
+                return True
+        return False
+
     def emit(self, ident: DiagID, span: Span = INVALID_SPAN, /, **args: object) -> Diagnostic:
         """Report the diagnostic *ident* and return it, so notes can be attached."""
         diag = self.make(ident, span, **args)
         info = diag.info
+        if self._absorb(info):
+            return diag
         if info.severity == "warning" and not self._control.is_enabled(info):
             return diag
         if info.is_error or (info.severity == "warning" and self._control.warnings_are_errors):

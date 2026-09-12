@@ -18,12 +18,23 @@ let signed_wide: i64 = 42i64
 
 @[startup]
 fn main() → u8:
+    ※ Each of these exists to make the backend emit one load; nothing reads
+    ※ them afterwards, and the attribute says so rather than the program
+    ※ being written round the warning.
+    @[expect(4006)]
     let a: u8 = unsigned_byte
+    @[expect(4006)]
     let b: i8 = signed_byte
+    @[expect(4006)]
     let c: u16 = unsigned_half
+    @[expect(4006)]
     let d: i16 = signed_half
+    @[expect(4006)]
     let e: u32 = unsigned_word
+    @[expect(4006)]
     let f: i32 = signed_word
+    @[expect(4006)]
     let g: u64 = unsigned_wide
+    @[expect(4006)]
     let h: i64 = signed_wide
     1u8

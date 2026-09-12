@@ -1,0 +1,9 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4401 LANG_FUNCDEF_SPECIAL_NO_STARTUP
+
+※ An error can be caught too, but a definition that raises one cannot be
+※ compiled, so it is discarded entirely.  Here the only startup function goes
+※ with it, which is what the remaining error says.
+@[startup, expect(4201)]
+fn main() → nosuchtype:
+    1u8

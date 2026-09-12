@@ -5,18 +5,18 @@ collected first and only then is any body checked, which is what lets the whole
 compilation be parallelized and what makes a forward reference legal.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Final, Sequence
 
 from ..diag import ids as D
-from ..diag.engine import DiagEngine
+from ..diag.engine import DiagEngine, Expectation
 from ..front import ast
 from ..ir.builder import IRBuilder
 from ..ir.function import (FuncAttrs, Function, InlineHint, Linkage, SpecialKind)
 from ..ir.module import GlobalVar, Module
 from ..ir.types import BOOL, BUILTIN_TYPES, ERROR, IntType, Type, VOID
 from ..ir.value import UndefConst, Value
-from ..source.location import Span
+from ..source.location import INVALID_SPAN, Span
 from .attributes import (AttrSpec, AttrTarget, BoundAttr, SPECIAL_OF_TEST_KIND,
                          TARGET_NAMES, lookup)
 
@@ -35,6 +35,7 @@ class _Collected:
     node: ast.FuncDef
     attrs: list[BoundAttr]
     func: Function
+    expectation: Expectation | None = None
 
 
 @dataclass(slots=True)
@@ -49,6 +50,18 @@ class _Local:
     value: Value
     span: Span
     mutable: bool = False
+    #: Whether anything has read the value the name currently stands for.
+    read: bool = False
+    #: Where that value was given, for reporting one that nothing reads.
+    value_span: Span = INVALID_SPAN
+    #: A parameter arrives with a value the caller chose, so not reading it says
+    #: nothing about this function.
+    is_parameter: bool = False
+    #: What the definition said it raises, kept in force for as long as the
+    #: variable exists, since not every such diagnostic is raised while the
+    #: definition itself is being read.
+    expectation: Expectation | None = None
+    expected_pairs: list[tuple[int, Span]] = field(default_factory=list)
 
 
 class Checker:
@@ -68,6 +81,12 @@ class Checker:
         self._initializing: str | None = None
         #: The variable being assigned to, while one is being checked.
         self._assigning: str | None = None
+        #: Whether anything inside the function being checked absorbed an error.
+        #: A construct that raises one cannot be compiled, so the definition it
+        #: belongs to is discarded rather than half built.
+        self._discard_function: bool = False
+        #: What each top-level definition says it raises, and where it says so.
+        self._expected_pairs: dict[str, list[tuple[int, Span]]] = {}
 
     # -- entry point -----------------------------------------------------------
 
@@ -115,9 +134,19 @@ class Checker:
         """
         if not self._declare(node.name, node.name_span):
             return
-        self._bind_attributes(node.attrs, AttrTarget.VARIABLE)
-        ty = self._variable_type(node)
-        initializer = self._constant_value(node, ty) if ty is not None else None
+        attrs = self._bind_attributes(node.attrs, AttrTarget.VARIABLE)
+        pairs = self._expected_numbers(attrs)
+        expectation = self._begin_expecting(pairs)
+        try:
+            ty = self._variable_type(node)
+            initializer = self._constant_value(node, ty) if ty is not None else None
+        finally:
+            self._end_expecting(expectation)
+            discard = self._settle_expecting(expectation, pairs)
+        if discard:
+            # A variable whose definition could not be made sense of has no
+            # value to put in the image, so it is not put there.
+            return
         if ty is None:
             ty = ERROR
         self._module.add_global(GlobalVar(
@@ -197,6 +226,44 @@ class Checker:
             return False
         return True
 
+    # -- expectations ----------------------------------------------------------
+
+    def _expected_numbers(self, attrs: Sequence[BoundAttr]) -> list[tuple[int, Span]]:
+        """The diagnostics a construct says it raises, and where it says so."""
+        found: list[tuple[int, Span]] = []
+        for attr in attrs:
+            if attr.name != "expect":
+                continue
+            number = attr.as_int("number")
+            if number not in self._diags.catalog.by_number:
+                self._diags.emit(D.LANG_ATTR_EXPECT_UNKNOWN_NUMBER, attr.node.span,
+                                 number=number)
+                continue
+            found.append((number, attr.node.span))
+        return found
+
+    def _begin_expecting(self, pairs: Sequence[tuple[int, Span]]) -> Expectation | None:
+        """Put the expectations of a construct in force."""
+        if not pairs:
+            return None
+        return self._diags.expect(frozenset(number for number, _ in pairs))
+
+    def _end_expecting(self, expectation: Expectation | None) -> None:
+        """Take them out of force, without yet deciding whether they were met."""
+        if expectation is not None:
+            self._diags.release(expectation)
+
+    def _settle_expecting(self, expectation: Expectation | None,
+                          pairs: Sequence[tuple[int, Span]]) -> bool:
+        """Report the expectations nothing met, and say whether what was absorbed
+        prevents the construct from being compiled."""
+        if expectation is None:
+            return False
+        for number in expectation.unmet:
+            where = next(span for raised, span in pairs if raised == number)
+            self._diags.emit(D.LANG_ATTR_EXPECT_NOT_RAISED, where, number=number)
+        return expectation.saw_error
+
     # -- scopes ----------------------------------------------------------------
 
     def _push_scope(self) -> None:
@@ -204,11 +271,37 @@ class Checker:
         self._scopes.append({})
 
     def _pop_scope(self) -> None:
-        """Leave the innermost scope."""
-        self._scopes.pop()
+        """Leave the innermost scope, reporting values nothing read."""
+        for local in self._scopes.pop().values():
+            self._report_unused(local)
+            self._settle_local(local)
+
+    def _report_unused(self, local: _Local) -> None:
+        """Report a value nothing read before it went out of reach.
+
+        What the definition said it raises is put back in force first, so that
+        an expectation written where a reader would write it -- on the
+        definition -- covers a diagnostic only discovered later.
+        """
+        if local.read or local.is_parameter or local.value.ty is ERROR:
+            return
+        if local.expectation is not None:
+            self._diags.resume(local.expectation)
+        try:
+            self._diags.emit(D.LANG_VARDEF_VALUE_UNUSED, local.value_span,
+                             name=local.name)
+        finally:
+            self._end_expecting(local.expectation)
+
+    def _settle_local(self, local: _Local) -> None:
+        """Decide whether what a definition said it raises was met."""
+        if self._settle_expecting(local.expectation, local.expected_pairs):
+            self._discard_function = True
+        local.expectation = None
 
     def _bind_local(self, name: str, value: Value, span: Span,
-                    mutable: bool = False) -> None:
+                    mutable: bool = False, value_span: Span = INVALID_SPAN,
+                    is_parameter: bool = False) -> None:
         """Bind a name in the innermost scope, reporting one already bound there."""
         scope = self._scopes[-1]
         previous = scope.get(name)
@@ -217,7 +310,9 @@ class Checker:
                              name=name).note(
                 D.LANG_FILESTRUCT_PREVIOUS_DEFINITION, previous.span, name=name)
             return
-        scope[name] = _Local(name=name, value=value, span=span, mutable=mutable)
+        scope[name] = _Local(name=name, value=value, span=span, mutable=mutable,
+                             value_span=value_span if value_span.is_valid else span,
+                             is_parameter=is_parameter)
 
     def _find_local(self, name: str) -> _Local | None:
         """The innermost binding of *name*, if there is one."""
@@ -231,6 +326,7 @@ class Checker:
         """Resolve a name: the innermost binding first, then the top level."""
         found = self._find_local(ref.name)
         if found is not None:
+            found.read = True
             return found.value
         found_global = self._module.globals.get(ref.name)
         if found_global is not None:
@@ -245,17 +341,27 @@ class Checker:
         if not self._declare(node.name, node.name_span, path):
             return None
         attrs = self._bind_attributes(node.attrs, AttrTarget.FUNCTION)
-        params = tuple(self._resolve_type(p.type) for p in node.params)
-        ret = self._resolve_type(node.ret_type)
-        func_attrs, linkage = self._function_attrs(attrs)
-        func = Function(name=node.name,
-                        ty=self._module.types.func_type(params, ret),
-                        attrs=func_attrs, linkage=linkage,
-                        cconv="sysv" if func_attrs.abi is not None else "pl4g.v0",
-                        span=node.span, source_path=path)
-        self._module.add_function(func)
-        self._register_special(func, node)
-        return _Collected(node=node, attrs=attrs, func=func)
+        # What a definition says it raises holds while its signature is checked
+        # here and again while its body is checked in the second pass, so the
+        # same expectation is put back in force there.
+        pairs = self._expected_numbers(attrs)
+        self._expected_pairs[node.name] = pairs
+        expectation = self._begin_expecting(pairs)
+        try:
+            params = tuple(self._resolve_type(p.type) for p in node.params)
+            ret = self._resolve_type(node.ret_type)
+            func_attrs, linkage = self._function_attrs(attrs)
+            func = Function(name=node.name,
+                            ty=self._module.types.func_type(params, ret),
+                            attrs=func_attrs, linkage=linkage,
+                            cconv="sysv" if func_attrs.abi is not None else "pl4g.v0",
+                            span=node.span, source_path=path)
+            self._module.add_function(func)
+            self._register_special(func, node)
+        finally:
+            if expectation is not None:
+                self._diags.release(expectation)
+        return _Collected(node=node, attrs=attrs, func=func, expectation=expectation)
 
     def _register_special(self, func: Function, node: ast.FuncDef) -> None:
         """Record the function in the module's caches and check its signature."""
@@ -285,6 +391,8 @@ class Checker:
     def _check_startup_signature(self, func: Function, node: ast.FuncDef) -> None:
         """Check that the startup function takes nothing and returns the status."""
         expected = BUILTIN_TYPES[STARTUP_RETURN_TYPE_NAME]
+        if func.ty.ret is ERROR or ERROR in func.ty.params:
+            return
         problem: str | None = None
         if func.ty.params:
             problem = "takes parameters"
@@ -297,6 +405,8 @@ class Checker:
 
     def _check_ctor_signature(self, func: Function, node: ast.FuncDef, kind: str) -> None:
         """Check that a constructor or destructor takes nothing and returns void."""
+        if func.ty.ret is ERROR or ERROR in func.ty.params:
+            return
         problem: str | None = None
         if func.ty.params:
             problem = "it takes parameters"
@@ -319,7 +429,7 @@ class Checker:
             if spec is None:
                 self._diags.emit(D.LANG_ATTR_UNKNOWN, node.name_span, name=node.name)
                 continue
-            if node.name in seen:
+            if node.name in seen and not spec.repeatable:
                 self._diags.emit(D.LANG_ATTR_DUPLICATE, node.name_span, name=node.name)
                 continue
             seen[node.name] = node
@@ -456,26 +566,64 @@ class Checker:
     # -- types -----------------------------------------------------------------
 
     def _resolve_type(self, ref: ast.TypeRef) -> Type:
-        """Resolve a type name, reporting an unknown one."""
+        """Resolve a type name, reporting an unknown one.
+
+        A name that resolves to nothing stands in as the type that matches
+        anything, so that the one mistake is reported once rather than again
+        wherever the type would have been checked.
+        """
         found = BUILTIN_TYPES.get(ref.name)
         if found is None:
             self._diags.emit(D.LANG_TYPE_UNKNOWN, ref.span, name=ref.name)
-            return VOID
+            return ERROR
         return found
 
     # -- bodies ----------------------------------------------------------------
 
     def _lower_function(self, entry: _Collected) -> None:
-        """Check and lower one function body."""
+        """Check and lower one function body.
+
+        A function that raises an error it said it would is discarded: there is
+        nothing to generate code from, and half of one would be worse than none.
+        """
         node, func = entry.node, entry.func
         if node.body is None:
             return
+        previous = self._discard_function
+        self._discard_function = False
+        if entry.expectation is not None:
+            self._diags.resume(entry.expectation)
+        try:
+            self._lower_body(entry)
+        finally:
+            pairs = self._expected_pairs.get(node.name, [])
+            self._end_expecting(entry.expectation)
+            if self._settle_expecting(entry.expectation, pairs):
+                self._discard_function = True
+            if self._discard_function:
+                self._discard(func)
+            self._discard_function = previous
+
+    def _discard(self, func: Function) -> None:
+        """Take a function out of the module, and out of every cache of it."""
+        self._module.functions.pop(func.name, None)
+        if self._module.startup is func:
+            self._module.startup = None
+        for cache in (self._module.ctors, self._module.dtors, self._module.tests):
+            if func in cache:
+                cache.remove(func)
+
+    def _lower_body(self, entry: _Collected) -> None:
+        """Check and lower the statements of one function."""
+        node, func = entry.node, entry.func
         block = func.add_block()
         builder = IRBuilder(self._module, func)
         self._push_scope()
         for index, param in enumerate(node.params):
             value = block.add_param(func.ty.params[index], param.name)
-            self._bind_local(param.name, value, node.params[index].span)
+            self._bind_local(param.name, value, node.params[index].span,
+                             is_parameter=True)
+        assert node.body is not None
         self._lower_block(builder, node.body, func)
         self._pop_scope()
         if not builder.is_terminated:
@@ -494,7 +642,33 @@ class Checker:
             if builder.is_terminated:
                 self._diags.emit(D.LANG_FUNCDEF_RETURN_UNREACHABLE, stmt.span)
                 return
+            self._lower_attributed_stmt(builder, stmt, func, is_last)
+
+    def _lower_attributed_stmt(self, builder: IRBuilder, stmt: ast.Stmt,
+                               func: Function, is_last: bool) -> None:
+        """Lower one statement with whatever it says it raises in force.
+
+        A definition hands its expectation to the variable it defines, because
+        what a definition raises is not all raised while it is being read: that
+        nothing ever reads the value it gives is only known once the variable is
+        gone.  Every other statement settles its expectation where it ends.
+        """
+        pairs = self._expected_numbers(
+            self._bind_attributes(stmt.attrs, AttrTarget.STATEMENT))
+        expectation = self._begin_expecting(pairs)
+        carried = False
+        try:
             self._lower_stmt(builder, stmt, func, is_last)
+            if isinstance(stmt, ast.VarDef) and expectation is not None:
+                local = self._find_local(stmt.name)
+                if local is not None:
+                    local.expectation = expectation
+                    local.expected_pairs = list(pairs)
+                    carried = True
+        finally:
+            self._end_expecting(expectation)
+            if not carried and self._settle_expecting(expectation, pairs):
+                self._discard_function = True
 
     def _lower_stmt(self, builder: IRBuilder, stmt: ast.Stmt, func: Function,
                     is_last: bool) -> None:
@@ -544,7 +718,8 @@ class Checker:
         if declared is None or not self._literal_matches(node, declared):
             # The error is reported; binding the name anyway keeps every later
             # mention of it from reporting the same thing again as undefined.
-            self._bind_local(node.name, UndefConst(ERROR), node.name_span, node.mutable)
+            self._bind_local(node.name, UndefConst(ERROR), node.name_span, node.mutable,
+                             value_span=node.span)
             return
         self._initializing = node.name
         try:
@@ -552,7 +727,7 @@ class Checker:
         finally:
             self._initializing = None
         self._bind_local(node.name, self._as_declared(value, declared), node.name_span,
-                         node.mutable)
+                         node.mutable, value_span=node.span)
 
     def _lower_assignment(self, builder: IRBuilder, node: ast.AssignStmt,
                           wants_value: bool = False) -> Value | None:
@@ -574,7 +749,12 @@ class Checker:
             if not self._check_mutable(node, local.mutable, local.span):
                 return None
             value = self._checked_value(builder, node, local.value.ty)
+            # The value the name stood for is gone; if nothing read it, giving
+            # it cannot have affected what the program does.
+            self._report_unused(local)
             local.value = value
+            local.value_span = node.span
+            local.read = wants_value
             return value
         target = self._module.globals.get(node.name)
         if target is None:

@@ -201,6 +201,36 @@ Each attribute declares the kinds of object it accepts and the parameters it tak
 the names and the kinds of the arguments.  An attribute name the compiler does not know is an error, never an ignored annotation:
 a misspelling must not be able to silently drop a property the program depends on.
 
+##### Expecting a Diagnostic
+
+`@[expect(NUMBER)]` says that the construct it is attached to raises the diagnostic with that number.  The diagnostic is then not
+reported.
+
+```
+@[startup]
+fn main() → u8:
+    @[expect(4006)]
+    let a: mut u8 = 5u8
+    a ← 4u8
+```
+
+In the layout notation the attribute stands on its own line, indented with the statement it belongs to; that indentation is what
+says which statement that is.  In the brace notation it simply precedes the statement.  It may be given more than once, since one
+expectation names one diagnostic and a construct may raise several, and the number must be one the compiler can emit.
+
+An expectation covers the construct it is attached to.  For a definition it also covers the variable being defined for as long as
+that variable exists, because not everything a definition raises is raised while the definition is being read: that nothing ever
+reads the value it gives is only known once the variable is gone.
+
+**An expectation that nothing meets is itself reported.**  The attribute says what a construct raises, so that a reader knows why
+it is there and so that the compiler can tell when it no longer is.  One that is never met is stale -- the code changed, or the
+number was wrong -- and it now hides nothing while saying something untrue.  This is why the word is `expect` and not `allow`:
+Rust draws the same distinction between `#[allow]`, which permits, and `#[expect]`, which asserts.
+
+**An error may be expected too, but the construct it is attached to is then discarded.**  A definition that raises an error cannot
+be compiled, and half of one would be worse than none: the function or the variable is left out of the program entirely.  What
+follows from leaving it out is not itself hidden -- discarding the only startup function is still reported as there being none.
+
 Considered were `#[...]` (Rust), `[[...]]` with namespaces (C++11, and the aspect clauses of Ada), `{. .}` pragmas (Nim),
 `@(...)` (Odin), a bare `@name` in the manner of a decorator (Python, Java, D), `pragma` statements (Ada), and magic comments
 (Go's `//go:...`).  The chosen notation takes the list-in-brackets shape from Odin and Rust and puts it behind `@`, which no other
@@ -315,6 +345,17 @@ Two characters that could mean two things are not a substitute.
 **A value too large for the variable's type is an error, not a truncation.**  `let small: u8 = 300u8` does not compile.  The value a
 program writes is the value the variable holds, or the program does not compile; there is no width at which a number quietly
 becomes a different number.  C and Go both narrow silently here, and C++ does unless the initializer is braced.
+
+**A value that nothing reads is reported.**  Where nothing reads what a variable was given, between the point it is given and the
+point it is replaced or the variable goes out of reach, giving it cannot affect what the program does:
+
+```
+let a: mut u8 = 5u8         ※ warning: the value given to 'a' here is never read
+a ← 4u8
+```
+
+Where that is deliberate -- a program written to exercise the compiler, say -- the program says so with `@[expect(4006)]` rather
+than being written around the warning.
 
 Considered for the notation: `x: u8 = 3u8` with `x := 3u8` as the short form, after Go and Odin, which is terse but leaves a
 statement beginning with an identifier ambiguous until the parser has looked past the name.  A keyword lets a parser commit on the

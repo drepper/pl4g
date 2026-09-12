@@ -343,3 +343,28 @@ reinterpretation there as anywhere, and it would be harder to notice.
 There is no register allocator, so every value a function computes goes to the register a result is returned in.  That is correct
 exactly while no two values are live at once, and the backend checks it: a function that would need two is reported as beyond what
 this compiler generates rather than compiled wrongly.
+
+
+Expectations
+------------
+
+A construct that says what it raises puts an *expectation* in force while it is checked.  The diagnostic engine consults the
+expectations in force before it reports anything, innermost first; one that matches absorbs the diagnostic, records that it was
+raised, and -- where what it absorbed was an error -- records that too, since a construct that raises an error cannot be compiled
+whether or not anyone was told.
+
+Expectations are a property of the engine rather than of any one stage, so a diagnostic raised anywhere while a construct is being
+checked is covered, without every stage having to know about them.
+
+A definition hands its expectation to what it defines rather than settling it where the definition ends, because not everything a
+definition raises is raised while it is being read: that nothing ever reads the value a variable was given is only known once the
+variable is gone.  The expectation is therefore put back in force at that point, and settled there.
+
+A definition that absorbed an error is removed from the module, and from every cache that named it -- the startup function, the
+constructors, the destructors, the tests.  Removing it is what keeps the later stages honest: they see a program that does not
+contain it, rather than one containing something that could not be checked.
+
+A value nothing reads is found by the scope, not by a pass: a binding records whether anything has read the value it stands for,
+and the report is made where the value is replaced or where the scope ends.  That is exact for straight-line code, which is all the
+language has; when control flow arrives it becomes a liveness analysis over the graph, and the place it is reported from will move
+with it.

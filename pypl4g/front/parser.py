@@ -5,6 +5,7 @@ the parser produces one syntax tree per file and leaves every question of
 meaning to the semantic analysis.
 """
 
+from dataclasses import replace
 from typing import Final, Sequence
 
 from ..diag import ids as D
@@ -150,7 +151,7 @@ class Parser:
         value = self._parse_expression()
         return ast.VarDef(span=start.to(value.span), name=name_token.text,
                           name_span=name_token.span, type=declared, value=value,
-                          mutable=mutable, attrs=attrs, doc=doc)
+                          mutable=mutable, doc=doc, attrs=attrs)
 
     def _parse_doc_comments(self) -> str | None:
         """Collect the documentation comments preceding a definition."""
@@ -309,6 +310,17 @@ class Parser:
         return ast.Block(span=start.to(end), style=ast.BlockStyle.EXPLICIT, stmts=tuple(stmts))
 
     def _parse_statement(self) -> ast.Stmt:
+        """Parse one statement, with whatever attributes precede it.
+
+        In the layout notation an attribute stands on its own line, indented
+        with the statement it belongs to, which is what says which statement
+        that is.
+        """
+        attrs = self._parse_attributes() if self._check(TokKind.AT_LBRACKET) else ()
+        stmt = self._parse_bare_statement()
+        return replace(stmt, attrs=attrs) if attrs else stmt
+
+    def _parse_bare_statement(self) -> ast.Stmt:
         """Parse one statement."""
         if self._check(TokKind.KW_LET):
             return self._parse_variable()

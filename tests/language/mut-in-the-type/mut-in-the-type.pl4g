@@ -10,5 +10,6 @@ let second: mut = 2u8
 
 @[startup]
 fn main() → u8:
+    @[expect(4006)]
     let third: mut = 3u8
     third ← 12u8

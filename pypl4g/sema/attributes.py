@@ -26,7 +26,8 @@ class AttrTarget(Flag):
     VARIABLE = auto()
     MODULE = auto()
     PARAMETER = auto()
-    ANY = FUNCTION | TYPE | VARIABLE | MODULE | PARAMETER
+    STATEMENT = auto()
+    ANY = FUNCTION | TYPE | VARIABLE | MODULE | PARAMETER | STATEMENT
 
 
 #: How a target is named in a diagnostic.
@@ -36,6 +37,7 @@ TARGET_NAMES: Final[dict[AttrTarget, str]] = {
     AttrTarget.VARIABLE: "a variable",
     AttrTarget.MODULE: "a module",
     AttrTarget.PARAMETER: "a parameter",
+    AttrTarget.STATEMENT: "a statement",
 }
 
 
@@ -66,6 +68,10 @@ class AttrSpec:
     params: tuple[AttrParam, ...] = ()
     #: Attributes that cannot be applied to the same object as this one.
     group: str | None = None
+    #: Whether it may be applied to one object more than once.  Most attributes
+    #: say one thing about an object and repeating one says nothing new; an
+    #: expectation names one diagnostic, and a construct may raise several.
+    repeatable: bool = False
     doc: str = ""
 
     def signature(self) -> str:
@@ -118,6 +124,10 @@ REGISTRY: Final[Mapping[str, AttrSpec]] = {
                  doc="places the object in the named section of the image"),
         AttrSpec("packed", AttrTarget.TYPE,
                  doc="requests a layout without padding between fields"),
+        AttrSpec("expect", AttrTarget.STATEMENT | AttrTarget.FUNCTION
+                 | AttrTarget.VARIABLE,
+                 (_param("number", "integer"),), repeatable=True,
+                 doc="the construct raises this diagnostic, and it is not reported"),
     )
 }
 

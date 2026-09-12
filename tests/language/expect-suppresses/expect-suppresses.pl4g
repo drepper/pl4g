@@ -1,0 +1,11 @@
+※ pl4g-test: compile=ok
+※ pl4g-test: run=native exit=4
+※ pl4g-test: diag=none
+
+※ The same program, saying what it raises.  The attribute stands on its own
+※ line, indented with the statement it belongs to.
+@[startup]
+fn main() → u8:
+    @[expect(4006)]
+    let a: mut u8 = 5u8
+    a ← 4u8

@@ -1,0 +1,11 @@
+※ pl4g-test: compile=ok
+※ pl4g-test: run=native exit=5
+※ pl4g-test: expect-diag 3206 LANG_ATTR_EXPECT_NOT_RAISED
+
+※ An expectation nothing meets is stale: it hides nothing and says something
+※ untrue.  Here the value is read, so no warning was there to suppress.
+@[startup]
+fn main() → u8:
+    @[expect(4006)]
+    let a: u8 = 5u8
+    a

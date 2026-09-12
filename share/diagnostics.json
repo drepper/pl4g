@@ -887,6 +887,50 @@
       "option": null
     },
     {
+      "number": 3206,
+      "name": "LANG_ATTR_EXPECT_NOT_RAISED",
+      "severity": "warning",
+      "message": "no diagnostic {number} was raised here, though one was expected",
+      "args": [
+        {
+          "name": "number",
+          "type": "integer",
+          "description": "the number expected"
+        }
+      ],
+      "cause": "The attribute says what the construct it is attached to reports, so that a reader knows why it is there and so that the compiler can tell when it no longer is.  An expectation that is never met is stale: the code was changed, or the number was wrong to begin with, and either way the attribute now hides nothing and says something untrue.  Remove it, or correct the number.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Attributes",
+        "requirement": "`@[expect(NUMBER)]` says that the construct it is attached to raises the diagnostic with that number, and keeps it from being reported."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": "expect-not-raised"
+    },
+    {
+      "number": 3207,
+      "name": "LANG_ATTR_EXPECT_UNKNOWN_NUMBER",
+      "severity": "error",
+      "message": "{number} is not the number of any diagnostic",
+      "args": [
+        {
+          "name": "number",
+          "type": "integer",
+          "description": "the number given"
+        }
+      ],
+      "cause": "The number must be one the compiler can emit.  They are four digits, they are the same in every implementation, and the definitive list of them is the shared catalog; a number that is not in it can never be raised, so expecting it could only ever be a mistake.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Attributes",
+        "requirement": "`@[expect(NUMBER)]` says that the construct it is attached to raises the diagnostic with that number, and keeps it from being reported."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 4001,
       "name": "LANG_FILESTRUCT_DUPLICATE_DEFINITION",
       "severity": "error",
@@ -1001,6 +1045,28 @@
       "since": "0.1",
       "default_enabled": true,
       "option": null
+    },
+    {
+      "number": 4006,
+      "name": "LANG_VARDEF_VALUE_UNUSED",
+      "severity": "warning",
+      "message": "the value given to '{name}' here is never read",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the variable"
+        }
+      ],
+      "cause": "Nothing reads the value between the point it is given and the point it is replaced or the variable goes out of scope, so giving it cannot affect what the program does.  Either the value was meant to be used and something reads the wrong thing, or it was not and the line can go.  Where it is deliberate -- a program written to exercise the compiler, say -- say so with `@[expect(4006)]`.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Variable Definition",
+        "requirement": "A variable is defined with `let NAME: TYPE = VALUE`.  The type may be left out, in which case it is the type of the value.  There is no definition without a value."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": "unused-value"
     },
     {
       "number": 4201,

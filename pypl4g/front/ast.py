@@ -128,7 +128,13 @@ class NameRef(Expr):
 
 @dataclass(frozen=True, slots=True)
 class Stmt(Node):
-    """Base of every statement."""
+    """Base of every statement.
+
+    Attributes are declared here rather than on each kind of statement, and are
+    keyword-only so that a statement's own fields keep their places.
+    """
+
+    attrs: tuple[Attribute, ...] = field(default=(), kw_only=True)
 
 
 @dataclass(frozen=True, slots=True)
@@ -160,9 +166,8 @@ class VarDef(Stmt):
     name_span: Span
     type: TypeRef | None
     value: Expr
-    #: Whether the definition said the variable may be changed.
+    #: Whether the type said the variable may be changed.
     mutable: bool = False
-    attrs: tuple[Attribute, ...] = ()
     doc: str | None = None
 
 

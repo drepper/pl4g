@@ -6,6 +6,7 @@
 ※ so the assignment binds the name to a new one.
 @[startup]
 fn main() → u8:
+    @[expect(4006)]
     let status: mut u8 = 3u8
     status ← 5u8
     status

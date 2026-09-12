@@ -1,0 +1,12 @@
+※ pl4g-test: compile=ok
+※ pl4g-test: run=native exit=1
+※ pl4g-test: diag=none
+
+※ A variable whose definition could not be made sense of is not put in the
+※ image.  Nothing else refers to it, so the program is otherwise unaffected.
+@[expect(2006)]
+let too_big: u8 = 300u8
+
+@[startup]
+fn main() → u8:
+    1u8

@@ -595,6 +595,59 @@ result, which only the last statement of a block is in a position to use.
 Where the result is not wanted, no load is emitted: reading a place nothing looks at would be an instruction the program never
 asked for.
 
+## 2026-09-13T18:00+02:00 — language
+
+**A value that nothing reads is reported**
+
+Decided on the user's direction.  Where nothing reads what a variable was given, between the point it is given and the point it is
+replaced or the variable goes out of reach, giving it cannot have affected what the program does.
+
+It is a warning rather than an error: the program means something, and what it means is simply less than it appears to.  What it
+usually means is that something reads the wrong thing.
+
+Only variables inside a function are examined.  One at the top level can be read by any function of the program, and whether
+anything does is a question for a pass over the whole program rather than for the scope that defines it.
+
+## 2026-09-13T18:00+02:00 — language
+
+**`@[expect(NUMBER)]` says what a construct raises, and the diagnostic is not reported**
+
+Decided on the user's direction, with the syntax and the number the user proposed.
+
+The word is `expect`, not `allow` or `suppress`, and it behaves as it reads: an expectation nothing meets is itself reported.  That
+is the distinction Rust draws between `#[allow]` and `#[expect]`, and it is what keeps a suppression from outliving the thing it
+suppressed -- a stale one hides nothing while saying something untrue.  This was not asked for; it follows from the word.
+
+In the layout notation the attribute stands on its own line, indented with the statement it belongs to, which is what says which
+statement that is.  It may be repeated, which no other attribute may: one expectation names one diagnostic and a construct may
+raise several.  The number must be one the compiler can emit, since a number nothing can raise could only ever be a mistake.
+
+## 2026-09-13T18:00+02:00 — language
+
+**An expected error discards the construct it is attached to**
+
+Decided on the user's direction.  A definition that raises an error cannot be compiled, and half of one would be worse than none,
+so the function or the variable is left out of the program entirely.
+
+What follows from leaving it out is not hidden in turn: discarding the only startup function is still reported as there being none.
+That is the honest behaviour -- the expectation said what *that* definition raises, and said nothing about the program that remains.
+
+## 2026-09-13T18:00+02:00 — implementation
+
+**An expectation belongs to the diagnostic engine, and a definition hands its own to what it defines**
+
+Putting expectations in the engine rather than in any one stage means a diagnostic raised anywhere while a construct is checked is
+covered, without every stage having to know they exist.
+
+A definition hands its expectation to the variable it defines rather than settling it where the definition ends, because not
+everything a definition raises is raised while it is being read.  That nothing ever reads the value a variable was given is only
+known once the variable is gone, so the expectation is put back in force there and settled there.  Written the other way -- purely
+lexically -- an attribute on a definition could not cover the very diagnostic it most obviously should.
+
+A value nothing reads is found by the scope rather than by a pass: a binding records whether anything has read what it stands for.
+That is exact for straight-line code, which is all the language has.  When control flow arrives it becomes a liveness analysis over
+the graph, and where it is reported from will move with it.
+
 ---
 
 Open questions
@@ -616,6 +669,9 @@ These are recorded so they are not lost.  None of them blocks the current versio
   analysis collects every top-level definition before checking any body, which is what makes that reading true.
 
 - **Comparison.**  `=` is reserved for it and nothing implements it.
+
+- **A value written to a variable at the top level that nothing reads.**  The same rule would apply, but whether anything reads one
+  is a question for a pass over the whole program rather than for the scope that defines it.
 
 - **A constant wider than one instruction.**  Materializing one needs a sequence -- two move-wide instructions on one
   architecture, an upper-immediate load and an add on another -- and none is generated, so such a constant is reported.

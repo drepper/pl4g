@@ -1,0 +1,10 @@
+※ pl4g-test: compile=ok
+※ pl4g-test: run=native exit=4
+※ pl4g-test: expect-diag 4006 LANG_VARDEF_VALUE_UNUSED
+
+※ The value a variable is given and never read before it is replaced.  Nothing
+※ reads the 5, so giving it cannot affect what the program does.
+@[startup]
+fn main() → u8:
+    let a: mut u8 = 5u8
+    a ← 4u8
