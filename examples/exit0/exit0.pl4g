@@ -1,0 +1,9 @@
+※※ The smallest conforming PL4G program.
+※※
+※※ Exactly one function carries the startup attribute; control is transferred
+※※ to it once the startup phase completes, and the value it returns becomes the
+※※ exit status of the process.
+
+@[startup]
+fn main() → i32:
+    0

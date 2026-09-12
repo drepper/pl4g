@@ -63,6 +63,15 @@ implementation will accept the same parameters as the actual, full compiler.  In
 `-o` or `--output` with a mandatory argument to specify the output file name (just like existing compilers like gcc).  Additional
 parameters are the names of the source files, ending with the extension `.pl4g`.
 
+`--print-targets` writes the target triples the compiler can generate for, one per line.  A build system asks for that list rather
+than carrying its own copy, so that nothing has to be edited when a target is added.  Only canonical triples are listed: the
+abbreviations a triple may also be spelled with are accepted on the command line but not reported, so that building one binary per
+line does not build the same binary several times.
+
+Examples live in `examples`, one directory each, holding the program and a `Makefile`.  The shared rules in `examples/common.mk`
+take the list of architectures from `--print-targets` and build into `build/<triple>/`, and `make run` runs each binary, through
+the emulator for its architecture where that is not the host's.
+
 
 The Intermediate Representation
 -------------------------------

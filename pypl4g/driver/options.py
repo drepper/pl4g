@@ -64,6 +64,7 @@ class Options:
     incremental: bool = False
     show_help: bool = False
     show_help_json: bool = False
+    show_targets: bool = False
     show_version: bool = False
 
 

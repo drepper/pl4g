@@ -44,7 +44,7 @@ class CommandLine:
             else:
                 self._add_input(word)
         if self._options.show_help or self._options.show_help_json \
-                or self._options.show_version:
+                or self._options.show_version or self._options.show_targets:
             return self._options
         self._check_required()
         return self._options
@@ -58,6 +58,8 @@ class CommandLine:
                 self._options.show_help = True
             case "--help-json":
                 self._options.show_help_json = True
+            case "--print-targets":
+                self._options.show_targets = True
             case "--version":
                 self._options.show_version = True
             case "-v" | "--verbose":

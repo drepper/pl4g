@@ -29,7 +29,8 @@ from ..mc.streamer import MCStreamer
 from ..opt.pass_ import build_manager
 from ..sema.check import check
 from ..source.manager import (SourceDecodeError, SourceManager, SourceReadError)
-from ..target.registry import known_triples, lookup as lookup_target
+from ..target.registry import (canonical_triples, known_triples,
+                               lookup as lookup_target)
 from .cli import parse_command_line
 from .options import (DiagFormat, EmitKind, ExitCode, Options, load_option_table,
                       render_help)
@@ -259,6 +260,10 @@ def main(argv: Sequence[str], stdout: TextIO | None = None,
         return ExitCode.SUCCESS
     if options.show_help:
         print(render_help(load_option_table()), file=out, end="")
+        return ExitCode.SUCCESS
+    if options.show_targets:
+        for triple in canonical_triples():
+            print(triple, file=out)
         return ExitCode.SUCCESS
     if options.show_help_json:
         json.dump(load_option_table(), out, indent=2, ensure_ascii=False)

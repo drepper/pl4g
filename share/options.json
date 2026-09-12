@@ -10,41 +10,149 @@
     "70": "internal compiler error"
   },
   "options": [
-    { "short": "-o", "long": "--output", "arg": "separate_or_joined", "metavar": "FILE",
-      "required": true, "since": "0.1",
-      "help": "write the generated binary to FILE" },
-    { "short": null, "long": "--emit", "arg": "joined_equals", "metavar": "KIND",
-      "values": ["elf", "asm", "ir", "ast", "tokens"], "default": "elf", "since": "0.1",
-      "help": "stop after the named stage and write its result to the output file" },
-    { "short": null, "long": "--target", "arg": "joined_equals", "metavar": "TRIPLE",
-      "default": "x86_64-linux-none", "since": "0.1",
-      "help": "generate code for TRIPLE" },
-    { "short": "-O", "long": null, "arg": "joined", "metavar": "LEVEL",
-      "values": ["0", "1", "2", "3"], "default": "0", "since": "0.1",
-      "help": "set the optimization level" },
-    { "short": "-g", "long": null, "arg": "none", "since": "0.1", "implemented": false,
-      "help": "generate debugging information" },
-    { "short": "-W", "long": null, "arg": "joined", "metavar": "NAME", "since": "0.1",
-      "help": "enable the warning NAME; -Wno-NAME disables it" },
-    { "short": null, "long": "--Werror", "arg": "none", "alias": "-Werror", "since": "0.1",
-      "help": "treat warnings as errors" },
-    { "short": null, "long": "--diag-format", "arg": "joined_equals", "metavar": "FORMAT",
-      "values": ["text", "json"], "default": "text", "since": "0.1",
-      "help": "render diagnostics as human-readable text or as JSON" },
-    { "short": null, "long": "--decision-log", "arg": "separate_or_joined", "metavar": "FILE",
+    {
+      "short": "-o",
+      "long": "--output",
+      "arg": "separate_or_joined",
+      "metavar": "FILE",
+      "required": true,
       "since": "0.1",
-      "help": "write the log of the decisions the compiler made to FILE, in JSON" },
-    { "short": null, "long": "--incremental", "arg": "none", "since": "0.1", "implemented": false,
-      "help": "keep running, watch the inputs and patch the generated binary in place" },
-    { "short": "-v", "long": "--verbose", "arg": "none", "since": "0.1",
-      "help": "report what the compiler is doing" },
-    { "short": null, "long": "--time-report", "arg": "none", "since": "0.1",
-      "help": "report the time spent in each stage" },
-    { "short": null, "long": "--help", "arg": "none", "since": "0.1",
-      "help": "describe the accepted options and exit" },
-    { "short": null, "long": "--help-json", "arg": "none", "since": "0.1",
-      "help": "write this option table as JSON and exit" },
-    { "short": null, "long": "--version", "arg": "none", "since": "0.1",
-      "help": "report the compiler version and exit" }
+      "help": "write the generated binary to FILE"
+    },
+    {
+      "short": null,
+      "long": "--emit",
+      "arg": "joined_equals",
+      "metavar": "KIND",
+      "values": [
+        "elf",
+        "asm",
+        "ir",
+        "ast",
+        "tokens"
+      ],
+      "default": "elf",
+      "since": "0.1",
+      "help": "stop after the named stage and write its result to the output file"
+    },
+    {
+      "short": null,
+      "long": "--target",
+      "arg": "joined_equals",
+      "metavar": "TRIPLE",
+      "default": "x86_64-linux-none",
+      "since": "0.1",
+      "help": "generate code for TRIPLE"
+    },
+    {
+      "short": "-O",
+      "long": null,
+      "arg": "joined",
+      "metavar": "LEVEL",
+      "values": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ],
+      "default": "0",
+      "since": "0.1",
+      "help": "set the optimization level"
+    },
+    {
+      "short": "-g",
+      "long": null,
+      "arg": "none",
+      "since": "0.1",
+      "implemented": false,
+      "help": "generate debugging information"
+    },
+    {
+      "short": "-W",
+      "long": null,
+      "arg": "joined",
+      "metavar": "NAME",
+      "since": "0.1",
+      "help": "enable the warning NAME; -Wno-NAME disables it"
+    },
+    {
+      "short": null,
+      "long": "--Werror",
+      "arg": "none",
+      "alias": "-Werror",
+      "since": "0.1",
+      "help": "treat warnings as errors"
+    },
+    {
+      "short": null,
+      "long": "--diag-format",
+      "arg": "joined_equals",
+      "metavar": "FORMAT",
+      "values": [
+        "text",
+        "json"
+      ],
+      "default": "text",
+      "since": "0.1",
+      "help": "render diagnostics as human-readable text or as JSON"
+    },
+    {
+      "short": null,
+      "long": "--decision-log",
+      "arg": "separate_or_joined",
+      "metavar": "FILE",
+      "since": "0.1",
+      "help": "write the log of the decisions the compiler made to FILE, in JSON"
+    },
+    {
+      "short": null,
+      "long": "--incremental",
+      "arg": "none",
+      "since": "0.1",
+      "implemented": false,
+      "help": "keep running, watch the inputs and patch the generated binary in place"
+    },
+    {
+      "short": "-v",
+      "long": "--verbose",
+      "arg": "none",
+      "since": "0.1",
+      "help": "report what the compiler is doing"
+    },
+    {
+      "short": null,
+      "long": "--time-report",
+      "arg": "none",
+      "since": "0.1",
+      "help": "report the time spent in each stage"
+    },
+    {
+      "short": null,
+      "long": "--help",
+      "arg": "none",
+      "since": "0.1",
+      "help": "describe the accepted options and exit"
+    },
+    {
+      "short": null,
+      "long": "--help-json",
+      "arg": "none",
+      "since": "0.1",
+      "help": "write this option table as JSON and exit"
+    },
+    {
+      "short": null,
+      "long": "--print-targets",
+      "arg": "none",
+      "since": "0.1",
+      "help": "list the target triples this compiler can generate for, and exit"
+    },
+    {
+      "short": null,
+      "long": "--version",
+      "arg": "none",
+      "since": "0.1",
+      "help": "report the compiler version and exit"
+    }
   ]
 }

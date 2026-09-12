@@ -1,0 +1,6 @@
+# Binaries built by the example Makefiles.
+#
+# Each example builds into its own build/ directory, with one subdirectory per
+# target triple, so a single pattern covers every architecture and needs no
+# change when a target is added.
+build/

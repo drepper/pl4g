@@ -35,6 +35,24 @@ def test_version_and_help() -> None:
         assert proc.stdout.strip() != ""
 
 
+def test_print_targets_lists_one_triple_per_target() -> None:
+    """A build system asks the compiler which targets exist, rather than guessing.
+
+    Only canonical triples are listed, so building one binary per line does not
+    build the same binary several times under its abbreviations.
+    """
+    from pypl4g.target.registry import canonical_triples, lookup
+
+    proc = run_compiler(["--print-targets"])
+    assert proc.returncode == ExitCode.SUCCESS
+    listed = proc.stdout.split()
+    assert listed == canonical_triples()
+    assert listed, "no target has a backend"
+    assert len(set(listed)) == len(listed)
+    for triple in listed:
+        assert lookup(triple) is not None
+
+
 def test_help_json_round_trips() -> None:
     """The option table can be read back by a tool, which is why it is shared."""
     proc = run_compiler(["--help-json"])
@@ -42,6 +60,8 @@ def test_help_json_round_trips() -> None:
     table = json.loads(proc.stdout)
     assert table["source_suffix"] == ".pl4g"
     assert table == load_option_table()
+    declared = {o["long"] for o in table["options"] if o["long"]}
+    assert "--print-targets" in declared, "the shared option table is out of date"
 
 
 @pytest.mark.parametrize(("argv", "number"), [
