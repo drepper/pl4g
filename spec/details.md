@@ -207,6 +207,15 @@ the disassembler is the independent check on the encoder.  More importantly, a s
 the map of where every function lives -- which is exactly what incremental recompilation needs, readable back out of the
 compiler's own previous output without a file beside it.
 
+**Every image the tests produce is checked against the format by `eu-elflint --strict`.**  No assembler and no linker stands
+between the compiler and the file, so nothing else would notice a field filled in wrongly: a header that disagrees with itself
+produces a file the kernel may still load and a tool may still read, and the mistake surfaces much later and somewhere else.  The
+strict form also reports what common practice allows but the standard does not, which is the level to hold a compiler to when it
+writes the bytes itself.
+
+The check runs on every binary any test builds, not on a chosen few, so it holds for whatever is added later.  A gate that cannot
+fail guards nothing, so one test damages an image deliberately and requires the check to reject it.
+
 The writer plans and then materializes.  Planning computes every offset, address and size without emitting a byte; materializing
 allocates one buffer of the final size and writes each piece at the offset the plan recorded.  Nothing is appended and nothing is
 back-patched.  That is what makes the layout reusable for an incremental rebuild, and it makes "write only the pages that changed"

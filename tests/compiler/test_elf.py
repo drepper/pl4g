@@ -13,8 +13,8 @@ from pathlib import Path
 import pytest
 
 import elfcheck
-from conftest import (ARCH_TOOLS, architecture_of, compiler_targets, describe,
-                      run_compiler, runner_for)
+from conftest import (ARCH_TOOLS, ELFLINT, architecture_of, check_conformance,
+                      compiler_targets, describe, run_compiler, runner_for)
 
 SOURCE = """\N{REFERENCE MARK} A program that exits with status 0.
 @[startup]
@@ -122,6 +122,34 @@ def test_header_describes_a_static_executable(built: Built) -> None:
 def test_is_well_formed(built: Built) -> None:
     """Every requirement the format states holds."""
     assert elfcheck.check_well_formed(built.image) == []
+
+
+@pytest.mark.skipif(not shutil.which(ELFLINT), reason="elfutils is not installed")
+def test_it_conforms_to_the_format(built: Built) -> None:
+    """Checked against the format by something that did not help write it.
+
+    The compiler writes the image itself, so nothing else would notice a field
+    filled in wrongly; --strict also reports what common practice allows but the
+    standard does not, which is the level to hold such a compiler to.
+    """
+    check_conformance(built.path)
+
+
+@pytest.mark.skipif(not shutil.which(ELFLINT), reason="elfutils is not installed")
+def test_the_conformance_check_is_not_a_formality(built: Built, tmp_path) -> None:  # noqa: ANN001
+    """A gate that cannot fail guards nothing, so this one is made to fail.
+
+    The header says which section holds the section names; pointing it at a
+    section that holds something else leaves a file nothing can read, and the
+    check must say so.
+    """
+    damaged = bytearray(built.path.read_bytes())
+    shstrndx_at = 62
+    damaged[shstrndx_at:shstrndx_at + 2] = (1).to_bytes(2, "little")
+    broken = tmp_path / "damaged"
+    broken.write_bytes(bytes(damaged))
+    with pytest.raises(AssertionError, match="rejects"):
+        check_conformance(broken)
 
 
 def test_the_stack_is_not_executable(built: Built) -> None:

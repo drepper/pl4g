@@ -701,6 +701,25 @@ need.  Saying it once, where the program says it, is cheaper than working it out
 The entry point stays visible.  It is the compiler's own rather than something the program declared, so the rule about what a
 program exports does not reach it, and every tool that inspects a binary expects to find it.
 
+## 2026-09-13T22:30+02:00 — process
+
+**Every generated image is checked against the format by `eu-elflint --strict`**
+
+Decided on the user's direction, and applying wherever and whenever a binary is produced rather than at one place in the tests.
+
+The compiler writes the image itself, with no assembler and no linker between it and the file.  That is the point of the design and
+it is also what removes the only other thing that would have noticed a field filled in wrongly: a header that disagrees with itself
+produces a file the kernel may still load and a tool may still read, and the mistake then surfaces much later and somewhere else.
+The strict form additionally reports what common practice allows but the standard does not, which is the level worth holding a
+compiler to when it is the one writing the bytes.
+
+It runs on every binary any test builds rather than on a chosen few, so it holds for whatever is added later without anyone having
+to remember.  One test damages an image deliberately and requires the check to reject it, because a gate that cannot fail guards
+nothing.
+
+All hundred and two binaries the tests currently produce, across the three architectures, pass it as they stand; nothing had to be
+fixed.
+
 ---
 
 Open questions

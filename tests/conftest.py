@@ -40,6 +40,27 @@ ARCH_TOOLS: dict[str, dict[str, str]] = {
 
 HOST_ARCH = platform.machine()
 
+#: Checks an ELF file against what the format requires.  With --strict it also
+#: reports what is merely allowed by common practice rather than by the standard,
+#: which is the level worth holding a compiler that writes the file itself to.
+ELFLINT = "eu-elflint"
+
+
+def check_conformance(path: Path) -> None:
+    """Check a generated binary against the format, and say what is wrong.
+
+    Every binary the tests produce goes through this.  The compiler writes the
+    image itself, with no assembler or linker between it and the file, so there
+    is nothing else that would notice a field it filled in wrongly.
+    """
+    if not shutil.which(ELFLINT):
+        return
+    proc = subprocess.run([ELFLINT, "--strict", str(path)], capture_output=True,
+                          text=True, timeout=60)
+    complaints = proc.stdout.strip()
+    assert proc.returncode == 0 and complaints == "No errors", "".join((
+        ELFLINT, " --strict rejects ", str(path), ":\n", complaints, proc.stderr))
+
 
 def architecture_of(triple: str) -> str:
     """The architecture a triple names, which is its first component."""
@@ -184,6 +205,7 @@ class PL4GItem(pytest.Item):
         self._check_compile(proc)
         if not self.expectations.compiles:
             return
+        check_conformance(output)
         runner = runner_for(self.triple)
         if runner and not shutil.which(runner[0]):
             pytest.skip("".join((runner[0], " is not installed")))
