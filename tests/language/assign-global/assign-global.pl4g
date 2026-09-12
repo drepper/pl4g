@@ -1,0 +1,11 @@
+※ pl4g-test: compile=ok opt=0,1
+※ pl4g-test: run=native,qemu exit=7
+※ pl4g-test: diag=none
+
+※ A variable at the top level is an address, so changing it writes memory.
+let mut counter: u8 = 1u8
+
+@[startup]
+fn main() → u8:
+    counter ← 7u8
+    counter

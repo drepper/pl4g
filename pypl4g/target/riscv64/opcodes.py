@@ -65,6 +65,22 @@ def _imm(operand: int, lsb: int, width: int) -> Field:
     return Field(FieldKind.IMMEDIATE, operand, lsb, width, signed=True)
 
 
+def _store_fields() -> tuple[Field, ...]:
+    """Where a store puts its value, its base and the two halves of its offset.
+
+    The operands are the value, the base register and the offset, in that order,
+    which is the order the assembly writes them: ``sb a0, 8(a1)``.
+    """
+    return (
+        Field(FieldKind.REGISTER, 0, _RS2),
+        Field(FieldKind.REGISTER, 1, _RS1),
+        # One value, two fields.  Each states the width of the whole value, so
+        # that the range is checked once and against the right thing.
+        Field(FieldKind.IMMEDIATE, 2, 7, 5, signed=True, value_bits=12),
+        Field(FieldKind.IMMEDIATE, 2, 25, 7, shift=5, signed=True, value_bits=12),
+    )
+
+
 RISCV_INSTRS: Final[tuple[RVInstDesc, ...]] = (
     # li rd, imm12       is  addi rd, zero, imm12
     RVInstDesc("li", (_r(), _imm12()), template=0x00000013,
@@ -146,6 +162,21 @@ RISCV_INSTRS: Final[tuple[RVInstDesc, ...]] = (
     RVInstDesc("ld", (_r(), _r(), _imm12()), template=0x00003003,
                fields=(_reg(0, _RD), _reg(1, _RS1), _imm(2, _IMM12, 12)),
                flags=InstFlags.MAY_LOAD, est_size=INSTRUCTION_SIZE),
+    # The stores.  Their offset is not one run of bits: the architecture puts its
+    # low five bits where a destination register would sit and the rest at the
+    # top, so each row names the two halves of one value.
+    RVInstDesc("sb", (_r(), _r(), _imm12()), template=0x00000023,
+               fields=_store_fields(), flags=InstFlags.MAY_STORE,
+               est_size=INSTRUCTION_SIZE),
+    RVInstDesc("sh", (_r(), _r(), _imm12()), template=0x00001023,
+               fields=_store_fields(), flags=InstFlags.MAY_STORE,
+               est_size=INSTRUCTION_SIZE),
+    RVInstDesc("sw", (_r(), _r(), _imm12()), template=0x00002023,
+               fields=_store_fields(), flags=InstFlags.MAY_STORE,
+               est_size=INSTRUCTION_SIZE),
+    RVInstDesc("sd", (_r(), _r(), _imm12()), template=0x00003023,
+               fields=_store_fields(), flags=InstFlags.MAY_STORE,
+               est_size=INSTRUCTION_SIZE),
     # jal ra, label      (the return address register is part of the template)
     RVInstDesc("jal", (_sym(),), template=0x000000EF,
                fields=(Field(FieldKind.RELOCATION, 0, 12, 20, reloc=JAL),),

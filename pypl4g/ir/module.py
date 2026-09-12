@@ -17,12 +17,14 @@ class GlobalVar(Value):
     name.
     """
 
-    __slots__ = ("name", "value_type", "linkage", "initializer", "span", "module")
+    __slots__ = ("name", "value_type", "linkage", "initializer", "span", "module",
+                 "mutable")
 
     def __init__(self, name: str, value_type: Type, ptr_type: Type,
                  initializer: Value | None = None,
                  linkage: Linkage = Linkage.INTERNAL,
-                 span: Span = INVALID_SPAN, module: str = "") -> None:
+                 span: Span = INVALID_SPAN, module: str = "",
+                 mutable: bool = False) -> None:
         super().__init__(ptr_type, name)
         self.name = name
         #: The type of what the variable holds, not of the variable itself.
@@ -32,6 +34,9 @@ class GlobalVar(Value):
         self.initializer = initializer
         self.span = span
         self.module = module
+        #: Whether the program may change it.  It is a property of the variable
+        #: rather than of any one access, which is why it is recorded here.
+        self.mutable = mutable
 
     def __repr__(self) -> str:
         return "".join(("GlobalVar(@", self.name, ")"))

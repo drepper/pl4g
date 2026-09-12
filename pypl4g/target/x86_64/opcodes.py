@@ -49,6 +49,19 @@ X86_INSTRS: Final[tuple[X86InstDesc, ...]] = (
     X86InstDesc("mov", (_rm(64), _imm(32)), opcode=0xC7, opsize=OpSize.REXW,
                 modrm=ModRMUse.EXT_RM, ext=0, rm_op=0, imm_op=1, imm_bits=32,
                 est_size=7),
+    # mov r/m8, imm8                     C6 /0 ib
+    X86InstDesc("mov", (_rm(8), _imm(8)), opcode=0xC6, modrm=ModRMUse.EXT_RM, ext=0,
+                rm_op=0, imm_op=1, imm_bits=8, est_size=3),
+    # mov r/m16, imm16                   66 C7 /0 iw
+    X86InstDesc("mov", (_rm(16), _imm(16)), opcode=0xC7, opsize=OpSize.P66,
+                modrm=ModRMUse.EXT_RM, ext=0, rm_op=0, imm_op=1, imm_bits=16,
+                est_size=5),
+    # mov r/m32, imm32                   C7 /0 id
+    X86InstDesc("mov", (_rm(32), _imm(32)), opcode=0xC7, modrm=ModRMUse.EXT_RM, ext=0,
+                rm_op=0, imm_op=1, imm_bits=32, est_size=6),
+    # mov r/m16, r16                     66 89 /r
+    X86InstDesc("mov", (_rm(16), _r(16)), opcode=0x89, opsize=OpSize.P66,
+                modrm=ModRMUse.REG_RM, reg_op=1, rm_op=0, est_size=3),
     # mov r/m8, r8                       88 /r
     X86InstDesc("mov", (_rm(8), _r(8)), opcode=0x88, modrm=ModRMUse.REG_RM,
                 reg_op=1, rm_op=0, est_size=2),

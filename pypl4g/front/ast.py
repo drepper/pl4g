@@ -160,8 +160,19 @@ class VarDef(Stmt):
     name_span: Span
     type: TypeRef | None
     value: Expr
+    #: Whether the definition said the variable may be changed.
+    mutable: bool = False
     attrs: tuple[Attribute, ...] = ()
     doc: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class AssignStmt(Stmt):
+    """An assignment to a variable that already exists."""
+
+    name: str
+    name_span: Span
+    value: Expr
 
 
 @dataclass(frozen=True, slots=True)

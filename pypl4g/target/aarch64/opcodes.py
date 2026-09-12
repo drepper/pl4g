@@ -163,6 +163,25 @@ AARCH64_INSTRS: Final[tuple[A64InstDesc, ...]] = (
     A64InstDesc("ldr", (_r(64), _r(64), _off(3)), template=0xF9400000,
                 fields=(_reg_field(0, _RD), _reg_field(1, _RN), _offset_field(2, 3)),
                 flags=InstFlags.MAY_LOAD, est_size=INSTRUCTION_SIZE),
+    # The stores, which mirror the loads.  There is no signed form: what is
+    # written is whatever the register holds, narrowed to the width the
+    # instruction names -- which the program has already been checked to allow.
+    # strb Wt, [Xn, #imm12]
+    A64InstDesc("strb", (_r(32), _r(64), _off(0)), template=0x39000000,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN), _offset_field(2, 0)),
+                flags=InstFlags.MAY_STORE, est_size=INSTRUCTION_SIZE),
+    # strh Wt, [Xn, #imm12]
+    A64InstDesc("strh", (_r(32), _r(64), _off(1)), template=0x79000000,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN), _offset_field(2, 1)),
+                flags=InstFlags.MAY_STORE, est_size=INSTRUCTION_SIZE),
+    # str Wt, [Xn, #imm12]
+    A64InstDesc("str", (_r(32), _r(64), _off(2)), template=0xB9000000,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN), _offset_field(2, 2)),
+                flags=InstFlags.MAY_STORE, est_size=INSTRUCTION_SIZE),
+    # str Xt, [Xn, #imm12]
+    A64InstDesc("str", (_r(64), _r(64), _off(3)), template=0xF9000000,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN), _offset_field(2, 3)),
+                flags=InstFlags.MAY_STORE, est_size=INSTRUCTION_SIZE),
     # bl label
     A64InstDesc("bl", (_sym(),), template=0x94000000,
                 fields=(Field(FieldKind.RELOCATION, 0, 0, 26, shift=2, signed=True,

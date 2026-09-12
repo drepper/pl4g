@@ -1,0 +1,12 @@
+※ pl4g-test: compile=ok opt=0,1
+※ pl4g-test: run=native,qemu exit=23
+※ pl4g-test: diag=none
+
+※ Reading one variable and writing another: a load, then a store.
+let source: u8 = 23u8
+let mut target: u8 = 0u8
+
+@[startup]
+fn main() → u8:
+    target ← source
+    target

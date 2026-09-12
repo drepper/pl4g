@@ -216,9 +216,19 @@ class LoadInst(Instruction):
 
 
 class StoreInst(Instruction):
-    """Writes memory and produces a new memory token."""
+    """Writes memory and produces a new memory token.
+
+    Operands are the token it follows, the address, and the value.  Producing a
+    token rather than merely consuming one is what puts a write in the dataflow
+    graph: a read that takes the new token is ordered after this write, and one
+    that takes the old token provably is not.
+    """
 
     __slots__ = ()
+
+    def __init__(self, token: Value, address: Value, value: Value,
+                 span: Span = INVALID_SPAN) -> None:
+        super().__init__(MEM, (token, address, value), span)
 
     @property
     def opcode(self) -> str:

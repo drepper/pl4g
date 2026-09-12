@@ -9,7 +9,7 @@ from ..source.location import INVALID_SPAN, Span
 from .function import BasicBlock, Function
 from .inst import (BinaryInst, BinOp, BlockTarget, BrInst, CastInst, CastKind,
                    CmpInst, CmpPred, CondBrInst, Instruction, LoadInst, MemStartInst,
-                   RetInst, Terminator, UnaryInst, UnOp, UnreachableInst)
+                   RetInst, StoreInst, Terminator, UnaryInst, UnOp, UnreachableInst)
 from .module import Module
 from .types import BOOL, IntType, PtrType, Type
 from .value import Value
@@ -103,6 +103,13 @@ class IRBuilder:
         pointee = address.ty
         assert isinstance(pointee, PtrType)
         return self._append(LoadInst(pointee.pointee, (self.memory(), address), span))
+
+    def store(self, address: Value, value: Value,
+              span: Span = INVALID_SPAN) -> Value:
+        """Append a store of *value* through *address*, and take the new token."""
+        written = self._append(StoreInst(self.memory(), address, value, span))
+        self._memory = written
+        return written
 
     def ret(self, value: Value | None = None, span: Span = INVALID_SPAN) -> Terminator:
         """Append a return."""

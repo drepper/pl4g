@@ -306,6 +306,24 @@ narrow value as it reads it.  On the two fixed-width architectures no instructio
 two steps and then read through.  The two differ in how: one computes the page the address lies in and then adds the offset within
 it, and the other adds an upper and a lower half, with the second instruction measuring from the first rather than from itself.
 
+Assigning to a local writes nothing: a local is a value, so the name is bound to a new one and the function that results is the
+same as if the final value had been written in the first place.  Where control flow arrives, a block parameter will carry the new
+value across a branch, which is what block parameters were chosen for; a local will not need memory even then.
+
+Assigning to a variable at the top level is a store, which takes the memory token and produces a new one, so a read that follows it
+is ordered after it and a read that does not provably is not.
+
+A store needs two things at once -- the address and the value -- which the one register the compiler has is not enough for.  Each
+fixed-width backend therefore sets aside two registers for it, chosen from the ones the calling convention leaves to the caller to
+preserve, since nothing of the compiler's holds a value across the few instructions a store takes.  x86-64 needs neither: it writes
+to a place in memory directly, and takes the value as an immediate where there is one.
+
+The width an immediate is *encoded* at is not the width of the access it belongs to.  An eight-byte store on x86-64 carries a
+four-byte immediate that the instruction widens, so what an operand states is how large the number is, and the row that accepts it
+states how large a number that form can carry.  Where a constant is larger than one instruction can carry -- twelve signed bits on
+one architecture, sixteen on another -- it is reported rather than assembled from a sequence, which this compiler does not generate
+yet.
+
 Nothing narrows a value without saying so.  The semantic analysis refuses every one a program can write that does not fit its
 type, and the three places further down that turn a value into bytes -- the initial contents of a variable, an immediate in an
 instruction, and a patched displacement -- refuse one too rather than storing it with its upper bits dropped.  Those cannot be

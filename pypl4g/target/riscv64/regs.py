@@ -75,6 +75,12 @@ A1: Final[PhysReg] = reg("a1")
 A7: Final[PhysReg] = reg("a7")
 S1: Final[PhysReg] = reg("s1")
 
+#: Holds an address while a store is being made, and the value to be written.
+#: Both are temporaries the calling convention leaves to the caller to preserve,
+#: and nothing of the compiler's holds a value across a store.
+SCRATCH: Final[PhysReg] = reg("t0")
+VALUE_SCRATCH: Final[PhysReg] = reg("t1")
+
 #: Registers a called function must leave as it found them.
 CALLEE_SAVED_NAMES: Final[tuple[str, ...]] = (
     "sp", "s0", "s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9", "s10", "s11")

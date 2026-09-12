@@ -747,6 +747,21 @@
       "option": null
     },
     {
+      "number": 3008,
+      "name": "LANG_ASSIGN_EXPECTED_ARROW",
+      "severity": "error",
+      "message": "'=' does not assign; an assignment is written with '←'",
+      "cause": "Assignment and comparison are different things and are written differently: '←' changes a variable and '=' asks whether two values are equal.  Languages that spell assignment with '=' have to spell comparison with something else, and a comparison written by mistake where an assignment belongs is then a statement that silently does nothing -- or worse, one that silently assigns.  Neither can happen here.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Assignment",
+        "requirement": "An assignment is written `NAME ← VALUE`."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 3201,
       "name": "LANG_ATTR_UNKNOWN",
       "severity": "error",
@@ -941,6 +956,53 @@
       "option": null
     },
     {
+      "number": 4004,
+      "name": "LANG_VARDEF_NOT_MUTABLE",
+      "severity": "error",
+      "message": "'{name}' cannot be changed; it was not defined with 'mut'",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the variable"
+        }
+      ],
+      "cause": "A variable can be assigned to only where its definition says so.  The default is the one that cannot change, because a name that keeps its value is easier to reason about and is what the language's functional style calls for; saying 'mut' is how a program states that this one does not.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Variable Definition",
+        "requirement": "A variable can be changed only if it was defined with `mut`."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null,
+      "notes": [
+        "LANG_VARDEF_DEFINED_HERE"
+      ]
+    },
+    {
+      "number": 4005,
+      "name": "LANG_VARDEF_DEFINED_HERE",
+      "severity": "note",
+      "message": "'{name}' is defined here",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the variable"
+        }
+      ],
+      "cause": "Attached to the report of an assignment to a variable that cannot change, to point at the definition that would have to say 'mut'.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Variable Definition",
+        "requirement": "A variable can be changed only if it was defined with `mut`."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 4201,
       "name": "LANG_TYPE_UNKNOWN",
       "severity": "error",
@@ -1014,6 +1076,38 @@
       "spec": {
         "document": "spec/spec.md",
         "section": "The Language / File Structure / Variable Definition",
+        "requirement": "the code behaves, when executed, exactly as the code describes it. No undefined behavior, no surprising interpretation of inputs."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4204,
+      "name": "LANG_TYPE_ASSIGNMENT_MISMATCH",
+      "severity": "error",
+      "message": "assigning a value of type '{found}' to '{name}', which is of type '{expected}'",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type of the value"
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the variable"
+        },
+        {
+          "name": "expected",
+          "type": "string",
+          "description": "the variable's type"
+        }
+      ],
+      "cause": "A variable keeps the type it was defined with, and the value assigned to it must have that type; the language performs no conversion that would hide a difference between them.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Assignment",
         "requirement": "the code behaves, when executed, exactly as the code describes it. No undefined behavior, no surprising interpretation of inputs."
       },
       "since": "0.1",

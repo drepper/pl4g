@@ -122,6 +122,16 @@ class X86Selector(InstructionSelector):
         moved = self.select_move(dst, lhs, span)
         return (*moved, self._inst(mnemonic, (MCReg(dst), rhs), span))
 
+    def select_store(self, address: MCMem, value: MCOperand,
+                     span: Span) -> Sequence[MCInst]:
+        """Instructions that write *value* into the memory *address* names.
+
+        This architecture writes to a place in memory directly, and takes the
+        value as an immediate where there is one, so a store is one instruction
+        and needs no register at all.
+        """
+        return (self._inst("mov", (address, value), span),)
+
     def select_call(self, target: MCOperand, span: Span) -> Sequence[MCInst]:
         """Instructions that call *target*."""
         if not isinstance(target, MCSymRef):
@@ -142,7 +152,7 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
     The bootstrap compiler generates code for as much of the language as its own
     source needs.  A construct with no rule here is reported, not ignored.
     """
-    from ...ir.inst import LoadInst, MemStartInst, RetInst
+    from ...ir.inst import LoadInst, MemStartInst, RetInst, StoreInst
     from ...ir.mangle import symbol_name
     from ...ir.module import GlobalVar
     from ...ir.types import IntType
@@ -174,6 +184,26 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
                                 rip_relative=True, size_bits=_width_of(inst.ty),
                                 signed=_is_signed(inst.ty)),
                         inst.span)
+                case StoreInst():
+                    address = inst.operands[1]
+                    if not isinstance(address, GlobalVar):
+                        raise UnsupportedOperation(
+                            "writing through an address that is not a variable", span)
+                    written = inst.operands[2]
+                    place = asm.mem(
+                        disp_sym=SymExpr(asm.streamer.symbol(symbol_of(address))),
+                        rip_relative=True, size_bits=_width_of(written.ty),
+                        signed=_is_signed(written.ty))
+                    if isinstance(written, IntConst):
+                        asm.store(place, MCImm(
+                            written.value,
+                            _immediate_width(written.value, _is_signed(written.ty)),
+                            signed=_is_signed(written.ty)), inst.span)
+                    elif written is previous:
+                        asm.store(place, MCReg(_store_register(written.ty, cconv,
+                                                               registers)), inst.span)
+                    else:
+                        raise UnsupportedOperation("writing a computed value", span)
                 case RetInst() if not inst.operands:
                     asm.ret(inst.span)
                 case RetInst():
@@ -252,3 +282,30 @@ def _is_signed(ty: "Type") -> bool:
     from ...ir.types import IntType
 
     return isinstance(ty, IntType) and ty.signed
+
+
+def _immediate_width(value: int, signed: bool) -> int:
+    """The narrowest standard width that holds *value*.
+
+    It is the width the *encoding* uses, which is not the width of the access:
+    an eight-byte store carries a four-byte immediate that the instruction
+    widens, so what the operand has to say is how large the number is.
+    """
+    for bits in (8, 16, 32, 64):
+        if signed:
+            if -(1 << (bits - 1)) <= value < (1 << (bits - 1)):
+                return bits
+        elif 0 <= value < (1 << bits):
+            return bits
+    return 64
+
+
+def _store_register(ty: "Type", cconv: "CallConvDesc",
+                    registers: "RegisterInfo") -> "PhysReg":
+    """The register a store reads its value from.
+
+    A store names how much of memory it writes, so the register it reads has to
+    be the view of that width: a byte store reads a byte register, which is a
+    different name for part of the one the value was computed in.
+    """
+    return registers.view(_result_register(ty, cconv, registers).unit, _width_of(ty))

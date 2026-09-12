@@ -1,0 +1,10 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 3008 LANG_ASSIGN_EXPECTED_ARROW
+
+※ '=' does not assign.  It is reserved for comparison, so the habit every other
+※ language teaches is answered with the rule rather than with a parse error.
+@[startup]
+fn main() → u8:
+    let mut status := 3u8
+    status = 5u8
+    status

@@ -1,0 +1,10 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 2006 LANG_SYNTAX_INTEGER_RANGE
+
+※ The rule against narrowing a value holds for an assignment too.
+let mut counter: u8 = 1u8
+
+@[startup]
+fn main() → u8:
+    counter ← 300u8
+    counter

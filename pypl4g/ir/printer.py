@@ -10,8 +10,8 @@ from typing import Sequence
 
 from .function import BasicBlock, Function
 from .inst import (BinaryInst, BlockTarget, BrInst, CastInst, CmpInst, CondBrInst,
-                   Instruction, LoadInst, MemStartInst, RetInst, SwitchInst,
-                   Terminator, UnaryInst, UnreachableInst)
+                   Instruction, LoadInst, MemStartInst, RetInst, StoreInst,
+                   SwitchInst, Terminator, UnaryInst, UnreachableInst)
 from .module import Module
 from .types import VOID
 from .value import BoolConst, IntConst, UndefConst, Value
@@ -98,6 +98,9 @@ def _render_inst(inst: Instruction, numbers: Numbering) -> str:
             return inst.opcode
         case LoadInst():
             return "".join((inst.opcode, ".", inst.ty.render(), " ", operands))
+        case StoreInst():
+            stored = inst.operands[2].ty.render() if len(inst.operands) > 2 else "void"
+            return "".join((inst.opcode, ".", stored, " ", operands))
         case BinaryInst() | UnaryInst() | CastInst():
             return "".join((inst.opcode, ".", inst.ty.render(), " ", operands))
         case _:
@@ -155,8 +158,8 @@ def render_global(var: object, out: list[str]) -> None:
     assert isinstance(var, GlobalVar)
     initializer = var.initializer
     text = str(initializer.value) if isinstance(initializer, _IntConst) else "undef"
-    out.append("".join(("let @", var.name, ": ", var.value_type.render(), " ",
-                        var.linkage.value, " = ", text)))
+    out.append("".join(("let ", "mut " if var.mutable else "", "@", var.name, ": ",
+                        var.value_type.render(), " ", var.linkage.value, " = ", text)))
 
 
 def render_module(module: Module) -> str:

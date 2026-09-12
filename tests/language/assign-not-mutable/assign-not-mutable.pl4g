@@ -1,0 +1,10 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4004 LANG_VARDEF_NOT_MUTABLE
+※ pl4g-test: expect-diag 4005 LANG_VARDEF_DEFINED_HERE
+
+※ A variable can be changed only where its definition said so.
+@[startup]
+fn main() → u8:
+    let status: u8 = 3u8
+    status ← 5u8
+    status

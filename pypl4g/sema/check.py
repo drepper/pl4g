@@ -39,11 +39,16 @@ class _Collected:
 
 @dataclass(slots=True)
 class _Local:
-    """A name bound inside a function body, and the value it stands for."""
+    """A name bound inside a function body, and the value it stands for.
+
+    Assigning to one rebinds the name: a local is a value, so the new value
+    simply takes the old one's place and nothing is written anywhere.
+    """
 
     name: str
     value: Value
     span: Span
+    mutable: bool = False
 
 
 class Checker:
@@ -61,6 +66,8 @@ class Checker:
         #: what lets a type that does not match say which variable it is about
         #: rather than borrow the wording of a return.
         self._initializing: str | None = None
+        #: The variable being assigned to, while one is being checked.
+        self._assigning: str | None = None
 
     # -- entry point -----------------------------------------------------------
 
@@ -115,7 +122,7 @@ class Checker:
             ty = ERROR
         self._module.add_global(GlobalVar(
             name=node.name, value_type=ty, ptr_type=self._module.types.ptr_type(ty),
-            initializer=initializer, span=node.span))
+            initializer=initializer, span=node.span, mutable=node.mutable))
 
     def _variable_type(self, node: ast.VarDef) -> Type | None:
         """The type of a variable: the one declared, or the one its value has."""
@@ -199,7 +206,8 @@ class Checker:
         """Leave the innermost scope."""
         self._scopes.pop()
 
-    def _bind_local(self, name: str, value: Value, span: Span) -> None:
+    def _bind_local(self, name: str, value: Value, span: Span,
+                    mutable: bool = False) -> None:
         """Bind a name in the innermost scope, reporting one already bound there."""
         scope = self._scopes[-1]
         previous = scope.get(name)
@@ -208,14 +216,21 @@ class Checker:
                              name=name).note(
                 D.LANG_FILESTRUCT_PREVIOUS_DEFINITION, previous.span, name=name)
             return
-        scope[name] = _Local(name=name, value=value, span=span)
+        scope[name] = _Local(name=name, value=value, span=span, mutable=mutable)
+
+    def _find_local(self, name: str) -> _Local | None:
+        """The innermost binding of *name*, if there is one."""
+        for scope in reversed(self._scopes):
+            found = scope.get(name)
+            if found is not None:
+                return found
+        return None
 
     def _lookup(self, ref: ast.NameRef) -> Value | None:
         """Resolve a name: the innermost binding first, then the top level."""
-        for scope in reversed(self._scopes):
-            found = scope.get(ref.name)
-            if found is not None:
-                return found.value
+        found = self._find_local(ref.name)
+        if found is not None:
+            return found.value
         found_global = self._module.globals.get(ref.name)
         if found_global is not None:
             return found_global
@@ -490,6 +505,8 @@ class Checker:
                 self._lower_return(builder, stmt, func)
             case ast.VarDef():
                 self._lower_local(builder, stmt)
+            case ast.AssignStmt():
+                self._lower_assignment(builder, stmt)
             case ast.ExprStmt():
                 # The value of the last statement is the function's result, which
                 # is why the canonical form of the language omits the keyword.
@@ -516,14 +533,58 @@ class Checker:
         if declared is None or not self._literal_matches(node, declared):
             # The error is reported; binding the name anyway keeps every later
             # mention of it from reporting the same thing again as undefined.
-            self._bind_local(node.name, UndefConst(ERROR), node.name_span)
+            self._bind_local(node.name, UndefConst(ERROR), node.name_span, node.mutable)
             return
         self._initializing = node.name
         try:
             value = self._lower_expr(builder, node.value, declared)
         finally:
             self._initializing = None
-        self._bind_local(node.name, value, node.name_span)
+        self._bind_local(node.name, self._as_declared(value, declared), node.name_span,
+                         node.mutable)
+
+    def _lower_assignment(self, builder: IRBuilder, node: ast.AssignStmt) -> None:
+        """Lower an assignment to a variable that already exists.
+
+        A local is a value, so assigning to one rebinds the name and nothing is
+        written.  A variable at the top level is an address, so assigning to one
+        is a store, which the memory token then orders after.
+        """
+        local = self._find_local(node.name)
+        if local is not None:
+            if not self._check_mutable(node, local.mutable, local.span):
+                return
+            value = self._checked_value(builder, node, local.value.ty)
+            local.value = value
+            return
+        target = self._module.globals.get(node.name)
+        if target is None:
+            self._diags.emit(D.LANG_FILESTRUCT_UNDEFINED_NAME, node.name_span,
+                             name=node.name)
+            return
+        if not self._check_mutable(node, target.mutable, target.span):
+            return
+        value = self._checked_value(builder, node, target.value_type)
+        builder.store(target, value, node.span)
+
+    def _check_mutable(self, node: ast.AssignStmt, mutable: bool, where: Span) -> bool:
+        """Report an assignment to something whose definition did not allow it."""
+        if mutable:
+            return True
+        self._diags.emit(D.LANG_VARDEF_NOT_MUTABLE, node.name_span,
+                         name=node.name).note(
+            D.LANG_VARDEF_DEFINED_HERE, where, name=node.name)
+        return False
+
+    def _checked_value(self, builder: IRBuilder, node: ast.AssignStmt,
+                       expected: Type) -> Value:
+        """Lower the value of an assignment, checking it against the variable."""
+        self._assigning = node.name
+        try:
+            value = self._lower_expr(builder, node.value, expected)
+        finally:
+            self._assigning = None
+        return self._as_declared(value, expected)
 
     def _lower_return(self, builder: IRBuilder, stmt: ast.ReturnStmt,
                       func: Function) -> None:
@@ -609,6 +670,16 @@ class Checker:
             self._report_mismatch(ref.span, resolved.ty, expected)
         return resolved
 
+    def _as_declared(self, value: Value, expected: Type) -> Value:
+        """Keep a value whose type matches; stand in for one whose type does not.
+
+        The mismatch has been reported.  Carrying the wrong value on would make
+        every later use of the name report the same thing again.
+        """
+        if value.ty is expected or value.ty is ERROR:
+            return value
+        return UndefConst(ERROR)
+
     def _report_mismatch(self, span: Span, found: Type, expected: Type) -> None:
         """Report a type that does not match what the context requires.
 
@@ -617,6 +688,11 @@ class Checker:
         value reaches would add nothing.
         """
         if found is ERROR or expected is ERROR:
+            return
+        if self._assigning is not None:
+            self._diags.emit(D.LANG_TYPE_ASSIGNMENT_MISMATCH, span,
+                             name=self._assigning, expected=expected.render(),
+                             found=found.render())
             return
         if self._initializing is not None:
             self._diags.emit(D.LANG_TYPE_INITIALIZER_MISMATCH, span,

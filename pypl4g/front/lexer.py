@@ -12,8 +12,8 @@ from ..diag import ids as D
 from ..diag.engine import DiagEngine
 from ..source.location import Span
 from ..source.manager import SourceFile
-from .token import (ARROW_ASCII, ARROW_GLYPH, COMMENT_GLYPH, INTEGER_TYPE_NAMES,
-                    KEYWORDS, TokKind, Token)
+from .token import (ARROW_ASCII, ARROW_GLYPH, ASSIGN_GLYPH, COMMENT_GLYPH,
+                    INTEGER_TYPE_NAMES, KEYWORDS, TokKind, Token)
 
 _SIMPLE: Final[dict[str, TokKind]] = {
     "(": TokKind.LPAREN,
@@ -27,6 +27,7 @@ _SIMPLE: Final[dict[str, TokKind]] = {
     ";": TokKind.SEMICOLON,
     "=": TokKind.EQUALS,
     ARROW_GLYPH: TokKind.ARROW,
+    ASSIGN_GLYPH: TokKind.ASSIGN,
 }
 
 _OPEN: Final[frozenset[TokKind]] = frozenset(

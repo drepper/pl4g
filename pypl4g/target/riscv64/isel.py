@@ -22,6 +22,7 @@ from ...mc.operand import SymExpr
 from ...source.location import Span
 from . import ops as rvops
 from .opcodes import IMM12_MAX, IMM12_MIN, RISCV_INSTRS
+from .regs import SCRATCH, VALUE_SCRATCH
 
 if TYPE_CHECKING:
     from ...mc.reg import PhysReg
@@ -138,6 +139,41 @@ class RVSelector(InstructionSelector):
         raise UnsupportedOperation("".join((
             "no RISC-V selection rule for '", op.name, "'")), span)
 
+    #: Which store writes a value of a given width.
+    _STORES: Final[dict[int, str]] = {8: "sb", 16: "sh", 32: "sw", 64: "sd"}
+
+    def select_store(self, address: MCMem, value: MCOperand,
+                     span: Span) -> Sequence[MCInst]:
+        """Instructions that write *value* into the memory *address* names.
+
+        As on the other fixed-width architecture the address is built in a
+        register set aside for it, one the calling convention leaves to the
+        caller to preserve.
+        """
+        width = address.size_bits if address.size_bits is not None else 64
+        mnemonic = self._STORES.get(width)
+        if mnemonic is None:
+            raise UnsupportedOperation("".join((
+                "writing ", str(width), " bits to memory")), span)
+        held: Sequence[MCInst] = ()
+        if isinstance(value, MCReg):
+            source = value
+        else:
+            held = self.select_move(VALUE_SCRATCH, value, span)
+            source = MCReg(VALUE_SCRATCH)
+        if address.disp_sym is None:
+            base = address.base if address.base is not None else SCRATCH
+            return (*held, self._inst(mnemonic, (source, MCReg(base),
+                                                 MCImm(address.disp, 12)), span))
+        symbol = MCSymRef(address.disp_sym)
+        return (
+            *held,
+            self._inst("auipc.hi20", (MCReg(SCRATCH), symbol), span),
+            self._inst("addi.lo12", (MCReg(SCRATCH), MCReg(SCRATCH), symbol), span),
+            self._inst(mnemonic, (source, MCReg(SCRATCH), MCImm(address.disp, 12)),
+                       span),
+        )
+
     def select_call(self, target: MCOperand, span: Span) -> Sequence[MCInst]:
         """Instructions that call *target*."""
         if not isinstance(target, MCSymRef):
@@ -152,7 +188,7 @@ class RVSelector(InstructionSelector):
 def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
                    registers: "RegisterInfo") -> None:
     """Build the machine form of one IR function."""
-    from ...ir.inst import LoadInst, MemStartInst, RetInst
+    from ...ir.inst import LoadInst, MemStartInst, RetInst, StoreInst
     from ...ir.mangle import symbol_name
     from ...ir.module import GlobalVar
     from ...ir.types import IntType
@@ -184,6 +220,26 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
                                 rip_relative=True, size_bits=_width_of(inst.ty),
                                 signed=_is_signed(inst.ty)),
                         inst.span)
+                case StoreInst():
+                    address = inst.operands[1]
+                    if not isinstance(address, GlobalVar):
+                        raise UnsupportedOperation(
+                            "writing through an address that is not a variable", span)
+                    written = inst.operands[2]
+                    place = asm.mem(
+                        disp_sym=SymExpr(asm.streamer.symbol(symbol_of(address))),
+                        rip_relative=True, size_bits=_width_of(written.ty),
+                        signed=_is_signed(written.ty))
+                    if isinstance(written, IntConst):
+                        asm.store(place, MCImm(
+                            written.value,
+                            _immediate_width(written.value, _is_signed(written.ty)),
+                            signed=_is_signed(written.ty)), inst.span)
+                    elif written is previous:
+                        asm.store(place, MCReg(_store_register(written.ty, cconv,
+                                                               registers)), inst.span)
+                    else:
+                        raise UnsupportedOperation("writing a computed value", span)
                 case RetInst() if not inst.operands:
                     asm.ret(inst.span)
                 case RetInst():
@@ -260,3 +316,28 @@ def _is_signed(ty: "Type") -> bool:
     from ...ir.types import IntType
 
     return isinstance(ty, IntType) and ty.signed
+
+
+def _immediate_width(value: int, signed: bool) -> int:
+    """The narrowest standard width that holds *value*.
+
+    It is the width the *encoding* uses, which is not the width of the access:
+    an eight-byte store carries a four-byte immediate that the instruction
+    widens, so what the operand has to say is how large the number is.
+    """
+    for bits in (8, 16, 32, 64):
+        if signed:
+            if -(1 << (bits - 1)) <= value < (1 << (bits - 1)):
+                return bits
+        elif 0 <= value < (1 << bits):
+            return bits
+    return 64
+
+
+def _store_register(ty: "Type", cconv: "CallConvDesc",
+                    registers: "RegisterInfo") -> "PhysReg":
+    """The register a store reads its value from.
+
+    There is one register width, so it is the one the value was computed in.
+    """
+    return _result_register(ty, cconv, registers)

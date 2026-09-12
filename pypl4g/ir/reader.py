@@ -12,7 +12,7 @@ from .function import (BasicBlock, FuncAttrs, Function, InlineHint, Linkage,
                        SpecialKind)
 from .inst import (BinaryInst, BinOp, BlockTarget, BrInst, CastInst, CastKind,
                    CmpInst, CmpPred, CondBrInst, LoadInst, MemStartInst, RetInst,
-                   UnaryInst, UnOp, UnreachableInst)
+                   StoreInst, UnaryInst, UnOp, UnreachableInst)
 from .module import GlobalVar, Module
 from .printer import IR_VERSION
 from .types import BOOL, BUILTIN_TYPES, MEM, Type, TypeContext, VOID
@@ -219,6 +219,13 @@ class _FunctionReader:
             return block.append(UnreachableInst())
         if opcode == "mem.start":
             return block.append(MemStartInst())
+        if opcode.startswith("store."):
+            ty = _parse_type(opcode[len("store."):], self._module.types, number)
+            parts = _split_top(rest)
+            token = self._value(parts[0], MEM, number)
+            address = self._value(parts[1], self._module.types.ptr_type(ty), number)
+            stored = self._value(parts[2], ty, number)
+            return block.append(StoreInst(token, address, stored))
         if opcode.startswith("load."):
             ty = _parse_type(opcode[len("load."):], self._module.types, number)
             parts = _split_top(rest)
@@ -281,7 +288,7 @@ def read_module(text: str) -> Module:
             module = Module(name=name, triple=triple)
             index += 1
             continue
-        if stripped.startswith("let @"):
+        if stripped.startswith("let "):
             if module is None:
                 raise IRSyntaxError(number, "a variable before the module line")
             _read_global(module, stripped, number)
@@ -309,7 +316,9 @@ def read_module(text: str) -> Module:
 
 def _read_global(module: Module, line: str, number: int) -> None:
     """Parse one ``let @name: type linkage = value`` line."""
-    head, _, initializer = line.removeprefix("let @").partition("=")
+    body = line.removeprefix("let ")
+    mutable = body.startswith("mut ")
+    head, _, initializer = body.removeprefix("mut ").removeprefix("@").partition("=")
     name, _, rest = head.strip().partition(":")
     words = rest.split()
     ty = _parse_type(words[0], module.types, number)
@@ -319,7 +328,7 @@ def _read_global(module: Module, line: str, number: int) -> None:
     text = initializer.strip()
     value = module.int_const(ty, int(text, 0)) if isinstance(ty, IntType) else None
     module.add_global(GlobalVar(name.strip(), ty, module.types.ptr_type(ty), value,
-                                linkage))
+                                linkage, mutable=mutable))
 
 
 def _rebuild_caches(module: Module) -> None:

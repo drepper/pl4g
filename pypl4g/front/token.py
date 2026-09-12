@@ -21,6 +21,12 @@ DOC_COMMENT_GLYPH: Final[str] = COMMENT_GLYPH * 2
 #: Separates a function's parameter list from its return type.
 ARROW_GLYPH: Final[str] = "\N{RIGHTWARDS ARROW}"
 
+#: Assigns a value to a variable.  It has no ASCII substitute: the only
+#: candidate, '<-', cannot be told apart from a comparison against a negated
+#: value without depending on the spaces around it, which is a distinction this
+#: language does not make.
+ASSIGN_GLYPH: Final[str] = "\N{LEFTWARDS ARROW}"
+
 #: Accepted substitute for the arrow.  Two characters, so it claims nothing.
 ARROW_ASCII: Final[str] = "->"
 
@@ -35,6 +41,7 @@ class TokKind(StrEnum):
     KW_FN = "'fn'"
     KW_RETURN = "'return'"
     KW_LET = "'let'"
+    KW_MUT = "'mut'"
     KW_TYPE = "'type'"
     KW_TRUE = "'true'"
     KW_FALSE = "'false'"
@@ -51,6 +58,7 @@ class TokKind(StrEnum):
     SEMICOLON = "';'"
     EQUALS = "'='"
     ARROW = "'\N{RIGHTWARDS ARROW}'"
+    ASSIGN = "'\N{LEFTWARDS ARROW}'"
 
     DOC_COMMENT = "documentation comment"
     NEWLINE = "end of line"
@@ -70,6 +78,7 @@ KEYWORDS: Final[dict[str, TokKind]] = {
     "fn": TokKind.KW_FN,
     "return": TokKind.KW_RETURN,
     "let": TokKind.KW_LET,
+    "mut": TokKind.KW_MUT,
     "type": TokKind.KW_TYPE,
     "true": TokKind.KW_TRUE,
     "false": TokKind.KW_FALSE,

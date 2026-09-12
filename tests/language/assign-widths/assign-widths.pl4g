@@ -1,0 +1,22 @@
+※ pl4g-test: compile=ok opt=0,1
+※ pl4g-test: run=native,qemu exit=200
+※ pl4g-test: diag=none
+
+※ A variable of every width is written and read back, so that each store the
+※ backends know is exercised on every architecture.
+※
+※ The values stay within what one instruction can carry on every target: the
+※ tightest is the twelve-bit signed immediate of one of them, so a larger
+※ constant would need a sequence this compiler does not generate yet.
+let mut byte_value: u8 = 0u8
+let mut half_value: u16 = 0u16
+let mut word_value: u32 = 0u32
+let mut wide_value: u64 = 0u64
+
+@[startup]
+fn main() → u8:
+    byte_value ← 200u8
+    half_value ← 1000u16
+    word_value ← 2000u32
+    wide_value ← 1500u64
+    byte_value

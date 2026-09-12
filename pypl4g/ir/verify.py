@@ -12,7 +12,7 @@ from ..diag.engine import InternalError
 from .function import BasicBlock, Function, SpecialKind
 from .mangle import symbol_name
 from .inst import (BinaryInst, BlockTarget, CmpInst, Instruction, LoadInst,
-                   RetInst, Terminator, UnaryInst)
+                   RetInst, StoreInst, Terminator, UnaryInst)
 from .module import GlobalVar, Module
 from .types import IntType, MEM, PtrType, VOID
 from .value import Const, IntConst, Value
@@ -154,6 +154,24 @@ class Verifier:
             case CmpInst():
                 if inst.operands[0].ty != inst.operands[1].ty:
                     self._fail(where, "comparison of operands of different types")
+            case StoreInst():
+                if len(inst.operands) != 3:
+                    self._fail(where, "a store takes a token, an address and a value")
+                elif inst.operands[0].ty is not MEM:
+                    self._fail(where, "a store's first operand is not a memory token")
+                else:
+                    target = inst.operands[1]
+                    stored = inst.operands[2].ty
+                    if not isinstance(target.ty, PtrType):
+                        self._fail(where, "a store's address is not a pointer")
+                    elif target.ty.pointee != stored:
+                        self._fail(where, "".join((
+                            "storing ", stored.render(), " through a pointer to ",
+                            target.ty.pointee.render())))
+                    if isinstance(target, GlobalVar) and not target.mutable:
+                        self._fail(where, "".join((
+                            "storing into '", target.name,
+                            "', which is not a mutable variable")))
             case LoadInst():
                 if len(inst.operands) != 2:
                     self._fail(where, "a load takes a memory token and an address")

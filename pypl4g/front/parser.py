@@ -133,6 +133,7 @@ class Parser:
         ``:=``, but they are the same two tokens either way.
         """
         start = self._expect(TokKind.KW_LET).span
+        mutable = self._accept(TokKind.KW_MUT) is not None
         name_token = self._expect(TokKind.IDENT)
         self._expect(TokKind.COLON, D.LANG_VARDEF_EXPECTED_COLON)
         declared: ast.TypeRef | None = None
@@ -146,7 +147,7 @@ class Parser:
         value = self._parse_expression()
         return ast.VarDef(span=start.to(value.span), name=name_token.text,
                           name_span=name_token.span, type=declared, value=value,
-                          attrs=attrs, doc=doc)
+                          mutable=mutable, attrs=attrs, doc=doc)
 
     def _parse_doc_comments(self) -> str | None:
         """Collect the documentation comments preceding a definition."""
@@ -308,6 +309,9 @@ class Parser:
         """Parse one statement."""
         if self._check(TokKind.KW_LET):
             return self._parse_variable()
+        if self._check(TokKind.IDENT) and self._peek().kind in (TokKind.ASSIGN,
+                                                               TokKind.EQUALS):
+            return self._parse_assignment()
         if self._check(TokKind.KW_RETURN):
             start = self._advance().span
             if self._check(TokKind.NEWLINE) or self._check(TokKind.SEMICOLON) \
@@ -317,6 +321,22 @@ class Parser:
             return ast.ReturnStmt(span=start.to(value.span), value=value, explicit=True)
         value = self._parse_expression()
         return ast.ExprStmt(span=value.span, value=value)
+
+    def _parse_assignment(self) -> ast.Stmt:
+        """Parse ``NAME ← VALUE``.
+
+        A name followed by '=' is caught here rather than left to the expression
+        grammar, so that the habit every other language teaches is answered with
+        the rule instead of with a token nobody expected.
+        """
+        name_token = self._advance()
+        if self._check(TokKind.EQUALS):
+            self._diags.emit(D.LANG_ASSIGN_EXPECTED_ARROW, self._current.span)
+            raise _Bail()
+        self._expect(TokKind.ASSIGN)
+        value = self._parse_expression()
+        return ast.AssignStmt(span=name_token.span.to(value.span), name=name_token.text,
+                              name_span=name_token.span, value=value)
 
     def _parse_expression(self) -> ast.Expr:
         """Parse an expression.

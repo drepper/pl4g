@@ -481,6 +481,78 @@ each is now an error reporting a defect in the compiler rather than a silent wra
 least likely to be noticed if it is broken.  The displacement case had a further consequence: a branch too far to reach was
 wrapping rather than being reported, on the one architecture whose relocations had no range check.
 
+## 2026-09-13T14:00+02:00 — language
+
+**A variable can be changed only if its definition says `mut`**
+
+Decided on the user's direction, in Rust's arrangement: one keyword for a definition, with `mut` where the definition admits
+change.  Unchanging is the default.
+
+Considered: Kotlin's and Scala's two keywords, `val` and `var`, which make the two look like different constructs when they differ
+in one property; C's and Go's arrangement, where everything may change and the exception is marked; and ML's and Haskell's, where
+nothing may.
+
+The default is the one worth having by default.  A name that keeps its value can be reasoned about wherever it appears, which is
+what the specification's functional style calls for, and a name that does not is worth marking where it is introduced rather than
+where it is changed.  This also settles the question left open when `let` replaced `var`: the pair is `let` and `let mut`, not
+`let` and `var`.
+
+## 2026-09-13T14:00+02:00 — language
+
+**Assignment is written `←`; `=` is reserved for comparison**
+
+Decided on the user's direction.
+
+The arrow is the older notation: Algol, Smalltalk and APL all wrote assignment with a left-pointing arrow, and what replaced it
+with `=` in C was the ASCII character set rather than any argument about language design.  Having spent `=` on assignment, those
+languages needed something else for comparison and chose `==`, which is why `if (x = 0)` is a mistake C makes easy and why several
+later languages spend a compiler warning on it.  Pascal, Ada and Go avoid the collision by spelling assignment `:=`; this language
+avoids it by leaving `=` to mean what it means everywhere outside programming.
+
+A language written with glyphs has no reason to inherit that particular accident, and this one already has the arrow's mirror
+image in a function's return type.
+
+`←` has no ASCII substitute.  The rule adopted earlier allowed one only where it is more than one character; this
+adds the other half of it, that a substitute must not be ambiguous.  `<-` is two characters, but `x <- y` and `x < -y` would be
+told apart only by the spaces around them -- a distinction the language makes nowhere else, and one R lives with.
+
+Writing `=` where an assignment belongs is reported and names the arrow, rather than being left to become a comparison whose result
+is discarded.  That is the habit every other language teaches, and answering it with the rule costs one diagnostic.
+
+## 2026-09-13T14:00+02:00 — implementation
+
+**Assigning to a local writes nothing; assigning to a variable at the top level is a store**
+
+A local is a value, so an assignment binds the name to a new one and the function that results is the same as if the final value
+had been written in the first place.  When control flow arrives a block parameter will carry the new value across a branch, which
+is what block parameters were chosen for, so a local will not need memory even then.
+
+A variable at the top level is an address, so an assignment is a store.  It takes the memory token and produces a new one, which is
+what orders a read after it -- and what will let a read that takes the older token be shown not to depend on it.
+
+## 2026-09-13T14:00+02:00 — implementation
+
+**Each fixed-width backend sets aside two registers for a store**
+
+A store needs the address and the value at once, which the single register this compiler has is not enough for.  Two registers are
+set aside per target, chosen from those the calling convention leaves to the caller to preserve, since nothing of the compiler's
+holds a value across the few instructions a store takes.  x86-64 needs neither, writing to a place in memory directly and taking
+the value as an immediate where there is one.
+
+This is not a register allocator and does not pretend to be one.  It is enough for a store and no more, and it will be the first
+thing an allocator replaces.
+
+## 2026-09-13T14:00+02:00 — implementation
+
+**The width an immediate is encoded at is not the width of the access**
+
+An eight-byte store on x86-64 carries a four-byte immediate that the instruction widens.  An operand therefore states how large the
+*number* is, and the table row states how large a number that form can carry; the memory operand states separately how much of
+memory is written.  Conflating the two made a perfectly ordinary store of a small constant into a wide variable fail to select.
+
+A constant larger than one instruction can carry -- twelve signed bits on one architecture, sixteen on another -- is reported
+rather than assembled from a sequence, which this compiler does not generate yet.
+
 ---
 
 Open questions
@@ -501,8 +573,14 @@ These are recorded so they are not lost.  None of them blocks the current versio
   read as "there is no *need to* process definitions in order", so a forward reference at the top level is legal.  The semantic
   analysis collects every top-level definition before checking any body, which is what makes that reading true.
 
-- **Assignment.**  A variable is given a value where it is defined and cannot be assigned to afterwards.  Nothing needs it yet,
-  and it is what will first make a store necessary.
+- **Comparison.**  `=` is reserved for it and nothing implements it.
+
+- **A constant wider than one instruction.**  Materializing one needs a sequence -- two move-wide instructions on one
+  architecture, an upper-immediate load and an add on another -- and none is generated, so such a constant is reported.
+
+- **Read-only data.**  A variable that cannot be changed is still placed in writable memory.  Putting one in a section that is
+  mapped read-only would cost a third loadable segment and would turn a compiler defect into a fault rather than a silent write;
+  nothing requires it, since the language already refuses every write a program can express.
 
 - **A unary minus.**  A negative number cannot be written: `-3i8` is a negation of a literal rather than a literal, and the
   expression syntax has no unary operators.

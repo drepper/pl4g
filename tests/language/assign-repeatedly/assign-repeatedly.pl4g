@@ -1,0 +1,13 @@
+※ pl4g-test: compile=ok opt=0,1
+※ pl4g-test: run=native,qemu exit=30
+※ pl4g-test: diag=none
+
+※ Each assignment supersedes the one before it.
+let mut counter: u8 = 1u8
+
+@[startup]
+fn main() → u8:
+    counter ← 10u8
+    counter ← 20u8
+    counter ← 30u8
+    counter

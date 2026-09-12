@@ -65,6 +65,10 @@ class Field:
     #: Added to the address a relocated value is measured from.  It is what lets
     #: the second instruction of a pair measure from the first.
     base_adjust: int = 0
+    #: The width of the whole value, where this field holds only part of it.
+    #: An architecture that scatters an immediate across a word has several
+    #: fields for one value, and the range belongs to the value, not the piece.
+    value_bits: int | None = None
 
     @property
     def mask(self) -> int:
@@ -72,7 +76,21 @@ class Field:
         return (1 << self.width) - 1
 
     def fits(self, value: int) -> bool:
-        """Whether *value* can be stored in this field."""
+        """Whether *value* can be stored in this field.
+
+        The shift means two different things, and which one decides what is
+        checked.  Where the field holds a whole value the shift is a scale --
+        the encoding keeps the value divided by the size of an access, so a
+        value that is not a multiple of it has no encoding at all.  Where the
+        field holds a piece of a wider value the shift merely says which bits of
+        it this piece is, every piece agrees on the value's width, and the range
+        to check is the whole value's.
+        """
+        if self.value_bits is not None:
+            if self.signed:
+                return (-(1 << (self.value_bits - 1)) <= value
+                        < (1 << (self.value_bits - 1)))
+            return 0 <= value < (1 << self.value_bits)
         if value & ((1 << self.shift) - 1):
             return False
         scaled = value >> self.shift

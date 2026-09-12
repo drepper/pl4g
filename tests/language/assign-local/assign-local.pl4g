@@ -1,0 +1,11 @@
+※ pl4g-test: compile=ok opt=0,1
+※ pl4g-test: run=native,qemu exit=5
+※ pl4g-test: diag=none
+
+※ A local that may be changed.  Nothing is written anywhere: a local is a value,
+※ so the assignment binds the name to a new one.
+@[startup]
+fn main() → u8:
+    let mut status: u8 = 3u8
+    status ← 5u8
+    status

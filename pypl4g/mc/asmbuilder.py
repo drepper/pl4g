@@ -52,6 +52,11 @@ class InstructionSelector(Protocol):
         """Instructions that compute *op* over *sources* into *dst*."""
         ...
 
+    def select_store(self, address: MCMem, value: MCOperand,
+                     span: Span) -> Sequence[MCInst]:
+        """Instructions that write *value* into the memory *address* names."""
+        ...
+
     def select_call(self, target: MCOperand, span: Span) -> Sequence[MCInst]:
         """Instructions that call *target*."""
         ...
@@ -221,6 +226,12 @@ class Assembler:
         """Place *src* into the register *dst*."""
         operand = self.imm(src) if isinstance(src, int) else src
         self._emit(self._selector.select_move(dst, operand, span))
+
+    def store(self, address: MCMem, value: MCOperand | int,
+              span: Span = INVALID_SPAN) -> None:
+        """Write *value* into the memory *address* names."""
+        operand = self.imm(value) if isinstance(value, int) else value
+        self._emit(self._selector.select_store(address, operand, span))
 
     def op(self, op: Op, dst: Reg | None = None, *sources: MCOperand | int,
            span: Span = INVALID_SPAN) -> None:

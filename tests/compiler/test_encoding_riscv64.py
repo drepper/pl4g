@@ -70,6 +70,10 @@ SAMPLES = [
     ("lwu a0, 0(a1)", "lwu", MCReg(reg("a0")), MCReg(reg("a1")), MCImm(0, 12)),
     ("lw a0, 0(a1)", "lw", MCReg(reg("a0")), MCReg(reg("a1")), MCImm(0, 12)),
     ("ld a0, 8(a1)", "ld", MCReg(reg("a0")), MCReg(reg("a1")), MCImm(8, 12)),
+    ("sb a0, 0(a1)", "sb", MCReg(reg("a0")), MCReg(reg("a1")), MCImm(0, 12)),
+    ("sh a0, 4(a1)", "sh", MCReg(reg("a0")), MCReg(reg("a1")), MCImm(4, 12)),
+    ("sw a0, 8(a1)", "sw", MCReg(reg("a0")), MCReg(reg("a1")), MCImm(8, 12)),
+    ("sd a0, -8(a1)", "sd", MCReg(reg("a0")), MCReg(reg("a1")), MCImm(-8, 12)),
     ("jal ra, .", "jal", MCSymRef(SymExpr(MCSymbol("s")))),
     ("ret", "ret"),
     ("ecall", "ecall"),
@@ -233,6 +237,19 @@ def test_the_second_half_of_the_pair_measures_from_the_first() -> None:
                      base_adjust=-fixups.PCREL_PAIR_DISTANCE)
     alone = MCFixup(offset=0, kind=fixups.PCREL_LO12_I, target=ConstExpr(0x1000))
     assert fixup_value(paired, 0x104) == fixup_value(alone, 0x100)
+
+
+def test_a_store_offset_is_split_across_two_runs_of_bits() -> None:
+    """The architecture puts the low five bits of the offset where a destination
+    register would sit, and the rest at the top.  Both halves are one value, so
+    the range is the value's: 2047 and -2048 encode, 2048 does not."""
+    assert assemble("sb", MCReg(reg("a0")), MCReg(reg("a1")), MCImm(2047, 12))
+    assert assemble("sb", MCReg(reg("a0")), MCReg(reg("a1")), MCImm(-2048, 12))
+    with pytest.raises(SelectionError):
+        assemble("sb", MCReg(reg("a0")), MCReg(reg("a1")), MCImm(2048, 32))
+    word = word_of(assemble("sd", MCReg(reg("a0")), MCReg(reg("a1")), MCImm(-8, 12)))
+    low, high = (word >> 7) & 0x1F, (word >> 25) & 0x7F
+    assert ((high << 5) | low) - (1 << 12) == -8
 
 
 def test_branch_offset_is_reassembled_correctly() -> None:

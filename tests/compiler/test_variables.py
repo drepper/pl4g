@@ -236,3 +236,79 @@ def test_the_largest_value_of_a_type_is_accepted(compile_source, declared: str, 
         "let v: ", declared, " = ", value,
         "\n@[startup]\nfn main() \N{RIGHTWARDS ARROW} u8:\n    1u8\n")))
     assert proc.returncode == 0, describe(proc)
+
+
+# -- changing a variable -------------------------------------------------------
+
+ASSIGN = """let mut counter: u8 = 1u8
+
+@[startup]
+fn main() \N{RIGHTWARDS ARROW} u8:
+    counter \N{LEFTWARDS ARROW} 7u8
+    counter
+"""
+
+
+def test_a_local_assignment_writes_nothing(compile_source, tmp_path) -> None:  # noqa: ANN001
+    """A local is a value, so changing it binds the name to a new one.
+
+    Nothing reaches memory, and the whole function folds to its result.
+    """
+    proc, output = compile_source(
+        "@[startup]\nfn main() \N{RIGHTWARDS ARROW} u8:\n"
+        "    let mut x: u8 = 3u8\n    x \N{LEFTWARDS ARROW} 5u8\n    x\n",
+        "--emit=ir")
+    assert proc.returncode == 0, describe(proc)
+    text = output.read_text(encoding="utf-8")
+    assert "ret.u8 5" in text, text
+    assert "store" not in text and "mem.start" not in text, text
+
+
+def test_a_global_assignment_is_a_store_the_token_orders(compile_source,  # noqa: ANN001
+                                                         tmp_path) -> None:  # noqa: ANN001
+    """A variable at the top level is an address, so changing it writes memory."""
+    proc, output = compile_source(ASSIGN, "--emit=ir")
+    assert proc.returncode == 0, describe(proc)
+    text = output.read_text(encoding="utf-8")
+    assert "let mut @counter" in text, text
+    assert "%0 = mem.start" in text, text
+    assert "%1 = store.u8 %0, @counter, 7" in text, text
+    assert "%2 = load.u8 %1, @counter" in text, "the read is not ordered after the write"
+
+
+@pytest.mark.parametrize("triple", compiler_targets())
+def test_the_change_is_visible_when_it_is_read_back(triple: str, tmp_path) -> None:  # noqa: ANN001
+    """What was written is what is read, on every target."""
+    source = tmp_path / "t.pl4g"
+    source.write_text(ASSIGN, encoding="utf-8")
+    output = tmp_path / "out"
+    proc = run_compiler(["-o", str(output), "-O1", "".join(("--target=", triple)),
+                         str(source)])
+    assert proc.returncode == 0, describe(proc)
+    runner = runner_for(triple)
+    ran = subprocess.run([*runner, str(output)], capture_output=True, timeout=60)
+    assert ran.returncode == 7, describe(ran)
+
+
+def test_the_verifier_refuses_a_store_into_something_immutable() -> None:
+    """The rule holds in the representation too, not only in the source."""
+    from pypl4g.diag.engine import InternalError
+    from pypl4g.ir.function import FuncAttrs, Function, SpecialKind
+    from pypl4g.ir.inst import MemStartInst, RetInst, StoreInst
+    from pypl4g.ir.verify import verify
+
+    module = Module("t")
+    var = GlobalVar("c", U8, module.types.ptr_type(U8), module.int_const(U8, 1))
+    module.add_global(var)
+    func = Function("main", module.types.func_type((), U8),
+                    FuncAttrs(special=SpecialKind.STARTUP))
+    block = func.add_block()
+    token = block.append(MemStartInst())
+    block.append(StoreInst(token, var, module.int_const(U8, 7)))
+    block.append(RetInst(module.int_const(U8, 0)))
+    module.add_function(func)
+    module.startup = func
+    with pytest.raises(InternalError, match="not a mutable variable"):
+        verify(module)
+    var.mutable = True
+    verify(module)

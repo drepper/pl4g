@@ -124,9 +124,13 @@ non-nesting block comment silently breaks when the region it wraps already conta
 Where a construct is written with a Unicode glyph, the glyph is canonical: it is what the compiler itself emits, what the
 formatter produces, and what the documentation shows.
 
-Whether an ASCII substitute exists is decided per glyph, by one rule: **a substitute may only be a sequence of more than one
-character.**  A single ASCII character is never a substitute, because it would then be unavailable to every future feature of the
-language.  So `->` is accepted for `→`, while `#` is *not* accepted for `※` and remains free.
+Whether an ASCII substitute exists is decided per glyph, by two rules: **a substitute may only be a sequence of more than one
+character**, and **it must not be ambiguous with anything else**.  A single ASCII character is never a substitute, because it would
+then be unavailable to every future feature of the language.  So `->` is accepted for `→`, while `#` is *not*
+accepted for `※` and remains free.
+
+The second rule decides `←`, which has no substitute at all: `<-` is two characters, but `x <- y` and `x < -y`
+would be told apart only by the spaces around them, and the language makes no other distinction of that kind.
 
 Using an accepted substitute is not an error.  A warning reports it for anyone who wants their sources in canonical form; it is
 off by default, since the substitute is accepted usage and not a defect.
@@ -211,6 +215,7 @@ A variable is defined with:
 
 ```
 let NAME: TYPE = VALUE
+let mut NAME: TYPE = VALUE
 ```
 
 The colon is always written.  The type after it may be left out, in which case the variable's type is the type of its value:
@@ -221,6 +226,19 @@ let total := 42u8           ※ the type is the value's, which its suffix names
 let spaced : = 42u8         ※ the same; ':=' is two tokens, not one
 ```
 
+**A variable cannot be changed unless its definition says `mut`.**  That is the default, and it is the one worth having by
+default: a name that keeps its value can be reasoned about wherever it appears, which is what the language's functional style calls
+for, and a name that does not is worth marking where it is introduced.
+
+```
+let limit: u8 = 255u8       ※ keeps its value
+let mut count: u8 = 0u8     ※ may be changed
+```
+
+The word is Rust's, and so is the arrangement: one keyword for a definition, with `mut` where the definition admits change.
+Compare Kotlin and Scala, which use two keywords (`val` and `var`) and so make the two look like different constructs; C and Go,
+where everything may change and `const`/no marker is the exception; and ML and Haskell, where nothing may.
+
 **A variable is always given a value where it is defined.**  There is no form that leaves one uninitialized.  A variable without a
 value would have to hold something the program never named, and no rule about what that something is would make it named; C leaves
 it undefined, Go and Java fill it with zeroes, and both answers are ones a reader has to know rather than read.
@@ -228,7 +246,35 @@ it undefined, Go and Java fill it with zeroes, and both answers are ones a reade
 The same form defines a variable at the top level and inside a function.  A variable at the top level exists for as long as the
 program does and lives in the image; one inside a function exists while the function does.  Naming either yields its value.
 
-Assignment to a variable after its definition is not specified yet.
+#### Assignment
+
+A variable that was defined with `mut` is changed by an assignment:
+
+```
+NAME ← VALUE
+```
+
+```
+let mut count: u8 = 0u8
+count ← 7u8
+```
+
+The value must have the variable's type, and -- as everywhere -- must fit it: `count ← 300u8` does not compile.
+
+**Assignment is written `←`, not `=`.**  `=` is reserved for comparison, which is not specified yet.
+
+The arrow is the older notation: Algol, Smalltalk and APL all wrote assignment with a left-pointing arrow, and it was ASCII rather
+than any argument about language design that replaced it with `=` in C and everything that followed C.  Having done so, those
+languages needed something else for comparison, and chose `==` -- which is why `if (x = 0)` is a mistake C makes easy, and why
+several later languages spend a compiler warning on it.  Pascal, Ada and Go avoid the collision by spelling assignment `:=`; this
+language avoids it by leaving `=` to mean what it means everywhere outside programming.
+
+An assignment is a statement and not an expression, so it has no value and cannot appear inside one.  Writing `=` where an
+assignment belongs is reported, naming the arrow, rather than left to become a comparison whose result is discarded.
+
+`←` has **no** ASCII substitute, by the rule above.  The only candidate is `<-`, and `x <- y` cannot be told from
+`x < -y` without depending on the spaces around it -- a distinction the language does not otherwise make, and one R lives with.
+Two characters that could mean two things are not a substitute.
 
 **A value too large for the variable's type is an error, not a truncation.**  `let small: u8 = 300u8` does not compile.  The value a
 program writes is the value the variable holds, or the program does not compile; there is no width at which a number quietly
