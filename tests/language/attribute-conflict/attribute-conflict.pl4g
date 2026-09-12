@@ -1,0 +1,7 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 3205 LANG_ATTR_CONFLICT
+
+※ A function cannot be both the startup function and a destructor.
+@[startup, destructor]
+fn main() → i32:
+    0

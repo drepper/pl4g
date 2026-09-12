@@ -1,0 +1,7 @@
+; pl4g-ir 1
+module "explicit-block.pl4g" triple "x86_64-linux-none"
+
+fn @main() → i32 internal cconv(pl4g.v0) special(startup) {
+block0:
+  ret.i32 7
+}

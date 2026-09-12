@@ -1,0 +1,7 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4404 LANG_FUNCDEF_SPECIAL_BAD_SIGNATURE
+
+※ Control is transferred to the startup function without arguments.
+@[startup]
+fn main(count: i32) → i32:
+    0

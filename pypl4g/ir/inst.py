@@ -1,0 +1,374 @@
+"""IR instructions.
+
+The hierarchy describes the *shapes* an instruction can have; the individual
+operations are enumerated inside a shape.  That keeps the number of classes
+bounded as operators multiply while still letting an exhaustive match over the
+shapes be checked statically.
+"""
+
+from enum import Enum
+from typing import Sequence
+
+from ..source.location import INVALID_SPAN, Span
+from .types import Type, VOID
+from .value import Value
+
+
+class BinOp(Enum):
+    """The binary arithmetic and bitwise operations."""
+
+    ADD = "add"
+    SUB = "sub"
+    MUL = "mul"
+    SDIV = "sdiv"
+    UDIV = "udiv"
+    SREM = "srem"
+    UREM = "urem"
+    AND = "and"
+    OR = "or"
+    XOR = "xor"
+    SHL = "shl"
+    ASHR = "ashr"
+    LSHR = "lshr"
+
+
+class UnOp(Enum):
+    """The unary operations."""
+
+    NEG = "neg"
+    NOT = "not"
+
+
+class CmpPred(Enum):
+    """The comparison predicates."""
+
+    EQ = "eq"
+    NE = "ne"
+    SLT = "slt"
+    SLE = "sle"
+    SGT = "sgt"
+    SGE = "sge"
+    ULT = "ult"
+    ULE = "ule"
+    UGT = "ugt"
+    UGE = "uge"
+
+
+class CastKind(Enum):
+    """The conversions between representations."""
+
+    ZEXT = "zext"
+    SEXT = "sext"
+    TRUNC = "trunc"
+    BITCAST = "bitcast"
+
+
+class Instruction(Value):
+    """Base of every instruction."""
+
+    __slots__ = ("operands", "parent", "span")
+
+    def __init__(self, ty: Type, operands: Sequence[Value] = (),
+                 span: Span = INVALID_SPAN, name_hint: str | None = None) -> None:
+        super().__init__(ty, name_hint)
+        self.operands: list[Value] = list(operands)
+        self.parent: object | None = None
+        self.span = span
+
+    @property
+    def opcode(self) -> str:
+        """The mnemonic used in the textual form."""
+        raise NotImplementedError
+
+    @property
+    def has_result(self) -> bool:
+        """Whether this instruction defines a value that can be named."""
+        return self.ty is not VOID
+
+
+class BinaryInst(Instruction):
+    """An arithmetic or bitwise operation on two values of the same type."""
+
+    __slots__ = ("op",)
+
+    def __init__(self, op: BinOp, lhs: Value, rhs: Value, span: Span = INVALID_SPAN) -> None:
+        super().__init__(lhs.ty, (lhs, rhs), span)
+        self.op = op
+
+    @property
+    def opcode(self) -> str:
+        """The mnemonic used in the textual form."""
+        return self.op.value
+
+
+class UnaryInst(Instruction):
+    """A unary operation."""
+
+    __slots__ = ("op",)
+
+    def __init__(self, op: UnOp, value: Value, span: Span = INVALID_SPAN) -> None:
+        super().__init__(value.ty, (value,), span)
+        self.op = op
+
+    @property
+    def opcode(self) -> str:
+        """The mnemonic used in the textual form."""
+        return self.op.value
+
+
+class CmpInst(Instruction):
+    """A comparison, whose result is a boolean."""
+
+    __slots__ = ("pred",)
+
+    def __init__(self, pred: CmpPred, lhs: Value, rhs: Value, result_ty: Type,
+                 span: Span = INVALID_SPAN) -> None:
+        super().__init__(result_ty, (lhs, rhs), span)
+        self.pred = pred
+
+    @property
+    def opcode(self) -> str:
+        """The mnemonic used in the textual form."""
+        return "".join(("icmp.", self.pred.value))
+
+
+class CastInst(Instruction):
+    """A conversion between representations."""
+
+    __slots__ = ("kind",)
+
+    def __init__(self, kind: CastKind, value: Value, target: Type,
+                 span: Span = INVALID_SPAN) -> None:
+        super().__init__(target, (value,), span)
+        self.kind = kind
+
+    @property
+    def opcode(self) -> str:
+        """The mnemonic used in the textual form."""
+        return self.kind.value
+
+
+class CallInst(Instruction):
+    """A call, direct or indirect.
+
+    The calling convention travels with the callee rather than with the target,
+    because the specification allows conventions to differ between functions of a
+    single compilation.
+    """
+
+    __slots__ = ("callee",)
+
+    def __init__(self, callee: object, args: Sequence[Value], result_ty: Type,
+                 span: Span = INVALID_SPAN) -> None:
+        super().__init__(result_ty, args, span)
+        self.callee = callee
+
+    @property
+    def opcode(self) -> str:
+        """The mnemonic used in the textual form."""
+        return "call"
+
+
+class AllocaInst(Instruction):
+    """Reserves storage whose address is taken."""
+
+    __slots__ = ("allocated",)
+
+    def __init__(self, allocated: Type, result_ty: Type, span: Span = INVALID_SPAN) -> None:
+        super().__init__(result_ty, (), span)
+        self.allocated = allocated
+
+    @property
+    def opcode(self) -> str:
+        """The mnemonic used in the textual form."""
+        return "alloca"
+
+
+class LoadInst(Instruction):
+    """Reads memory.  Operands are the memory token and the address."""
+
+    __slots__ = ()
+
+    @property
+    def opcode(self) -> str:
+        """The mnemonic used in the textual form."""
+        return "load"
+
+
+class StoreInst(Instruction):
+    """Writes memory and produces a new memory token."""
+
+    __slots__ = ()
+
+    @property
+    def opcode(self) -> str:
+        """The mnemonic used in the textual form."""
+        return "store"
+
+
+class FieldInst(Instruction):
+    """Selects a field of a product value by *index*, never by byte offset."""
+
+    __slots__ = ("field",)
+
+    def __init__(self, value: Value, field: int, result_ty: Type,
+                 span: Span = INVALID_SPAN) -> None:
+        super().__init__(result_ty, (value,), span)
+        self.field = field
+
+    @property
+    def opcode(self) -> str:
+        """The mnemonic used in the textual form."""
+        return "field"
+
+
+class SumMakeInst(Instruction):
+    """Builds a value of a sum type from a variant index and a payload."""
+
+    __slots__ = ("variant",)
+
+    def __init__(self, variant: int, payload: Value, result_ty: Type,
+                 span: Span = INVALID_SPAN) -> None:
+        super().__init__(result_ty, (payload,), span)
+        self.variant = variant
+
+    @property
+    def opcode(self) -> str:
+        """The mnemonic used in the textual form."""
+        return "sum.make"
+
+
+class SumTagInst(Instruction):
+    """Reads the variant index of a sum value."""
+
+    __slots__ = ()
+
+    @property
+    def opcode(self) -> str:
+        """The mnemonic used in the textual form."""
+        return "sum.tag"
+
+
+class SumGetInst(Instruction):
+    """Reads the payload of a known variant of a sum value."""
+
+    __slots__ = ("variant",)
+
+    def __init__(self, value: Value, variant: int, result_ty: Type,
+                 span: Span = INVALID_SPAN) -> None:
+        super().__init__(result_ty, (value,), span)
+        self.variant = variant
+
+    @property
+    def opcode(self) -> str:
+        """The mnemonic used in the textual form."""
+        return "sum.get"
+
+
+class BlockTarget:
+    """A branch destination together with the arguments it supplies."""
+
+    __slots__ = ("block", "args")
+
+    def __init__(self, block: object, args: Sequence[Value] = ()) -> None:
+        self.block = block
+        self.args: list[Value] = list(args)
+
+
+class Terminator(Instruction):
+    """The last instruction of a block, and the only one that may transfer control."""
+
+    __slots__ = ()
+
+    def successors(self) -> Sequence[BlockTarget]:
+        """The destinations control may reach from here."""
+        return ()
+
+
+class RetInst(Terminator):
+    """Returns from the function, with a value unless the return type is void."""
+
+    __slots__ = ()
+
+    def __init__(self, value: Value | None = None, span: Span = INVALID_SPAN) -> None:
+        super().__init__(VOID, () if value is None else (value,), span)
+
+    @property
+    def opcode(self) -> str:
+        """The mnemonic used in the textual form."""
+        return "ret"
+
+
+class BrInst(Terminator):
+    """An unconditional branch."""
+
+    __slots__ = ("target",)
+
+    def __init__(self, target: BlockTarget, span: Span = INVALID_SPAN) -> None:
+        super().__init__(VOID, (), span)
+        self.target = target
+
+    @property
+    def opcode(self) -> str:
+        """The mnemonic used in the textual form."""
+        return "br"
+
+    def successors(self) -> Sequence[BlockTarget]:
+        """The destinations control may reach from here."""
+        return (self.target,)
+
+
+class CondBrInst(Terminator):
+    """A branch on a boolean condition."""
+
+    __slots__ = ("true_target", "false_target")
+
+    def __init__(self, cond: Value, true_target: BlockTarget, false_target: BlockTarget,
+                 span: Span = INVALID_SPAN) -> None:
+        super().__init__(VOID, (cond,), span)
+        self.true_target = true_target
+        self.false_target = false_target
+
+    @property
+    def opcode(self) -> str:
+        """The mnemonic used in the textual form."""
+        return "condbr"
+
+    def successors(self) -> Sequence[BlockTarget]:
+        """The destinations control may reach from here."""
+        return (self.true_target, self.false_target)
+
+
+class SwitchInst(Terminator):
+    """A multi-way branch on an integer value."""
+
+    __slots__ = ("cases", "default")
+
+    def __init__(self, value: Value, cases: Sequence[tuple[int, BlockTarget]],
+                 default: BlockTarget, span: Span = INVALID_SPAN) -> None:
+        super().__init__(VOID, (value,), span)
+        self.cases = list(cases)
+        self.default = default
+
+    @property
+    def opcode(self) -> str:
+        """The mnemonic used in the textual form."""
+        return "switch"
+
+    def successors(self) -> Sequence[BlockTarget]:
+        """The destinations control may reach from here."""
+        return [t for _, t in self.cases] + [self.default]
+
+
+class UnreachableInst(Terminator):
+    """Marks a point control has been proved never to reach."""
+
+    __slots__ = ()
+
+    def __init__(self, span: Span = INVALID_SPAN) -> None:
+        super().__init__(VOID, (), span)
+
+    @property
+    def opcode(self) -> str:
+        """The mnemonic used in the textual form."""
+        return "unreachable"

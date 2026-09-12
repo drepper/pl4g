@@ -1,0 +1,9 @@
+※ pl4g-test: compile=ok
+※ pl4g-test: run=native exit=3
+※ pl4g-test: expect-diag 5001 LANG_FUNCDEF_RETURN_UNREACHABLE
+
+※ Statements after a return can never run.
+@[startup]
+fn main() → i32:
+    return 3
+    4

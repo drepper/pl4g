@@ -1,0 +1,9 @@
+※ pl4g-test: compile=ok
+※ pl4g-test: run=native exit=0
+※ pl4g-test: expect-diag 5002 LANG_FUNCDEF_RETURN_REDUNDANT
+
+※ Writing 'return' on the last statement is accepted but warned about: the
+※ canonical form of the language omits it.
+@[startup]
+fn main() → i32:
+    return 0

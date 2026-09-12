@@ -1,0 +1,1214 @@
+{
+  "$schema": "./diagnostics.schema.json",
+  "format_version": 1,
+  "blocks": [
+    {
+      "first": 1000,
+      "last": 1099,
+      "topic": "driver and command line",
+      "spec": {
+        "document": "spec/details.md",
+        "section": "Implementation"
+      }
+    },
+    {
+      "first": 1100,
+      "last": 1199,
+      "topic": "input and output files",
+      "spec": {
+        "document": "spec/details.md",
+        "section": "Implementation"
+      }
+    },
+    {
+      "first": 2000,
+      "last": 2099,
+      "topic": "lexical structure",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Syntax"
+      }
+    },
+    {
+      "first": 2100,
+      "last": 2199,
+      "topic": "layout and block style",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Syntax"
+      }
+    },
+    {
+      "first": 3000,
+      "last": 3199,
+      "topic": "syntax",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure"
+      }
+    },
+    {
+      "first": 3200,
+      "last": 3299,
+      "topic": "attributes",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition / Special Functions"
+      }
+    },
+    {
+      "first": 4000,
+      "last": 4199,
+      "topic": "names and modules",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure"
+      }
+    },
+    {
+      "first": 4200,
+      "last": 4399,
+      "topic": "types",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure"
+      }
+    },
+    {
+      "first": 4400,
+      "last": 4599,
+      "topic": "special functions",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition / Special Functions"
+      }
+    },
+    {
+      "first": 5000,
+      "last": 5299,
+      "topic": "control flow and returns",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition"
+      }
+    },
+    {
+      "first": 6000,
+      "last": 6999,
+      "topic": "purity, effects, aliasing and parallelization"
+    },
+    {
+      "first": 7000,
+      "last": 7499,
+      "topic": "compile-time evaluation and reflection"
+    },
+    {
+      "first": 7500,
+      "last": 7999,
+      "topic": "testing"
+    },
+    {
+      "first": 8000,
+      "last": 8499,
+      "topic": "intermediate representation and optimization",
+      "spec": {
+        "document": "spec/details.md",
+        "section": "Implementation"
+      }
+    },
+    {
+      "first": 8500,
+      "last": 8999,
+      "topic": "code generation and inline assembly"
+    },
+    {
+      "first": 9000,
+      "last": 9499,
+      "topic": "image generation and incremental compilation"
+    },
+    {
+      "first": 9900,
+      "last": 9999,
+      "topic": "internal compiler errors",
+      "spec": {
+        "document": "spec/details.md",
+        "section": "Implementation"
+      }
+    }
+  ],
+  "diagnostics": [
+    {
+      "number": 1001,
+      "name": "IMPL_CLI_MISSING_OUTPUT",
+      "severity": "error",
+      "message": "no output file given; use -o FILE or --output FILE",
+      "cause": "The output file name is a mandatory parameter, so that the compiler never guesses where to put the generated binary and never overwrites a file the caller did not name.  Add -o followed by the path of the executable to create.",
+      "spec": {
+        "document": "spec/details.md",
+        "section": "Implementation",
+        "requirement": "Initially, the compiler will require a parameter `-o` or `--output` with a mandatory argument to specify the output file name (just like existing compilers like gcc).  Additional parameters are the names of the source files, ending with the extension `.pl4g`."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 1002,
+      "name": "IMPL_CLI_NO_INPUT",
+      "severity": "error",
+      "message": "no input files given",
+      "cause": "At least one source file must be named on the command line.  This usually means the file list was produced by a shell glob that matched nothing, or that every argument was consumed as the value of an option.",
+      "spec": {
+        "document": "spec/details.md",
+        "section": "Implementation",
+        "requirement": "Initially, the compiler will require a parameter `-o` or `--output` with a mandatory argument to specify the output file name (just like existing compilers like gcc).  Additional parameters are the names of the source files, ending with the extension `.pl4g`."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 1003,
+      "name": "IMPL_CLI_BAD_SUFFIX",
+      "severity": "error",
+      "message": "input file '{path}' does not have the '.pl4g' suffix",
+      "args": [
+        {
+          "name": "path",
+          "type": "string",
+          "description": "the rejected file name"
+        }
+      ],
+      "cause": "Source files are recognized by their '.pl4g' suffix.  A file with any other suffix is rejected rather than guessed at, because silently treating an unrelated file as source would produce a cascade of confusing syntax errors.  Rename the file, or check whether an option value was mistaken for a positional argument.",
+      "spec": {
+        "document": "spec/details.md",
+        "section": "Implementation",
+        "requirement": "Initially, the compiler will require a parameter `-o` or `--output` with a mandatory argument to specify the output file name (just like existing compilers like gcc).  Additional parameters are the names of the source files, ending with the extension `.pl4g`."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 1004,
+      "name": "IMPL_CLI_UNKNOWN_OPTION",
+      "severity": "error",
+      "message": "unrecognized command line option '{option}'",
+      "args": [
+        {
+          "name": "option",
+          "type": "string",
+          "description": "the option as written"
+        }
+      ],
+      "cause": "The option is not known to this compiler.  Both compiler implementations accept the same options, so an option that works with one and not the other is a defect worth reporting.  Use --help to list the accepted options.",
+      "spec": {
+        "document": "spec/details.md",
+        "section": "Implementation",
+        "requirement": "Initially, the compiler will require a parameter `-o` or `--output` with a mandatory argument to specify the output file name (just like existing compilers like gcc).  Additional parameters are the names of the source files, ending with the extension `.pl4g`."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 1005,
+      "name": "IMPL_CLI_DUPLICATE_OUTPUT",
+      "severity": "error",
+      "message": "output file specified more than once; previously '{previous}'",
+      "args": [
+        {
+          "name": "previous",
+          "type": "string",
+          "description": "the output file named first"
+        }
+      ],
+      "cause": "Exactly one output file may be named.  Repeating -o is rejected rather than resolved by taking the last one, because a generated command line that accumulates an extra -o is far more likely to be a defect in the generator than a deliberate override.",
+      "spec": {
+        "document": "spec/details.md",
+        "section": "Implementation",
+        "requirement": "Initially, the compiler will require a parameter `-o` or `--output` with a mandatory argument to specify the output file name (just like existing compilers like gcc).  Additional parameters are the names of the source files, ending with the extension `.pl4g`."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 1006,
+      "name": "IMPL_CLI_NOT_IMPLEMENTED",
+      "severity": "error",
+      "message": "option '{option}' is accepted by this compiler but not yet implemented",
+      "args": [
+        {
+          "name": "option",
+          "type": "string",
+          "description": "the unimplemented option"
+        }
+      ],
+      "cause": "The bootstrap compiler accepts the full option set of the final compiler so that build systems need not distinguish between them, but it does not implement every option yet.  This is a limitation of the bootstrap compiler, not an error in the command line.",
+      "spec": {
+        "document": "spec/details.md",
+        "section": "Implementation",
+        "requirement": "The Python implementation will accept the same parameters as the actual, full compiler."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 1007,
+      "name": "IMPL_CLI_MISSING_ARGUMENT",
+      "severity": "error",
+      "message": "option '{option}' requires an argument",
+      "args": [
+        {
+          "name": "option",
+          "type": "string",
+          "description": "the option as written"
+        }
+      ],
+      "cause": "The option takes a value which was not supplied, usually because it was the last word of the command line or because the following word began with a dash and was taken as a separate option.",
+      "spec": {
+        "document": "spec/details.md",
+        "section": "Implementation",
+        "requirement": "Initially, the compiler will require a parameter `-o` or `--output` with a mandatory argument to specify the output file name (just like existing compilers like gcc).  Additional parameters are the names of the source files, ending with the extension `.pl4g`."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 1008,
+      "name": "IMPL_CLI_BAD_ARGUMENT",
+      "severity": "error",
+      "message": "invalid argument '{value}' for option '{option}'; expected one of {expected}",
+      "args": [
+        {
+          "name": "value",
+          "type": "string",
+          "description": "the rejected value"
+        },
+        {
+          "name": "option",
+          "type": "string",
+          "description": "the option as written"
+        },
+        {
+          "name": "expected",
+          "type": "string",
+          "description": "the accepted values"
+        }
+      ],
+      "cause": "The option accepts only a fixed set of values.  Check the spelling of the value against the list in the message or in --help.",
+      "spec": {
+        "document": "spec/details.md",
+        "section": "Implementation",
+        "requirement": "Initially, the compiler will require a parameter `-o` or `--output` with a mandatory argument to specify the output file name (just like existing compilers like gcc).  Additional parameters are the names of the source files, ending with the extension `.pl4g`."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 1009,
+      "name": "IMPL_CLI_UNKNOWN_TARGET",
+      "severity": "error",
+      "message": "unknown target '{triple}'",
+      "args": [
+        {
+          "name": "triple",
+          "type": "string",
+          "description": "the requested target triple"
+        }
+      ],
+      "cause": "No backend is registered for this target triple.  The bootstrap compiler supports a subset of the targets the final compiler will support; the supported ones are listed by --help.",
+      "spec": {
+        "document": "spec/details.md",
+        "section": "Implementation"
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 1010,
+      "name": "IMPL_CLI_UNKNOWN_WARNING",
+      "severity": "error",
+      "message": "unknown warning name '{name}' in '{option}'",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the warning name"
+        },
+        {
+          "name": "option",
+          "type": "string",
+          "description": "the option as written"
+        }
+      ],
+      "cause": "The name given to -W or -Wno- does not match any controllable diagnostic.  The controllable names are the 'option' fields of the shared diagnostic catalog; note that errors cannot be disabled.",
+      "spec": {
+        "document": "spec/details.md",
+        "section": "Implementation",
+        "requirement": "Errors and warnings the compiler emits can be handled in the code.  To enable this, errors and warnings must be unique, constant, and consistent numbers."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 1101,
+      "name": "IMPL_INPUT_UNREADABLE",
+      "severity": "fatal",
+      "message": "cannot read '{path}': {reason}",
+      "args": [
+        {
+          "name": "path",
+          "type": "string",
+          "description": "the file name"
+        },
+        {
+          "name": "reason",
+          "type": "string",
+          "description": "the operating system's explanation"
+        }
+      ],
+      "cause": "The source file could not be opened or read.  Common causes are a mistyped path, a file that was removed between the glob and the compilation, or insufficient permissions.",
+      "spec": {
+        "document": "spec/details.md",
+        "section": "Implementation"
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 1102,
+      "name": "IMPL_OUTPUT_UNWRITABLE",
+      "severity": "fatal",
+      "message": "cannot write '{path}': {reason}",
+      "args": [
+        {
+          "name": "path",
+          "type": "string",
+          "description": "the file name"
+        },
+        {
+          "name": "reason",
+          "type": "string",
+          "description": "the operating system's explanation"
+        }
+      ],
+      "cause": "The output file could not be created or written.  Common causes are a non-existent directory, insufficient permissions, or a full file system.  The compiler writes the output only after code generation has succeeded, so a failure here leaves any previous output untouched.",
+      "spec": {
+        "document": "spec/details.md",
+        "section": "Implementation"
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 2001,
+      "name": "LANG_SYNTAX_INVALID_UTF8",
+      "severity": "error",
+      "message": "source file is not valid UTF-8 (at byte offset {offset})",
+      "args": [
+        {
+          "name": "offset",
+          "type": "integer",
+          "description": "byte offset of the first invalid sequence"
+        }
+      ],
+      "cause": "Source text must be encoded in UTF-8.  A file saved in a single-byte encoding such as ISO-8859-1 will fail here as soon as it contains a non-ASCII character.  Re-encode the file as UTF-8.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Syntax",
+        "requirement": "The compiler and well as any generated program requires that the encoding of text uses UTF-8 encoding."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 2002,
+      "name": "LANG_SYNTAX_UNEXPECTED_CHAR",
+      "severity": "error",
+      "message": "unexpected character {char} in source",
+      "args": [
+        {
+          "name": "char",
+          "type": "string",
+          "description": "the character and its code point"
+        }
+      ],
+      "cause": "The character cannot begin any token.  Since the language uses Unicode glyphs for several operators, this is often a glyph that resembles the intended one without being it, such as a hyphen-minus where a dash was meant, or a full-width character pasted from another document.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Syntax"
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 2003,
+      "name": "LANG_SYNTAX_UNTERMINATED_STRING",
+      "severity": "error",
+      "message": "unterminated string literal",
+      "cause": "A string literal was not closed before the end of the line.  String literals do not span lines; a closing quotation mark may be missing, or a backslash immediately before it may have escaped it unintentionally.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Syntax",
+        "requirement": "Strings are written as in C/C++ and many other languages enclosed in `\"` and supporting an escape notation like modern C and C++ for special characters as well as the Unicode notation."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 2004,
+      "name": "LANG_SYNTAX_BAD_ESCAPE",
+      "severity": "error",
+      "message": "unknown escape sequence '\\\\{char}' in string literal",
+      "args": [
+        {
+          "name": "char",
+          "type": "string",
+          "description": "the character after the backslash"
+        }
+      ],
+      "cause": "The character following the backslash does not form a recognized escape sequence.  The recognized escapes follow modern C and C++, including the \\\\u and \\\\U Unicode notations.  A literal backslash must be written as two backslashes.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Syntax"
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 2005,
+      "name": "LANG_SYNTAX_ASCII_SUBSTITUTE",
+      "severity": "warning",
+      "message": "'{ascii}' is accepted as a substitute for '{glyph}'",
+      "args": [
+        {
+          "name": "ascii",
+          "type": "string",
+          "description": "the substitute as written"
+        },
+        {
+          "name": "glyph",
+          "type": "string",
+          "description": "the canonical glyph"
+        }
+      ],
+      "cause": "The language is meant to be generated rather than typed, so the Unicode glyph is the canonical spelling and is what the compiler itself emits.  Multi-character ASCII substitutes are accepted for convenience while editing by hand; single characters are never substitutes, so that they remain available for future language features.  The substitution is reported only when this warning is asked for, since it is accepted usage rather than a defect.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Syntax",
+        "requirement": "It is not important that keyboard support for entering the language exists which opens the door to using Unicode glyphs for operators and functions."
+      },
+      "since": "0.1",
+      "default_enabled": false,
+      "option": "ascii-substitute"
+    },
+    {
+      "number": 2006,
+      "name": "LANG_SYNTAX_INTEGER_RANGE",
+      "severity": "error",
+      "message": "integer literal {literal} does not fit in type '{type}'",
+      "args": [
+        {
+          "name": "literal",
+          "type": "string",
+          "description": "the literal as written"
+        },
+        {
+          "name": "type",
+          "type": "string",
+          "description": "the expected type"
+        }
+      ],
+      "cause": "The value of the literal lies outside the range the type can represent.  Because the language admits no undefined behaviour and no surprising interpretation of inputs, an out-of-range literal is an error rather than a silent truncation or wrap-around.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Syntax",
+        "requirement": "the code behaves, when executed, exactly as the code describes it. No undefined behavior, no surprising interpretation of inputs."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 2101,
+      "name": "LANG_SYNTAX_INCONSISTENT_INDENT",
+      "severity": "error",
+      "message": "indentation does not match any enclosing block",
+      "cause": "A line is indented less than the current block but more than the block that encloses it, so it belongs to neither.  This usually results from mixing tab and space indentation, or from a generator that computed an indentation width inconsistently.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Syntax",
+        "requirement": "Layout-based syntax uses rules and syntax similar to Python."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 2102,
+      "name": "LANG_SYNTAX_MIXED_BLOCK_STYLE",
+      "severity": "error",
+      "message": "layout and explicit '{{' '}}' block syntax cannot be mixed within one block",
+      "cause": "A single block uses one notation throughout: either indentation, or braces with semicolon-separated statements.  Nested blocks may each choose their own notation, but a block may not change notation part way through.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Syntax",
+        "requirement": "Indentation and explicit syntax cannot be mixed for individual blocks but properly nested blocks can have different syntaxes."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 2103,
+      "name": "LANG_SYNTAX_TAB_INDENT",
+      "severity": "error",
+      "message": "tab character used for indentation",
+      "cause": "Indentation is measured in characters, so a tab would make the layout depend on a tab width that is not part of the language.  Because the language admits no surprising interpretation of inputs, tabs are rejected in indentation rather than assigned an arbitrary width.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Syntax",
+        "requirement": "the code behaves, when executed, exactly as the code describes it. No undefined behavior, no surprising interpretation of inputs."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 3001,
+      "name": "LANG_SYNTAX_UNEXPECTED_TOKEN",
+      "severity": "error",
+      "message": "expected {expected}, found {found}",
+      "args": [
+        {
+          "name": "expected",
+          "type": "string",
+          "description": "what would have been accepted"
+        },
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the token actually found"
+        }
+      ],
+      "cause": "The parser reached a token that cannot continue the construct being parsed.  The message names what would have been accepted at that point.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure"
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 3002,
+      "name": "LANG_FUNCDEF_EXPECTED_ARROW",
+      "severity": "error",
+      "message": "expected '→' before the return type",
+      "cause": "A function header names its return type after a rightwards arrow.  The arrow may also be written as the two-character sequence '->'; a single character is never a substitute for a glyph.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition",
+        "requirement": "fn NAME(ARG1: TYPE1, [ARGN: TYPEN]) → RETVALTYPE BLOCK"
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 3003,
+      "name": "LANG_FUNCDEF_EXPECTED_BLOCK",
+      "severity": "error",
+      "message": "expected ':' or '{{' to begin the function body",
+      "cause": "A function header is followed either by a colon and an indented block, or by a brace-enclosed block of semicolon-separated statements.  A header with neither has no body.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition",
+        "requirement": "In layout format, the function header is followed by a colon, a newline, and then the properly indented code.  When the function header is followed by a `{` it uses the explicit syntax and continues until the respective closing `}`."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 3004,
+      "name": "LANG_FILESTRUCT_UNEXPECTED_TOPLEVEL",
+      "severity": "error",
+      "message": "{construct} is not allowed at the top level of a file",
+      "args": [
+        {
+          "name": "construct",
+          "type": "string",
+          "description": "what was found"
+        }
+      ],
+      "cause": "Only module handling, compile-time assertions and contracts, type definitions, variable definitions and function definitions may appear at the top level.  Statements that execute at run time belong inside a function; use a constructor function if the intent was to run code before the startup function.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure",
+        "requirement": "At the top level of a file one can find: module handling, compile-time expressions as assertions and contracts, type definitions, variable definitions, function definitions"
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 3005,
+      "name": "LANG_FUNCDEF_DUPLICATE_PARAMETER",
+      "severity": "error",
+      "message": "parameter '{name}' is declared more than once",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the repeated parameter name"
+        }
+      ],
+      "cause": "Each parameter of a function must have a distinct name, since otherwise a reference to that name in the body would be ambiguous.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition",
+        "requirement": "fn NAME(ARG1: TYPE1, [ARGN: TYPEN]) → RETVALTYPE BLOCK"
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 3201,
+      "name": "LANG_ATTR_UNKNOWN",
+      "severity": "error",
+      "message": "unknown attribute '{name}'",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the attribute as written"
+        }
+      ],
+      "cause": "The attribute name is not one the compiler knows.  Attribute names are not an open namespace: an unrecognized name is an error rather than an ignored annotation, so that a misspelling can never silently drop a property the code depends on.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition / Special Functions",
+        "requirement": "Some functions have to be treated special.  The attribute syntax denotes this status of the function alongside the function definition."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 3202,
+      "name": "LANG_ATTR_DUPLICATE",
+      "severity": "error",
+      "message": "attribute '{name}' is applied more than once to the same object",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the repeated attribute"
+        }
+      ],
+      "cause": "An attribute may appear only once per object.  Where an attribute admits several variants, the variant is selected by a parameter rather than by repeating the attribute.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition / Special Functions",
+        "requirement": "Some functions have to be treated special.  The attribute syntax denotes this status of the function alongside the function definition."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 3203,
+      "name": "LANG_ATTR_BAD_ARGUMENTS",
+      "severity": "error",
+      "message": "attribute '{name}' {problem}",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the attribute"
+        },
+        {
+          "name": "problem",
+          "type": "string",
+          "description": "the mismatch"
+        }
+      ],
+      "cause": "The arguments do not match the attribute's declared signature.  Attributes take positional arguments first and named arguments after, in the manner of a function call.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition / Special Functions",
+        "requirement": "Some functions have to be treated special.  The attribute syntax denotes this status of the function alongside the function definition."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 3204,
+      "name": "LANG_ATTR_NOT_APPLICABLE",
+      "severity": "error",
+      "message": "attribute '{name}' cannot be applied to {target}",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the attribute"
+        },
+        {
+          "name": "target",
+          "type": "string",
+          "description": "the kind of object it was applied to"
+        }
+      ],
+      "cause": "Each attribute declares the kinds of object it may annotate.  The startup, constructor, destructor and test attributes, for instance, describe how a function participates in program execution and are meaningless on a type or a variable.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition / Special Functions",
+        "requirement": "Some functions have to be treated special.  The attribute syntax denotes this status of the function alongside the function definition."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 3205,
+      "name": "LANG_ATTR_CONFLICT",
+      "severity": "error",
+      "message": "attribute '{name}' conflicts with '{other}' on the same object",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the attribute"
+        },
+        {
+          "name": "other",
+          "type": "string",
+          "description": "the attribute it conflicts with"
+        }
+      ],
+      "cause": "The two attributes request incompatible treatment.  A function cannot, for example, be both the startup function and a destructor, since the two describe different points in the program's life.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition / Special Functions",
+        "requirement": "Some functions have to be treated special.  The attribute syntax denotes this status of the function alongside the function definition."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4001,
+      "name": "LANG_FILESTRUCT_DUPLICATE_DEFINITION",
+      "severity": "error",
+      "message": "'{name}' is defined more than once",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the repeated name"
+        }
+      ],
+      "cause": "Two definitions at the top level share a name.  Since compilation covers the whole program at once, this also catches a name defined in two different source files.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure",
+        "requirement": "At the top level of a file one can find: module handling, compile-time expressions as assertions and contracts, type definitions, variable definitions, function definitions"
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null,
+      "notes": [
+        "LANG_FILESTRUCT_PREVIOUS_DEFINITION"
+      ]
+    },
+    {
+      "number": 4002,
+      "name": "LANG_FILESTRUCT_PREVIOUS_DEFINITION",
+      "severity": "note",
+      "message": "'{name}' was previously defined here",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the repeated name"
+        }
+      ],
+      "cause": "Attached to the report of a duplicate definition, to point at the one that was seen first.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure",
+        "requirement": "At the top level of a file one can find: module handling, compile-time expressions as assertions and contracts, type definitions, variable definitions, function definitions"
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4003,
+      "name": "LANG_FILESTRUCT_UNDEFINED_NAME",
+      "severity": "error",
+      "message": "'{name}' is not defined",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the undefined name"
+        }
+      ],
+      "cause": "No definition of this name is visible.  Definitions need not appear before their use, because the grammar is context-free and the compiler collects every top-level definition before checking any function body; so this really means no definition exists anywhere in the program.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure",
+        "requirement": "Operations of the compiler must be parallelizable and to ensure this the grammar has to be context-free"
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4201,
+      "name": "LANG_TYPE_UNKNOWN",
+      "severity": "error",
+      "message": "unknown type '{name}'",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the type name as written"
+        }
+      ],
+      "cause": "No type of this name is in scope.  The built-in types are i8, i16, i32, i64, u8, u16, u32, u64, f32, f64, bool and void.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure"
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4202,
+      "name": "LANG_TYPE_RETURN_MISMATCH",
+      "severity": "error",
+      "message": "returning '{found}' from a function declared to return '{expected}'",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type of the returned expression"
+        },
+        {
+          "name": "expected",
+          "type": "string",
+          "description": "the declared return type"
+        }
+      ],
+      "cause": "The type of the returned expression differs from the function's declared return type, and the language performs no implicit conversion that would hide the difference.  Either change the declared return type or convert the value explicitly.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition",
+        "requirement": "the code behaves, when executed, exactly as the code describes it. No undefined behavior, no surprising interpretation of inputs."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4401,
+      "name": "LANG_FUNCDEF_SPECIAL_NO_STARTUP",
+      "severity": "error",
+      "message": "no function is marked as the startup function",
+      "cause": "Every program needs the one function control is transferred to once the startup phase completes, and the specification states that compilation fails when none is marked.  Apply the startup attribute to the entry point.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition / Special Functions",
+        "requirement": "Exactly one function can be marked this way.  If no function is marked as such compilation fails."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4402,
+      "name": "LANG_FUNCDEF_SPECIAL_MULTIPLE_STARTUP",
+      "severity": "error",
+      "message": "more than one function is marked as the startup function",
+      "cause": "Exactly one function may carry the startup attribute, because control is transferred to a single entry point.  This commonly happens when two source files each define a startup function, or when a generator emitted the attribute on more than one candidate.  If both entry points really are needed, make one of them a constructor.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition / Special Functions",
+        "requirement": "Exactly one function can be marked this way.  If no function is marked as such compilation fails."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null,
+      "notes": [
+        "LANG_FUNCDEF_SPECIAL_PREVIOUS_STARTUP"
+      ]
+    },
+    {
+      "number": 4403,
+      "name": "LANG_FUNCDEF_SPECIAL_PREVIOUS_STARTUP",
+      "severity": "note",
+      "message": "the startup function '{name}' was marked here",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the function marked first"
+        }
+      ],
+      "cause": "Attached to the report of a duplicate startup function, to point at the one that was seen first.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition / Special Functions",
+        "requirement": "Exactly one function can be marked this way.  If no function is marked as such compilation fails."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4404,
+      "name": "LANG_FUNCDEF_SPECIAL_BAD_SIGNATURE",
+      "severity": "error",
+      "message": "the startup function must have the signature 'fn NAME() → i32', but '{name}' {problem}",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the function"
+        },
+        {
+          "name": "problem",
+          "type": "string",
+          "description": "how the signature differs"
+        }
+      ],
+      "cause": "Control is transferred to the startup function without arguments, and the value it returns becomes the exit status of the process.  A different signature would leave either the arguments or the exit status undefined.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition / Special Functions",
+        "requirement": "the startup function.  This is the function control is transferred to after the startup phase is completed."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4405,
+      "name": "LANG_FUNCDEF_SPECIAL_BAD_CTOR_SIGNATURE",
+      "severity": "error",
+      "message": "{kind} function '{name}' must take no parameters and return 'void', but {problem}",
+      "args": [
+        {
+          "name": "kind",
+          "type": "string",
+          "description": "constructor or destructor"
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the function"
+        },
+        {
+          "name": "problem",
+          "type": "string",
+          "description": "how the signature differs"
+        }
+      ],
+      "cause": "Constructor and destructor functions are called by the runtime startup and shutdown sequence, which has nothing to pass to them and nowhere to put a result.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition / Special Functions",
+        "requirement": "constructor function.  These are functions that run before control is transferred to the startup function."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 5001,
+      "name": "LANG_FUNCDEF_RETURN_UNREACHABLE",
+      "severity": "warning",
+      "message": "statements after 'return' are never executed",
+      "cause": "The function returns immediately at the 'return' statement, so the statements that follow it in the same block can never run.  This is usually leftover code, or a 'return' that was meant to be conditional.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition",
+        "requirement": "Function return values are specified with the `return` keyword.  The function immediately returns and the remaining statements in the block are ignored (the compiler must issue a warning in this case).  If the `return` statement is the last statement in the function then the `return` keywords can and should be skipped (a warning is issued in this case)."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": "unreachable-after-return"
+    },
+    {
+      "number": 5002,
+      "name": "LANG_FUNCDEF_RETURN_REDUNDANT",
+      "severity": "warning",
+      "message": "'return' can and should be omitted on the last statement of a function",
+      "cause": "When the value of the last statement is the function's result, the 'return' keyword carries no information and is omitted in the canonical form of the language.  The compiler's own output never writes it.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition",
+        "requirement": "Function return values are specified with the `return` keyword.  The function immediately returns and the remaining statements in the block are ignored (the compiler must issue a warning in this case).  If the `return` statement is the last statement in the function then the `return` keywords can and should be skipped (a warning is issued in this case)."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": "redundant-return"
+    },
+    {
+      "number": 5003,
+      "name": "LANG_FUNCDEF_RETURN_MISSING",
+      "severity": "error",
+      "message": "control reaches the end of '{name}' without producing a value of type '{type}'",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the function"
+        },
+        {
+          "name": "type",
+          "type": "string",
+          "description": "the declared return type"
+        }
+      ],
+      "cause": "A function whose return type is not 'void' must produce a value on every path that leaves it.  Because the language admits no undefined behaviour, falling off the end is an error rather than an unspecified result.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition",
+        "requirement": "the code behaves, when executed, exactly as the code describes it. No undefined behavior, no surprising interpretation of inputs."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 5004,
+      "name": "LANG_FUNCDEF_RETURN_VALUE_IN_VOID",
+      "severity": "error",
+      "message": "returning a value from '{name}', which is declared to return 'void'",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the function"
+        }
+      ],
+      "cause": "The function declares no result, so there is nothing for the returned value to become.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition",
+        "requirement": "Function return values are specified with the `return` keyword.  The function immediately returns and the remaining statements in the block are ignored (the compiler must issue a warning in this case).  If the `return` statement is the last statement in the function then the `return` keywords can and should be skipped (a warning is issued in this case)."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 8501,
+      "name": "IMPL_BACKEND_UNSUPPORTED",
+      "severity": "error",
+      "message": "the bootstrap compiler cannot generate code for {construct} yet",
+      "args": [
+        {
+          "name": "construct",
+          "type": "string",
+          "description": "the construct that has no code generation yet"
+        }
+      ],
+      "cause": "The bootstrap compiler implements only as much of the language as the compiler's own source needs, so a construct the specification describes may still have no code generation.  This is a limitation of the bootstrap compiler and not an error in the program; the same program will compile once the construct is implemented.",
+      "spec": {
+        "document": "spec/details.md",
+        "section": "Implementation",
+        "requirement": "It does not have to be able to handle the entire language as per the specification as long as it can compile the code of the actual compiler."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 8502,
+      "name": "IMPL_BACKEND_UNENCODABLE",
+      "severity": "error",
+      "message": "instruction cannot be encoded: {detail}",
+      "args": [
+        {
+          "name": "detail",
+          "type": "string",
+          "description": "the constraint that was violated"
+        }
+      ],
+      "cause": "The instruction, its operands, or the combination of the two cannot be represented in the target's encoding.  From generated code this reports a defect in the compiler; once inline assembly exists it will also report a constraint the written instruction violates, such as naming a high-byte register in a form that carries a REX prefix.",
+      "spec": {
+        "document": "spec/details.md",
+        "section": "Implementation",
+        "requirement": "The backends should use a symbolic version to generate the assembler code to allow, in future, inline assembler code."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 9001,
+      "name": "IMPL_IMAGE_UNDEFINED_SYMBOL",
+      "severity": "error",
+      "message": "'{name}' is referenced but never defined",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the undefined symbol"
+        }
+      ],
+      "cause": "Compilation covers the whole program at once and there is no equivalent of an object file, so every symbol the generated code refers to must be defined by the same compilation.  A symbol that is still undefined at image generation means a function the program calls was never given a body.",
+      "spec": {
+        "document": "spec/details.md",
+        "section": "Implementation",
+        "requirement": "At least for the time being there is only whole-program compilation.  There is no equivalent of object files."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 9901,
+      "name": "IMPL_INTERNAL_ERROR",
+      "severity": "fatal",
+      "message": "internal compiler error: {detail}",
+      "args": [
+        {
+          "name": "detail",
+          "type": "string",
+          "description": "what went wrong"
+        }
+      ],
+      "cause": "The compiler detected an inconsistency in its own data structures, which always indicates a defect in the compiler rather than in the compiled program.  Please report it together with the source that triggered it.",
+      "spec": {
+        "document": "spec/details.md",
+        "section": "Implementation"
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "internal": true,
+      "option": null
+    }
+  ]
+}

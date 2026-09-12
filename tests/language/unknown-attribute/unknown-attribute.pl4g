@@ -1,0 +1,7 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 3201 LANG_ATTR_UNKNOWN
+
+※ An unrecognized attribute is an error, never a silently ignored annotation.
+@[startup, entrypoint]
+fn main() → i32:
+    0

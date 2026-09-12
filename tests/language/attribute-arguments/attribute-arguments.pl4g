@@ -1,0 +1,12 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 3203 LANG_ATTR_BAD_ARGUMENTS
+
+※ An attribute's arguments are checked against its declared signature; 'test'
+※ selects one of the three kinds of test function.
+@[startup]
+fn main() → i32:
+    0
+
+@[test(sideways)]
+fn check() → i32:
+    0

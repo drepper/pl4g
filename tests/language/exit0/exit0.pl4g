@@ -1,0 +1,8 @@
+※ pl4g-test: compile=ok
+※ pl4g-test: run=native,qemu exit=0
+※ pl4g-test: diag=none
+
+※ The smallest conforming program: it exits with status 0.
+@[startup]
+fn main() → i32:
+    0

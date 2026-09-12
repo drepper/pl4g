@@ -1,0 +1,12 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4402 LANG_FUNCDEF_SPECIAL_MULTIPLE_STARTUP
+※ pl4g-test: expect-diag 4403 LANG_FUNCDEF_SPECIAL_PREVIOUS_STARTUP
+
+※ Exactly one function may be marked as the startup function.
+@[startup]
+fn first() → i32:
+    0
+
+@[startup]
+fn second() → i32:
+    0

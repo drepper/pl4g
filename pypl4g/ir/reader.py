@@ -1,0 +1,304 @@
+"""Reading the textual form of the IR back into memory.
+
+This exists so that the printer can be tested against a fixed point: printing a
+module, reading it and printing it again must give the same text.  It is a
+testing facility, not a serialization format -- it does not preserve source
+spans, and a persistent form would be a packed binary one instead.
+"""
+
+from typing import Sequence
+
+from .function import (BasicBlock, FuncAttrs, Function, InlineHint, Linkage,
+                       SpecialKind)
+from .inst import (BinaryInst, BinOp, BlockTarget, BrInst, CastInst, CastKind,
+                   CmpInst, CmpPred, CondBrInst, RetInst, UnaryInst, UnOp,
+                   UnreachableInst)
+from .module import Module
+from .printer import IR_VERSION
+from .types import BOOL, BUILTIN_TYPES, MEM, Type, TypeContext, VOID
+from .value import Value
+
+
+class IRSyntaxError(Exception):
+    """The text is not a well-formed textual IR."""
+
+    def __init__(self, line_number: int, detail: str) -> None:
+        super().__init__("".join(("line ", str(line_number), ": ", detail)))
+        self.line_number = line_number
+        self.detail = detail
+
+
+_BINOPS = {op.value: op for op in BinOp}
+_UNOPS = {op.value: op for op in UnOp}
+_PREDS = {p.value: p for p in CmpPred}
+_CASTS = {k.value: k for k in CastKind}
+
+
+def _parse_type(text: str, types: TypeContext, line_number: int) -> Type:
+    """Parse a type name."""
+    text = text.strip()
+    if text == "mem":
+        return MEM
+    if text.startswith("ptr<") and text.endswith(">"):
+        return types.ptr_type(_parse_type(text[4:-1], types, line_number))
+    found = BUILTIN_TYPES.get(text)
+    if found is None:
+        raise IRSyntaxError(line_number, "".join(("unknown type '", text, "'")))
+    return found
+
+
+def _split_top(text: str, sep: str = ",") -> list[str]:
+    """Split on *sep*, ignoring separators inside parentheses or angle brackets."""
+    parts: list[str] = []
+    depth = 0
+    current: list[str] = []
+    for ch in text:
+        if ch in "(<[":
+            depth += 1
+        elif ch in ")>]":
+            depth -= 1
+        if ch == sep and depth == 0:
+            parts.append("".join(current).strip())
+            current = []
+            continue
+        current.append(ch)
+    tail = "".join(current).strip()
+    if tail:
+        parts.append(tail)
+    return parts
+
+
+class _FunctionReader:
+    """Reads one function from the lines that make it up."""
+
+    def __init__(self, module: Module, header: str, lines: Sequence[tuple[int, str]]) -> None:
+        self._module = module
+        self._header = header
+        self._lines = lines
+        self._values: dict[int, Value] = {}
+        self._blocks: dict[str, BasicBlock] = {}
+
+    def read(self) -> Function:
+        """Parse the function and return it."""
+        func = self._parse_header()
+        self._collect_blocks(func)
+        self._parse_body()
+        return func
+
+    def _parse_header(self) -> Function:
+        """Parse the ``fn @name(...) -> ...`` line."""
+        text = self._header.removeprefix("fn @").removesuffix("{").strip()
+        open_paren = text.index("(")
+        close_paren = text.index(")")
+        name = text[:open_paren].strip()
+        param_text = text[open_paren + 1:close_paren].strip()
+        params = tuple(_parse_type(p, self._module.types, 0)
+                       for p in _split_top(param_text)) if param_text else ()
+        rest = text[close_paren + 1:].strip().removeprefix("\N{RIGHTWARDS ARROW}").strip()
+        words = rest.split()
+        ret = _parse_type(words[0], self._module.types, 0)
+        attrs = FuncAttrs()
+        linkage = Linkage.INTERNAL
+        cconv = "pl4g.v0"
+        special: SpecialKind | None = None
+        priority: int | None = None
+        abi: str | None = None
+        for word in words[1:]:
+            if word in (l.value for l in Linkage):
+                linkage = Linkage(word)
+            elif word.startswith("cconv("):
+                cconv = word[len("cconv("):-1]
+            elif word.startswith("special("):
+                special = SpecialKind(word[len("special("):-1])
+            elif word.startswith("priority("):
+                priority = int(word[len("priority("):-1])
+            elif word.startswith("abi("):
+                abi = word[len("abi("):-1]
+        attrs = FuncAttrs(special=special, priority=priority, inline=InlineHint.DEFAULT,
+                          abi=abi)
+        func = Function(name=name, ty=self._module.types.func_type(params, ret),
+                        attrs=attrs, linkage=linkage, cconv=cconv)
+        return func
+
+    def _collect_blocks(self, func: Function) -> None:
+        """First pass: create every block and register its parameters.
+
+        The numbers of the parameters are written in the text, so a branch may
+        refer to a block defined further down without any fixing up.
+        """
+        for number, line in self._lines:
+            if not line.endswith(":") or line.startswith(" "):
+                continue
+            head = line[:-1]
+            if "(" in head:
+                label = head[:head.index("(")]
+                param_text = head[head.index("(") + 1:head.rindex(")")]
+            else:
+                label = head
+                param_text = ""
+            block = func.add_block(label)
+            self._blocks[label] = block
+            if not param_text:
+                continue
+            for item in _split_top(param_text):
+                name, _, type_text = item.partition(":")
+                param = block.add_param(_parse_type(type_text, self._module.types, number))
+                self._values[int(name.strip().removeprefix("%"))] = param
+
+    def _parse_body(self) -> None:
+        """Second pass: parse the instructions of every block."""
+        current: BasicBlock | None = None
+        for number, line in self._lines:
+            if line.endswith(":") and not line.startswith(" "):
+                label = line[:-1].split("(")[0]
+                current = self._blocks[label]
+                continue
+            body = line.strip()
+            if not body:
+                continue
+            if current is None:
+                raise IRSyntaxError(number, "instruction outside a block")
+            self._parse_inst(current, body, number)
+
+    def _parse_inst(self, block: BasicBlock, body: str, number: int) -> None:
+        """Parse one instruction line and append it to *block*."""
+        comment = body.find(";")
+        hint: str | None = None
+        if comment >= 0:
+            trailer = body[comment + 1:].strip()
+            body = body[:comment].strip()
+            if trailer.startswith("name="):
+                hint = trailer[len("name="):]
+        result: int | None = None
+        if body.startswith("%"):
+            name, _, body = body.partition("=")
+            result = int(name.strip().removeprefix("%"))
+            body = body.strip()
+        opcode, _, rest = body.partition(" ")
+        inst = self._build(block, opcode, rest.strip(), number)
+        if hint is not None:
+            inst.name_hint = hint
+        if result is not None:
+            self._values[result] = inst
+
+    def _value(self, text: str, ty: Type, number: int) -> Value:
+        """Resolve one operand against its expected type."""
+        text = text.strip()
+        if text.startswith("%"):
+            found = self._values.get(int(text[1:]))
+            if found is None:
+                raise IRSyntaxError(number, "".join(("undefined value '", text, "'")))
+            return found
+        if text == "true" or text == "false":
+            return self._module.bool_const(BOOL, text == "true")
+        from .types import IntType
+        if isinstance(ty, IntType):
+            return self._module.int_const(ty, int(text, 0))
+        raise IRSyntaxError(number, "".join(("cannot read '", text, "' as ", ty.render())))
+
+    def _target(self, text: str, number: int) -> BlockTarget:
+        """Parse a branch destination and its arguments."""
+        text = text.strip()
+        if "(" not in text:
+            return BlockTarget(self._blocks[text])
+        label = text[:text.index("(")]
+        block = self._blocks[label]
+        arg_text = text[text.index("(") + 1:text.rindex(")")]
+        args = [self._value(a, block.params[i].ty, number)
+                for i, a in enumerate(_split_top(arg_text))] if arg_text.strip() else []
+        return BlockTarget(block, args)
+
+    def _build(self, block: BasicBlock, opcode: str, rest: str, number: int):  # noqa: ANN202
+        """Build the instruction named by *opcode* and append it to *block*."""
+        if opcode == "unreachable":
+            return block.append(UnreachableInst())
+        if opcode == "ret.void":
+            return block.append(RetInst())
+        if opcode.startswith("ret."):
+            ty = _parse_type(opcode[4:], self._module.types, number)
+            return block.append(RetInst(self._value(rest, ty, number)))
+        if opcode == "br":
+            return block.append(BrInst(self._target(rest, number)))
+        if opcode == "condbr":
+            parts = _split_top(rest)
+            cond = self._value(parts[0], BOOL, number)
+            return block.append(CondBrInst(cond, self._target(parts[1], number),
+                                           self._target(parts[2], number)))
+        head, _, type_text = opcode.rpartition(".")
+        ty = _parse_type(type_text, self._module.types, number)
+        parts = _split_top(rest)
+        if head in _BINOPS:
+            lhs = self._value(parts[0], ty, number)
+            rhs = self._value(parts[1], ty, number)
+            return block.append(BinaryInst(_BINOPS[head], lhs, rhs))
+        if head in _UNOPS:
+            return block.append(UnaryInst(_UNOPS[head], self._value(parts[0], ty, number)))
+        if head in _CASTS:
+            return block.append(CastInst(_CASTS[head], self._value(parts[0], ty, number), ty))
+        if head.startswith("icmp."):
+            pred = _PREDS.get(head[len("icmp."):])
+            if pred is None:
+                raise IRSyntaxError(number, "".join(("unknown predicate in '", opcode, "'")))
+            lhs = self._value(parts[0], ty, number)
+            rhs = self._value(parts[1], ty, number)
+            return block.append(CmpInst(pred, lhs, rhs, BOOL))
+        raise IRSyntaxError(number, "".join(("unknown instruction '", opcode, "'")))
+
+
+def read_module(text: str) -> Module:
+    """Parse the textual form of a module."""
+    lines = [(i + 1, line.rstrip()) for i, line in enumerate(text.splitlines())]
+    if not lines or not lines[0][1].startswith("; pl4g-ir "):
+        raise IRSyntaxError(1, "missing '; pl4g-ir' version line")
+    version = int(lines[0][1][len("; pl4g-ir "):])
+    if version != IR_VERSION:
+        raise IRSyntaxError(1, "".join(("textual IR version ", str(version),
+                                        " cannot be read by this compiler")))
+    module: Module | None = None
+    index = 1
+    while index < len(lines):
+        number, line = lines[index]
+        stripped = line.strip()
+        if not stripped or stripped.startswith(";"):
+            index += 1
+            continue
+        if stripped.startswith("module "):
+            name = stripped.split('"')[1]
+            triple = stripped.split('"')[3]
+            module = Module(name=name, triple=triple)
+            index += 1
+            continue
+        if stripped.startswith("fn @"):
+            if module is None:
+                raise IRSyntaxError(number, "function before the module line")
+            body: list[tuple[int, str]] = []
+            header = stripped
+            index += 1
+            if header.endswith("{"):
+                while index < len(lines) and lines[index][1].strip() != "}":
+                    body.append((lines[index][0], lines[index][1]))
+                    index += 1
+                index += 1
+            module.add_function(_FunctionReader(module, header, body).read())
+            continue
+        raise IRSyntaxError(number, "".join(("unexpected line '", stripped, "'")))
+    if module is None:
+        raise IRSyntaxError(1, "no module line")
+    _rebuild_caches(module)
+    return module
+
+
+def _rebuild_caches(module: Module) -> None:
+    """Refill the module's special-function caches from the function attributes."""
+    for func in module.functions.values():
+        match func.attrs.special:
+            case SpecialKind.STARTUP:
+                module.startup = func
+            case SpecialKind.CONSTRUCTOR:
+                module.ctors.append(func)
+            case SpecialKind.DESTRUCTOR:
+                module.dtors.append(func)
+            case SpecialKind.TEST_ALWAYS | SpecialKind.TEST_BUILD | SpecialKind.TEST_SUITE:
+                module.tests.append(func)
+            case _:
+                pass

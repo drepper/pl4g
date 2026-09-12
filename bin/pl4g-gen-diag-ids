@@ -1,0 +1,13 @@
+#!/usr/bin/python3
+"""Regenerate ``pypl4g/diag/ids.py`` from the shared diagnostic catalog."""
+
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from pypl4g.diag.catalog import generate_ids_source, load_catalog  # noqa: E402
+
+target = Path(__file__).resolve().parent.parent / "pypl4g" / "diag" / "ids.py"
+target.write_text(generate_ids_source(load_catalog()), encoding="utf-8")
+print("wrote", target, file=sys.stderr)

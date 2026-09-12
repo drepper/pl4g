@@ -1,0 +1,8 @@
+※ pl4g-test: compile=ok opt=0,1
+※ pl4g-test: run=native,qemu exit=42
+※ pl4g-test: diag=none
+
+※ The value the startup function returns becomes the process exit status.
+@[startup]
+fn main() → i32:
+    42

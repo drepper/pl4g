@@ -1,0 +1,18 @@
+[project]
+name = "pypl4g"
+version = "0.1"
+description = "Bootstrap compiler for PL4G, the Programming Language for Generators"
+requires-python = ">=3.14"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "qemu: runs the generated binary under qemu-user",
+    "objdump: compares generated encodings against an external disassembler",
+]
+
+[tool.pyright]
+include = ["pypl4g"]
+pythonVersion = "3.14"
+typeCheckingMode = "standard"
+reportMissingImports = "error"

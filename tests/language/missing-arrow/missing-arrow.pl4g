@@ -1,0 +1,7 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 3002 LANG_FUNCDEF_EXPECTED_ARROW
+
+※ A function header names its return type after an arrow.
+@[startup]
+fn main() i32:
+    0

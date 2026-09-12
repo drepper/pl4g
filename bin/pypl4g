@@ -1,0 +1,6 @@
+#!/bin/sh
+# Run the Python bootstrap compiler from the source tree.
+here=$(dirname "$(readlink -f "$0")")
+PYTHONPATH=${here}/..${PYTHONPATH:+:${PYTHONPATH}}
+export PYTHONPATH
+exec python3 -m pypl4g "$@"
