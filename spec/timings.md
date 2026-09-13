@@ -45,6 +45,7 @@ the parser does, and they are the floor everything else is measured against.
 | `74ac227` | 1.06 |  | 1.66 | 1.42 |
 | `c0f29f2` | 1.05 |  | 1.65 | 1.37 |
 | `5c3aec4` | 1.15 | 1.87 | 1.86 | 1.55 |
+| `f7ba2fc` | 1.05 | 1.68 | 1.73 | 1.48 |
 
 ### Variables and memory
 
@@ -74,6 +75,7 @@ backend do.
 | `74ac227` | 1.23 | 1.66 | 1.43 |
 | `c0f29f2` | 1.21 | 1.69 | 1.46 |
 | `5c3aec4` | 1.35 | 1.83 | 1.61 |
+| `f7ba2fc` | 1.23 | 1.71 | 1.44 |
 
 ### Register pressure
 
@@ -103,6 +105,7 @@ and they are the only ones that reach the frame.
 | `74ac227` | 1.94 | 6.73 |
 | `c0f29f2` | 1.89 | 6.71 |
 | `5c3aec4` | 2.06 | 6.97 |
+| `f7ba2fc` | 1.94 | 6.70 |
 
 ### What is left out
 
@@ -132,6 +135,7 @@ decision log does.
 | `74ac227` | 1.48 | 1.50 |
 | `c0f29f2` | 1.52 | 1.56 |
 | `5c3aec4` | 1.63 | 1.75 |
+| `f7ba2fc` | 1.53 | 1.56 |
 
 ### Expressions
 
@@ -161,6 +165,7 @@ optimizer does.
 | `74ac227` | 1.71 | 1.37 | 2.29 | 2.41 | 2.27 | 1.57 |  |
 | `c0f29f2` | 1.60 | 1.41 | 2.43 | 2.48 | 2.43 | 1.73 | 1.83 |
 | `5c3aec4` | 1.83 | 1.55 | 2.67 | 2.79 | 2.56 | 1.76 | 1.95 |
+| `f7ba2fc` | 1.65 | 1.44 | 2.61 | 2.65 | 2.43 | 1.67 | 1.75 |
 
 Process
 -------
@@ -194,6 +199,7 @@ worth showing here, and every figure is in the JSON beside this file.
 | `74ac227` | 73 | 85 |
 | `c0f29f2` | 72 | 81 |
 | `5c3aec4` | 79 | 86 |
+| `f7ba2fc` | 74 | 84 |
 
 What each row is:
 
@@ -218,6 +224,7 @@ What each row is:
 - `74ac227` -- ✨ Saturating arithmetic: ⊞ ⊟ ⊠
 - `c0f29f2` -- ✨ Arithmetic that checks, and the path a fault leaves through
 - `5c3aec4` -- ✨ No arrow means nothing answered with; a semicolon separates and never ends
+- `f7ba2fc` -- ✅ A call that answers with nothing has nothing to use
 
 What each program exercises:
 

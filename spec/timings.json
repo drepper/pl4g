@@ -103,6 +103,10 @@
     {
       "hash": "5c3aec4",
       "subject": "✨ No arrow means nothing answered with; a semicolon separates and never ends"
+    },
+    {
+      "hash": "f7ba2fc",
+      "subject": "✅ A call that answers with nothing has nothing to use"
     }
   ],
   "times": {
@@ -1142,6 +1146,80 @@
       "semicolon-separates-statements": [
         1.8679999999999999,
         80.31142695108429
+      ]
+    },
+    "f7ba2fc": {
+      "exit0": [
+        1.054,
+        77.08878302946687
+      ],
+      "global-variable": [
+        1.232,
+        76.2503890437074
+      ],
+      "assign-widths": [
+        1.713,
+        76.61211403319612
+      ],
+      "many-values-at-once": [
+        1.936,
+        75.63932897755876
+      ],
+      "unreached-function": [
+        1.528,
+        76.72026799991727
+      ],
+      "export-visibility": [
+        1.558,
+        75.76038100523874
+      ],
+      "digit-separators": [
+        1.7320000000000002,
+        78.36236304137856
+      ],
+      "boolean-values": [
+        1.4769999999999999,
+        78.4393890062347
+      ],
+      "bitwise-operators": [
+        1.646,
+        76.00694196298718
+      ],
+      "bitwise-precedence": [
+        1.4369999999999998,
+        78.24586698552594
+      ],
+      "spill-to-the-frame": [
+        6.7,
+        83.50221998989582
+      ],
+      "boolean-in-memory": [
+        1.443,
+        73.90824897447601
+      ],
+      "comparison-operators": [
+        2.612,
+        80.38715500151739
+      ],
+      "logic-operators": [
+        2.646,
+        81.22058102162555
+      ],
+      "logic-short-circuit": [
+        2.431,
+        78.77377298427746
+      ],
+      "saturating-precedence": [
+        1.6749999999999998,
+        81.49518503341824
+      ],
+      "arithmetic-operators": [
+        1.7489999999999999,
+        77.71575800143182
+      ],
+      "semicolon-separates-statements": [
+        1.683,
+        78.12466501491144
       ]
     }
   }
