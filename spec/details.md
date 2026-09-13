@@ -544,6 +544,12 @@ and read back before each use.  The value is in memory for its whole life, and w
 for the single instruction reading or writing it.  Splitting a range so that a value is in a register where it is busy and in
 memory where it is not would generate better code and is a great deal more machinery; this is the version that is obviously right.
 
+A value read again by the instruction straight after the one that read it is not read from the frame twice: the register it is
+already in serves both, and the register is held across exactly as many instructions as are reading it and no further.  The same
+rule covers a value read straight after it was computed, which is used from the register it was written from rather than read back
+at once.  That is as far as splitting a range goes here; keeping a value in a register across instructions that are *not* reading
+it would need a cost model, since the register held is one another value cannot have, and there is nothing yet to base one on.
+
 Spilling is done by rewriting and starting again rather than by patching the assignment as it goes.  A spill adds instructions,
 which moves every position after it and so changes every range, and recomputing is simpler than repairing.  The value given up is
 the one whose range reaches furthest, since that is the one that would hold a register longest.

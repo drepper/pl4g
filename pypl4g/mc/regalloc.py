@@ -305,9 +305,23 @@ class LinearScan:
 
     def _with_spill_code(self, insts: Sequence[MCInst], wanted: dict[int, VirtReg],
                          assignment: Assignment) -> list[MCInst]:
-        """One block's instructions, with the reads and writes of the frame in."""
+        """One block's instructions, with the reads and writes of the frame in.
+
+        A value that is read again by the instruction straight after the one
+        that read it is not read from the frame twice: the register it is
+        already in serves both, and the register is held across exactly as many
+        instructions as are reading it.  That is what keeps a value in a
+        register where it is busy without keeping it there where it is not.
+
+        The same rule covers a value read straight after it was computed, which
+        is written to the frame and then used from the register it was written
+        from rather than read back at once.
+        """
         out: list[MCInst] = []
-        for inst in insts:
+        #: For each spilled value that is in a register just now, which register
+        #: and which instruction last touched it.
+        held: dict[int, tuple[VirtReg, int]] = {}
+        for index, inst in enumerate(insts):
             defs, uses = defs_and_uses(inst)
             touched = {r.ident: r for r in (*defs, *uses)
                        if isinstance(r, VirtReg) and r.ident in wanted}
@@ -318,13 +332,21 @@ class LinearScan:
             before: list[MCInst] = []
             after: list[MCInst] = []
             for ident, victim in touched.items():
-                fresh = self._registers.new_virtual(victim.cls, victim.bits)
-                replacement[ident] = fresh
                 slot = assignment.spilled[ident]
-                if any(isinstance(r, VirtReg) and r.ident == ident for r in uses):
-                    before.extend(self._selector.select_reload(fresh, slot, inst.span))
-                if any(isinstance(r, VirtReg) and r.ident == ident for r in defs):
+                reads = any(isinstance(r, VirtReg) and r.ident == ident for r in uses)
+                writes = any(isinstance(r, VirtReg) and r.ident == ident for r in defs)
+                carried = held.get(ident)
+                if reads and not writes and carried is not None and carried[1] == index - 1:
+                    fresh = carried[0]
+                else:
+                    fresh = self._registers.new_virtual(victim.cls, victim.bits)
+                    if reads:
+                        before.extend(
+                            self._selector.select_reload(fresh, slot, inst.span))
+                replacement[ident] = fresh
+                if writes:
                     after.extend(self._selector.select_spill(slot, fresh, inst.span))
+                held[ident] = (fresh, index)
             out.extend(before)
             out.append(self._substituted(inst, replacement))
             out.extend(after)

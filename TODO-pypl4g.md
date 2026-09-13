@@ -43,9 +43,15 @@ To Do List for the pypl4g compiler
     patched.  The frame is made only where a slot was taken, and given back before every return.  A register may say it must not be
     spilled, which RISC-V needs for the pair of instructions that build an address.
 
-[ ] split a live range instead of spilling a value for its whole life.  A spilled value is in memory everywhere, so every use
-    costs a load; splitting it would keep it in a register where it is busy.  Linear scan makes this easy and the loop that rewrites
-    and reallocates is where it would go.
+[x] split a live range instead of spilling a value for its whole life.  Done as far as it pays: a value read again by the next
+    instruction is not read from the frame twice, and one read straight after it was computed is not read back at all.  Measured on
+    a program built to show it, that is two instructions fewer on each of the fixed-width targets and one more on x86-64, whose
+    two-address form puts a move between the two reads and so blunts it.
+
+[ ] keep a spilled value in a register across instructions that do not read it, where that is cheaper than reloading.  The step
+    beyond the entry above, and the one that needs a cost model: the register held is one another value cannot have, so holding it
+    causes a spill somewhere else, which is exactly what the x86-64 measurement above shows in miniature.  There is nothing to base
+    such a model on until there are loops, where the count of times a load runs stops being the count of times it is written.
 
 [ ] a frame larger than the immediate a stack adjustment can carry is reported rather than built in steps.  RISC-V reaches this
     first, at about two hundred and fifty slots, and AArch64 at about five hundred; x86-64 does not.  The same question as

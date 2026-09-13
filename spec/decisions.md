@@ -1192,6 +1192,38 @@ the old answer.
 Verified by running programs with twenty, forty, eighty and a hundred and fifty values live at once on all three architectures,
 each returning the first value read, which can only be right if it came back from the frame unchanged.
 
+## 2026-09-15T03:00+02:00 — implementation
+
+**A spilled value is read from the frame once for as many instructions running as read it, and no further**
+
+The entry asked to split a live range rather than spill a value for its whole life.  Before writing anything, the question was how
+much there was to gain, and the answer decided the shape of the change.
+
+Counting reloads per slot in the code the compiler generates: on a program with thirty-two values live at once, every slot is read
+exactly once -- there is nothing to merge, because every value is defined once and used once.  On a program written to make a value
+be read several times over, one slot was read five times.  So the gain is real but it is exactly the gain from *repeated* reads,
+and nothing else.
+
+Two measurements then decided where to stop.  Merging the reads of a value that is read by consecutive instructions: two
+instructions fewer on AArch64, two fewer on RISC-V, one *more* on x86-64.  The one more is the whole argument in miniature -- the
+register held across the reads is a register some other value cannot have, so holding it caused a spill elsewhere; x86-64 feels it
+because its two-address form puts a move between the two reads, so only one merge fires and the cost is not paid back.
+
+Going further -- keeping a value in a register across instructions that do not read it -- is where a cost model is needed, and
+there is nothing to base one on.  The question is whether a load that runs once is worth a register held for ten instructions, and
+the answer depends on how often the code runs, which is not knowable until there are loops.  So that is a separate entry, waiting
+for the thing that would make it answerable, rather than a guess written down as a constant.
+
+A third measurement fell out of it and is worth recording: the values with clustered reads are, in the programs written so far,
+precisely the ones *not* spilled, because a value read several times close together has a short range and the allocator gives up
+the value whose range reaches furthest.  A first attempt at measuring this change showed no effect at all for that reason, and the
+programme had to be rewritten so that the value read repeatedly was also the one read last.
+
+What other compilers do: LLVM's greedy allocator splits ranges properly and pays for it with a cost model built on block
+frequencies, which come from the loop structure.  Its fast allocator does what this now does -- reuse within a run, nothing beyond.
+That the two sit side by side in one compiler is the evidence that the second is not worth having until the information the first
+needs exists.
+
 ---
 
 Open questions

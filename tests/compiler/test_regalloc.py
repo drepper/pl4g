@@ -335,3 +335,55 @@ def test_far_more_values_than_registers_still_runs(triple: str, tmp_path) -> Non
     ran = subprocess.run([*runner_for(triple), str(output)], capture_output=True,
                          timeout=60)
     assert ran.returncode == 1, describe(ran)
+
+
+def test_a_value_read_twice_running_is_read_from_the_frame_once() -> None:
+    """The register it is already in serves the second read.
+
+    This is the whole of what splitting a range comes to here: the register is
+    held across exactly as many instructions as are reading the value, and no
+    further.
+    """
+    values = [virtual() for _ in range(len(ORDER) + 2)]
+    instructions = [inst("mov", MCReg(v), MCImm(1, 32)) for v in values]
+    # Everything else dies here, leaving the first value as the one spilled.
+    instructions += [inst("mov", MCMem(disp=8, size_bits=32), MCReg(v))
+                     for v in values[1:]]
+    # Then it is read three times running.
+    instructions += [inst("mov", MCMem(disp=16, size_bits=32), MCReg(values[0]))
+                     for _ in range(3)]
+    built = function(*instructions)
+    result = allocate(built, INFO, ORDER, SELECTOR)
+    assert values[0].ident in result.spilled, "the value under test was not spilled"
+    slot = result.spilled[values[0].ident]
+    reloads = [i for i in built.instructions()
+               if _reads_slot(i, slot)]
+    assert len(reloads) == 1, \
+        "".join((str(len(reloads)), " reloads where one serves all three reads"))
+
+
+def _reads_slot(inst: MCInst, slot: int) -> bool:
+    """Whether *inst* reads the frame slot at *slot* into a register."""
+    if len(inst.operands) != 2:
+        return False
+    destination, source = inst.operands
+    return (isinstance(destination, MCReg) and isinstance(source, MCMem)
+            and source.base is not None and source.disp == slot
+            and getattr(source.base, "name", "") == "rsp")
+
+
+def test_a_value_used_right_after_it_is_computed_is_not_read_back() -> None:
+    """It is written to the frame and then used from the register it came from."""
+    values = [virtual() for _ in range(len(ORDER) + 2)]
+    instructions = [inst("mov", MCReg(v), MCImm(1, 32)) for v in values]
+    instructions += [inst("mov", MCMem(disp=8, size_bits=32), MCReg(v))
+                     for v in reversed(values)]
+    built = function(*instructions)
+    result = allocate(built, INFO, ORDER, SELECTOR)
+    assert result.spilled
+    # Every spilled value here is written once and read once, so the number of
+    # reloads can never be more than the number of values that went.
+    reloads = sum(1 for i in built.instructions()
+                  for slot in result.spilled.values() if _reads_slot(i, slot))
+    assert reloads <= len(result.spilled), reloads
+
