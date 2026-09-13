@@ -53,6 +53,7 @@ the parser does, and they are the floor everything else is measured against.
 | `87c066b` | 1.25 | 2.04 | 1.81 | 1.51 |
 | `ca395a6` | 0.96 | 2.07 | 1.53 | 1.29 |
 | `230b8a7` | 1.05 | 1.87 | 1.71 | 1.42 |
+| `5706c5f` | 1.05 | 1.95 | 1.78 | 1.46 |
 
 ### Variables and memory
 
@@ -90,6 +91,7 @@ backend do.
 | `87c066b` | 1.54 | 2.02 | 1.59 |
 | `ca395a6` | 1.14 | 1.55 | 1.67 |
 | `230b8a7` | 1.27 | 1.74 | 1.49 |
+| `5706c5f` | 1.24 | 1.76 | 1.52 |
 
 ### Register pressure
 
@@ -127,6 +129,7 @@ and they are the only ones that reach the frame.
 | `87c066b` | 2.10 | 7.18 |
 | `ca395a6` | 1.76 | 6.76 |
 | `230b8a7` | 2.02 | 7.22 |
+| `5706c5f` | 2.17 | 7.30 |
 
 ### What is left out
 
@@ -164,6 +167,7 @@ decision log does.
 | `87c066b` | 1.72 | 1.68 |
 | `ca395a6` | 1.36 | 1.45 |
 | `230b8a7` | 1.56 | 1.74 |
+| `5706c5f` | 1.58 | 1.74 |
 
 ### Expressions
 
@@ -201,6 +205,44 @@ optimizer does.
 | `87c066b` | 1.78 | 1.56 | 2.63 | 2.76 | 2.46 | 1.80 | 2.08 | 2.59 | 2.21 | 2.29 | 6.22 |  |  |
 | `ca395a6` | 1.53 | 1.66 | 2.60 | 2.72 | 2.45 | 1.85 | 2.12 | 2.68 | 2.28 | 2.41 | 5.91 | 9.15 |  |
 | `230b8a7` | 1.70 | 1.44 | 2.54 | 2.61 | 2.43 | 1.65 | 1.94 | 2.68 | 2.40 | 2.27 | 6.34 | 9.70 | 3.80 |
+| `5706c5f` | 1.77 | 1.47 | 2.59 | 2.71 | 2.57 | 1.71 | 2.10 | 2.77 | 2.45 | 2.43 | 6.43 | 9.88 | 3.88 |
+
+### Types
+
+Definitions the program writes.  These move when the parser, the name resolution or the layout does.
+
+| commit | type-definitions |
+|---|---|
+| `eee64a3` |  |
+| `af657ad` |  |
+| `2f564cb` |  |
+| `37dbb28` |  |
+| `1c4ae78` |  |
+| `f391839` |  |
+| `04c20c9` |  |
+| `3020cf6` |  |
+| `9bcaf84` |  |
+| `40c35bb` |  |
+| `9437d8a` |  |
+| `d0c8cf5` |  |
+| `73ce857` |  |
+| `ed1c028` |  |
+| `1269bd5` |  |
+| `db0b436` |  |
+| `25bb4e0` |  |
+| `baf1f3c` |  |
+| `74ac227` |  |
+| `c0f29f2` |  |
+| `5c3aec4` |  |
+| `f7ba2fc` |  |
+| `3e9eb27` |  |
+| `0990c74` |  |
+| `05d8da1` |  |
+| `03887ff` |  |
+| `87c066b` |  |
+| `ca395a6` |  |
+| `230b8a7` |  |
+| `5706c5f` | 1.42 |
 
 Process
 -------
@@ -242,6 +284,7 @@ worth showing here, and every figure is in the JSON beside this file.
 | `87c066b` | 77 | 90 |
 | `ca395a6` | 66 | 86 |
 | `230b8a7` | 75 | 84 |
+| `5706c5f` | 80 | 93 |
 
 What each row is:
 
@@ -274,6 +317,7 @@ What each row is:
 - `87c066b` -- ✨ A floating-point answer that is not a number stops the program
 - `ca395a6` -- 📝 Time the approximate comparisons too
 - `230b8a7` -- 📝 Time the result type too
+- `5706c5f` -- 📝 Time the type definitions too
 
 What each program exercises:
 
@@ -301,3 +345,4 @@ What each program exercises:
 - `float-arithmetic` -- ten floating-point answers, each asserted
 - `float-approximate` -- every approximate comparison, in both widths
 - `result-type` -- a result made, propagated with ? and read with ??
+- `type-definitions` -- eight definitions in all three notations
