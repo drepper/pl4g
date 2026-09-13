@@ -730,8 +730,11 @@ class Parser:
                 raise _Bail()
             return found
         if self._check(TokKind.KW_MATCH):
-            found = self._parse_match()
-            return ast.ExprStmt(span=found.span, value=found)
+            matched = self._parse_match()
+            return ast.ExprStmt(span=matched.span, value=matched)
+        if self._check(TokKind.KW_IF):
+            asked = self._parse_if()
+            return ast.ExprStmt(span=asked.span, value=asked)
         if self._check(TokKind.IDENT) and self._peek().kind is TokKind.ASSIGN:
             return self._parse_assignment()
         if self._check(TokKind.KW_RETURN):
@@ -743,6 +746,34 @@ class Parser:
             return ast.ReturnStmt(span=start.to(value.span), value=value, explicit=True)
         value = self._parse_expression()
         return ast.ExprStmt(span=value.span, value=value)
+
+    def _parse_if(self) -> ast.If:
+        """Parse ``if COND BODY`` with its `elif`s and its `else`.
+
+        The condition stands on its own: there are no parentheses around it,
+        because nothing needs them -- what ends it is the body, which begins
+        with a colon or a brace, and neither can be part of an expression.
+        """
+        start = self._expect(TokKind.KW_IF).span
+        arms: list[ast.IfArm] = [self._parse_if_arm()]
+        while self._check(TokKind.KW_ELIF):
+            self._advance()
+            arms.append(self._parse_if_arm())
+        if self._check(TokKind.KW_ELSE):
+            self._advance()
+            body = self._parse_body()
+            arms.append(ast.IfArm(span=body.span, condition=None, body=body))
+            if self._check(TokKind.KW_ELIF) or self._check(TokKind.KW_ELSE):
+                self._diags.emit(D.LANG_IF_ELSE_IS_LAST, self._current.span)
+                raise _Bail()
+        return ast.If(span=start.to(arms[-1].body.span), arms=tuple(arms))
+
+    def _parse_if_arm(self) -> ast.IfArm:
+        """Parse the condition of one arm and the body it runs."""
+        condition = self._parse_expression()
+        body = self._parse_body()
+        return ast.IfArm(span=condition.span.to(body.span), condition=condition,
+                         body=body)
 
     def _parse_match(self) -> ast.Match:
         """Parse ``match EXPR`` and the arms that take its alternatives apart.
@@ -927,6 +958,8 @@ class Parser:
                 return ast.BoolLit(span=token.span, value=token.kind is TokKind.KW_TRUE)
             case TokKind.KW_MATCH:
                 return self._parse_match()
+            case TokKind.KW_IF:
+                return self._parse_if()
             case TokKind.IDENT:
                 self._advance()
                 return ast.NameRef(span=token.span, name=token.text)
@@ -948,9 +981,9 @@ def _ends_with_a_block(stmt: ast.Stmt) -> bool:
 
 
 def _trailing_match(expr: "ast.Expr | None") -> bool:
-    """Whether a `match` is the last thing written in an expression."""
+    """Whether something with a block of its own ends an expression."""
     while True:
-        if isinstance(expr, ast.Match):
+        if isinstance(expr, (ast.Match, ast.If)):
             return True
         if isinstance(expr, ast.Binary):
             expr = expr.right

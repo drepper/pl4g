@@ -17,16 +17,21 @@ To Do List for the PL4g language
     answer was the point.  Rust has `#[must_use]` for this and reports it as a warning; the shape here would be an attribute, and
     the rule that a statement's value must be used is what it would switch back on for that one function.
 
-[?] there is no control flow.  A function body is a straight-line list of statements: there is no `if`, no loop and no way to
-    choose between two values.  The intermediate representation has had branches and block parameters from the start and nothing
-    generates them.
-    `match` is in and is the pattern-matching form, so what is left of this is the conditional and repetition.
-    Question: what shape, and how much?  Considered for the conditional: `if COND:` in the layout syntax with the same block rules
-    as a function body, which needs no new ideas and can reuse everything `match` needed -- the block the arms join at, the names
-    it carries and the memory token it merges.  That it should produce a value is no longer open: `match` does, so an `if` that
-    did not would be the odd one out.  A third possibility is that `if` need not exist at all, `match` over a `bool` saying the
-    same thing with two arms.  For repetition the question is whether a generated language needs a general loop at all, or whether
-    iteration over something is enough -- a generator emitting a counted loop can emit whatever the language gives it.
+[x] the conditional half of the control flow: `if`, `elif` and `else`.  Done: a condition with no parentheses around it, which
+    must be a `bool` -- a number is not a condition -- then a body in either notation, zero or more `elif` with the same shape and
+    an optional `else`, which is the last arm there is.  It produces a value where one is wanted of it, and then needs an `else`.
+    It needed no new machinery: the block the arms join at, the names it carries across, the memory token it merges and the value
+    it hands out were all built for `match`.
+
+[?] there is no repetition.  A function body cannot loop: there is no `while`, no `for` and no recursion that terminates by
+    anything the compiler checks.  Branches and block parameters carry it already, and `if` and `match` show the shape a
+    construct with bodies takes here.
+    Question: does a language written by generators need a general loop at all, or is iteration over something enough?  A
+    generator emitting a counted loop can emit whatever the language gives it, so the question is what reads best in the output
+    and what the optimizer can say most about -- a counted loop whose bounds are written down is one an implementation can
+    reason about, where a general `while` is not.  Considered: `while COND:` with the same block rules as `if`; `for NAME in
+    RANGE:`, which wants a range type and an iteration protocol; and tail recursion made to terminate, which needs nothing new
+    in the syntax and a guarantee in the compiler.
 
 [ ] add floating-point types `f16` and `bfloat`, optional if there is no hardware support.
     `f32` and `f64` are done: a value can be written, held, passed, returned, computed with and compared, and the hardware's

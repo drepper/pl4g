@@ -2142,6 +2142,40 @@ line end optional was tried and is wrong: it lets two statements share a line wi
 as `3bool` parsing as `3` followed by `bool`.  The four shapes are written out instead, and a line ending with one has a node of
 its own.
 
+## 2026-09-15T13:00+02:00 — language and compiler
+
+**`if`, `elif` and `else`, and the last of the control flow that was open**
+
+Decided on the user's direction, and it closes the entry that has been open since the language had no control flow at all.  `if`
+takes a condition with no parentheses around it, then a body in either notation, then zero or more `elif` with the same shape,
+then an optional `else`.
+
+**No parentheses, because nothing needs them.**  What ends the condition is the body, which begins with a colon or a brace, and
+neither can be part of an expression.  That is Python's and Rust's and Go's arrangement; C needs them because its body may be a
+bare statement with nothing marking where it starts.
+
+**The condition is a `bool` and a number is not one** (4427).  C treats any scalar as a condition, which is what makes `if (x = 0)`
+compile there; this language has nothing for a number to mean in that place, and `n = 0u8` is how the question is asked.
+
+**It produces a value, and then needs an `else`** (4428).  `match` produces one, so an `if` that did not would have been the odd
+one out -- which the to-do list said two days ago.  The `else` is required for the reason Rust requires it: without one there is a
+way through that runs no arm, and that way would owe a value it has nowhere to get.  An arm ending in `return` owes none.
+
+**It needed no new machinery.**  The block the arms join at, the names it carries across, the memory token it merges and the value
+it hands out were all built for `match`; what `if` added was a chain of conditional branches in front of them and one more shape
+of arm.  The part that was already there was generalized rather than copied: an arm is now a body and a block rather than a
+`match` arm, so the two constructs share the whole of what runs them.  An `if` with no `else` needed one thing more -- a way
+through that runs no arm at all and still reaches the join, carrying what was true before the `if`.
+
+**Two spellings that mean one thing, kept.**  `match` over a `bool` and an `if` are the same two branches.  The one-spelling rule
+is about constructs that say the same thing; these two are about different questions -- which alternative a value holds, and
+whether something is so -- and a language that made you write `match ready: true: ... false: ...` would be worse for it.
+
+**What the grammar needed.**  A line may now end with an `if` as well as a `match`, in the same four shapes, so the three
+statements a block expression can end are written as rules of their own and aliased.  An alias over an inline sequence flattens
+the fields inside it, which showed up as a variable definition whose name, type and value all came out as siblings called
+`variable_statement`; aliasing a named rule keeps the shape.
+
 ---
 
 ---

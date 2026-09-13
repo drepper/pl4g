@@ -853,6 +853,59 @@ account for every value, and **a `match` over a flag enumeration needs an arm ta
 
 ### Statements
 
+#### if
+
+`if` runs one of several bodies, according to conditions asked in order.
+
+```
+if a < b:
+    kept ← 1u8
+elif a = b:
+    kept ← 2u8
+else:
+    kept ← 3u8
+```
+
+**The condition stands on its own.**  There are no parentheses around it, because nothing needs them: what ends the condition is
+the body, which begins with a colon or a brace, and neither can be part of an expression.  Parentheses may of course be written
+inside a condition as they may inside any expression; they are simply no part of the `if`.
+
+**The condition is of type `bool`** (4427).  A number is not a condition: C treats any scalar as one, which is what makes `if (x =
+0)` compile there, and this language has nothing for a number to mean in that place.  Where the question is whether a number is
+zero, `n = 0u8` asks it.
+
+**Zero or more `elif` follow**, each with a condition of its own, asked only where the ones before it did not hold -- which is
+what makes an `elif` an `elif` and not a second `if`.  **An `else` may follow them**, with no condition, and is the last arm there
+is (3024): nothing can be asked after the arm that runs when nothing else did.
+
+**An arm's body is written the way a function's is**: a colon and an indented block, or braces.  Both notations take the same
+arms.
+
+**`if` is an expression, and a statement where nothing wants its value**, exactly as `match` is.  Where a value is wanted of it,
+every arm produces one and they are all of one type, and **there has to be an `else`** (4428) -- an `if` without one has a way
+through that runs no arm, and that way would owe a value it has nowhere to get.  An arm ending in `return` owes none, leaving the
+function rather than reaching the place the arms join.
+
+```
+let first: u8 = if a < b:
+    4u8
+elif a = b:
+    5u8
+else:
+    6u8
+```
+
+A name bound outside the `if` and assigned inside one arm means what it reads afterwards, by the same machinery `match` uses: the
+block the arms join at takes it as a parameter and each arm hands its own value over.
+
+Compare: Python, whose `elif` this is and whose layout notation this shares; Rust, where `if` is an expression and the `else` is
+required for the same reason, and which also refuses a non-boolean condition; C, where the condition is any scalar and the
+statement has no value, so a separate `?:` exists for the case this covers.  There is no `?:` here and no need of one.
+
+Whether `match` or `if` should be preferred where both would do is not something the language says.  `match` over a `bool` and an
+`if` are the same two branches written two ways, and that is a place where two spellings mean one thing -- kept because the two
+constructs are about different questions, one about which alternative a value holds and the other about whether something is so.
+
 #### match
 
 `match` takes a value's alternatives apart.  It applies to a **sum**, whose alternatives its definition lists, and to a

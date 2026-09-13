@@ -89,6 +89,20 @@ class _Local:
 
 
 @dataclass(slots=True)
+class _ArmPlan:
+    """One arm to run: its body, the block it runs in, and what it binds.
+
+    A `match` over a result binds the answer; nothing else binds anything.  The
+    block is nothing where the arm is the whole of what runs, which is what an
+    arm taking every alternative comes to.
+    """
+
+    body: ast.Block
+    block: "BasicBlock | None" = None
+    binds: "tuple[str, Span, Span, Value, Type] | None" = None
+
+
+@dataclass(slots=True)
 class _NamedType:
     """A type a program defined, and what it turned out to be.
 
@@ -1528,6 +1542,10 @@ class Checker:
                     value = self._lower_into(builder, stmt.value, func.ty.ret,
                                              stmt.span)
                     builder.ret(value, stmt.span)
+                elif isinstance(stmt.value, ast.If):
+                    # An `if` written as a statement of its own produces no
+                    # value, and needs no `else` for that reason.
+                    self._lower_if(builder, stmt.value, func, None, False)
                 elif isinstance(stmt.value, ast.Match):
                     # A `match` written as a statement of its own produces no
                     # value, and its arms are runs of statements like any other
@@ -1539,6 +1557,73 @@ class Checker:
                     self._lower_expr(builder, stmt.value, None)
             case _:
                 self._diags.internal("unknown statement kind in lowering")
+
+    # -- if --------------------------------------------------------------------
+
+    def _lower_if(self, builder: IRBuilder, stmt: ast.If, func: Function,
+                  wanted: Type | None, produces: bool) -> Value:
+        """Check and lower an `if`, its `elif`s and its `else`.
+
+        A chain of conditional branches, each condition asked in the block the
+        one before it falls through to -- which is what makes an `elif` an
+        elif and not a second `if`: it is only asked where the earlier ones did
+        not hold.
+
+            entry:   condbr c1 → then1, ask2
+            ask2:    condbr c2 → then2, otherwise
+            then1:   its body, then the join
+            then2:   the same
+            otherwise: the `else` body, or the join itself where there is none
+            joined(p): whatever the arms left behind
+
+        Where a value is wanted there has to be an `else`: an `if` without one
+        has a way through that runs no arm, and that way would owe a value it
+        has nowhere to get.
+        """
+        last = stmt.arms[-1]
+        has_else = last.condition is None
+        if produces and not has_else:
+            self._diags.emit(D.LANG_IF_NEEDS_AN_ELSE, stmt.span)
+            return UndefConst(ERROR)
+        asked = [arm for arm in stmt.arms if arm.condition is not None]
+        blocks = [builder.new_block("then") for _ in asked]
+        otherwise = builder.new_block("otherwise") if has_else else None
+        spoiled = False
+        for index, arm in enumerate(asked):
+            assert arm.condition is not None
+            # Lowered with nothing expected of it, so that a condition of the
+            # wrong type is reported once, as a condition, rather than by
+            # whatever wording the place it stands in would have used.
+            condition = self._lower_expr(builder, arm.condition, None)
+            found = self._value_type_of(condition)
+            if found is not BOOL and found is not ERROR:
+                self._diags.emit(D.LANG_IF_CONDITION_NOT_BOOLEAN,
+                                 arm.condition.span, found=found.render())
+                spoiled = True
+                condition = UndefConst(BOOL)
+            elif found is ERROR:
+                spoiled = True
+                condition = UndefConst(BOOL)
+            following = (builder.new_block("elif") if index + 1 < len(asked)
+                         else otherwise)
+            if following is None:
+                # Nothing left to ask and no `else`: what the last condition
+                # falls through to is the place the arms join, which the arms
+                # themselves are what makes.
+                following = builder.new_block("otherwise")
+                otherwise = following
+            builder.condbr(condition, blocks[index], following, span=arm.span)
+            builder.position_at(following)
+        if spoiled:
+            return UndefConst(ERROR)
+        plan = [_ArmPlan(body=arm.body, block=block)
+                for arm, block in zip(asked, blocks)]
+        if has_else:
+            assert otherwise is not None
+            plan.append(_ArmPlan(body=last.body, block=otherwise))
+            return self._run_arms(builder, stmt, func, plan, wanted, produces)
+        return self._run_arms(builder, stmt, func, plan, wanted, produces,
+                              otherwise=otherwise)
 
     # -- match -----------------------------------------------------------------
 
@@ -1696,15 +1781,21 @@ class Checker:
         """
         if len(taken) == 1:
             return self._run_arms(builder, stmt, func,
-                                  [(taken[0][0], None, None)], wanted, produces)
+                                  [_ArmPlan(body=taken[0][0].body)],
+                                  wanted, produces)
         holders = {index: arm for arm, indices in taken for index in indices}
         answered = builder.new_block("answer")
         failed = builder.new_block("error")
         builder.condbr(builder.failed(subject, stmt.span), failed, answered,
                        span=stmt.span)
-        return self._run_arms(builder, stmt, func,
-                              [(holders[0], answered, (subject, ty.ok)),
-                               (holders[1], failed, None)], wanted, produces)
+        first, second = holders[0], holders[1]
+        binds = None if first.pattern.name is None else (
+            first.pattern.name, first.pattern.name_span, first.pattern.span,
+            subject, ty.ok)
+        return self._run_arms(
+            builder, stmt, func,
+            [_ArmPlan(body=first.body, block=answered, binds=binds),
+             _ArmPlan(body=second.body, block=failed)], wanted, produces)
 
     def _lower_match_on_enum(self, builder: IRBuilder, stmt: ast.Match,
                              func: Function, subject: Value, ty: EnumType,
@@ -1735,13 +1826,16 @@ class Checker:
                                span=arm.pattern.span)
                 builder.position_at(following)
         builder.br(blocks[id(fallback)], (), stmt.span)
-        return self._run_arms(builder, stmt, func,
-                              [(arm, blocks[id(arm)], None) for arm, _ in taken],
-                              wanted, produces)
+        return self._run_arms(
+            builder, stmt, func,
+            [_ArmPlan(body=arm.body, block=blocks[id(arm)]) for arm, _ in taken],
+            wanted, produces)
 
-    def _run_arms(self, builder: IRBuilder, stmt: ast.Match, func: Function,
-                  plan: "Sequence[tuple[ast.MatchArm, BasicBlock | None, tuple[Value, Type] | None]]",
-                  wanted: Type | None = None, produces: bool = False) -> Value:
+    def _run_arms(self, builder: IRBuilder, stmt: "ast.Match | ast.If",
+                  func: Function,
+                  plan: "Sequence[_ArmPlan]", wanted: Type | None = None,
+                  produces: bool = False,
+                  otherwise: "BasicBlock | None" = None) -> Value:
         """Lower each arm into its block and join what the arms leave behind.
 
         A name bound outside the match and assigned inside one arm stands for
@@ -1760,17 +1854,16 @@ class Checker:
         changed: dict[int, _Local] = {}
         touched = False
         answer: Type | None = wanted
-        for arm, block, carries in plan:
-            if block is not None:
-                builder.position_at(block)
+        for arm in plan:
+            if arm.block is not None:
+                builder.position_at(arm.block)
             builder.set_memory(before_memory)
             self._push_scope()
-            if arm.pattern.name is not None and carries is not None:
-                value, answer_ty = carries
-                bound = builder.unwrap(value, answer_ty, arm.pattern.span)
-                self._name_value(bound, arm.pattern.name)
-                self._bind_local(arm.pattern.name, bound, arm.pattern.name_span,
-                                 value_span=arm.pattern.span)
+            if arm.binds is not None:
+                name, name_span, where_span, value, answer_ty = arm.binds
+                bound = builder.unwrap(value, answer_ty, where_span)
+                self._name_value(bound, name)
+                self._bind_local(name, bound, name_span, value_span=where_span)
             given = self._lower_block(builder, arm.body, func, as_result=False,
                                       wanted=answer, produces=produces)
             if produces and given is not None and answer is None:
@@ -1789,6 +1882,10 @@ class Checker:
                 touched = touched or builder.memory() is not before_memory
             for local, held, where in before:
                 local.value, local.value_span = held, where
+        if otherwise is not None:
+            # A way through that runs no arm at all, which is what an `if` with
+            # no `else` has.  Nothing changed along it and nothing was written.
+            outcomes.append((otherwise, {}, before_memory, None))
         self._carried = outer_carried
         if not outcomes:
             # Every arm left the function, so nothing arrives at the join and a
@@ -2030,6 +2127,9 @@ class Checker:
                 return self._lower_call(builder, expr, expected)
             case ast.NameRef():
                 return self._lower_name(builder, expr, expected)
+            case ast.If():
+                return self._lower_if(builder, expr, builder.function, expected,
+                                      True)
             case ast.Match():
                 return self._lower_match(builder, expr, builder.function,
                                          expected, True)

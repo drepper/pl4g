@@ -1,0 +1,13 @@
+※ pl4g-test: compile=ok run=native,qemu exit=7 diag=none
+
+※ An arm's body is written the way a function's is: a colon and an indented
+※ block, or braces.  Both notations take the same arms.
+
+let a: mut u8 = 3u8
+let b: mut u8 = 9u8
+
+@[visible]
+let kept: mut u8 = 0u8
+
+@[startup]
+fn main() → u8 { if a < b { kept ← 3u8 } elif a = b { kept ← 4u8 } else { kept ← 5u8 } ; kept + 4u8 }

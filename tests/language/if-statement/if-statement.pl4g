@@ -1,0 +1,29 @@
+※ pl4g-test: compile=ok run=native,qemu exit=31 diag=none
+
+※ `if` takes a condition, which stands on its own -- there are no parentheses
+※ around it, because nothing needs them: what ends it is the body, which
+※ begins with a colon or a brace, and neither can be part of an expression.
+※
+※ Zero or more `elif` follow, each with a condition of its own, asked only
+※ where the ones before it did not hold.  An `else` may follow them, and is
+※ the last arm there is.
+
+let a: mut u8 = 3u8
+let b: mut u8 = 9u8
+
+@[visible]
+let kept: mut u8 = 0u8
+
+@[startup]
+fn main() → u8:
+    ※ a statement of its own, with no else
+    if a < b:
+        kept ← 1u8
+    ※ a chain
+    if a > b:
+        kept ← kept + 10u8
+    elif a = b:
+        kept ← kept + 20u8
+    else:
+        kept ← kept + 30u8
+    kept

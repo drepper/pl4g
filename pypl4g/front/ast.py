@@ -332,6 +332,30 @@ class MatchArm(Node):
 
 
 @dataclass(frozen=True, slots=True)
+class IfArm(Node):
+    """One arm of an `if`: what has to hold for it, and what it does.
+
+    The condition is nothing for the arm written `else`, which is the one that
+    holds when none of the others did.
+    """
+
+    condition: "Expr | None"
+    body: Block
+
+
+@dataclass(frozen=True, slots=True)
+class If(Expr):
+    """`if`, its `elif`s and its `else`.
+
+    An expression, as `match` is: where a value is wanted of it every arm
+    produces one, and there has to be an `else`, since an `if` with none has a
+    way through that produces nothing.
+    """
+
+    arms: tuple[IfArm, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class Match(Expr):
     """`match EXPR` and the arms that take its alternatives apart.
 

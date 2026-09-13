@@ -1024,6 +1024,22 @@
       "option": null
     },
     {
+      "number": 3024,
+      "name": "LANG_IF_ELSE_IS_LAST",
+      "severity": "error",
+      "message": "'else' is the last arm of an 'if'",
+      "args": [],
+      "cause": "`else` is the arm that runs when none of the others did, so nothing can be asked after it: an `elif` written there could never be reached, and a second `else` would be a second answer to a question already answered.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Statements / if",
+        "requirement": "The `else` arm of an `if` is its last."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 3201,
       "name": "LANG_ATTR_UNKNOWN",
       "severity": "error",
@@ -2685,6 +2701,44 @@
         "document": "spec/spec.md",
         "section": "The Language / Statements / match",
         "requirement": "Where a value is wanted of a `match`, every arm produces one."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4427,
+      "name": "LANG_IF_CONDITION_NOT_BOOLEAN",
+      "severity": "error",
+      "message": "the condition of an 'if' is a truth value, not '{found}'",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type of what was written"
+        }
+      ],
+      "cause": "A condition asks a question, and a question is answered by a truth value.  A number is not one: C treats any scalar as a condition and that is the source of `if (x = 0)` compiling, which this language refuses by having nothing for a number to mean here.  Where the question is whether a number is zero, `x = 0u8` asks it.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Statements / if",
+        "requirement": "The condition of an `if` is of type `bool`."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4428,
+      "name": "LANG_IF_NEEDS_AN_ELSE",
+      "severity": "error",
+      "message": "a value is wanted of this 'if', and it has no 'else'",
+      "args": [],
+      "cause": "Where a value is wanted, every way through has to produce one -- and an `if` with no `else` has a way through that runs none of its arms.  Adding an `else` says what the value is then.  An `if` written as a statement of its own needs none, there being no value for the way through to owe.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Statements / if",
+        "requirement": "An `if` a value is wanted of has an `else`."
       },
       "since": "0.1",
       "default_enabled": true,

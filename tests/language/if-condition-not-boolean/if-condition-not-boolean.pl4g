@@ -1,0 +1,15 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4427 LANG_IF_CONDITION_NOT_BOOLEAN
+
+※ A condition asks a question, and a question is answered by a truth value.
+※ A number is not one: C treats any scalar as a condition, and that is what
+※ makes `if (x = 0)` compile there.  Where the question is whether a number is
+※ zero, `n = 0u8` asks it.
+
+let n: mut u8 = 3u8
+
+@[startup]
+fn main() → u8:
+    if n:
+        return 1u8
+    0u8

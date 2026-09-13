@@ -231,14 +231,9 @@ module.exports = grammar({
     _trailing_block_line: $ => prec(1, seq(
       optional($.attribute_list),
       choice(
-        alias(seq('let', field('name', $.identifier), ':',
-                  optional($.mutable), optional(field('type', $.type)), '=',
-                  field('value', $.match_expression)),
-              $.variable_statement),
-        alias(seq(field('target', $.identifier), '\u2190',
-                  field('value', $.match_expression)),
-              $.assignment),
-        alias(seq('return', $.match_expression), $.return_statement),
+        alias($._trailing_variable, $.variable_statement),
+        alias($._trailing_assignment, $.assignment),
+        alias($._trailing_return, $.return_statement),
         // Higher than the ordinary expression statement, so that a `match`
         // standing alone on a line is read as the line that ends with a block
         // rather than as one that has yet to be finished.
@@ -246,10 +241,43 @@ module.exports = grammar({
         // own rather than an aliased expression statement so that the match
         // stays a child of it, which is what an editor wants to fold.
         $.match_statement,
+        $.if_statement,
       ),
     )),
 
+    // Higher than the ordinary readings, for the same reason the line that
+    // ends with one is: a line ending here is a line that ended.
+    _block_expression: $ => prec(1, choice($.match_expression,
+                                           $.if_expression)),
+
+    // The three statements a block expression can end, written as rules of
+    // their own so that aliasing one keeps the shape it would have had: an
+    // alias over an inline sequence flattens the fields inside it.
+    _trailing_variable: $ => seq(
+      'let', field('name', $.identifier), ':', optional($.mutable),
+      optional(field('type', $.type)), '=', field('value', $._block_expression),
+    ),
+
+    _trailing_assignment: $ => seq(
+      field('target', $.identifier), '\u2190', field('value', $._block_expression),
+    ),
+
+    _trailing_return: $ => seq('return', $._block_expression),
+
     match_statement: $ => prec(2, $.match_expression),
+
+    // `if`, its `elif`s and its `else`.  The condition stands on its own --
+    // there are no parentheses around it, because nothing needs them: what ends
+    // it is the body, which begins with a colon or a brace, and neither can be
+    // part of an expression.
+    if_expression: $ => seq(
+      'if', field('condition', $._expression), field('then', $._block),
+      repeat(seq('elif', field('condition', $._expression),
+                 field('then', $._block))),
+      optional(seq('else', field('else', $._block))),
+    ),
+
+    if_statement: $ => prec(2, $.if_expression),
 
     // What follows a semicolon may be written or may be left out, and leaving
     // it out is the empty statement.  It has no node of its own: there is
@@ -355,6 +383,7 @@ module.exports = grammar({
     // truth value, so a second one beside it would be comparing that answer.
     _non_comparison: $ => choice(
       $.match_expression,
+      $.if_expression,
       $.or_else_expression,
       $.try_expression,
       $.binary_expression,

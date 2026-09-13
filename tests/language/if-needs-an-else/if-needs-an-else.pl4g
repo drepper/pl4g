@@ -1,0 +1,13 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4428 LANG_IF_NEEDS_AN_ELSE
+
+※ Where a value is wanted, every way through has to produce one -- and an `if`
+※ with no `else` has a way through that runs none of its arms.
+
+let n: mut u8 = 3u8
+
+@[startup]
+fn main() → u8:
+    let kept: u8 = if n = 3u8:
+        1u8
+    kept

@@ -1,0 +1,24 @@
+※ pl4g-test: compile=ok run=native,qemu exit=19 diag=none
+
+※ Where a value is wanted of an `if`, every arm produces one and they are all
+※ of one type, and there has to be an `else`: an `if` without one has a way
+※ through that runs no arm, and that way would owe a value it has nowhere to
+※ get.  It is the same rule `match` follows and the same machinery underneath.
+
+let a: mut u8 = 3u8
+let b: mut u8 = 9u8
+
+@[startup]
+fn main() → u8:
+    let first: u8 = if a < b:
+        4u8
+    elif a = b:
+        5u8
+    else:
+        6u8
+    ※ an arm may leave the function instead of producing a value
+    let second: u8 = if a > b:
+        return 1u8
+    else:
+        15u8
+    first + second

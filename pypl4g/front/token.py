@@ -151,6 +151,9 @@ class TokKind(StrEnum):
     KW_TYPE = "'type'"
     KW_MATCH = "'match'"
     KW_ENUM = "'enum'"
+    KW_IF = "'if'"
+    KW_ELIF = "'elif'"
+    KW_ELSE = "'else'"
     KW_TRUE = "'true'"
     KW_FALSE = "'false'"
     KW_IMPORT = "'import'"
@@ -241,6 +244,9 @@ KEYWORDS: Final[dict[str, TokKind]] = {
     "type": TokKind.KW_TYPE,
     "match": TokKind.KW_MATCH,
     "enum": TokKind.KW_ENUM,
+    "if": TokKind.KW_IF,
+    "elif": TokKind.KW_ELIF,
+    "else": TokKind.KW_ELSE,
     "true": TokKind.KW_TRUE,
     "false": TokKind.KW_FALSE,
     "import": TokKind.KW_IMPORT,

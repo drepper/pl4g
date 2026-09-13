@@ -331,3 +331,85 @@ fn main() → u8:
                 value: (integer_literal))))))
       (expression_statement
         (identifier)))))
+
+================================================================================
+An if with its elif and its else, in both notations
+================================================================================
+
+@[startup]
+fn main() → u8:
+    if a < b:
+        kept ← 1u8
+    let more: u8 = if a > b:
+        2u8
+    else:
+        3u8
+    kept
+
+fn braced() → u8 { if a < b { kept ← 3u8 } elif a = b { kept ← 4u8 } else { kept ← 5u8 } ; kept }
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_definition
+    (attribute_list
+      (attribute
+        name: (identifier)))
+    name: (identifier)
+    parameters: (parameter_list)
+    return_type: (type
+      (identifier))
+    body: (layout_block
+      (if_statement
+        (if_expression
+          condition: (comparison_expression
+            left: (identifier)
+            right: (identifier))
+          then: (layout_block
+            (assignment
+              target: (identifier)
+              value: (integer_literal)))))
+      (variable_statement
+        name: (identifier)
+        type: (type
+          (identifier))
+        value: (if_expression
+          condition: (comparison_expression
+            left: (identifier)
+            right: (identifier))
+          then: (layout_block
+            (expression_statement
+              (integer_literal)))
+          else: (layout_block
+            (expression_statement
+              (integer_literal)))))
+      (expression_statement
+        (identifier))))
+  (function_definition
+    name: (identifier)
+    parameters: (parameter_list)
+    return_type: (type
+      (identifier))
+    body: (explicit_block
+      (expression_statement
+        (if_expression
+          condition: (comparison_expression
+            left: (identifier)
+            right: (identifier))
+          then: (explicit_block
+            (assignment
+              target: (identifier)
+              value: (integer_literal)))
+          condition: (comparison_expression
+            left: (identifier)
+            right: (identifier))
+          then: (explicit_block
+            (assignment
+              target: (identifier)
+              value: (integer_literal)))
+          else: (explicit_block
+            (assignment
+              target: (identifier)
+              value: (integer_literal)))))
+      (expression_statement
+        (identifier)))))
