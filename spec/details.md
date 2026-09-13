@@ -273,6 +273,30 @@ A comparison is folded into a branch only where the branch is its *sole* reader 
 anything else, or read twice, it is a value that something wants, and a value something wants has to be in a register.  Two
 branches cannot each absorb one comparison, so that case computes it once and both branches test the result against zero.
 
+**A value narrower than a register carries its own zeroes or its own sign above
+itself.**  Every integer value of width *w* is held in a register with the bits
+above *w* equal to the zero- or sign-extension of the value, according to the
+type's signedness.  That is the invariant everything else rests on: a
+comparison, a store and an arithmetic operation each read the whole register, so
+a value whose upper bits say something other than what the type says is a value
+one of them will read wrongly.
+
+Nearly everything maintains it without being asked.  A load says in its own
+instruction whether it widens by zero or by sign.  A constant is built as the
+whole pattern.  A comparison answers with one or zero.  `and`, `or` and
+`exclusive or` of two values that satisfy it satisfy it again, the bits above
+the width being then the same bit on both sides.  The complement of an
+*unsigned* value does not, which is the one place the bits have to be put back:
+`~15` as a `u8` is 240, and a register holding the complement of 15 holds
+neither 240 nor anything that compares equal to it.
+
+Arithmetic answers the question differently.  An operation that saturates or
+that faults on overflow never produces a value outside its type, so computing it
+at the full width of the register and clamping leaves the invariant holding with
+nothing further to do -- which is also why such an operation can be computed
+*exactly* for any type narrower than a register, and needs a rule of its own only
+at the width of the register itself.
+
 **A constant wider than an instruction can carry is built rather than loaded.**  No constant pool is emitted and none is planned:
 a pool costs a relocation, a cache line and a section, where a sequence costs two to four instructions that no other value has to
 wait for.  AArch64 sets a quarter of a word at a time, and turns every bit round first where the value has more quarters of ones

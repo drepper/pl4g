@@ -366,6 +366,72 @@ AARCH64_INSTRS: Final[tuple[A64InstDesc, ...]] = (
     A64InstDesc("cset.hs", (_r(32),), template=0x1A9F37E0,
                 fields=(_reg_field(0, _RD),), implicit_uses=(NZCV,),
                 est_size=INSTRUCTION_SIZE),
+    # mul Wd, Wn, Wm   is  madd Wd, Wn, Wm, WZR
+    A64InstDesc("mul", (_r(32), _r(32), _r(32)), template=0x1B007C00,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN), _reg_field(2, _RM)),
+                est_size=INSTRUCTION_SIZE),
+    # mul Xd, Xn, Xm
+    A64InstDesc("mul", (_r(64), _r(64), _r(64)), template=0x9B007C00,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN), _reg_field(2, _RM)),
+                est_size=INSTRUCTION_SIZE),
+    # umulh Xd, Xn, Xm   the upper half of an unsigned product
+    A64InstDesc("umulh", (_r(64), _r(64), _r(64)), template=0x9BC07C00,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN), _reg_field(2, _RM)),
+                est_size=INSTRUCTION_SIZE),
+    # smulh Xd, Xn, Xm   the upper half of a signed product
+    A64InstDesc("smulh", (_r(64), _r(64), _r(64)), template=0x9B407C00,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN), _reg_field(2, _RM)),
+                est_size=INSTRUCTION_SIZE),
+    # csel Xd, Xn, Xm, eq
+    A64InstDesc("csel.eq", (_r(64), _r(64), _r(64)), template=0x9A800000,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN),
+                        _reg_field(2, _RM)),
+                implicit_uses=(NZCV,), est_size=INSTRUCTION_SIZE),
+    # csel Xd, Xn, Xm, ne
+    A64InstDesc("csel.ne", (_r(64), _r(64), _r(64)), template=0x9A801000,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN),
+                        _reg_field(2, _RM)),
+                implicit_uses=(NZCV,), est_size=INSTRUCTION_SIZE),
+    # csel Xd, Xn, Xm, lt
+    A64InstDesc("csel.lt", (_r(64), _r(64), _r(64)), template=0x9A80B000,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN),
+                        _reg_field(2, _RM)),
+                implicit_uses=(NZCV,), est_size=INSTRUCTION_SIZE),
+    # csel Xd, Xn, Xm, le
+    A64InstDesc("csel.le", (_r(64), _r(64), _r(64)), template=0x9A80D000,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN),
+                        _reg_field(2, _RM)),
+                implicit_uses=(NZCV,), est_size=INSTRUCTION_SIZE),
+    # csel Xd, Xn, Xm, gt
+    A64InstDesc("csel.gt", (_r(64), _r(64), _r(64)), template=0x9A80C000,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN),
+                        _reg_field(2, _RM)),
+                implicit_uses=(NZCV,), est_size=INSTRUCTION_SIZE),
+    # csel Xd, Xn, Xm, ge
+    A64InstDesc("csel.ge", (_r(64), _r(64), _r(64)), template=0x9A80A000,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN),
+                        _reg_field(2, _RM)),
+                implicit_uses=(NZCV,), est_size=INSTRUCTION_SIZE),
+    # csel Xd, Xn, Xm, lo
+    A64InstDesc("csel.lo", (_r(64), _r(64), _r(64)), template=0x9A803000,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN),
+                        _reg_field(2, _RM)),
+                implicit_uses=(NZCV,), est_size=INSTRUCTION_SIZE),
+    # csel Xd, Xn, Xm, ls
+    A64InstDesc("csel.ls", (_r(64), _r(64), _r(64)), template=0x9A809000,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN),
+                        _reg_field(2, _RM)),
+                implicit_uses=(NZCV,), est_size=INSTRUCTION_SIZE),
+    # csel Xd, Xn, Xm, hi
+    A64InstDesc("csel.hi", (_r(64), _r(64), _r(64)), template=0x9A808000,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN),
+                        _reg_field(2, _RM)),
+                implicit_uses=(NZCV,), est_size=INSTRUCTION_SIZE),
+    # csel Xd, Xn, Xm, hs
+    A64InstDesc("csel.hs", (_r(64), _r(64), _r(64)), template=0x9A802000,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN),
+                        _reg_field(2, _RM)),
+                implicit_uses=(NZCV,), est_size=INSTRUCTION_SIZE),
     # cbnz Wt, label
     A64InstDesc("cbnz", (_r(32), _sym()), template=0x35000000,
                 fields=(_reg_field(0, _RD),

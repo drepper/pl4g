@@ -20,6 +20,7 @@ from ...mc.operand import SymExpr
 from ...source.location import Span
 from ..branches import (UnsupportedBranch, folded_into_branch, labels_of,
                         lower_branch, lower_comparison)
+from ..narrow import normalize
 
 if TYPE_CHECKING:
     from ...mc.reg import PhysReg
@@ -36,6 +37,7 @@ from .regs import GPR, INFO as REGISTERS, RSP
 _BINARY: Final[dict[str, str]] = {
     ops.PLUS.name: "add",
     ops.MINUS.name: "sub",
+    ops.TIMES.name: "imul",
     ops.XOR.name: "xor",
     ops.AND.name: "and",
     ops.OR.name: "or",
@@ -314,9 +316,13 @@ class X86Selector(InstructionSelector):
             try:
                 self.table.select("cmp", (lhs, rhs))
             except SelectionError:
+                # The comparison is made at the full width of the register, which
+                # is what the two operands have to agree on.  That is right
+                # whatever the type: a value narrower than its register carries
+                # its own zeroes or its own sign above itself.
                 carried = REGISTERS.new_virtual(GPR, 64)
                 return (*self.select_move(carried, rhs, span),
-                        self._inst("cmp", (lhs, MCReg(carried)), span))
+                        self._inst("cmp", (_whole(lhs), MCReg(carried)), span))
         return (self._inst("cmp", (lhs, rhs), span),)
 
     # -- the stack -------------------------------------------------------------
@@ -519,6 +525,9 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
                     asm.op(unary, destination,
                            operands.in_register(inst.operands[0], inst.span),
                            span=inst.span)
+                    # The complement of a narrow unsigned value sets the bits
+                    # above it, where the value it stands for has zeroes there.
+                    normalize(asm, inst.ty, destination, max(32, _width_of(inst.ty)), inst.span)
                 case CmpInst():
                     # A comparison read exactly once is folded into the branch
                     # that reads it and nothing is emitted here; read any other
@@ -660,3 +669,8 @@ def _immediate_width(value: int, signed: bool, width: int = 64) -> int:
     return width
 
 
+
+
+def _whole(operand: MCOperand) -> MCOperand:
+    """*operand* naming the whole of the register it is in, where it is one."""
+    return MCReg(operand.reg, bits=64) if isinstance(operand, MCReg) else operand

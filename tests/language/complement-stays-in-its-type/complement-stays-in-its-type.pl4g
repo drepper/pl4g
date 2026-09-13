@@ -1,0 +1,20 @@
+※ pl4g-test: compile=ok run=native,qemu exit=0 diag=none
+
+※ The complement of a narrow unsigned value sets every bit above its width,
+※ where the value it stands for has zeroes there: ~15 as a u8 is 240, and a
+※ register holding the complement of 15 holds neither 240 nor anything that
+※ compares equal to it.  So the bits above the width are put back.
+
+let fifteen: u8 = 15u8
+let sixteen_bits: u16 = 15u16
+
+@[visible]
+let byte_agrees: mut bool = false
+@[visible]
+let half_agrees: mut bool = false
+
+@[startup]
+fn main() → u8:
+    byte_agrees ← ~ fifteen = 240u8
+    half_agrees ← ~ sixteen_bits = 65520u16
+    0u8

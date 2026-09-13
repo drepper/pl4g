@@ -246,6 +246,64 @@ X86_INSTRS: Final[tuple[X86InstDesc, ...]] = (
     X86InstDesc("setae", (_rm(8),), opcode=0x93, map=OpMap.M0F,
                 modrm=ModRMUse.EXT_RM, ext=0, rm_op=0,
                 implicit_uses=(EFLAGS,), est_size=3),
+    # imul r32, r/m32                    0F AF /r
+    X86InstDesc("imul", (_r(32), _rm(32)), opcode=0xAF, map=OpMap.M0F,
+                modrm=ModRMUse.REG_RM, reg_op=0, rm_op=1, implicit_defs=(EFLAGS,),
+                flags=InstFlags.ZEXT32, est_size=3, roles=_ACCUMULATE),
+    # imul r64, r/m64                    REX.W 0F AF /r
+    X86InstDesc("imul", (_r(64), _rm(64)), opcode=0xAF, map=OpMap.M0F,
+                opsize=OpSize.REXW, modrm=ModRMUse.REG_RM, reg_op=0, rm_op=1,
+                implicit_defs=(EFLAGS,), est_size=4, roles=_ACCUMULATE),
+    # cmove r64, r/m64                   REX.W 0F 44 /r
+    X86InstDesc("cmove", (_r(64), _rm(64)), opcode=0x44, map=OpMap.M0F,
+                opsize=OpSize.REXW, modrm=ModRMUse.REG_RM, reg_op=0, rm_op=1,
+                implicit_uses=(EFLAGS,), est_size=4,
+                roles=(OperandRole.DEF_USE, OperandRole.USE)),
+    # cmovne r64, r/m64                  REX.W 0F 45 /r
+    X86InstDesc("cmovne", (_r(64), _rm(64)), opcode=0x45, map=OpMap.M0F,
+                opsize=OpSize.REXW, modrm=ModRMUse.REG_RM, reg_op=0, rm_op=1,
+                implicit_uses=(EFLAGS,), est_size=4,
+                roles=(OperandRole.DEF_USE, OperandRole.USE)),
+    # cmovl r64, r/m64                   REX.W 0F 4C /r
+    X86InstDesc("cmovl", (_r(64), _rm(64)), opcode=0x4C, map=OpMap.M0F,
+                opsize=OpSize.REXW, modrm=ModRMUse.REG_RM, reg_op=0, rm_op=1,
+                implicit_uses=(EFLAGS,), est_size=4,
+                roles=(OperandRole.DEF_USE, OperandRole.USE)),
+    # cmovle r64, r/m64                  REX.W 0F 4E /r
+    X86InstDesc("cmovle", (_r(64), _rm(64)), opcode=0x4E, map=OpMap.M0F,
+                opsize=OpSize.REXW, modrm=ModRMUse.REG_RM, reg_op=0, rm_op=1,
+                implicit_uses=(EFLAGS,), est_size=4,
+                roles=(OperandRole.DEF_USE, OperandRole.USE)),
+    # cmovg r64, r/m64                   REX.W 0F 4F /r
+    X86InstDesc("cmovg", (_r(64), _rm(64)), opcode=0x4F, map=OpMap.M0F,
+                opsize=OpSize.REXW, modrm=ModRMUse.REG_RM, reg_op=0, rm_op=1,
+                implicit_uses=(EFLAGS,), est_size=4,
+                roles=(OperandRole.DEF_USE, OperandRole.USE)),
+    # cmovge r64, r/m64                  REX.W 0F 4D /r
+    X86InstDesc("cmovge", (_r(64), _rm(64)), opcode=0x4D, map=OpMap.M0F,
+                opsize=OpSize.REXW, modrm=ModRMUse.REG_RM, reg_op=0, rm_op=1,
+                implicit_uses=(EFLAGS,), est_size=4,
+                roles=(OperandRole.DEF_USE, OperandRole.USE)),
+    # cmovb r64, r/m64                   REX.W 0F 42 /r
+    X86InstDesc("cmovb", (_r(64), _rm(64)), opcode=0x42, map=OpMap.M0F,
+                opsize=OpSize.REXW, modrm=ModRMUse.REG_RM, reg_op=0, rm_op=1,
+                implicit_uses=(EFLAGS,), est_size=4,
+                roles=(OperandRole.DEF_USE, OperandRole.USE)),
+    # cmovbe r64, r/m64                  REX.W 0F 46 /r
+    X86InstDesc("cmovbe", (_r(64), _rm(64)), opcode=0x46, map=OpMap.M0F,
+                opsize=OpSize.REXW, modrm=ModRMUse.REG_RM, reg_op=0, rm_op=1,
+                implicit_uses=(EFLAGS,), est_size=4,
+                roles=(OperandRole.DEF_USE, OperandRole.USE)),
+    # cmova r64, r/m64                   REX.W 0F 47 /r
+    X86InstDesc("cmova", (_r(64), _rm(64)), opcode=0x47, map=OpMap.M0F,
+                opsize=OpSize.REXW, modrm=ModRMUse.REG_RM, reg_op=0, rm_op=1,
+                implicit_uses=(EFLAGS,), est_size=4,
+                roles=(OperandRole.DEF_USE, OperandRole.USE)),
+    # cmovae r64, r/m64                  REX.W 0F 43 /r
+    X86InstDesc("cmovae", (_r(64), _rm(64)), opcode=0x43, map=OpMap.M0F,
+                opsize=OpSize.REXW, modrm=ModRMUse.REG_RM, reg_op=0, rm_op=1,
+                implicit_uses=(EFLAGS,), est_size=4,
+                roles=(OperandRole.DEF_USE, OperandRole.USE)),
     # jmp rel32                          E9 cd
     X86InstDesc("jmp", (_rel(32),), opcode=0xE9, rel_op=0, rel_bits=32,
                 flags=InstFlags.TERMINATOR | InstFlags.BARRIER, est_size=5),

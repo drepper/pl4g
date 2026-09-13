@@ -171,6 +171,21 @@ RISCV_INSTRS: Final[tuple[RVInstDesc, ...]] = (
                fields=(_reg(0, _RD), _reg(1, _RS1),
                        Field(FieldKind.IMMEDIATE, 2, 20, 6)),
                est_size=INSTRUCTION_SIZE),
+    # The multiply instructions of the M extension.  `mul` is the low half of
+    # the product and `mulh`/`mulhu` the high half, which is the only way to
+    # see that a sixty-four bit product overflowed.
+    # mul rd, rs1, rs2
+    RVInstDesc("mul", (_r(), _r(), _r()), template=0x02000033,
+               fields=(_reg(0, _RD), _reg(1, _RS1), _reg(2, _RS2)),
+               est_size=INSTRUCTION_SIZE),
+    # mulh rd, rs1, rs2
+    RVInstDesc("mulh", (_r(), _r(), _r()), template=0x02001033,
+               fields=(_reg(0, _RD), _reg(1, _RS1), _reg(2, _RS2)),
+               est_size=INSTRUCTION_SIZE),
+    # mulhu rd, rs1, rs2
+    RVInstDesc("mulhu", (_r(), _r(), _r()), template=0x02003033,
+               fields=(_reg(0, _RD), _reg(1, _RS1), _reg(2, _RS2)),
+               est_size=INSTRUCTION_SIZE),
     # lui rd, imm20
     RVInstDesc("lui", (_r(), _imm20()), template=0x00000037,
                fields=(_reg(0, _RD),

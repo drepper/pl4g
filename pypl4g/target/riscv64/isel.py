@@ -23,6 +23,7 @@ from ...mc.operand import SymExpr
 from ...source.location import Span
 from ..branches import (UnsupportedBranch, folded_into_branch, labels_of,
                         lower_branch, lower_comparison)
+from ..narrow import normalize
 from . import ops as rvops
 from .opcodes import IMM12_MAX, IMM12_MIN, RISCV_INSTRS
 from .regs import GPR, INFO, SP, ZERO
@@ -39,6 +40,7 @@ if TYPE_CHECKING:
 _BINARY: Final[dict[str, str]] = {
     ops.PLUS.name: "add",
     ops.MINUS.name: "sub",
+    ops.TIMES.name: "mul",
     ops.XOR.name: "xor",
     ops.AND.name: "and",
     ops.OR.name: "or",
@@ -569,6 +571,9 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
                     asm.op(unary, destination,
                            operands.in_register(inst.operands[0], inst.span),
                            span=inst.span)
+                    # The complement of a narrow unsigned value sets the bits
+                    # above it, where the value it stands for has zeroes there.
+                    normalize(asm, inst.ty, destination, 64, inst.span)
                 case CmpInst():
                     # A comparison read exactly once is folded into the branch
                     # that reads it and nothing is emitted here; read any other

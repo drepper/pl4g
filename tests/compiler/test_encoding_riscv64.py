@@ -32,6 +32,14 @@ TABLE = InstrTable(RISCV_INSTRS)
 OBJDUMP = ARCH_TOOLS["riscv64"]["objdump"]
 ASSEMBLER = "/usr/bin/riscv64-linux-gnu-as"
 
+#: What the compiler emits for.  The base integer set plus the multiply and
+#: divide extension, which every Linux-capable RISC-V implementation has and
+#: which the standard sixty-four bit Linux ABI requires; multiplying without it
+#: would mean calling a routine, and there is nothing to call yet.  The
+#: compressed encoding is deliberately not included: nothing emits it, and the
+#: header flag that would announce it stays clear.
+MARCH = "rv64im"
+
 
 def assemble(mnemonic: str, *operands: object) -> bytes:
     """Select and encode one instruction."""
@@ -82,6 +90,9 @@ SAMPLES = [
     ("sltiu a0, a1, 1", "sltiu", MCReg(reg("a0")), MCReg(reg("a1")), MCImm(1, 12)),
     ("xori a0, a1, 1", "xori", MCReg(reg("a0")), MCReg(reg("a1")), MCImm(1, 12)),
     ("slli a0, a1, 32", "slli", MCReg(reg("a0")), MCReg(reg("a1")), MCImm(32, 6)),
+    ("mul a0, a1, a2", "mul", MCReg(reg("a0")), MCReg(reg("a1")), MCReg(reg("a2"))),
+    ("mulh a0, a1, a2", "mulh", MCReg(reg("a0")), MCReg(reg("a1")), MCReg(reg("a2"))),
+    ("mulhu a0, a1, a2", "mulhu", MCReg(reg("a0")), MCReg(reg("a1")), MCReg(reg("a2"))),
     ("j .", "j", MCSymRef(SymExpr(MCSymbol("s")))),
     ("beq a0, a1, .", "beq", MCReg(reg("a0")), MCReg(reg("a1")),
      MCSymRef(SymExpr(MCSymbol("s")))),
@@ -116,7 +127,7 @@ def assemble_externally(source: str) -> list[int]:
         # is switched off here for the same reason the backend does not use it.
         (path / "in.s").write_text("".join(("\t.text\n\t.option norvc\n", source, "\n")),
                                    encoding="utf-8")
-        subprocess.run([ASSEMBLER, "-march=rv64i", "-o", str(path / "in.o"),
+        subprocess.run([ASSEMBLER, "-march=" + MARCH, "-o", str(path / "in.o"),
                         str(path / "in.s")], check=True, capture_output=True)
         objcopy = OBJDUMP.replace("objdump", "objcopy")
         subprocess.run([objcopy, "-O", "binary", "--only-section=.text",
