@@ -93,7 +93,8 @@ GROUPS: tuple[Group, ...] = (
            "call-nested": "four calls, two of them nested",
            "arithmetic-division": "a division and a remainder, each checked twice",
            "shift-operators": "two shifts, each with its distance checked",
-           "float-arithmetic": "ten floating-point answers, each asserted"}),
+           "float-arithmetic": "ten floating-point answers, each asserted",
+           "float-approximate": "every approximate comparison, in both widths"}),
 )
 
 #: How many times each sample is compiled.  The best is kept.
