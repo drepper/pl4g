@@ -56,6 +56,7 @@ the parser does, and they are the floor everything else is measured against.
 | `5706c5f` | 1.05 | 1.95 | 1.78 | 1.46 |
 | `41f13c3` | 1.19 | 2.04 | 1.87 | 1.61 |
 | `e7fb804` | 1.23 | 2.04 | 1.89 | 1.59 |
+| `d0caa00` | 1.14 | 1.90 | 1.98 | 1.46 |
 
 ### Variables and memory
 
@@ -96,6 +97,7 @@ backend do.
 | `5706c5f` | 1.24 | 1.76 | 1.52 |
 | `41f13c3` | 1.36 | 1.92 | 1.67 |
 | `e7fb804` | 1.37 | 1.87 | 1.73 |
+| `d0caa00` | 1.34 | 1.82 | 1.53 |
 
 ### Register pressure
 
@@ -136,6 +138,7 @@ and they are the only ones that reach the frame.
 | `5706c5f` | 2.17 | 7.30 |
 | `41f13c3` | 2.10 | 7.32 |
 | `e7fb804` | 2.21 | 7.38 |
+| `d0caa00` | 2.04 | 7.19 |
 
 ### What is left out
 
@@ -176,6 +179,7 @@ decision log does.
 | `5706c5f` | 1.58 | 1.74 |
 | `41f13c3` | 1.69 | 1.79 |
 | `e7fb804` | 1.70 | 1.82 |
+| `d0caa00` | 1.58 | 1.63 |
 
 ### Expressions
 
@@ -216,45 +220,47 @@ optimizer does.
 | `5706c5f` | 1.77 | 1.47 | 2.59 | 2.71 | 2.57 | 1.71 | 2.10 | 2.77 | 2.45 | 2.43 | 6.43 | 9.88 | 3.88 |  |  |
 | `41f13c3` | 1.98 | 1.61 | 2.58 | 2.75 | 2.45 | 1.98 | 2.17 | 2.77 | 2.43 | 2.41 | 6.40 | 9.62 | 4.10 | 10.07 |  |
 | `e7fb804` | 1.90 | 1.61 | 2.66 | 2.81 | 2.58 | 1.87 | 2.15 | 2.75 | 2.50 | 2.47 | 6.45 | 9.96 | 3.96 | 10.11 | 4.29 |
+| `d0caa00` | 1.87 | 1.51 | 2.45 | 2.62 | 2.44 | 1.83 | 2.04 | 2.60 | 2.31 | 2.35 | 6.36 | 9.62 | 3.79 | 10.51 | 4.23 |
 
 ### Types
 
 Definitions the program writes.  These move when the parser, the name resolution or the layout does.
 
-| commit | type-definitions |
-|---|---|
-| `eee64a3` |  |
-| `af657ad` |  |
-| `2f564cb` |  |
-| `37dbb28` |  |
-| `1c4ae78` |  |
-| `f391839` |  |
-| `04c20c9` |  |
-| `3020cf6` |  |
-| `9bcaf84` |  |
-| `40c35bb` |  |
-| `9437d8a` |  |
-| `d0c8cf5` |  |
-| `73ce857` |  |
-| `ed1c028` |  |
-| `1269bd5` |  |
-| `db0b436` |  |
-| `25bb4e0` |  |
-| `baf1f3c` |  |
-| `74ac227` |  |
-| `c0f29f2` |  |
-| `5c3aec4` |  |
-| `f7ba2fc` |  |
-| `3e9eb27` |  |
-| `0990c74` |  |
-| `05d8da1` |  |
-| `03887ff` |  |
-| `87c066b` |  |
-| `ca395a6` |  |
-| `230b8a7` |  |
-| `5706c5f` | 1.42 |
-| `41f13c3` | 1.53 |
-| `e7fb804` | 1.54 |
+| commit | type-definitions | enum-values |
+|---|---|---|
+| `eee64a3` |  |  |
+| `af657ad` |  |  |
+| `2f564cb` |  |  |
+| `37dbb28` |  |  |
+| `1c4ae78` |  |  |
+| `f391839` |  |  |
+| `04c20c9` |  |  |
+| `3020cf6` |  |  |
+| `9bcaf84` |  |  |
+| `40c35bb` |  |  |
+| `9437d8a` |  |  |
+| `d0c8cf5` |  |  |
+| `73ce857` |  |  |
+| `ed1c028` |  |  |
+| `1269bd5` |  |  |
+| `db0b436` |  |  |
+| `25bb4e0` |  |  |
+| `baf1f3c` |  |  |
+| `74ac227` |  |  |
+| `c0f29f2` |  |  |
+| `5c3aec4` |  |  |
+| `f7ba2fc` |  |  |
+| `3e9eb27` |  |  |
+| `0990c74` |  |  |
+| `05d8da1` |  |  |
+| `03887ff` |  |  |
+| `87c066b` |  |  |
+| `ca395a6` |  |  |
+| `230b8a7` |  |  |
+| `5706c5f` | 1.42 |  |
+| `41f13c3` | 1.53 |  |
+| `e7fb804` | 1.54 |  |
+| `d0caa00` | 1.60 | 3.76 |
 
 Process
 -------
@@ -299,6 +305,7 @@ worth showing here, and every figure is in the JSON beside this file.
 | `5706c5f` | 80 | 93 |
 | `41f13c3` | 77 | 89 |
 | `e7fb804` | 80 | 91 |
+| `d0caa00` | 80 | 96 |
 
 What each row is:
 
@@ -334,6 +341,7 @@ What each row is:
 - `5706c5f` -- 📝 Time the type definitions too
 - `41f13c3` -- 📝 Time a result passed to a function too
 - `e7fb804` -- 📝 Time a match too
+- `d0caa00` -- 📝 Time the enumerations too
 
 What each program exercises:
 
@@ -364,3 +372,4 @@ What each program exercises:
 - `result-as-an-argument` -- results passed and answered with, both kinds
 - `match-a-result` -- three matches, one of them carrying a name past
 - `type-definitions` -- eight definitions in all three notations
+- `enum-values` -- two enumerations, and three matches over them
