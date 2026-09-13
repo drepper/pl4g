@@ -87,6 +87,7 @@ _BINARY_OPERATORS: Final[dict[TokKind, _Operator]] = {
     TokKind.SAT_SUB: _Operator(ast.BinaryOp.SAT_SUB, 40),
     TokKind.TIMES: _Operator(ast.BinaryOp.MULTIPLY, 50),
     TokKind.DIVIDE: _Operator(ast.BinaryOp.DIVIDE, 50),
+    TokKind.PERCENT: _Operator(ast.BinaryOp.REMAINDER, 50),
     TokKind.SAT_MUL: _Operator(ast.BinaryOp.SAT_MUL, 50),
 }
 

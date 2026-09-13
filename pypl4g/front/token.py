@@ -136,6 +136,7 @@ class TokKind(StrEnum):
     MINUS = "'-'"
     TIMES = "'\N{MULTIPLICATION SIGN}'"
     DIVIDE = "'\N{DIVISION SIGN}'"
+    PERCENT = "'%'"
 
     SAT_ADD = "'\N{SQUARED PLUS}'"
     SAT_SUB = "'\N{SQUARED MINUS}'"

@@ -117,3 +117,36 @@ def test_the_widest_multiplication_is_reported_not_guessed(triple: str, ty,  # n
     target.generate(module, target.new_assembler(streamer, 0), engine, 0)
     assert 8501 in [d.info.number for d in collected], \
         [d.info.name for d in collected]
+
+
+# -- dividing, and what is left over --------------------------------------------
+
+#: Every case where the answer is not simply the obvious one: the signs, the
+#: ends, and the pair that has no answer at all.  Written out rather than
+#: computed, since the point is what truncating toward zero comes to.
+DIVISIONS = [
+    (U8, 100, 7, 14, 2), (U8, 7, 100, 0, 7), (U8, 255, 1, 255, 0),
+    (I8, 7, 2, 3, 1), (I8, -7, 2, -3, -1),
+    (I8, 7, -2, -3, 1), (I8, -7, -2, 3, -1),
+    (I8, -128, 1, -128, 0), (I8, 127, -1, -127, 0),
+    (U64, 18446744073709551615, 3, 6148914691236517205, 0),
+    (I64, -9223372036854775808, 2, -4611686018427387904, 0),
+]
+
+
+@pytest.mark.parametrize("triple", compiler_targets())
+@pytest.mark.parametrize(("ty", "left", "right", "quotient", "rest"), DIVISIONS,
+                         ids=["".join((c[0].render(), ".", str(c[1]), ".", str(c[2])))
+                              for c in DIVISIONS])
+def test_dividing_truncates_toward_zero(triple: str, ty, left: int,  # noqa: ANN001
+                                        right: int, quotient: int, rest: int,
+                                        tmp_path) -> None:  # noqa: ANN001
+    """And what is left over then carries the sign of what was divided, which is
+    the half of the rule a language that floored its division would differ on."""
+    for op, expected in ((BinOp.SDIV if ty.signed else BinOp.UDIV, quotient),
+                         (BinOp.SREM if ty.signed else BinOp.UREM, rest)):
+        path = tmp_path / "out"
+        build(answers(triple, op, ty, left, right, expected), triple, path)
+        assert run(triple, path) == 1, "".join((
+            op.value, " of ", str(left), " and ", str(right), " as ",
+            ty.render(), " is not ", str(expected)))

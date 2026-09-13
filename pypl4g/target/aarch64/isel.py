@@ -22,7 +22,7 @@ from ..branches import (UnsupportedBranch, folded_into_branch, labels_of,
 from ..faults import Messages, describe
 from ..narrow import normalize
 from ..saturate import (DIVISION, NAMES, SATURATING, TRAPPING, Unsupported,
-                        lower_saturating, lower_trapping)
+                        lower_division, lower_saturating, lower_trapping)
 from . import ops as a64ops
 from .startup import ABORT_SYMBOL
 from .opcodes import AARCH64_INSTRS
@@ -448,6 +448,37 @@ class A64Selector(InstructionSelector):
 
     # -- the stack -------------------------------------------------------------
 
+    def select_divide(self, dst: Reg, left: MCOperand, right: MCOperand,
+                      signed: bool, remainder: bool, bits: int,
+                      span: Span) -> Sequence[MCInst]:
+        """Instructions that divide *left* by *right* into *dst*.
+
+        There is a division and no remainder, so what is left over is worked out
+        from the quotient: the dividend less the quotient times the divisor,
+        which is one instruction here.
+        """
+        held: list[MCInst] = []
+        dividend, before = self._in_register(left, bits, span)
+        held.extend(before)
+        divisor, before = self._in_register(right, bits, span)
+        held.extend(before)
+        quotient = MCReg(dst, bits=bits) if not remainder else MCReg(
+            INFO.new_virtual(GPR, 64), bits=bits)
+        held.append(self._inst("sdiv" if signed else "udiv",
+                               (quotient, dividend, divisor), span))
+        if remainder:
+            held.append(self._inst("msub", (MCReg(dst, bits=bits), quotient,
+                                            divisor, dividend), span))
+        return tuple(held)
+
+    def _in_register(self, operand: MCOperand, bits: int,
+                     span: Span) -> tuple[MCReg, Sequence[MCInst]]:
+        """*operand* as a register of *bits*, with whatever puts it in one."""
+        if isinstance(operand, MCReg):
+            return MCReg(operand.reg, bits=bits), ()
+        carried = INFO.new_virtual(GPR, 64)
+        return MCReg(carried, bits=bits), self.select_move(carried, operand, span)
+
     def link_slot_size(self) -> int:
         """A whole stack unit, the stack having to stay aligned to sixteen."""
         return 16
@@ -699,10 +730,24 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
                         raise UnsupportedOperation(unsupported.what, span) \
                             from unsupported
                 case BinaryInst() if inst.op in DIVISION:
-                    raise UnsupportedOperation(
-                        "division, which writes its quotient and its remainder "
-                        "to a fixed pair of registers on one of the targets and "
-                        "so waits on an operand being able to require one", span)
+                    destination = _new_value(
+                        inst.ty, registers,
+                        hint=(_result_register(inst.ty, cconv, registers)
+                              if inst is returned else None))
+                    held[id(inst)] = destination
+                    try:
+                        lower_division(
+                            asm, inst.op, inst.ty,
+                            operands.value(inst.operands[0], inst.span),
+                            operands.value(inst.operands[1], inst.span),
+                            destination, operands, max(32, _width_of(inst.ty)),
+                            _Fault("".join((NAMES[inst.op],
+                                            " that does not fit")), inst.span),
+                            _Fault("division by zero", inst.span),
+                            inst.span)
+                    except Unsupported as unsupported:
+                        raise UnsupportedOperation(unsupported.what, span) \
+                            from unsupported
                 case BinaryInst():
                     operation = _OPERATIONS.get(inst.op)
                     if operation is None:

@@ -230,6 +230,7 @@ answer must not be dropped, which this language will want too and does not have 
 | `-` | subtraction |
 | `×` | multiplication |
 | `÷` | division |
+| `%` | what is left over after division |
 
 Multiplication and division are glyphs rather than `*` and `/`, for the reason every glyph here is a glyph: a single ASCII
 character spent on an operator is one no future feature can have, and `×` and `÷` are what the operations are written with
@@ -257,6 +258,16 @@ exit with it.
 
 Where an overflow can be shown at compile time it is a compilation error rather than a fault, since a program that must stop every
 time it runs is a program that need not be run.
+
+**Division truncates toward zero**, and `%` is what is left over after it, so what is left over carries the sign of what was
+divided: `⁻7i8 ÷ 2i8` is `⁻3i8` and `⁻7i8 % 2i8` is `⁻1i8`.  That is what all three architectures' instructions do and what C, Rust, Go,
+Java and Zig all say; Python floors instead, and would answer `⁻4` and `1`.  Taking the hardware's answer costs nothing and means
+`a` is always `(a ÷ b) × b + a % b`.
+
+**Two divisions have no answer, and both stop the program.**  Dividing by zero is the obvious one -- and the three architectures
+do three different things about it, one raising a fault of its own, one answering with all ones and one with zero, so it is asked
+about first and the program stops the same way everywhere.  The other is the most negative number divided by `⁻1`, whose quotient is
+one past the largest the type can hold; it is the only pair that overflows, and an unsigned type never meets it.
 
 Compare C, where signed overflow is undefined and unsigned overflow wraps, and where `-ftrapv` and the sanitizers exist because
 neither answer is what anyone wanted; Rust, which panics in a debug build and wraps in a release one, so that a program means two

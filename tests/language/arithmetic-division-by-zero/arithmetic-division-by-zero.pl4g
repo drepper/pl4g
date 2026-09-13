@@ -1,0 +1,13 @@
+※ pl4g-test: compile=ok run=native,qemu exit=-4 diag=none
+
+※ Dividing by zero has no answer, and the three architectures do three
+※ different things about it: one raises a fault of the processor's own, one
+※ answers with all ones, one with zero.  So it is asked about first, and the
+※ program stops the same way on all three.
+
+let hundred: u8 = 100u8
+let none: u8 = 0u8
+
+@[startup]
+fn main() → u8:
+    hundred ÷ none

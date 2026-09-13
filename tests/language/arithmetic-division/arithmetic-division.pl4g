@@ -1,0 +1,16 @@
+※ pl4g-test: compile=ok run=native,qemu exit=14 diag=none
+
+※ Division truncates toward zero, which is what all three architectures do and
+※ what every language in this family says it does.  '%' is what is left over
+※ after it, and so carries the sign of what was divided.
+
+let hundred: u8 = 100u8
+let seven: u8 = 7u8
+
+@[visible]
+let rest: mut u8 = 0u8
+
+@[startup]
+fn main() → u8:
+    rest ← hundred % seven
+    hundred ÷ seven

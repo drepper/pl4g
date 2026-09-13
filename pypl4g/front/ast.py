@@ -156,6 +156,7 @@ class BinaryOp(StrEnum):
     SUBTRACT = "-"
     MULTIPLY = "\N{MULTIPLICATION SIGN}"
     DIVIDE = "\N{DIVISION SIGN}"
+    REMAINDER = "%"
 
     SAT_ADD = "\N{SQUARED PLUS}"
     SAT_SUB = "\N{SQUARED MINUS}"

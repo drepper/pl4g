@@ -55,6 +55,7 @@ _SIMPLE: Final[dict[str, TokKind]] = {
     "-": TokKind.MINUS,
     TIMES_GLYPH: TokKind.TIMES,
     DIVIDE_GLYPH: TokKind.DIVIDE,
+    "%": TokKind.PERCENT,
 }
 
 _OPEN: Final[frozenset[TokKind]] = frozenset(

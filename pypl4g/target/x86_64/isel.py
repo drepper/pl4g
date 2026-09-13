@@ -23,7 +23,7 @@ from ..branches import (UnsupportedBranch, folded_into_branch, labels_of,
 from ..faults import Messages, describe
 from ..narrow import normalize
 from ..saturate import (DIVISION, NAMES, SATURATING, TRAPPING, Unsupported,
-                        lower_saturating, lower_trapping)
+                        lower_division, lower_saturating, lower_trapping)
 
 if TYPE_CHECKING:
     from ...mc.reg import PhysReg
@@ -36,7 +36,7 @@ if TYPE_CHECKING:
 from . import ops as x86ops
 from .startup import ABORT_SYMBOL
 from .opcodes import X86_INSTRS
-from .regs import GPR, INFO as REGISTERS, RSP
+from .regs import GPR, INFO as REGISTERS, RAX, RDX, RSP
 
 #: The mnemonic that implements each architecture-neutral binary operation.
 _BINARY: Final[dict[str, str]] = {
@@ -398,6 +398,48 @@ class X86Selector(InstructionSelector):
         """The place in the frame at *slot*, measured from the stack pointer."""
         return MCMem(base=RSP, disp=slot, size_bits=64)
 
+    def select_divide(self, dst: Reg, left: MCOperand, right: MCOperand,
+                      signed: bool, remainder: bool, bits: int,
+                      span: Span) -> Sequence[MCInst]:
+        """Instructions that divide *left* by *right* into *dst*.
+
+        The dividend goes in one fixed register and is stretched across a second
+        before the division, which then writes the quotient to the first and the
+        remainder to the second.  The divisor cannot be either of them, and
+        nothing here has to say so: the instruction declares that it writes both,
+        and the allocator already keeps a value out of a register whose life
+        overlaps its own.
+        """
+        held: list[MCInst] = []
+        accumulator = REGISTERS.view(RAX.unit, bits)
+        # Named at the width the division is done at, which is the width of the
+        # type: a value is correct in the register it is held in, and both sides
+        # of the move have to agree on which part of it that is.
+        dividend, before = self._in_register(left, bits, span)
+        held.extend(before)
+        held.extend(self.select_move(accumulator, dividend, span))
+        if signed:
+            held.append(self._inst("cqo" if bits == 64 else "cdq", (), span))
+        else:
+            # The upper half of the dividend is zero, and clearing it with a
+            # move rather than an exclusive-or leaves the flags alone.
+            held.extend(self.select_move(REGISTERS.view(RDX.unit, bits),
+                                         MCImm(0, 32, signed=False), span))
+        divisor, before = self._in_register(right, bits, span)
+        held.extend(before)
+        held.append(self._inst("idiv" if signed else "div", (divisor,), span))
+        answer = REGISTERS.view((RDX if remainder else RAX).unit, bits)
+        held.extend(self.select_move(dst, MCReg(answer), span))
+        return tuple(held)
+
+    def _in_register(self, operand: MCOperand, bits: int,
+                     span: Span) -> tuple[MCReg, Sequence[MCInst]]:
+        """*operand* as a register of *bits*, with whatever puts it in one."""
+        if isinstance(operand, MCReg):
+            return MCReg(operand.reg, bits=bits), ()
+        carried = REGISTERS.new_virtual(GPR, bits)
+        return MCReg(carried, bits=bits), self.select_move(carried, operand, span)
+
     def link_slot_size(self) -> int:
         """None.  The call instruction here pushes the return address onto the
         stack, where a further call cannot reach it."""
@@ -655,10 +697,24 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
                         raise UnsupportedOperation(unsupported.what, span) \
                             from unsupported
                 case BinaryInst() if inst.op in DIVISION:
-                    raise UnsupportedOperation(
-                        "division, which writes its quotient and its remainder "
-                        "to a fixed pair of registers on one of the targets and "
-                        "so waits on an operand being able to require one", span)
+                    destination = _new_value(
+                        inst.ty, registers,
+                        hint=(_result_register(inst.ty, cconv, registers)
+                              if inst is returned else None))
+                    held[id(inst)] = destination
+                    try:
+                        lower_division(
+                            asm, inst.op, inst.ty,
+                            operands.value(inst.operands[0], inst.span),
+                            operands.value(inst.operands[1], inst.span),
+                            destination, operands, max(32, _width_of(inst.ty)),
+                            _Fault("".join((NAMES[inst.op],
+                                            " that does not fit")), inst.span),
+                            _Fault("division by zero", inst.span),
+                            inst.span)
+                    except Unsupported as unsupported:
+                        raise UnsupportedOperation(unsupported.what, span) \
+                            from unsupported
                 case BinaryInst():
                     operation = _OPERATIONS.get(inst.op)
                     if operation is None:

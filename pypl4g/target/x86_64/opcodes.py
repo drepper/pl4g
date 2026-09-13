@@ -10,7 +10,7 @@ from typing import Final
 
 from ...mc.desc import InstFlags, OperandKind, OperandRole, OperandSpec
 from .desc import ModRMUse, OpMap, OpSize, X86InstDesc
-from .regs import CALLER_SAVED, EFLAGS, GPR, R11, RCX
+from .regs import CALLER_SAVED, EFLAGS, GPR, R11, RAX, RCX, RDX
 
 
 def _r(bits: int) -> OperandSpec:
@@ -304,6 +304,35 @@ X86_INSTRS: Final[tuple[X86InstDesc, ...]] = (
                 opsize=OpSize.REXW, modrm=ModRMUse.REG_RM, reg_op=0, rm_op=1,
                 implicit_uses=(EFLAGS,), est_size=4,
                 roles=(OperandRole.DEF_USE, OperandRole.USE)),
+    # The division instructions take their dividend in a fixed pair of
+    # registers and write their quotient and remainder to the same pair.  That
+    # is said here as implicit uses and defs, which is all the allocator needs:
+    # it already keeps a value out of a register whose life overlaps its own, so
+    # the divisor cannot land in one of the two.
+    # cdq                                99          (sign-extends eax into edx)
+    X86InstDesc("cdq", (), opcode=0x99, implicit_uses=(RAX,), implicit_defs=(RDX,),
+                est_size=1),
+    # cqo                                REX.W 99
+    X86InstDesc("cqo", (), opcode=0x99, opsize=OpSize.REXW, implicit_uses=(RAX,),
+                implicit_defs=(RDX,), est_size=2),
+    # idiv r/m32                         F7 /7
+    X86InstDesc("idiv", (_rm(32),), opcode=0xF7, modrm=ModRMUse.EXT_RM, ext=7,
+                rm_op=0, implicit_uses=(RAX, RDX), implicit_defs=(RAX, RDX, EFLAGS),
+                est_size=2, roles=(OperandRole.USE,)),
+    # idiv r/m64                         REX.W F7 /7
+    X86InstDesc("idiv", (_rm(64),), opcode=0xF7, opsize=OpSize.REXW,
+                modrm=ModRMUse.EXT_RM, ext=7, rm_op=0,
+                implicit_uses=(RAX, RDX), implicit_defs=(RAX, RDX, EFLAGS),
+                est_size=3, roles=(OperandRole.USE,)),
+    # div r/m32                          F7 /6
+    X86InstDesc("div", (_rm(32),), opcode=0xF7, modrm=ModRMUse.EXT_RM, ext=6,
+                rm_op=0, implicit_uses=(RAX, RDX), implicit_defs=(RAX, RDX, EFLAGS),
+                est_size=2, roles=(OperandRole.USE,)),
+    # div r/m64                          REX.W F7 /6
+    X86InstDesc("div", (_rm(64),), opcode=0xF7, opsize=OpSize.REXW,
+                modrm=ModRMUse.EXT_RM, ext=6, rm_op=0,
+                implicit_uses=(RAX, RDX), implicit_defs=(RAX, RDX, EFLAGS),
+                est_size=3, roles=(OperandRole.USE,)),
     # jmp rel32                          E9 cd
     X86InstDesc("jmp", (_rel(32),), opcode=0xE9, rel_op=0, rel_bits=32,
                 flags=InstFlags.TERMINATOR | InstFlags.BARRIER, est_size=5),

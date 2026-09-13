@@ -121,6 +121,20 @@ class InstructionSelector(Protocol):
         """
         ...
 
+    def select_divide(self, dst: Reg, left: MCOperand, right: MCOperand,
+                      signed: bool, remainder: bool, bits: int,
+                      span: Span) -> Sequence[MCInst]:
+        """Instructions that divide *left* by *right* into *dst*, giving the
+        quotient or, where *remainder*, what is left over.
+
+        One call, because the shapes are nothing alike: one architecture takes
+        its dividend in a fixed pair of registers and writes both answers there,
+        one has a division and gets the remainder by multiplying back, and one
+        has an instruction for each.  What they agree on is that the division
+        truncates toward zero, which is what the language says it does.
+        """
+        ...
+
     def link_slot_size(self) -> int:
         """How much room a function that calls has to set aside for its own
         return address, which is none where a call has already put it somewhere
@@ -491,6 +505,12 @@ class Assembler:
               span: Span = INVALID_SPAN) -> None:
         """Put a *bits*-wide value into the whole of *dst*."""
         self._emit(self._selector.select_widen(dst, src, bits, signed, span))
+
+    def divide(self, dst: Reg, left: MCOperand, right: MCOperand, signed: bool,
+               remainder: bool, bits: int, span: Span = INVALID_SPAN) -> None:
+        """Divide *left* by *right* into *dst*, truncating toward zero."""
+        self._emit(self._selector.select_divide(dst, left, right, signed,
+                                                remainder, bits, span))
 
     def clamp(self, cond: Condition, dst: Reg, lhs: MCOperand, rhs: MCOperand,
               bound: MCOperand, span: Span = INVALID_SPAN) -> None:

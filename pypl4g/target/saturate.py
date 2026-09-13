@@ -89,12 +89,14 @@ NAMES = {
     BinOp.ADD: "addition", BinOp.SUB: "subtraction", BinOp.MUL: "multiplication",
 }
 
-#: Division is not here.  On two of the three architectures it is one
-#: instruction; on x86-64 it writes its quotient and its remainder to a fixed
-#: pair of registers, which the allocator cannot yet be told about.  Naming it
-#: here lets the refusal say what it waits on rather than that the operation is
-#: unknown.
-DIVISION = frozenset((BinOp.SDIV, BinOp.UDIV))
+#: Dividing, and asking what is left over.  They are one operation as far as the
+#: instructions go -- two of the three architectures answer both questions with
+#: one instruction, and on the third the same instruction writes both answers.
+DIVISION = frozenset((BinOp.SDIV, BinOp.UDIV, BinOp.SREM, BinOp.UREM))
+
+#: What each of them is called where a message has to say which went wrong.
+NAMES.update({BinOp.SDIV: "division", BinOp.UDIV: "division",
+              BinOp.SREM: "remainder", BinOp.UREM: "remainder"})
 
 #: The unsaturating operation each saturating one corresponds to, so that one
 #: table of shapes serves both.
@@ -260,3 +262,63 @@ def _signed_wrapping(asm: Assembler, op: BinOp, ty: IntType, left: MCReg,
         asm.clamp(Condition.SLT, bound, left, zero,
                   MCImm(ty.low, 64, signed=True), span)
     _answer(asm, Condition.SLT, destination, first, zero, MCReg(bound), fault, span)
+
+
+def lower_division(asm: Assembler, op: BinOp, ty: Type, left: MCOperand,
+                   right: MCOperand, destination: Reg, scratch: Scratch,
+                   register_bits: int, fault: Fault, divide_by_zero: Fault,
+                   span: Span) -> None:
+    """Emit a division or a remainder, with the two questions asked first.
+
+    **Dividing by zero has no answer**, and what the three architectures do
+    about it is three different things: one raises a fault of the processor's
+    own, one answers with all ones, and one answers with zero.  So the divisor
+    is compared with zero and the program is stopped where it is, which is the
+    same thing happening on every target and the same message as any other
+    fault.
+
+    **The most negative number divided by minus one** has no answer either: the
+    quotient is one past the largest the type can hold.  Here too the three
+    disagree -- one raises a fault, two answer with the most negative number
+    again -- so it is asked about rather than left to them.  Nothing like it
+    arises for an unsigned type, where the only unanswerable division is by
+    zero.
+    """
+    if not isinstance(ty, IntType):
+        raise Unsupported("a division of something that is not an integer")
+    bits = max(32, ty.bits) if register_bits < 64 else 64
+    # Both are read again after the checks, so both have to be somewhere that
+    # reading them is possible; one already in a register is left where it is,
+    # since moving it would only have to choose a width to move at.
+    held = _in_a_register(asm, left, scratch, span)
+    divisor = _in_a_register(asm, right, scratch, span)
+
+    zero = MCImm(0, 32, signed=False)
+    _answer(asm, Condition.EQ, destination, divisor, zero, zero, divide_by_zero, span)
+    if ty.signed:
+        # Only this one pair overflows, so it is asked about as one thing: the
+        # dividend being the most negative number *and* the divisor minus one.
+        # Two questions and one answer, which is what the second clamp on a
+        # value the first already settled comes to.
+        smallest = MCReg(scratch.scratch())
+        # The immediate is declared at the width the value is held at, so that
+        # what carries it into a register is a register of that width too.
+        asm.setcond(Condition.EQ, smallest.reg, held,
+                    MCImm(ty.low, bits, signed=True), span)
+        negative_one = MCReg(scratch.scratch())
+        asm.setcond(Condition.EQ, negative_one.reg, divisor,
+                    MCImm(-1, 32, signed=True), span)
+        asm.op(ops.AND, smallest.reg, smallest, negative_one, span=span)
+        _answer(asm, Condition.NE, destination, smallest, zero, zero, fault, span)
+    asm.divide(destination, held, divisor, ty.signed,
+               op in (BinOp.SREM, BinOp.UREM), bits, span)
+
+
+def _in_a_register(asm: Assembler, operand: MCOperand, scratch: Scratch,
+                   span: Span) -> MCReg:
+    """*operand* where reading it twice is possible."""
+    if isinstance(operand, MCReg):
+        return operand
+    carried = MCReg(scratch.scratch())
+    asm.loadreg(carried.reg, operand, span)
+    return carried

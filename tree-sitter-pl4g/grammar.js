@@ -247,7 +247,7 @@ module.exports = grammar({
                        field('operator', choice('+', '-', '\u229e', '\u229f')),
                        $._non_comparison)),
       prec.left(8, seq($._non_comparison,
-                       field('operator', choice('\u00d7', '\u00f7', '\u22a0')),
+                       field('operator', choice('\u00d7', '\u00f7', '%', '\u22a0')),
                        $._non_comparison)),
     ),
 

@@ -32,8 +32,22 @@ _COMPARISONS = {
     CmpPred.UGE: lambda a, b: a >= b,
 }
 
+def _towards_zero(left: int, right: int) -> int:
+    """*left* divided by *right*, truncated toward zero."""
+    quotient = abs(left) // abs(right)
+    return -quotient if (left < 0) != (right < 0) else quotient
+
+
+def _left_over(left: int, right: int) -> int:
+    """What is left of *left* after dividing by *right*, with the sign of *left*."""
+    return left - _towards_zero(left, right) * right
+
+
 #: The operations that clamp rather than going past the ends of their type.
 _SATURATING = frozenset((BinOp.SAT_ADD, BinOp.SAT_SUB, BinOp.SAT_MUL))
+
+#: The ones that have no answer for every pair of operands.
+_DIVISIONS = frozenset((BinOp.SDIV, BinOp.UDIV, BinOp.SREM, BinOp.UREM))
 
 _FOLDERS = {
     BinOp.ADD: lambda a, b: a + b,
@@ -42,6 +56,13 @@ _FOLDERS = {
     BinOp.SAT_ADD: lambda a, b: a + b,
     BinOp.SAT_SUB: lambda a, b: a - b,
     BinOp.SAT_MUL: lambda a, b: a * b,
+    # Truncating toward zero, which is what all three architectures do and what
+    # the language says it does -- Python's own division floors, so neither of
+    # these can be written with its operators.
+    BinOp.SDIV: _towards_zero,
+    BinOp.UDIV: _towards_zero,
+    BinOp.SREM: _left_over,
+    BinOp.UREM: _left_over,
     BinOp.AND: lambda a, b: a & b,
     BinOp.OR: lambda a, b: a | b,
     BinOp.XOR: lambda a, b: a ^ b,
@@ -89,6 +110,10 @@ class ConstantFolding:
         if folder is None:
             return None
         lhs, rhs = inst.operands
+        if inst.op in _DIVISIONS and isinstance(rhs, IntConst) and rhs.value == 0:
+            # Nothing to fold and nothing to report from here: the program
+            # stops when it runs, and saying so is the checker's business.
+            return None
         ty = inst.ty
         if ty is BOOL:
             # The logical operators are these same instructions asked of values

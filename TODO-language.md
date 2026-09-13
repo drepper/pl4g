@@ -136,10 +136,12 @@ To Do List for the PL4g language
     the ones the saturating operations use, the question being the same and only the reply differing.
     Left open, each with an entry of its own below: division, exponentiation, and the same for floating point.
 
-[ ] implement `÷`.  Parsed, typed and refused (8501).  What it waits on is in TODO-pypl4g.md: on x86-64 a division writes
-    its quotient and its remainder to a fixed pair of registers, which the register allocator cannot yet be told about.  It is
-    refused on every target rather than on the one that cannot do it, so that a program means the same thing wherever it is
-    compiled.  Dividing by zero is a fault like an overflow and wants the same path, which now exists.
+[x] implement `÷` and `%`.  Done, truncating toward zero, so that what is left over carries the sign of what was divided and
+    `a` is always `(a ÷ b) × b + a % b`.  Dividing by zero and dividing the most negative number by `⁻1` are the two
+    divisions with no answer, and both are asked about before the instruction runs: the three architectures do three different
+    things about each, so leaving it to them would mean a program meaning three things.
+    The fixed pair of registers x86-64 divides through needed nothing new after all: the instruction declares that it writes them,
+    and the allocator already keeps a value out of a register whose life overlaps its own.
 
 [ ] implement `↑` for exponentiation.  Not begun, and it needs a decision first: with a constant exponent it is a few
     multiplications and every one of them checks, which is straightforward; with an exponent that is not known until the program

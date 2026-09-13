@@ -1,0 +1,16 @@
+※ pl4g-test: compile=ok run=native,qemu exit=-4 diag=none
+
+※ The most negative number divided by minus one has no answer either: the
+※ quotient is one past the largest the type can hold.  It is the only pair
+※ that overflows, and the only one an unsigned type never meets.
+
+let smallest: i8 = ⁻128i8
+let minus_one: i8 = ⁻1i8
+
+@[visible]
+let kept: mut i8 = 0i8
+
+@[startup]
+fn main() → u8:
+    kept ← smallest ÷ minus_one
+    0u8

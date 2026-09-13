@@ -1450,12 +1450,14 @@ class Checker:
                              operator=expr.op.value, expected=ty.render(),
                              found=found.render())
             return UndefConst(ERROR)
-        if expr.op is ast.BinaryOp.DIVIDE:
+        if expr.op in (ast.BinaryOp.DIVIDE, ast.BinaryOp.REMAINDER):
             # One operator, two instructions: dividing signed numbers and
             # dividing unsigned ones are different questions, and the type of
             # what is divided is what says which was asked.
             signed = isinstance(ty, IntType) and ty.signed
-            return builder.binary(BinOp.SDIV if signed else BinOp.UDIV,
+            wanted = ((BinOp.SDIV, BinOp.UDIV) if expr.op is ast.BinaryOp.DIVIDE
+                      else (BinOp.SREM, BinOp.UREM))
+            return builder.binary(wanted[0] if signed else wanted[1],
                                   left, right, expr.span)
         return builder.binary(_BINARY_OPS[expr.op], left, right, expr.span)
 

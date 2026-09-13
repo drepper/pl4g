@@ -76,10 +76,11 @@ To Do List for the pypl4g compiler
     reach a convention, so each backend names them beside its registers and the call row uses them.  It costs nothing today,
     every convention each target has naming the same set; the day one does not, the call will have to carry them per instance.
 
-[ ] let an operand require a particular register, so that an instruction with a fixed register pair can be used.  x86-64 needs
-    it for the one-operand multiply, which is the only way to see the upper half of a product there, and for division, which
-    writes its quotient and remainder to a fixed pair.  Until then a saturating multiplication of the widest type is refused on
-    every target rather than on the one that cannot do it, so that a program means the same thing wherever it is compiled.
+[ ] let an operand require a particular register, so that an instruction with a fixed register pair can be used.  Division turned
+    out not to need it -- an instruction that declares it writes a register is already enough to keep other values out of it, so
+    the divisor cannot land in the pair -- but the one-operand multiply does, since its *input* has to be in a particular register
+    and nothing can say so.  That is the only way to see the upper half of a product on x86-64, and until then a saturating
+    multiplication of the widest type is refused on every target rather than on the one that cannot do it.
 
 [ ] lower `SwitchInst`.  It exists in the representation and nothing generates one, since the language has no construct that would.
     A chain of comparisons is correct and is what a first version should do; a jump table wants the relocation work that

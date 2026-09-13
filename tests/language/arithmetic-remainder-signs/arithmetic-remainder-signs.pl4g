@@ -1,0 +1,19 @@
+※ pl4g-test: compile=ok run=native,qemu exit=0 diag=none
+
+※ Division truncates toward zero, so what is left over has the sign of what
+※ was divided: ⁻7 ÷ 2 is ⁻3 and ⁻7 % 2 is ⁻1.  A language that floored its
+※ division would answer ⁻4 and 1.
+
+let minus_seven: i8 = ⁻7i8
+let two: i8 = 2i8
+
+@[visible]
+let quotient: mut i8 = 0i8
+@[visible]
+let rest: mut i8 = 0i8
+
+@[startup]
+fn main() → u8:
+    quotient ← minus_seven ÷ two
+    rest ← minus_seven % two
+    0u8

@@ -90,7 +90,8 @@ GROUPS: tuple[Group, ...] = (
            "logic-short-circuit": "three short circuits, which is six blocks",
            "saturating-precedence": "a sum and a product that saturate",
            "arithmetic-operators": "a sum and a product that check and can fault",
-           "call-nested": "four calls, two of them nested"}),
+           "call-nested": "four calls, two of them nested",
+           "arithmetic-division": "a division and a remainder, each checked twice"}),
 )
 
 #: How many times each sample is compiled.  The best is kept.
