@@ -183,6 +183,10 @@
     {
       "hash": "3ef3db4",
       "subject": "📝 Timings for the collections front end"
+    },
+    {
+      "hash": "90846b5",
+      "subject": "📝 Take the collection sample out of the timings for good"
     }
   ],
   "times": {
@@ -2952,6 +2956,128 @@
       "if-statement": [
         3.279,
         86.1796949757263
+      ]
+    },
+    "90846b5": {
+      "exit0": [
+        1.06,
+        83.27659999486059
+      ],
+      "global-variable": [
+        1.267,
+        83.29526800662279
+      ],
+      "assign-widths": [
+        1.775,
+        83.56915100011975
+      ],
+      "many-values-at-once": [
+        2.011,
+        83.54692702414468
+      ],
+      "unreached-function": [
+        1.546,
+        81.67139004217461
+      ],
+      "export-visibility": [
+        1.636,
+        82.3485609726049
+      ],
+      "digit-separators": [
+        1.7389999999999999,
+        83.72013899497688
+      ],
+      "boolean-values": [
+        1.452,
+        84.56240798113868
+      ],
+      "bitwise-operators": [
+        1.694,
+        82.9763279762119
+      ],
+      "bitwise-precedence": [
+        1.4779999999999998,
+        83.27444700989872
+      ],
+      "spill-to-the-frame": [
+        7.349,
+        90.6573660322465
+      ],
+      "boolean-in-memory": [
+        1.5160000000000002,
+        84.65123199857771
+      ],
+      "comparison-operators": [
+        2.606,
+        85.88957897154614
+      ],
+      "logic-operators": [
+        2.663,
+        85.59339202474803
+      ],
+      "logic-short-circuit": [
+        2.5160000000000005,
+        84.32810503290966
+      ],
+      "saturating-precedence": [
+        1.7109999999999999,
+        83.12707400182262
+      ],
+      "arithmetic-operators": [
+        1.985,
+        86.26329200342298
+      ],
+      "semicolon-separates-statements": [
+        1.87,
+        82.39818597212434
+      ],
+      "call-nested": [
+        2.7059999999999995,
+        84.21365299727768
+      ],
+      "arithmetic-division": [
+        2.448,
+        84.25071800593287
+      ],
+      "shift-operators": [
+        2.4299999999999997,
+        82.84526999341324
+      ],
+      "float-arithmetic": [
+        6.5360000000000005,
+        90.28544503962621
+      ],
+      "float-approximate": [
+        9.743,
+        92.92236901819706
+      ],
+      "result-type": [
+        3.786,
+        85.90578299481422
+      ],
+      "type-definitions": [
+        1.403,
+        84.35645798454061
+      ],
+      "result-as-an-argument": [
+        10.093,
+        92.4757780157961
+      ],
+      "match-a-result": [
+        4.294,
+        85.57170000858605
+      ],
+      "enum-values": [
+        3.909,
+        87.62932202080265
+      ],
+      "enum-flag": [
+        3.9400000000000004,
+        88.18540896754712
+      ],
+      "if-statement": [
+        3.3400000000000003,
+        90.50448494963348
       ]
     }
   }

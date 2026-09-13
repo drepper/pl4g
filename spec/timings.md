@@ -62,6 +62,7 @@ the parser does, and they are the floor everything else is measured against.
 | `7de9bb1` | 1.10 | 1.90 | 1.76 | 1.47 |
 | `08bdd97` | 1.07 | 1.92 | 1.71 | 1.43 |
 | `3ef3db4` | 1.29 | 1.88 | 1.76 | 1.45 |
+| `90846b5` | 1.06 | 1.87 | 1.74 | 1.45 |
 
 ### Variables and memory
 
@@ -108,6 +109,7 @@ backend do.
 | `7de9bb1` | 1.25 | 1.78 | 1.52 |
 | `08bdd97` | 1.23 | 1.76 | 1.54 |
 | `3ef3db4` | 1.34 | 2.01 | 1.56 |
+| `90846b5` | 1.27 | 1.77 | 1.52 |
 
 ### Register pressure
 
@@ -154,6 +156,7 @@ and they are the only ones that reach the frame.
 | `7de9bb1` | 2.03 | 7.43 |
 | `08bdd97` | 2.03 | 7.26 |
 | `3ef3db4` | 2.26 | 7.37 |
+| `90846b5` | 2.01 | 7.35 |
 
 ### What is left out
 
@@ -200,6 +203,7 @@ decision log does.
 | `7de9bb1` | 1.56 | 1.69 |
 | `08bdd97` | 1.57 | 1.67 |
 | `3ef3db4` | 1.72 | 1.74 |
+| `90846b5` | 1.55 | 1.64 |
 
 ### Expressions
 
@@ -246,6 +250,7 @@ optimizer does.
 | `7de9bb1` | 1.76 | 1.49 | 2.64 | 2.71 | 2.46 | 1.68 | 1.95 | 2.74 | 2.35 | 2.38 | 6.49 | 9.71 | 3.80 | 10.21 | 4.38 | 3.25 |
 | `08bdd97` | 1.74 | 1.47 | 2.59 | 2.73 | 2.54 | 1.70 | 1.95 | 2.75 | 2.45 | 2.40 | 6.65 | 9.82 | 3.84 | 10.23 | 4.38 | 3.28 |
 | `3ef3db4` | 1.72 | 1.49 | 2.61 | 2.77 | 2.61 | 1.74 | 1.97 | 2.75 | 2.39 | 2.42 | 6.53 | 9.64 | 3.88 | 10.14 | 4.31 | 3.28 |
+| `90846b5` | 1.69 | 1.48 | 2.61 | 2.66 | 2.52 | 1.71 | 1.99 | 2.71 | 2.45 | 2.43 | 6.54 | 9.74 | 3.79 | 10.09 | 4.29 | 3.34 |
 
 ### Types
 
@@ -291,6 +296,7 @@ Definitions the program writes.  These move when the parser, the name resolution
 | `7de9bb1` | 1.39 | 3.84 | 3.87 |
 | `08bdd97` | 1.38 | 3.88 | 4.03 |
 | `3ef3db4` | 1.41 | 3.85 | 3.92 |
+| `90846b5` | 1.40 | 3.91 | 3.94 |
 
 Process
 -------
@@ -341,6 +347,7 @@ worth showing here, and every figure is in the JSON beside this file.
 | `7de9bb1` | 82 | 95 |
 | `08bdd97` | 82 | 94 |
 | `3ef3db4` | 82 | 93 |
+| `90846b5` | 82 | 93 |
 
 What each row is:
 
@@ -382,6 +389,7 @@ What each row is:
 - `7de9bb1` -- 📝 Time the collections too
 - `08bdd97` -- 📝 The collections are not a timing sample yet
 - `3ef3db4` -- 📝 Timings for the collections front end
+- `90846b5` -- 📝 Take the collection sample out of the timings for good
 
 What each program exercises:
 
@@ -415,4 +423,3 @@ What each program exercises:
 - `type-definitions` -- eight definitions in all three notations
 - `enum-values` -- two enumerations, and three matches over them
 - `enum-flag` -- a flag enumeration, its operators and three matches
-- `collection-syntax` -- sets and dictionaries, their types and lookups
