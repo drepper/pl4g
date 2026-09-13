@@ -40,6 +40,7 @@ the parser does, and they are the floor everything else is measured against.
 | `ed1c028` | 1.06 | 1.64 | 1.45 |
 | `1269bd5` | 1.13 | 1.65 | 1.41 |
 | `db0b436` | 1.13 | 1.65 | 1.40 |
+| `25bb4e0` | 1.10 | 1.70 | 1.45 |
 
 ### Variables and memory
 
@@ -64,6 +65,7 @@ backend do.
 | `ed1c028` | 1.22 | 1.73 | 1.43 |
 | `1269bd5` | 1.25 | 1.67 | 1.53 |
 | `db0b436` | 1.28 | 1.74 | 1.54 |
+| `25bb4e0` | 1.26 | 1.68 | 1.47 |
 
 ### Register pressure
 
@@ -88,6 +90,7 @@ and they are the only ones that reach the frame.
 | `ed1c028` | 1.94 | 6.32 |
 | `1269bd5` | 1.94 | 6.65 |
 | `db0b436` | 1.97 | 6.68 |
+| `25bb4e0` | 2.02 | 6.75 |
 
 ### What is left out
 
@@ -112,30 +115,32 @@ decision log does.
 | `ed1c028` | 1.49 | 1.59 |
 | `1269bd5` | 1.52 | 1.58 |
 | `db0b436` | 1.56 | 1.73 |
+| `25bb4e0` | 1.53 | 1.58 |
 
 ### Expressions
 
 Operators, and the folding of them.  These move when the expression parser, the semantic analysis or the
 optimizer does.
 
-| commit | bitwise-operators | bitwise-precedence | comparison-operators |
-|---|---|---|---|
-| `eee64a3` |  |  |  |
-| `af657ad` |  |  |  |
-| `2f564cb` | 1.47 | 1.22 |  |
-| `37dbb28` | 1.55 | 1.22 |  |
-| `1c4ae78` | 1.56 | 1.42 |  |
-| `f391839` | 1.57 | 1.40 |  |
-| `04c20c9` | 1.58 | 1.39 |  |
-| `3020cf6` | 1.44 | 1.28 |  |
-| `9bcaf84` | 1.46 | 1.28 |  |
-| `40c35bb` | 1.51 | 1.31 |  |
-| `9437d8a` | 1.54 | 1.45 |  |
-| `d0c8cf5` | 1.55 | 1.36 |  |
-| `73ce857` | 1.58 | 1.39 |  |
-| `ed1c028` | 1.65 | 1.45 |  |
-| `1269bd5` | 1.58 | 1.43 | 2.40 |
-| `db0b436` | 1.66 | 1.42 | 2.36 |
+| commit | bitwise-operators | bitwise-precedence | comparison-operators | logic-operators | logic-short-circuit |
+|---|---|---|---|---|---|
+| `eee64a3` |  |  |  |  |  |
+| `af657ad` |  |  |  |  |  |
+| `2f564cb` | 1.47 | 1.22 |  |  |  |
+| `37dbb28` | 1.55 | 1.22 |  |  |  |
+| `1c4ae78` | 1.56 | 1.42 |  |  |  |
+| `f391839` | 1.57 | 1.40 |  |  |  |
+| `04c20c9` | 1.58 | 1.39 |  |  |  |
+| `3020cf6` | 1.44 | 1.28 |  |  |  |
+| `9bcaf84` | 1.46 | 1.28 |  |  |  |
+| `40c35bb` | 1.51 | 1.31 |  |  |  |
+| `9437d8a` | 1.54 | 1.45 |  |  |  |
+| `d0c8cf5` | 1.55 | 1.36 |  |  |  |
+| `73ce857` | 1.58 | 1.39 |  |  |  |
+| `ed1c028` | 1.65 | 1.45 |  |  |  |
+| `1269bd5` | 1.58 | 1.43 | 2.40 |  |  |
+| `db0b436` | 1.66 | 1.42 | 2.36 |  |  |
+| `25bb4e0` | 1.67 | 1.39 | 2.29 | 2.39 | 2.33 |
 
 Process
 -------
@@ -164,6 +169,7 @@ worth showing here, and every figure is in the JSON beside this file.
 | `ed1c028` | 74 | 80 |
 | `1269bd5` | 75 | 85 |
 | `db0b436` | 76 | 82 |
+| `25bb4e0` | 74 | 83 |
 
 What each row is:
 
@@ -183,6 +189,7 @@ What each row is:
 - `ed1c028` -- ✨ A truth value in a register, on all three architectures
 - `1269bd5` -- ✨ The comparisons: `=` `≠` `<` `>` `≤` `≥`
 - `db0b436` -- ✨ A statement's value must be used, and ≠ keeps its glyph
+- `25bb4e0` -- ✨ The logical operators, and block parameters to carry `and` and `or`
 
 What each program exercises:
 
@@ -199,3 +206,5 @@ What each program exercises:
 - `bitwise-operators` -- four operators over two variables
 - `bitwise-precedence` -- an expression the folder collapses entirely
 - `comparison-operators` -- all six comparisons, none of them folded
+- `logic-operators` -- all six logical operators, none of them folded
+- `logic-short-circuit` -- three short circuits, which is six blocks

@@ -12,7 +12,9 @@
     "bitwise-precedence": "an expression the folder collapses entirely",
     "spill-to-the-frame": "thirty-two at once, which no target can hold",
     "boolean-in-memory": "a truth value, which is one byte",
-    "comparison-operators": "all six comparisons, none of them folded"
+    "comparison-operators": "all six comparisons, none of them folded",
+    "logic-operators": "all six logical operators, none of them folded",
+    "logic-short-circuit": "three short circuits, which is six blocks"
   },
   "commits": [
     {
@@ -78,6 +80,10 @@
     {
       "hash": "db0b436",
       "subject": "✨ A statement's value must be used, and ≠ keeps its glyph"
+    },
+    {
+      "hash": "25bb4e0",
+      "subject": "✨ The logical operators, and block parameters to carry `and` and `or`"
     }
   ],
   "times": {
@@ -783,6 +789,68 @@
       "comparison-operators": [
         2.359,
         78.09626398375258
+      ]
+    },
+    "25bb4e0": {
+      "exit0": [
+        1.0990000000000002,
+        79.21472302405164
+      ],
+      "global-variable": [
+        1.262,
+        77.20038702245802
+      ],
+      "assign-widths": [
+        1.682,
+        75.59323596069589
+      ],
+      "many-values-at-once": [
+        2.015,
+        76.84826699551195
+      ],
+      "unreached-function": [
+        1.528,
+        77.60286499978974
+      ],
+      "export-visibility": [
+        1.5759999999999998,
+        77.06366101047024
+      ],
+      "digit-separators": [
+        1.699,
+        75.16488101100549
+      ],
+      "boolean-values": [
+        1.4469999999999998,
+        78.18592299008742
+      ],
+      "bitwise-operators": [
+        1.672,
+        78.41634104261175
+      ],
+      "bitwise-precedence": [
+        1.389,
+        76.3951150001958
+      ],
+      "spill-to-the-frame": [
+        6.7490000000000006,
+        83.26259395107627
+      ],
+      "boolean-in-memory": [
+        1.4700000000000002,
+        74.17685200925916
+      ],
+      "comparison-operators": [
+        2.2920000000000003,
+        76.35703700361773
+      ],
+      "logic-operators": [
+        2.388,
+        74.0764100337401
+      ],
+      "logic-short-circuit": [
+        2.3289999999999997,
+        77.43078505154699
       ]
     }
   }
