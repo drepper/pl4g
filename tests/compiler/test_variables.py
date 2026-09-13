@@ -477,3 +477,63 @@ def test_an_assertion_nothing_meets_is_still_reported(compile_source) -> None:  
     assert proc.returncode != 0
     assert "[PL4G-3206]" in proc.stderr, proc.stderr
 
+
+# -- truth values ---------------------------------------------------------------
+
+def test_a_boolean_holds_one_byte_which_is_one_or_zero() -> None:
+    """The language says the type has two values; the width is the compiler's."""
+    module = Module("t")
+    yes = GlobalVar("y", BOOL, module.types.ptr_type(BOOL), module.bool_const(BOOL, True))
+    no = GlobalVar("n", BOOL, module.types.ptr_type(BOOL), module.bool_const(BOOL, False))
+    assert size_of(BOOL, LAYOUT) == 1 and align_of(BOOL, LAYOUT) == 1
+    assert initial_bytes(yes, LAYOUT) == b"\x01"
+    assert initial_bytes(no, LAYOUT) == b"\x00"
+
+
+@pytest.mark.parametrize(("source", "found"), [
+    ("let flag: bool = 1u8\n", "u8"),
+    ("let flag: bool = 1\n", "integer"),
+    ("let n: u8 = true\n", "bool"),
+])
+def test_nothing_but_true_and_false_is_a_boolean(compile_source, source: str,  # noqa: ANN001
+                                                 found: str) -> None:
+    """A number is not a truth value spelled differently, in either direction.
+
+    It is reported as the mismatch it is.  A literal the declared type has no use
+    for used to fall through to "not implemented", which said the compiler was
+    unfinished where the program was simply wrong.
+    """
+    proc, _ = compile_source("".join((
+        source, "@[startup]\nfn main() \N{RIGHTWARDS ARROW} u8:\n    1u8\n")))
+    assert proc.returncode != 0, proc.stdout
+    assert "[PL4G-4203]" in proc.stderr, proc.stderr
+    assert "".join(("of type '", found, "'")) in proc.stderr, proc.stderr
+
+
+def test_a_type_already_reported_says_nothing_more_about_the_value(compile_source) -> None:  # noqa: ANN001
+    """One mistake, one message: the unknown type is not also a bad initializer."""
+    proc, _ = compile_source(
+        "let v: nosuchtype = 1u8\n"
+        "@[startup]\nfn main() \N{RIGHTWARDS ARROW} u8:\n    1u8\n")
+    assert proc.returncode != 0
+    assert proc.stderr.count("[PL4G-") == 1, proc.stderr
+    assert "[PL4G-4201]" in proc.stderr, proc.stderr
+
+
+def test_a_boolean_constant_is_read_only_and_a_mutable_one_is_not(tmp_path) -> None:  # noqa: ANN001
+    """A truth value is placed by the same rule as any other constant."""
+    source = tmp_path / "t.pl4g"
+    source.write_text("let ready: bool = true\n"
+                      "let seen: mut bool = false\n"
+                      "@[startup]\nfn main() \N{RIGHTWARDS ARROW} u8:\n"
+                      "    seen \N{LEFTWARDS ARROW} ready\n    1u8\n", encoding="utf-8")
+    output = tmp_path / "out"
+    proc = run_compiler(["-o", str(output), str(source)])
+    assert proc.returncode == 0, describe(proc)
+    parsed = elfcheck.parse(output.read_bytes())
+    rodata = parsed.section(".rodata")
+    data = parsed.section(".data")
+    assert rodata is not None and data is not None
+    assert parsed.data[rodata.sh_offset] == 1, "true is not one in the image"
+    assert parsed.data[data.sh_offset] == 0, "false is not zero in the image"
+

@@ -1,0 +1,25 @@
+※ pl4g-test: compile=ok opt=0,1
+※ pl4g-test: run=native,qemu exit=42
+※ pl4g-test: diag=none
+
+※ Underscores may separate the digits anywhere, in every base.  They are not
+※ read as grouping into threes or any other rule: they are ignored, so a
+※ generator emitting them by whatever rule it likes is always writing the same
+※ number.
+let decimal: u32 = 1_000_000u32
+
+@[expect(4007)]
+let hexadecimal: mut u32 = 0x_dead_beefu32
+
+@[expect(4007)]
+let octal: mut u16 = 0o1_777u16
+
+@[expect(4007)]
+let binary: mut u8 = 0b0010_1010u8
+
+@[startup]
+fn main() → u8:
+    hexadecimal ← decimal
+    octal ← 0o52u16
+    binary ← 0b101010u8
+    42u8

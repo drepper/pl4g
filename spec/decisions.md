@@ -850,6 +850,44 @@ Deliberately not done: a variable nothing writes and nothing reads that is never
 whose only writes come from a function that is later dropped.  The second is handled, since the analysis runs before the pass and
 the pass then removes both; the first is correct as it stands.
 
+## 2026-09-14T12:00+02:00 — language
+
+**Truth values, digit separators, and the sign of a negative literal**
+
+Three entries from the language list, two of which turned out to be already true of the compiler and to be missing only their tests
+and their statement here.
+
+*Truth values.* A `bool` has exactly two values, `true` and `false`, and nothing else is one.  A number is not a truth value spelled
+differently: `let flag: bool = 1u8` does not compile, and neither does the reverse.  That is narrower than C, where any scalar is a
+condition and `bool` is an integer type that holds 0 or 1, and narrower than Python, where everything has a truth value; it is the
+rule of Go, Rust, Zig, Odin and Haskell.  It is the same rule that refuses to truncate a number, applied to a different type — a
+program that wrote `1` and meant "true" reads as a program about a number.
+
+Auditing this found a real defect.  A top-level literal the declared type had no use for fell through to "not implemented", so
+`let n: u8 = true` reported a fatal internal error rather than the mismatch a variable inside a function reports for the same
+mistake.  It said the compiler was unfinished where the program was simply wrong.  It is now 4203 either way, naming the literal's
+own type where a suffix gives one and "integer" where the literal is untyped.  A type that was already reported says nothing more
+about the value it was given, so one mistake is still one message.
+
+*Digit separators.* Underscores may separate the digits anywhere, in every base, and are ignored rather than checked against any
+grouping rule.  The specification already said so and the lexer already did it; what was missing was a test, which now covers the
+four bases, repeated and trailing underscores, and the fact that the suffix still splits where it looks like it does.  Not
+enforcing a rule is deliberate: the language is meant to be generated, and a generator emitting separators by whatever rule it
+likes should always be writing the same number.  C++14, Rust, Ada, Java and Python all take this position; only Ada is strict about
+placement.
+
+*The sign of a negative literal.* A leading `⁻` (U+207B SUPERSCRIPT MINUS), with nothing between it and the digits, makes a literal
+negative.  A space after the sign is an error (2008) rather than some other reading.
+
+The reason for a glyph of its own is the reason APL has one.  Where `-` is both a sign and subtraction, `a -b`, `a - b` and `a-b`
+have to be told apart by spacing or by a precedence rule the reader has to know, and a language meant to be generated should not
+make its parser depend on whitespace.  Here `-` will only ever be subtraction and `⁻` only ever a sign, and neither question
+arises.  APL writes `¯3`; the superscript minus is the same idea in a character that says "minus" outright.  C, C++, Rust, Go and
+Zig all take the other road, which is why each of them has to explain that the most negative literal of a type is not a literal at
+all but a negation — a wrinkle this arrangement does not have: `⁻128i8` is simply the smallest `i8`.
+
+This also closes the separate entry observing that there was no way to write a negative number.  It and the sign were one question.
+
 ---
 
 Open questions

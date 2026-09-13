@@ -102,6 +102,19 @@ ends up, as in Odin.  Untyped values are described here and are not implemented 
 feature the compiler lacks rather than given a width by some default rule.  That the compiler says so is the point -- the
 alternative, as C and Rust and Go all take it, is that a rule the reader has to know decides the width silently.
 
+A literal is made negative by a leading `⁻` (U+207B SUPERSCRIPT MINUS) with nothing between the sign and the digits: `⁻3i8`,
+`⁻0x1fi32`.  The sign is part of how the number is written, not an operator applied to a number, so `⁻ 3i8` with a space is an
+error rather than a subtraction of some kind.
+
+That is why it is a glyph of its own rather than `-`.  Everywhere `-` is both a sign and subtraction, a reader and a parser have to
+tell `a -b` from `a - b` from `a-b`, and the answer depends on spacing or on a precedence rule that has to be learned.  Here `-`
+will only ever be subtraction and `⁻` only ever a sign, so neither question arises.  This is APL's arrangement, which writes its
+negative literals with a high minus `¯` for exactly this reason; the superscript minus is the same idea in a character that says
+"minus" outright.
+
+A negative literal is subject to the same rule as any other value: `⁻128i8` is the smallest `i8` and is accepted, `⁻129i8` is not,
+and `⁻1u8` is not, because no unsigned type has a negative value to hold.
+
 Compare C's `42U` and `42L`, Rust's `42u8`, and C#'s `42L`; the form here is Rust's, and the fallback is Odin's.
 
 #### Comments
@@ -157,6 +170,20 @@ Considered were `int32`/`uint32`/`float64` (Go, C#, D, Java), `s32`/`u32` (the L
 unsized `int`/`long` of C.  The chosen spelling is that of Rust, Zig, Odin, WebAssembly and LLVM's own IR; it is the shortest
 unambiguous form, and it is short enough to repeat in every diagnostic and every dump of the intermediate representation without
 making them harder to read.
+
+#### Boolean Values
+
+A `bool` has exactly two values, written `true` and `false`.  Nothing else is one.  A number is not a truth value spelled
+differently, so `let flag: bool = 1u8` does not compile, and neither does using a `bool` where a number is wanted; there is no
+conversion in either direction that happens without being asked for.
+
+That is narrower than C, where any scalar is a condition and `bool` is an integer type that happens to hold 0 or 1, and narrower
+than Python, where every object has a truth value.  It is the rule of Go, Rust, Zig, Odin and Haskell, and it is the one this
+language wants for the same reason it refuses to truncate a number: a program that said `1` and meant "true" reads as a program
+about a number.
+
+What a `bool` occupies in memory is one byte, which is the compiler's business and not the language's; the language says only that
+the type has two values.
 
 A value that its type cannot represent is an error, wherever it appears: a literal, the value a variable is defined with, or a
 value the compiler works out for itself.  Nothing is truncated and nothing wraps around.  This is the no-surprises rule applied to

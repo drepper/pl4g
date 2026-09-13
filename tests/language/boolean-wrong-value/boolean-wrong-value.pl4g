@@ -1,0 +1,9 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4203 LANG_TYPE_INITIALIZER_MISMATCH
+
+※ Nothing but `true` and `false` is a boolean.  A number is not one spelled
+※ differently, so it is refused rather than taken to mean the same thing.
+@[startup]
+fn main() → u8:
+    let flag: bool = 1u8
+    1u8

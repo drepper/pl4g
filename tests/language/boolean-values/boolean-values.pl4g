@@ -1,0 +1,16 @@
+※ pl4g-test: compile=ok opt=0,1
+※ pl4g-test: run=native,qemu exit=1
+※ pl4g-test: diag=none
+
+※ Only `true` and `false` are boolean values.  One that cannot change goes in
+※ the read-only section like any other constant; one that can goes beside the
+※ variables.
+let ready: bool = true
+
+@[expect(4007)]
+let seen: mut bool = false
+
+@[startup]
+fn main() → u8:
+    seen ← ready
+    1u8

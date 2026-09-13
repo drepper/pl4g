@@ -27,6 +27,12 @@ ARROW_GLYPH: Final[str] = "\N{RIGHTWARDS ARROW}"
 #: language does not make.
 ASSIGN_GLYPH: Final[str] = "\N{LEFTWARDS ARROW}"
 
+#: Marks a literal as negative.  It is part of the literal, not an operator, so
+#: nothing may stand between it and the digits.  A separate glyph is what lets
+#: subtraction keep '-' without either meaning having to be worked out from the
+#: spaces around it, which is the distinction APL draws with its own high minus.
+NEGATIVE_GLYPH: Final[str] = "\N{SUPERSCRIPT MINUS}"
+
 #: Accepted substitute for the arrow.  Two characters, so it claims nothing.
 ARROW_ASCII: Final[str] = "->"
 

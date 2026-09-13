@@ -13,7 +13,7 @@ from ..diag.engine import DiagEngine
 from ..source.location import Span
 from ..source.manager import SourceFile
 from .token import (ARROW_ASCII, ARROW_GLYPH, ASSIGN_GLYPH, COMMENT_GLYPH,
-                    INTEGER_TYPE_NAMES, KEYWORDS, TokKind, Token)
+                    INTEGER_TYPE_NAMES, KEYWORDS, NEGATIVE_GLYPH, TokKind, Token)
 
 _SIMPLE: Final[dict[str, TokKind]] = {
     "(": TokKind.LPAREN,
@@ -215,6 +215,9 @@ class Lexer:
         if ch.isdigit():
             self._lex_number(start)
             return True
+        if ch == NEGATIVE_GLYPH:
+            self._lex_number(start)
+            return True
         if ch == '"':
             self._lex_string(start)
             return True
@@ -253,7 +256,19 @@ class Lexer:
         cannot be mistaken for the digits: no name of an integer type begins
         with one, and none of the letters a hexadecimal literal uses starts one
         either.
+
+        A leading superscript minus makes the literal negative.  It is read here
+        rather than as an operator because that is what it is: part of how the
+        number is written, with nothing allowed between it and the digits.
         """
+        negative = self._peek() == NEGATIVE_GLYPH
+        if negative:
+            self._pos += 1
+            if not self._peek().isdigit():
+                self._diags.emit(D.LANG_SYNTAX_LONELY_NEGATIVE,
+                                 self._span(start, self._pos))
+                self._emit(TokKind.INT, start, int_value=0, int_type=None)
+                return
         radix = 10
         digits = "0123456789_"
         if self._peek() == "0" and self._peek(1).lower() in _DIGITS:
@@ -273,7 +288,8 @@ class Lexer:
             self._diags.emit(D.LANG_SYNTAX_UNEXPECTED_CHAR, self._span(start, self._pos),
                              char="".join(("'", text, "'")))
             value = 0
-        self._emit(TokKind.INT, start, int_value=value, int_type=suffix)
+        self._emit(TokKind.INT, start, int_value=-value if negative else value,
+                   int_type=suffix)
 
     def _lex_literal_suffix(self) -> str | None:
         """Read the type a literal names, if it names one."""

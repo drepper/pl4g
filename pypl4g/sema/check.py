@@ -236,8 +236,19 @@ class Checker:
 
     def _constant_value(self, node: ast.VarDef, ty: Type) -> Value | None:
         """The value a top-level variable is given, which must be a constant."""
+        if ty is ERROR:
+            # The type was already reported; saying anything about the value it
+            # was given would be a second message about the same mistake.
+            return None
         match node.value:
-            case ast.IntLit() if isinstance(ty, IntType):
+            case ast.IntLit():
+                if not isinstance(ty, IntType):
+                    # A suffix names the literal's type outright; without one it
+                    # is a number of no particular width, and saying "integer"
+                    # is as much as can honestly be said about it.
+                    named = BUILTIN_TYPES.get(node.value.type_name or "")
+                    return self._wrong_initializer(
+                        node, ty, named.render() if named is not None else "integer")
                 if not self._literal_matches(node, ty):
                     return None
                 if not ty.holds(node.value.value):
@@ -245,13 +256,26 @@ class Checker:
                                      literal=str(node.value.value), type=ty.render())
                     return None
                 return self._module.int_const(ty, node.value.value)
-            case ast.BoolLit() if ty is BOOL:
+            case ast.BoolLit():
+                if ty is not BOOL:
+                    return self._wrong_initializer(node, ty, BOOL.render())
                 return self._module.bool_const(BOOL, node.value.value)
             case _:
                 self._diags.emit(
                     D.IMPL_UNIMPLEMENTED_FEATURE, node.value.span,
                     feature="a top-level variable whose value is not a literal")
                 return None
+
+    def _wrong_initializer(self, node: ast.VarDef, ty: Type, found: str) -> None:
+        """Report a literal of a kind the declared type cannot hold.
+
+        A literal the type has no use for is a mismatch, the same one a variable
+        inside a function reports.  Falling through to "not implemented" would
+        say the compiler is unfinished where the program is simply wrong.
+        """
+        self._diags.emit(D.LANG_TYPE_INITIALIZER_MISMATCH, node.value.span,
+                         name=node.name, expected=ty.render(), found=found)
+        return None
 
     def _literal_matches(self, node: ast.VarDef, ty: Type) -> bool:
         """Check a suffixed literal against the type the variable was declared."""

@@ -106,3 +106,72 @@ def test_unterminated_string() -> None:
     """A string does not run past the end of its line."""
     _, diags = lex('"open\n')
     assert D.LANG_SYNTAX_UNTERMINATED_STRING in diags
+
+
+# -- separating the digits ------------------------------------------------------
+
+def values(text: str) -> list[tuple[int | None, str | None]]:
+    """The value and the suffix of every integer token in *text*."""
+    sources = SourceManager()
+    source = sources.add(Path("t.pl4g"), text)
+    engine, collected = collecting_engine(None)
+    tokens = tokenize(source, engine)
+    assert [d.info.number for d in collected] == []
+    return [(t.int_value, t.int_type) for t in tokens if t.kind is TokKind.INT]
+
+
+@pytest.mark.parametrize(("written", "value"), [
+    ("1_000_000u32", 1000000),
+    ("0x_dead_beefu32", 0xdeadbeef),
+    ("0o1_777u16", 0o1777),
+    ("0b0010_1010u8", 0b00101010),
+    ("4_2u8", 42),
+    ("1___0u8", 10),
+    ("10_u8", 10),
+])
+def test_underscores_are_ignored_wherever_they_stand(written: str, value: int) -> None:
+    """They are not read as grouping by any rule, so a generator emitting them
+    by whatever rule it likes is always writing the same number."""
+    assert values(written)[0][0] == value
+
+
+def test_the_suffix_still_splits_where_it_looks_like_it_does() -> None:
+    """An underscore before the suffix does not make the suffix part of the digits."""
+    assert values("0x1_fu8") == [(0x1f, "u8")]
+    assert values("0b1_0i16") == [(0b10, "i16")]
+
+
+# -- the sign of a negative literal ---------------------------------------------
+
+@pytest.mark.parametrize(("written", "value", "suffix"), [
+    ("\N{SUPERSCRIPT MINUS}3i8", -3, "i8"),
+    ("\N{SUPERSCRIPT MINUS}128i8", -128, "i8"),
+    ("\N{SUPERSCRIPT MINUS}0x1fi32", -31, "i32"),
+    ("\N{SUPERSCRIPT MINUS}0b1010i16", -10, "i16"),
+    ("\N{SUPERSCRIPT MINUS}1_000i32", -1000, "i32"),
+    ("\N{SUPERSCRIPT MINUS}7", -7, None),
+])
+def test_the_sign_is_part_of_the_literal(written: str, value: int,
+                                         suffix: str | None) -> None:
+    """It is read where the number is read, not as an operator applied to one."""
+    assert values(written) == [(value, suffix)]
+
+
+def test_the_sign_must_touch_the_digits() -> None:
+    """Allowing a space would make it a second spelling of subtraction, which is
+    the whole thing a separate glyph avoids."""
+    _, diags = lex("".join(("let n: i8 = \N{SUPERSCRIPT MINUS} 3i8\n")))
+    assert D.LANG_SYNTAX_LONELY_NEGATIVE in diags
+
+
+def test_the_sign_before_something_that_is_not_a_number_is_reported() -> None:
+    """There is nothing else it could mean, since it is never an operator."""
+    _, diags = lex("\N{SUPERSCRIPT MINUS}x\n")
+    assert D.LANG_SYNTAX_LONELY_NEGATIVE in diags
+
+
+def test_the_ordinary_minus_is_still_not_a_token() -> None:
+    """'-' is left for subtraction, which is the point of the separate sign."""
+    _, diags = lex("3u8 - 1u8\n")
+    assert D.LANG_SYNTAX_UNEXPECTED_CHAR in diags
+

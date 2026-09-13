@@ -30,8 +30,8 @@ To Do List for the PL4g language
     is read as "there is no *need to* process definitions in order", so a forward reference at the top level is legal, and the
     compiler collects every top-level definition before checking any body on that reading.  Confirm or correct the wording.
 
-[ ] there is no way to write a negative number.  `-3i8` is a negation of a literal rather than a literal, and the expression
-    syntax has no unary operators.
+[x] there is no way to write a negative number.  Done by the entry below on `⁻`: the sign is part of the literal, so the most
+    negative value of a type is a literal like any other and not a negation of one.
 
 [ ] there is no way to say what symbol a function should be known by without also saying how it is called.  A function
     declaring a foreign calling convention keeps its bare name, which covers calling into another world; an attribute naming the
@@ -41,11 +41,13 @@ To Do List for the PL4g language
     C warn.  PL4G warns (4006) and an optimized build drops the variable.  Since the language is meant to be generated rather than
     written, refusing one may catch a generator bug that a warning would let through.
 
-[ ] Add negative number literals with a leading `⁻`, no space.  Compare with what APL does in the documentation.  This allows more
-    streamlined parsing in the presence of subtraction.
+[x] Add negative number literals with a leading `⁻`, no space.  Compare with what APL does in the documentation.  This allows more
+    streamlined parsing in the presence of subtraction.  Done: the sign is read where the number is read, a space after it is an
+    error (2008), and `-` stays free for subtraction alone.
 
-[ ] Allow thousand separators in integers and the whole part of float literals.  Use `_`.  Do not be strict wrt the rules of the
-    thousand separator, just ignore the `_` characters.
+[x] Allow thousand separators in integers and the whole part of float literals.  Use `_`.  Do not be strict wrt the rules of the
+    thousand separator, just ignore the `_` characters.  Done for integers in every base, and tested; the float half follows when
+    float literals exist, since there are none to put a separator in yet.
 
 [ ] implement operations on numbers.  Use `+` for addition, `-` for subtraction, `×` for multiplication, `÷` for division.
     Both sides of the operator need to have the same type or one side can be an untyped integer/float.  The result must fit into
@@ -59,7 +61,8 @@ To Do List for the PL4g language
     should be placed in `.rodata`.  A `mut str` object can be resized and changed and therefore has to be an object which can
     reference allocated memory elsewhere.  Small string optimizations are welcome.
 
-[ ] Implement boolean values.  Only the values `true` and `false` are defined.  Assigning any other value is an error.
+[x] Implement boolean values.  Only the values `true` and `false` are defined.  Assigning any other value is an error.  Done and
+    tested in both directions; a constant `bool` goes in `.rodata` and a `mut` one beside the variables, like any other value.
 
 [ ] implement bitwise operations.  Use `&` for bitwise AND, `|` for bitwise OR, `^` for bitwise XOR, `~` for bitwise NOT.  Usable
     only on integer values.

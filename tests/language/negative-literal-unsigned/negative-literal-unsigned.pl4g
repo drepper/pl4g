@@ -1,0 +1,9 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 2006 LANG_SYNTAX_INTEGER_RANGE
+
+※ No unsigned type has a negative value to hold, so this is the ordinary rule
+※ about a value a type cannot represent and not a special case.
+@[startup]
+fn main() → u8:
+    let n: u8 = ⁻1u8
+    1u8

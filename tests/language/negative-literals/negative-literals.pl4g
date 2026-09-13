@@ -1,0 +1,19 @@
+※ pl4g-test: compile=ok opt=0,1
+※ pl4g-test: run=native,qemu exit=5
+※ pl4g-test: diag=none
+
+※ A leading superscript minus makes a literal negative.  The sign is part of how
+※ the number is written, so nothing stands between it and the digits.  They are
+※ exported because nothing here reads them and what nothing reaches is dropped.
+@[export]
+let smallest: i8 = ⁻128i8
+
+@[export]
+let word: i32 = ⁻2i32
+
+@[export]
+let hexadecimal: i16 = ⁻0x1fi16
+
+@[startup]
+fn main() → u8:
+    5u8

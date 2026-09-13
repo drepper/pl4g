@@ -565,6 +565,21 @@
       "option": null
     },
     {
+      "number": 2008,
+      "name": "LANG_SYNTAX_LONELY_NEGATIVE",
+      "severity": "error",
+      "message": "the sign of a negative literal must be followed immediately by digits",
+      "cause": "A leading superscript minus is part of how a number is written, not an operator applied to one, so nothing may stand between it and the digits -- no space, and no other expression.  Writing it apart from the digits would make it a second spelling of subtraction, which is what having a separate glyph for the sign avoids.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Syntax / Integer Literals",
+        "requirement": "A negative literal is written with a leading superscript minus and no space: nothing stands between the sign and the digits."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 2101,
       "name": "LANG_SYNTAX_INCONSISTENT_INDENT",
       "severity": "error",
