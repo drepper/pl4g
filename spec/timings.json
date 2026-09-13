@@ -14,7 +14,8 @@
     "boolean-in-memory": "a truth value, which is one byte",
     "comparison-operators": "all six comparisons, none of them folded",
     "logic-operators": "all six logical operators, none of them folded",
-    "logic-short-circuit": "three short circuits, which is six blocks"
+    "logic-short-circuit": "three short circuits, which is six blocks",
+    "saturating-precedence": "a sum and a product that saturate"
   },
   "commits": [
     {
@@ -88,6 +89,10 @@
     {
       "hash": "baf1f3c",
       "subject": "✨ Constants of any width, and the header flags they travel under"
+    },
+    {
+      "hash": "74ac227",
+      "subject": "✨ Saturating arithmetic: ⊞ ⊟ ⊠"
     }
   ],
   "times": {
@@ -917,6 +922,72 @@
       "logic-short-circuit": [
         2.347,
         79.42775200353935
+      ]
+    },
+    "74ac227": {
+      "exit0": [
+        1.0550000000000002,
+        75.2829359844327
+      ],
+      "global-variable": [
+        1.228,
+        74.18648299062625
+      ],
+      "assign-widths": [
+        1.662,
+        73.92630004324019
+      ],
+      "many-values-at-once": [
+        1.937,
+        76.10725902486593
+      ],
+      "unreached-function": [
+        1.482,
+        75.19575499463826
+      ],
+      "export-visibility": [
+        1.505,
+        76.04227104457095
+      ],
+      "digit-separators": [
+        1.655,
+        74.8435030109249
+      ],
+      "boolean-values": [
+        1.4249999999999998,
+        77.00597395887598
+      ],
+      "bitwise-operators": [
+        1.7089999999999999,
+        78.75949802109972
+      ],
+      "bitwise-precedence": [
+        1.366,
+        74.15363297332078
+      ],
+      "spill-to-the-frame": [
+        6.732,
+        84.80563299963251
+      ],
+      "boolean-in-memory": [
+        1.43,
+        73.35867400979623
+      ],
+      "comparison-operators": [
+        2.293,
+        76.82926702545956
+      ],
+      "logic-operators": [
+        2.412,
+        77.25674204993993
+      ],
+      "logic-short-circuit": [
+        2.2720000000000002,
+        76.16398500977084
+      ],
+      "saturating-precedence": [
+        1.571,
+        73.83860897971317
       ]
     }
   }
