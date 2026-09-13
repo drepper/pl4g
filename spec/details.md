@@ -273,6 +273,18 @@ A comparison is folded into a branch only where the branch is its *sole* reader 
 anything else, or read twice, it is a value that something wants, and a value something wants has to be in a register.  Two
 branches cannot each absorb one comparison, so that case computes it once and both branches test the result against zero.
 
+**A block parameter is a value like any other, and lives in a register.**  Every parameter of every block is given one before any
+block is walked, since a branch writes the parameters of a block that may come later in the layout than the branch does; what a
+branch carries is then the instruction to put something there, emitted immediately before the jump.  The register allocator's hint
+usually makes the move disappear, by giving the parameter and the value that reaches it the same register.
+
+That works because only an *unconditional* branch may carry arguments.  An edge of a conditional branch has nowhere to put the
+moves -- they belong on that edge and not before the test -- so splitting the edge is what carrying arguments there would need.
+Nothing generates that shape: the front end's short-circuit lowering sends the conditional branch to two blocks that carry nothing
+and lets each of them hand the answer over with a branch of its own.  A conditional branch with arguments is refused rather than
+got wrong, and so is a branch handing a block its own parameters rearranged, which would need a temporary the way any parallel
+copy does.
+
 Which way round a branch is written is decided where the order of the blocks is known, and not by a backend.  A two-way branch is a
 conditional branch and a jump; the jump is not needed when the block it would go to is the next one in the image, so the condition
 is inverted when that is what makes it so.  For a branch whose two blocks both follow it -- which is every branch a conditional

@@ -18,8 +18,8 @@ from ...ir.inst import BinOp, UnOp
 from ...mc.reg import Reg, VirtReg
 from ...mc.operand import SymExpr
 from ...source.location import Span
-from ..branches import (folded_into_branch, labels_of, lower_branch,
-                        lower_comparison)
+from ..branches import (UnsupportedBranch, folded_into_branch, labels_of,
+                        lower_branch, lower_comparison)
 
 if TYPE_CHECKING:
     from ...mc.reg import PhysReg
@@ -372,7 +372,27 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
                     span if span.is_valid else None)
             return MCReg(found)
 
+        def destination(self, value: object) -> Reg:
+            """The register a value is computed into, for one that is written.
+
+            Only a block parameter is asked for this, and every one of them was
+            given a register before any block was walked -- a branch writes a
+            parameter of a block that may not have been reached yet.
+            """
+            found = held.get(id(value))
+            if found is None:
+                raise UnsupportedOperation("a value this backend did not compute",
+                                           None)
+            return found
+
     operands = _Operands()
+
+    # Every block parameter gets its register before any block is walked: a
+    # branch writes the parameters of the block it goes to, and that block may
+    # come later in the layout than the branch does.
+    for block in func.blocks:
+        for param in block.params:
+            held[id(param)] = _new_value(param.ty, registers)
 
     for index, block in enumerate(func.blocks):
         if index > 0:
@@ -482,8 +502,14 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
                 case UnreachableInst():
                     asm.op(ops.TRAP, None, span=inst.span)
                 case BrInst() | CondBrInst():
-                    lower_branch(asm, func, labels, index, inst, operands,
-                                 ZERO_IMMEDIATE)
+                    try:
+                        lower_branch(asm, func, labels, index, inst, operands,
+                                     ZERO_IMMEDIATE)
+                    except UnsupportedBranch as unsupported:
+                        raise UnsupportedOperation(
+                            unsupported.what,
+                            unsupported.span if unsupported.span.is_valid else None
+                        ) from unsupported
                 case _:
                     raise UnsupportedOperation("".join((
                         "the instruction '", inst.opcode, "'")), span)

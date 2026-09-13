@@ -199,11 +199,16 @@ To Do List for the PL4g language
     The comparison here is true as long as the difference is not larger than a limit.  For the time being, make this a builtin
     variable with the value 1e-13.  In future this will be a runtime-time variable.  Compare this with `⎕CT` in APL.
 
-[ ] implement binary logic operations.  The boolean type they work on exists, a truth value in a register does too, and so do the
-    comparisons that produce most of the values these will be given.  Everything in the compiler that these need is now built:
-    `and` and `or` short-circuit, so those two need conditional branches, which is the only place the language will generate a
-    branch before there is an `if`.  One thing to settle while writing it: where the six glyph operators sit relative to the
-    comparisons -- looser, as in every language that has both, so that `a < b ∧ c < d` reads as it looks.  Use this table for guidance:
+[x] implement binary logic operations.  Done: `∧` `∨` `⊕` `⊼` `⊽` `¬`, which always compute both operands, and `and`
+    and `or`, which do not.  They bind looser than everything else, and among themselves take the order of the three bitwise
+    operators they mirror; `⊼` and `⊽` share a level and do not associate (3014).  They work on truth values and on nothing else
+    (4208), and no bitwise operator takes one.  None has an ASCII substitute, `&&` and `||` being the one confusion the language
+    exists not to have.
+    `and` and `or` made the first branch the front end has ever generated, which needed block parameters to reach the backends:
+    every parameter gets a register before any block is walked, and a branch's arguments become moves before the jump.  Only an
+    unconditional branch may carry arguments; the other shape needs the edge split and is refused rather than got wrong.
+    Worth recording: the difference between `and` and `∧` is unobservable today, since no expression can have an effect, fail, or
+    fail to finish.  They are separate so that a program says which it meant before that changes.  Use this table for guidance:
     | Glyph | Name | Arity  | Definition |
     |-------|------|--------|------------|
     | `∧`   | AND  | binary | true when both operands are true |

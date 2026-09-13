@@ -38,16 +38,34 @@ class _Operator:
 
 #: What may stand between two operands, and how tightly each binds.
 #:
-#: The bitwise order is the one C settled on and Rust, Go and Zig kept: "and"
-#: binds tighter than "exclusive or", which binds tighter than "or".  The
+#: Loosest first.  The **logical** operators come first because what they join
+#: is whole questions: `a < b ∧ c < d` reads as it looks, which it would not if
+#: they bound tighter than the comparisons.  Among themselves they take the
+#: order of the bitwise three they mirror -- "and" tighter than "exclusive or"
+#: tighter than "or" -- so that one set of habits serves for both.  `and` and
+#: `or` sit exactly where `∧` and `∨` do, since they say the same thing and
+#: differ only in what they evaluate.
+#:
+#: `⊼` and `⊽` are neither associative nor conventional, so they share a level of
+#: their own and do not associate: `a ⊼ b ⊼ c` has two meanings and is refused
+#: rather than given one of them.
+#:
+#: The **comparisons** come next, all six on one level as in Go and Rust.
+#: Splitting equality from ordering, as C does, only decides what `a < b = c`
+#: means, and that expression is refused here rather than given a meaning.
+#:
+#: The **bitwise** order is the one C settled on and Rust, Go and Zig kept.  The
 #: comparisons bind looser than all of them, which is where C put them wrongly
 #: and where every language since has put them: `a & b = c` asks about `a & b`,
 #: not about `b = c`.
-#:
-#: All six comparisons share one level, as they do in Go and Rust.  Splitting
-#: equality from ordering, as C does, only decides what `a < b = c` means, and
-#: that expression is refused here rather than given a meaning.
 _BINARY_OPERATORS: Final[dict[TokKind, _Operator]] = {
+    TokKind.LOGIC_OR: _Operator(ast.BinaryOp.LOGIC_OR, 1),
+    TokKind.KW_OR: _Operator(ast.BinaryOp.SHORT_OR, 1),
+    TokKind.LOGIC_XOR: _Operator(ast.BinaryOp.LOGIC_XOR, 2),
+    TokKind.LOGIC_AND: _Operator(ast.BinaryOp.LOGIC_AND, 3),
+    TokKind.KW_AND: _Operator(ast.BinaryOp.SHORT_AND, 3),
+    TokKind.LOGIC_NAND: _Operator(ast.BinaryOp.LOGIC_NAND, 4, non_associative=True),
+    TokKind.LOGIC_NOR: _Operator(ast.BinaryOp.LOGIC_NOR, 4, non_associative=True),
     TokKind.EQUALS: _Operator(ast.BinaryOp.EQUAL, 5, non_associative=True),
     TokKind.NOT_EQUAL: _Operator(ast.BinaryOp.NOT_EQUAL, 5, non_associative=True),
     TokKind.LESS: _Operator(ast.BinaryOp.LESS, 5, non_associative=True),
@@ -63,6 +81,7 @@ _BINARY_OPERATORS: Final[dict[TokKind, _Operator]] = {
 #: What may stand before an operand.  These bind tighter than anything above.
 _UNARY_OPERATORS: Final[dict[TokKind, ast.UnaryOp]] = {
     TokKind.TILDE: ast.UnaryOp.BIT_NOT,
+    TokKind.LOGIC_NOT: ast.UnaryOp.LOGIC_NOT,
 }
 
 
@@ -474,7 +493,7 @@ class Parser:
                 following = _BINARY_OPERATORS.get(self._current.kind)
                 if following is not None \
                         and following.precedence == operator.precedence:
-                    self._diags.emit(D.LANG_SYNTAX_COMPARISON_CHAINED,
+                    self._diags.emit(D.LANG_SYNTAX_NOT_ASSOCIATIVE,
                                      self._current.span, first=operator.op.value,
                                      second=following.op.value)
                     raise _Bail()

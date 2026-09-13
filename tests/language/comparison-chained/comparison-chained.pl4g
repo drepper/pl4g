@@ -1,5 +1,5 @@
 ※ pl4g-test: compile=fail
-※ pl4g-test: expect-diag 3014 LANG_SYNTAX_COMPARISON_CHAINED
+※ pl4g-test: expect-diag 3014 LANG_SYNTAX_NOT_ASSOCIATIVE
 
 ※ A comparison answers with a truth value, so a second one beside it would be
 ※ comparing that answer with a number.  Rust refuses the same thing; C and Go

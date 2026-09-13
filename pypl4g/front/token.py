@@ -41,6 +41,20 @@ NOT_EQUAL_GLYPH: Final[str] = "\N{NOT EQUAL TO}"
 LESS_EQUAL_GLYPH: Final[str] = "\N{LESS-THAN OR EQUAL TO}"
 GREATER_EQUAL_GLYPH: Final[str] = "\N{GREATER-THAN OR EQUAL TO}"
 
+#: The logical operators, which work on truth values and on nothing else.  Each
+#: is a glyph, and none has an ASCII substitute: the candidates would be `&&`,
+#: `||` and `!`, and spelling two of them with the characters the *bitwise*
+#: operators use is the one confusion this language is built to avoid.  `and`
+#: and `or` are words rather than glyphs because they differ from `\N{LOGICAL AND}` and `\N{LOGICAL OR}`
+#: in when they evaluate their right operand, which is a thing a reader has to
+#: be told rather than shown.
+AND_GLYPH: Final[str] = "\N{LOGICAL AND}"
+OR_GLYPH: Final[str] = "\N{LOGICAL OR}"
+XOR_GLYPH: Final[str] = "\N{CIRCLED PLUS}"
+NAND_GLYPH: Final[str] = "\N{NAND}"
+NOR_GLYPH: Final[str] = "\N{NOR}"
+NOT_GLYPH: Final[str] = "\N{NOT SIGN}"
+
 #: Accepted substitute for the arrow.  Two characters, so it claims nothing.
 ARROW_ASCII: Final[str] = "->"
 
@@ -69,6 +83,8 @@ class TokKind(StrEnum):
     KW_TRUE = "'true'"
     KW_FALSE = "'false'"
     KW_IMPORT = "'import'"
+    KW_AND = "'and'"
+    KW_OR = "'or'"
 
     AT_LBRACKET = "'@['"
     LPAREN = "'('"
@@ -96,6 +112,13 @@ class TokKind(StrEnum):
     LESS_EQUAL = "'\N{LESS-THAN OR EQUAL TO}'"
     GREATER_EQUAL = "'\N{GREATER-THAN OR EQUAL TO}'"
 
+    LOGIC_AND = "'\N{LOGICAL AND}'"
+    LOGIC_OR = "'\N{LOGICAL OR}'"
+    LOGIC_XOR = "'\N{CIRCLED PLUS}'"
+    LOGIC_NAND = "'\N{NAND}'"
+    LOGIC_NOR = "'\N{NOR}'"
+    LOGIC_NOT = "'\N{NOT SIGN}'"
+
     DOC_COMMENT = "documentation comment"
     NEWLINE = "end of line"
     INDENT = "indentation"
@@ -119,6 +142,8 @@ KEYWORDS: Final[dict[str, TokKind]] = {
     "true": TokKind.KW_TRUE,
     "false": TokKind.KW_FALSE,
     "import": TokKind.KW_IMPORT,
+    "and": TokKind.KW_AND,
+    "or": TokKind.KW_OR,
 }
 
 

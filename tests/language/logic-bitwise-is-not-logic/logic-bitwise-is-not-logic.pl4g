@@ -1,0 +1,12 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4205 LANG_TYPE_OPERAND_NOT_INTEGER
+
+※ '&' works on the bits of a number and '∧' on truth values, and neither will
+※ do the other's work.  C lets '&' take two conditions, which is usually a
+※ mistake; here it is refused.
+let ready: bool = true
+let seen: bool = false
+
+@[startup]
+fn main() → bool:
+    ready & seen

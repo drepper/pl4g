@@ -161,11 +161,15 @@ operator binds as tightly as the table below says: a tighter one takes its opera
 
 | Operator | Meaning | Binds |
 |---|---|---|
-| `~` | bitwise complement, written before its operand | tightest |
+| `~` `¬` | complement, written before its operand | tightest |
 | `&` | bitwise and | |
 | `^` | bitwise exclusive or | |
 | `|` | bitwise or | |
-| `=` `≠` `<` `>` `≤` `≥` | comparison | loosest |
+| `=` `≠` `<` `>` `≤` `≥` | comparison | |
+| `⊼` `⊽` | not both, neither | |
+| `∧` `and` | logical and | |
+| `⊕` | logical exclusive or | |
+| `∨` `or` | logical or | loosest |
 
 The bitwise operators are defined on integer values only, and both sides of one have the same type; the result has it too.  Nothing
 is widened to make two types meet, so `1u8 & 2u16` does not compile: a value of one width silently becoming a value of another is
@@ -173,8 +177,8 @@ exactly the quiet reinterpretation this language refuses everywhere else.  A lit
 is written against, on either side, so `count & 3` and `3 & count` mean the same thing.
 
 A truth value is not a one-bit integer.  `bool` has two values and no representation the language promises, so there is nothing for
-a bitwise operator to work on; the logical operators are what applies to a truth value.  That is the rule of Go and Rust; C, where
-`&` on two conditions is legal and usually a mistake, is the example not followed.
+a bitwise operator to work on; the logical operators below are what applies to a truth value.  That is the rule of Go and Rust; C,
+where `&` on two conditions is legal and usually a mistake, is the example not followed.
 
 The relative binding of the three is the one C settled on and Rust, Go and Zig kept, so that a reader coming from any of them reads
 these the same way.  C's choice of making them bind *looser* than comparison is a famous defect, which this language does not
@@ -215,6 +219,51 @@ well and is the only language that does it; C and Go give it the meaning above a
 
 Splitting equality from ordering, as C does, would decide only what `a < b = c` means, and that expression has no meaning here.
 One level for all six is what Go and Rust do.
+
+#### Logical operators
+
+Six operators and two words work on truth values, and on nothing else.
+
+| Operator | Name | Arity | True when |
+|---|---|---|---|
+| `∧` | and | binary | both operands are true |
+| `∨` | or | binary | at least one operand is true |
+| `⊕` | exclusive or | binary | exactly one operand is true |
+| `⊼` | nand | binary | not both operands are true |
+| `⊽` | nor | binary | neither operand is true |
+| `¬` | not | unary | the operand is false |
+| `and` | and, short-circuiting | binary | both operands are true |
+| `or` | or, short-circuiting | binary | at least one operand is true |
+
+None of them has an ASCII substitute.  The candidates would be `&&`, `||` and `!`, and spelling the logical operators with the
+characters the *bitwise* ones use is the one confusion this language is built not to have.
+
+**They join truth values and nothing else.**  `count ∧ ready` does not compile: there is no rule here that a number other than
+zero counts as true.  That rule is where a good deal of C's trouble comes from, and where the question really is whether a number
+is zero, `≠` asks it.  In the other direction `&` does not take two truth values either, for the reason given above: a `bool`
+has no representation the language promises, so there are no bits to and together.
+
+**`and` and `or` do not compute their right operand where the left one settles the answer.**  `∧` and `∨` always compute both.
+That is the whole difference, and it is a difference nothing can yet observe: no expression in the language has an effect, can
+fail, or can fail to finish, so the two forms give the same answer in the same time.  They are separate now so that programs
+written today say which they meant, and so that the day an expression can have an effect is not the day every program has to be
+read again.  The words are words rather than glyphs for the same reason: what distinguishes them is *when* they evaluate, which is
+something a reader has to be told rather than shown.
+
+**Where they bind.**  The logical operators join whole questions, so they bind looser than everything else: `a < b ∧ c < d` reads as
+it looks.  Among themselves they take the order of the three bitwise operators they mirror -- `∧` tighter than `⊕` tighter than
+`∨` -- so that one set of habits serves for both.  `and` binds exactly where `∧` does and `or` where `∨` does, since they say the
+same thing.  `¬` binds tighter than every operator written between two operands, so `¬ ready ∧ seen` is `(¬ ready) ∧ seen` and
+`¬ (a < b)` needs its parentheses -- the rule `!` follows in C, Go and Rust.
+
+**`⊼` and `⊽` do not associate.**  `a ⊼ b ⊼ c` is refused: neither operator is associative, so the two ways of grouping it are
+two different questions and a reader cannot tell which was meant.  Parentheses say which.  They share a level of their own, tighter
+than `∧`, which is the only thing that has to be said about them since they cannot be written next to one another.
+
+Compare APL, which writes these as `∧` `∨` `⊼` `⊽` and is where the glyphs come from; C, C++, Java, Go and Rust, which have `&&`,
+`||` and `!` and no nand or nor at all; and Python and Ada, which use words throughout.  Taking the glyphs for the six that always
+compute both operands and words for the two that do not is what makes the difference between them visible in the source rather
+than something to be remembered.
 
 #### Statements that are expressions
 

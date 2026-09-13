@@ -1486,6 +1486,63 @@ carry the difference.
 
 ---
 
+## 2026-09-13T20:45+02:00 — language and compiler
+
+**The logical operators, and the block parameters `and` and `or` brought with them**
+
+Implemented as the to-do list specifies them: `∧` `∨` `⊕` `⊼` `⊽` `¬`, which always compute both operands, and `and` and
+`or`, which do not.  Four decisions inside that, and one piece of compiler machinery that had to be built to keep a promise.
+
+**Where they bind.**  Looser than everything, because what they join is whole questions: `a < b ∧ c < d` reads as it looks.  Among
+themselves they take the order of the three bitwise operators they mirror -- `∧` tighter than `⊕` tighter than `∨` -- so that one
+set of habits serves for both.  That is not what C does, where `&&` and `||` are two levels with nothing between and there is no
+logical exclusive or at all; taking the bitwise shape gives the third operator a place to go.
+
+**`⊼` and `⊽` do not associate.**  Neither is an associative operation, so `a ⊼ b ⊼ c` is two different questions depending on how
+it is grouped.  The same answer as for the comparisons, for the same reason, and now sharing one diagnostic: 3014 was named for
+comparisons and is now `LANG_SYNTAX_NOT_ASSOCIATIVE`, which is the rule both cases are instances of.  APL has these glyphs and
+gives them its uniform right-to-left grouping; no language in this family has them at all.
+
+**No ASCII substitutes.**  The candidates would be `&&`, `||` and `!`, and spelling the logical operators with the characters the
+bitwise ones use is the single confusion this language exists not to have.  `&` and `∧` being different operators on different
+types is the whole point, and `&&` would put them one character apart.
+
+**Words for the two that short-circuit.**  `and` and `or` differ from `∧` and `∨` in *when* they evaluate, which is not a thing a
+glyph can show.  Worth saying plainly: today the difference is unobservable, since no expression in the language has an effect, can
+fail, or can fail to finish.  They are separate now so that a program written today says which it meant, and so that the day an
+expression can have an effect is not the day every program has to be read again.  Python and Ada use words for these; C, Go and
+Rust use punctuation and have no non-short-circuiting form at all, which is the thing that cannot be said in those languages.
+
+**How they are built.**  A truth value is one or zero, so "both are true" is the two anded together -- the same instruction the
+bitwise operators use, asked of values that have only one bit's worth of meaning.  That is what LLVM does with `i1` and it needs no
+new instruction.  `⊼` and `⊽` are those two with the answer turned round, and turning a truth value round is an exclusive or with
+one and *not* a complement: complementing one sets every bit above the lowest and gives something that is neither true nor false.
+
+**The machinery: block parameters reach the backends.**  `and` and `or` are the first thing in the language that makes a branch,
+and the value they produce arrives from two different blocks -- which is a block parameter, which no backend could lower.  So:
+every block parameter is given a register before any block is walked, and a branch's arguments become moves immediately before the
+jump.  The register allocator's existing hint usually makes those moves vanish by giving the parameter and the value that reaches
+it the same register, which is visible in the generated code -- the short-circuit shape compiles to a compare, a branch, and no
+moves at all on any of the three targets.
+
+Only an *unconditional* branch may carry arguments, and that is a real restriction rather than an oversight: an edge of a
+conditional branch has nowhere to put the moves, and splitting the edge is what carrying them there would need.  The lowering is
+shaped so the question does not arise -- the conditional branch goes to two blocks that carry nothing, and each hands the answer
+over with a branch of its own.  The unsupported shapes are refused rather than got wrong.  When `if` arrives it will produce the
+same shape; when something produces the other one, edge splitting is what it needs and the refusal says so.
+
+**One optimizer addition, which the shape asked for.**  A branch on a condition the folder has already settled is now replaced by
+the jump it would have taken, and the block it would not have gone to is then pruned as unreachable.  Without it `true and false`
+compiled to a branch on a constant.  With it, the machine code for a short circuit whose answer is known is the answer and nothing
+else.  What is *not* done is merging the blocks that remain: the code is already what it should be, since the blocks fall through,
+and merging is a larger change that `if` is the right occasion for.
+
+**A small correctness fix underneath.**  `Function.add_block` now makes a label unique if something already has it.  Two `and`
+expressions in one function asked for two blocks called `rest`, and the verifier caught it -- which is the verifier doing its job,
+but the fix belongs where the label is made, since a block is found by the object and never by its label.
+
+---
+
 ---
 
 Open questions

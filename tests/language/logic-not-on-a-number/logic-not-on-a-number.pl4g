@@ -1,0 +1,10 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4208 LANG_TYPE_OPERAND_NOT_BOOLEAN
+
+※ '¬' asks the opposite of a truth value; '~' is what turns the bits of a
+※ number round.  Keeping the two apart is the point of having both.
+let count: u8 = 3u8
+
+@[startup]
+fn main() → bool:
+    ¬ count

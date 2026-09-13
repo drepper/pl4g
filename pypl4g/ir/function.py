@@ -130,11 +130,29 @@ class Function:
         return self.blocks[0] if self.blocks else None
 
     def add_block(self, label: str | None = None) -> BasicBlock:
-        """Append a new block and return it."""
-        block = BasicBlock(label if label is not None else "".join(("block", str(len(self.blocks)))))
+        """Append a new block and return it.
+
+        A label that is already taken gets a number after it.  What a caller
+        asks for is a name for the reader, not a name it will look the block up
+        by -- a block is found by the object, never by its label -- so making
+        the label unique here is better than making every caller count.
+        """
+        block = BasicBlock(self._unique(label))
         block.parent = self
         self.blocks.append(block)
         return block
+
+    def _unique(self, label: str | None) -> str:
+        """*label*, made unlike every label already used in this function."""
+        if label is None:
+            return "".join(("block", str(len(self.blocks))))
+        taken = {block.label for block in self.blocks}
+        if label not in taken:
+            return label
+        count = 1
+        while "".join((label, str(count))) in taken:
+            count += 1
+        return "".join((label, str(count)))
 
     def params(self) -> Sequence[BlockParam]:
         """The function's parameters, which are the entry block's parameters."""

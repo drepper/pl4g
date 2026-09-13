@@ -6,7 +6,8 @@ language admits no surprising interpretation of values.
 
 A comparison of constants folds too, and its answer is a truth value rather
 than a number, so it needs no range check: there is no truth value that does
-not fit in a `bool`.
+not fit in a `bool`.  The logical operators are the bitwise instructions asked
+of values that are one or zero, so the same folders answer them.
 """
 
 from ...ir.inst import BinaryInst, BinOp, CmpInst, CmpPred, Instruction
@@ -82,9 +83,17 @@ class ConstantFolding:
         if folder is None:
             return None
         lhs, rhs = inst.operands
+        ty = inst.ty
+        if ty is BOOL:
+            # The logical operators are these same instructions asked of values
+            # that are one or zero, so the same folder answers them -- and the
+            # answer is a truth value, which needs no range check.
+            numbers = [_as_number(lhs), _as_number(rhs)]
+            if any(number is None for number in numbers):
+                return None
+            return module.bool_const(BOOL, bool(folder(numbers[0], numbers[1])))
         if not isinstance(lhs, IntConst) or not isinstance(rhs, IntConst):
             return None
-        ty = inst.ty
         if not isinstance(ty, IntType):
             return None
         value = folder(lhs.value, rhs.value)

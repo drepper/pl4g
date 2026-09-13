@@ -1,0 +1,13 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 3014 LANG_SYNTAX_NOT_ASSOCIATIVE
+
+※ '⊼' is not associative: (a ⊼ b) ⊼ c and a ⊼ (b ⊼ c) are different questions,
+※ so writing three in a row is refused rather than given one of the two
+※ meanings.  Parentheses say which was meant.
+let a: bool = true
+let b: bool = false
+let c: bool = true
+
+@[startup]
+fn main() → bool:
+    a ⊼ b ⊼ c

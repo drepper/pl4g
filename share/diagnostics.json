@@ -852,7 +852,7 @@
     },
     {
       "number": 3014,
-      "name": "LANG_SYNTAX_COMPARISON_CHAINED",
+      "name": "LANG_SYNTAX_NOT_ASSOCIATIVE",
       "severity": "error",
       "message": "'{first}' and '{second}' cannot be written one after the other",
       "args": [
@@ -867,11 +867,11 @@
           "description": "the one written after it"
         }
       ],
-      "cause": "A comparison answers with a truth value, so a second comparison beside the first would be asking a question about that answer -- `a < b < c` would mean `(a < b) < c`, which compares a truth value with a number.  That is almost never what was meant, and where it was meant, writing the parentheses says so.  Where the intent was to say that a value lies between two others, that is two comparisons joined with `∧`.",
+      "cause": "Some operators join two things and no more, because a third would have two readings and neither is what anyone means.  A comparison answers with a truth value, so `a < b < c` would compare that answer with a number.  ⊼ and ⊽ are not associative at all: `a ⊼ b ⊼ c` is one thing grouped to the left and a different thing grouped to the right.  Where one of those really was meant, parentheses say which; where a value was meant to lie between two others, that is two comparisons joined with ∧.",
       "spec": {
         "document": "spec/spec.md",
         "section": "The Language / Expressions / Comparisons",
-        "requirement": "The six comparisons share one level of precedence and do not associate."
+        "requirement": "The six comparisons share one level of precedence and do not associate, and neither do ⊼ and ⊽."
       },
       "since": "0.1",
       "default_enabled": true,
@@ -1595,6 +1595,33 @@
         "document": "spec/spec.md",
         "section": "The Language / Expressions / Comparisons",
         "requirement": "Exact comparisons are defined for numbers, truth values and strings."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4208,
+      "name": "LANG_TYPE_OPERAND_NOT_BOOLEAN",
+      "severity": "error",
+      "message": "'{operator}' is defined on truth values, not on '{found}'",
+      "args": [
+        {
+          "name": "operator",
+          "type": "string",
+          "description": "the operator"
+        },
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type of the operand"
+        }
+      ],
+      "cause": "The logical operators join truth values, and a number is not one.  There is no rule here that a number other than zero counts as true: C has that rule and it is where `if (x = 0)` and a good deal else comes from, and the bitwise operators are what applies to the bits of a number.  Where the question is whether a number is zero, `≠` asks it.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Logical operators",
+        "requirement": "The logical operators work on truth values only."
       },
       "since": "0.1",
       "default_enabled": true,

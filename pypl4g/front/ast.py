@@ -144,11 +144,20 @@ class BinaryOp(StrEnum):
     LESS_EQUAL = "\N{LESS-THAN OR EQUAL TO}"
     GREATER_EQUAL = "\N{GREATER-THAN OR EQUAL TO}"
 
+    LOGIC_AND = "\N{LOGICAL AND}"
+    LOGIC_OR = "\N{LOGICAL OR}"
+    LOGIC_XOR = "\N{CIRCLED PLUS}"
+    LOGIC_NAND = "\N{NAND}"
+    LOGIC_NOR = "\N{NOR}"
+    SHORT_AND = "and"
+    SHORT_OR = "or"
+
 
 class UnaryOp(StrEnum):
     """An operator written before its operand."""
 
     BIT_NOT = "~"
+    LOGIC_NOT = "\N{NOT SIGN}"
 
 
 @dataclass(frozen=True, slots=True)

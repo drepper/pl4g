@@ -30,13 +30,28 @@ instruction producing one on these architectures produces.
 from typing import Protocol, Sequence
 
 from ..ir.function import BasicBlock, Function
-from ..ir.inst import (BrInst, CmpInst, CmpPred, CondBrInst, Instruction,
-                       Terminator)
+from ..ir.inst import (BlockTarget, BrInst, CmpInst, CmpPred, CondBrInst,
+                       Instruction, Terminator)
+from ..ir.value import BlockParam
 from ..mc.asmbuilder import Assembler
 from ..mc.operand import MCImm, MCOperand
 from ..mc.ops import Condition
 from ..mc.reg import Reg
 from ..source.location import Span
+
+class UnsupportedBranch(Exception):
+    """A branch shape no backend generates and none can yet lower.
+
+    Raised rather than reported, so that a backend turns it into its own
+    diagnostic with its own span, the way it does for every other construct it
+    has no rule for.
+    """
+
+    def __init__(self, what: str, span: Span) -> None:
+        super().__init__(what)
+        self.what = what
+        self.span = span
+
 
 #: What each comparison of the representation tests, in the assembler's terms.
 CONDITIONS: dict[CmpPred, Condition] = {
@@ -62,6 +77,11 @@ class Operands(Protocol):
 
     def in_register(self, value: object, span: Span) -> MCOperand:
         """The operand for *value*, put in a register if it is not in one."""
+        ...
+
+    def destination(self, value: object) -> Reg:
+        """The register *value* is computed into, for a value that is written
+        rather than read: a block parameter, which a branch writes."""
         ...
 
 
@@ -145,6 +165,7 @@ def lower_branch(asm: Assembler, func: Function, labels: Sequence[str], index: i
     match terminator:
         case BrInst():
             target = _target_label(func, labels, terminator.target.block)
+            _pass_arguments(asm, terminator.target, operands, span)
             if target == following:
                 # Control arrives there by simply going on, so there is nothing
                 # to emit; the edge is still recorded, since it is still an edge.
@@ -153,11 +174,47 @@ def lower_branch(asm: Assembler, func: Function, labels: Sequence[str], index: i
                 asm.jump(target, span)
             return True
         case CondBrInst():
+            for edge in (terminator.true_target, terminator.false_target):
+                if edge.args:
+                    # The moves would belong on one edge and there is no block
+                    # there to put them in; splitting the edge is what that
+                    # needs, and nothing generates this shape.
+                    raise UnsupportedBranch(
+                        "a conditional branch that passes arguments", span)
             _lower_conditional(asm, func, labels, following, terminator,
                                operands, zero)
             return True
         case _:
             return False
+
+
+def _pass_arguments(asm: Assembler, target: BlockTarget, operands: Operands,
+                    span: Span) -> None:
+    """Put a branch's arguments where the block it goes to will look for them.
+
+    A block parameter is a value like any other and lives in a register; what
+    a branch carries is the instruction to put something there.  The moves go
+    before the jump, which is where they can go because only an unconditional
+    branch reaches here -- an edge of a conditional one would need a block of
+    its own to hold them.
+
+    The moves are emitted in order, so a block whose parameters were rearranged
+    among themselves -- the second taking what the first held -- would read a
+    register after it had been written.  One value never can, and nothing
+    generates more than one; the case is refused rather than got wrong.
+    """
+    if not target.args:
+        return
+    block = target.block
+    assert isinstance(block, BasicBlock)
+    places = [operands.destination(param) for param in block.params]
+    if len(places) > 1 and any(
+            isinstance(arg, BlockParam) and arg.block is block
+            for arg in target.args):
+        raise UnsupportedBranch(
+            "a branch that passes a block's own parameters back to it", span)
+    for place, argument in zip(places, target.args):
+        asm.loadreg(place, operands.value(argument, span), span)
 
 
 def _lower_conditional(asm: Assembler, func: Function, labels: Sequence[str],

@@ -1,0 +1,23 @@
+※ pl4g-test: compile=ok run=native,qemu exit=0 diag=none
+
+※ 'and' and 'or' do not compute their right operand where the left one already
+※ settles the answer, which is the first and so far the only thing in the
+※ language that makes a branch.  The program runs to its end, which is what
+※ says the branches go where they should.
+
+let yes: bool = true
+let no: bool = false
+
+@[visible]
+let both: mut bool = false
+@[visible]
+let either: mut bool = false
+@[visible]
+let chained: mut bool = false
+
+@[startup]
+fn main() → u8:
+    both ← yes and no
+    either ← yes or no
+    chained ← yes and no or yes
+    0u8

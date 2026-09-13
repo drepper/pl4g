@@ -1,0 +1,30 @@
+※ pl4g-test: compile=ok run=native,qemu exit=0 diag=none
+
+※ The six that compute both operands.  None of these can be folded away: what
+※ they are given is read from memory.
+
+let yes: bool = true
+let no: bool = false
+
+@[visible]
+let both: mut bool = false
+@[visible]
+let either: mut bool = false
+@[visible]
+let one_of: mut bool = false
+@[visible]
+let not_both: mut bool = false
+@[visible]
+let neither: mut bool = false
+@[visible]
+let opposite: mut bool = false
+
+@[startup]
+fn main() → u8:
+    both ← yes ∧ no
+    either ← yes ∨ no
+    one_of ← yes ⊕ no
+    not_both ← yes ⊼ no
+    neither ← yes ⊽ no
+    opposite ← ¬ yes
+    0u8

@@ -176,3 +176,35 @@ fn main() → bool:
             (comparison_expression
               left: (identifier)
               right: (identifier))))))))
+
+================================================================================
+The logical operators bind looser than the comparisons
+================================================================================
+
+@[startup]
+fn main() → bool:
+    a < b ∧ ¬ ready ∨ c ≠ d
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_definition
+    (attribute_list
+      (attribute
+        name: (identifier)))
+    name: (identifier)
+    parameters: (parameter_list)
+    return_type: (type
+      (identifier))
+    body: (layout_block
+      (expression_statement
+        (logical_expression
+          (logical_expression
+            (comparison_expression
+              left: (identifier)
+              right: (identifier))
+            (unary_expression
+              (identifier)))
+          (comparison_expression
+            left: (identifier)
+            right: (identifier)))))))

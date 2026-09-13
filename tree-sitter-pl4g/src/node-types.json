@@ -38,6 +38,10 @@
             "named": true
           },
           {
+            "type": "logical_expression",
+            "named": true
+          },
+          {
             "type": "member_expression",
             "named": true
           },
@@ -383,6 +387,10 @@
           "named": true
         },
         {
+          "type": "logical_expression",
+          "named": true
+        },
+        {
           "type": "member_expression",
           "named": true
         },
@@ -487,6 +495,176 @@
         },
         {
           "type": "variable_statement",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "logical_expression",
+    "named": true,
+    "fields": {
+      "left": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "binary_expression",
+            "named": true
+          },
+          {
+            "type": "boolean_literal",
+            "named": true
+          },
+          {
+            "type": "comparison_expression",
+            "named": true
+          },
+          {
+            "type": "identifier",
+            "named": true
+          },
+          {
+            "type": "integer_literal",
+            "named": true
+          },
+          {
+            "type": "member_expression",
+            "named": true
+          },
+          {
+            "type": "parenthesized_expression",
+            "named": true
+          },
+          {
+            "type": "string_literal",
+            "named": true
+          },
+          {
+            "type": "unary_expression",
+            "named": true
+          }
+        ]
+      },
+      "operator": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "and",
+            "named": false
+          },
+          {
+            "type": "or",
+            "named": false
+          },
+          {
+            "type": "∧",
+            "named": false
+          },
+          {
+            "type": "∨",
+            "named": false
+          },
+          {
+            "type": "⊕",
+            "named": false
+          },
+          {
+            "type": "⊼",
+            "named": false
+          },
+          {
+            "type": "⊽",
+            "named": false
+          }
+        ]
+      },
+      "right": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "binary_expression",
+            "named": true
+          },
+          {
+            "type": "boolean_literal",
+            "named": true
+          },
+          {
+            "type": "comparison_expression",
+            "named": true
+          },
+          {
+            "type": "identifier",
+            "named": true
+          },
+          {
+            "type": "integer_literal",
+            "named": true
+          },
+          {
+            "type": "member_expression",
+            "named": true
+          },
+          {
+            "type": "parenthesized_expression",
+            "named": true
+          },
+          {
+            "type": "string_literal",
+            "named": true
+          },
+          {
+            "type": "unary_expression",
+            "named": true
+          }
+        ]
+      }
+    },
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "binary_expression",
+          "named": true
+        },
+        {
+          "type": "boolean_literal",
+          "named": true
+        },
+        {
+          "type": "comparison_expression",
+          "named": true
+        },
+        {
+          "type": "identifier",
+          "named": true
+        },
+        {
+          "type": "integer_literal",
+          "named": true
+        },
+        {
+          "type": "logical_expression",
+          "named": true
+        },
+        {
+          "type": "member_expression",
+          "named": true
+        },
+        {
+          "type": "parenthesized_expression",
+          "named": true
+        },
+        {
+          "type": "string_literal",
+          "named": true
+        },
+        {
+          "type": "unary_expression",
           "named": true
         }
       ]
@@ -652,6 +830,10 @@
           "named": true
         },
         {
+          "type": "logical_expression",
+          "named": true
+        },
+        {
           "type": "member_expression",
           "named": true
         },
@@ -696,6 +878,10 @@
         },
         {
           "type": "integer_literal",
+          "named": true
+        },
+        {
+          "type": "logical_expression",
           "named": true
         },
         {
@@ -766,6 +952,10 @@
         "types": [
           {
             "type": "~",
+            "named": false
+          },
+          {
+            "type": "¬",
             "named": false
           }
         ]
@@ -859,6 +1049,10 @@
             "named": true
           },
           {
+            "type": "logical_expression",
+            "named": true
+          },
+          {
             "type": "member_expression",
             "named": true
           },
@@ -938,6 +1132,10 @@
           },
           {
             "type": "integer_literal",
+            "named": true
+          },
+          {
+            "type": "logical_expression",
             "named": true
           },
           {
@@ -1035,6 +1233,10 @@
     "named": false
   },
   {
+    "type": "and",
+    "named": false
+  },
+  {
     "type": "doc_comment",
     "named": true,
     "extra": true
@@ -1073,6 +1275,10 @@
     "named": true
   },
   {
+    "type": "or",
+    "named": false
+  },
+  {
     "type": "return",
     "named": false
   },
@@ -1101,11 +1307,23 @@
     "named": false
   },
   {
+    "type": "¬",
+    "named": false
+  },
+  {
     "type": "←",
     "named": false
   },
   {
     "type": "→",
+    "named": false
+  },
+  {
+    "type": "∧",
+    "named": false
+  },
+  {
+    "type": "∨",
     "named": false
   },
   {
@@ -1118,6 +1336,18 @@
   },
   {
     "type": "≥",
+    "named": false
+  },
+  {
+    "type": "⊕",
+    "named": false
+  },
+  {
+    "type": "⊼",
+    "named": false
+  },
+  {
+    "type": "⊽",
     "named": false
   }
 ]

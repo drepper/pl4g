@@ -1,0 +1,19 @@
+※ pl4g-test: compile=ok run=native,qemu exit=0 diag=none
+
+※ The logical operators join whole questions, so they bind looser than the
+※ comparisons: this reads as ((a < b) ∧ (¬ ready)) ∨ (c ≠ d).  Among
+※ themselves they take the order of the bitwise three they mirror.
+
+let a: u8 = 1u8
+let b: u8 = 2u8
+let c: u8 = 3u8
+let d: u8 = 4u8
+let ready: bool = true
+
+@[visible]
+let answer: mut bool = false
+
+@[startup]
+fn main() → u8:
+    answer ← a < b ∧ ¬ ready ∨ c ≠ d
+    0u8

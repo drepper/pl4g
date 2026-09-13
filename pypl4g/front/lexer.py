@@ -12,10 +12,11 @@ from ..diag import ids as D
 from ..diag.engine import DiagEngine
 from ..source.location import Span
 from ..source.manager import SourceFile
-from .token import (ARROW_GLYPH, ASCII_SUBSTITUTES, ASSIGN_GLYPH,
+from .token import (AND_GLYPH, ARROW_GLYPH, ASCII_SUBSTITUTES, ASSIGN_GLYPH,
                     COMMENT_GLYPH, GREATER_EQUAL_GLYPH, INTEGER_TYPE_NAMES,
-                    KEYWORDS, LESS_EQUAL_GLYPH, NEGATIVE_GLYPH, NOT_EQUAL_GLYPH,
-                    TokKind, Token)
+                    KEYWORDS, LESS_EQUAL_GLYPH, NAND_GLYPH, NEGATIVE_GLYPH,
+                    NOR_GLYPH, NOT_EQUAL_GLYPH, NOT_GLYPH, OR_GLYPH, TokKind,
+                    Token, XOR_GLYPH)
 
 _SIMPLE: Final[dict[str, TokKind]] = {
     "(": TokKind.LPAREN,
@@ -40,6 +41,12 @@ _SIMPLE: Final[dict[str, TokKind]] = {
     ">": TokKind.GREATER,
     LESS_EQUAL_GLYPH: TokKind.LESS_EQUAL,
     GREATER_EQUAL_GLYPH: TokKind.GREATER_EQUAL,
+    AND_GLYPH: TokKind.LOGIC_AND,
+    OR_GLYPH: TokKind.LOGIC_OR,
+    XOR_GLYPH: TokKind.LOGIC_XOR,
+    NAND_GLYPH: TokKind.LOGIC_NAND,
+    NOR_GLYPH: TokKind.LOGIC_NOR,
+    NOT_GLYPH: TokKind.LOGIC_NOT,
 }
 
 _OPEN: Final[frozenset[TokKind]] = frozenset(

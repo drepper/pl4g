@@ -156,11 +156,27 @@ module.exports = grammar({
 
     // -- expressions -------------------------------------------------------
     //
-    // The precedences are the ones `spec/spec.md` states: the comparisons bind
-    // loosest, then bitwise "or", "exclusive or" and "and" in that order, and
-    // an operator written before its operand binds tighter than any of them.
+    // The precedences are the ones `spec/spec.md` states, loosest first: the
+    // logical operators, then the comparisons, then bitwise "or", "exclusive
+    // or" and "and" in that order, and an operator written before its operand
+    // binds tighter than any of them.
+    //
+    // Three layers, and the layering is what states the precedence between
+    // them: a logical operator takes anything below it, a comparison takes
+    // anything below *itself*, and the bitwise operators take only their own
+    // kind.  That also says, in the shape of the rules rather than with
+    // precedence numbers, which of them do not chain -- there is nowhere for a
+    // bare comparison to appear inside another one except within parentheses.
 
     _expression: $ => choice(
+      $.logical_expression,
+      $._non_logical,
+    ),
+
+    // Everything an expression can be except a logical operator applied to two
+    // things.  `\u22bc` and `\u22bd` take one of these on each side, which is how the
+    // grammar says they do not associate.
+    _non_logical: $ => choice(
       $.comparison_expression,
       $._non_comparison,
     ),
@@ -180,16 +196,23 @@ module.exports = grammar({
       $.identifier,
     ),
 
+    // '\u2227' and 'and' bind alike, as do '\u2228' and 'or': the word and the glyph say
+    // the same thing and differ only in what they evaluate.  '\u22bc' and '\u22bd' share a
+    // level of their own and take a non-logical operand on each side, since
+    // neither is associative and `a \u22bc b \u22bc c` has two meanings.
+    logical_expression: $ => choice(
+      prec.left(1, seq($._expression,
+                       field('operator', choice('\u2228', 'or')), $._expression)),
+      prec.left(2, seq($._expression, field('operator', '\u2295'), $._expression)),
+      prec.left(3, seq($._expression,
+                       field('operator', choice('\u2227', 'and')), $._expression)),
+      seq(field('left', $._non_logical),
+          field('operator', choice('\u22bc', '\u22bd')),
+          field('right', $._non_logical)),
+    ),
+
     // All six share one level.  '<=' and '>=' are the accepted substitutes for
     // the two glyphs, by the rule that a substitute is never one character.
-    //
-    // Every operand below is a `_non_comparison` rather than an expression,
-    // which is the whole of what says that the comparisons bind loosest and do
-    // not chain -- there is nowhere for a bare comparison to appear except at
-    // the top of an expression or inside parentheses.  That is said in the
-    // shape of the rules rather than with precedence numbers, because a shape
-    // cannot be read two ways.  Chaining still works for the bitwise operators,
-    // since `_non_comparison` holds `binary_expression` itself.
     comparison_expression: $ => seq(
       field('left', $._non_comparison),
       field('operator', choice('=', '\u2260', '<', '>', '\u2264', '\u2265',
@@ -198,16 +221,21 @@ module.exports = grammar({
     ),
 
     binary_expression: $ => choice(
-      prec.left(1, seq($._non_comparison, field('operator', '|'), $._non_comparison)),
-      prec.left(2, seq($._non_comparison, field('operator', '^'), $._non_comparison)),
-      prec.left(3, seq($._non_comparison, field('operator', '&'), $._non_comparison)),
+      prec.left(4, seq($._non_comparison, field('operator', '|'), $._non_comparison)),
+      prec.left(5, seq($._non_comparison, field('operator', '^'), $._non_comparison)),
+      prec.left(6, seq($._non_comparison, field('operator', '&'), $._non_comparison)),
     ),
 
-    unary_expression: $ => prec(4, seq(field('operator', '~'), $._non_comparison)),
+    // Both bind tighter than every operator written between two operands, so
+    // `\u00ac ready \u2227 seen` is `(\u00ac ready) \u2227 seen` and `\u00ac (a < b)` needs its parentheses --
+    // the same rule '!' follows in C, Go and Rust.
+    unary_expression: $ => prec(7, seq(
+      field('operator', choice('~', '\u00ac')), $._non_comparison,
+    )),
 
     // Something named through the module it belongs to, which binds tighter
     // than any operator: `a.b & c` is `(a.b) & c`.
-    member_expression: $ => prec(5, seq(
+    member_expression: $ => prec(8, seq(
       field('base', $._non_comparison), '.', field('name', $.identifier),
     )),
 

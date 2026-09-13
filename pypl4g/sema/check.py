@@ -124,6 +124,24 @@ _COMPARISONS: Final[dict[ast.BinaryOp, tuple[CmpPred, CmpPred]]] = {
     ast.BinaryOp.GREATER_EQUAL: (CmpPred.SGE, CmpPred.UGE),
 }
 
+#: The logical operators that compute both sides and then combine them, and the
+#: instruction each one is built from.  `⊼` and `⊽` are the first two with the
+#: answer turned round afterwards, which is what the second field says.
+_LOGIC_OPS: Final[dict[ast.BinaryOp, tuple[BinOp, bool]]] = {
+    ast.BinaryOp.LOGIC_AND: (BinOp.AND, False),
+    ast.BinaryOp.LOGIC_OR: (BinOp.OR, False),
+    ast.BinaryOp.LOGIC_XOR: (BinOp.XOR, False),
+    ast.BinaryOp.LOGIC_NAND: (BinOp.AND, True),
+    ast.BinaryOp.LOGIC_NOR: (BinOp.OR, True),
+}
+
+#: The two that do not compute both sides, and what the left one deciding the
+#: answer means: `and` is answered by a false left side, `or` by a true one.
+_SHORT_CIRCUIT: Final[dict[ast.BinaryOp, bool]] = {
+    ast.BinaryOp.SHORT_AND: False,
+    ast.BinaryOp.SHORT_OR: True,
+}
+
 #: The comparisons that put the two values in an order.  Ordering is defined on
 #: numbers; equality is defined on anything whose values can be told apart.
 _ORDERINGS: Final[frozenset[ast.BinaryOp]] = frozenset((
@@ -1163,6 +1181,10 @@ class Checker:
                 return self._lower_name(builder, expr, expected)
             case ast.Binary() if expr.op in _COMPARISONS:
                 return self._lower_comparison(builder, expr, expected)
+            case ast.Binary() if expr.op in _LOGIC_OPS:
+                return self._lower_logic(builder, expr, expected)
+            case ast.Binary() if expr.op in _SHORT_CIRCUIT:
+                return self._lower_short_circuit(builder, expr, expected)
             case ast.Binary():
                 return self._lower_binary(builder, expr, expected)
             case ast.Unary():
@@ -1214,6 +1236,113 @@ class Checker:
         return builder.compare(
             signed if isinstance(ty, IntType) and ty.signed else unsigned,
             left, right, expr.span)
+
+    def _lower_logic(self, builder: IRBuilder, expr: ast.Binary,
+                     expected: Type | None) -> Value:
+        """Lower a logical operator that computes both of its operands.
+
+        A truth value is one or zero, so "both are true" is the bits of the two
+        anded together and "at least one is true" is them ored -- the same
+        instruction the bitwise operators use, asked of a value that has only
+        two of its bits' worth of meaning.  `⊼` and `⊽` are those two with the
+        answer turned round, and turning a truth value round is an exclusive or
+        with one rather than a complement: complementing one gives every bit but
+        the lowest as well.
+        """
+        if expected is not None and expected is not BOOL:
+            self._report_mismatch(expr.span, BOOL, expected)
+            return UndefConst(ERROR)
+        outer, self._operand_of = self._operand_of, expr.op.value
+        try:
+            left = self._boolean(builder, expr.left, expr.op)
+            right = self._boolean(builder, expr.right, expr.op)
+        finally:
+            self._operand_of = outer
+        if left is None or right is None:
+            return UndefConst(ERROR)
+        operation, inverted = _LOGIC_OPS[expr.op]
+        found = builder.binary(operation, left, right, expr.span)
+        return self._negate(builder, found, expr.span) if inverted else found
+
+    def _lower_short_circuit(self, builder: IRBuilder, expr: ast.Binary,
+                             expected: Type | None) -> Value:
+        """Lower `and` or `or`, which do not compute the right side unless the
+        left one leaves the answer open.
+
+        This is the first and so far the only place the front end makes a
+        branch.  The shape is chosen so that only the *unconditional* branches
+        carry an argument: the conditional one goes to the block that computes
+        the right side or to a block that does nothing but hand the answer over.
+        A conditional branch whose two edges carried different arguments would
+        need the edge split before the argument could be moved into place, and
+        nothing here asks for that.
+
+            entry:      condbr left → rest, decided
+            decided:    br joined(left decides it)
+            rest:       br joined(right)
+            joined(p):  p
+        """
+        if expected is not None and expected is not BOOL:
+            self._report_mismatch(expr.span, BOOL, expected)
+            return UndefConst(ERROR)
+        outer, self._operand_of = self._operand_of, expr.op.value
+        try:
+            left = self._boolean(builder, expr.left, expr.op)
+        finally:
+            self._operand_of = outer
+        if left is None:
+            return UndefConst(ERROR)
+        decides = _SHORT_CIRCUIT[expr.op]
+        rest = builder.new_block("rest")
+        decided = builder.new_block("decided")
+        joined = builder.new_block("joined")
+        answer = joined.add_param(BOOL, "answer")
+        # The left side being what decides sends control straight to the answer.
+        builder.condbr(left, decided if decides else rest,
+                       rest if decides else decided, span=expr.span)
+        builder.position_at(decided)
+        builder.br(joined, (builder.bool_const(decides),), expr.span)
+        builder.position_at(rest)
+        outer, self._operand_of = self._operand_of, expr.op.value
+        try:
+            right = self._boolean(builder, expr.right, expr.op)
+        finally:
+            self._operand_of = outer
+        if right is None:
+            # The left side was fine and the right was not, so the blocks are
+            # already there; giving the join something of the right type keeps
+            # the representation well formed while the error is reported.
+            right = UndefConst(BOOL)
+        builder.br(joined, (right,), expr.span)
+        builder.position_at(joined)
+        return answer
+
+    def _boolean(self, builder: IRBuilder, expr: ast.Expr,
+                 op: ast.BinaryOp | ast.UnaryOp) -> Value | None:
+        """Lower *expr* where only a truth value will do, or report why not.
+
+        Nothing else counts as one.  C's rule that any number other than zero is
+        true is what `if (x = 0)` comes from, and where the question really is
+        whether a number is zero, `≠` asks it.
+        """
+        value = self._lower_expr(builder, expr, BOOL)
+        ty = self._value_type_of(value)
+        if ty is ERROR:
+            return None
+        if ty is not BOOL:
+            self._diags.emit(D.LANG_TYPE_OPERAND_NOT_BOOLEAN, expr.span,
+                             operator=op.value, found=ty.render())
+            return None
+        return value
+
+    def _negate(self, builder: IRBuilder, value: Value, span: Span) -> Value:
+        """The truth value that is true exactly where *value* is not.
+
+        An exclusive or with one, not a complement: a truth value is one or
+        zero, and complementing it would set every other bit of the register as
+        well.
+        """
+        return builder.binary(BinOp.XOR, value, builder.bool_const(True), span)
 
     def _comparable(self, span: Span, op: ast.BinaryOp, ty: Type) -> Type:
         """*ty* itself where it may stand on one side of *op*, and ERROR else.
@@ -1275,6 +1404,8 @@ class Checker:
     def _lower_unary(self, builder: IRBuilder, expr: ast.Unary,
                      expected: Type | None) -> Value:
         """Lower an operator written before its operand."""
+        if expr.op is ast.UnaryOp.LOGIC_NOT:
+            return self._lower_not(builder, expr, expected)
         outer, self._operand_of = self._operand_of, expr.op.value
         try:
             operand = self._lower_expr(builder, expr.operand, expected)
@@ -1288,6 +1419,21 @@ class Checker:
                              operator=expr.op.value, found=ty.render())
             return UndefConst(ERROR)
         return builder.unary(_UNARY_OPS[expr.op], operand, expr.span)
+
+    def _lower_not(self, builder: IRBuilder, expr: ast.Unary,
+                   expected: Type | None) -> Value:
+        """Lower `¬`, which answers the opposite of what its operand says."""
+        if expected is not None and expected is not BOOL:
+            self._report_mismatch(expr.span, BOOL, expected)
+            return UndefConst(ERROR)
+        outer, self._operand_of = self._operand_of, expr.op.value
+        try:
+            operand = self._boolean(builder, expr.operand, expr.op)
+        finally:
+            self._operand_of = outer
+        if operand is None:
+            return UndefConst(ERROR)
+        return self._negate(builder, operand, expr.span)
 
     def _hint_of(self, expr: ast.Expr) -> Type | None:
         """The type an expression says it has, without lowering it.
@@ -1304,9 +1450,12 @@ class Checker:
                 return BOOL
             case ast.NameRef():
                 return self._type_of_name(expr.name)
-            case ast.Binary() if expr.op in _COMPARISONS:
-                # What a comparison answers with, not what it compares: the
+            case ast.Binary() if (expr.op in _COMPARISONS or expr.op in _LOGIC_OPS
+                                  or expr.op in _SHORT_CIRCUIT):
+                # What the operator answers with, not what it was given: the
                 # answer is what whatever reads the expression will get.
+                return BOOL
+            case ast.Unary() if expr.op is ast.UnaryOp.LOGIC_NOT:
                 return BOOL
             case ast.Binary():
                 return self._hint_of(expr.left) or self._hint_of(expr.right)
