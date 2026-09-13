@@ -39,6 +39,10 @@
     {
       "hash": "04c20c9",
       "subject": "✨ A grammar for editors, and a program that shows a log against its source"
+    },
+    {
+      "hash": "3020cf6",
+      "subject": "✨ Spilling to a stack frame, by rewriting and starting again"
     }
   ],
   "times": {
@@ -318,6 +322,48 @@
       "bitwise-precedence": [
         1.3929999999999998,
         67.61870998889208
+      ]
+    },
+    "3020cf6": {
+      "exit0": [
+        0.9289999999999999,
+        71.11121295019984
+      ],
+      "global-variable": [
+        1.146,
+        70.62236603815109
+      ],
+      "assign-widths": [
+        1.5470000000000002,
+        71.5881499927491
+      ],
+      "many-values-at-once": [
+        1.8110000000000002,
+        75.14000299852341
+      ],
+      "unreached-function": [
+        1.3599999999999999,
+        70.48140303231776
+      ],
+      "export-visibility": [
+        1.3379999999999999,
+        71.37670298106968
+      ],
+      "digit-separators": [
+        1.507,
+        72.08363799145445
+      ],
+      "boolean-values": [
+        1.399,
+        75.11481503024697
+      ],
+      "bitwise-operators": [
+        1.444,
+        70.98666403908283
+      ],
+      "bitwise-precedence": [
+        1.2759999999999998,
+        72.65555899357423
       ]
     }
   }

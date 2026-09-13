@@ -15,18 +15,18 @@ Work
 The sum of the compiler's own stages, which is what a change to the
 compiler moves.
 
-| program | eee64a3 | af657ad | 2f564cb | 37dbb28 | 1c4ae78 | f391839 | 04c20c9 |
-|---|---|---|---|---|---|---|---|
-| exit0 | 0.90 | 0.89 | 0.88 | 0.89 | 1.06 | 1.05 | 1.07 |
-| global-variable | 1.05 | 1.10 | 1.04 | 1.05 | 1.22 | 1.22 | 1.20 |
-| assign-widths | 1.50 | 1.49 | 1.50 | 1.64 | 1.63 | 1.63 | 1.66 |
-| many-values-at-once | 1.73 | 1.74 | 1.87 | 1.90 | 1.90 | 1.88 | 1.87 |
-| unreached-function | 1.33 | 1.31 | 1.33 | 1.44 | 1.46 | 1.44 | 1.44 |
-| export-visibility | 1.28 | 1.27 | 1.30 | 1.47 | 1.42 | 1.45 | 1.44 |
-| digit-separators | 1.46 | 1.47 | 1.49 | 1.63 | 1.64 | 1.60 | 1.62 |
-| boolean-values | 1.25 | 1.24 | 1.23 | 1.27 | 1.39 | 1.45 | 1.38 |
-| bitwise-operators |  |  | 1.47 | 1.55 | 1.56 | 1.57 | 1.58 |
-| bitwise-precedence |  |  | 1.22 | 1.22 | 1.42 | 1.40 | 1.39 |
+| program | eee64a3 | af657ad | 2f564cb | 37dbb28 | 1c4ae78 | f391839 | 04c20c9 | 3020cf6 |
+|---|---|---|---|---|---|---|---|---|
+| exit0 | 0.90 | 0.89 | 0.88 | 0.89 | 1.06 | 1.05 | 1.07 | 0.93 |
+| global-variable | 1.05 | 1.10 | 1.04 | 1.05 | 1.22 | 1.22 | 1.20 | 1.15 |
+| assign-widths | 1.50 | 1.49 | 1.50 | 1.64 | 1.63 | 1.63 | 1.66 | 1.55 |
+| many-values-at-once | 1.73 | 1.74 | 1.87 | 1.90 | 1.90 | 1.88 | 1.87 | 1.81 |
+| unreached-function | 1.33 | 1.31 | 1.33 | 1.44 | 1.46 | 1.44 | 1.44 | 1.36 |
+| export-visibility | 1.28 | 1.27 | 1.30 | 1.47 | 1.42 | 1.45 | 1.44 | 1.34 |
+| digit-separators | 1.46 | 1.47 | 1.49 | 1.63 | 1.64 | 1.60 | 1.62 | 1.51 |
+| boolean-values | 1.25 | 1.24 | 1.23 | 1.27 | 1.39 | 1.45 | 1.38 | 1.40 |
+| bitwise-operators |  |  | 1.47 | 1.55 | 1.56 | 1.57 | 1.58 | 1.44 |
+| bitwise-precedence |  |  | 1.22 | 1.22 | 1.42 | 1.40 | 1.39 | 1.28 |
 
 Process
 -------
@@ -36,18 +36,18 @@ for.  For the bootstrap compiler this is mostly starting the interpreter and
 importing the package, so it says little about code generation and a good deal
 about how much of the compiler an ordinary compilation has to import.
 
-| program | eee64a3 | af657ad | 2f564cb | 37dbb28 | 1c4ae78 | f391839 | 04c20c9 |
-|---|---|---|---|---|---|---|---|
-| exit0 | 69 | 69 | 67 | 68 | 71 | 67 | 69 |
-| global-variable | 68 | 69 | 69 | 66 | 71 | 70 | 68 |
-| assign-widths | 69 | 69 | 70 | 67 | 71 | 69 | 70 |
-| many-values-at-once | 69 | 70 | 69 | 69 | 68 | 71 | 68 |
-| unreached-function | 71 | 69 | 68 | 66 | 71 | 69 | 69 |
-| export-visibility | 68 | 65 | 69 | 69 | 70 | 71 | 68 |
-| digit-separators | 68 | 66 | 68 | 68 | 68 | 68 | 70 |
-| boolean-values | 68 | 67 | 72 | 69 | 67 | 67 | 67 |
-| bitwise-operators |  |  | 72 | 68 | 70 | 68 | 69 |
-| bitwise-precedence |  |  | 68 | 67 | 70 | 68 | 68 |
+| program | eee64a3 | af657ad | 2f564cb | 37dbb28 | 1c4ae78 | f391839 | 04c20c9 | 3020cf6 |
+|---|---|---|---|---|---|---|---|---|
+| exit0 | 69 | 69 | 67 | 68 | 71 | 67 | 69 | 71 |
+| global-variable | 68 | 69 | 69 | 66 | 71 | 70 | 68 | 71 |
+| assign-widths | 69 | 69 | 70 | 67 | 71 | 69 | 70 | 72 |
+| many-values-at-once | 69 | 70 | 69 | 69 | 68 | 71 | 68 | 75 |
+| unreached-function | 71 | 69 | 68 | 66 | 71 | 69 | 69 | 70 |
+| export-visibility | 68 | 65 | 69 | 69 | 70 | 71 | 68 | 71 |
+| digit-separators | 68 | 66 | 68 | 68 | 68 | 68 | 70 | 72 |
+| boolean-values | 68 | 67 | 72 | 69 | 67 | 67 | 67 | 75 |
+| bitwise-operators |  |  | 72 | 68 | 70 | 68 | 69 | 71 |
+| bitwise-precedence |  |  | 68 | 67 | 70 | 68 | 68 | 73 |
 
 What each column is:
 
@@ -58,6 +58,7 @@ What each column is:
 - `1c4ae78` -- ✨ What the compiler leaves out is recorded in the decision log
 - `f391839` -- ✨ A local the sweep removes is logged too, by the name it was given
 - `04c20c9` -- ✨ A grammar for editors, and a program that shows a log against its source
+- `3020cf6` -- ✨ Spilling to a stack frame, by rewriting and starting again
 
 What each sample exercises:
 
