@@ -63,6 +63,8 @@ To Do List for the pypl4g compiler
     the branch fall through instead of jumping.  Every ordering is compiled and run on all three targets.
 
 [ ] merge a block into its only predecessor, and replace a block parameter that has one incoming argument by that argument.
+    `match` makes the first of these worth having: an arm that assigns nothing still ends in a branch to the block the arms join
+    at, and a join with one incoming edge is a block that need not exist.
     What is left after a branch on a settled condition is replaced by its jump: a chain of blocks that fall through, which costs
     nothing in the generated code and is why this was not done with the logical operators.  `if` is the right occasion for it,
     since an `if` whose condition is known should leave no trace at all.
@@ -93,9 +95,10 @@ To Do List for the pypl4g compiler
     depends on it today -- the golden round-trip test names the cases it covers -- and what it costs is that a dump of a program
     using any of those cannot be fed back in.  Worth closing in one piece rather than a shape at a time.
 
-[ ] lower `SwitchInst`.  It exists in the representation and nothing generates one, since the language has no construct that
-    would -- asking which variant a sum holds will be the first, once there is a way to ask.  A chain of comparisons is correct
-    and is what a first version should do; a jump table wants the relocation work that position-independent code needs anyway.
+[ ] lower `SwitchInst`.  It exists in the representation and nothing generates one.  A `match` over a result is two ways and is
+    lowered as a conditional branch; a `match` over a *sum* is what will want this, once a value of a sum can be held at all.  A
+    chain of comparisons is correct and is what a first version should do; a jump table wants the relocation work that
+    position-independent code needs anyway.
 
 [ ] hold a value whose type is a product or a sum.  Both are refused today (8501): a product is every one of its fields at once
     and a sum is one variant and a tag, and neither is a thing a register holds.  What they want is a place in memory, an address

@@ -7,7 +7,7 @@ report against the text the user wrote.
 from dataclasses import dataclass, field
 from enum import Enum, StrEnum
 
-from ..source.location import Span
+from ..source.location import INVALID_SPAN, Span
 
 
 class BlockStyle(Enum):
@@ -300,6 +300,39 @@ class VarDef(Stmt):
     #: Whether the type said the variable may be changed.
     mutable: bool = False
     doc: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class Pattern(Node):
+    """What one arm of a `match` matches.
+
+    `TYPE(NAME)` takes the alternative whose type is `TYPE` and binds its value
+    to `NAME`; `TYPE` alone takes it and binds nothing, which is what an
+    alternative carrying nothing is written with.  `\N{UP TACK}` in place of the type is the
+    error arm of a result, whose two alternatives may name one type and so
+    cannot both be said by naming one.
+    """
+
+    #: The type this arm takes, or nothing where the arm is the error one.
+    type: TypeRef | None
+    name: str | None = None
+    name_span: Span = INVALID_SPAN
+
+
+@dataclass(frozen=True, slots=True)
+class MatchArm(Node):
+    """One arm: what it matches and what it does."""
+
+    pattern: Pattern
+    body: Block
+
+
+@dataclass(frozen=True, slots=True)
+class MatchStmt(Stmt):
+    """`match EXPR` and the arms that take its alternatives apart."""
+
+    subject: Expr
+    arms: tuple[MatchArm, ...]
 
 
 @dataclass(frozen=True, slots=True)

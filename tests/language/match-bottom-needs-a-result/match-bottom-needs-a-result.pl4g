@@ -1,0 +1,19 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4415 LANG_MATCH_BOTTOM_NEEDS_A_RESULT
+
+※ A sum names its alternatives by their types, so every arm of one is written
+※ with a type.  `⊥` exists because a result's two alternatives may name one
+※ type and so cannot both be said by naming one.
+
+type Number = whole : i64 | fraction : f64
+
+fn which(n: Number) → u8:
+    match n:
+        i64(w):
+            return 1u8
+        ⊥:
+            return 2u8
+
+@[startup]
+fn main() → u8:
+    0u8

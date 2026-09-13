@@ -1,0 +1,17 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4416 LANG_MATCH_BINDS_NOTHING
+
+※ An arm binds a name to the value its alternative carries.  The error of a
+※ result whose error carries nothing has none, so the name would stand for
+※ nothing; the pattern without the parentheses is how it is taken.
+
+let hundred: mut u8 = 100u8
+let seven: mut u8 = 7u8
+
+@[startup]
+fn main() → u8:
+    match hundred ÷ seven:
+        u8(q):
+            return q
+        ⊥(e):
+            return 1u8

@@ -693,7 +693,8 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
     from ...ir.function import Function as _Function
     from ...ir.mangle import symbol_name
     from ...ir.module import GlobalVar
-    from ...ir.types import BOOL, BoolType, FloatType, IntType, ResultType, VOID
+    from ...ir.types import (BOOL, BoolType, FloatType, IntType, MEM,
+                             ResultType, VOID)
     from ...ir.inst import (CastInst, CastKind, FailedInst, UnwrapInst,
                             WrapInst)
     from ...ir.value import FloatConst, UndefConst
@@ -848,6 +849,10 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
     for index, block in enumerate(func.blocks):
         for position, param in enumerate(block.params):
             if index != 0:
+                if param.ty is MEM:
+                    # Not a value and never in a register: what it says is which
+                    # path's ordering of the memory operations holds from here.
+                    continue
                 if isinstance(param.ty, ResultType):
                     raise UnsupportedOperation(
                         "a block parameter whose type is a result", None)

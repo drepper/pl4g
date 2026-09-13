@@ -2020,6 +2020,47 @@ would be, and what those two operators answer with is the answer.
 question about the result type any more: the sum type now exists, so what is missing is a way to *write* a value of one, which is
 an open question of its own.  Until something can construct an error, such a type is one no program could put anything in.
 
+## 2026-09-15T03:00+02:00 — language and compiler
+
+**`match`, and an alternative named by its type**
+
+Decided on the user's direction: a `match` after Rust's, with arms written `TYPE(x)` naming the alternative by its *type*, and
+`⊥` for the error arm of a result -- `⊥(x)` where the error carries something and `⊥` alone where it does not.
+
+**Naming an alternative by its type is the decision everything else follows from.**  It means no constructor has to exist before a
+value can be taken apart, which matters here because nothing yet writes a value of a sum: the patterns are complete while the
+values are not.  It also means **no two alternatives of a sum may have the same type** (4410), which the user stated as the
+consequence it is.
+
+That rule has a cost worth recording: an enumeration -- a sum every one of whose alternatives carries nothing -- cannot be
+written, all of them being `void`.  The specification said last week that an all-`void` sum was how one is written; it no longer
+does.  The to-do list carries the question, with the two ways out: let a pattern name the *variant* instead of the type where the
+two differ, which is Rust's arrangement and would make the uniqueness rule unnecessary; or give the language an enumeration of its
+own.
+
+**`⊥` rather than a type for the error arm.**  A result's two alternatives may name one type -- `u8?u8` is a perfectly good
+type -- so naming a type cannot say which arm is which.  The glyph is logic's bottom, the proposition that never holds.
+
+**Exhaustive, with no catch-all.**  Every alternative must be taken and none twice.  A catch-all would let an alternative added
+later fall silently into a branch written before it existed, which is the mistake exhaustiveness is checked to prevent; Rust has
+`_` and Zig has `else`, and this has neither on purpose.
+
+**A statement, not an expression.**  The user asked for a statement.  Whether it should yield a value is the same question `if`
+raises, and the two should be answered together rather than one of them settled by whichever was implemented first.
+
+**What it needed underneath, which `if` will want too.**  A name bound outside the match and assigned inside one arm stands for
+two values afterwards, one per arm, so the block the arms join at takes it as a parameter and each arm hands its own value over.
+The memory token is merged the same way and for the same reason: two arms that both touch memory arrive with two tokens.  A
+memory-typed block parameter is not a value in a register -- what it says is which path's ordering holds from here -- so the
+backends skip it, which is one line in each and one in the shared branch lowering.
+
+The unread-value rule says nothing about a name a match may carry past its arms.  Whether an earlier value survives is a question
+about paths; that rule is a statement about a straight line of code, and answering it inside an arm would be a guess.
+
+**On a sum it is checked and not generated.**  Every rule about the arms is applied, and then the compiler says it cannot generate
+for one (9902).  What is missing is not the match: it is a value of a sum, which nothing writes, and the way one is held, which is
+not a register.  A match over a *result* runs today.
+
 ---
 
 ---

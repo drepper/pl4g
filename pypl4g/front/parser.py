@@ -599,7 +599,12 @@ class Parser:
             if self._check(TokKind.DEDENT) or self._check(TokKind.EOF):
                 break
             stmts.extend(self._parse_separated())
-            if not self._check(TokKind.DEDENT) and not self._check(TokKind.EOF):
+            if self._check(TokKind.DEDENT) or self._check(TokKind.EOF):
+                continue
+            if self._accept(TokKind.NEWLINE) is None \
+                    and not _ends_with_a_block(stmts[-1]):
+                # A statement that ends with an indented block has already taken
+                # the end of its own last line, so there is none left to ask for.
                 self._expect(TokKind.NEWLINE)
         end = self._current.span
         self._accept(TokKind.DEDENT)
@@ -646,6 +651,8 @@ class Parser:
                                  name=found.name)
                 raise _Bail()
             return found
+        if self._check(TokKind.KW_MATCH):
+            return self._parse_match()
         if self._check(TokKind.IDENT) and self._peek().kind is TokKind.ASSIGN:
             return self._parse_assignment()
         if self._check(TokKind.KW_RETURN):
@@ -657,6 +664,57 @@ class Parser:
             return ast.ReturnStmt(span=start.to(value.span), value=value, explicit=True)
         value = self._parse_expression()
         return ast.ExprStmt(span=value.span, value=value)
+
+    def _parse_match(self) -> ast.Stmt:
+        """Parse ``match EXPR`` and the arms that take its alternatives apart.
+
+        The arms stand where the statements of a body would, in either of the
+        two notations: indented under a colon, or inside braces.  An arm is a
+        pattern and then a body written the way a function's is -- a colon and
+        an indented block, or braces -- so that what a body looks like is one
+        thing wherever one appears.  Inside braces the arms follow one another
+        with nothing between them, each ending in the brace that closes it.
+        """
+        start = self._expect(TokKind.KW_MATCH).span
+        subject = self._parse_expression()
+        arms: list[ast.MatchArm] = []
+        if self._check(TokKind.LBRACE):
+            self._advance()
+            while not self._check(TokKind.RBRACE) and not self._check(TokKind.EOF):
+                arms.append(self._parse_arm())
+            end = self._expect(TokKind.RBRACE).span
+        else:
+            self._expect(TokKind.COLON, D.LANG_MATCH_EXPECTED_ARMS)
+            self._expect(TokKind.NEWLINE)
+            self._expect(TokKind.INDENT)
+            while not self._check(TokKind.DEDENT) and not self._check(TokKind.EOF):
+                self._skip_newlines()
+                if self._check(TokKind.DEDENT) or self._check(TokKind.EOF):
+                    break
+                arms.append(self._parse_arm())
+                self._skip_newlines()
+            end = self._current.span
+            self._accept(TokKind.DEDENT)
+        return ast.MatchStmt(span=start.to(end), subject=subject, arms=tuple(arms))
+
+    def _parse_arm(self) -> ast.MatchArm:
+        """Parse one arm: a pattern and the body it runs."""
+        pattern = self._parse_pattern()
+        body = self._parse_body()
+        return ast.MatchArm(span=pattern.span.to(body.span), pattern=pattern,
+                            body=body)
+
+    def _parse_pattern(self) -> ast.Pattern:
+        """Parse ``TYPE``, ``TYPE(NAME)``, ``\N{UP TACK}`` or ``\N{UP TACK}(NAME)``."""
+        bottom = self._accept(TokKind.BOTTOM)
+        written = None if bottom is not None else self._parse_type_ref()
+        start = bottom.span if bottom is not None else written.span  # pyright: ignore
+        if self._accept(TokKind.LPAREN) is None:
+            return ast.Pattern(span=start, type=written)
+        name_token = self._expect(TokKind.IDENT)
+        end = self._expect(TokKind.RPAREN, D.LANG_SYNTAX_EXPECTED_CLOSING_PAREN).span
+        return ast.Pattern(span=start.to(end), type=written, name=name_token.text,
+                           name_span=name_token.span)
 
     def _parse_assignment(self) -> ast.Stmt:
         """Parse ``NAME ← VALUE``."""
@@ -780,6 +838,16 @@ class Parser:
                 self._diags.emit(D.LANG_SYNTAX_UNEXPECTED_TOKEN, token.span,
                                  expected="an expression", found=token.describe())
                 raise _Bail()
+
+
+def _ends_with_a_block(stmt: ast.Stmt) -> bool:
+    """Whether a statement ends with a block of its own.
+
+    Such a statement swallows the end of its own last line in the layout
+    notation, so the block it stands in must not ask for one after it.  `match`
+    is the first of these and `if` will be the next.
+    """
+    return isinstance(stmt, ast.MatchStmt)
 
 
 def parse(tokens: Sequence[Token], path: str, diags: DiagEngine) -> ast.SourceUnit:

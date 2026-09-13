@@ -1,0 +1,38 @@
+※ pl4g-test: compile=ok run=native,qemu exit=100 diag=none
+
+※ `match` takes a value's alternatives apart.  An arm names the type of the
+※ alternative it takes and binds what that alternative carries; `⊥` is the
+※ error arm of a result, which is written that way because a result's two
+※ alternatives may name one type and so cannot both be said by naming one.
+※
+※ Every alternative must be taken and none twice.  There is no catch-all
+※ pattern: one would let an alternative added later fall silently into a
+※ branch written before it existed.
+
+let hundred: mut u8 = 100u8
+let seven: mut u8 = 7u8
+let none: mut u8 = 0u8
+
+fn share(a: u8, b: u8) → u8:
+    ※ a name bound outside the match and assigned in both arms stands for two
+    ※ values afterwards, and the block the arms join at is what carries it
+    let answer: mut u8 = 0u8
+    match a ÷ b:
+        u8(q):
+            answer ← q + 1u8
+        ⊥:
+            answer ← 99u8
+    answer
+
+fn leaves(a: u8, b: u8) → u8:
+    ※ every arm leaves the function, so there is no block for them to join at
+    match a ÷ b:
+        ⊥:
+            return 7u8
+        u8(q):
+            return q
+
+@[startup]
+fn main() → u8:
+    ※ 15 + 99 - 14
+    share(hundred, seven) + share(hundred, none) - leaves(hundred, seven)

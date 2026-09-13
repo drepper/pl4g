@@ -63,6 +63,13 @@ ABOVE_NOT_ALIKE_GLYPH: Final[str] = "\N{GREATER-THAN AND NOT APPROXIMATE}"
 QUESTION_GLYPH: Final[str] = "?"
 OR_ELSE_GLYPH: Final[str] = "??"
 
+#: What the arm of a `match` that takes the error case is written with.  A
+#: result's two arms may name one type -- `u8?u8` is a perfectly good type --
+#: so which arm is which cannot be said by naming a type, and this says it.
+#: The glyph is logic's "bottom", the proposition that never holds, which is as
+#: close to "there is no answer" as a single character comes.
+BOTTOM_GLYPH: Final[str] = "\N{UP TACK}"
+
 #: What a name the compiler provides begins with.  A program may read and write
 #: the ones that exist and may not define one of its own, so the glyph is what
 #: keeps the two apart: no name a program writes can begin with it, and there is
@@ -137,6 +144,7 @@ class TokKind(StrEnum):
     KW_LET = "'let'"
     KW_MUT = "'mut'"
     KW_TYPE = "'type'"
+    KW_MATCH = "'match'"
     KW_TRUE = "'true'"
     KW_FALSE = "'false'"
     KW_IMPORT = "'import'"
@@ -170,6 +178,7 @@ class TokKind(StrEnum):
     GREATER_EQUAL = "'\N{GREATER-THAN OR EQUAL TO}'"
 
     QUESTION = "'?'"
+    BOTTOM = "'\N{UP TACK}'"
     OR_ELSE = "'??'"
 
     ALIKE = "'\N{APPROXIMATELY EQUAL TO}'"
@@ -224,6 +233,7 @@ KEYWORDS: Final[dict[str, TokKind]] = {
     "let": TokKind.KW_LET,
     "mut": TokKind.KW_MUT,
     "type": TokKind.KW_TYPE,
+    "match": TokKind.KW_MATCH,
     "true": TokKind.KW_TRUE,
     "false": TokKind.KW_FALSE,
     "import": TokKind.KW_IMPORT,

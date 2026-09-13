@@ -732,14 +732,20 @@ separator ends the line it is written on and the end of line is then skipped.  N
 a line may be broken after a separator and not before one, which is what keeps "this pair was the last" decidable where it is
 written rather than one line further on.
 
-**A variant of a sum may be `void`**, and says the value is this alternative and carries nothing further.  A sum every one of
-whose variants is `void` is an enumeration, and is how one is written:
+**No two alternatives of a sum may have the same type** (4410).  An arm of a `match` names the type of the alternative it takes,
+so two alternatives of one type would be two an arm could not choose between.  The rule is a sum's alone: a product holds all of
+its fields at once and reaches each by name, so two fields of one type are no trouble there.
+
+**One variant of a sum may be `void`**, and says the value is this alternative and carries nothing further:
 
 ```
-type Colour = red : void | green : void | blue : void
+type Choice = nothing : void | small : u8 | large : u64
 ```
 
-A **field** of a product may not be (4409): a product holds all of its fields, so one that carries no information leaves the
+Only one, by the rule above -- which means an enumeration, every one of whose alternatives carries nothing, cannot be written
+today.  The to-do list carries that question.
+
+A **field** of a product may not be `void` (4409): a product holds all of its fields, so one that carries no information leaves the
 product meaning exactly what it would have meant without it.
 
 **A type definition may name a type defined below it**, and may name one another module exports (`m.Point`), for which the
@@ -773,6 +779,58 @@ alignment allows; the compiler is free to choose their order, and the order it c
 sum is its largest variant with a one-byte tag after it, the tag last rather than first because a tag ahead of a payload wanting
 eight bytes is seven bytes of padding and behind it is often none.  The whole of either is rounded up to its own alignment, which
 is the largest of its parts'.
+
+### Statements
+
+#### match
+
+`match` takes a value's alternatives apart.  It applies to a **sum**, whose alternatives its definition lists, and to a
+**result**, whose two are the answer and the error (4411).
+
+```
+match a ÷ b:
+    u8(quotient):
+        kept ← quotient
+    ⊥:
+        kept ← 0u8
+```
+
+**An arm names the type of the alternative it takes**, and binds what that alternative carries: `u8(quotient)` takes the
+alternative whose type is `u8`.  Written without the parentheses it takes the alternative and binds nothing, which is how one
+carrying nothing is taken (4416).  Naming a type the value has no alternative of is refused (4412).
+
+That is why no two alternatives of a sum may have the same type: an arm could not choose between them.
+
+**`⊥` (U+22A5 UP TACK) is the error arm of a result.**  A result's two alternatives may name one type -- `u8?u8` is a perfectly
+good type -- so which arm is which cannot be said by naming a type, and this says it.  It is logic's "bottom", the proposition
+that never holds, which is as close to "there is no answer" as a single character comes.  `⊥(name)` binds what the error carries
+where it carries something, and `⊥` alone takes an error that carries nothing.  It is an arm of a result and not of a sum (4415),
+a sum naming every one of its alternatives by a type.
+
+**Every alternative must be taken, and none twice** (4414, 4413).  A value holds one of them, so a `match` that left one out
+would be a program with nowhere to go when the value held it -- which is the thing a sum type exists to make impossible.  There is
+**no catch-all pattern**, and that is deliberate: one would let an alternative added later fall silently into a branch written
+before it existed, which is exactly the mistake exhaustiveness is checked to prevent.
+
+**The arms stand where the statements of a body would**, in either of the two block notations, and an arm is a pattern and then a
+body written the way a function's is -- a colon and an indented block, or braces.  Inside braces the arms follow one another with
+nothing between them, each ending in the brace that closes it.
+
+**`match` is a statement and not an expression.**  The value of an arm's last statement goes nowhere, as it does in any statement
+that is not the last of a body.  Whether it should yield a value is the same question `if` raises and is answered with it.
+
+**A name bound outside the match and assigned inside an arm** means what it reads: after the match it stands for whatever the arm
+that ran gave it.  What makes that work is the block the arms join at taking the name as a parameter, which is also why the
+unread-value rule says nothing about such a name while the arms are being checked -- whether an earlier value survives is a
+question about paths, and that rule is a statement about a straight line of code.
+
+Where every arm leaves the function there is no block to join at and none is made.
+
+Compare: Rust's `match`, which this follows in shape and in insisting on exhaustiveness, and which writes `Pattern => expr` where
+this writes a pattern and a body -- Rust's arms are expressions and these are statements.  Rust names a variant by its
+constructor; here an alternative is named by its type, which is what removes the need for a constructor to exist before a value
+can be taken apart.  Swift's `switch` is also exhaustive; C's `switch` is not, and falls through besides, which is the pair of
+mistakes every language since has fixed.  Zig writes `switch` with `else` as the catch-all; this has none, deliberately.
 
 ### Names the compiler provides
 

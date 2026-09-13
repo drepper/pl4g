@@ -1,0 +1,16 @@
+※ pl4g-test: compile=ok run=native,qemu exit=14 diag=none
+
+※ The arms stand where the statements of a body would, in either of the two
+※ notations the language has for a block.  An arm is a pattern and then a body
+※ written the way a function's is, so that what a body looks like is one thing
+※ wherever one appears; inside braces the arms follow one another with nothing
+※ between them, each ending in the brace that closes it.
+
+let hundred: mut u8 = 100u8
+let seven: mut u8 = 7u8
+
+@[visible]
+let kept: mut u8 = 0u8
+
+@[startup]
+fn main() → u8 { match hundred ÷ seven { u8(q) { kept ← q } ⊥ { kept ← 9u8 } } ; kept }

@@ -13,7 +13,7 @@ from ..diag.engine import DiagEngine
 from ..source.location import Span
 from ..source.manager import SourceFile
 from .token import (ABOVE_NOT_ALIKE_GLYPH, ABOVE_OR_ALIKE_GLYPH, ALIKE_GLYPH,
-                    BUILTIN_GLYPH,
+                    BOTTOM_GLYPH, BUILTIN_GLYPH,
                     AND_GLYPH, ARROW_GLYPH, ASCII_SUBSTITUTES, ASSIGN_GLYPH,
                     BELOW_NOT_ALIKE_GLYPH, BELOW_OR_ALIKE_GLYPH,
                     COMMENT_GLYPH, FLOAT_TYPE_NAMES, GREATER_EQUAL_GLYPH,
@@ -75,6 +75,7 @@ _SIMPLE: Final[dict[str, TokKind]] = {
     ROTATE_LEFT_GLYPH: TokKind.ROTATE_LEFT,
     ROTATE_RIGHT_GLYPH: TokKind.ROTATE_RIGHT,
     QUESTION_GLYPH: TokKind.QUESTION,
+    BOTTOM_GLYPH: TokKind.BOTTOM,
 }
 
 _OPEN: Final[frozenset[TokKind]] = frozenset(

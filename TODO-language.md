@@ -54,14 +54,23 @@ To Do List for the PL4g language
     or a bare `.red` taking its type from the context, which is Zig's and Swift's.  Whichever is chosen, the two should be one
     shape, since the definitions are.
 
-[?] read a field of a product, and ask which variant a sum holds.
-    Question: `p.x` for a field is the obvious spelling and is what the grammar already parses for a name reached through a
-    module, so the two would be one syntax with two meanings decided by what the base is -- which is what Go, Rust and Zig all do.
-    Asking which variant a sum holds is the harder half and is control flow, so it waits on the `if` question below: the choices
-    are a `match`/`switch` over the variants, which is what a sum wants and what would also give `SwitchInst` something to
-    generate; a test-and-extract pair after Zig's `if (x) |value|`; or a form of `if` that binds a name.  A product's fields may
-    be reordered by the compiler, so a field is reached by name and never by position; a sum's tag is likewise not a number the
-    language exposes.
+[x] ask which variant a sum holds: `match`.  Done, for the result type, which runs; for a sum every rule about the arms is
+    checked and the compiler then says it cannot generate for one, what is missing being a value of a sum rather than the match.
+    An arm names the type of the alternative it takes, `⊥` is the error arm of a result, every alternative must be taken and none
+    twice, and there is no catch-all.  A name assigned inside an arm is carried past the match by a parameter of the block the
+    arms join at, which is the machinery `if` will want.
+
+[ ] decide how an enumeration is written.  A sum's alternatives are told apart by their types, so no two may share one -- which
+    means a sum every one of whose alternatives carries nothing cannot be written, all of them being `void`.  Two ways out: let a
+    pattern name the *variant* rather than the type where the two differ, which is Rust's arrangement and would make the
+    uniqueness rule unnecessary; or give the language an enumeration of its own, with its own syntax and a `match` over its names.
+    The first is the smaller change and keeps one construct for the two kinds of sum; the second says outright that an
+    enumeration is a different thing from a tagged union, which it arguably is.
+
+[?] read a field of a product.
+    Question: `p.x` is the obvious spelling and is what the grammar already parses for a name reached through a module, so the
+    two would be one syntax with two meanings decided by what the base is -- which is what Go, Rust and Zig all do.  A product's
+    fields may be reordered by the compiler, so a field is reached by name and never by position.
 
 [?] allowing definition member functions
     Question: this needs a syntax for the receiver.  Considered: Go's `fn (p: Point) length() → f64`, which keeps functions at the

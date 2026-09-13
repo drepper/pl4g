@@ -25,11 +25,12 @@ type Line =
     from : Point ;
     to : Point
 
-※ a sum, whose variants may carry nothing: which is what an enumeration is
-type Colour =
-    red : void |
-    green : void |
-    blue : void
+※ a sum, whose alternatives are told apart by their types, since that is
+※ what an arm of a `match` names.  One of them may carry nothing.
+type Choice =
+    nothing : void |
+    small : u8 |
+    large : u64
 
 ※ a sum whose variants carry something, written inside braces
 type Number = { whole : i64 | fraction : f64 }

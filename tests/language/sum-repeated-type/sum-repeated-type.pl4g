@@ -1,0 +1,15 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4410 LANG_TYPEDEF_REPEATED_TYPE
+
+※ An arm of a `match` names the type of the alternative it takes, so two
+※ alternatives of one type would be two an arm could not choose between.  It
+※ is a rule about sums and not about products: a product holds all of its
+※ fields and reaches each by name.
+
+type Twice = first : u8 | second : u8
+
+type Fine = a : u8 ; b : u8
+
+@[startup]
+fn main() → u8:
+    0u8

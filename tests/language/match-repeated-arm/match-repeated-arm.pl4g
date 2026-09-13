@@ -1,0 +1,15 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4413 LANG_MATCH_REPEATED_ARM
+
+※ Two arms taking one alternative means the second can never run.
+
+let hundred: mut u8 = 100u8
+let seven: mut u8 = 7u8
+
+@[startup]
+fn main() → u8:
+    match hundred ÷ seven:
+        u8(q):
+            return q
+        u8(r):
+            return r

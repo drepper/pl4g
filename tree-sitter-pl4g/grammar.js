@@ -185,7 +185,14 @@ module.exports = grammar({
     // statement -- the empty one, where nothing else is written.
     explicit_block: $ => seq('{', optional($._statement_run), '}'),
 
-    _statement_line: $ => seq($._statement_run, repeat1($._newline)),
+    // A statement that ends with an indented block has taken the end of its own
+    // last line with it -- the dedent comes after that newline, not before --
+    // so there is none left for the line to end with.  `match` is the first of
+    // these and `if` will be the next.
+    _statement_line: $ => choice(
+      seq($._statement_run, repeat1($._newline)),
+      seq(optional($.attribute_list), $.match_statement),
+    ),
 
     // What follows a semicolon may be written or may be left out, and leaving
     // it out is the empty statement.  It has no node of its own: there is
@@ -201,7 +208,36 @@ module.exports = grammar({
       $.variable_statement,
       $.assignment,
       $.return_statement,
+      $.match_statement,
       $.expression_statement,
+    ),
+
+    // `match` takes a value apart.  Its arms stand where the statements of a
+    // body would, in either notation, and an arm is a pattern and then a body
+    // written the way a function's is -- so that what a body looks like is one
+    // thing wherever one appears.  Inside braces the arms follow one another
+    // with nothing between them, each ending in the brace that closes it.
+    match_statement: $ => seq(
+      'match',
+      field('subject', $._expression),
+      choice(
+        seq(':', repeat1($._newline), $._indent, repeat1($.match_arm), $._dedent),
+        seq('{', repeat($.match_arm), '}'),
+      ),
+    ),
+
+    match_arm: $ => seq(
+      field('pattern', $.pattern),
+      field('body', $._block),
+      repeat($._newline),
+    ),
+
+    // `TYPE(NAME)` takes the alternative whose type is `TYPE` and binds its
+    // value; `\u22a5` in place of the type is the error arm of a result, whose two
+    // alternatives may name one type and so cannot both be said by naming one.
+    pattern: $ => seq(
+      choice('\u22a5', field('type', $.type)),
+      optional(seq('(', field('name', $.identifier), ')')),
     ),
 
     // A `let` inside a block, whose terminator the block supplies.

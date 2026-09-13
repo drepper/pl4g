@@ -1,0 +1,21 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 9902 IMPL_UNIMPLEMENTED_FEATURE
+
+※ The arms of a match over a sum are checked -- their types must be the sum's
+※ alternatives, each taken once, all of them taken -- and then the compiler
+※ says it cannot generate for one.  What is missing is not the match: it is a
+※ value of a sum, which nothing in the language writes, and the way one is
+※ held, which is not a register.
+
+type Number = whole : i64 | fraction : f64
+
+fn which(n: Number) → u8:
+    match n:
+        i64(w):
+            return 1u8
+        f64(f):
+            return 2u8
+
+@[startup]
+fn main() → u8:
+    0u8

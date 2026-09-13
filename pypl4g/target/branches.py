@@ -32,6 +32,7 @@ from typing import Protocol, Sequence
 from ..ir.function import BasicBlock, Function
 from ..ir.inst import (BlockTarget, BrInst, CmpInst, CmpPred, CondBrInst,
                        Instruction, Terminator)
+from ..ir.types import MEM
 from ..ir.value import BlockParam
 from ..mc.asmbuilder import Assembler
 from ..mc.operand import MCImm, MCOperand
@@ -207,14 +208,18 @@ def _pass_arguments(asm: Assembler, target: BlockTarget, operands: Operands,
         return
     block = target.block
     assert isinstance(block, BasicBlock)
-    places = [operands.destination(param) for param in block.params]
-    if len(places) > 1 and any(
+    # A memory token is not held anywhere: it exists to order the operations
+    # that touch memory, and a parameter of one says only which path's ordering
+    # holds from here.  There is nothing to move for it.
+    carried = [(param, arg) for param, arg in zip(block.params, target.args)
+               if param.ty is not MEM]
+    if len(carried) > 1 and any(
             isinstance(arg, BlockParam) and arg.block is block
-            for arg in target.args):
+            for _, arg in carried):
         raise UnsupportedBranch(
             "a branch that passes a block's own parameters back to it", span)
-    for place, argument in zip(places, target.args):
-        asm.loadreg(place, operands.value(argument, span), span)
+    for param, argument in carried:
+        asm.loadreg(operands.destination(param), operands.value(argument, span), span)
 
 
 def _lower_conditional(asm: Assembler, func: Function, labels: Sequence[str],

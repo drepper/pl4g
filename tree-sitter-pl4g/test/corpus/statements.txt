@@ -182,3 +182,79 @@ type Outer = inner : other.Inner ; maybe : u8?
         name: (identifier)
         type: (type
           (identifier))))))
+
+================================================================================
+A match over a result, in both notations
+================================================================================
+
+@[startup]
+fn main() → u8:
+    match a ÷ b:
+        u8(q):
+            kept ← q
+        ⊥:
+            kept ← 9u8
+    kept
+
+fn braced() → u8 { match a ÷ b { u8(q) { kept ← q } ⊥ { kept ← 9u8 } } ; kept }
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_definition
+    (attribute_list
+      (attribute
+        name: (identifier)))
+    name: (identifier)
+    parameters: (parameter_list)
+    return_type: (type
+      (identifier))
+    body: (layout_block
+      (match_statement
+        subject: (binary_expression
+          (identifier)
+          (identifier))
+        (match_arm
+          pattern: (pattern
+            type: (type
+              (identifier))
+            name: (identifier))
+          body: (layout_block
+            (assignment
+              target: (identifier)
+              value: (identifier))))
+        (match_arm
+          pattern: (pattern)
+          body: (layout_block
+            (assignment
+              target: (identifier)
+              value: (integer_literal)))))
+      (expression_statement
+        (identifier))))
+  (function_definition
+    name: (identifier)
+    parameters: (parameter_list)
+    return_type: (type
+      (identifier))
+    body: (explicit_block
+      (match_statement
+        subject: (binary_expression
+          (identifier)
+          (identifier))
+        (match_arm
+          pattern: (pattern
+            type: (type
+              (identifier))
+            name: (identifier))
+          body: (explicit_block
+            (assignment
+              target: (identifier)
+              value: (identifier))))
+        (match_arm
+          pattern: (pattern)
+          body: (explicit_block
+            (assignment
+              target: (identifier)
+              value: (integer_literal)))))
+      (expression_statement
+        (identifier)))))

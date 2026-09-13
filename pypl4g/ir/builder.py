@@ -124,6 +124,16 @@ class IRBuilder:
             self._memory = self._append(MemStartInst())
         return self._memory
 
+    def set_memory(self, token: Value) -> None:
+        """Make *token* the memory token from here on.
+
+        Two paths that both touch memory reach the place they join with two
+        tokens, so whatever built them has to say which one holds there.  It is
+        the same question a name assigned on both paths asks, and gets the same
+        answer: a parameter of the block they join at.
+        """
+        self._memory = token
+
     def load(self, address: Value, span: Span = INVALID_SPAN) -> Value:
         """Append a load of whatever *address* points at."""
         pointee = address.ty

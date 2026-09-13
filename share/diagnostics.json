@@ -954,6 +954,22 @@
       "option": null
     },
     {
+      "number": 3020,
+      "name": "LANG_MATCH_EXPECTED_ARMS",
+      "severity": "error",
+      "message": "the arms of a 'match' follow it, indented or in braces",
+      "args": [],
+      "cause": "`match` takes a value apart, so it is written with the value and then the arms that take its alternatives: a colon and an indented run of them, or a braced one.  There is no form with no arms, because a `match` that takes nothing apart does nothing.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Statements / match",
+        "requirement": "A `match` is written with its arms in one of the two block notations."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 3201,
       "name": "LANG_ATTR_UNKNOWN",
       "severity": "error",
@@ -2245,6 +2261,159 @@
         "document": "spec/spec.md",
         "section": "The Language / Types / Product and sum types",
         "requirement": "A field of a product may not be `void`."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4410,
+      "name": "LANG_TYPEDEF_REPEATED_TYPE",
+      "severity": "error",
+      "message": "'{type}' is the type of two parts of this sum, so no pattern could tell them apart",
+      "args": [
+        {
+          "name": "type",
+          "type": "string",
+          "description": "the type written twice"
+        }
+      ],
+      "cause": "An arm of a `match` names the type of the alternative it takes, so two alternatives of one type would be two an arm could not choose between.  This is the rule that makes the patterns work, and it applies to a sum and not to a product: a product holds all of its fields at once and reaches each by name, so two of one type are no trouble there.  Where the two alternatives really are the same type, what tells them apart is a type of their own -- a record of one field named for what it means.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Product and sum types",
+        "requirement": "No two alternatives of a sum have the same type."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4411,
+      "name": "LANG_MATCH_NOT_A_CHOICE",
+      "severity": "error",
+      "message": "'match' takes a sum or a result apart, not '{found}'",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type of what was written"
+        }
+      ],
+      "cause": "A `match` exists to say which of several alternatives a value holds, and a type with one alternative has nothing to say.  The two types that have several are a sum, whose alternatives its definition names, and a result, whose two are the answer and the error.  A value of any other type is already the one thing it is.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Statements / match",
+        "requirement": "`match` applies to a value of a sum or a result type."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4412,
+      "name": "LANG_MATCH_UNKNOWN_ALTERNATIVE",
+      "severity": "error",
+      "message": "'{type}' is not one of the alternatives of '{found}'",
+      "args": [
+        {
+          "name": "type",
+          "type": "string",
+          "description": "the type the pattern names"
+        },
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type being taken apart"
+        }
+      ],
+      "cause": "An arm names the type of the alternative it takes, and this one names a type the value being taken apart has no alternative of -- so the arm could never be the one that runs.  The alternatives are what the definition of the sum lists, or, for a result, its answer type and the error.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Statements / match",
+        "requirement": "Each arm of a `match` names an alternative of what is taken apart."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4413,
+      "name": "LANG_MATCH_REPEATED_ARM",
+      "severity": "error",
+      "message": "this alternative is already taken by an earlier arm",
+      "args": [],
+      "cause": "Two arms taking one alternative means the second can never run: the first takes it.  Where two things should happen for one alternative, they are two statements of one arm.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Statements / match",
+        "requirement": "No two arms of a `match` take the same alternative."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4414,
+      "name": "LANG_MATCH_NOT_EXHAUSTIVE",
+      "severity": "error",
+      "message": "'{missing}' is an alternative no arm of this 'match' takes",
+      "args": [
+        {
+          "name": "missing",
+          "type": "string",
+          "description": "an alternative left out"
+        }
+      ],
+      "cause": "Every alternative must be taken by an arm.  A value holds one of them, and a `match` that left one out would be a program with nowhere to go when the value held it -- which is the thing a sum type exists to make impossible.  There is no catch-all pattern, and that is deliberate: one would let an alternative added later fall silently into a branch written before it existed.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Statements / match",
+        "requirement": "The arms of a `match` take every alternative."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4415,
+      "name": "LANG_MATCH_BOTTOM_NEEDS_A_RESULT",
+      "severity": "error",
+      "message": "'⊥' takes the error of a result, and this takes '{found}' apart",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type being taken apart"
+        }
+      ],
+      "cause": "A sum names its alternatives by their types, so every arm of one is written with a type.  `⊥` exists because a result's two alternatives may name one type -- `u8?u8` is a perfectly good type -- and so cannot both be said by naming one.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Statements / match",
+        "requirement": "`⊥` is an arm of a result and not of a sum."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4416,
+      "name": "LANG_MATCH_BINDS_NOTHING",
+      "severity": "error",
+      "message": "this alternative carries nothing, so there is no value for '{name}' to be",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the name the pattern binds"
+        }
+      ],
+      "cause": "An arm binds a name to the value the alternative carries.  This one carries none -- its type is `void`, or it is the error of a result whose error carries nothing -- so the name would stand for nothing.  The pattern without the parentheses is how an alternative that carries nothing is taken.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Statements / match",
+        "requirement": "A pattern binds a name only where the alternative carries a value."
       },
       "since": "0.1",
       "default_enabled": true,

@@ -1,0 +1,14 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4414 LANG_MATCH_NOT_EXHAUSTIVE
+
+※ A value holds one of the alternatives, so a match that left one out would be
+※ a program with nowhere to go when the value held it.
+
+let hundred: mut u8 = 100u8
+let seven: mut u8 = 7u8
+
+@[startup]
+fn main() → u8:
+    match hundred ÷ seven:
+        u8(q):
+            return q

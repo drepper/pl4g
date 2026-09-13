@@ -12,13 +12,15 @@ from typing import Callable, Final, Sequence
 from ..diag import ids as D
 from ..diag.engine import DiagEngine, Expectation
 from ..front import ast
-from ..front.token import BUILTIN_GLYPH, TOLERANCE_DEFAULT, TOLERANCE_NAME
+from ..front.token import (BOTTOM_GLYPH, BUILTIN_GLYPH, TOLERANCE_DEFAULT,
+                          TOLERANCE_NAME)
 from ..ir.builder import IRBuilder
 from ..ir.inst import BinOp, CastKind, CmpPred, Instruction, UnOp
-from ..ir.function import (FuncAttrs, Function, InlineHint, Linkage, SpecialKind)
+from ..ir.function import (BasicBlock, FuncAttrs, Function, InlineHint,
+                           Linkage, SpecialKind)
 from ..ir.module import GlobalVar, Module
 from ..ir.types import (BOOL, BUILTIN_TYPES, ERROR, F64, FloatType, IntType,
-                        ProductType, ResultType, SumType, Type, VOID)
+                        MEM, ProductType, ResultType, SumType, Type, VOID)
 from .modules import (ImportCycle, LoadedModule, ModuleNotFound, ModuleRegistry,
                       base_name)
 from ..ir.value import Const, FloatConst, IntConst, UndefConst, Value
@@ -292,6 +294,10 @@ class Checker:
         #: Every type this file defines, in the order they were written, so
         #: that one nothing names is still worked out and still reported on.
         self._named_types: list[_NamedType] = []
+        #: The locals whose value a `match` being lowered may carry past its
+        #: arms, and about which the unread-value rule therefore says nothing
+        #: while the arms are being checked.
+        self._carried: set[int] = set()
         #: What the function now being lowered answers with, which is what `?`
         #: has to agree with: it leaves the function carrying an error, so the
         #: function must be one that can carry it.
@@ -1098,6 +1104,17 @@ class Checker:
             if ty is ERROR:
                 spoiled = True
                 continue
+            if node.kind is ast.TypeKind.SUM:
+                # An arm of a `match` names the type of the alternative it
+                # takes, so two alternatives of one type would be two no arm
+                # could choose between.  A product has no such rule: it holds
+                # all of its fields and reaches each by name.
+                twice = next((n for n, seen_ty in parts if seen_ty is ty), None)
+                if twice is not None:
+                    self._diags.emit(D.LANG_TYPEDEF_REPEATED_TYPE, field.name_span,
+                                     type=ty.render())
+                    spoiled = True
+                    continue
             parts.append((field.name, ty))
         if not parts:
             # Every part was wrong, and each was reported where it was written.
@@ -1221,11 +1238,18 @@ class Checker:
                                  name=func.name, type=func.ty.ret.render())
                 builder.unreachable()
 
-    def _lower_block(self, builder: IRBuilder, block: ast.Block, func: Function) -> None:
-        """Lower the statements of one block."""
+    def _lower_block(self, builder: IRBuilder, block: ast.Block, func: Function,
+                     as_result: bool = True) -> None:
+        """Lower the statements of one block.
+
+        `as_result` says whether the last statement of this block is the
+        function's result.  It is for a function's body and is not for the body
+        of an arm of a `match`: an arm is a run of statements and the value of
+        its last one goes nowhere, which is what makes `match` a statement.
+        """
         count = len(block.stmts)
         for index, stmt in enumerate(block.stmts):
-            is_last = index == count - 1
+            is_last = as_result and index == count - 1
             if builder.is_terminated:
                 self._diags.emit(D.LANG_FUNCDEF_RETURN_UNREACHABLE, stmt.span)
                 return
@@ -1285,6 +1309,8 @@ class Checker:
                     if result.ty is not func.ty.ret:
                         self._report_mismatch(stmt.span, result.ty, func.ty.ret)
                     builder.ret(result, stmt.span)
+            case ast.MatchStmt():
+                self._lower_match(builder, stmt, func)
             case ast.EmptyStmt():
                 # Nothing to lower.  What it does is be a statement, so that a
                 # body ending in a semicolon ends in one that produces no value.
@@ -1301,6 +1327,174 @@ class Checker:
                     self._lower_expr(builder, stmt.value, None)
             case _:
                 self._diags.internal("unknown statement kind in lowering")
+
+    # -- match -----------------------------------------------------------------
+
+    def _lower_match(self, builder: IRBuilder, stmt: ast.MatchStmt,
+                     func: Function) -> None:
+        """Check and lower a `match`, which takes a value's alternatives apart."""
+        subject = self._lower_expr(builder, stmt.subject, None)
+        ty = self._value_type_of(subject)
+        if ty is ERROR:
+            return
+        if not isinstance(ty, (ResultType, SumType)):
+            self._diags.emit(D.LANG_MATCH_NOT_A_CHOICE, stmt.subject.span,
+                             found=ty.render())
+            return
+        taken = self._matched_arms(stmt, ty)
+        if taken is None:
+            return
+        if isinstance(ty, SumType):
+            # Everything about the arms has been checked; what is missing is a
+            # value of a sum to take apart, which nothing in the language makes
+            # -- and with it the way one is held, which is not a register.
+            self._diags.emit(D.IMPL_UNIMPLEMENTED_FEATURE, stmt.span,
+                             feature="a match on a sum")
+            return
+        self._lower_match_on_result(builder, stmt, func, subject, ty, taken)
+
+    def _alternatives(self, ty: Type) -> list[tuple[str, Type | None, bool]]:
+        """What a value of *ty* may be: a name to report it by, what the
+        alternative carries, and whether it is a result's error."""
+        if isinstance(ty, ResultType):
+            return [(ty.ok.render(), ty.ok, False), (BOTTOM_GLYPH, ty.err, True)]
+        assert isinstance(ty, SumType)
+        return [(variant.render(), variant, False) for _, variant in ty.variants]
+
+    def _matched_arms(self, stmt: ast.MatchStmt,
+                      ty: Type) -> "list[tuple[ast.MatchArm, int]] | None":
+        """Which alternative each arm takes, or nothing where the arms are wrong.
+
+        Every alternative must be taken and none twice.  There is no catch-all
+        pattern, deliberately: one would let an alternative added later fall
+        silently into a branch written before it existed.
+        """
+        alternatives = self._alternatives(ty)
+        found: list[tuple[ast.MatchArm, int]] = []
+        by_arm: dict[int, Span] = {}
+        spoiled = False
+        for arm in stmt.arms:
+            index = self._alternative_of(arm.pattern, ty, alternatives)
+            if index is None:
+                spoiled = True
+                continue
+            if index in by_arm:
+                self._diags.emit(D.LANG_MATCH_REPEATED_ARM, arm.pattern.span)
+                spoiled = True
+                continue
+            by_arm[index] = arm.pattern.span
+            carried = alternatives[index][1]
+            if arm.pattern.name is not None and (carried is None or carried is VOID):
+                self._diags.emit(D.LANG_MATCH_BINDS_NOTHING, arm.pattern.span,
+                                 name=arm.pattern.name)
+                spoiled = True
+                continue
+            found.append((arm, index))
+        for index, (name, _, _) in enumerate(alternatives):
+            if index not in by_arm:
+                self._diags.emit(D.LANG_MATCH_NOT_EXHAUSTIVE, stmt.span, missing=name)
+                spoiled = True
+        return None if spoiled else found
+
+    def _alternative_of(self, pattern: ast.Pattern, ty: Type,
+                        alternatives: Sequence[tuple[str, Type | None, bool]]
+                        ) -> int | None:
+        """Which alternative a pattern takes, reporting one that takes none."""
+        if pattern.type is None:
+            if not isinstance(ty, ResultType):
+                self._diags.emit(D.LANG_MATCH_BOTTOM_NEEDS_A_RESULT, pattern.span,
+                                 found=ty.render())
+                return None
+            return next(i for i, (_, _, bottom) in enumerate(alternatives) if bottom)
+        named = self._resolve_type(pattern.type)
+        if named is ERROR:
+            return None
+        for index, (_, carried, bottom) in enumerate(alternatives):
+            if not bottom and carried is named:
+                return index
+        self._diags.emit(D.LANG_MATCH_UNKNOWN_ALTERNATIVE, pattern.span,
+                         type=named.render(), found=ty.render())
+        return None
+
+    def _lower_match_on_result(self, builder: IRBuilder, stmt: ast.MatchStmt,
+                               func: Function, subject: Value, ty: ResultType,
+                               taken: "list[tuple[ast.MatchArm, int]]") -> None:
+        """Lower a `match` over a result, which has two alternatives.
+
+            entry:     condbr failed → error, answer
+            answer:    the arm that names the answer type
+            error:     the arm written `⊥`
+            matched(p): whatever a name assigned in an arm now stands for
+
+        A name bound outside the match and assigned inside one arm stands for
+        two values afterwards, one per arm, so the block the arms join at takes
+        it as a parameter.  That is what makes an assignment inside a branch
+        mean what it reads, and it is the same machinery `if` will want.
+        """
+        blocks = (builder.new_block("answer"), builder.new_block("error"))
+        joined = builder.new_block("matched")
+        builder.condbr(builder.failed(subject, stmt.span), blocks[1], blocks[0],
+                       span=stmt.span)
+        before = [(local, local.value, local.value_span)
+                  for scope in self._scopes for local in scope.values()]
+        outer_carried = self._carried
+        self._carried = outer_carried | {id(local) for local, _, _ in before}
+        # The memory token is merged the same way a name is, and for the same
+        # reason: two arms that both touch memory arrive with two tokens.  It is
+        # made to exist before the arms so that every arm starts from one.
+        before_memory = builder.memory()
+        outcomes: list[tuple[BasicBlock, dict[int, Value], Value]] = []
+        changed: dict[int, _Local] = {}
+        touched = False
+        for arm, index in taken:
+            builder.position_at(blocks[index])
+            builder.set_memory(before_memory)
+            self._push_scope()
+            if arm.pattern.name is not None:
+                bound = builder.unwrap(subject, ty.ok, arm.pattern.span)
+                self._name_value(bound, arm.pattern.name)
+                self._bind_local(arm.pattern.name, bound, arm.pattern.name_span,
+                                 value_span=arm.pattern.span)
+            self._lower_block(builder, arm.body, func, as_result=False)
+            moved = {id(local): local.value for local, held, _ in before
+                     if local.value is not held}
+            for local, _, _ in before:
+                if id(local) in moved:
+                    changed[id(local)] = local
+            self._pop_scope()
+            if not builder.is_terminated and builder.block is not None:
+                outcomes.append((builder.block, moved, builder.memory()))
+                touched = touched or builder.memory() is not before_memory
+            for local, held, where in before:
+                local.value, local.value_span = held, where
+        self._carried = outer_carried
+        if not outcomes:
+            # Every arm left the function, so nothing arrives at the join and a
+            # block with no way in is a block that should not be there.
+            func.blocks.remove(joined)
+            builder.position_at(blocks[taken[-1][1]])
+            builder.set_memory(before_memory)
+            return
+        merged = list(changed.values())
+        params = [joined.add_param(self._value_type_of(local.value), local.name)
+                  for local in merged]
+        memory = joined.add_param(MEM, "mem") if touched else None
+        held_before = {id(local): value for local, value, _ in before}
+        for block, moved, token in outcomes:
+            builder.position_at(block)
+            args = [moved.get(id(local), held_before[id(local)]) for local in merged]
+            if memory is not None:
+                args.append(token)
+            builder.br(joined, tuple(args), stmt.span)
+        builder.position_at(joined)
+        for local, param in zip(merged, params):
+            local.value = param
+            # The value it now stands for was given by the match, so that is
+            # where a report about nothing reading it should point.
+            local.value_span = stmt.span
+            local.read = False
+        if memory is not None:
+            builder.set_memory(memory)
 
     def _check_value_is_used(self, expr: ast.Expr) -> None:
         """Report a statement that is an expression whose value goes nowhere.
@@ -1398,7 +1592,12 @@ class Checker:
             value = self._checked_value(builder, node, local.value.ty)
             # The value the name stood for is gone; if nothing read it, giving
             # it cannot have affected what the program does.
-            self._report_unused(local)
+            if id(local) not in self._carried:
+                # Inside an arm of a `match` the question cannot be answered
+                # here: whether the value this one replaces is read depends on
+                # the other arms and on what follows them, so a straight-line
+                # answer would be a guess.
+                self._report_unused(local)
             local.value = value
             local.value_span = node.span
             local.read = wants_value

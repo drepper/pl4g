@@ -1,0 +1,13 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4411 LANG_MATCH_NOT_A_CHOICE
+
+※ A `match` says which of several alternatives a value holds, and a type with
+※ one alternative has nothing to say.
+
+let count: mut u8 = 3u8
+
+@[startup]
+fn main() → u8:
+    match count:
+        u8(v):
+            return v
