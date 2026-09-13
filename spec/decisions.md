@@ -2100,6 +2100,48 @@ than switching it off.
 width, a signedness and a constant, which are three small answers in each.  A `match` over one is a chain of comparisons; a jump
 table is what `SwitchInst` is for and stays in the to-do list.
 
+## 2026-09-15T09:00+02:00 — language and compiler
+
+**Enumerations gain numbers and flags, `match` gains a value, and `=` works on two values of one enumeration**
+
+Four things the user asked for, and what had to be decided around them.
+
+**`=` and `≠` on an enumeration.**  Two values are one value or they are not.  Ordering is deliberately still refused: the order
+of the values is the order the definition wrote them in, and the language promises nothing about that -- promising it would make
+the declaration order part of the meaning, which is the sort of thing a generator changes without meaning to.
+
+**`match` produces a value where one is wanted of it.**  It is now an expression, and a statement in the one place an expression
+is worth writing for what it does rather than for what it comes to.  Where a value is wanted every arm ends in a statement that
+has one and they are all of one type (4426); the block the arms join at already carried names and the memory token across, so the
+value is one more parameter of it.  The statements that have a value are the ones that may be the last of a function's body -- an
+expression, and an assignment -- and an arm ending in `return` owes none, leaving the function rather than reaching the join.
+
+Considered: requiring the type to be written on the match.  Rejected: the first arm that produces a value says what the type is
+and the rest are checked against it, which is what the operands of an operator already do for each other.
+
+**Values may be given numbers, and two written down may not be alike** (4423).  Two values a program cannot tell apart, written as
+though they were two things, is a mistake.  Taking another value's *name* says outright that the two are one and is how an alias
+is written (4424 where the name is not an earlier value).  The alternatives of a `match` are therefore the distinct *numbers* and
+not the names: two names for one number are one alternative, and an arm naming the second after one naming the first is reported
+as an arm that can never run.
+
+**`@[flag]`.**  The values the compiler chooses become powers of two, and the bitwise operators are defined on two values of the
+type.  Which operators: `&`, `|`, `^` and `~`, which are the bitwise operators the language has.  `⊼` and `⊽` were considered and
+left out -- they are the *logical* nand and nor, they sit at the logical precedence level, and giving them a bitwise meaning would
+make `a ⊼ b` bind looser than `a & b`, which is wrong for an operator on bits.  A "neither" is `~(a | b)`.  Arithmetic is left out
+for a different reason: it would be a question about the number a value is stored as, which is the one thing the type does not
+say.
+
+A flag enumeration's values combine, so a value of one may be a combination no single name stands for.  Naming every name
+therefore does not account for every value, and a `match` over one needs an arm taking the rest (4425).  That is the rule that
+keeps exhaustiveness honest for a type whose values outnumber its names.
+
+**One thing the grammar had to be told carefully.**  A `match` is an expression now, so a line may end with one in four shapes --
+a variable definition, an assignment, a `return`, or the match alone -- and such a line has already taken its own end.  Making the
+line end optional was tried and is wrong: it lets two statements share a line with nothing between them, which showed up at once
+as `3bool` parsing as `3` followed by `bool`.  The four shapes are written out instead, and a line ending with one has a node of
+its own.
+
 ---
 
 ---

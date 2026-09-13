@@ -86,6 +86,12 @@ class EnumConst(Const):
         assert isinstance(self.ty, EnumType)
         return self.ty.members[self.index]
 
+    @property
+    def number(self) -> int:
+        """The number it is stored as."""
+        assert isinstance(self.ty, EnumType)
+        return self.ty.values[self.index]
+
 
 class ResultConst(Const):
     """A result whose answer, or whose absence of one, is known while compiling.

@@ -1,0 +1,42 @@
+※ pl4g-test: compile=ok run=native,qemu exit=37 diag=none
+
+※ `@[flag]` says an enumeration's values are meant to be combined.  What the
+※ compiler chooses for a value that says no number is then the next power of
+※ two rather than one past the last, so each value is a bit of its own, and the
+※ bitwise operators `&`, `|`, `^` and `~` are defined on two values of the
+※ type -- and on nothing else, arithmetic on one being a question about the
+※ number, which is the one thing the type does not say.
+※
+※ A value of such a type may be a combination no single name stands for, so a
+※ `match` over one needs an arm taking the rest.
+
+@[flag]
+enum Perm : u8 { read ; write ; run }
+
+@[visible]
+let mine: mut Perm = Perm.read
+
+@[visible]
+let readable: mut bool = false
+
+@[startup]
+fn main() → u8:
+    mine ← mine | Perm.write
+    readable ← (mine & Perm.read) = Perm.read
+    let kept: u8 = match mine & Perm.write:
+        write:
+            32u8
+        _:
+            0u8
+    ※ read is 1, write is 2, run is 4
+    let both: u8 = match mine ^ Perm.read:
+        write:
+            4u8
+        _:
+            1u8
+    let rest: u8 = match ~mine & Perm.run:
+        run:
+            1u8
+        _:
+            0u8
+    kept + both + rest

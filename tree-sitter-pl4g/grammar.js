@@ -88,8 +88,15 @@ module.exports = grammar({
     ),
 
     enum_values: $ => seq(
-      $.identifier,
-      repeat(seq(';', repeat($._newline), $.identifier)),
+      $.enum_value,
+      repeat(seq(';', repeat($._newline), $.enum_value)),
+    ),
+
+    // A value may say which number it is stored as, or take the name of an
+    // earlier one and be that.  Nothing written means the compiler chooses.
+    enum_value: $ => seq(
+      field('name', $.identifier),
+      optional(seq('=', field('value', choice($.integer_literal, $.identifier)))),
     ),
 
     product_parts: $ => seq(
@@ -208,12 +215,41 @@ module.exports = grammar({
 
     // A statement that ends with an indented block has taken the end of its own
     // last line with it -- the dedent comes after that newline, not before --
-    // so there is none left for the line to end with.  `match` is the first of
-    // these and `if` will be the next.
+    // so there is none left for the line to end with.  `match` is the only one
+    // of these so far and `if` will be the next.  The four shapes it can end
+    // are written out rather than the line end being made optional: optional
+    // would let two statements share a line with nothing between them, which
+    // is not a program.
     _statement_line: $ => choice(
       seq($._statement_run, repeat1($._newline)),
-      seq(optional($.attribute_list), $.match_statement),
+      $._trailing_block_line,
     ),
+
+    // Higher than the ordinary readings throughout, so that a line ending with
+    // a `match` is read as the line that ends with a block rather than as one
+    // that has yet to be finished.
+    _trailing_block_line: $ => prec(1, seq(
+      optional($.attribute_list),
+      choice(
+        alias(seq('let', field('name', $.identifier), ':',
+                  optional($.mutable), optional(field('type', $.type)), '=',
+                  field('value', $.match_expression)),
+              $.variable_statement),
+        alias(seq(field('target', $.identifier), '\u2190',
+                  field('value', $.match_expression)),
+              $.assignment),
+        alias(seq('return', $.match_expression), $.return_statement),
+        // Higher than the ordinary expression statement, so that a `match`
+        // standing alone on a line is read as the line that ends with a block
+        // rather than as one that has yet to be finished.
+        // A `match` standing as a statement of its own.  It has a node of its
+        // own rather than an aliased expression statement so that the match
+        // stays a child of it, which is what an editor wants to fold.
+        $.match_statement,
+      ),
+    )),
+
+    match_statement: $ => prec(2, $.match_expression),
 
     // What follows a semicolon may be written or may be left out, and leaving
     // it out is the empty statement.  It has no node of its own: there is
@@ -229,7 +265,6 @@ module.exports = grammar({
       $.variable_statement,
       $.assignment,
       $.return_statement,
-      $.match_statement,
       $.expression_statement,
     ),
 
@@ -238,7 +273,7 @@ module.exports = grammar({
     // written the way a function's is -- so that what a body looks like is one
     // thing wherever one appears.  Inside braces the arms follow one another
     // with nothing between them, each ending in the brace that closes it.
-    match_statement: $ => seq(
+    match_expression: $ => seq(
       'match',
       field('subject', $._expression),
       choice(
@@ -280,7 +315,10 @@ module.exports = grammar({
       field('target', $.identifier), '←', field('value', $._expression),
     ),
 
-    return_statement: $ => seq('return', optional($._expression)),
+    // A line may end without an end of line where the statement took it, so
+    // `return` and what may follow it has to say which reading wins: the one
+    // that takes the expression, which is the only one that can be meant.
+    return_statement: $ => prec.right(seq('return', optional($._expression))),
 
     expression_statement: $ => $._expression,
 
@@ -316,6 +354,7 @@ module.exports = grammar({
     // grammar says that `a < b < c` is not written: a comparison answers with a
     // truth value, so a second one beside it would be comparing that answer.
     _non_comparison: $ => choice(
+      $.match_expression,
       $.or_else_expression,
       $.try_expression,
       $.binary_expression,

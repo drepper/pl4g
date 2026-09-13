@@ -1,0 +1,22 @@
+※ pl4g-test: compile=ok run=native,qemu exit=0 diag=none
+
+※ Two values of an enumeration are one value or they are not.  Which comes
+※ first is not a question they answer: the order is the order the definition
+※ wrote them in, and the language promises nothing about that.
+
+enum Colour { red ; green ; blue }
+
+let here: mut Colour = Colour.green
+let there: mut Colour = Colour.green
+let other: mut Colour = Colour.blue
+
+@[visible]
+let same: mut bool = false
+@[visible]
+let differ: mut bool = false
+
+@[startup]
+fn main() → u8:
+    same ← here = there
+    differ ← here ≠ other
+    0u8

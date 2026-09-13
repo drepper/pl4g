@@ -236,7 +236,14 @@ class EnumType(Type):
     """
 
     members: tuple[str, ...]
+    #: The number each value is stored as, in the order the names are written.
+    #: Two names may share one where a definition says so outright.
+    values: tuple[int, ...]
     holder: IntType
+    #: Whether its values are meant to be combined, which is what `@[flag]`
+    #: says.  A flag enumeration has more values than it has names, and the
+    #: bitwise operators are defined on it for that reason.
+    flag: bool = False
     name: str = ""
     origin: str = ""
 
@@ -253,7 +260,7 @@ class EnumType(Type):
         return "".join(("enum<", ",".join(self.members), ">"))
 
     def index_of(self, name: str) -> int | None:
-        """Which value *name* is, or nothing where it is not one of them."""
+        """Which of the names *name* is, or nothing where it is not one."""
         try:
             return self.members.index(name)
         except ValueError:

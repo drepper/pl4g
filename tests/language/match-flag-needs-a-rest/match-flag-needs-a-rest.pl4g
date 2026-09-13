@@ -1,0 +1,19 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4425 LANG_MATCH_FLAG_NEEDS_A_REST
+
+※ The values of a flag enumeration are meant to be combined, so a value of one
+※ may be a combination no single name stands for: naming every name does not
+※ account for every value.
+
+@[flag]
+enum Perm { read ; write }
+
+let mine: mut Perm = Perm.read
+
+@[startup]
+fn main() → u8:
+    match mine:
+        read:
+            return 1u8
+        write:
+            return 2u8

@@ -20,12 +20,13 @@ To Do List for the PL4g language
 [?] there is no control flow.  A function body is a straight-line list of statements: there is no `if`, no loop and no way to
     choose between two values.  The intermediate representation has had branches and block parameters from the start and nothing
     generates them.
+    `match` is in and is the pattern-matching form, so what is left of this is the conditional and repetition.
     Question: what shape, and how much?  Considered for the conditional: `if COND:` in the layout syntax with the same block rules
-    as a function body, which needs no new ideas; a conditional expression, since the language already makes the last expression a
-    function's result, so `if` yielding a value would be consistent and would remove the need for a separate ternary form; and a
-    pattern-matching form, which the sum type will want anyway and which might be the only branching construct rather than a second
-    one.  For repetition the question is whether a generated language needs a general loop at all, or whether iteration over
-    something is enough -- a generator emitting a counted loop can emit whatever the language gives it.
+    as a function body, which needs no new ideas and can reuse everything `match` needed -- the block the arms join at, the names
+    it carries and the memory token it merges.  That it should produce a value is no longer open: `match` does, so an `if` that
+    did not would be the odd one out.  A third possibility is that `if` need not exist at all, `match` over a `bool` saying the
+    same thing with two arms.  For repetition the question is whether a generated language needs a general loop at all, or whether
+    iteration over something is enough -- a generator emitting a counted loop can emit whatever the language gives it.
 
 [ ] add floating-point types `f16` and `bfloat`, optional if there is no hardware support.
     `f32` and `f64` are done: a value can be written, held, passed, returned, computed with and compared, and the hardware's
@@ -67,13 +68,23 @@ To Do List for the PL4g language
     `match` over one names a value in each arm.  A sum every one of whose alternatives carries nothing is still not writable, and
     no longer needs to be.
 
-[?] compare two values of one enumeration with `=`.  Refused today (4207), equality being defined on numbers and truth values
-    and on nothing else.  `match` answers the question a comparison would ask, which is why this is not obviously needed; against
-    that, two enumeration values are equal or they are not, there is nothing surprising about asking, and a program that wants to
-    keep "is it still what it was" in a `bool` has no way to.
-    Question: allow `=` and `≠` and nothing else, or leave `match` as the only way to look at one?  Ordering is a separate
-    question and the answer there is no: the order of the values is the declaration order, which is not a thing the language
-    promises anything about.
+[x] compare two values of one enumeration with `=`.  Done, `=` and `≠` and nothing else.  Ordering stays refused: the order
+    of the values is the declaration order, and the language promises nothing about it.
+
+[x] give the values of an enumeration numbers, and a `@[flag]` enumeration whose values combine.  Done: `NAME = NUMBER` says which
+    number a value is stored as and `NAME = OTHER` takes an earlier value's, which is how an alias is written; two numbers written
+    down may not be alike.  `@[flag]` makes the numbers the compiler chooses powers of two and defines `&`, `|`, `^` and `~` on
+    two values of the type, and a `match` over one needs an arm taking the rest, its values combining into ones no name stands
+    for.
+
+[ ] decide whether a flag enumeration should have a bitwise nand and nor.  `⊼` and `⊽` are the logical ones and sit at the
+    logical precedence level, so giving them a bitwise meaning would make `a ⊼ b` bind looser than `a & b`, which is wrong for an
+    operator on bits.  Today a "neither" is written `~(a | b)`.  The choices: leave it so; give the two glyphs a second meaning
+    and accept the precedence; or add two glyphs of their own at the bitwise level, which is two more characters spent.
+
+[x] allow `match` to produce a value.  Done: where one is wanted of it every arm ends in a statement that has one and they are all
+    of one type, and the block the arms join at carries it out -- which is what lets an assignment be pulled out of the arms and
+    written once.  The same question for `if` is still open below and should be answered the same way.
 
 [?] read a field of a product.
     Question: `p.x` is the obvious spelling and is what the grammar already parses for a name reached through a module, so the

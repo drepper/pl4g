@@ -119,6 +119,8 @@ REGISTRY: Final[Mapping[str, AttrSpec]] = {
                  doc="a file importing this module may name the definition"),
         AttrSpec("visible", AttrTarget.FUNCTION | AttrTarget.VARIABLE,
                  doc="the finished image offers the definition's symbol"),
+        AttrSpec("flag", AttrTarget.TYPE,
+                 doc="an enumeration whose values are meant to be combined"),
         AttrSpec("align", AttrTarget.TYPE | AttrTarget.VARIABLE | AttrTarget.FUNCTION,
                  (_param("bytes", "integer"),),
                  doc="requests a minimum alignment"),

@@ -211,24 +211,25 @@ fn braced() → u8 { match a ÷ b { u8(q) { kept ← q } ⊥ { kept ← 9u8 } } 
       (identifier))
     body: (layout_block
       (match_statement
-        subject: (binary_expression
-          (identifier)
-          (identifier))
-        (match_arm
-          pattern: (pattern
-            type: (type
-              (identifier))
-            name: (identifier))
-          body: (layout_block
-            (assignment
-              target: (identifier)
-              value: (identifier))))
-        (match_arm
-          pattern: (pattern)
-          body: (layout_block
-            (assignment
-              target: (identifier)
-              value: (integer_literal)))))
+        (match_expression
+          subject: (binary_expression
+            (identifier)
+            (identifier))
+          (match_arm
+            pattern: (pattern
+              type: (type
+                (identifier))
+              name: (identifier))
+            body: (layout_block
+              (assignment
+                target: (identifier)
+                value: (identifier))))
+          (match_arm
+            pattern: (pattern)
+            body: (layout_block
+              (assignment
+                target: (identifier)
+                value: (integer_literal))))))
       (expression_statement
         (identifier))))
   (function_definition
@@ -237,25 +238,26 @@ fn braced() → u8 { match a ÷ b { u8(q) { kept ← q } ⊥ { kept ← 9u8 } } 
     return_type: (type
       (identifier))
     body: (explicit_block
-      (match_statement
-        subject: (binary_expression
-          (identifier)
-          (identifier))
-        (match_arm
-          pattern: (pattern
-            type: (type
-              (identifier))
-            name: (identifier))
-          body: (explicit_block
-            (assignment
-              target: (identifier)
-              value: (identifier))))
-        (match_arm
-          pattern: (pattern)
-          body: (explicit_block
-            (assignment
-              target: (identifier)
-              value: (integer_literal)))))
+      (expression_statement
+        (match_expression
+          subject: (binary_expression
+            (identifier)
+            (identifier))
+          (match_arm
+            pattern: (pattern
+              type: (type
+                (identifier))
+              name: (identifier))
+            body: (explicit_block
+              (assignment
+                target: (identifier)
+                value: (identifier))))
+          (match_arm
+            pattern: (pattern)
+            body: (explicit_block
+              (assignment
+                target: (identifier)
+                value: (integer_literal))))))
       (expression_statement
         (identifier)))))
 
@@ -284,16 +286,21 @@ fn main() → u8:
   (enum_definition
     name: (identifier)
     (enum_values
-      (identifier)
-      (identifier)
-      (identifier)))
+      (enum_value
+        name: (identifier))
+      (enum_value
+        name: (identifier))
+      (enum_value
+        name: (identifier))))
   (enum_definition
     name: (identifier)
     holder: (type
       (identifier))
     (enum_values
-      (identifier)
-      (identifier)))
+      (enum_value
+        name: (identifier))
+      (enum_value
+        name: (identifier))))
   (function_definition
     (attribute_list
       (attribute
@@ -304,22 +311,23 @@ fn main() → u8:
       (identifier))
     body: (layout_block
       (match_statement
-        subject: (identifier)
-        (match_arm
-          pattern: (pattern
-            type: (type
-              (identifier)))
-          body: (layout_block
-            (assignment
-              target: (identifier)
-              value: (integer_literal))))
-        (match_arm
-          pattern: (pattern
-            type: (type
-              (identifier)))
-          body: (layout_block
-            (assignment
-              target: (identifier)
-              value: (integer_literal)))))
+        (match_expression
+          subject: (identifier)
+          (match_arm
+            pattern: (pattern
+              type: (type
+                (identifier)))
+            body: (layout_block
+              (assignment
+                target: (identifier)
+                value: (integer_literal))))
+          (match_arm
+            pattern: (pattern
+              type: (type
+                (identifier)))
+            body: (layout_block
+              (assignment
+                target: (identifier)
+                value: (integer_literal))))))
       (expression_statement
         (identifier)))))

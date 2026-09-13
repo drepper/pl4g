@@ -332,8 +332,13 @@ class MatchArm(Node):
 
 
 @dataclass(frozen=True, slots=True)
-class MatchStmt(Stmt):
-    """`match EXPR` and the arms that take its alternatives apart."""
+class Match(Expr):
+    """`match EXPR` and the arms that take its alternatives apart.
+
+    An expression: where a value is wanted of it, every arm produces one and
+    they are of one type.  Written as a statement of its own it produces none,
+    and the arms are runs of statements like any other body.
+    """
 
     subject: Expr
     arms: tuple[MatchArm, ...]
@@ -434,12 +439,26 @@ class TypeDef(Node):
 
 
 @dataclass(frozen=True, slots=True)
+class EnumMember(Node):
+    """One value of an enumeration: its name, and the number it is stored as.
+
+    Nothing written means the compiler chooses, by the rule the specification
+    gives; a number says which one outright; a name says "the one that name
+    already stands for", which is how two names are given one value on purpose.
+    """
+
+    name: str
+    name_span: Span
+    value: "IntLit | NameRef | None" = None
+
+
+@dataclass(frozen=True, slots=True)
 class EnumDef(Node):
     """`enum NAME [: TYPE]` and the names of its values."""
 
     name: str
     name_span: Span
-    members: tuple[tuple[str, Span], ...]
+    members: tuple[EnumMember, ...]
     #: What a value of it occupies, where the definition said.  Nothing means
     #: the compiler chooses, and what it chooses is written in the
     #: specification.

@@ -795,6 +795,16 @@ enum Wide : u32:
 `enum NAME` says what the type is called; the names of its values follow, in braces or indented under a colon, separated by `;`
 either way (3021).  A definition lists at least one (3022), and no two of its names are alike (4418).
 
+**A value may say which number it is stored as**, with `NAME = NUMBER`, or take the number of an earlier value of the same
+enumeration, with `NAME = OTHER` (3023).  Two values written with the same number outright are refused (4423): two a program
+cannot tell apart, written as though they were two things, is a mistake and not a shorthand.  Taking another's *name* says
+outright that the two are one thing and is how an alias is written -- `retry = again` gives `retry` the number `again` has, and
+the two are then one value under two names.  A name taken must be a value written earlier (4424).
+
+**What a value says nowhere the compiler chooses**: one past the last, starting at zero -- and, for a flag enumeration, the
+smallest power of two above every number already used, starting at one, so that each value is a bit of its own however the ones
+before it were written.
+
 **`enum NAME : TYPE` says how much room a value takes and says nothing else.**  The type must be an integer type (4420) and must
 hold every one of the values (4419), which are numbered from zero in the order they are written.  It is **not** a conversion:
 writing `: i32` does not make a value of the enumeration an `i32`, does not let one stand where an `i32` is wanted, and does not
@@ -805,8 +815,8 @@ Because the type and the indented form of the list are both introduced by a colo
 values carries two of them -- one belongs to the type and one opens the block -- exactly as a function that answers with something
 and has an indented body carries both a return type and a colon.
 
-**Where no type is given the compiler chooses the smallest unsigned integer type that holds every value**: `u8` for up to 256 of
-them, then `u16`, `u32`, `u64`.  That is a promise about size and alignment and about nothing else.  The numbering from zero is
+**Where no type is given the compiler chooses the smallest unsigned integer type that holds every value**: `u8` for values up to
+255, then `u16`, `u32`, `u64`.  That is a promise about size and alignment and about nothing else.  The numbering from zero is
 what the compiler does and is not something a program can observe, there being no conversion to observe it with; a later
 implementation may number them differently, and a program that reads as it behaves cannot tell.
 
@@ -817,6 +827,29 @@ spelling here is C++'s `enum class` without the second word, there being no othe
 
 **A value is written `TYPE.NAME`** -- `Colour.red` -- so that two enumerations may each have a `red`.  An arm of a `match` writes
 the name alone, the type being known there already.  A name that is not one of the enumeration's is refused (4421).
+
+**`=` and `≠` compare two values of one enumeration.**  Two of them are one value or they are not.  Ordering is not defined on
+them: the order of the values is the order the definition wrote them in, and the language promises nothing about that.
+
+##### Flag enumerations
+
+`@[flag]` says the values of an enumeration are meant to be **combined**.
+
+```
+@[flag]
+enum Perm : u8 { read ; write ; run }
+```
+
+Two things follow.  The values the compiler chooses are powers of two rather than consecutive numbers, so each is a bit of its
+own.  And **the bitwise operators are defined on two values of the type** -- `&`, `|`, `^`, and `~` on one -- each answering with
+a value of the enumeration.  Nothing else is: arithmetic on one would be a question about the number it is stored as, which is the
+one thing the type does not say.
+
+The language has no bitwise nand or nor operator -- `⊼` and `⊽` are the *logical* ones and work on truth values -- so a "neither"
+is written `~(a | b)`.
+
+A value of a flag enumeration may be a combination that no single name stands for, which is the point of one.  So the names do not
+account for every value, and **a `match` over a flag enumeration needs an arm taking the rest** (4425).
 
 ### Statements
 
@@ -865,8 +898,29 @@ choose later; the language says only which arm runs.
 body written the way a function's is -- a colon and an indented block, or braces.  Inside braces the arms follow one another with
 nothing between them, each ending in the brace that closes it.
 
-**`match` is a statement and not an expression.**  The value of an arm's last statement goes nowhere, as it does in any statement
-that is not the last of a body.  Whether it should yield a value is the same question `if` raises and is answered with it.
+**`match` is an expression, and a statement where nothing wants its value.**  Written as a statement of its own the arms are runs
+of statements like any other body and the value of each one's last statement goes nowhere.  Where a value is wanted of it -- as
+the value a variable is given, as what an assignment writes, as what a function answers with -- **every arm ends in a statement
+that has a value and they are all of one type** (4426), and the block the arms join at carries it out.
+
+That is what lets an assignment be pulled out of the arms and written once:
+
+```
+let kept: u8 = match chosen:
+    red:
+        1u8
+    green:
+        2u8
+    blue:
+        3u8
+```
+
+The statements that have a value are the ones that may be the last of a function's body: an expression, and an assignment, which
+stands for the variable it changed.  An arm ending in `return` owes none -- it leaves the function rather than reaching the place
+the arms join.
+
+A `match` written at the end of a line takes that line's end with it, the indentation closing after it, so nothing follows it on
+that line and nothing separates it from the next.
 
 **A name bound outside the match and assigned inside an arm** means what it reads: after the match it stands for whatever the arm
 that ran gave it.  What makes that work is the block the arms join at taking the name as a parameter, which is also why the

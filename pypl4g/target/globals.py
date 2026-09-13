@@ -100,7 +100,7 @@ def _encoded(initializer: object, ty: Type, layout: DataLayout) -> bytes:
         case EnumConst() if isinstance(ty, EnumType):
             # Which value it is, written as the number it is stored as.  The
             # numbering is the representation's business and lives in one place.
-            return encode_scalar(initializer.index, ty.holder, layout)
+            return encode_scalar(initializer.number, ty.holder, layout)
         case ResultConst() if isinstance(ty, ResultType):
             # The answer where an answer goes, the truth value where the layout
             # says, and whatever is between and after them left as zeroes --

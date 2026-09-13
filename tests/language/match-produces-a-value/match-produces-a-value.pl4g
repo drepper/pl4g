@@ -1,0 +1,26 @@
+※ pl4g-test: compile=ok run=native,qemu exit=16 diag=none
+
+※ Where a value is wanted of a `match`, every arm ends in a statement that has
+※ one and they are all of one type; the block the arms join at carries it out.
+※ That is what lets an assignment be pulled out of the arms and written once.
+
+enum Colour { red ; green ; blue }
+let chosen: mut Colour = Colour.green
+let hundred: mut u8 = 100u8
+let seven: mut u8 = 7u8
+
+@[startup]
+fn main() → u8:
+    let kept: u8 = match chosen:
+        red:
+            1u8
+        green:
+            2u8
+        blue:
+            3u8
+    let more: u8 = match hundred ÷ seven:
+        u8(q):
+            q
+        ⊥:
+            0u8
+    kept + more

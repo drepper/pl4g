@@ -1002,6 +1002,28 @@
       "option": null
     },
     {
+      "number": 3023,
+      "name": "LANG_ENUMDEF_EXPECTED_VALUE",
+      "severity": "error",
+      "message": "a value of an enumeration is given a number or another of its names, not {found}",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "what was written instead"
+        }
+      ],
+      "cause": "`NAME = 4` says which number the value is stored as; `NAME = other` says it is the one `other` already stands for, which is how two names are given one value on purpose.  Nothing else may follow the `=`: an enumeration's values are known while the program is compiled, so there is nothing for an expression to be worked out from.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Enumerations",
+        "requirement": "A value of an enumeration is given a number or the name of an earlier one."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 3201,
       "name": "LANG_ATTR_UNKNOWN",
       "severity": "error",
@@ -2493,7 +2515,7 @@
       "number": 4419,
       "name": "LANG_ENUMDEF_HOLDER_TOO_NARROW",
       "severity": "error",
-      "message": "'{type}' does not hold the {count} values of this enumeration",
+      "message": "'{type}' does not hold the value {value} of this enumeration",
       "args": [
         {
           "name": "type",
@@ -2501,12 +2523,12 @@
           "description": "the type the definition named"
         },
         {
-          "name": "count",
+          "name": "value",
           "type": "string",
-          "description": "how many values there are"
+          "description": "a value it does not hold"
         }
       ],
-      "cause": "A definition may say how much room a value of the enumeration takes, and the values are numbered from zero in the order they are written -- so the type named has to hold the largest of those numbers.  Leaving the type out lets the compiler choose one that does.",
+      "cause": "A definition may say how much room a value of the enumeration takes, and the type it names has to hold every one of the values -- those written down and those the compiler chose.  Leaving the type out lets the compiler choose one that does.",
       "spec": {
         "document": "spec/spec.md",
         "section": "The Language / Types / Enumerations",
@@ -2576,6 +2598,93 @@
         "document": "spec/spec.md",
         "section": "The Language / Statements / match",
         "requirement": "The wildcard pattern binds no name."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4423,
+      "name": "LANG_ENUMDEF_REPEATED_NUMBER",
+      "severity": "error",
+      "message": "{number} is already the value of '{name}'",
+      "args": [
+        {
+          "name": "number",
+          "type": "string",
+          "description": "the number written twice"
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the value that already has it"
+        }
+      ],
+      "cause": "Two values given one number would be two a program could not tell apart, written as though they were two things.  Where they really are one thing, say so: `second = first` gives the second the value the first has and says outright that the two are one.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Enumerations",
+        "requirement": "No two values of an enumeration are given the same number outright."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4424,
+      "name": "LANG_ENUMDEF_UNKNOWN_EARLIER_VALUE",
+      "severity": "error",
+      "message": "'{name}' is not a value of this enumeration written before this one",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the name written"
+        }
+      ],
+      "cause": "A value may be given the number of another by naming it, which says the two are one thing.  The one named has to be a value of the same enumeration and has to be written earlier, since its own number is what this one takes.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Enumerations",
+        "requirement": "A value named as another's is an earlier value of the same enumeration."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4425,
+      "name": "LANG_MATCH_FLAG_NEEDS_A_REST",
+      "severity": "error",
+      "message": "'{type}' is a flag enumeration, whose values combine, so an arm taking the rest is needed",
+      "args": [
+        {
+          "name": "type",
+          "type": "string",
+          "description": "the enumeration"
+        }
+      ],
+      "cause": "The values of a flag enumeration are meant to be combined with the bitwise operators, so a value of one may be a combination that no single name stands for.  Naming every one of the names therefore does not account for every value, and `_` is what takes the rest.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Statements / match",
+        "requirement": "A `match` over a flag enumeration has an arm taking the rest."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4426,
+      "name": "LANG_MATCH_ARM_HAS_NO_VALUE",
+      "severity": "error",
+      "message": "a value is wanted of this 'match', and this arm ends with a statement that has none",
+      "args": [],
+      "cause": "Where a value is wanted of a `match`, every arm has to have one, since any of them may be the one that runs.  The statements that have a value are the ones that may be the last of a function's body: an expression, and an assignment, which stands for the variable it changed.  An arm that ends with `return` owes none -- it leaves the function rather than reaching the place the arms join.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Statements / match",
+        "requirement": "Where a value is wanted of a `match`, every arm produces one."
       },
       "since": "0.1",
       "default_enabled": true,

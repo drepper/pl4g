@@ -1,0 +1,12 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4424 LANG_ENUMDEF_UNKNOWN_EARLIER_VALUE
+
+※ A value may take the number of another by naming it, and the one named has
+※ to be a value of the same enumeration written earlier: its own number is
+※ what this one takes.
+
+enum Wrong { a ; b = later ; later }
+
+@[startup]
+fn main() → u8:
+    0u8

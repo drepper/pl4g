@@ -1,0 +1,12 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4423 LANG_ENUMDEF_REPEATED_NUMBER
+
+※ Two values given one number would be two a program could not tell apart,
+※ written as though they were two things.  Where they really are one thing,
+※ `second = first` says so.
+
+enum Twice { a = 3 ; b = 3 }
+
+@[startup]
+fn main() → u8:
+    0u8

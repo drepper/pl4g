@@ -1481,7 +1481,7 @@ def _number_of(value: object) -> "tuple[int, Type] | None":
         # Which value of the enumeration it is.  A value of one is not a number
         # of the type that holds it, but what is compared and what is stored is
         # that number, and this is where the two meet.
-        return value.index, value.ty
+        return value.number, value.ty
     return None
 
 

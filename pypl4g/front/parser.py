@@ -544,15 +544,14 @@ class Parser:
         if indented:
             self._expect(TokKind.NEWLINE)
             self._expect(TokKind.INDENT)
-        members: list[tuple[str, Span]] = []
+        members: list[ast.EnumMember] = []
         while True:
             if indented:
                 self._skip_newlines()
             if not members and self._ends_the_parts(braced, indented):
                 self._diags.emit(D.LANG_ENUMDEF_NO_VALUES, name_token.span)
                 raise _Bail()
-            written = self._expect(TokKind.IDENT)
-            members.append((written.text, written.span))
+            members.append(self._parse_enum_member())
             if self._accept(TokKind.SEMICOLON) is None:
                 break
             if indented:
@@ -566,6 +565,33 @@ class Parser:
         return ast.EnumDef(span=start.to(end), name=name_token.text,
                            name_span=name_token.span, members=tuple(members),
                            holder=holder, attrs=attrs, doc=doc)
+
+    def _parse_enum_member(self) -> ast.EnumMember:
+        """Parse ``NAME`` or ``NAME '=' (NUMBER | NAME)``.
+
+        A number says which value it is; a name says "the one that name already
+        stands for", which is how two names are given one value on purpose.
+        Nothing written means the compiler chooses.
+        """
+        written = self._expect(TokKind.IDENT)
+        if self._accept(TokKind.EQUALS) is None:
+            return ast.EnumMember(span=written.span, name=written.text,
+                                  name_span=written.span)
+        token = self._current
+        if token.kind is TokKind.INT:
+            self._advance()
+            assert token.int_value is not None
+            value: "ast.IntLit | ast.NameRef" = ast.IntLit(
+                span=token.span, value=token.int_value, type_name=token.int_type)
+        elif token.kind is TokKind.IDENT:
+            self._advance()
+            value = ast.NameRef(span=token.span, name=token.text)
+        else:
+            self._diags.emit(D.LANG_ENUMDEF_EXPECTED_VALUE, token.span,
+                             found=token.describe())
+            raise _Bail()
+        return ast.EnumMember(span=written.span.to(token.span), name=written.text,
+                              name_span=written.span, value=value)
 
     def _parse_field(self) -> ast.Field:
         """Parse one ``NAME ':' TYPE`` of a type definition."""
@@ -704,7 +730,8 @@ class Parser:
                 raise _Bail()
             return found
         if self._check(TokKind.KW_MATCH):
-            return self._parse_match()
+            found = self._parse_match()
+            return ast.ExprStmt(span=found.span, value=found)
         if self._check(TokKind.IDENT) and self._peek().kind is TokKind.ASSIGN:
             return self._parse_assignment()
         if self._check(TokKind.KW_RETURN):
@@ -717,7 +744,7 @@ class Parser:
         value = self._parse_expression()
         return ast.ExprStmt(span=value.span, value=value)
 
-    def _parse_match(self) -> ast.Stmt:
+    def _parse_match(self) -> ast.Match:
         """Parse ``match EXPR`` and the arms that take its alternatives apart.
 
         The arms stand where the statements of a body would, in either of the
@@ -747,7 +774,7 @@ class Parser:
                 self._skip_newlines()
             end = self._current.span
             self._accept(TokKind.DEDENT)
-        return ast.MatchStmt(span=start.to(end), subject=subject, arms=tuple(arms))
+        return ast.Match(span=start.to(end), subject=subject, arms=tuple(arms))
 
     def _parse_arm(self) -> ast.MatchArm:
         """Parse one arm: a pattern and the body it runs."""
@@ -898,6 +925,8 @@ class Parser:
             case TokKind.KW_TRUE | TokKind.KW_FALSE:
                 self._advance()
                 return ast.BoolLit(span=token.span, value=token.kind is TokKind.KW_TRUE)
+            case TokKind.KW_MATCH:
+                return self._parse_match()
             case TokKind.IDENT:
                 self._advance()
                 return ast.NameRef(span=token.span, name=token.text)
@@ -911,10 +940,22 @@ def _ends_with_a_block(stmt: ast.Stmt) -> bool:
     """Whether a statement ends with a block of its own.
 
     Such a statement swallows the end of its own last line in the layout
-    notation, so the block it stands in must not ask for one after it.  `match`
-    is the first of these and `if` will be the next.
+    notation -- the dedent comes after that newline, not before -- so the block
+    it stands in must not ask for one after it.  `match` is the first of these
+    and `if` will be the next.
     """
-    return isinstance(stmt, ast.MatchStmt)
+    return _trailing_match(getattr(stmt, "value", None))
+
+
+def _trailing_match(expr: "ast.Expr | None") -> bool:
+    """Whether a `match` is the last thing written in an expression."""
+    while True:
+        if isinstance(expr, ast.Match):
+            return True
+        if isinstance(expr, ast.Binary):
+            expr = expr.right
+            continue
+        return False
 
 
 def parse(tokens: Sequence[Token], path: str, diags: DiagEngine) -> ast.SourceUnit:

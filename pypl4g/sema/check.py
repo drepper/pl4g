@@ -220,6 +220,12 @@ _BINARY_OPS: Final[dict[ast.BinaryOp, BinOp]] = {
     ast.BinaryOp.SAT_MUL: BinOp.SAT_MUL,
 }
 
+#: The operators a flag enumeration answers, whose values are meant to be
+#: combined.  The bitwise three and nothing else: arithmetic on one would be
+#: asking what the *number* is, which is the one thing the type does not say.
+_ON_FLAGS: Final[frozenset[ast.BinaryOp]] = frozenset((
+    ast.BinaryOp.BIT_AND, ast.BinaryOp.BIT_OR, ast.BinaryOp.BIT_XOR))
+
 #: The operators that ask a question about a number rather than about a pattern
 #: of bits, and so are defined on a floating-point value as well as on an
 #: integer.  Everything left out is left out on purpose: the bitwise operators
@@ -1132,41 +1138,106 @@ class Checker:
     def _values_of(self, defined: _NamedType) -> Type:
         """The enumeration a definition makes, reporting what is wrong with it.
 
-        The values are numbered from zero in the order they are written, and
-        what holds them is either what the definition named or the smallest
-        unsigned type that fits them.  The type is how much room a value takes
-        and is no part of what it means: a value of an enumeration is not a
-        number and does not become one.
+        A value may say which number it is stored as, or take the name of an
+        earlier one and be that; what is written down nowhere the compiler
+        chooses, by the rule in the specification -- one past the last for an
+        ordinary enumeration, and the next power of two for one marked
+        `@[flag]`, whose values are meant to be combined.
         """
         node = defined.node
         assert isinstance(node, ast.EnumDef)
-        seen: dict[str, Span] = {}
+        flag = any(attr.name == "flag"
+                   for attr in self._bind_attributes(node.attrs, AttrTarget.TYPE))
+        names: list[str] = []
+        numbers: list[int] = []
+        where: dict[str, Span] = {}
+        taken: dict[int, str] = {}
         spoiled = False
-        for name, where in node.members:
-            if name in seen:
-                self._diags.emit(D.LANG_ENUMDEF_DUPLICATE_VALUE, where, name=name)
+        for member in node.members:
+            if member.name in where:
+                self._diags.emit(D.LANG_ENUMDEF_DUPLICATE_VALUE, member.name_span,
+                                 name=member.name)
                 spoiled = True
                 continue
-            seen[name] = where
-        members = tuple(seen)
-        holder = self._module.types.holder_for(len(members))
-        if node.holder is not None:
-            named = self._resolve_type(node.holder)
-            if named is ERROR:
+            where[member.name] = member.name_span
+            number = self._number_for(member, names, numbers, taken, flag)
+            if number is None:
                 spoiled = True
-            elif not isinstance(named, IntType):
-                self._diags.emit(D.LANG_ENUMDEF_HOLDER_NOT_INTEGER, node.holder.span,
-                                 type=named.render())
-                spoiled = True
-            elif not named.holds(len(members) - 1):
-                self._diags.emit(D.LANG_ENUMDEF_HOLDER_TOO_NARROW, node.holder.span,
-                                 type=named.render(), count=str(len(members)))
-                spoiled = True
-            else:
-                holder = named
-        if spoiled or not members:
+                continue
+            names.append(member.name)
+            numbers.append(number)
+        if spoiled or not names:
             return ERROR
-        return EnumType(members, holder, name=defined.name, origin=defined.origin)
+        holder = self._holder_for(node, numbers)
+        if holder is None:
+            return ERROR
+        return EnumType(tuple(names), tuple(numbers), holder, flag=flag,
+                        name=defined.name, origin=defined.origin)
+
+    def _number_for(self, member: ast.EnumMember, names: Sequence[str],
+                    numbers: Sequence[int], taken: dict[int, str],
+                    flag: bool) -> int | None:
+        """The number one value of an enumeration is stored as.
+
+        A number written down must be one no other value was given, since two
+        values a program cannot tell apart would be two names for one thing
+        written as though they were two things.  Taking another value's *name*
+        says exactly that they are one thing, and is allowed for it.
+        """
+        match member.value:
+            case ast.NameRef():
+                try:
+                    return numbers[list(names).index(member.value.name)]
+                except ValueError:
+                    self._diags.emit(D.LANG_ENUMDEF_UNKNOWN_EARLIER_VALUE,
+                                     member.value.span, name=member.value.name)
+                    return None
+            case ast.IntLit():
+                number = member.value.value
+            case _:
+                number = self._next_number(numbers, flag)
+        held = taken.get(number)
+        if held is not None:
+            self._diags.emit(D.LANG_ENUMDEF_REPEATED_NUMBER, member.name_span,
+                             number=str(number), name=held)
+            return None
+        taken[number] = member.name
+        return number
+
+    def _next_number(self, numbers: Sequence[int], flag: bool) -> int:
+        """The number a value that says none is given.
+
+        One past the last for an ordinary enumeration, starting at zero.  For
+        one whose values are meant to be combined, the smallest power of two
+        above every number already used, starting at one -- so that each value
+        is a bit of its own however the ones before it were written.
+        """
+        if not flag:
+            return numbers[-1] + 1 if numbers else 0
+        highest = max(numbers, default=0)
+        bit = 1
+        while bit <= highest:
+            bit <<= 1
+        return bit
+
+    def _holder_for(self, node: ast.EnumDef, numbers: Sequence[int]) -> "IntType | None":
+        """What holds the values: what the definition named, or the smallest
+        unsigned type that holds every one of them."""
+        if node.holder is None:
+            return self._module.types.holder_for(max(numbers) + 1)
+        named = self._resolve_type(node.holder)
+        if named is ERROR:
+            return None
+        if not isinstance(named, IntType):
+            self._diags.emit(D.LANG_ENUMDEF_HOLDER_NOT_INTEGER, node.holder.span,
+                             type=named.render())
+            return None
+        outside = next((n for n in numbers if not named.holds(n)), None)
+        if outside is not None:
+            self._diags.emit(D.LANG_ENUMDEF_HOLDER_TOO_NARROW, node.holder.span,
+                             type=named.render(), value=str(outside))
+            return None
+        return named
 
     def _parts_of(self, defined: _NamedType) -> Type:
         """The type a definition's parts make, reporting what is wrong with them."""
@@ -1329,21 +1400,68 @@ class Checker:
                 builder.unreachable()
 
     def _lower_block(self, builder: IRBuilder, block: ast.Block, func: Function,
-                     as_result: bool = True) -> None:
-        """Lower the statements of one block.
+                     as_result: bool = True, wanted: Type | None = None,
+                     produces: bool = False) -> Value | None:
+        """Lower the statements of one block, and hand back what it comes to.
 
         `as_result` says whether the last statement of this block is the
         function's result.  It is for a function's body and is not for the body
-        of an arm of a `match`: an arm is a run of statements and the value of
-        its last one goes nowhere, which is what makes `match` a statement.
+        of an arm of a `match`.  `produces` says the block is an arm a value is
+        wanted of, in which case its last statement has to have one.
         """
         count = len(block.stmts)
+        answer: Value | None = None
         for index, stmt in enumerate(block.stmts):
-            is_last = as_result and index == count - 1
+            is_last = index == count - 1
             if builder.is_terminated:
                 self._diags.emit(D.LANG_FUNCDEF_RETURN_UNREACHABLE, stmt.span)
-                return
-            self._lower_attributed_stmt(builder, stmt, func, is_last)
+                return None
+            if is_last and produces:
+                answer = self._lower_yielding(builder, stmt, func, wanted)
+                continue
+            self._lower_attributed_stmt(builder, stmt, func,
+                                        as_result and is_last)
+        if produces and answer is None and not builder.is_terminated:
+            self._diags.emit(D.LANG_MATCH_ARM_HAS_NO_VALUE, block.span)
+        return answer
+
+    def _lower_yielding(self, builder: IRBuilder, stmt: ast.Stmt, func: Function,
+                        wanted: Type | None) -> Value | None:
+        """Lower the last statement of an arm a value is wanted of.
+
+        The statements that have a value are the same ones that may be the last
+        of a function's body: an expression, and an assignment, which stands for
+        the variable it changed.  A `return` leaves the function, so the arm
+        reaches no join and owes no value.
+        """
+        pairs = self._expected_numbers(
+            self._bind_attributes(stmt.attrs, AttrTarget.STATEMENT))
+        expectation = self._begin_expecting(pairs)
+        try:
+            match stmt:
+                case ast.ExprStmt():
+                    return self._lower_into(builder, stmt.value,
+                                            wanted if wanted is not None else ERROR,
+                                            stmt.span) \
+                        if wanted is not None \
+                        else self._lower_expr(builder, stmt.value, None)
+                case ast.AssignStmt():
+                    found = self._lower_assignment(builder, stmt, True)
+                    if found is not None and wanted is not None \
+                            and found.ty is not wanted and found.ty is not ERROR:
+                        self._report_mismatch(stmt.span, found.ty, wanted)
+                        return UndefConst(wanted)
+                    return found
+                case ast.ReturnStmt():
+                    self._lower_return(builder, stmt, func)
+                    return None
+                case _:
+                    self._diags.emit(D.LANG_MATCH_ARM_HAS_NO_VALUE, stmt.span)
+                    return None
+        finally:
+            self._end_expecting(expectation)
+            if self._settle_expecting(expectation, pairs):
+                self._discard_function = True
 
     def _lower_attributed_stmt(self, builder: IRBuilder, stmt: ast.Stmt,
                                func: Function, is_last: bool) -> None:
@@ -1399,8 +1517,6 @@ class Checker:
                     if result.ty is not func.ty.ret:
                         self._report_mismatch(stmt.span, result.ty, func.ty.ret)
                     builder.ret(result, stmt.span)
-            case ast.MatchStmt():
-                self._lower_match(builder, stmt, func)
             case ast.EmptyStmt():
                 # Nothing to lower.  What it does is be a statement, so that a
                 # body ending in a semicolon ends in one that produces no value.
@@ -1412,6 +1528,12 @@ class Checker:
                     value = self._lower_into(builder, stmt.value, func.ty.ret,
                                              stmt.span)
                     builder.ret(value, stmt.span)
+                elif isinstance(stmt.value, ast.Match):
+                    # A `match` written as a statement of its own produces no
+                    # value, and its arms are runs of statements like any other
+                    # body.  It is the one expression that is worth writing for
+                    # what it does rather than for what it comes to.
+                    self._lower_match(builder, stmt.value, func, None, False)
                 else:
                     self._check_value_is_used(stmt.value)
                     self._lower_expr(builder, stmt.value, None)
@@ -1420,31 +1542,38 @@ class Checker:
 
     # -- match -----------------------------------------------------------------
 
-    def _lower_match(self, builder: IRBuilder, stmt: ast.MatchStmt,
-                     func: Function) -> None:
-        """Check and lower a `match`, which takes a value's alternatives apart."""
+    def _lower_match(self, builder: IRBuilder, stmt: ast.Match, func: Function,
+                     wanted: Type | None, produces: bool) -> Value:
+        """Check and lower a `match`, which takes a value's alternatives apart.
+
+        `produces` says whether a value is wanted of it.  Where one is, every
+        arm ends in a statement that has one and they are all of one type, and
+        the block the arms join at carries it out; where none is, an arm is a
+        run of statements like any other body.
+        """
         subject = self._lower_expr(builder, stmt.subject, None)
         ty = self._value_type_of(subject)
         if ty is ERROR:
-            return
+            return UndefConst(ERROR)
         if not isinstance(ty, (ResultType, SumType, EnumType)):
             self._diags.emit(D.LANG_MATCH_NOT_A_CHOICE, stmt.subject.span,
                              found=ty.render())
-            return
+            return UndefConst(ERROR)
         taken = self._matched_arms(stmt, ty)
         if taken is None:
-            return
+            return UndefConst(ERROR)
         if isinstance(ty, SumType):
             # Everything about the arms has been checked; what is missing is a
             # value of a sum to take apart, which nothing in the language makes
             # -- and with it the way one is held, which is not a register.
             self._diags.emit(D.IMPL_UNIMPLEMENTED_FEATURE, stmt.span,
                              feature="a match on a sum")
-            return
+            return UndefConst(ERROR)
         if isinstance(ty, EnumType):
-            self._lower_match_on_enum(builder, stmt, func, subject, ty, taken)
-            return
-        self._lower_match_on_result(builder, stmt, func, subject, ty, taken)
+            return self._lower_match_on_enum(builder, stmt, func, subject, ty,
+                                             taken, wanted, produces)
+        return self._lower_match_on_result(builder, stmt, func, subject, ty,
+                                           taken, wanted, produces)
 
     def _alternatives(self, ty: Type) -> list[tuple[str, Type | None, bool]]:
         """What a value of *ty* may be: a name to report it by, what the
@@ -1452,11 +1581,17 @@ class Checker:
         if isinstance(ty, ResultType):
             return [(ty.ok.render(), ty.ok, False), (BOTTOM_GLYPH, ty.err, True)]
         if isinstance(ty, EnumType):
-            return [(member, None, False) for member in ty.members]
+            # One alternative per *number*, not per name: two names given one
+            # number are one value, and nothing at run time can tell an arm
+            # naming the first from an arm naming the second.
+            seen: dict[int, str] = {}
+            for member, number in zip(ty.members, ty.values):
+                seen.setdefault(number, member)
+            return [(member, None, False) for member in seen.values()]
         assert isinstance(ty, SumType)
         return [(variant.render(), variant, False) for _, variant in ty.variants]
 
-    def _matched_arms(self, stmt: ast.MatchStmt,
+    def _matched_arms(self, stmt: ast.Match,
                       ty: Type) -> "list[tuple[ast.MatchArm, frozenset[int]]] | None":
         """Which alternatives each arm takes, or nothing where the arms are wrong.
 
@@ -1503,6 +1638,13 @@ class Checker:
             if index not in settled:
                 self._diags.emit(D.LANG_MATCH_NOT_EXHAUSTIVE, stmt.span, missing=name)
                 spoiled = True
+        if isinstance(ty, EnumType) and ty.flag \
+                and not any(arm.pattern.wildcard for arm, _ in found):
+            # Its values combine, so a value of it may be one no single name
+            # stands for: naming every name does not account for every value.
+            self._diags.emit(D.LANG_MATCH_FLAG_NEEDS_A_REST, stmt.span,
+                             type=ty.render())
+            spoiled = True
         return None if spoiled else found
 
     def _alternative_of(self, pattern: ast.Pattern, ty: Type,
@@ -1524,7 +1666,10 @@ class Checker:
                 self._diags.emit(D.LANG_ENUM_UNKNOWN_VALUE, pattern.span,
                                  name=pattern.type.name, type=ty.render())
                 return None
-            return index
+            # Which alternative, which is which *number*: two names given one
+            # number name one alternative between them.
+            wanted = ty.values[index]
+            return list(dict.fromkeys(ty.values)).index(wanted)
         named = self._resolve_type(pattern.type)
         if named is ERROR:
             return None
@@ -1535,10 +1680,10 @@ class Checker:
                          type=named.render(), found=ty.render())
         return None
 
-    def _lower_match_on_result(self, builder: IRBuilder, stmt: ast.MatchStmt,
+    def _lower_match_on_result(self, builder: IRBuilder, stmt: ast.Match,
                                func: Function, subject: Value, ty: ResultType,
-                               taken: "list[tuple[ast.MatchArm, frozenset[int]]]"
-                               ) -> None:
+                               taken: "list[tuple[ast.MatchArm, frozenset[int]]]",
+                               wanted: Type | None, produces: bool) -> Value:
         """Lower a `match` over a result, which has two alternatives.
 
             entry:     condbr failed \N{RIGHTWARDS ARROW} error, answer
@@ -1550,21 +1695,21 @@ class Checker:
         to ask and nothing to branch on, and the arm is the whole of it.
         """
         if len(taken) == 1:
-            self._run_arms(builder, stmt, func, [(taken[0][0], None, None)])
-            return
+            return self._run_arms(builder, stmt, func,
+                                  [(taken[0][0], None, None)], wanted, produces)
         holders = {index: arm for arm, indices in taken for index in indices}
         answered = builder.new_block("answer")
         failed = builder.new_block("error")
         builder.condbr(builder.failed(subject, stmt.span), failed, answered,
                        span=stmt.span)
-        self._run_arms(builder, stmt, func,
-                       [(holders[0], answered, (subject, ty.ok)),
-                        (holders[1], failed, None)])
+        return self._run_arms(builder, stmt, func,
+                              [(holders[0], answered, (subject, ty.ok)),
+                               (holders[1], failed, None)], wanted, produces)
 
-    def _lower_match_on_enum(self, builder: IRBuilder, stmt: ast.MatchStmt,
+    def _lower_match_on_enum(self, builder: IRBuilder, stmt: ast.Match,
                              func: Function, subject: Value, ty: EnumType,
-                             taken: "list[tuple[ast.MatchArm, frozenset[int]]]"
-                             ) -> None:
+                             taken: "list[tuple[ast.MatchArm, frozenset[int]]]",
+                             wanted: Type | None, produces: bool) -> Value:
         """Lower a `match` over an enumeration.
 
         A chain of comparisons, one per value an arm names, with the last arm --
@@ -1582,18 +1727,21 @@ class Checker:
             for index in sorted(indices):
                 following = builder.new_block("otherwise")
                 asked = builder.compare(
-                    CmpPred.EQ, subject, self._module.enum_const(ty, index),
+                    CmpPred.EQ, subject,
+                    self._module.enum_const(ty, ty.values.index(
+                        list(dict.fromkeys(ty.values))[index])),
                     arm.pattern.span)
                 builder.condbr(asked, blocks[id(arm)], following,
                                span=arm.pattern.span)
                 builder.position_at(following)
         builder.br(blocks[id(fallback)], (), stmt.span)
-        self._run_arms(builder, stmt, func,
-                       [(arm, blocks[id(arm)], None) for arm, _ in taken])
+        return self._run_arms(builder, stmt, func,
+                              [(arm, blocks[id(arm)], None) for arm, _ in taken],
+                              wanted, produces)
 
-    def _run_arms(self, builder: IRBuilder, stmt: ast.MatchStmt, func: Function,
-                  plan: "Sequence[tuple[ast.MatchArm, BasicBlock | None, tuple[Value, Type] | None]]"
-                  ) -> None:
+    def _run_arms(self, builder: IRBuilder, stmt: ast.Match, func: Function,
+                  plan: "Sequence[tuple[ast.MatchArm, BasicBlock | None, tuple[Value, Type] | None]]",
+                  wanted: Type | None = None, produces: bool = False) -> Value:
         """Lower each arm into its block and join what the arms leave behind.
 
         A name bound outside the match and assigned inside one arm stands for
@@ -1608,9 +1756,10 @@ class Checker:
         outer_carried = self._carried
         self._carried = outer_carried | {id(local) for local, _, _ in before}
         before_memory = builder.memory()
-        outcomes: list[tuple[BasicBlock, dict[int, Value], Value]] = []
+        outcomes: list[tuple[BasicBlock, dict[int, Value], Value, Value | None]] = []
         changed: dict[int, _Local] = {}
         touched = False
+        answer: Type | None = wanted
         for arm, block, carries in plan:
             if block is not None:
                 builder.position_at(block)
@@ -1622,7 +1771,13 @@ class Checker:
                 self._name_value(bound, arm.pattern.name)
                 self._bind_local(arm.pattern.name, bound, arm.pattern.name_span,
                                  value_span=arm.pattern.span)
-            self._lower_block(builder, arm.body, func, as_result=False)
+            given = self._lower_block(builder, arm.body, func, as_result=False,
+                                      wanted=answer, produces=produces)
+            if produces and given is not None and answer is None:
+                # Nothing said what the arms answer with, so the first one that
+                # does say.  The rest are checked against it.
+                found = self._value_type_of(given)
+                answer = found if found is not ERROR else None
             moved = {id(local): local.value for local, held, _ in before
                      if local.value is not held}
             for local, _, _ in before:
@@ -1630,7 +1785,7 @@ class Checker:
                     changed[id(local)] = local
             self._pop_scope()
             if not builder.is_terminated and builder.block is not None:
-                outcomes.append((builder.block, moved, builder.memory()))
+                outcomes.append((builder.block, moved, builder.memory(), given))
                 touched = touched or builder.memory() is not before_memory
             for local, held, where in before:
                 local.value, local.value_span = held, where
@@ -1640,17 +1795,22 @@ class Checker:
             # block with no way in is a block that should not be there.
             func.blocks.remove(joined)
             builder.set_memory(before_memory)
-            return
+            return UndefConst(answer if answer is not None else ERROR)
         merged = list(changed.values())
         params = [joined.add_param(self._value_type_of(local.value), local.name)
                   for local in merged]
         memory = joined.add_param(MEM, "mem") if touched else None
+        produced = (joined.add_param(answer, "answer")
+                    if produces and answer is not None else None)
         held_before = {id(local): value for local, value, _ in before}
-        for block, moved, token in outcomes:
+        for block, moved, token, given in outcomes:
             builder.position_at(block)
             args = [moved.get(id(local), held_before[id(local)]) for local in merged]
             if memory is not None:
                 args.append(token)
+            if produced is not None:
+                args.append(given if given is not None
+                            else UndefConst(produced.ty))
             builder.br(joined, tuple(args), stmt.span)
         builder.position_at(joined)
         for local, param in zip(merged, params):
@@ -1661,6 +1821,7 @@ class Checker:
             local.read = False
         if memory is not None:
             builder.set_memory(memory)
+        return produced if produced is not None else UndefConst(VOID)
 
     def _check_value_is_used(self, expr: ast.Expr) -> None:
         """Report a statement that is an expression whose value goes nowhere.
@@ -1869,6 +2030,9 @@ class Checker:
                 return self._lower_call(builder, expr, expected)
             case ast.NameRef():
                 return self._lower_name(builder, expr, expected)
+            case ast.Match():
+                return self._lower_match(builder, expr, builder.function,
+                                         expected, True)
             case ast.Try():
                 return self._lower_try(builder, expr, expected)
             case ast.Binary() if expr.op is ast.BinaryOp.OR_ELSE:
@@ -2213,6 +2377,12 @@ class Checker:
             return ERROR
         if isinstance(ty, (IntType, FloatType)):
             return ty
+        if isinstance(ty, EnumType) and op not in _ORDERINGS:
+            # Two values of an enumeration are one value or they are not.
+            # Which comes first is not a question it answers: the order is the
+            # order the definition wrote them in, and the language promises
+            # nothing about that.
+            return ty
         if ty is BOOL and op not in _ORDERINGS:
             return ty
         if op in _ORDERINGS:
@@ -2303,6 +2473,11 @@ class Checker:
         """Whether a value of *ty* may stand on one side of *op*."""
         if isinstance(ty, IntType):
             return True
+        if isinstance(ty, EnumType):
+            # Only where the definition said the values are meant to be
+            # combined.  On an ordinary enumeration a bitwise operator would be
+            # asking about bits the type says nothing about.
+            return ty.flag and op in _ON_FLAGS
         return isinstance(ty, FloatType) and op in _ON_FLOATS
 
     def _answer_is_already_known(self, expr: ast.Binary, ty: Type, left: Value,
@@ -2394,7 +2569,8 @@ class Checker:
         ty = self._value_type_of(operand)
         if ty is ERROR:
             return UndefConst(ERROR)
-        if not isinstance(ty, IntType):
+        flagged = isinstance(ty, EnumType) and ty.flag
+        if not isinstance(ty, IntType) and not flagged:
             self._diags.emit(D.LANG_TYPE_OPERAND_NOT_INTEGER, expr.operand.span,
                              operator=expr.op.value, found=ty.render())
             return UndefConst(ERROR)

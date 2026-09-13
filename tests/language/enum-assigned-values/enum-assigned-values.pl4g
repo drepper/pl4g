@@ -1,0 +1,38 @@
+※ pl4g-test: compile=ok run=native,qemu exit=8 diag=none
+
+※ A value may say which number it is stored as.  Two written down may not be
+※ the same, since two values a program cannot tell apart would be two names
+※ for one thing written as though they were two things -- but a value may take
+※ another's *name*, which says outright that the two are one.
+※
+※ What is written nowhere the compiler chooses: one past the last, starting at
+※ zero.
+
+enum Code:
+    ok ;
+    again = 5 ;
+    retry = again ;
+    other
+
+@[visible]
+let seen: mut Code = Code.retry
+
+@[startup]
+fn main() → u8:
+    let first: u8 = match seen:
+        ok:
+            1u8
+        again:
+            2u8
+        other:
+            4u8
+    seen ← Code.other
+    ※ `other` follows `retry`, whose number is five, so it is six
+    let second: u8 = match seen:
+        ok:
+            1u8
+        retry:
+            2u8
+        other:
+            6u8
+    first + second
