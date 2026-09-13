@@ -84,6 +84,10 @@
     {
       "hash": "25bb4e0",
       "subject": "✨ The logical operators, and block parameters to carry `and` and `or`"
+    },
+    {
+      "hash": "baf1f3c",
+      "subject": "✨ Constants of any width, and the header flags they travel under"
     }
   ],
   "times": {
@@ -851,6 +855,68 @@
       "logic-short-circuit": [
         2.3289999999999997,
         77.43078505154699
+      ]
+    },
+    "baf1f3c": {
+      "exit0": [
+        1.0779999999999998,
+        76.86297700274736
+      ],
+      "global-variable": [
+        1.22,
+        75.43367199832574
+      ],
+      "assign-widths": [
+        1.6700000000000002,
+        76.91550499293953
+      ],
+      "many-values-at-once": [
+        2.016,
+        77.35283498186618
+      ],
+      "unreached-function": [
+        1.522,
+        76.6513769631274
+      ],
+      "export-visibility": [
+        1.5839999999999999,
+        77.25795201258734
+      ],
+      "digit-separators": [
+        1.722,
+        78.76803702674806
+      ],
+      "boolean-values": [
+        1.473,
+        76.75460301106796
+      ],
+      "bitwise-operators": [
+        1.688,
+        77.99258903833106
+      ],
+      "bitwise-precedence": [
+        1.48,
+        79.32866300689057
+      ],
+      "spill-to-the-frame": [
+        6.752,
+        82.46353600407019
+      ],
+      "boolean-in-memory": [
+        1.5410000000000001,
+        79.54866404179484
+      ],
+      "comparison-operators": [
+        2.3659999999999997,
+        77.40684598684311
+      ],
+      "logic-operators": [
+        2.5549999999999997,
+        81.82450401363894
+      ],
+      "logic-short-circuit": [
+        2.347,
+        79.42775200353935
       ]
     }
   }

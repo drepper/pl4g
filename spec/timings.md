@@ -41,6 +41,7 @@ the parser does, and they are the floor everything else is measured against.
 | `1269bd5` | 1.13 | 1.65 | 1.41 |
 | `db0b436` | 1.13 | 1.65 | 1.40 |
 | `25bb4e0` | 1.10 | 1.70 | 1.45 |
+| `baf1f3c` | 1.08 | 1.72 | 1.47 |
 
 ### Variables and memory
 
@@ -66,6 +67,7 @@ backend do.
 | `1269bd5` | 1.25 | 1.67 | 1.53 |
 | `db0b436` | 1.28 | 1.74 | 1.54 |
 | `25bb4e0` | 1.26 | 1.68 | 1.47 |
+| `baf1f3c` | 1.22 | 1.67 | 1.54 |
 
 ### Register pressure
 
@@ -91,6 +93,7 @@ and they are the only ones that reach the frame.
 | `1269bd5` | 1.94 | 6.65 |
 | `db0b436` | 1.97 | 6.68 |
 | `25bb4e0` | 2.02 | 6.75 |
+| `baf1f3c` | 2.02 | 6.75 |
 
 ### What is left out
 
@@ -116,6 +119,7 @@ decision log does.
 | `1269bd5` | 1.52 | 1.58 |
 | `db0b436` | 1.56 | 1.73 |
 | `25bb4e0` | 1.53 | 1.58 |
+| `baf1f3c` | 1.52 | 1.58 |
 
 ### Expressions
 
@@ -141,6 +145,7 @@ optimizer does.
 | `1269bd5` | 1.58 | 1.43 | 2.40 |  |  |
 | `db0b436` | 1.66 | 1.42 | 2.36 |  |  |
 | `25bb4e0` | 1.67 | 1.39 | 2.29 | 2.39 | 2.33 |
+| `baf1f3c` | 1.69 | 1.48 | 2.37 | 2.55 | 2.35 |
 
 Process
 -------
@@ -170,6 +175,7 @@ worth showing here, and every figure is in the JSON beside this file.
 | `1269bd5` | 75 | 85 |
 | `db0b436` | 76 | 82 |
 | `25bb4e0` | 74 | 83 |
+| `baf1f3c` | 75 | 82 |
 
 What each row is:
 
@@ -190,6 +196,7 @@ What each row is:
 - `1269bd5` -- ✨ The comparisons: `=` `≠` `<` `>` `≤` `≥`
 - `db0b436` -- ✨ A statement's value must be used, and ≠ keeps its glyph
 - `25bb4e0` -- ✨ The logical operators, and block parameters to carry `and` and `or`
+- `baf1f3c` -- ✨ Constants of any width, and the header flags they travel under
 
 What each program exercises:
 
