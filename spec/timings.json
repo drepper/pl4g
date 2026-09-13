@@ -19,7 +19,8 @@
     "arithmetic-operators": "a sum and a product that check and can fault",
     "semicolon-separates-statements": "two statements on one line",
     "call-nested": "four calls, two of them nested",
-    "arithmetic-division": "a division and a remainder, each checked twice"
+    "arithmetic-division": "a division and a remainder, each checked twice",
+    "shift-operators": "two shifts, each with its distance checked"
   },
   "commits": [
     {
@@ -117,6 +118,10 @@
     {
       "hash": "0990c74",
       "subject": "✨ Division and what is left over: `÷` and `%`"
+    },
+    {
+      "hash": "05d8da1",
+      "subject": "✨ Moving bits sideways: « » ↺ ↻, and an overflow seen while compiling"
     }
   ],
   "times": {
@@ -1390,6 +1395,92 @@
       "arithmetic-division": [
         2.086,
         68.50042100995779
+      ]
+    },
+    "05d8da1": {
+      "exit0": [
+        0.943,
+        70.08759002201259
+      ],
+      "global-variable": [
+        1.048,
+        64.79977001436055
+      ],
+      "assign-widths": [
+        1.456,
+        65.73795195436105
+      ],
+      "many-values-at-once": [
+        1.7000000000000002,
+        66.43664400326088
+      ],
+      "unreached-function": [
+        1.307,
+        65.13738801004365
+      ],
+      "export-visibility": [
+        1.4929999999999999,
+        66.55065598897636
+      ],
+      "digit-separators": [
+        1.45,
+        66.36063999030739
+      ],
+      "boolean-values": [
+        1.2329999999999999,
+        65.81471802201122
+      ],
+      "bitwise-operators": [
+        1.448,
+        65.33460499485955
+      ],
+      "bitwise-precedence": [
+        1.2180000000000002,
+        64.59774501854554
+      ],
+      "spill-to-the-frame": [
+        5.8790000000000004,
+        69.70955099677667
+      ],
+      "boolean-in-memory": [
+        1.289,
+        65.34359900979325
+      ],
+      "comparison-operators": [
+        2.06,
+        72.9148070095107
+      ],
+      "logic-operators": [
+        2.1319999999999997,
+        67.27791100274771
+      ],
+      "logic-short-circuit": [
+        2.008,
+        68.04917199769989
+      ],
+      "saturating-precedence": [
+        1.4169999999999998,
+        65.84761798148975
+      ],
+      "arithmetic-operators": [
+        1.6969999999999998,
+        67.79353698948398
+      ],
+      "semicolon-separates-statements": [
+        1.581,
+        65.22688298719004
+      ],
+      "call-nested": [
+        2.1639999999999997,
+        66.50568795157596
+      ],
+      "arithmetic-division": [
+        1.857,
+        68.97741899592802
+      ],
+      "shift-operators": [
+        2.0,
+        69.58047702210024
       ]
     }
   }
