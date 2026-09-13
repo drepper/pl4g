@@ -258,8 +258,26 @@ reading the log matches on; a `subject`, named as the program names it; a `reaso
 reworded; and, where the subject is written in a source file, a `where` giving the file, line and column -- being told that a
 function went without being told which one would leave the reader to find it.
 
-What is recorded today is what the reachability pass leaves out: `drop-function` and `drop-variable`.  Recording happens whether or
-not the log was asked for, because a decision recorded only when someone is watching is one a test cannot check.
+What is recorded today is what is left out: `drop-function` and `drop-variable` from the reachability pass, and `drop-local` from
+the dead-code sweep.  The first two happen at every optimization level, because a function nothing can reach is code the program
+cannot run; the third happens from `-O1`, because an unoptimized build keeps what the program wrote and so decides nothing about
+it.  Recording happens whether or not the log was asked for, because a decision recorded only when someone is watching is one a
+test cannot check.
+
+A dropped local is named by the name the program gave it.  That is what the name hint on a value is for: the semantic analysis
+writes the name of a local on the instruction its definition produced, so that the textual form can be read against the source and
+a pass that removes a value can say which local went with it.  Only an instruction is named and only if it has none already -- a
+constant is interned and shared with every other use of the same number, and where two locals stand for one value the first name
+is the one that stays.  A value with no name is an intermediate of an expression, not something the program can ask about, and its
+going is not recorded.
+
+A local bound to a constant is not recorded either, because nothing drops it: a local is a value, so one whose initializer is a
+constant never becomes an instruction at all.  Saying where such a local went is the business of the debug information, which is
+where a constant expression standing for a name belongs.
+
+The warning that nothing reads a value (4006) and the record that it is therefore not in the binary are different facts and both
+are kept.  One is a possible mistake and is reported at every optimization level; the other is what became of it and only happens
+where something was optimized.  They also come apart: a local that *is* read can still go, when the thing that read it went.
 
 The log travels on the module, since every stage has the module and any of them may decide something.  It is not the design log in
 [decisions.md](decisions.md), which records what was decided about the *language* and is written by hand; this one is about one

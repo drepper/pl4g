@@ -222,3 +222,46 @@ def test_time_report(source: Path, tmp_path: Path) -> None:
     assert proc.returncode == ExitCode.SUCCESS
     assert "stage timings" in proc.stderr
     assert "image generation" in proc.stderr
+
+
+DROPPED_LOCAL = """let g: u8 = 3u8
+
+@[startup]
+fn main() \N{RIGHTWARDS ARROW} u8:
+    @[ignore(4006)]
+    let unread: u8 = g
+    let kept: u8 = g
+    kept
+"""
+
+
+def test_a_local_that_is_dropped_is_logged(tmp_path: Path) -> None:
+    """Dropping it is an optimization, so it happens from -O1 and is logged there.
+
+    The warning that nothing reads it and the record that it is therefore not in
+    the binary are different facts: one is a possible mistake, the other is what
+    became of it.
+    """
+    source = tmp_path / "t.pl4g"
+    source.write_text(DROPPED_LOCAL, encoding="utf-8")
+    log = tmp_path / "decisions.json"
+    proc = run_compiler(["-o", str(tmp_path / "out"), "-O1",
+                         "".join(("--decision-log=", str(log))), str(source)])
+    assert proc.returncode == ExitCode.SUCCESS, proc.stderr
+    decisions = json.loads(log.read_text(encoding="utf-8"))["decisions"]
+    locals_ = [d for d in decisions if d["kind"] == "drop-local"]
+    assert [d["subject"] for d in locals_] == ["unread"], decisions
+    assert locals_[0]["where"]["line"] == 6, locals_
+
+
+def test_nothing_is_dropped_where_nothing_asked_for_it(tmp_path: Path) -> None:
+    """An unoptimized build keeps what the program wrote, so it decides nothing."""
+    source = tmp_path / "t.pl4g"
+    source.write_text(DROPPED_LOCAL, encoding="utf-8")
+    log = tmp_path / "decisions.json"
+    proc = run_compiler(["-o", str(tmp_path / "out"),
+                         "".join(("--decision-log=", str(log))), str(source)])
+    assert proc.returncode == ExitCode.SUCCESS, proc.stderr
+    decisions = json.loads(log.read_text(encoding="utf-8"))["decisions"]
+    assert [d for d in decisions if d["kind"] == "drop-local"] == [], decisions
+

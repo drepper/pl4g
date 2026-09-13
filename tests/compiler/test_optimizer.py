@@ -440,3 +440,43 @@ def test_nothing_kept_is_recorded_as_dropped() -> None:
     assert module.decisions.entries == []
     assert module.decisions.of_kind(DecisionKind.DROP_FUNCTION) == []
 
+
+def test_a_dropped_local_is_recorded_by_the_name_it_was_given() -> None:
+    """A value with no name is an intermediate of an expression and nothing the
+    program can ask about; one with a name is a local the program wrote down."""
+    from pypl4g.ir.decisions import DecisionKind
+
+    module = Module("t")
+    var = GlobalVar("g", U8, module.types.ptr_type(U8), module.int_const(U8, 3))
+    module.add_global(var)
+    func = _startup(module)
+    block = func.entry
+    assert block is not None
+    token = block.append(MemStartInst())
+    named = block.append(LoadInst(U8, (token, var)))
+    named.name_hint = "unread"
+    block.append(LoadInst(U8, (token, var)))          # no name: an intermediate
+    block.append(RetInst(module.int_const(U8, 5)))
+    assert DeadCodeElimination().run(module)
+    dropped = module.decisions.of_kind(DecisionKind.DROP_LOCAL)
+    assert [d.subject for d in dropped] == ["unread"], \
+        "an unnamed value was reported as a local, or a named one was not"
+
+
+def test_a_local_something_reads_is_not_recorded() -> None:
+    """A log that said things went that did not would be worse than none."""
+    from pypl4g.ir.decisions import DecisionKind
+
+    module = Module("t")
+    var = GlobalVar("g", U8, module.types.ptr_type(U8), module.int_const(U8, 3))
+    module.add_global(var)
+    func = _startup(module)
+    block = func.entry
+    assert block is not None
+    token = block.append(MemStartInst())
+    named = block.append(LoadInst(U8, (token, var)))
+    named.name_hint = "kept"
+    block.append(RetInst(named))
+    assert not DeadCodeElimination().run(module)
+    assert module.decisions.of_kind(DecisionKind.DROP_LOCAL) == []
+

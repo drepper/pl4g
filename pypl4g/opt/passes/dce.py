@@ -14,6 +14,7 @@ terminator.  Each instruction answers that for itself, so a shape added later
 cannot be overlooked here.
 """
 
+from ...ir.decisions import DecisionKind, DecisionLog
 from ...ir.function import Function
 from ...ir.inst import Terminator
 from ...ir.module import Module
@@ -30,11 +31,11 @@ class DeadCodeElimination:
         for func in module.functions.values():
             if func.is_declaration:
                 continue
-            while self._sweep(func):
+            while self._sweep(func, module.decisions):
                 changed = True
         return changed
 
-    def _sweep(self, func: Function) -> bool:
+    def _sweep(self, func: Function, decisions: DecisionLog) -> bool:
         """Drop what is dead now, and say whether anything went.
 
         Dropping an instruction can leave the ones it used with no user, so this
@@ -42,14 +43,28 @@ class DeadCodeElimination:
         find the uses; with a use list on every value it would be one walk and a
         worklist, and that is the change to make when functions are large enough
         for it to matter.
+
+        What went is recorded where it had a name.  A value with no name is an
+        intermediate of an expression and nothing the program can ask about; one
+        with a name is a local the program wrote down, and its going is a thing
+        a reader is entitled to be told.
         """
         used = self._used(func)
         removed = False
         for block in func.blocks:
             kept = [i for i in block.insts if i.has_effects or id(i) in used]
-            if len(kept) != len(block.insts):
-                block.insts = kept
-                removed = True
+            if len(kept) == len(block.insts):
+                continue
+            surviving = {id(i) for i in kept}
+            for inst in block.insts:
+                if inst.name_hint is not None and id(inst) not in surviving:
+                    decisions.record(
+                        DecisionKind.DROP_LOCAL, inst.name_hint,
+                        "".join(("nothing reads it, and computing it does nothing "
+                                 "else, so it is not in ", func.name)),
+                        inst.span)
+            block.insts = kept
+            removed = True
         return removed
 
     def _used(self, func: Function) -> set[int]:

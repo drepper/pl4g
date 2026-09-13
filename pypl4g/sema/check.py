@@ -12,7 +12,7 @@ from ..diag import ids as D
 from ..diag.engine import DiagEngine, Expectation
 from ..front import ast
 from ..ir.builder import IRBuilder
-from ..ir.inst import BinOp, UnOp
+from ..ir.inst import BinOp, Instruction, UnOp
 from ..ir.function import (FuncAttrs, Function, InlineHint, Linkage, SpecialKind)
 from ..ir.module import GlobalVar, Module
 from ..ir.types import BOOL, BUILTIN_TYPES, ERROR, IntType, Type, VOID
@@ -824,8 +824,25 @@ class Checker:
             value = self._lower_expr(builder, node.value, declared)
         finally:
             self._initializing = None
-        self._bind_local(node.name, self._as_declared(value, declared), node.name_span,
-                         node.mutable, value_span=node.span)
+        bound = self._as_declared(value, declared)
+        self._name_value(bound, node.name)
+        self._bind_local(node.name, bound, node.name_span, node.mutable,
+                         value_span=node.span)
+
+    def _name_value(self, value: Value, name: str) -> None:
+        """Record which local a computed value belongs to.
+
+        Only an instruction is named, and only if it has no name already.  A
+        constant is interned and shared with every other use of the same number,
+        so writing a name on one would put that name on all of them; and where
+        two locals stand for one value, the first name is the one that stays.
+
+        The name is a hint and nothing reads it to decide anything.  It is what
+        lets the textual form be read against the source it came from, and what
+        lets a pass that removes a value say which local went with it.
+        """
+        if isinstance(value, Instruction) and value.name_hint is None:
+            value.name_hint = name
 
     def _lower_assignment(self, builder: IRBuilder, node: ast.AssignStmt,
                           wants_value: bool = False) -> Value | None:

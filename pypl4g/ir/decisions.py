@@ -31,6 +31,7 @@ class DecisionKind(StrEnum):
 
     DROP_FUNCTION = "drop-function"
     DROP_VARIABLE = "drop-variable"
+    DROP_LOCAL = "drop-local"
 
 
 @dataclass(frozen=True, slots=True)

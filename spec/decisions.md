@@ -1095,6 +1095,22 @@ What other compilers do: GCC's `-fopt-info` and Clang's `-Rpass` report optimiza
 avoided here -- they are diagnostics, they are off by default, and they are prose.  Clang's `-fsave-optimization-record` writes
 structured YAML, which is this idea; the difference is that it is a special mode rather than the way the compiler says what it did.
 
+A local that the dead-code sweep removes is recorded too, which needed the name of the local to survive into the representation.
+It did not: a value carried a name hint from the first version, the printer rendered it, and nothing ever set one.  The semantic
+analysis now writes the name of a local on the instruction its definition produced -- only on an instruction, and only where there
+is no name already, since a constant is interned and naming one would put that name on every other use of the same number.  The
+textual form became readable against its source as a side effect, which is what the hint was for in the first place.
+
+A value with no name is an intermediate of an expression and its going is not recorded: a log that reported every folded
+subexpression would be a log nobody reads.  A local bound to a constant is not recorded either, because nothing drops it -- a local
+is a value, so one whose initializer is a constant never becomes an instruction.  Where such a local went is a question for the
+debug information, which is where a constant expression standing for a name belongs, and which is still an open entry.
+
+The warning that nothing reads a value and the record that it is therefore not in the binary are different facts, and keeping both
+is deliberate.  One is a possible mistake, reported at every optimization level; the other is what became of it, and only where
+something was optimized.  They come apart in both directions: at `-O0` there is a warning and no decision, and a local that *is*
+read can still go when the thing that read it went, which is a decision with no warning.
+
 ---
 
 Open questions
