@@ -43,6 +43,7 @@ the parser does, and they are the floor everything else is measured against.
 | `25bb4e0` | 1.10 | 1.70 | 1.45 |
 | `baf1f3c` | 1.08 | 1.72 | 1.47 |
 | `74ac227` | 1.06 | 1.66 | 1.42 |
+| `c0f29f2` | 1.05 | 1.65 | 1.37 |
 
 ### Variables and memory
 
@@ -70,6 +71,7 @@ backend do.
 | `25bb4e0` | 1.26 | 1.68 | 1.47 |
 | `baf1f3c` | 1.22 | 1.67 | 1.54 |
 | `74ac227` | 1.23 | 1.66 | 1.43 |
+| `c0f29f2` | 1.21 | 1.69 | 1.46 |
 
 ### Register pressure
 
@@ -97,6 +99,7 @@ and they are the only ones that reach the frame.
 | `25bb4e0` | 2.02 | 6.75 |
 | `baf1f3c` | 2.02 | 6.75 |
 | `74ac227` | 1.94 | 6.73 |
+| `c0f29f2` | 1.89 | 6.71 |
 
 ### What is left out
 
@@ -124,33 +127,35 @@ decision log does.
 | `25bb4e0` | 1.53 | 1.58 |
 | `baf1f3c` | 1.52 | 1.58 |
 | `74ac227` | 1.48 | 1.50 |
+| `c0f29f2` | 1.52 | 1.56 |
 
 ### Expressions
 
 Operators, and the folding of them.  These move when the expression parser, the semantic analysis or the
 optimizer does.
 
-| commit | bitwise-operators | bitwise-precedence | comparison-operators | logic-operators | logic-short-circuit | saturating-precedence |
-|---|---|---|---|---|---|---|
-| `eee64a3` |  |  |  |  |  |  |
-| `af657ad` |  |  |  |  |  |  |
-| `2f564cb` | 1.47 | 1.22 |  |  |  |  |
-| `37dbb28` | 1.55 | 1.22 |  |  |  |  |
-| `1c4ae78` | 1.56 | 1.42 |  |  |  |  |
-| `f391839` | 1.57 | 1.40 |  |  |  |  |
-| `04c20c9` | 1.58 | 1.39 |  |  |  |  |
-| `3020cf6` | 1.44 | 1.28 |  |  |  |  |
-| `9bcaf84` | 1.46 | 1.28 |  |  |  |  |
-| `40c35bb` | 1.51 | 1.31 |  |  |  |  |
-| `9437d8a` | 1.54 | 1.45 |  |  |  |  |
-| `d0c8cf5` | 1.55 | 1.36 |  |  |  |  |
-| `73ce857` | 1.58 | 1.39 |  |  |  |  |
-| `ed1c028` | 1.65 | 1.45 |  |  |  |  |
-| `1269bd5` | 1.58 | 1.43 | 2.40 |  |  |  |
-| `db0b436` | 1.66 | 1.42 | 2.36 |  |  |  |
-| `25bb4e0` | 1.67 | 1.39 | 2.29 | 2.39 | 2.33 |  |
-| `baf1f3c` | 1.69 | 1.48 | 2.37 | 2.55 | 2.35 |  |
-| `74ac227` | 1.71 | 1.37 | 2.29 | 2.41 | 2.27 | 1.57 |
+| commit | bitwise-operators | bitwise-precedence | comparison-operators | logic-operators | logic-short-circuit | saturating-precedence | arithmetic-operators |
+|---|---|---|---|---|---|---|---|
+| `eee64a3` |  |  |  |  |  |  |  |
+| `af657ad` |  |  |  |  |  |  |  |
+| `2f564cb` | 1.47 | 1.22 |  |  |  |  |  |
+| `37dbb28` | 1.55 | 1.22 |  |  |  |  |  |
+| `1c4ae78` | 1.56 | 1.42 |  |  |  |  |  |
+| `f391839` | 1.57 | 1.40 |  |  |  |  |  |
+| `04c20c9` | 1.58 | 1.39 |  |  |  |  |  |
+| `3020cf6` | 1.44 | 1.28 |  |  |  |  |  |
+| `9bcaf84` | 1.46 | 1.28 |  |  |  |  |  |
+| `40c35bb` | 1.51 | 1.31 |  |  |  |  |  |
+| `9437d8a` | 1.54 | 1.45 |  |  |  |  |  |
+| `d0c8cf5` | 1.55 | 1.36 |  |  |  |  |  |
+| `73ce857` | 1.58 | 1.39 |  |  |  |  |  |
+| `ed1c028` | 1.65 | 1.45 |  |  |  |  |  |
+| `1269bd5` | 1.58 | 1.43 | 2.40 |  |  |  |  |
+| `db0b436` | 1.66 | 1.42 | 2.36 |  |  |  |  |
+| `25bb4e0` | 1.67 | 1.39 | 2.29 | 2.39 | 2.33 |  |  |
+| `baf1f3c` | 1.69 | 1.48 | 2.37 | 2.55 | 2.35 |  |  |
+| `74ac227` | 1.71 | 1.37 | 2.29 | 2.41 | 2.27 | 1.57 |  |
+| `c0f29f2` | 1.60 | 1.41 | 2.43 | 2.48 | 2.43 | 1.73 | 1.83 |
 
 Process
 -------
@@ -182,6 +187,7 @@ worth showing here, and every figure is in the JSON beside this file.
 | `25bb4e0` | 74 | 83 |
 | `baf1f3c` | 75 | 82 |
 | `74ac227` | 73 | 85 |
+| `c0f29f2` | 72 | 81 |
 
 What each row is:
 
@@ -204,6 +210,7 @@ What each row is:
 - `25bb4e0` -- ✨ The logical operators, and block parameters to carry `and` and `or`
 - `baf1f3c` -- ✨ Constants of any width, and the header flags they travel under
 - `74ac227` -- ✨ Saturating arithmetic: ⊞ ⊟ ⊠
+- `c0f29f2` -- ✨ Arithmetic that checks, and the path a fault leaves through
 
 What each program exercises:
 
@@ -223,3 +230,4 @@ What each program exercises:
 - `logic-operators` -- all six logical operators, none of them folded
 - `logic-short-circuit` -- three short circuits, which is six blocks
 - `saturating-precedence` -- a sum and a product that saturate
+- `arithmetic-operators` -- a sum and a product that check and can fault

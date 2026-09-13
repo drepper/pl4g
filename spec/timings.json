@@ -15,7 +15,8 @@
     "comparison-operators": "all six comparisons, none of them folded",
     "logic-operators": "all six logical operators, none of them folded",
     "logic-short-circuit": "three short circuits, which is six blocks",
-    "saturating-precedence": "a sum and a product that saturate"
+    "saturating-precedence": "a sum and a product that saturate",
+    "arithmetic-operators": "a sum and a product that check and can fault"
   },
   "commits": [
     {
@@ -93,6 +94,10 @@
     {
       "hash": "74ac227",
       "subject": "✨ Saturating arithmetic: ⊞ ⊟ ⊠"
+    },
+    {
+      "hash": "c0f29f2",
+      "subject": "✨ Arithmetic that checks, and the path a fault leaves through"
     }
   ],
   "times": {
@@ -988,6 +993,76 @@
       "saturating-precedence": [
         1.571,
         73.83860897971317
+      ]
+    },
+    "c0f29f2": {
+      "exit0": [
+        1.054,
+        76.53939299052581
+      ],
+      "global-variable": [
+        1.214,
+        75.33657900057733
+      ],
+      "assign-widths": [
+        1.692,
+        77.18065899098292
+      ],
+      "many-values-at-once": [
+        1.887,
+        72.47459201607853
+      ],
+      "unreached-function": [
+        1.525,
+        76.48578198859468
+      ],
+      "export-visibility": [
+        1.5559999999999998,
+        76.34404901182279
+      ],
+      "digit-separators": [
+        1.648,
+        76.57186198048294
+      ],
+      "boolean-values": [
+        1.3699999999999999,
+        75.98148100078106
+      ],
+      "bitwise-operators": [
+        1.597,
+        76.24878402566537
+      ],
+      "bitwise-precedence": [
+        1.4060000000000001,
+        75.53983601974323
+      ],
+      "spill-to-the-frame": [
+        6.714,
+        80.5893600336276
+      ],
+      "boolean-in-memory": [
+        1.457,
+        74.63327795267105
+      ],
+      "comparison-operators": [
+        2.4290000000000003,
+        76.23358099954203
+      ],
+      "logic-operators": [
+        2.48,
+        74.57803498255089
+      ],
+      "logic-short-circuit": [
+        2.427,
+        76.91678102128208
+      ],
+      "saturating-precedence": [
+        1.731,
+        80.0606330158189
+      ],
+      "arithmetic-operators": [
+        1.827,
+        80.06741298595443
       ]
     }
   }
