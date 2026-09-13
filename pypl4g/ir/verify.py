@@ -128,6 +128,15 @@ class Verifier:
                     self._fail(where, "".join((
                         "constant ", str(operand.value), " does not fit in ",
                         operand.ty.render())))
+            if operand.ty is VOID:
+                # A call to a function that answers with nothing is the only
+                # thing that has this type, and its answer is not a value: there
+                # is nothing to store, nothing to compare and nothing to give
+                # back.  A front end that let one be named has to report that
+                # itself, with the place the name was written; this is the net
+                # underneath, and it catches a pass that builds one by mistake.
+                self._fail(where, "".join((
+                    "'", inst.opcode, "' is given something that has no value")))
         match inst:
             case RetInst():
                 expected = func.ty.ret

@@ -782,6 +782,27 @@ The same semicolon in a function that *does* answer with something is the other 
 produces nothing, and the function has not answered.  That is an error, and it is the one thing the rule about semicolons is worth
 having a rule for -- `7u8;` and `7u8` are different programs, and the difference is visible.
 
+**A call to such a function has no answer, so there is nothing to use.**  Where a value is wanted, naming one is an error: it
+cannot start a variable, it cannot be assigned, and it cannot be an operand of anything.
+
+```
+let kept: u8 = prepare()      ※ refused: there is nothing to put in it
+kept ← prepare()              ※ refused, for the same reason
+kept ← prepare() + 1u8        ※ refused, and twice over
+```
+
+**With one exception, and it is an abbreviation rather than an exception to the rule.**  In a function that itself answers with
+nothing, `return f()` is allowed where `f` also answers with nothing, and means the call followed by returning.  No value is
+carried anywhere in it -- which is why it is well formed where all three lines above are not.  It exists so that a function ending
+in a call to another can say "and that is the last thing I do" in the place a reader looks for it.
+
+C and C++ allow exactly this and for a reason this language does not have yet -- a template returning `T` where `T` may be `void`
+-- but the abbreviation reads well on its own, and it is the same shape the language already admits in `return x` beside a bare
+`x` as the last statement.
+
+Nothing of this reaches the representation as a value: a call that answers with nothing is an instruction whose result nothing may
+name, and the compiler refuses to build anything that names one.
+
 Function return values are specified with the `return` keyword.  The function immediately returns and the remaining statements in the
 block are ignored (the compiler must issue a warning in this case).  If the `return` statement is the last statement in the function
 then the `return` keywords can and should be skipped (a warning is issued in this case).

@@ -1736,6 +1736,42 @@ together.
 
 ---
 
+## 2026-09-14T11:00+02:00 — language
+
+**A call that answers with nothing has nothing to use, and `return f()` is an abbreviation and not an exception**
+
+Decided on the user's direction, and recorded before there is a way to write it: the language still has no way to call a function,
+so none of the three uses this is about can appear in a program.  What could be done was done, and the rest is written down so
+that implementing the call is a matter of following a decision rather than making one.
+
+**The rule.**  A call to a function that answers with nothing has no answer, so naming one where a value is wanted is an error --
+it cannot start a variable, be assigned, or be an operand.  Nothing here was really open; it is what "answers with nothing" means.
+
+**The exception, which on inspection is not one.**  In a function that itself answers with nothing, `return f()` is allowed where
+`f` also answers with nothing.  It looks like a hole in the rule and is not: it lowers to the call and then a return carrying
+nothing, and no value is named anywhere in it.  That is why it is well formed where every other use is not, and it is the same
+shape the language already admits in `return x` beside a bare `x` as the last statement.
+
+C and C++ allow exactly this, and for a reason this language does not have -- a template returning `T` where `T` may be `void`.
+It is worth keeping anyway: a function ending in a call to another can then say "and that is the last thing I do" in the place a
+reader looks for it.
+
+**Where it is enforced.**  In the representation, which is a level below the syntax and does not wait for it: no instruction may
+be given an operand whose type is `void`, and a call that answers with nothing is the only thing that has one.  Five tests build
+that representation by hand -- the call on its own, then its answer stored, added, compared and returned, and then the
+abbreviation written out -- and the abbreviation is the one that passes.  A front end that lets such a name be written will still
+have to report it itself, with the place the name appears; this is the net underneath, and it catches a pass that builds one by
+mistake.
+
+**What is left.**  The surface rule needs the surface, and the call entry in the to-do list now carries what was settled here
+along with the one part of its question still open: whether arguments may be named.  It also names what the compiler needs beyond
+the syntax -- a rule for `CallInst` in the backends, and a register allocator that knows a call destroys the registers a
+convention calls caller-saved.  The second is the one that matters, a value held across a call being silently lost without it;
+the machinery is already there, the call having only to declare those registers as ones it writes, which is how the flags
+register is already handled.
+
+---
+
 ---
 
 Open questions
