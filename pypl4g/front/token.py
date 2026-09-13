@@ -61,6 +61,14 @@ NOT_GLYPH: Final[str] = "\N{NOT SIGN}"
 TIMES_GLYPH: Final[str] = "\N{MULTIPLICATION SIGN}"
 DIVIDE_GLYPH: Final[str] = "\N{DIVISION SIGN}"
 
+#: Moving the bits of a number sideways.  The two angle quotation marks point
+#: the way the bits go, and the two circle arrows turn them round.  A shift
+#: drops what falls off the end; a rotation puts it back at the other end.
+SHIFT_LEFT_GLYPH: Final[str] = "\N{LEFT-POINTING DOUBLE ANGLE QUOTATION MARK}"
+SHIFT_RIGHT_GLYPH: Final[str] = "\N{RIGHT-POINTING DOUBLE ANGLE QUOTATION MARK}"
+ROTATE_LEFT_GLYPH: Final[str] = "\N{ANTICLOCKWISE OPEN CIRCLE ARROW}"
+ROTATE_RIGHT_GLYPH: Final[str] = "\N{CLOCKWISE OPEN CIRCLE ARROW}"
+
 #: The saturating operations, which answer with the nearest value their type can
 #: hold rather than going past it.  Each is the sign of the operation it is built
 #: from, in a box: what the box says is that the answer stays inside something.
@@ -137,6 +145,10 @@ class TokKind(StrEnum):
     TIMES = "'\N{MULTIPLICATION SIGN}'"
     DIVIDE = "'\N{DIVISION SIGN}'"
     PERCENT = "'%'"
+    SHIFT_LEFT = "'\N{LEFT-POINTING DOUBLE ANGLE QUOTATION MARK}'"
+    SHIFT_RIGHT = "'\N{RIGHT-POINTING DOUBLE ANGLE QUOTATION MARK}'"
+    ROTATE_LEFT = "'\N{ANTICLOCKWISE OPEN CIRCLE ARROW}'"
+    ROTATE_RIGHT = "'\N{CLOCKWISE OPEN CIRCLE ARROW}'"
 
     SAT_ADD = "'\N{SQUARED PLUS}'"
     SAT_SUB = "'\N{SQUARED MINUS}'"

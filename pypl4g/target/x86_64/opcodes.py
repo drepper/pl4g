@@ -33,6 +33,11 @@ def _rel(bits: int) -> OperandSpec:
     return OperandSpec(OperandKind.REL | OperandKind.SYM, bits=bits)
 
 
+def _cl() -> OperandSpec:
+    """The one register a variable shift takes its count in."""
+    return OperandSpec(OperandKind.REG, rclass=GPR, bits=8)
+
+
 def _mem() -> OperandSpec:
     """A memory operand of any width."""
     return OperandSpec(OperandKind.MEM)
@@ -128,6 +133,14 @@ X86_INSTRS: Final[tuple[X86InstDesc, ...]] = (
     X86InstDesc("movsx", (_r(32), _rm(16)), opcode=0xBF, map=OpMap.M0F,
                 modrm=ModRMUse.REG_RM, reg_op=0, rm_op=1, flags=InstFlags.ZEXT32,
                 est_size=3),
+    # movsx r64, r/m8                    REX.W 0F BE /r
+    X86InstDesc("movsx", (_r(64), _rm(8)), opcode=0xBE, map=OpMap.M0F,
+                opsize=OpSize.REXW, modrm=ModRMUse.REG_RM, reg_op=0, rm_op=1,
+                est_size=4),
+    # movsx r64, r/m16                   REX.W 0F BF /r
+    X86InstDesc("movsx", (_r(64), _rm(16)), opcode=0xBF, map=OpMap.M0F,
+                opsize=OpSize.REXW, modrm=ModRMUse.REG_RM, reg_op=0, rm_op=1,
+                est_size=4),
     # movsxd r64, r/m32                  REX.W 63 /r
     X86InstDesc("movsxd", (_r(64), _rm(32)), opcode=0x63, opsize=OpSize.REXW,
                 modrm=ModRMUse.REG_RM, reg_op=0, rm_op=1, est_size=4),
@@ -333,6 +346,49 @@ X86_INSTRS: Final[tuple[X86InstDesc, ...]] = (
                 modrm=ModRMUse.EXT_RM, ext=6, rm_op=0,
                 implicit_uses=(RAX, RDX), implicit_defs=(RAX, RDX, EFLAGS),
                 est_size=3, roles=(OperandRole.USE,)),
+    # The variable-count shifts take their count in the low byte of one fixed
+    # register, which is said here as an implicit use: the allocator then keeps
+    # every other value out of it while the shift wants it.
+    X86InstDesc("shl", (_rm(32), _cl()), opcode=0xD3,
+                modrm=ModRMUse.EXT_RM, ext=4, rm_op=0,
+                implicit_uses=(RCX,), implicit_defs=(EFLAGS,),
+                est_size=2, roles=_ACCUMULATE),
+    X86InstDesc("shl", (_rm(64), _cl()), opcode=0xD3, opsize=OpSize.REXW,
+                modrm=ModRMUse.EXT_RM, ext=4, rm_op=0,
+                implicit_uses=(RCX,), implicit_defs=(EFLAGS,),
+                est_size=3, roles=_ACCUMULATE),
+    X86InstDesc("shr", (_rm(32), _cl()), opcode=0xD3,
+                modrm=ModRMUse.EXT_RM, ext=5, rm_op=0,
+                implicit_uses=(RCX,), implicit_defs=(EFLAGS,),
+                est_size=2, roles=_ACCUMULATE),
+    X86InstDesc("shr", (_rm(64), _cl()), opcode=0xD3, opsize=OpSize.REXW,
+                modrm=ModRMUse.EXT_RM, ext=5, rm_op=0,
+                implicit_uses=(RCX,), implicit_defs=(EFLAGS,),
+                est_size=3, roles=_ACCUMULATE),
+    X86InstDesc("sar", (_rm(32), _cl()), opcode=0xD3,
+                modrm=ModRMUse.EXT_RM, ext=7, rm_op=0,
+                implicit_uses=(RCX,), implicit_defs=(EFLAGS,),
+                est_size=2, roles=_ACCUMULATE),
+    X86InstDesc("sar", (_rm(64), _cl()), opcode=0xD3, opsize=OpSize.REXW,
+                modrm=ModRMUse.EXT_RM, ext=7, rm_op=0,
+                implicit_uses=(RCX,), implicit_defs=(EFLAGS,),
+                est_size=3, roles=_ACCUMULATE),
+    X86InstDesc("rol", (_rm(32), _cl()), opcode=0xD3,
+                modrm=ModRMUse.EXT_RM, ext=0, rm_op=0,
+                implicit_uses=(RCX,), implicit_defs=(EFLAGS,),
+                est_size=2, roles=_ACCUMULATE),
+    X86InstDesc("rol", (_rm(64), _cl()), opcode=0xD3, opsize=OpSize.REXW,
+                modrm=ModRMUse.EXT_RM, ext=0, rm_op=0,
+                implicit_uses=(RCX,), implicit_defs=(EFLAGS,),
+                est_size=3, roles=_ACCUMULATE),
+    X86InstDesc("ror", (_rm(32), _cl()), opcode=0xD3,
+                modrm=ModRMUse.EXT_RM, ext=1, rm_op=0,
+                implicit_uses=(RCX,), implicit_defs=(EFLAGS,),
+                est_size=2, roles=_ACCUMULATE),
+    X86InstDesc("ror", (_rm(64), _cl()), opcode=0xD3, opsize=OpSize.REXW,
+                modrm=ModRMUse.EXT_RM, ext=1, rm_op=0,
+                implicit_uses=(RCX,), implicit_defs=(EFLAGS,),
+                est_size=3, roles=_ACCUMULATE),
     # jmp rel32                          E9 cd
     X86InstDesc("jmp", (_rel(32),), opcode=0xE9, rel_op=0, rel_bits=32,
                 flags=InstFlags.TERMINATOR | InstFlags.BARRIER, est_size=5),

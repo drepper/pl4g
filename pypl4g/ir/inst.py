@@ -30,6 +30,8 @@ class BinOp(Enum):
     SHL = "shl"
     ASHR = "ashr"
     LSHR = "lshr"
+    ROTL = "rotl"
+    ROTR = "rotr"
 
     #: The three that answer with the nearest value their type can hold rather
     #: than going past it.  They are operations of their own and not a flag on

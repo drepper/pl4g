@@ -6,7 +6,7 @@ compilation be parallelized and what makes a forward reference legal.
 """
 
 from dataclasses import dataclass, field
-from typing import Final, Sequence
+from typing import Callable, Final, Sequence
 
 from ..diag import ids as D
 from ..diag.engine import DiagEngine, Expectation
@@ -18,7 +18,7 @@ from ..ir.module import GlobalVar, Module
 from ..ir.types import BOOL, BUILTIN_TYPES, ERROR, IntType, Type, VOID
 from .modules import (ImportCycle, LoadedModule, ModuleNotFound, ModuleRegistry,
                       base_name)
-from ..ir.value import UndefConst, Value
+from ..ir.value import IntConst, UndefConst, Value
 from pathlib import Path
 
 from ..source.location import INVALID_SPAN, Span
@@ -140,6 +140,15 @@ _LOGIC_OPS: Final[dict[ast.BinaryOp, tuple[BinOp, bool]]] = {
 _SHORT_CIRCUIT: Final[dict[ast.BinaryOp, bool]] = {
     ast.BinaryOp.SHORT_AND: False,
     ast.BinaryOp.SHORT_OR: True,
+}
+
+#: Moving bits sideways, with the signed reading first: only the right shift
+#: differs between the two, bringing in copies of the sign rather than zeroes.
+_SHIFTS: Final[dict[ast.BinaryOp, tuple[BinOp, BinOp]]] = {
+    ast.BinaryOp.SHIFT_LEFT: (BinOp.SHL, BinOp.SHL),
+    ast.BinaryOp.SHIFT_RIGHT: (BinOp.ASHR, BinOp.LSHR),
+    ast.BinaryOp.ROTATE_LEFT: (BinOp.ROTL, BinOp.ROTL),
+    ast.BinaryOp.ROTATE_RIGHT: (BinOp.ROTR, BinOp.ROTR),
 }
 
 #: The comparisons that put the two values in an order.  Ordering is defined on
@@ -1450,6 +1459,19 @@ class Checker:
                              operator=expr.op.value, expected=ty.render(),
                              found=found.render())
             return UndefConst(ERROR)
+        if self._answer_is_already_known(expr, ty, left, right):
+            return UndefConst(ERROR)
+        if expr.op in _SHIFTS:
+            if expr.op in (ast.BinaryOp.ROTATE_LEFT, ast.BinaryOp.ROTATE_RIGHT) \
+                    and isinstance(ty, IntType) and ty.signed:
+                # Turning the bits of a signed number round has no meaning as a
+                # number, and this language's types say what a value is.
+                self._diags.emit(D.LANG_TYPE_ROTATE_IS_UNSIGNED, expr.span,
+                                 found=ty.render())
+                return UndefConst(ERROR)
+            signed = isinstance(ty, IntType) and ty.signed
+            return builder.binary(_SHIFTS[expr.op][0 if signed else 1],
+                                  left, right, expr.span)
         if expr.op in (ast.BinaryOp.DIVIDE, ast.BinaryOp.REMAINDER):
             # One operator, two instructions: dividing signed numbers and
             # dividing unsigned ones are different questions, and the type of
@@ -1460,6 +1482,48 @@ class Checker:
             return builder.binary(wanted[0] if signed else wanted[1],
                                   left, right, expr.span)
         return builder.binary(_BINARY_OPS[expr.op], left, right, expr.span)
+
+    #: What each operator that can fault does, where both sides are known.  The
+    #: saturating ones are not here: theirs is the answer nearest the end of the
+    #: type, which always fits and is never a mistake.
+    _ARITHMETIC: Final[dict[ast.BinaryOp, "Callable[[int, int], int]"]] = {
+        ast.BinaryOp.ADD: lambda a, b: a + b,
+        ast.BinaryOp.SUBTRACT: lambda a, b: a - b,
+        ast.BinaryOp.MULTIPLY: lambda a, b: a * b,
+    }
+
+    def _answer_is_already_known(self, expr: ast.Binary, ty: Type, left: Value,
+                                 right: Value) -> bool:
+        """Report an operation that can be seen to fault, and say whether it was.
+
+        A program that must stop whenever it is started is one that need not be
+        built, and the answer is here to be worked out: both sides are written
+        down.  This is the checker and not the folder, because the folder is an
+        optimization and a program means the same thing whether or not one runs.
+        """
+        if not isinstance(left, IntConst) or not isinstance(right, IntConst):
+            return False
+        if expr.op in (ast.BinaryOp.DIVIDE, ast.BinaryOp.REMAINDER):
+            if right.value == 0:
+                self._diags.emit(D.LANG_TYPE_DIVISION_BY_ZERO, expr.span)
+                return True
+            if not isinstance(ty, IntType) or not ty.signed:
+                return False
+            # The one division that overflows, and the one pair that does it.
+            if left.value == ty.low and right.value == -1:
+                self._diags.emit(D.LANG_TYPE_ANSWER_DOES_NOT_FIT, expr.span,
+                                 value=str(-ty.low), type=ty.render())
+                return True
+            return False
+        working = self._ARITHMETIC.get(expr.op)
+        if working is None or not isinstance(ty, IntType):
+            return False
+        answer = working(left.value, right.value)
+        if ty.holds(answer):
+            return False
+        self._diags.emit(D.LANG_TYPE_ANSWER_DOES_NOT_FIT, expr.span,
+                         value=str(answer), type=ty.render())
+        return True
 
     def _lower_unary(self, builder: IRBuilder, expr: ast.Unary,
                      expected: Type | None) -> Value:

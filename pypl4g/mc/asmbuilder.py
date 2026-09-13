@@ -121,6 +121,16 @@ class InstructionSelector(Protocol):
         """
         ...
 
+    def select_shift(self, op: Op, dst: Reg, value: MCOperand, amount: MCOperand,
+                     bits: int, span: Span) -> Sequence[MCInst]:
+        """Instructions that move the bits of *value* by *amount* into *dst*.
+
+        One call rather than an ordinary two-operand operation because one of
+        these architectures takes the count in a fixed register, which is a
+        thing the caller should not have to know.
+        """
+        ...
+
     def select_divide(self, dst: Reg, left: MCOperand, right: MCOperand,
                       signed: bool, remainder: bool, bits: int,
                       span: Span) -> Sequence[MCInst]:
@@ -505,6 +515,11 @@ class Assembler:
               span: Span = INVALID_SPAN) -> None:
         """Put a *bits*-wide value into the whole of *dst*."""
         self._emit(self._selector.select_widen(dst, src, bits, signed, span))
+
+    def shift(self, op: Op, dst: Reg, value: MCOperand, amount: MCOperand,
+              bits: int, span: Span = INVALID_SPAN) -> None:
+        """Move the bits of *value* by *amount* into *dst*."""
+        self._emit(self._selector.select_shift(op, dst, value, amount, bits, span))
 
     def divide(self, dst: Reg, left: MCOperand, right: MCOperand, signed: bool,
                remainder: bool, bits: int, span: Span = INVALID_SPAN) -> None:

@@ -150,3 +150,39 @@ def test_dividing_truncates_toward_zero(triple: str, ty, left: int,  # noqa: ANN
         assert run(triple, path) == 1, "".join((
             op.value, " of ", str(left), " and ", str(right), " as ",
             ty.render(), " is not ", str(expected)))
+
+
+# -- moving bits sideways -------------------------------------------------------
+
+#: The cases where a shift or a rotation means something other than the obvious:
+#: the sign coming in on the right, the bits falling off on the left, and a
+#: rotation turning the bits of the *type* rather than of the register.
+MOVES = [
+    (BinOp.SHL, U8, 13, 1, 26), (BinOp.SHL, U8, 200, 1, 144),
+    (BinOp.LSHR, U8, 13, 1, 6), (BinOp.LSHR, U8, 255, 7, 1),
+    (BinOp.ASHR, I8, -8, 1, -4), (BinOp.ASHR, I8, -1, 7, -1),
+    (BinOp.SHL, I8, 64, 1, -128), (BinOp.ASHR, I8, 127, 6, 1),
+    (BinOp.ROTR, U8, 13, 1, 134), (BinOp.ROTL, U8, 13, 5, 161),
+    (BinOp.ROTL, U8, 13, 0, 13), (BinOp.ROTR, U8, 13, 0, 13),
+    (BinOp.ROTL, U16, 0x1234, 8, 0x3412),
+    (BinOp.ROTL, U64, 1 << 63, 1, 1),
+    (BinOp.SHL, U64, 1, 63, 1 << 63),
+    (BinOp.LSHR, U64, 1 << 63, 63, 1),
+    (BinOp.ASHR, I64, -(1 << 62), 62, -1),
+]
+
+
+@pytest.mark.parametrize("triple", compiler_targets())
+@pytest.mark.parametrize(("op", "ty", "value", "distance", "expected"), MOVES,
+                         ids=["".join((c[0].value, ".", c[1].render(), ".",
+                                       str(c[2]), ".", str(c[3]))) for c in MOVES])
+def test_moving_bits_sideways(triple: str, op: BinOp, ty, value: int,  # noqa: ANN001
+                              distance: int, expected: int, tmp_path) -> None:  # noqa: ANN001
+    """A rotation turns the bits of the type, not of the register the value
+    happens to be held in -- which is the half of this a rotate instruction
+    would get wrong for every type narrower than a register."""
+    path = tmp_path / "out"
+    build(answers(triple, op, ty, value, distance, expected), triple, path)
+    assert run(triple, path) == 1, "".join((
+        op.value, " of ", str(value), " by ", str(distance), " as ",
+        ty.render(), " is not ", str(expected)))

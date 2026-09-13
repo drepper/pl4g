@@ -175,10 +175,12 @@ To Do List for the PL4g language
     only on integer values.  Done, with C's relative binding, which Rust, Go and Zig kept: `&` tighter than `^` tighter than `|`.
     A truth value is refused (4205) and two different integer types are refused (4206).
 
-[ ] implement shifting and rotating of integers.  Use `«` and `»` for shifting and `↺` and `↻` for rotation.  Needs the
-    expression parser and the register allocator.  One thing to settle while writing it: what a shift by more than the width does,
-    since the three architectures disagree and leaving it to the hardware would be exactly the kind of surprise the language
-    refuses.
+[x] implement shifting and rotating of integers.  Done: `«` `»` `↺` `↻`, binding where multiplication does.  A distance of the
+    width of the type or more stops the program, decided by the user by the rule of least surprises: the three architectures
+    answer it three different ways, and two take it modulo the width of the *register* rather than of the type.  A right shift
+    brings in copies of the sign for a signed type and zeros for an unsigned one; bits that fall off the end of a shift are gone,
+    a shift being how a bit pattern is built.  A rotation turns the bits of the type rather than of the register, which is why it
+    is built from two shifts rather than from the rotate instruction, and is defined on unsigned types only (4216).
 
 [x] implement saturated operations.  Done: `⊞`, `⊟` and `⊠`, binding tighter than the bitwise operators with
     multiplication tighter than addition.  A type narrower than its register is computed as it stands, the answer being exact,

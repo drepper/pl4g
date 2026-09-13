@@ -89,6 +89,14 @@ NAMES = {
     BinOp.ADD: "addition", BinOp.SUB: "subtraction", BinOp.MUL: "multiplication",
 }
 
+#: Moving bits sideways.  A rotation is built from two shifts rather than from
+#: a rotate instruction, so that it means the same thing for a type narrower
+#: than the register it is held in -- which is most of them.
+SHIFTS = frozenset((BinOp.SHL, BinOp.ASHR, BinOp.LSHR, BinOp.ROTL, BinOp.ROTR))
+
+NAMES.update({BinOp.SHL: "shift", BinOp.ASHR: "shift", BinOp.LSHR: "shift",
+              BinOp.ROTL: "rotation", BinOp.ROTR: "rotation"})
+
 #: Dividing, and asking what is left over.  They are one operation as far as the
 #: instructions go -- two of the three architectures answer both questions with
 #: one instruction, and on the third the same instruction writes both answers.
@@ -322,3 +330,92 @@ def _in_a_register(asm: Assembler, operand: MCOperand, scratch: Scratch,
     carried = MCReg(scratch.scratch())
     asm.loadreg(carried.reg, operand, span)
     return carried
+
+
+def lower_shift(asm: Assembler, op: BinOp, ty: Type, value: MCOperand,
+                amount: MCOperand, destination: Reg, scratch: Scratch,
+                register_bits: int, too_far: Fault, span: Span) -> None:
+    """Emit a shift or a rotation, with the distance checked first.
+
+    **A distance of the width or more has no answer**, and the three
+    architectures answer it three different ways: two take the distance modulo
+    the width of the register -- which is not the width of the type -- and the
+    third does something else again.  So the distance is compared with the width
+    of the *type* and the program stops where it is too far, which is the same
+    thing happening everywhere.  A negative distance for a signed type is caught
+    by the same comparison, being enormous read as unsigned.
+
+    **What falls off the end of a shift is gone.**  That is what a shift is, and
+    it is why this does not fault on bits lost the way an addition faults on a
+    sum that does not fit: `\N{LEFT-POINTING DOUBLE ANGLE QUOTATION MARK}` is how a bit pattern is built, and a pattern that grew past
+    the type is a pattern that was asked for.  The result is brought back into
+    the type afterwards, which for an unsigned type is a mask and for a signed
+    one is the sign put back.
+    """
+    if not isinstance(ty, IntType):
+        raise Unsupported("a shift of something that is not an integer")
+    held = _in_a_register(asm, value, scratch, span)
+    distance = _in_a_register(asm, amount, scratch, span)
+    width = MCImm(ty.bits, 32, signed=False)
+    _answer(asm, Condition.UGE, destination, distance, width,
+            MCImm(0, 32, signed=False), too_far, span)
+    # Everything below is done at the full width of a register.  A value
+    # narrower than one carries its own zeroes or its own sign above itself, so
+    # the wide reading of it is the value; what the wide answer has above the
+    # type is then put back to what the type says, which is the last step.
+    answer = scratch.scratch()
+    if op in (BinOp.ROTL, BinOp.ROTR):
+        _rotate(asm, op, ty, held, distance, answer, scratch, span)
+    else:
+        moving = {BinOp.SHL: ops.SHIFT_LEFT, BinOp.LSHR: ops.SHIFT_RIGHT,
+                  BinOp.ASHR: ops.SHIFT_RIGHT_SIGNED}[op]
+        asm.shift(moving, answer, _whole(held), _whole(distance), 64, span)
+        _back_into_the_type(asm, ty, answer, span)
+    # The answer is inside the type by now, so naming the narrower part of the
+    # register it was computed in loses nothing.
+    asm.loadreg(destination, MCReg(answer, bits=register_bits), span)
+
+
+def _rotate(asm: Assembler, op: BinOp, ty: IntType, value: MCReg,
+            distance: MCReg, destination: Reg, scratch: Scratch,
+            span: Span) -> None:
+    """Turn the bits of *value* round by *distance*.
+
+    Two shifts and an or, rather than the rotate instruction the architectures
+    have: theirs turns a whole register round, and a value of a narrower type
+    occupies only part of one.  The other distance is the width less this one,
+    taken modulo the width -- which for a width that is a power of two is one
+    and, since every width here is one, is what makes a rotation by nothing come
+    out as the value itself rather than as a shift by the whole width.
+    """
+    left = MCReg(scratch.scratch())
+    right = MCReg(scratch.scratch())
+    other = MCReg(scratch.scratch())
+    asm.op(ops.MINUS, other.reg, MCImm(ty.bits, 32, signed=False),
+           _whole(distance), span=span)
+    asm.op(ops.AND, other.reg, other, MCImm(ty.bits - 1, 32, signed=False),
+           span=span)
+    forwards, backwards = ((_whole(distance), other) if op is BinOp.ROTL
+                           else (other, _whole(distance)))
+    asm.shift(ops.SHIFT_LEFT, left.reg, _whole(value), forwards, 64, span)
+    asm.shift(ops.SHIFT_RIGHT, right.reg, _whole(value), backwards, 64, span)
+    asm.op(ops.OR, destination, left, right, span=span)
+    _back_into_the_type(asm, ty, destination, span)
+
+
+def _whole(operand: MCReg) -> MCReg:
+    """*operand* naming the whole of the register it is in."""
+    return MCReg(operand.reg, bits=64)
+
+
+def _back_into_the_type(asm: Assembler, ty: IntType, destination: Reg,
+                        span: Span) -> None:
+    """Put the bits above the type back to what the type says they are."""
+    if ty.bits >= 64:
+        return
+    if ty.signed:
+        asm.widen(destination, MCReg(destination), ty.bits, True, span)
+        return
+    asm.op(ops.AND, destination, MCReg(destination),
+           MCImm((1 << ty.bits) - 1, 32 if ty.bits < 32 else 64, signed=False),
+           span=span)

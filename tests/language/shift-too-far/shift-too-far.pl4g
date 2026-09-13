@@ -1,0 +1,13 @@
+※ pl4g-test: compile=ok run=native,qemu exit=-4 diag=none
+
+※ A distance of the width or more has no answer, and the three architectures
+※ answer it three different ways -- two take the distance modulo the width of
+※ the *register*, which is not the width of the type.  So it is asked about,
+※ and the program stops the same way everywhere.
+
+let thirteen: u8 = 13u8
+let eight: u8 = 8u8
+
+@[startup]
+fn main() → u8:
+    thirteen « eight

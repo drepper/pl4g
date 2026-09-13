@@ -120,6 +120,9 @@ NEG: Final[Op] = register(Op("neg", 1))
 NOT: Final[Op] = register(Op("not", 1))
 SHIFT_LEFT: Final[Op] = register(Op("shift_left", 2))
 SHIFT_RIGHT: Final[Op] = register(Op("shift_right", 2))
+#: Shifting right brings in copies of the sign rather than zeroes, which is what
+#: a signed value wants and what an unsigned one must not have.
+SHIFT_RIGHT_SIGNED: Final[Op] = register(Op("shift_right_signed", 2))
 COMPARE: Final[Op] = register(Op("compare", 2, has_result=False))
 CALL: Final[Op] = register(Op("call", 1, has_result=False))
 RETURN: Final[Op] = register(Op("return", 0, has_result=False, is_terminator=True))

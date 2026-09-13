@@ -166,6 +166,11 @@ RISCV_INSTRS: Final[tuple[RVInstDesc, ...]] = (
     RVInstDesc("xori", (_r(), _r(), _imm12()), template=0x00004013,
                fields=(_reg(0, _RD), _reg(1, _RS1), _imm(2, _IMM12, 12)),
                est_size=INSTRUCTION_SIZE),
+    # srai rd, rs1, shamt    an arithmetic shift, bringing in copies of the sign
+    RVInstDesc("srai", (_r(), _r(), _shamt()), template=0x40005013,
+               fields=(_reg(0, _RD), _reg(1, _RS1),
+                       Field(FieldKind.IMMEDIATE, 2, 20, 6)),
+               est_size=INSTRUCTION_SIZE),
     # slli rd, rs1, shamt        the shift is six bits wide on this width
     RVInstDesc("slli", (_r(), _r(), _shamt()), template=0x00001013,
                fields=(_reg(0, _RD), _reg(1, _RS1),
@@ -197,6 +202,15 @@ RISCV_INSTRS: Final[tuple[RVInstDesc, ...]] = (
                fields=(_reg(0, _RD), _reg(1, _RS1), _reg(2, _RS2)),
                est_size=INSTRUCTION_SIZE),
     RVInstDesc("remu", (_r(), _r(), _r()), template=0x02007033,
+               fields=(_reg(0, _RD), _reg(1, _RS1), _reg(2, _RS2)),
+               est_size=INSTRUCTION_SIZE),
+    RVInstDesc("sll", (_r(), _r(), _r()), template=0x00001033,
+               fields=(_reg(0, _RD), _reg(1, _RS1), _reg(2, _RS2)),
+               est_size=INSTRUCTION_SIZE),
+    RVInstDesc("srl", (_r(), _r(), _r()), template=0x00005033,
+               fields=(_reg(0, _RD), _reg(1, _RS1), _reg(2, _RS2)),
+               est_size=INSTRUCTION_SIZE),
+    RVInstDesc("sra", (_r(), _r(), _r()), template=0x40005033,
                fields=(_reg(0, _RD), _reg(1, _RS1), _reg(2, _RS2)),
                est_size=INSTRUCTION_SIZE),
     # lui rd, imm20

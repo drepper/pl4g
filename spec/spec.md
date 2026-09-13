@@ -275,6 +275,41 @@ different things depending on how it was built; Zig, which faults in both and ha
 has `&+`.  Zig's and Swift's position is the one taken here, with `⊞` and its relatives in place of `+%` -- and with no wrapping
 operator at all, wrapping being a thing to ask for by writing the wrap rather than by writing an operator that hides it.
 
+#### Moving bits
+
+Four operators move the bits of a number sideways.  They bind where multiplication does.
+
+| Operator | Meaning |
+|---|---|
+| `«` | shift left |
+| `»` | shift right |
+| `↺` | rotate left |
+| `↻` | rotate right |
+
+The two angle marks point the way the bits go and the two circle arrows turn them round.  Both operands have the same type, as
+everywhere, and the distance is a value of that type.
+
+**What falls off the end of a shift is gone.**  That is what a shift is, and it is why a shift does not fault on bits lost the way
+an addition faults on a sum that does not fit: `«` is how a bit pattern is built, and a pattern that grew past the end of the type is
+one that was asked for.  A rotation puts back at the other end what a shift would have dropped.
+
+**Shifting a signed number right brings in copies of its sign**, so `⁻8i8 » 1i8` is `⁻4i8` and not a large positive number.
+Shifting an unsigned one brings in zeroes.  The type is what decides, and there is no second operator for the other reading.
+
+**A distance of the width of the type or more stops the program.**  There is no answer to give: the three architectures answer
+such a shift three different ways, and two of them take the distance modulo the width of the *register*, which is not the width of
+the type.  So the distance is compared with the width and the program stops where it is too far, which is the same thing happening
+everywhere.  A negative distance is caught by the same comparison.
+
+C leaves this undefined and is where a good deal of trouble with it comes from; Rust panics in a debug build and masks in a
+release one; Go and Zig define a shift by too much as zero.  Stopping is what this language does with every other operation that
+has no answer, and doing the same here is what makes the rule one rule.
+
+**A rotation turns the bits of the type**, not of the register the value happens to be held in -- `13u8 ↻ 1u8` is `134u8`, which
+is what turning eight bits round gives.  It is defined on **unsigned** types only: the bit that would come round into the top of a
+signed number is the one that says which sign it has, so the answer would be a number unrelated to the one that went in.  Where
+the bits are what is wanted, an unsigned type is what says so.  Rust rotates signed integers too, and is the example not followed.
+
 #### Saturating arithmetic
 
 Three operators compute a sum, a difference and a product that **answer with the nearest value the type can hold** rather than

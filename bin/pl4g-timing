@@ -91,7 +91,8 @@ GROUPS: tuple[Group, ...] = (
            "saturating-precedence": "a sum and a product that saturate",
            "arithmetic-operators": "a sum and a product that check and can fault",
            "call-nested": "four calls, two of them nested",
-           "arithmetic-division": "a division and a remainder, each checked twice"}),
+           "arithmetic-division": "a division and a remainder, each checked twice",
+           "shift-operators": "two shifts, each with its distance checked"}),
 )
 
 #: How many times each sample is compiled.  The best is kept.

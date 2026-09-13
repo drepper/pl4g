@@ -22,7 +22,8 @@ from ..branches import (UnsupportedBranch, folded_into_branch, labels_of,
 from ..faults import Messages, describe
 from ..narrow import normalize
 from ..saturate import (DIVISION, NAMES, SATURATING, TRAPPING, Unsupported,
-                        lower_division, lower_saturating, lower_trapping)
+                        SHIFTS, lower_division, lower_saturating,
+                        lower_shift, lower_trapping)
 from . import ops as a64ops
 from .startup import ABORT_SYMBOL
 from .opcodes import AARCH64_INSTRS
@@ -389,8 +390,12 @@ class A64Selector(InstructionSelector):
         if not signed:
             return (self._inst("mov", (MCReg(dst, bits=32),
                                        MCReg(src.reg, bits=32)), span),)
-        return (self._inst("sxtw", (MCReg(dst, bits=64),
-                                    MCReg(src.reg, bits=32)), span),)
+        mnemonic = {8: "sxtb", 16: "sxth", 32: "sxtw"}.get(bits)
+        if mnemonic is None:
+            raise UnsupportedOperation("".join((
+                "widening a value of ", str(bits), " bits")), span)
+        return (self._inst(mnemonic, (MCReg(dst, bits=64),
+                                      MCReg(src.reg, bits=32)), span),)
 
     def select_clamp(self, cond: Condition, dst: Reg, lhs: MCOperand, rhs: MCOperand,
                      bound: MCOperand, span: Span) -> Sequence[MCInst]:
@@ -447,6 +452,24 @@ class A64Selector(InstructionSelector):
                 self._inst(_SET[cond], (MCReg(dst, bits=32),), span))
 
     # -- the stack -------------------------------------------------------------
+
+    #: What each of the three shifts is called here.
+    _SHIFTS: Final[dict[str, str]] = {
+        ops.SHIFT_LEFT.name: "lslv", ops.SHIFT_RIGHT.name: "lsrv",
+        ops.SHIFT_RIGHT_SIGNED.name: "asrv",
+    }
+
+    def select_shift(self, op: Op, dst: Reg, value: MCOperand, amount: MCOperand,
+                     bits: int, span: Span) -> Sequence[MCInst]:
+        """Instructions that move the bits of *value* by *amount* into *dst*."""
+        held: list[MCInst] = []
+        held_value, before = self._in_register(value, bits, span)
+        held.extend(before)
+        counted, before = self._in_register(amount, bits, span)
+        held.extend(before)
+        held.append(self._inst(self._SHIFTS[op.name],
+                               (MCReg(dst, bits=bits), held_value, counted), span))
+        return tuple(held)
 
     def select_divide(self, dst: Reg, left: MCOperand, right: MCOperand,
                       signed: bool, remainder: bool, bits: int,
@@ -725,6 +748,25 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
                             operands.value(inst.operands[0], inst.span),
                             operands.value(inst.operands[1], inst.span),
                             destination, operands, max(32, _width_of(inst.ty)),
+                            inst.span)
+                    except Unsupported as unsupported:
+                        raise UnsupportedOperation(unsupported.what, span) \
+                            from unsupported
+                case BinaryInst() if inst.op in SHIFTS:
+                    destination = _new_value(
+                        inst.ty, registers,
+                        hint=(_result_register(inst.ty, cconv, registers)
+                              if inst is returned else None))
+                    held[id(inst)] = destination
+                    try:
+                        lower_shift(
+                            asm, inst.op, inst.ty,
+                            operands.value(inst.operands[0], inst.span),
+                            operands.value(inst.operands[1], inst.span),
+                            destination, operands, max(32, _width_of(inst.ty)),
+                            _Fault("".join((NAMES[inst.op],
+                                            " by more than the width of the type")),
+                                   inst.span),
                             inst.span)
                     except Unsupported as unsupported:
                         raise UnsupportedOperation(unsupported.what, span) \

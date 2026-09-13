@@ -1,0 +1,13 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4216 LANG_TYPE_ROTATE_IS_UNSIGNED
+
+※ Turning bits round says nothing about a number that has a sign: the bit that
+※ would come round into the top is the one that says which sign it has.
+let value: i8 = 13i8
+let one: i8 = 1i8
+
+@[startup]
+fn main() → u8:
+    @[ignore(5005)]
+    value ↺ one
+    0u8

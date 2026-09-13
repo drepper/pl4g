@@ -1,0 +1,16 @@
+※ pl4g-test: compile=ok run=native,qemu exit=26 diag=none
+
+※ '«' and '»' move the bits of a number the way the marks point.  What falls
+※ off the end is gone: that is what a shift is, and it is why this does not
+※ fault on bits lost the way an addition faults on a sum that does not fit.
+
+let thirteen: u8 = 13u8
+let one: u8 = 1u8
+
+@[visible]
+let halved: mut u8 = 0u8
+
+@[startup]
+fn main() → u8:
+    halved ← thirteen » one
+    thirteen « one

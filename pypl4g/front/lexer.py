@@ -16,7 +16,9 @@ from .token import (AND_GLYPH, ARROW_GLYPH, ASCII_SUBSTITUTES, ASSIGN_GLYPH,
                     COMMENT_GLYPH, GREATER_EQUAL_GLYPH, INTEGER_TYPE_NAMES,
                     KEYWORDS, LESS_EQUAL_GLYPH, NAND_GLYPH, NEGATIVE_GLYPH,
                     NOR_GLYPH, NOT_EQUAL_GLYPH, NOT_GLYPH, OR_GLYPH,
-                    DIVIDE_GLYPH, SAT_ADD_GLYPH, SAT_MUL_GLYPH,
+                    DIVIDE_GLYPH, ROTATE_LEFT_GLYPH, ROTATE_RIGHT_GLYPH,
+                    SAT_ADD_GLYPH, SAT_MUL_GLYPH, SHIFT_LEFT_GLYPH,
+                    SHIFT_RIGHT_GLYPH,
                     SAT_SUB_GLYPH, TIMES_GLYPH, TokKind, Token, XOR_GLYPH)
 
 _SIMPLE: Final[dict[str, TokKind]] = {
@@ -56,6 +58,10 @@ _SIMPLE: Final[dict[str, TokKind]] = {
     TIMES_GLYPH: TokKind.TIMES,
     DIVIDE_GLYPH: TokKind.DIVIDE,
     "%": TokKind.PERCENT,
+    SHIFT_LEFT_GLYPH: TokKind.SHIFT_LEFT,
+    SHIFT_RIGHT_GLYPH: TokKind.SHIFT_RIGHT,
+    ROTATE_LEFT_GLYPH: TokKind.ROTATE_LEFT,
+    ROTATE_RIGHT_GLYPH: TokKind.ROTATE_RIGHT,
 }
 
 _OPEN: Final[frozenset[TokKind]] = frozenset(

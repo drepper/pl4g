@@ -88,6 +88,14 @@ _BINARY_OPERATORS: Final[dict[TokKind, _Operator]] = {
     TokKind.TIMES: _Operator(ast.BinaryOp.MULTIPLY, 50),
     TokKind.DIVIDE: _Operator(ast.BinaryOp.DIVIDE, 50),
     TokKind.PERCENT: _Operator(ast.BinaryOp.REMAINDER, 50),
+    # Moving bits sideways binds where multiplying does, which is where Go puts
+    # it.  C binds it looser than *addition*, so that `a << 1 + b` shifts by
+    # `1 + b`, which is a defect of the same family as binding comparison
+    # tighter than the bitwise operators and is not inherited here either.
+    TokKind.SHIFT_LEFT: _Operator(ast.BinaryOp.SHIFT_LEFT, 50),
+    TokKind.SHIFT_RIGHT: _Operator(ast.BinaryOp.SHIFT_RIGHT, 50),
+    TokKind.ROTATE_LEFT: _Operator(ast.BinaryOp.ROTATE_LEFT, 50),
+    TokKind.ROTATE_RIGHT: _Operator(ast.BinaryOp.ROTATE_RIGHT, 50),
     TokKind.SAT_MUL: _Operator(ast.BinaryOp.SAT_MUL, 50),
 }
 

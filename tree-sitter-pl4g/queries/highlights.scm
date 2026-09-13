@@ -41,6 +41,7 @@
 ["=" "≠" "<" ">" "≤" "≥" "<=" ">="] @operator
 ["∧" "∨" "⊕" "⊼" "⊽" "¬"] @operator
 ["+" "-" "×" "÷" "%" "⊞" "⊟" "⊠"] @operator
+["«" "»" "↺" "↻"] @operator
 ["and" "or"] @keyword.operator
 ["←"] @operator
 ["→" "->"] @punctuation.delimiter

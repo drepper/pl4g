@@ -1742,6 +1742,71 @@
       "option": null
     },
     {
+      "number": 4214,
+      "name": "LANG_TYPE_ANSWER_DOES_NOT_FIT",
+      "severity": "error",
+      "message": "the answer to this is {value}, which does not fit '{type}'",
+      "args": [
+        {
+          "name": "value",
+          "type": "string",
+          "description": "the answer"
+        },
+        {
+          "name": "type",
+          "type": "string",
+          "description": "the type it had to fit"
+        }
+      ],
+      "cause": "The operation faults when it runs, and both sides are known here, so it faults every time the program runs.  A program that must stop whenever it is started is one that need not be built, and saying so while it is being compiled costs nothing and is found without running anything.  Where going past the end is what was meant, the saturating operators are what say so.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Arithmetic",
+        "requirement": "Where an overflow can be shown at compile time it is a compilation error rather than a fault."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4215,
+      "name": "LANG_TYPE_DIVISION_BY_ZERO",
+      "severity": "error",
+      "message": "this divides by zero",
+      "args": [],
+      "cause": "Dividing by zero has no answer, and the divisor is known here, so this faults every time the program runs.  Like any other fault that can be seen while the program is being compiled, it is reported then rather than left to happen.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Arithmetic",
+        "requirement": "Where a fault can be shown at compile time it is a compilation error rather than a fault."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4216,
+      "name": "LANG_TYPE_ROTATE_IS_UNSIGNED",
+      "severity": "error",
+      "message": "a rotation turns the bits of an unsigned number, not of '{found}'",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type of what was rotated"
+        }
+      ],
+      "cause": "Turning bits round says nothing about a number that has a sign: the bit that would come round into the top is the one that says which sign it has, so the answer is a number unrelated to the one that went in.  A type says what a value *is* here, and a signed type says the value is a number.  Where the bits are what is wanted, an unsigned type is what says so.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Moving bits",
+        "requirement": "A rotation is defined on unsigned integers."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 4401,
       "name": "LANG_FUNCDEF_SPECIAL_NO_STARTUP",
       "severity": "error",

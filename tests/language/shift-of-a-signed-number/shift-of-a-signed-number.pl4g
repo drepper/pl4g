@@ -1,0 +1,15 @@
+※ pl4g-test: compile=ok run=native,qemu exit=0 diag=none
+
+※ Shifting a signed number right brings in copies of its sign rather than
+※ zeroes, so ⁻8 » 1 is ⁻4 and not a large positive number.
+
+let minus_eight: i8 = ⁻8i8
+let one: i8 = 1i8
+
+@[visible]
+let halved: mut i8 = 0i8
+
+@[startup]
+fn main() → u8:
+    halved ← minus_eight » one
+    0u8
