@@ -25,7 +25,8 @@ from ..faults import Messages, describe
 from ..pool import Constants
 from ..narrow import normalize
 from ...ir.layout import DataLayout, tag_offset_of
-from ..callconv import TooManyArguments, argument_places
+from ...ir.types import parts_of
+from ..callconv import TooManyArguments, argument_places, result_places
 from ..saturate import (DIVISION, NAMES, SATURATING, TRAPPING, Unsupported,
                         SHIFTS, lower_division_result, lower_saturating,
                         lower_shift, lower_trapping)
@@ -687,8 +688,8 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
     from ...ir.module import GlobalVar
     from ...ir.types import (BOOL, BoolType, FloatType, IntType, MEM,
                              ResultType, VOID)
-    from ...ir.inst import (CastInst, CastKind, FailedInst, UnwrapInst,
-                            WrapInst)
+    from ...ir.inst import (CastInst, CastKind, ExtractInst, FailedInst,
+                            TupleInst, UnwrapInst, WrapInst)
     from ...ir.value import FloatConst, UndefConst
     from ...ir.layout import encode_float
     from ..globals import symbol_of
@@ -698,10 +699,11 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
     #: Where each value the function computes is held.  A value gets a register
     #: of its own and the allocator decides which; nothing here knows or cares.
     held: dict[int, VirtReg] = {}
-    #: The other half of a value whose type is a result: the truth value saying
-    #: whether there is an answer.  A result is two registers and never one, so
-    #: the allocator sees two ordinary values and nothing aggregate at all.
-    flags: dict[int, VirtReg] = {}
+    #: The registers of a value that takes more than one, after the first: the
+    #: truth value beside a result's answer, and every member of a tuple after
+    #: its first.  Such a value is that many ordinary registers and nothing
+    #: aggregate at all, which is what keeps the allocator out of it.
+    extra: dict[int, list[VirtReg]] = {}
     returned = _returned_value(func)
     symbol = symbol_name(func)
     labels = labels_of(symbol, func)
@@ -755,11 +757,18 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
 
         def flag_of(self, value: object, span: "Span | None") -> VirtReg:
             """The register holding whether a result has an answer."""
-            found = flags.get(id(value))
-            if found is None:
+            return self.part_of(value, 1, span)
+
+        def part_of(self, value: object, index: int,
+                    span: "Span | None") -> VirtReg:
+            """The register holding one of a value's several parts."""
+            if index == 0:
+                return self.register_of(value, span)
+            found = extra.get(id(value))
+            if found is None or index > len(found):
                 raise UnsupportedOperation(
-                    "a result this backend did not compute", span)
-            return found
+                    "a value of several parts this backend did not compute", span)
+            return found[index - 1]
 
         def undefined(self, value: object, ty: "Type", span: Span) -> MCOperand:
             """The operand for *value*, where it may be one nothing may read.
@@ -864,22 +873,19 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
                         "a block parameter whose type is a result", None)
                 held[id(param)] = _new_value(param.ty, registers)
                 continue
-            first, second = arriving[position]
-            answer = param.ty.ok if isinstance(param.ty, ResultType) else param.ty
-            held[id(param)] = _new_value(
-                answer, registers, hint=_as_argument(first, answer, registers))
-            if second is not None:
-                flags[id(param)] = _new_value(
-                    BOOL, registers, hint=_as_argument(second, BOOL, registers))
+            pieces = parts_of(param.ty)
+            given = [_new_value(part, registers,
+                                hint=_as_argument(place, part, registers))
+                     for part, place in zip(pieces, arriving[position])]
+            held[id(param)] = given[0]
+            if len(given) > 1:
+                extra[id(param)] = given[1:]
     if entry is not None:
         for position, param in enumerate(entry.params):
-            first, second = arriving[position]
-            answer = param.ty.ok if isinstance(param.ty, ResultType) else param.ty
-            asm.loadreg(held[id(param)],
-                        MCReg(_as_argument(first, answer, registers)), func.span)
-            if second is not None:
-                asm.loadreg(flags[id(param)],
-                            MCReg(_as_argument(second, BOOL, registers)), func.span)
+            pieces = parts_of(param.ty)
+            for at, (part, place) in enumerate(zip(pieces, arriving[position])):
+                asm.loadreg(operands.part_of(param, at, None),
+                            MCReg(_as_argument(place, part, registers)), func.span)
 
     for index, block in enumerate(func.blocks):
         if index > 0:
@@ -907,7 +913,7 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
                         hint=(_result_register(BOOL, cconv, registers, 1)
                               if inst is returned else None))
                     held[id(inst)] = destination
-                    flags[id(inst)] = failed
+                    extra[id(inst)] = [failed]
                     # Two reads of one place: the answer where an answer goes,
                     # and the truth value where the layout puts it.
                     place = asm.streamer.symbol(symbol_of(address))
@@ -991,15 +997,21 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
                 case RetInst():
                     value = inst.operands[0]
                     ty = value.ty
-                    if isinstance(ty, ResultType):
-                        # Two registers, which is what every one of these
-                        # architectures returns a two-word answer in.
-                        asm.loadreg(_result_register(ty.ok, cconv, registers),
-                                    MCReg(operands.register_of(value, span)),
-                                    inst.span)
-                        asm.loadreg(_result_register(BOOL, cconv, registers, 1),
-                                    MCReg(operands.flag_of(value, span)),
-                                    inst.span)
+                    pieces = parts_of(ty)
+                    if len(pieces) > 1:
+                        # One register per part, which is what every one of
+                        # these architectures answers with for a two-word value.
+                        try:
+                            places = result_places(cconv, ty)
+                        except TooManyArguments as many:
+                            raise UnsupportedOperation("".join((
+                                "answering with '", ty.render(),
+                                "', which wants more registers than the "
+                                "convention answers in")), span) from many
+                        for at, (part, place) in enumerate(zip(pieces, places)):
+                            asm.loadreg(_as_argument(place, part, registers),
+                                        MCReg(operands.part_of(value, at, span)),
+                                        inst.span)
                         asm.ret(inst.span)
                         continue
                     if isinstance(ty, FloatType):
@@ -1047,7 +1059,7 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
                             BOOL, registers,
                             hint=(_result_register(BOOL, cconv, registers, 1)
                                   if inst is returned else None))
-                        flags[id(inst)] = failed
+                        extra[id(inst)] = [failed]
                         asm.float_compare(
                             Condition.EQ, failed, divisor,
                             MCReg(operands.floating(FloatConst(answer, 0.0),
@@ -1138,7 +1150,7 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
                         hint=(_result_register(BOOL, cconv, registers, 1)
                               if inst is returned else None))
                     held[id(inst)] = destination
-                    flags[id(inst)] = failed
+                    extra[id(inst)] = [failed]
                     try:
                         lower_division_result(
                             asm, inst.op, answer,
@@ -1163,6 +1175,21 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
                            operands.value(inst.operands[0], inst.span),
                            operands.value(inst.operands[1], inst.span),
                            span=inst.span)
+                case TupleInst():
+                    # Several values made into one that travels together, which
+                    # here is several registers with nothing between them.
+                    pieces = parts_of(inst.ty)
+                    taken = [_new_value(part, registers) for part in pieces]
+                    held[id(inst)] = taken[0]
+                    extra[id(inst)] = taken[1:]
+                    for into, value in zip(taken, inst.operands):
+                        asm.loadreg(into, operands.value(value, inst.span),
+                                    inst.span)
+                case ExtractInst():
+                    # Nothing to emit: the value asked for is already in a
+                    # register of its own, and this says to go on using it.
+                    held[id(inst)] = operands.part_of(inst.operands[0],
+                                                      inst.index, span)
                 case WrapInst():
                     # One value made of two, which here is two registers with
                     # nothing between them: the answer goes where an answer
@@ -1178,7 +1205,7 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
                         hint=(_result_register(BOOL, cconv, registers, 1)
                               if inst is returned else None))
                     held[id(inst)] = destination
-                    flags[id(inst)] = failed
+                    extra[id(inst)] = [failed]
                     asm.loadreg(destination,
                                 operands.undefined(inst.operands[0], answer,
                                                    inst.span),
@@ -1278,38 +1305,37 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
                     # place -- which is only true while every argument is a
                     # value the function already holds.
                     for position, argument in enumerate(inst.operands):
-                        first, second = going[position]
-                        if isinstance(argument.ty, ResultType):
-                            asm.loadreg(
-                                _as_argument(first, argument.ty.ok, registers),
-                                MCReg(operands.register_of(argument, span)),
-                                inst.span)
-                            assert second is not None
-                            asm.loadreg(
-                                _as_argument(second, BOOL, registers),
-                                MCReg(operands.flag_of(argument, span)), inst.span)
+                        pieces = parts_of(argument.ty)
+                        if len(pieces) > 1:
+                            for at, (part, place) in enumerate(
+                                    zip(pieces, going[position])):
+                                asm.loadreg(
+                                    _as_argument(place, part, registers),
+                                    MCReg(operands.part_of(argument, at, span)),
+                                    inst.span)
                             continue
                         asm.loadreg(
-                            _as_argument(first, argument.ty, registers),
+                            _as_argument(going[position][0], argument.ty, registers),
                             operands.value(argument, inst.span), inst.span)
                     asm.call(symbol_name(callee), inst.span)
-                    if isinstance(inst.ty, ResultType):
-                        destination = _new_value(
-                            inst.ty.ok, registers,
-                            hint=(_result_register(inst.ty.ok, cconv, registers)
-                                  if inst is returned else None))
-                        failed = _new_value(
-                            BOOL, registers,
-                            hint=(_result_register(BOOL, cconv, registers, 1)
-                                  if inst is returned else None))
-                        held[id(inst)] = destination
-                        flags[id(inst)] = failed
-                        asm.loadreg(destination,
-                                    MCReg(_result_register(inst.ty.ok, cconv,
-                                                           registers)), inst.span)
-                        asm.loadreg(failed,
-                                    MCReg(_result_register(BOOL, cconv, registers,
-                                                           1)), inst.span)
+                    if len(parts_of(inst.ty)) > 1:
+                        pieces = parts_of(inst.ty)
+                        try:
+                            places = result_places(cconv, inst.ty)
+                        except TooManyArguments as many:
+                            raise UnsupportedOperation("".join((
+                                "a call answering with '", inst.ty.render(),
+                                "', which wants more registers than the "
+                                "convention answers in")), span) from many
+                        taken = []
+                        for part, place in zip(pieces, places):
+                            into = _new_value(part, registers)
+                            asm.loadreg(into,
+                                        MCReg(_as_argument(place, part, registers)),
+                                        inst.span)
+                            taken.append(into)
+                        held[id(inst)] = taken[0]
+                        extra[id(inst)] = taken[1:]
                     elif inst.ty is not VOID:
                         destination = _new_value(
                             inst.ty, registers,

@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from typing import Final
 
 from .types import (BoolType, DictType, EnumType, FloatType, IntType, MemType,
-                    ProductType, PtrType, SetType,
+                    ProductType, PtrType, SetType, TupleType,
                     ResultType, SumType, Type, VoidType)
 
 
@@ -41,6 +41,13 @@ def size_of(ty: Type, layout: DataLayout) -> int:
             return 1
         case EnumType():
             return size_of(ty.holder, layout)
+        case TupleType():
+            # Laid out as a product of the same members would be.
+            total = 0
+            for member in ty.members:
+                total = _align_up(total, align_of(member, layout))
+                total += size_of(member, layout)
+            return _align_up(total, align_of(ty, layout))
         case SetType() | DictType():
             # A handle: where the table is, and how many entries are in it.
             # The table itself is elsewhere and is not part of the value, which
@@ -85,6 +92,8 @@ def align_of(ty: Type, layout: DataLayout) -> int:
             return 1
         case EnumType():
             return align_of(ty.holder, layout)
+        case TupleType():
+            return max((align_of(m, layout) for m in ty.members), default=1)
         case SetType() | DictType():
             return layout.pointer_size
         case PtrType():

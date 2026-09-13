@@ -11,11 +11,12 @@ from typing import Iterable
 from ..diag.engine import InternalError
 from .function import BasicBlock, Function, SpecialKind
 from .mangle import symbol_name
-from .inst import (BinaryInst, BlockTarget, CmpInst, FailedInst, Instruction,
+from .inst import (BinaryInst, BlockTarget, CmpInst, ExtractInst, FailedInst,
+                   Instruction, TupleInst,
                    LoadInst, RetInst, StoreInst, Terminator, UnaryInst,
                    UnwrapInst, WrapInst)
 from .module import GlobalVar, Module
-from .types import BOOL, IntType, MEM, PtrType, ResultType, VOID
+from .types import BOOL, IntType, MEM, PtrType, ResultType, TupleType, VOID
 from .value import Const, IntConst, Value
 
 
@@ -161,6 +162,31 @@ class Verifier:
                 if answered != inst.operands[0].ty:
                     self._fail(where, "".join(("'", inst.opcode,
                                                "' result type differs from its operands")))
+            case TupleInst():
+                if not isinstance(inst.ty, TupleType):
+                    self._fail(where, "making something that is not a tuple")
+                elif len(inst.operands) != len(inst.ty.members):
+                    self._fail(where, "".join((
+                        "making a ", inst.ty.render(), " out of ",
+                        str(len(inst.operands)), " values")))
+                else:
+                    for index, (value, member) in enumerate(
+                            zip(inst.operands, inst.ty.members)):
+                        if value.ty != member:
+                            self._fail(where, "".join((
+                                "the value at ", str(index), " of a ",
+                                inst.ty.render(), " is ", value.ty.render())))
+            case ExtractInst():
+                inner = inst.operands[0].ty
+                if not isinstance(inner, TupleType):
+                    self._fail(where, "taking a value out of something that is "
+                                      "not a tuple")
+                elif not 0 <= inst.index < len(inner.members):
+                    self._fail(where, "".join((
+                        inner.render(), " has no value at ", str(inst.index))))
+                elif inst.ty != inner.members[inst.index]:
+                    self._fail(where, "".join((
+                        "taking ", inst.ty.render(), " out of ", inner.render())))
             case WrapInst():
                 if not isinstance(inst.ty, ResultType):
                     self._fail(where, "making something that is not a result")

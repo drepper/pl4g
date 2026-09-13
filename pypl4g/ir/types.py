@@ -6,7 +6,7 @@ is a property computed late and held beside the type, never inside it.
 """
 
 from dataclasses import dataclass
-from typing import Final
+from typing import Final, Sequence
 
 
 @dataclass(frozen=True, slots=True)
@@ -226,6 +226,29 @@ class ResultType(Type):
 
 
 @dataclass(frozen=True, slots=True)
+class TupleType(Type):
+    """Several values travelling as one, reached by position rather than by name.
+
+    A product with no names, which is what makes it the right thing for a
+    function that answers with two of something: naming the parts of an answer
+    that is taken apart on the spot would be naming something that does not
+    outlive the line it is written on.
+    """
+
+    members: tuple[Type, ...]
+
+    def render(self) -> str:
+        """The name of this type in the textual form of the IR."""
+        return "".join(("\N{LEFT ANGLE BRACKET}",
+                        ", ".join(m.render() for m in self.members),
+                        "\N{RIGHT ANGLE BRACKET}"))
+
+    def mangled(self) -> str:
+        """The normalized name of this type, for use inside a symbol name."""
+        return "".join(("tuple<", ",".join(m.mangled() for m in self.members), ">"))
+
+
+@dataclass(frozen=True, slots=True)
 class SetType(Type):
     """A set: the keys it holds, and nothing said about them beyond membership."""
 
@@ -357,6 +380,7 @@ class TypeContext:
 
     def __init__(self) -> None:
         self._results: dict[tuple[Type, Type | None], ResultType] = {}
+        self._tuples: dict[tuple[Type, ...], TupleType] = {}
         self._sets: dict[Type, SetType] = {}
         self._dicts: dict[tuple[Type, Type], DictType] = {}
         self._pointers: dict[tuple[Type, bool], PtrType] = {}
@@ -376,6 +400,15 @@ class TypeContext:
             if count <= limit:
                 return self.int_type(bits, False)
         return self.int_type(64, False)
+
+    def tuple_type(self, members: "Sequence[Type]") -> TupleType:
+        """Return the tuple type over *members*."""
+        key = tuple(members)
+        found = self._tuples.get(key)
+        if found is None:
+            found = TupleType(key)
+            self._tuples[key] = found
+        return found
 
     def set_type(self, element: Type) -> SetType:
         """Return the set type over *element*."""
@@ -432,3 +465,18 @@ class TypeContext:
     def builtin(self, name: str) -> Type | None:
         """Return the built-in type named *name*, if there is one."""
         return BUILTIN_TYPES.get(name)
+
+
+def parts_of(ty: Type) -> tuple[Type, ...]:
+    """What a value of *ty* is, where it is more than one value travelling as one.
+
+    A result is its answer and the truth value beside it; a tuple is its
+    members; anything else is itself.  Everything that has to say where such a
+    value goes -- a register, an argument, an answer -- asks this rather than
+    knowing the shapes, so a shape added later is added here.
+    """
+    if isinstance(ty, ResultType):
+        return (ty.ok, BOOL)
+    if isinstance(ty, TupleType):
+        return ty.members
+    return (ty,)

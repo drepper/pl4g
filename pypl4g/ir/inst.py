@@ -216,6 +216,37 @@ class WrapInst(Instruction):
         return "wrap"
 
 
+class TupleInst(Instruction):
+    """Several values made into one that travels together."""
+
+    __slots__ = ()
+
+    def __init__(self, values: Sequence[Value], ty: Type,
+                 span: Span = INVALID_SPAN) -> None:
+        super().__init__(ty, tuple(values), span)
+
+    @property
+    def opcode(self) -> str:
+        """The mnemonic used in the textual form."""
+        return "tuple"
+
+
+class ExtractInst(Instruction):
+    """One of the values a tuple is made of, named by its position."""
+
+    __slots__ = ("index",)
+
+    def __init__(self, value: Value, index: int, ty: Type,
+                 span: Span = INVALID_SPAN) -> None:
+        super().__init__(ty, (value,), span)
+        self.index = index
+
+    @property
+    def opcode(self) -> str:
+        """The mnemonic used in the textual form."""
+        return "".join(("extract.", str(self.index)))
+
+
 class UnwrapInst(Instruction):
     """The answer half of a result, which means nothing where there is none."""
 

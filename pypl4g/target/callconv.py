@@ -10,7 +10,7 @@ for one function has somewhere to put the result.
 from dataclasses import dataclass, field
 from typing import Sequence
 
-from ..ir.types import FloatType, ResultType, Type
+from ..ir.types import FloatType, Type, parts_of
 from ..mc.reg import PhysReg, RegUnit
 
 
@@ -62,37 +62,40 @@ class TooManyArguments(Exception):
 
 
 def argument_places(cconv: CallConvDesc,
-                    types: Sequence[Type]) -> list[tuple[PhysReg, PhysReg | None]]:
-    """Which register each argument is passed in, in order.
+                    types: Sequence[Type]) -> list[list[PhysReg]]:
+    """Which registers each argument is passed in, in order.
 
     A register is taken from the list its *kind* comes out of, so a
     floating-point argument does not use up an integer register and the other
     way round -- which is what every one of these conventions says and what
     counting by position alone would get wrong the moment the two are mixed.
 
-    A result takes two: one for the answer, of whichever kind the answer wants,
-    and one ordinary register for the truth value beside it.  That is what the
-    ABIs already do with a two-word aggregate.
+    A value of several parts takes one register per part: a result its answer
+    and the truth value beside it, a tuple its members.  That is what the ABIs
+    already do with a two-word aggregate.
     """
-    found: list[tuple[PhysReg, PhysReg | None]] = []
-    integers = 0
-    floats = 0
+    return _places(cconv.int_arg_regs, cconv.float_arg_regs, types)
 
-    def _integer() -> PhysReg:
-        nonlocal integers
-        if integers >= len(cconv.int_arg_regs):
+
+def result_places(cconv: CallConvDesc, ty: Type) -> list[PhysReg]:
+    """Which registers a value of *ty* is answered with, one per part."""
+    return _places(cconv.int_ret_regs, cconv.float_ret_regs, (ty,))[0]
+
+
+def _places(integers: "Sequence[PhysReg]", floats: "Sequence[PhysReg]",
+            types: Sequence[Type]) -> list[list[PhysReg]]:
+    """The registers each of *types* occupies, counted per kind."""
+    found: list[list[PhysReg]] = []
+    used = {True: 0, False: 0}
+
+    def _take(part: Type) -> PhysReg:
+        floating = isinstance(part, FloatType)
+        bank = floats if floating else integers
+        if used[floating] >= len(bank):
             raise TooManyArguments()
-        integers += 1
-        return cconv.int_arg_regs[integers - 1]
+        used[floating] += 1
+        return bank[used[floating] - 1]
 
     for ty in types:
-        answer = ty.ok if isinstance(ty, ResultType) else ty
-        if isinstance(answer, FloatType):
-            if floats >= len(cconv.float_arg_regs):
-                raise TooManyArguments()
-            first = cconv.float_arg_regs[floats]
-            floats += 1
-        else:
-            first = _integer()
-        found.append((first, _integer() if isinstance(ty, ResultType) else None))
+        found.append([_take(part) for part in parts_of(ty)])
     return found

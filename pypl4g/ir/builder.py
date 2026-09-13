@@ -11,7 +11,8 @@ from typing import Sequence
 
 from .inst import (CallInst, BinaryInst, BinOp, BlockTarget, BrInst, CastInst, CastKind,
                    CmpInst, CmpPred, CondBrInst, Instruction, LoadInst, MemStartInst,
-                   FailedInst, RetInst, StoreInst, Terminator, UnaryInst, UnOp,
+                   ExtractInst, FailedInst, RetInst, StoreInst, Terminator,
+                   TupleInst, UnaryInst, UnOp,
                    UnreachableInst, UnwrapInst, WrapInst)
 from .module import Module
 from .types import FloatType, BOOL, IntType, PtrType, Type
@@ -86,6 +87,16 @@ class IRBuilder:
              span: Span = INVALID_SPAN) -> Value:
         """Append the making of a result out of an answer and a truth value."""
         return self._append(WrapInst(value, failed, result_ty, span))
+
+    def make_tuple(self, values: Sequence[Value], ty: Type,
+                   span: Span = INVALID_SPAN) -> Value:
+        """Append the making of a tuple out of several values."""
+        return self._append(TupleInst(values, ty, span))
+
+    def extract(self, value: Value, index: int, ty: Type,
+                span: Span = INVALID_SPAN) -> Value:
+        """Append the taking of one value out of a tuple."""
+        return self._append(ExtractInst(value, index, ty, span))
 
     def unwrap(self, value: Value, ok_ty: Type, span: Span = INVALID_SPAN) -> Value:
         """Append the reading of a result's answer."""
