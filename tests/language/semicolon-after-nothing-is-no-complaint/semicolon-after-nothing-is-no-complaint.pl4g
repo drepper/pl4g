@@ -1,0 +1,14 @@
+※ pl4g-test: compile=ok run=native,qemu exit=7 diag=none
+
+※ The same semicolon after the last statement of a function that answers with
+※ nothing asks for nothing, so there is nothing to complain about.
+
+let counter: mut u8 = 0u8
+
+@[constructor]
+fn prepare():
+    counter ← 7u8;
+
+@[startup]
+fn main() → u8:
+    counter

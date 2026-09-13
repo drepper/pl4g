@@ -1,0 +1,15 @@
+※ pl4g-test: compile=ok run=native,qemu exit=7 diag=none
+
+※ A function whose header has no arrow answers with nothing.  There is no name
+※ to write for that: writing one out would be a second way of saying what the
+※ absence already says.
+
+let counter: mut u8 = 0u8
+
+@[constructor]
+fn prepare():
+    counter ← 7u8
+
+@[startup]
+fn main() → u8:
+    counter

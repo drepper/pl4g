@@ -364,9 +364,14 @@ class Parser:
         self._expect(TokKind.LPAREN)
         params = self._parse_params()
         self._expect(TokKind.RPAREN)
-        self._expect(TokKind.ARROW, D.LANG_FUNCDEF_EXPECTED_ARROW)
-        ret_token = self._expect(TokKind.IDENT)
-        ret_type = ast.TypeRef(span=ret_token.span, name=ret_token.text)
+        # The arrow and what follows it say what the function answers with.
+        # Leaving them off is how a function says it answers with nothing;
+        # there is no name to write for that, which is what keeps the two from
+        # being two ways of saying one thing.
+        ret_type: ast.TypeRef | None = None
+        if self._accept(TokKind.ARROW) is not None:
+            ret_token = self._expect(TokKind.IDENT)
+            ret_type = ast.TypeRef(span=ret_token.span, name=ret_token.text)
         body = self._parse_body()
         return ast.FuncDef(span=start.to(body.span), name=name_token.text,
                            name_span=name_token.span, params=params, ret_type=ret_type,
@@ -403,8 +408,41 @@ class Parser:
         self._diags.emit(D.LANG_FUNCDEF_EXPECTED_BLOCK, self._current.span)
         raise _Bail()
 
+    #: What ends a run of statements, whichever notation the block is in.  A
+    #: semicolon separates two statements and never ends the last, so what
+    #: follows one is always a statement -- and where one of these follows it
+    #: instead, the statement between them is the empty one.
+    _ENDS_A_RUN: Final[tuple[TokKind, ...]] = (
+        TokKind.NEWLINE, TokKind.DEDENT, TokKind.RBRACE, TokKind.EOF)
+
+    def _parse_separated(self) -> list[ast.Stmt]:
+        """Parse the statements a run of semicolons separates.
+
+        A semicolon is a *separator* and not a terminator: `a;` is two
+        statements, the second of which is empty.  That is what makes a body
+        ending in a semicolon produce no value, which is a thing worth being
+        able to write and worth not writing by accident.
+        """
+        found: list[ast.Stmt] = [self._parse_statement()]
+        while self._check(TokKind.SEMICOLON):
+            semicolon = self._advance().span
+            if self._check(TokKind.SEMICOLON) or self._check_any(self._ENDS_A_RUN):
+                found.append(ast.EmptyStmt(span=semicolon))
+                continue
+            found.append(self._parse_statement())
+        return found
+
+    def _check_any(self, kinds: Sequence[TokKind]) -> bool:
+        """Whether the next token is one of *kinds*."""
+        return any(self._check(kind) for kind in kinds)
+
     def _parse_layout_block(self) -> ast.Block:
-        """Parse ``: NEWLINE INDENT statements DEDENT``."""
+        """Parse ``: NEWLINE INDENT statements DEDENT``.
+
+        Statements are separated by the ends of lines and, within a line, by
+        semicolons.  Both notations take both separators, so that what a
+        statement is does not depend on which notation it is written in.
+        """
         start = self._expect(TokKind.COLON).span
         self._expect(TokKind.NEWLINE)
         self._expect(TokKind.INDENT)
@@ -413,7 +451,7 @@ class Parser:
             self._skip_newlines()
             if self._check(TokKind.DEDENT) or self._check(TokKind.EOF):
                 break
-            stmts.append(self._parse_statement())
+            stmts.extend(self._parse_separated())
             if not self._check(TokKind.DEDENT) and not self._check(TokKind.EOF):
                 self._expect(TokKind.NEWLINE)
         end = self._current.span
@@ -421,19 +459,19 @@ class Parser:
         return ast.Block(span=start.to(end), style=ast.BlockStyle.LAYOUT, stmts=tuple(stmts))
 
     def _parse_explicit_block(self) -> ast.Block:
-        """Parse ``{ statement ; ... }``."""
+        """Parse ``{ statement ; ... }``.
+
+        There are no ends of lines inside braces -- the lexer gives none out
+        there -- so a semicolon is the only separator, and two statements with
+        nothing between them is the layout notation written inside braces.
+        """
         start = self._expect(TokKind.LBRACE).span
         stmts: list[ast.Stmt] = []
-        while not self._check(TokKind.RBRACE) and not self._check(TokKind.EOF):
-            stmts.append(self._parse_statement())
-            if self._accept(TokKind.SEMICOLON) is not None:
-                continue
-            if self._check(TokKind.RBRACE) or self._check(TokKind.EOF):
-                break
-            # Two statements in a row without a separator means the block was
-            # written in the layout notation inside explicit braces.
-            self._diags.emit(D.LANG_SYNTAX_MIXED_BLOCK_STYLE, self._current.span)
-            raise _Bail()
+        if not self._check(TokKind.RBRACE) and not self._check(TokKind.EOF):
+            stmts.extend(self._parse_separated())
+            if not self._check(TokKind.RBRACE) and not self._check(TokKind.EOF):
+                self._diags.emit(D.LANG_SYNTAX_MIXED_BLOCK_STYLE, self._current.span)
+                raise _Bail()
         end = self._current.span
         self._accept(TokKind.RBRACE)
         return ast.Block(span=start.to(end), style=ast.BlockStyle.EXPLICIT, stmts=tuple(stmts))

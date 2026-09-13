@@ -83,6 +83,16 @@ The language has both an layout-based syntax and a explicitly specified syntax. 
 similar to Python.  Explicit syntax uses `{` and `}` enclosed blocks of statements which are individually separated by semicolons.
 Indentation and explicit syntax cannot be mixed for individual blocks but properly nested blocks can have different syntaxes.
 
+**A semicolon separates two statements in either notation.**  The layout notation does not need one -- the end of a line separates
+too -- but it takes one, so that two short statements may stand on one line and so that what a statement is does not depend on
+which notation it is written in.  Inside braces there are no ends of lines to separate with, so the semicolon is the only
+separator there.
+
+**A semicolon separates and never terminates**, which is the whole of the rule and decides everything else about it.  What follows
+a semicolon is another statement; where nothing is written there, that statement is the empty one.  So `a;` is two statements and
+not one, `a;;` is three, and a body ending in a semicolon ends in a statement that does nothing.  That matters because the last
+statement of a body is the body's result, which the next section is about.
+
 Strings are written as in C/C++ and many other languages enclosed in `"` and supporting an escape notation like modern C and C++ for
 special characters as well as the Unicode notation.
 
@@ -746,6 +756,7 @@ Functions are defined at the top level of a file with the syntax:
 
 ```
 fn NAME(ARG1: TYPE1, [ARGN: TYPEN]) → RETVALTYPE BLOCK
+fn NAME(ARG1: TYPE1, [ARGN: TYPEN]) BLOCK
 ```
 
 where `NAME` is a valid identifier naming the function, `ARG?` are parameter names, `TYPE?` are type descriptions for the parameter,
@@ -753,9 +764,31 @@ where `NAME` is a valid identifier naming the function, `ARG?` are parameter nam
 the function header is followed by a colon, a newline, and then the properly indented code.  When the function header is followed by
 a `{` it uses the explicit syntax and continues until the respective closing `}`.
 
+**A header with no arrow says the function answers with nothing.**  There is no name to write for that and writing one is refused:
+`fn prepare():` is how it is said, and `fn prepare() → void:` is not a second way of saying it.  `void` is not a type any value can
+have, so naming it where a type belongs says less than leaving the place empty.
+
+What follows from a function answering with nothing is three things, and all three are the ordinary rules applied rather than
+rules of their own:
+
+- **A `return` in it carries nothing.**  `return 1u8` is refused: there is nothing for the value to become.
+- **An expression as its last statement is a value that goes nowhere.**  The last statement of a body is the body's *result*, and
+  a body with no result has nowhere to put one, so a bare expression there is refused exactly as one in the middle of a body is.
+  What belongs at the end of such a body is a statement that does something -- an assignment.
+- **A semicolon at the end asks for nothing.**  The empty statement it leaves behind produces no value, and no value is what was
+  wanted.
+
+The same semicolon in a function that *does* answer with something is the other way round: the body then ends in a statement that
+produces nothing, and the function has not answered.  That is an error, and it is the one thing the rule about semicolons is worth
+having a rule for -- `7u8;` and `7u8` are different programs, and the difference is visible.
+
 Function return values are specified with the `return` keyword.  The function immediately returns and the remaining statements in the
 block are ignored (the compiler must issue a warning in this case).  If the `return` statement is the last statement in the function
 then the `return` keywords can and should be skipped (a warning is issued in this case).
+
+Rust draws the same distinction with the same mark, and for the same reason: a block's value is its last expression, and a
+semicolon after it turns the block into one that has none.  C, C++, Go and Java have no such distinction to draw, a semicolon
+there terminating a statement rather than separating two.
 
 
 ##### Special Functions

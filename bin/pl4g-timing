@@ -60,6 +60,7 @@ GROUPS: tuple[Group, ...] = (
           "These move when the driver, the lexer or the parser does, and they "
           "are the floor everything else is measured against.",
           {"exit0": "the smallest conforming program",
+           "semicolon-separates-statements": "two statements on one line",
            "digit-separators": "literals in every base",
            "boolean-values": "truth values in both sections"}),
     Group("Variables and memory",

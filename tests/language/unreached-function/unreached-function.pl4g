@@ -9,7 +9,7 @@ let g: mut u8 = 0u8
 
 ※ Reached, because the entry point calls the constructors itself.
 @[constructor]
-fn prepare() → void:
+fn prepare():
     g ← 7u8
 
 ※ Not reached from anywhere, and not exported.

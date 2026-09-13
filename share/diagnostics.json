@@ -651,21 +651,6 @@
       "option": null
     },
     {
-      "number": 3002,
-      "name": "LANG_FUNCDEF_EXPECTED_ARROW",
-      "severity": "error",
-      "message": "expected '→' before the return type",
-      "cause": "A function header names its return type after a rightwards arrow.  The arrow may also be written as the two-character sequence '->'; a single character is never a substitute for a glyph.",
-      "spec": {
-        "document": "spec/spec.md",
-        "section": "The Language / File Structure / Function Definition",
-        "requirement": "fn NAME(ARG1: TYPE1, [ARGN: TYPEN]) → RETVALTYPE BLOCK"
-      },
-      "since": "0.1",
-      "default_enabled": true,
-      "option": null
-    },
-    {
       "number": 3003,
       "name": "LANG_FUNCDEF_EXPECTED_BLOCK",
       "severity": "error",
@@ -1622,6 +1607,22 @@
         "document": "spec/spec.md",
         "section": "The Language / Expressions / Logical operators",
         "requirement": "The logical operators work on truth values only."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4209,
+      "name": "LANG_TYPE_NOTHING_IS_NOT_WRITTEN",
+      "severity": "error",
+      "message": "a function that answers with nothing is written without the arrow",
+      "args": [],
+      "cause": "There is one way to say that a function answers with nothing, and it is to say nothing: `fn prepare():` rather than `fn prepare() → void:`.  Writing it out would be a second spelling of the same thing, which the language admits nowhere -- and `void` is not a type a value can have, so naming it as one says less than leaving it out.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition",
+        "requirement": "A function that answers with nothing is written without the arrow and without a type after it."
       },
       "since": "0.1",
       "default_enabled": true,

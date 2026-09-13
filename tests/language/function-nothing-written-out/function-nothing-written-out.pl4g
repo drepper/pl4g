@@ -1,0 +1,11 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4209 LANG_TYPE_NOTHING_IS_NOT_WRITTEN
+
+※ One way to say it, and it is to say nothing.
+@[constructor]
+fn prepare() → void:
+    0u8
+
+@[startup]
+fn main() → u8:
+    0u8

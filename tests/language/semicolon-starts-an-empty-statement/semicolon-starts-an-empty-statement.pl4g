@@ -1,0 +1,10 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 5003 LANG_FUNCDEF_RETURN_MISSING
+
+※ A semicolon separates and never terminates, so a body ending in one ends in
+※ a statement that is empty -- and an empty statement produces no value, so a
+※ function declared to answer with one has not answered.
+@[startup]
+fn main() → u8:
+    @[ignore(5005)]
+    7u8;

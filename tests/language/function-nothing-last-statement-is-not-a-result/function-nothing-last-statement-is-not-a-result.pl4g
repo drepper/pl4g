@@ -1,0 +1,16 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 5005 LANG_STMT_VALUE_DISCARDED
+
+※ The last statement of a body is the body's result -- but a body that answers
+※ with nothing has no result, so an expression there computes a value that goes
+※ nowhere, like an expression anywhere else.  An assignment is a statement that
+※ does something, and is what belongs at the end of one of these.
+let counter: u8 = 3u8
+
+@[constructor]
+fn prepare():
+    counter
+
+@[startup]
+fn main() → u8:
+    counter

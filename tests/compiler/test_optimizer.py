@@ -272,7 +272,7 @@ def test_a_declaration_nothing_calls_goes_too() -> None:
 UNREACHED = """let g: mut u8 = 0u8
 
 @[constructor]
-fn prepare() \N{RIGHTWARDS ARROW} void:
+fn prepare():
     g \N{LEFTWARDS ARROW} 7u8
 
 fn unreached() \N{RIGHTWARDS ARROW} u8:

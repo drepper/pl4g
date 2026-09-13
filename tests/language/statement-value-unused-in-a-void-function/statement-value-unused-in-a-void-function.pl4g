@@ -7,7 +7,7 @@
 let count: u8 = 7u8
 
 @[constructor]
-fn prepare() → void:
+fn prepare():
     count
 
 @[startup]

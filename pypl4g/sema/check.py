@@ -646,7 +646,7 @@ class Checker:
         expectation = self._begin_expecting(pairs)
         try:
             params = tuple(self._resolve_type(p.type) for p in node.params)
-            ret = self._resolve_type(node.ret_type)
+            ret = self._return_type(node.ret_type)
             func_attrs, linkage = self._function_attrs(attrs)
             func = Function(name=node.name,
                             ty=self._module.types.func_type(params, ret),
@@ -991,7 +991,13 @@ class Checker:
         """Lower one statement."""
         match stmt:
             case ast.ReturnStmt():
-                if stmt.explicit and is_last:
+                # Only where the statement is one the function could have
+                # wanted.  A value returned from a function that answers with
+                # nothing has something else wrong with it, and saying the
+                # keyword could have been left off would be advice that makes
+                # it worse.
+                agrees = (stmt.value is None) == (func.ty.ret is VOID)
+                if stmt.explicit and is_last and agrees:
                     self._diags.emit(D.LANG_FUNCDEF_RETURN_REDUNDANT, stmt.span)
                 self._lower_return(builder, stmt, func)
             case ast.VarDef():
@@ -1008,6 +1014,10 @@ class Checker:
                     if result.ty is not func.ty.ret:
                         self._report_mismatch(stmt.span, result.ty, func.ty.ret)
                     builder.ret(result, stmt.span)
+            case ast.EmptyStmt():
+                # Nothing to lower.  What it does is be a statement, so that a
+                # body ending in a semicolon ends in one that produces no value.
+                pass
             case ast.ExprStmt():
                 # The value of the last statement is the function's result, which
                 # is why the canonical form of the language omits the keyword.
@@ -1147,6 +1157,21 @@ class Checker:
         finally:
             self._assigning = None
         return self._as_declared(value, expected)
+
+    def _return_type(self, ref: ast.TypeRef | None) -> Type:
+        """What a function answers with, from what its definition wrote.
+
+        Nothing written means nothing answered with.  Writing `void` out is
+        refused: it would be a second spelling of what the absence already says,
+        and `void` is not a type any value can have, so naming it as one says
+        less than leaving it out.
+        """
+        if ref is None:
+            return VOID
+        if ref.name == "void":
+            self._diags.emit(D.LANG_TYPE_NOTHING_IS_NOT_WRITTEN, ref.span)
+            return VOID
+        return self._resolve_type(ref)
 
     def _lower_return(self, builder: IRBuilder, stmt: ast.ReturnStmt,
                       func: Function) -> None:

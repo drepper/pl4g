@@ -36,7 +36,7 @@ fn reachable() \N{RIGHTWARDS ARROW} u8:
 \N{REFERENCE MARK} Not exported, but the entry point calls it, so it is in the image
 \N{REFERENCE MARK} and this says what a name that is kept in looks like.
 @[constructor]
-fn prepare() \N{RIGHTWARDS ARROW} void:
+fn prepare():
     private \N{LEFTWARDS ARROW} 8u8
 
 \N{REFERENCE MARK} Neither exported nor reached from anywhere, so nothing can call it.
@@ -139,7 +139,7 @@ def test_visible_is_the_only_thing_that_changes_it(compile_source) -> None:  # n
     """Without the attribute a definition is kept in, whatever else it says."""
     proc, output = compile_source("".join((
         "let g: mut u8 = 0u8\n\n",
-        "@[align(16), constructor]\nfn helper() ", ARROW, " void:\n",
+        "@[align(16), constructor]\nfn helper():\n",
         "    g \N{LEFTWARDS ARROW} 1u8\n\n",
         "@[startup]\nfn main() ", ARROW, " u8:\n    1u8\n")))
     assert proc.returncode == 0, describe(proc)

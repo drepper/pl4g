@@ -70,3 +70,20 @@ fn shared() → u8:
     return_type: (type (identifier))
     body: (layout_block
       (expression_statement (integer_literal)))))
+
+================================================================================
+A function that answers with nothing, and semicolons in the layout notation
+================================================================================
+
+fn prepare():
+    a ← 1u8; b ← 2u8;
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_definition
+    name: (identifier)
+    parameters: (parameter_list)
+    body: (layout_block
+      (assignment target: (identifier) value: (integer_literal))
+      (assignment target: (identifier) value: (integer_literal)))))

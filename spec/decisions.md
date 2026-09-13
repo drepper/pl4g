@@ -1689,6 +1689,53 @@ cannot write and the compiler would have to emit.
 
 ---
 
+## 2026-09-14T09:15+02:00 — language
+
+**A function with no arrow answers with nothing; a semicolon separates and never terminates**
+
+Two rules the user asked for, and they turn out to be one rule seen twice: the last statement of a body is the body's result, so
+anything that changes what the last statement *is* changes what the body answers with.
+
+**No arrow means nothing answered with.**  `fn prepare():` rather than `fn prepare() → void:`, and the second is refused (4209).
+Refusing it is the one-meaning-one-spelling rule applied, which this language now states outright; leaving both would be the
+first place the rule is broken, and in the definition syntax at that.  `void` is also not a type any value can have, so naming it
+where a type belongs says less than leaving the place empty -- Rust and Haskell make the same choice for the same reason, where C,
+C++ and Java write the word out.
+
+Three things follow, and it is worth saying that all three are the ordinary rules applied and not rules of their own.  A `return`
+in such a function carries nothing (5004, which already existed and now has somewhere to fire).  An expression as its last
+statement is a value that goes nowhere (5005, the rule that landed earlier), because a body with no result has nowhere to put one
+-- what belongs at the end of such a body is an assignment, which is a statement that does something.  And a trailing semicolon
+asks for nothing, which is what was wanted.
+
+**A semicolon separates and never terminates.**  It is now accepted in the layout notation as well as between braces, so that two
+short statements may share a line and so that what a statement is does not depend on which notation it is written in.  The
+important half is the second word: what follows a semicolon is another statement, and where nothing is written there, that
+statement is the empty one.  `a;` is two statements, `a;;` is three.
+
+That makes `7u8;` in a function declared to answer with a number a program that does not answer -- and being able to write that
+deliberately, and to be told when it happens by accident, is the whole reason the rule is worth having.  Rust draws exactly this
+distinction with exactly this mark, and for exactly this reason.  C, C++, Go and Java have no such distinction to draw, a
+semicolon there terminating one statement rather than separating two, which is why a stray one costs nothing in those languages
+and is worth noticing here.
+
+**3002 is retired.**  It asked for an arrow, and nothing can ask for one now.  A header followed by a bare type is no longer a
+header missing its arrow -- it is a header that has ended, followed by something that is not the beginning of a body -- so what is
+reported is 3003, which says that.  The number is retired rather than reused, for the reason 3008 was: a number is how a program
+names a diagnostic in `@[expect]`.
+
+**One diagnostic narrowed.**  The advice that a `return` at the end of a body could be left off (5002) is no longer given where
+the statement is one the function could not have wanted.  `return 1u8` in a function answering with nothing is already reported
+for what it is, and telling the author to drop the keyword would leave an expression whose value goes nowhere -- advice that makes
+the program worse.
+
+In the tree-sitter grammar the empty statement has no node: there is nothing in the text to give one to, and what matters about it
+is only that it is a statement, which is a thing the compiler says and the grammar need not.  The grammar says the shape -- what
+follows a semicolon may be written or left out -- and the test that the two agree about every language test is what holds them
+together.
+
+---
+
 ---
 
 Open questions

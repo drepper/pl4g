@@ -225,6 +225,18 @@ class ExprStmt(Stmt):
 
 
 @dataclass(frozen=True, slots=True)
+class EmptyStmt(Stmt):
+    """A statement that does nothing, which is what stands between or after two
+    semicolons.
+
+    It is a statement and not an absence of one, and that is the whole of why it
+    exists: the last statement of a body is the body's result, so a body ending
+    in a semicolon ends in something that produces no value, and a function that
+    was declared to answer with one has not answered.
+    """
+
+
+@dataclass(frozen=True, slots=True)
 class VarDef(Stmt):
     """A variable definition, at the top level or inside a block.
 
@@ -295,7 +307,9 @@ class FuncDef(Node):
     name: str
     name_span: Span
     params: tuple[Param, ...]
-    ret_type: TypeRef
+    #: What the function answers with, or nothing where it answers with
+    #: nothing -- which is written by leaving the arrow off altogether.
+    ret_type: TypeRef | None
     body: Block | None
     attrs: tuple[Attribute, ...] = ()
     doc: str | None = None

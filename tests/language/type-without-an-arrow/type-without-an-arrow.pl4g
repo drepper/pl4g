@@ -1,0 +1,10 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 3003 LANG_FUNCDEF_EXPECTED_BLOCK
+
+※ A function header names what it answers with after an arrow, and a header
+※ with no arrow says it answers with nothing.  So a type standing on its own is
+※ not a header missing an arrow -- it is a header that has ended, followed by
+※ something that is not the beginning of a body.
+@[startup]
+fn main() u8:
+    0

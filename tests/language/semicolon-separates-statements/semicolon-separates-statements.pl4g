@@ -1,0 +1,13 @@
+※ pl4g-test: compile=ok run=native,qemu exit=7 diag=none
+
+※ A semicolon separates two statements in the layout notation as it does
+※ between braces, so that what a statement is does not depend on which
+※ notation it is written in.
+
+let a: mut u8 = 0u8
+let b: mut u8 = 0u8
+
+@[startup]
+fn main() → u8:
+    a ← 3u8; b ← 4u8
+    a + b

@@ -38,13 +38,16 @@ module.exports = grammar({
       repeat($._newline),
     ),
 
+    // The arrow and what follows it say what the function answers with.
+    // Leaving them off is how a function says it answers with nothing; there is
+    // no name to write for that, which is what keeps the two from being two ways
+    // of saying one thing.
     function_definition: $ => seq(
       optional($.attribute_list),
       'fn',
       field('name', $.identifier),
       field('parameters', $.parameter_list),
-      $._return_arrow,
-      field('return_type', $.type),
+      optional(seq($._return_arrow, field('return_type', $.type))),
       field('body', $._block),
     ),
 
@@ -122,9 +125,21 @@ module.exports = grammar({
       repeat1($._statement_line), $._dedent,
     ),
 
-    explicit_block: $ => seq('{', sepBy(';', $._statement), '}'),
+    // There are no ends of lines inside braces, so a semicolon is the only
+    // separator there; in the layout notation both separate.  A semicolon is a
+    // separator and never a terminator, so what follows one is another
+    // statement -- the empty one, where nothing else is written.
+    explicit_block: $ => seq('{', optional($._statement_run), '}'),
 
-    _statement_line: $ => seq($._statement, repeat1($._newline)),
+    _statement_line: $ => seq($._statement_run, repeat1($._newline)),
+
+    // What follows a semicolon may be written or may be left out, and leaving
+    // it out is the empty statement.  It has no node of its own: there is
+    // nothing in the text to give one to, and what matters about it is only
+    // that it is a statement, which the compiler is where that is said.
+    _statement_run: $ => seq(
+      $._statement, repeat(seq(';', optional($._statement))),
+    ),
 
     _statement: $ => seq(optional($.attribute_list), $._bare_statement),
 
