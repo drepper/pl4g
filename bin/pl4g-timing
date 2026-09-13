@@ -98,7 +98,8 @@ GROUPS: tuple[Group, ...] = (
            "result-type": "a result made, propagated with ? and read with ??",
            "result-as-an-argument": "results passed and answered with, both kinds",
            "match-a-result": "three matches, one of them carrying a name past",
-           "if-statement": "a chain of conditions, and one with no else"}),
+           "if-statement": "a chain of conditions, and one with no else",
+           "tuple-values": "a tuple answered with, and two taken apart"}),
     Group("Types",
           "Definitions the program writes.  These move when the parser, the "
           "name resolution or the layout does.",
