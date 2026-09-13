@@ -24,7 +24,8 @@
     "float-arithmetic": "ten floating-point answers, each asserted",
     "float-approximate": "every approximate comparison, in both widths",
     "result-type": "a result made, propagated with ? and read with ??",
-    "type-definitions": "eight definitions in all three notations"
+    "type-definitions": "eight definitions in all three notations",
+    "result-as-an-argument": "results passed and answered with, both kinds"
   },
   "commits": [
     {
@@ -146,6 +147,10 @@
     {
       "hash": "5706c5f",
       "subject": "📝 Time the type definitions too"
+    },
+    {
+      "hash": "41f13c3",
+      "subject": "📝 Time a result passed to a function too"
     }
   ],
   "times": {
@@ -1979,6 +1984,112 @@
       "type-definitions": [
         1.423,
         81.04161103256047
+      ]
+    },
+    "41f13c3": {
+      "exit0": [
+        1.188,
+        80.69619501475245
+      ],
+      "global-variable": [
+        1.3599999999999999,
+        77.18454295536503
+      ],
+      "assign-widths": [
+        1.915,
+        81.49630099069327
+      ],
+      "many-values-at-once": [
+        2.105,
+        76.5789810102433
+      ],
+      "unreached-function": [
+        1.6909999999999998,
+        81.83591201668605
+      ],
+      "export-visibility": [
+        1.791,
+        81.17412502178922
+      ],
+      "digit-separators": [
+        1.87,
+        82.74632401298732
+      ],
+      "boolean-values": [
+        1.612,
+        82.17857900308445
+      ],
+      "bitwise-operators": [
+        1.981,
+        80.7543020346202
+      ],
+      "bitwise-precedence": [
+        1.609,
+        81.38485200470313
+      ],
+      "spill-to-the-frame": [
+        7.316,
+        89.4995400449261
+      ],
+      "boolean-in-memory": [
+        1.674,
+        79.87764099380001
+      ],
+      "comparison-operators": [
+        2.578,
+        82.51467504305765
+      ],
+      "logic-operators": [
+        2.748,
+        82.50352903269231
+      ],
+      "logic-short-circuit": [
+        2.447,
+        76.58056303625926
+      ],
+      "saturating-precedence": [
+        1.976,
+        81.0028170235455
+      ],
+      "arithmetic-operators": [
+        2.165,
+        82.16323499800637
+      ],
+      "semicolon-separates-statements": [
+        2.036,
+        85.51751001505181
+      ],
+      "call-nested": [
+        2.773,
+        81.50291000492871
+      ],
+      "arithmetic-division": [
+        2.4259999999999997,
+        81.19102101773024
+      ],
+      "shift-operators": [
+        2.4070000000000005,
+        78.45691102556884
+      ],
+      "float-arithmetic": [
+        6.402,
+        85.56780603248626
+      ],
+      "float-approximate": [
+        9.619,
+        89.36763100791723
+      ],
+      "result-type": [
+        4.104,
+        84.08812602283433
+      ],
+      "type-definitions": [
+        1.528,
+        78.97092500934377
+      ],
+      "result-as-an-argument": [
+        10.068,
+        89.29080603411421
       ]
     }
   }
