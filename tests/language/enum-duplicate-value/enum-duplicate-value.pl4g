@@ -1,0 +1,11 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4418 LANG_ENUMDEF_DUPLICATE_VALUE
+
+※ The names are how the values are written and how an arm of a `match` names
+※ one, so two of them alike would be two values nothing could tell apart.
+
+enum Twice { a ; a ; b }
+
+@[startup]
+fn main() → u8:
+    0u8

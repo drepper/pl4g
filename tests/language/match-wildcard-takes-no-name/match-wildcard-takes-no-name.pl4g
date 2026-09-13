@@ -1,0 +1,17 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4422 LANG_MATCH_WILDCARD_TAKES_NO_NAME
+
+※ A pattern that names one alternative binds what that alternative carries.
+※ `_` names every alternative left, and those may carry different things or
+※ nothing at all, so there is no one value a name after it could stand for.
+
+let hundred: mut u8 = 100u8
+let seven: mut u8 = 7u8
+
+@[startup]
+fn main() → u8:
+    match hundred ÷ seven:
+        u8(q):
+            return q
+        _(rest):
+            return 1u8

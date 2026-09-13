@@ -2061,6 +2061,45 @@ about paths; that rule is a statement about a straight line of code, and answeri
 for one (9902).  What is missing is not the match: it is a value of a sum, which nothing writes, and the way one is held, which is
 not a register.  A match over a *result* runs today.
 
+## 2026-09-15T05:00+02:00 — language and compiler
+
+**Enumerations, and a wildcard in `match`**
+
+Decided on the user's direction.  `enum NAME [: TYPE]` and then the names of its values, in braces or indented under a colon,
+separated by `;`.  A `match` over one names a value in each arm, and `_` takes every alternative no earlier arm took -- on every
+kind of value a `match` takes apart, not only on an enumeration.
+
+**The type is the representation and nothing else.**  The user said so outright and it is the decision that matters: writing
+`: i32` does not make a value of the enumeration an `i32`, does not let one stand where an `i32` is wanted, and does not let an
+`i32` stand where the enumeration is.  It says how much room a value takes and how it is aligned.  That is C++'s `enum class` and
+the opposite of C, where an enumerator *is* an `int` and converts both ways silently.
+
+**Where no type is given the compiler chooses the smallest unsigned type that holds every value** -- `u8` up to 256 of them, then
+`u16`, `u32`, `u64` -- and the values are numbered from zero in the order they are written.  Both are promises about size and
+alignment and about nothing else: with no conversion in the language there is nothing a program can use to observe the numbering,
+so a later implementation may number them differently and a program that reads as it behaves cannot tell.  Considered and
+rejected: always `u32`, which wastes three bytes in the common case and is what several ABIs do for compatibility with C; and the
+*signed* smallest type, which would waste a bit for nothing since no value is negative.
+
+**Two colons where a type is named and the values are indented.**  The type is introduced by a colon and so is the block, which
+follows from the two rules the user gave and matches a function that answers with something and has an indented body.
+
+**A value is written `TYPE.NAME`.**  The user gave no syntax for writing one, and without one an enumeration could be declared and
+matched but no value of it could exist -- the feature would be as unreachable as a sum is.  `Colour.red` uses syntax the grammar
+already parses for a name reached through a module, so nothing is invented but the meaning, and it keeps two enumerations able to
+each have a `red`.  It is what Rust, Swift and C++'s `enum class` all write.  An arm of a `match` writes the name alone, the type
+being known there; Swift and Zig do the same.
+
+**The wildcard reverses a decision made two days ago.**  `match` was written with no catch-all, deliberately, so that an
+alternative added later could not fall silently into a branch written before it existed.  The user has asked for one and it is in.
+What is kept of the old reasoning: an arm that takes nothing an earlier arm left is reported (4417), so a wildcard written where
+everything is already taken is a mistake and not a habit, and exhaustiveness is still checked -- the wildcard satisfies it rather
+than switching it off.
+
+**What an enumeration is at run time**: a number of the type that holds it, so it needs no new machinery in the backends -- a
+width, a signedness and a constant, which are three small answers in each.  A `match` over one is a chain of comparisons; a jump
+table is what `SwitchInst` is for and stays in the to-do list.
+
 ---
 
 ---

@@ -96,9 +96,10 @@ To Do List for the pypl4g compiler
     using any of those cannot be fed back in.  Worth closing in one piece rather than a shape at a time.
 
 [ ] lower `SwitchInst`.  It exists in the representation and nothing generates one.  A `match` over a result is two ways and is
-    lowered as a conditional branch; a `match` over a *sum* is what will want this, once a value of a sum can be held at all.  A
-    chain of comparisons is correct and is what a first version should do; a jump table wants the relocation work that
-    position-independent code needs anyway.
+    lowered as a conditional branch; a `match` over an *enumeration* is a chain of comparisons, one per value an arm names, which
+    is correct and is what a first version should do -- this is what would replace that chain.  A jump table wants the relocation
+    work that position-independent code needs anyway.  Worth measuring against the chain before it is written: an enumeration with
+    three values is better off with the comparisons.
 
 [ ] hold a value whose type is a product or a sum.  Both are refused today (8501): a product is every one of its fields at once
     and a sum is one variant and a tag, and neither is a thing a register holds.  What they want is a place in memory, an address

@@ -780,6 +780,44 @@ sum is its largest variant with a one-byte tag after it, the tag last rather tha
 eight bytes is seven bytes of padding and behind it is often none.  The whole of either is rounded up to its own alignment, which
 is the largest of its parts'.
 
+#### Enumerations
+
+An enumeration is a fixed set of named values and nothing else.
+
+```
+enum Colour { red ; green ; blue }
+
+enum Wide : u32:
+    first ;
+    second
+```
+
+`enum NAME` says what the type is called; the names of its values follow, in braces or indented under a colon, separated by `;`
+either way (3021).  A definition lists at least one (3022), and no two of its names are alike (4418).
+
+**`enum NAME : TYPE` says how much room a value takes and says nothing else.**  The type must be an integer type (4420) and must
+hold every one of the values (4419), which are numbered from zero in the order they are written.  It is **not** a conversion:
+writing `: i32` does not make a value of the enumeration an `i32`, does not let one stand where an `i32` is wanted, and does not
+let an `i32` stand where the enumeration is.  A value of an enumeration is one of its names; the type is how the compiler lays one
+out and is the whole of what it says.
+
+Because the type and the indented form of the list are both introduced by a colon, a definition that names a type and indents its
+values carries two of them -- one belongs to the type and one opens the block -- exactly as a function that answers with something
+and has an indented body carries both a return type and a colon.
+
+**Where no type is given the compiler chooses the smallest unsigned integer type that holds every value**: `u8` for up to 256 of
+them, then `u16`, `u32`, `u64`.  That is a promise about size and alignment and about nothing else.  The numbering from zero is
+what the compiler does and is not something a program can observe, there being no conversion to observe it with; a later
+implementation may number them differently, and a program that reads as it behaves cannot tell.
+
+Compare: C, where an enumerator *is* an `int` and converts both ways silently, which is the source of a whole class of mistakes
+this language does not admit; C++'s `enum class`, which is this arrangement down to the optional underlying type; Rust's
+fieldless `enum`, which needs `as` to become a number; Go, which has no enumerations and uses typed constants instead.  The
+spelling here is C++'s `enum class` without the second word, there being no other kind to distinguish it from.
+
+**A value is written `TYPE.NAME`** -- `Colour.red` -- so that two enumerations may each have a `red`.  An arm of a `match` writes
+the name alone, the type being known there already.  A name that is not one of the enumeration's is refused (4421).
+
 ### Statements
 
 #### match
@@ -807,10 +845,21 @@ that never holds, which is as close to "there is no answer" as a single characte
 where it carries something, and `⊥` alone takes an error that carries nothing.  It is an arm of a result and not of a sum (4415),
 a sum naming every one of its alternatives by a type.
 
+**`match` also takes an enumeration apart**, whose alternatives are its values.  An arm names one of them -- `red` -- and binds
+nothing, a value of an enumeration carrying nothing beyond being itself.
+
+**`_` takes every alternative no earlier arm took**, and binds nothing (4422): the alternatives it takes may carry different
+things or nothing at all, so there is no one value a name after it could stand for.  It works on every kind of value a `match`
+takes apart.
+
 **Every alternative must be taken, and none twice** (4414, 4413).  A value holds one of them, so a `match` that left one out
-would be a program with nowhere to go when the value held it -- which is the thing a sum type exists to make impossible.  There is
-**no catch-all pattern**, and that is deliberate: one would let an alternative added later fall silently into a branch written
-before it existed, which is exactly the mistake exhaustiveness is checked to prevent.
+would be a program with nowhere to go when the value held it -- which is the thing a sum type exists to make impossible.  An arm
+that takes nothing an earlier arm left -- which is what a wildcard written after arms that already take everything comes to -- is
+reported rather than left standing (4417).
+
+**An enumeration is taken apart by a chain of comparisons**, one per value an arm names, with the last arm -- or the wildcard,
+where there is one -- reached by falling off the end of the chain.  A jump table is the other way and is a thing the compiler may
+choose later; the language says only which arm runs.
 
 **The arms stand where the statements of a body would**, in either of the two block notations, and an arm is a pattern and then a
 body written the way a function's is -- a colon and an indented block, or braces.  Inside braces the arms follow one another with
@@ -858,7 +907,7 @@ one; it is not what is implemented, and the entry in the to-do list holds the qu
 At the top level of a file one can find:
 - module handling
 - compile-time expressions as assertions and contracts
-- type definitions, which are read before anything else in the file: a function's signature may name a type defined below it, and
+- type and enumeration definitions, which are read before anything else in the file: a function's signature may name a type defined below it, and
   a type definition may name one defined below itself
 - variable definitions
 - function definitions

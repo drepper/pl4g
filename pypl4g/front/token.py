@@ -54,6 +54,11 @@ ABOVE_OR_ALIKE_GLYPH: Final[str] = "\N{GREATER-THAN OR APPROXIMATE}"
 BELOW_NOT_ALIKE_GLYPH: Final[str] = "\N{LESS-THAN AND NOT APPROXIMATE}"
 ABOVE_NOT_ALIKE_GLYPH: Final[str] = "\N{GREATER-THAN AND NOT APPROXIMATE}"
 
+#: What a `match` arm that takes every alternative left is written with.  It is
+#: a name no definition may have, so nothing a program writes can be mistaken
+#: for it; every language with pattern matching spells it this way.
+WILDCARD_NAME: Final[str] = "_"
+
 #: The two operators a result type has.  `?` written after an expression takes
 #: the answer out of it and leaves the function with the error where there is
 #: none; `??` takes the answer or the value written after it.  Both are ASCII
@@ -145,6 +150,7 @@ class TokKind(StrEnum):
     KW_MUT = "'mut'"
     KW_TYPE = "'type'"
     KW_MATCH = "'match'"
+    KW_ENUM = "'enum'"
     KW_TRUE = "'true'"
     KW_FALSE = "'false'"
     KW_IMPORT = "'import'"
@@ -234,6 +240,7 @@ KEYWORDS: Final[dict[str, TokKind]] = {
     "mut": TokKind.KW_MUT,
     "type": TokKind.KW_TYPE,
     "match": TokKind.KW_MATCH,
+    "enum": TokKind.KW_ENUM,
     "true": TokKind.KW_TRUE,
     "false": TokKind.KW_FALSE,
     "import": TokKind.KW_IMPORT,

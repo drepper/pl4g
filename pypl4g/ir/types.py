@@ -226,6 +226,41 @@ class ResultType(Type):
 
 
 @dataclass(frozen=True, slots=True)
+class EnumType(Type):
+    """A fixed set of named values, and nothing else.
+
+    Nominal, as a product and a sum are, and for the same reason.  `holder` is
+    how much room a value takes and says nothing else: a value of this type is
+    not a number of that type and does not become one, which is what keeps an
+    enumeration from being an integer with a nicer spelling.
+    """
+
+    members: tuple[str, ...]
+    holder: IntType
+    name: str = ""
+    origin: str = ""
+
+    def render(self) -> str:
+        """The name of this type in the textual form of the IR."""
+        if self.name:
+            return self.name
+        return "".join(("enum<", ", ".join(self.members), ">"))
+
+    def mangled(self) -> str:
+        """The normalized name of this type, for use inside a symbol name."""
+        if self.name:
+            return self.name
+        return "".join(("enum<", ",".join(self.members), ">"))
+
+    def index_of(self, name: str) -> int | None:
+        """Which value *name* is, or nothing where it is not one of them."""
+        try:
+            return self.members.index(name)
+        except ValueError:
+            return None
+
+
+@dataclass(frozen=True, slots=True)
 class SumType(Type):
     """A choice between named variants, the basis of the language's error model.
 
@@ -287,6 +322,19 @@ class TypeContext:
         self._functions: dict[tuple[tuple[Type, ...], Type], FuncType] = {}
         self._integers: dict[tuple[int, bool], IntType] = {
             (t.bits, t.signed): t for t in (I8, I16, I32, I64, U8, U16, U32, U64)}
+
+    #: How much room an enumeration takes where its definition does not say.
+    #: The smallest unsigned type that holds every one of its values, the values
+    #: being numbered from zero in the order they were written.
+    HOLDERS: Final[tuple[tuple[int, int], ...]] = (
+        (1 << 8, 8), (1 << 16, 16), (1 << 32, 32), (1 << 64, 64))
+
+    def holder_for(self, count: int) -> IntType:
+        """The smallest unsigned type that holds *count* values."""
+        for limit, bits in self.HOLDERS:
+            if count <= limit:
+                return self.int_type(bits, False)
+        return self.int_type(64, False)
 
     def result_type(self, ok: Type, err: Type | None = None) -> ResultType:
         """Return the result type with this answer type and error type."""

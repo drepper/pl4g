@@ -54,18 +54,26 @@ To Do List for the PL4g language
     or a bare `.red` taking its type from the context, which is Zig's and Swift's.  Whichever is chosen, the two should be one
     shape, since the definitions are.
 
-[x] ask which variant a sum holds: `match`.  Done, for the result type, which runs; for a sum every rule about the arms is
-    checked and the compiler then says it cannot generate for one, what is missing being a value of a sum rather than the match.
-    An arm names the type of the alternative it takes, `⊥` is the error arm of a result, every alternative must be taken and none
-    twice, and there is no catch-all.  A name assigned inside an arm is carried past the match by a parameter of the block the
-    arms join at, which is the machinery `if` will want.
+[x] ask which variant a sum holds: `match`.  Done, and it takes an enumeration and a result apart as well.  A result and an
+    enumeration run; for a sum every rule about the arms is checked and the compiler then says it cannot generate for one, what is
+    missing being a value of a sum rather than the match.  An arm names the type of the alternative it takes -- or, for an
+    enumeration, the name of a value -- `⊥` is the error arm of a result, `_` takes every alternative left, and every
+    alternative must be taken and none twice.  A name assigned inside an arm is carried past the match by a parameter of the block
+    the arms join at, which is the machinery `if` will want.
 
-[ ] decide how an enumeration is written.  A sum's alternatives are told apart by their types, so no two may share one -- which
-    means a sum every one of whose alternatives carries nothing cannot be written, all of them being `void`.  Two ways out: let a
-    pattern name the *variant* rather than the type where the two differ, which is Rust's arrangement and would make the
-    uniqueness rule unnecessary; or give the language an enumeration of its own, with its own syntax and a `match` over its names.
-    The first is the smaller change and keeps one construct for the two kinds of sum; the second says outright that an
-    enumeration is a different thing from a tagged union, which it arguably is.
+[x] decide how an enumeration is written.  Done, the second way: an enumeration is a construct of its own, `enum NAME [: TYPE]`
+    and then the names of its values.  The type is the representation and nothing else -- no conversion in either direction -- and
+    where it is left out the compiler takes the smallest unsigned type that holds every value.  A value is written `TYPE.NAME`; a
+    `match` over one names a value in each arm.  A sum every one of whose alternatives carries nothing is still not writable, and
+    no longer needs to be.
+
+[?] compare two values of one enumeration with `=`.  Refused today (4207), equality being defined on numbers and truth values
+    and on nothing else.  `match` answers the question a comparison would ask, which is why this is not obviously needed; against
+    that, two enumeration values are equal or they are not, there is nothing surprising about asking, and a program that wants to
+    keep "is it still what it was" in a `bool` has no way to.
+    Question: allow `=` and `≠` and nothing else, or leave `match` as the only way to look at one?  Ordering is a separate
+    question and the answer there is no: the order of the values is the declaration order, which is not a thing the language
+    promises anything about.
 
 [?] read a field of a product.
     Question: `p.x` is the obvious spelling and is what the grammar already parses for a name reached through a module, so the

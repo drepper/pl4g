@@ -1,0 +1,11 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 3022 LANG_ENUMDEF_NO_VALUES
+
+※ Every value of an enumeration is one of the names its definition lists, so a
+※ definition that lists none describes a type no value can be of.
+
+enum Nothing { }
+
+@[startup]
+fn main() → u8:
+    0u8

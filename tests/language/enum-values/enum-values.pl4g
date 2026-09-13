@@ -1,0 +1,51 @@
+※ pl4g-test: compile=ok run=native,qemu exit=22 diag=none
+
+※ An enumeration is a fixed set of named values and nothing else.  `enum NAME`
+※ says what the type is called, and the names of its values follow -- in
+※ braces, or indented under a colon, separated by `;` either way.
+※
+※ `enum NAME : TYPE` says how much room a value takes and says nothing else: a
+※ value of an enumeration is not a number of that type and does not become
+※ one.  Leaving it out lets the compiler choose, and what it chooses is the
+※ smallest unsigned type that holds every value.
+※
+※ A value is written with the type in front of it, so that two enumerations
+※ may each have a `red`.  An arm of a `match` writes the name alone, the type
+※ being known there already.
+
+enum Colour { red ; green ; blue }
+
+※ a type named, and the values indented, so two colons: one is the type's and
+※ one opens the block
+enum Wide : u32:
+    first ;
+    second
+
+@[visible]
+let chosen: mut Colour = Colour.green
+
+@[visible]
+let side: Wide = Wide.second
+
+@[startup]
+fn main() → u8:
+    let kept: mut u8 = 0u8
+    match chosen:
+        red:
+            kept ← 1u8
+        green:
+            kept ← 2u8
+        blue:
+            kept ← 3u8
+    chosen ← Colour.blue
+    match chosen:
+        red:
+            kept ← kept + 10u8
+        _:
+            kept ← kept + 20u8
+    match side:
+        first:
+            kept ← kept + 100u8
+        second:
+            kept ← kept + 0u8
+    kept

@@ -586,6 +586,61 @@
     }
   },
   {
+    "type": "enum_definition",
+    "named": true,
+    "fields": {
+      "holder": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "type",
+            "named": true
+          }
+        ]
+      },
+      "name": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      }
+    },
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "attribute_list",
+          "named": true
+        },
+        {
+          "type": "enum_values",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "enum_values",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "identifier",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
     "type": "explicit_block",
     "named": true,
     "fields": {},
@@ -1554,6 +1609,10 @@
       "required": false,
       "types": [
         {
+          "type": "enum_definition",
+          "named": true
+        },
+        {
           "type": "function_definition",
           "named": true
         },
@@ -2121,6 +2180,10 @@
     "type": "doc_comment",
     "named": true,
     "extra": true
+  },
+  {
+    "type": "enum",
+    "named": false
   },
   {
     "type": "false",

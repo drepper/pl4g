@@ -7,7 +7,7 @@ constants of the same type are two references, and treating them as equal would
 break every use list.
 """
 
-from .types import BoolType, FloatType, IntType, ResultType, Type
+from .types import BoolType, EnumType, FloatType, IntType, ResultType, Type
 
 
 class Value:
@@ -64,6 +64,27 @@ class BoolConst(Const):
     def __init__(self, ty: BoolType, value: bool) -> None:
         super().__init__(ty)
         self.value = value
+
+
+class EnumConst(Const):
+    """One of the named values of an enumeration.
+
+    Kept as which one it is and not as the number it is stored as: the number is
+    the representation's business, and a pass that chose a different one should
+    not have to find every constant that was written down.
+    """
+
+    __slots__ = ("index",)
+
+    def __init__(self, ty: "EnumType", index: int) -> None:
+        super().__init__(ty)
+        self.index = index
+
+    @property
+    def member(self) -> str:
+        """The name this value was written with."""
+        assert isinstance(self.ty, EnumType)
+        return self.ty.members[self.index]
 
 
 class ResultConst(Const):

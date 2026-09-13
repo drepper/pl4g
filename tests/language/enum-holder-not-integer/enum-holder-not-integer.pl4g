@@ -1,0 +1,11 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4420 LANG_ENUMDEF_HOLDER_NOT_INTEGER
+
+※ What the type says is how much room a value takes and how it is aligned,
+※ which only an integer type answers here.
+
+enum Wrong : bool { x ; y }
+
+@[startup]
+fn main() → u8:
+    0u8

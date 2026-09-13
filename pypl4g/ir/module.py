@@ -5,9 +5,11 @@ from dataclasses import dataclass, field
 from ..source.location import INVALID_SPAN, Span
 from .decisions import DecisionLog
 from .function import Function, Linkage
-from .types import (BoolType, FloatType, IntType, MEM, PtrType, ResultType, Type,
+from .types import (BoolType, EnumType, FloatType, IntType, MEM, PtrType,
+                    ResultType, Type,
                     TypeContext)
-from .value import BoolConst, Const, FloatConst, IntConst, ResultConst, Value
+from .value import (BoolConst, Const, EnumConst, FloatConst, IntConst,
+                    ResultConst, Value)
 
 
 class GlobalVar(Value):
@@ -83,6 +85,7 @@ class Module:
     _bool_consts: dict[bool, BoolConst] = field(default_factory=dict)
     _result_consts: dict[tuple[int, int, bool], ResultConst] = field(
         default_factory=dict)
+    _enum_consts: dict[tuple[int, int], EnumConst] = field(default_factory=dict)
 
     def add_function(self, func: Function, key: str | None = None) -> Function:
         """Register *func* in this module.
@@ -121,6 +124,15 @@ class Module:
         if found is None:
             found = FloatConst(ty, value)
             self._float_consts[key] = found
+        return found
+
+    def enum_const(self, ty: EnumType, index: int) -> EnumConst:
+        """Return the interned constant naming one value of an enumeration."""
+        key = (id(ty), index)
+        found = self._enum_consts.get(key)
+        if found is None:
+            found = EnumConst(ty, index)
+            self._enum_consts[key] = found
         return found
 
     def result_const(self, ty: ResultType, answer: Const,

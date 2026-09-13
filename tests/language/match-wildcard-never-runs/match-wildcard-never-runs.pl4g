@@ -1,0 +1,18 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4417 LANG_MATCH_ARM_NEVER_RUNS
+
+※ Every alternative this one could take has been taken already, so it can
+※ never be the one that runs -- which means the wildcard is not needed.
+
+enum Colour { red ; green }
+let chosen: mut Colour = Colour.red
+
+@[startup]
+fn main() → u8:
+    match chosen:
+        red:
+            return 1u8
+        green:
+            return 2u8
+        _:
+            return 3u8

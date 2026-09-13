@@ -258,3 +258,68 @@ fn braced() → u8 { match a ÷ b { u8(q) { kept ← q } ⊥ { kept ← 9u8 } } 
               value: (integer_literal)))))
       (expression_statement
         (identifier)))))
+
+================================================================================
+Enumerations, and a match over one with a wildcard
+================================================================================
+
+enum Colour { red ; green ; blue }
+
+enum Wide : u32:
+    first ;
+    second
+
+@[startup]
+fn main() → u8:
+    match chosen:
+        red:
+            kept ← 1u8
+        _:
+            kept ← 2u8
+    kept
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (enum_definition
+    name: (identifier)
+    (enum_values
+      (identifier)
+      (identifier)
+      (identifier)))
+  (enum_definition
+    name: (identifier)
+    holder: (type
+      (identifier))
+    (enum_values
+      (identifier)
+      (identifier)))
+  (function_definition
+    (attribute_list
+      (attribute
+        name: (identifier)))
+    name: (identifier)
+    parameters: (parameter_list)
+    return_type: (type
+      (identifier))
+    body: (layout_block
+      (match_statement
+        subject: (identifier)
+        (match_arm
+          pattern: (pattern
+            type: (type
+              (identifier)))
+          body: (layout_block
+            (assignment
+              target: (identifier)
+              value: (integer_literal))))
+        (match_arm
+          pattern: (pattern
+            type: (type
+              (identifier)))
+          body: (layout_block
+            (assignment
+              target: (identifier)
+              value: (integer_literal)))))
+      (expression_statement
+        (identifier)))))

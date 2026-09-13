@@ -970,6 +970,38 @@
       "option": null
     },
     {
+      "number": 3021,
+      "name": "LANG_ENUMDEF_EXPECTED_VALUES",
+      "severity": "error",
+      "message": "the values of an enumeration follow it, indented or in braces",
+      "args": [],
+      "cause": "`enum NAME` says what the type is called and nothing about what it holds, so the names of its values follow: a colon and an indented run of them, or a braced one.  Where a type was named as well, the colon that opens the block is a second one -- the first belongs to the type.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Enumerations",
+        "requirement": "An enumeration is written with its values in one of the two block notations."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 3022,
+      "name": "LANG_ENUMDEF_NO_VALUES",
+      "severity": "error",
+      "message": "an enumeration with no values is a type nothing can have",
+      "args": [],
+      "cause": "Every value of an enumeration is one of the names its definition lists, so a definition that lists none describes a type no value can be of.  `void` is the type of what carries no information, and is what a program that wants one should say.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Enumerations",
+        "requirement": "An enumeration has at least one value."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 3201,
       "name": "LANG_ATTR_UNKNOWN",
       "severity": "error",
@@ -2414,6 +2446,136 @@
         "document": "spec/spec.md",
         "section": "The Language / Statements / match",
         "requirement": "A pattern binds a name only where the alternative carries a value."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4417,
+      "name": "LANG_MATCH_ARM_NEVER_RUNS",
+      "severity": "error",
+      "message": "this arm takes nothing an earlier arm left",
+      "args": [],
+      "cause": "Every alternative it could take has been taken already, so this arm can never be the one that runs.  A wildcard written after arms that between them take everything is the usual way to reach this, and what it means is that the wildcard is not needed.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Statements / match",
+        "requirement": "Every arm of a `match` can run."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4418,
+      "name": "LANG_ENUMDEF_DUPLICATE_VALUE",
+      "severity": "error",
+      "message": "'{name}' is already a value of this enumeration",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the name written twice"
+        }
+      ],
+      "cause": "The names of an enumeration are how its values are written and how an arm of a `match` names one, so two of them alike would be two values nothing could tell apart.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Enumerations",
+        "requirement": "The values of one enumeration have distinct names."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4419,
+      "name": "LANG_ENUMDEF_HOLDER_TOO_NARROW",
+      "severity": "error",
+      "message": "'{type}' does not hold the {count} values of this enumeration",
+      "args": [
+        {
+          "name": "type",
+          "type": "string",
+          "description": "the type the definition named"
+        },
+        {
+          "name": "count",
+          "type": "string",
+          "description": "how many values there are"
+        }
+      ],
+      "cause": "A definition may say how much room a value of the enumeration takes, and the values are numbered from zero in the order they are written -- so the type named has to hold the largest of those numbers.  Leaving the type out lets the compiler choose one that does.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Enumerations",
+        "requirement": "The type an enumeration names holds every one of its values."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4420,
+      "name": "LANG_ENUMDEF_HOLDER_NOT_INTEGER",
+      "severity": "error",
+      "message": "an enumeration is held in an integer type, not in '{type}'",
+      "args": [
+        {
+          "name": "type",
+          "type": "string",
+          "description": "the type the definition named"
+        }
+      ],
+      "cause": "What the type says is how much room a value takes and how it is aligned, which only an integer type answers here.  It says nothing else: a value of the enumeration is not a number of that type and does not become one.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Enumerations",
+        "requirement": "The type an enumeration names is an integer type."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4421,
+      "name": "LANG_ENUM_UNKNOWN_VALUE",
+      "severity": "error",
+      "message": "'{name}' is not a value of '{type}'",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the name written"
+        },
+        {
+          "name": "type",
+          "type": "string",
+          "description": "the enumeration"
+        }
+      ],
+      "cause": "A value of an enumeration is one of the names its definition lists, written after the name of the type.  This one is not among them.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Enumerations",
+        "requirement": "A value of an enumeration is one of the names its definition lists."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4422,
+      "name": "LANG_MATCH_WILDCARD_TAKES_NO_NAME",
+      "severity": "error",
+      "message": "'_' takes every alternative left, so there is nothing for a name to be",
+      "args": [],
+      "cause": "A pattern that names one alternative binds what that alternative carries.  `_` names every alternative no earlier arm took, and those may carry different things or nothing at all, so there is no one value a name written after it could stand for.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Statements / match",
+        "requirement": "The wildcard pattern binds no name."
       },
       "since": "0.1",
       "default_enabled": true,

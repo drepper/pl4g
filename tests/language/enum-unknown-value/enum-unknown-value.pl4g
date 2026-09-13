@@ -1,0 +1,17 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4421 LANG_ENUM_UNKNOWN_VALUE
+
+※ A value of an enumeration is one of the names its definition lists, whether
+※ it is written as a value or as the arm of a `match` that takes it.
+
+enum Colour { red ; green }
+
+let chosen: mut Colour = Colour.mauve
+
+@[startup]
+fn main() → u8:
+    match chosen:
+        red:
+            return 1u8
+        mauve:
+            return 2u8

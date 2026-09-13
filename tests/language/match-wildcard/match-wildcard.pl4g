@@ -1,0 +1,25 @@
+※ pl4g-test: compile=ok run=native,qemu exit=64 diag=none
+
+※ `_` takes every alternative no earlier arm took, and binds nothing: the
+※ alternatives it takes may carry different things or nothing at all, so there
+※ is no one value a name after it could stand for.  It works on every kind of
+※ value a `match` takes apart.
+
+let hundred: mut u8 = 100u8
+let none: mut u8 = 0u8
+let seven: mut u8 = 7u8
+
+@[startup]
+fn main() → u8:
+    let kept: mut u8 = 0u8
+    ※ a wildcard beside a named arm
+    match hundred ÷ seven:
+        u8(q):
+            kept ← q
+        _:
+            kept ← 1u8
+    ※ and one taking both, so there is nothing to ask and nothing to branch on
+    match hundred ÷ none:
+        _:
+            kept ← kept + 50u8
+    kept

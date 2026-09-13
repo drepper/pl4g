@@ -313,10 +313,14 @@ class Pattern(Node):
     cannot both be said by naming one.
     """
 
-    #: The type this arm takes, or nothing where the arm is the error one.
+    #: The type this arm takes -- or, where what is taken apart is an
+    #: enumeration, the name of one of its values.  Nothing where the arm is
+    #: the error one or the wildcard.
     type: TypeRef | None
     name: str | None = None
     name_span: Span = INVALID_SPAN
+    #: Whether this arm takes every alternative no earlier arm took.
+    wildcard: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -429,7 +433,22 @@ class TypeDef(Node):
     doc: str | None = None
 
 
-type Definition = FuncDef | VarDef | ModuleImport | TypeDef
+@dataclass(frozen=True, slots=True)
+class EnumDef(Node):
+    """`enum NAME [: TYPE]` and the names of its values."""
+
+    name: str
+    name_span: Span
+    members: tuple[tuple[str, Span], ...]
+    #: What a value of it occupies, where the definition said.  Nothing means
+    #: the compiler chooses, and what it chooses is written in the
+    #: specification.
+    holder: TypeRef | None = None
+    attrs: tuple[Attribute, ...] = ()
+    doc: str | None = None
+
+
+type Definition = FuncDef | VarDef | ModuleImport | TypeDef | EnumDef
 
 
 @dataclass(frozen=True, slots=True)

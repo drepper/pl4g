@@ -35,7 +35,7 @@ module.exports = grammar({
 
     _item: $ => seq(
       choice($.function_definition, $.variable_definition, $.module_import,
-             $.type_definition),
+             $.type_definition, $.enum_definition),
       repeat($._newline),
     ),
 
@@ -71,6 +71,27 @@ module.exports = grammar({
     // written over several: a line may be broken after it and not before it,
     // which is what keeps "this pair is the last" decidable at the end of a
     // line rather than at the start of the next.
+    // `enum NAME [: TYPE]` and the names of its values.  The type says how much
+    // room a value takes and nothing else.  It is introduced by a colon, and so
+    // is the indented form of the list, which is why a definition that names a
+    // type and indents its values carries two of them.
+    enum_definition: $ => seq(
+      optional($.attribute_list),
+      'enum',
+      field('name', $.identifier),
+      optional(seq(':', field('holder', $.type))),
+      choice(
+        seq('{', $.enum_values, '}'),
+        seq(':', repeat1($._newline), $._indent, $.enum_values,
+            repeat($._newline), $._dedent),
+      ),
+    ),
+
+    enum_values: $ => seq(
+      $.identifier,
+      repeat(seq(';', repeat($._newline), $.identifier)),
+    ),
+
     product_parts: $ => seq(
       $.type_part,
       repeat1(seq(';', repeat($._newline), $.type_part)),
@@ -235,9 +256,13 @@ module.exports = grammar({
     // `TYPE(NAME)` takes the alternative whose type is `TYPE` and binds its
     // value; `\u22a5` in place of the type is the error arm of a result, whose two
     // alternatives may name one type and so cannot both be said by naming one.
-    pattern: $ => seq(
-      choice('\u22a5', field('type', $.type)),
-      optional(seq('(', field('name', $.identifier), ')')),
+    // `_` takes every alternative no earlier arm took and binds nothing, so no
+    // name follows it.  It is an ordinary identifier to the scanner; what makes
+    // it the wildcard is where it is written, which the compiler is where that
+    // is said.
+    pattern: $ => choice(
+      seq(choice('\u22a5', field('type', $.type)),
+          optional(seq('(', field('name', $.identifier), ')'))),
     ),
 
     // A `let` inside a block, whose terminator the block supplies.

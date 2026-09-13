@@ -12,7 +12,7 @@ from ..diag import ids as D
 from ..diag.engine import DiagEngine
 from ..source.location import Span
 from . import ast
-from .token import COMMENT_GLYPH, TokKind, Token
+from .token import COMMENT_GLYPH, TokKind, Token, WILDCARD_NAME
 
 #: Tokens at which error recovery stops, because a new definition can begin there.
 _RECOVERY: Final[frozenset[TokKind]] = frozenset(
@@ -226,6 +226,8 @@ class Parser:
             return self._parse_variable(attrs, doc)
         if self._check(TokKind.KW_TYPE):
             return self._parse_type_definition(attrs, doc)
+        if self._check(TokKind.KW_ENUM):
+            return self._parse_enum_definition(attrs, doc)
         self._diags.emit(D.LANG_FILESTRUCT_UNEXPECTED_TOPLEVEL, self._current.span,
                          construct=self._current.describe())
         raise _Bail()
@@ -515,6 +517,56 @@ class Parser:
             return self._check(TokKind.DEDENT) or self._check(TokKind.EOF)
         return self._check(TokKind.NEWLINE) or self._check(TokKind.EOF)
 
+    def _parse_enum_definition(self, attrs: tuple[ast.Attribute, ...] = (),
+                               doc: str | None = None) -> ast.EnumDef:
+        """Parse ``enum NAME [':' TYPE]`` and the names of its values.
+
+        The type says how much room a value takes and nothing else.  It is
+        introduced by a colon, and so is the indented form of the list, which is
+        why a definition that names a type and indents its values carries two of
+        them: one belongs to the type and one opens the block, as a function
+        that answers with something and has an indented body carries both a
+        return type and a colon.
+        """
+        start = self._expect(TokKind.KW_ENUM).span
+        name_token = self._expect(TokKind.IDENT)
+        holder: ast.TypeRef | None = None
+        indented = False
+        if self._accept(TokKind.COLON) is not None:
+            if self._check(TokKind.IDENT):
+                holder = self._parse_type_ref()
+            else:
+                indented = True
+        braced = not indented and self._accept(TokKind.LBRACE) is not None
+        if not braced and not indented:
+            self._expect(TokKind.COLON, D.LANG_ENUMDEF_EXPECTED_VALUES)
+            indented = True
+        if indented:
+            self._expect(TokKind.NEWLINE)
+            self._expect(TokKind.INDENT)
+        members: list[tuple[str, Span]] = []
+        while True:
+            if indented:
+                self._skip_newlines()
+            if not members and self._ends_the_parts(braced, indented):
+                self._diags.emit(D.LANG_ENUMDEF_NO_VALUES, name_token.span)
+                raise _Bail()
+            written = self._expect(TokKind.IDENT)
+            members.append((written.text, written.span))
+            if self._accept(TokKind.SEMICOLON) is None:
+                break
+            if indented:
+                self._skip_newlines()
+        end = self._current.span
+        if braced:
+            end = self._expect(TokKind.RBRACE).span
+        else:
+            self._skip_newlines()
+            self._accept(TokKind.DEDENT)
+        return ast.EnumDef(span=start.to(end), name=name_token.text,
+                           name_span=name_token.span, members=tuple(members),
+                           holder=holder, attrs=attrs, doc=doc)
+
     def _parse_field(self) -> ast.Field:
         """Parse one ``NAME ':' TYPE`` of a type definition."""
         name_token = self._expect(TokKind.IDENT)
@@ -705,7 +757,22 @@ class Parser:
                             body=body)
 
     def _parse_pattern(self) -> ast.Pattern:
-        """Parse ``TYPE``, ``TYPE(NAME)``, ``\N{UP TACK}`` or ``\N{UP TACK}(NAME)``."""
+        """Parse ``TYPE``, ``TYPE(NAME)``, ``\N{UP TACK}``, ``\N{UP TACK}(NAME)`` or ``_``.
+
+        `_` takes every alternative no earlier arm took and binds nothing, so a
+        name written after it would stand for a value of no one type.
+        """
+        if self._check(TokKind.IDENT) and self._current.text == WILDCARD_NAME:
+            token = self._advance()
+            if self._accept(TokKind.LPAREN) is None:
+                return ast.Pattern(span=token.span, type=None, wildcard=True)
+            # `_(name)` is a pattern in shape and not in meaning, so it is built
+            # and reported where the rest of what an arm means is checked.
+            name_token = self._expect(TokKind.IDENT)
+            end = self._expect(TokKind.RPAREN,
+                               D.LANG_SYNTAX_EXPECTED_CLOSING_PAREN).span
+            return ast.Pattern(span=token.span.to(end), type=None, wildcard=True,
+                               name=name_token.text, name_span=name_token.span)
         bottom = self._accept(TokKind.BOTTOM)
         written = None if bottom is not None else self._parse_type_ref()
         start = bottom.span if bottom is not None else written.span  # pyright: ignore

@@ -1434,10 +1434,12 @@ def _width_of(ty: "Type") -> int:
     A truth value is a byte, which is what the layout says it is.  Reading or
     writing one any wider would touch whatever is laid out beside it.
     """
-    from ...ir.types import BoolType, FloatType, IntType
+    from ...ir.types import BoolType, EnumType, FloatType, IntType
 
     if isinstance(ty, (IntType, FloatType)):
         return ty.bits
+    if isinstance(ty, EnumType):
+        return ty.holder.bits
     return 8 if isinstance(ty, BoolType) else 64
 
 
@@ -1449,19 +1451,26 @@ def _number_of(value: object) -> "tuple[int, Type] | None":
     every instruction on this architecture that produces one produces, and what
     the byte in the image already holds.
     """
-    from ...ir.value import BoolConst, IntConst
+    from ...ir.value import BoolConst, EnumConst, IntConst
 
     if isinstance(value, IntConst):
         return value.value, value.ty
     if isinstance(value, BoolConst):
         return (1 if value.value else 0), value.ty
+    if isinstance(value, EnumConst):
+        # Which value of the enumeration it is.  A value of one is not a number
+        # of the type that holds it, but what is compared and what is stored is
+        # that number, and this is where the two meet.
+        return value.index, value.ty
     return None
 
 
 def _is_signed(ty: "Type") -> bool:
     """Whether a narrow value of *ty* is widened by its sign when it is read."""
-    from ...ir.types import IntType
+    from ...ir.types import EnumType, IntType
 
+    if isinstance(ty, EnumType):
+        return ty.holder.signed
     return isinstance(ty, IntType) and ty.signed
 
 
