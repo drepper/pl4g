@@ -29,8 +29,7 @@
     "match-a-result": "three matches, one of them carrying a name past",
     "enum-values": "two enumerations, and three matches over them",
     "enum-flag": "a flag enumeration, its operators and three matches",
-    "if-statement": "a chain of conditions, and one with no else",
-    "collection-syntax": "sets and dictionaries, their types and lookups"
+    "if-statement": "a chain of conditions, and one with no else"
   },
   "commits": [
     {
