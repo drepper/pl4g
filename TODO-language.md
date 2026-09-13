@@ -29,10 +29,24 @@ To Do List for the PL4g language
 
 [ ] add floating-point types `f16`, `f32`, `f64`, and `bfloat`.  `f16` and `bfloat` optional, if there is no hardware support.
     Allow both the decimal and the hexadecimal format as specified in the C standard.
-    Where it stands: `f32` and `f64` already name a type and have a size and an alignment, but nothing can hold a value of one --
-    there is no float literal, no float constant in the representation, and no backend rule.  Needs the register allocator, since
-    the float register classes are declared on all three targets and none is ever used, and the calling convention has to say where
-    a float is passed.  "Optional if there is no hardware support" is what `@[required(NAME)]` above is for.
+    Decided by the user, to be done with it: the hardware's floating point is assumed on all three targets, and the requirement is
+    recorded in the binary.  On RISC-V that is the header's flag word, which already carries the floating-point convention and
+    would say DOUBLE instead of SOFT -- the field and its three values are already named in `target/riscv64/target.py` waiting for
+    it, and the differential encoding test would assemble against `rv64imfd` rather than `rv64im`.  On x86-64 and AArch64 there is
+    nothing to record: floating point is in the base of both ABIs, so a binary that uses it requires nothing a binary that does not
+    would not already have.  Saying that in the specification is the whole of what those two need.
+    **What the compiler needs first, which is the reason this is not begun.**  The register allocator has one allocation order and
+    hands out one register class; a value of float type would be given a general-purpose register.  Teaching it about classes --
+    an order per class, a spill slot per class, and a virtual register saying which class it wants -- is a piece of work of its own
+    and is the thing to do before any of the rest.  It is also what a vector type will want later, so it is worth doing properly
+    rather than around.
+    **And then, in rough order:** a `FloatConst` in the representation and a literal in the lexer, decimal and hexadecimal; the
+    calling convention saying which registers a float is passed and returned in; and per target the loads, stores, moves, the four
+    operations, the comparison, and the absolute value -- about twenty rows each, every one to be checked against the assembler by
+    the differential test the way every other row is.
+    **Two rules are already decided and wait for it.**  An operation whose answer is an IEEE infinity or a not-a-number faults, the
+    way an integer overflow does, which is what makes floating point behave like the rest of the language rather than like an
+    exception to it.  And `=` on floating point warns that it is an unsafe question, which `@[ignore]` is the way out of.
 
 [?] add a product type
     Question: no syntax has been given for declaring one, for naming its fields, or for writing a value of one, and the `type`
@@ -213,7 +227,9 @@ To Do List for the PL4g language
     despite, and quieting one of those leaves it in the program where quieting any other error discards it.
 
 [ ] implement comparisons for floating point values that are sensitive to small, accumulated errors.  Needs the float entry above
-    and the exact comparisons.  Use this equivalency table:
+    and the exact comparisons.  Decided by the user: the tolerance is a global variable for now, so that a program can set it,
+    rather than a constant built into the compiler -- which also means the comparison reads it, and so is a load and a subtraction
+    and an absolute value and one ordinary comparison, with no new machinery beyond the absolute value.  Use this equivalency table:
     | Tolerant | Exact | Reads as |
     |----------|-------|----------|
     | `≅` | `=` | alike |

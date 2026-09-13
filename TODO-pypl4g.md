@@ -76,6 +76,11 @@ To Do List for the pypl4g compiler
     reach a convention, so each backend names them beside its registers and the call row uses them.  It costs nothing today,
     every convention each target has naming the same set; the day one does not, the call will have to carry them per instance.
 
+[ ] teach the register allocator about register classes.  It has one allocation order today and gives every virtual register a
+    general-purpose one, which is right while every value is an integer and wrong the moment one is not.  What it wants: an order
+    per class, a virtual register saying which class it belongs to, and a frame slot of the right width per class.  Floating point
+    waits on this and so will vectors, and it is the first thing to do for either.
+
 [ ] let an operand require a particular register, so that an instruction with a fixed register pair can be used.  Division turned
     out not to need it -- an instruction that declares it writes a register is already enough to keep other values out of it, so
     the divisor cannot land in the pair -- but the one-operand multiply does, since its *input* has to be in a particular register
