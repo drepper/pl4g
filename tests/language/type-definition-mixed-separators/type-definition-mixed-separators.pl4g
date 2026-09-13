@@ -1,0 +1,12 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 3017 LANG_TYPEDEF_MIXED_SEPARATORS
+
+※ The separator is what says which kind of type is being defined, so a
+※ definition using both would be saying two things about itself, and there is
+※ no type that is both.
+
+type Confused = a : u8 ; b : u8 | c : u8
+
+@[startup]
+fn main() → u8:
+    0u8

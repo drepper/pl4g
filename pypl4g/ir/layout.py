@@ -8,9 +8,10 @@ width of a pointer is the target's business and not the type's.
 """
 
 from dataclasses import dataclass
+from typing import Final
 
 from .types import (BoolType, FloatType, IntType, MemType, ProductType, PtrType,
-                    SumType, Type, VoidType)
+                    ResultType, SumType, Type, VoidType)
 
 
 class NoLayoutError(Exception):
@@ -50,6 +51,19 @@ def size_of(ty: Type, layout: DataLayout) -> int:
                 total = _align_up(total, align_of(field, layout))
                 total += size_of(field, layout)
             return _align_up(total, align_of(ty, layout))
+        case SumType():
+            # The payload first and the tag after it, which is never larger than
+            # the tag first and is sometimes smaller: a tag ahead of a payload
+            # that wants eight bytes is seven bytes of padding, and behind it is
+            # often none.
+            payload = max((size_of(v, layout) for _, v in ty.variants), default=0)
+            return _align_up(payload + _TAG_SIZE, align_of(ty, layout))
+        case ResultType():
+            # The same shape: the answer, and one byte saying whether there is
+            # one.  It is not a `SumType` because the error carries nothing and
+            # a variant of a sum carries something.
+            return _align_up(size_of(ty.ok, layout) + _TAG_SIZE,
+                             align_of(ty, layout))
         case _:
             raise NoLayoutError(ty)
 
@@ -67,10 +81,43 @@ def align_of(ty: Type, layout: DataLayout) -> int:
             return 1
         case ProductType():
             return max((align_of(f, layout) for _, f in ty.fields), default=1)
-        case MemType() | SumType():
+        case SumType():
+            return max((align_of(v, layout) for _, v in ty.variants), default=1)
+        case ResultType():
+            return align_of(ty.ok, layout)
+        case MemType():
             raise NoLayoutError(ty)
         case _:
             raise NoLayoutError(ty)
+
+
+#: How much room the tag of a sum takes.  One byte holds two hundred and
+#: fifty-six variants, and a type with more of them than that is a type whose
+#: definition is the thing to look at.
+_TAG_SIZE: Final[int] = 1
+
+
+def offsets_of(ty: ProductType, layout: DataLayout) -> tuple[int, ...]:
+    """Where each field of *ty* starts, in the order the fields were declared.
+
+    Declaration order for now, which is what `size_of` lays out.  The
+    specification lets a later pass choose a better order; when one does, this
+    is the single place that says where a field went.
+    """
+    found: list[int] = []
+    total = 0
+    for _, field in ty.fields:
+        total = _align_up(total, align_of(field, layout))
+        found.append(total)
+        total += size_of(field, layout)
+    return tuple(found)
+
+
+def tag_offset_of(ty: SumType | ResultType, layout: DataLayout) -> int:
+    """Where the tag of a sum, or the truth value of a result, starts."""
+    if isinstance(ty, ResultType):
+        return size_of(ty.ok, layout)
+    return max((size_of(v, layout) for _, v in ty.variants), default=0)
 
 
 def _align_up(value: int, alignment: int) -> int:

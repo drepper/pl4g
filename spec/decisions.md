@@ -1930,6 +1930,62 @@ this a change to the lowering rather than to the allocator.  Three instructions 
 in memory, which is a question the compiler has not answered.  Neither can a parameter, which needs the positional mapping to
 account for a value that takes two registers.  A local holds one today, because a local is a value and needs no layout.
 
+## 2026-09-14T21:00+02:00 — language and compiler
+
+**Product and sum types: one construct, and the separator says which**
+
+Decided on the user's direction.  A definition is `type NAME = ` and then a sequence of `NAME : TYPE` pairs; the pairs are
+separated by `;` for a product, which holds all of its parts at once, or by `|` for a sum, which holds exactly one.  The sequence
+may be written over several lines inside braces or indented under the definition.
+
+That is one construct where nearly every language has two.  Rust has `struct` and `enum`, Go has `struct` and nothing, Zig has
+`struct` and `union(enum)`.  Haskell has one `data` declaration and separates a sum's alternatives with `|`, which is where the
+glyph here comes from; the `;` beside it is the language's own, and the two characters already mean "and also" and "or else"
+everywhere else in it.  A product and a sum are dual, and writing them with one construct that differs in one character says so.
+
+Considered and rejected: `type Point = (x: i32, y: i32)`, which reuses the parameter-list shape but offers no obvious spelling for
+a sum; two keywords after Rust; and an untagged `type Result = i32 | Error` naming only the types, which leaves a sum's parts
+unnamed and therefore unreachable.
+
+**What had to be decided beyond the syntax given.**
+
+*One pair with no separator is a product.*  There is nothing to go by, and a record of one field is a useful thing where a choice
+between one alternative is not.
+
+*A line may be broken after a separator and not before one.*  Both readings are writable, and allowing either made the grammar
+ambiguous: after a pair and an end of line, nothing says yet whether the definition ended.  Ending the line with the separator
+keeps that decidable where it is written.
+
+*A defined type is nominal.*  Two definitions with the same parts are two types, and two files each defining `Point` define two.
+A definition is what says what a value *is*; two things laid out alike are not one thing.  The type in the representation
+therefore carries the name it was given and the file that gave it, and renders as its name, which is what a diagnostic about one
+should say.
+
+*A variant of a sum may be `void` and a field of a product may not.*  A `void` variant says the value is this alternative and
+carries nothing further, which is how an enumeration is written; a `void` field leaves the product meaning what it would have
+meant without it, which is a second spelling of one thing.
+
+*A type may not reach itself* (4408), directly or through a chain: a value of such a type would have to hold a value of itself,
+and the indirection that makes that finite elsewhere is not something this language can write.  Resolution is therefore on first
+ask with a mark saying "being worked out", which catches the chain and reports the type the chain came back to.
+
+*A type name lives in the same namespace as everything else at the top level.*  A name in this language stands for one thing, and
+which kind of thing should not have to be worked out from where it is written.
+
+*Types are read before functions and variables*, and imports before types, so that a signature may name a type defined below it
+and a type may be one another module exports.  `@[export]` now applies to a type, and `m.Point` names one.
+
+*What a value occupies.*  A product is its fields, each where its own alignment allows, in declaration order for now -- the
+specification lets a later pass choose better, and `offsets_of` is the one place that would change.  A sum is its largest variant
+with a one-byte tag *after* it: a tag ahead of a payload wanting eight bytes is seven bytes of padding and behind it is often
+none.  A result is laid out the same way, which settles what it looks like in memory even though nothing puts one there yet.
+
+**What is deliberately not in this change.**  Nothing writes a value of a product or a sum, nothing reads a field, and nothing
+asks which variant a sum holds -- the last needs control flow the language does not have.  No syntax was given for any of the
+three, so all three are questions in the to-do list with proposals rather than decisions made here.  A function that takes or
+answers with one compiles as far as the code generator, which says it cannot generate for it (8501) rather than putting a value
+in a register it does not fit in.
+
 ---
 
 ---

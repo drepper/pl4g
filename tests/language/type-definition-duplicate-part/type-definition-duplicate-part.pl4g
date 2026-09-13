@@ -1,0 +1,11 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4406 LANG_TYPEDEF_DUPLICATE_PART
+
+※ The name is how a part is reached, and the specification lets the compiler
+※ reorder a product's fields, so there is nothing else to reach one by.
+
+type Twice = x : u8 ; x : u16
+
+@[startup]
+fn main() → u8:
+    0u8

@@ -34,8 +34,55 @@ module.exports = grammar({
     // -- items -------------------------------------------------------------
 
     _item: $ => seq(
-      choice($.function_definition, $.variable_definition, $.module_import),
+      choice($.function_definition, $.variable_definition, $.module_import,
+             $.type_definition),
       repeat($._newline),
+    ),
+
+    // `type NAME = ` and then a sequence of `NAME : TYPE` pairs.  The separator
+    // is what says which kind of type it is: `;` for a product, which holds all
+    // of its parts at once, and `|` for a sum, which holds one of them.  One
+    // pair with no separator to go by is a product.
+    //
+    // The sequence may be written over several lines in either of the two ways
+    // the language already breaks a line -- inside braces, where the scanner
+    // gives out no ends of lines at all, or indented under the definition,
+    // where an end of line may fall between any two of its tokens.  Neither
+    // changes what separates the pairs.
+    type_definition: $ => seq(
+      optional($.attribute_list),
+      'type',
+      field('name', $.identifier),
+      '=',
+      field('parts', $._type_parts),
+    ),
+
+    // One pair with nothing to separate it is a product: a record of one field
+    // is a useful thing and a choice between one alternative is not.
+    _type_parts: $ => choice(
+      $._bare_parts,
+      seq('{', $._bare_parts, '}'),
+      seq($._newline, $._indent, $._bare_parts, repeat($._newline), $._dedent),
+    ),
+
+    _bare_parts: $ => choice($.product_parts, $.sum_parts, $.type_part),
+
+    // The separator ends the line it is written on, where the definition is
+    // written over several: a line may be broken after it and not before it,
+    // which is what keeps "this pair is the last" decidable at the end of a
+    // line rather than at the start of the next.
+    product_parts: $ => seq(
+      $.type_part,
+      repeat1(seq(';', repeat($._newline), $.type_part)),
+    ),
+
+    sum_parts: $ => seq(
+      $.type_part,
+      repeat1(seq('|', repeat($._newline), $.type_part)),
+    ),
+
+    type_part: $ => seq(
+      field('name', $.identifier), ':', field('type', $.type),
     ),
 
     // The arrow and what follows it say what the function answers with.
@@ -89,7 +136,11 @@ module.exports = grammar({
     // A type is a name, and after it the mark that says a value of it may not
     // be there: `TYPE?` is a result whose error carries nothing, `TYPE?ERROR`
     // one whose error is a value of its own.
-    type: $ => seq($.identifier, optional(seq('?', optional($.identifier)))),
+    type: $ => seq(
+      field('module', optional(seq($.identifier, '.'))),
+      $.identifier,
+      optional(seq('?', optional($.identifier))),
+    ),
 
     // -- attributes --------------------------------------------------------
 

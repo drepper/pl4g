@@ -1,0 +1,15 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4408 LANG_TYPEDEF_CONTAINS_ITSELF
+
+※ A product holds its fields and a sum holds one of its variants, so a type
+※ that reaches itself through either would need room for a value of itself
+※ inside a value of itself, without end.  What makes such a shape possible
+※ elsewhere is an indirection, and the language has no way to write one.
+※ A chain through several definitions counts as much as a direct one.
+
+type Chain = next : Link
+type Link = back : Chain
+
+@[startup]
+fn main() → u8:
+    0u8

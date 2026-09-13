@@ -1,0 +1,12 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4409 LANG_TYPEDEF_FIELD_OF_NOTHING
+
+※ A product holds all of its fields, so one of a type that carries no
+※ information leaves the product meaning what it would have meant without it.
+※ A variant of a sum may be `void`, and the test beside this one writes one.
+
+type Padded = a : u8 ; nothing : void
+
+@[startup]
+fn main() → u8:
+    0u8

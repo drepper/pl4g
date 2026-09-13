@@ -87,3 +87,98 @@ fn prepare():
     body: (layout_block
       (assignment target: (identifier) value: (integer_literal))
       (assignment target: (identifier) value: (integer_literal)))))
+
+================================================================================
+Type definitions in all three notations
+================================================================================
+
+type Handle = value : u64
+
+type Point = x : f64 ; y : f64
+
+type Span = { first : u32 ; last : u32 }
+
+type Line =
+    from : Point ;
+    to : Point
+
+type Colour =
+    red : void |
+    green : void |
+    blue : void
+
+@[export]
+type Outer = inner : other.Inner ; maybe : u8?
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (type_definition
+    name: (identifier)
+    parts: (type_part
+      name: (identifier)
+      type: (type
+        (identifier))))
+  (type_definition
+    name: (identifier)
+    parts: (product_parts
+      (type_part
+        name: (identifier)
+        type: (type
+          (identifier)))
+      (type_part
+        name: (identifier)
+        type: (type
+          (identifier)))))
+  (type_definition
+    name: (identifier)
+    parts: (product_parts
+      (type_part
+        name: (identifier)
+        type: (type
+          (identifier)))
+      (type_part
+        name: (identifier)
+        type: (type
+          (identifier)))))
+  (type_definition
+    name: (identifier)
+    parts: (product_parts
+      (type_part
+        name: (identifier)
+        type: (type
+          (identifier)))
+      (type_part
+        name: (identifier)
+        type: (type
+          (identifier)))))
+  (type_definition
+    name: (identifier)
+    parts: (sum_parts
+      (type_part
+        name: (identifier)
+        type: (type
+          (identifier)))
+      (type_part
+        name: (identifier)
+        type: (type
+          (identifier)))
+      (type_part
+        name: (identifier)
+        type: (type
+          (identifier)))))
+  (type_definition
+    (attribute_list
+      (attribute
+        name: (identifier)))
+    name: (identifier)
+    parts: (product_parts
+      (type_part
+        name: (identifier)
+        type: (type
+          module: (identifier)
+          (identifier)))
+      (type_part
+        name: (identifier)
+        type: (type
+          (identifier))))))

@@ -88,9 +88,16 @@ To Do List for the pypl4g compiler
     and nothing can say so.  That is the only way to see the upper half of a product on x86-64, and until then a saturating
     multiplication of the widest type is refused on every target rather than on the one that cannot do it.
 
-[ ] lower `SwitchInst`.  It exists in the representation and nothing generates one, since the language has no construct that would.
-    A chain of comparisons is correct and is what a first version should do; a jump table wants the relocation work that
-    position-independent code needs anyway.
+[ ] lower `SwitchInst`.  It exists in the representation and nothing generates one, since the language has no construct that
+    would -- asking which variant a sum holds will be the first, once there is a way to ask.  A chain of comparisons is correct
+    and is what a first version should do; a jump table wants the relocation work that position-independent code needs anyway.
+
+[ ] hold a value whose type is a product or a sum.  Both are refused today (8501): a product is every one of its fields at once
+    and a sum is one variant and a tag, and neither is a thing a register holds.  What they want is a place in memory, an address
+    to reach it by, and a convention for passing one to a function and answering with one -- which on all three targets means
+    small aggregates in registers and large ones behind a pointer.  Nothing in the language writes such a value yet, so this waits
+    on the two questions in TODO-language.md rather than the other way round.  The layout is already computed, in
+    `pypl4g/ir/layout.py`, including where each field starts.
 
 [x] produce a truth value in a register.  Done: `setcc` and a widening move on x86-64, `cset` on AArch64, and `slt`/`sltu` with
     the operands exchanged or the answer inverted on RISC-V, equality there being a subtraction and then a question about the

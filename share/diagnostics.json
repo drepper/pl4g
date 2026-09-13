@@ -863,6 +863,97 @@
       "option": null
     },
     {
+      "number": 3015,
+      "name": "LANG_TYPEDEF_EXPECTED_EQUALS",
+      "severity": "error",
+      "message": "a type definition is written 'type NAME = ...'",
+      "args": [],
+      "cause": "The name of the type is followed by `=` and then by what the type is made of.  There is no form that declares a name without saying what it stands for: a type whose parts are not written is a type nothing can be said about, and the language has no forward declarations because it reads every definition of a file before it checks any of them.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Product and sum types",
+        "requirement": "A type definition is written `type NAME = ...`."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 3016,
+      "name": "LANG_TYPEDEF_EXPECTED_COLON",
+      "severity": "error",
+      "message": "each part of a type is written 'NAME : TYPE'",
+      "args": [],
+      "cause": "A field of a product and a variant of a sum are both written as a name, a colon and a type -- the same shape a parameter and a variable are written with, so that one habit serves for all of them.  A part with no name would be one that could only be reached by counting, and the specification lets the compiler reorder a product's fields, so counting is exactly what it must not be possible to do.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Product and sum types",
+        "requirement": "Each part of a type definition is written `NAME : TYPE`."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 3017,
+      "name": "LANG_TYPEDEF_MIXED_SEPARATORS",
+      "severity": "error",
+      "message": "this definition separates its parts with {found} after separating them with {first}",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the separator written here"
+        },
+        {
+          "name": "first",
+          "type": "string",
+          "description": "the separator the definition started with"
+        }
+      ],
+      "cause": "The separator is what says which kind of type is being defined: `;` for a product, which holds all of its parts at once, and `|` for a sum, which holds exactly one of them.  A definition using both would be saying two things about itself, and there is no type that is both.  Which one was meant is what to decide; the first separator is where the definition said so.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Product and sum types",
+        "requirement": "One type definition uses one separator throughout."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 3018,
+      "name": "LANG_TYPEDEF_FIRST_SEPARATOR",
+      "severity": "note",
+      "message": "the definition separated its parts with this",
+      "args": [],
+      "cause": "Attached to the report of a definition that changed separator part way, pointing at the one it began with.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Product and sum types",
+        "requirement": "One type definition uses one separator throughout."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 3019,
+      "name": "LANG_TYPEDEF_NO_PARTS",
+      "severity": "error",
+      "message": "a type with no parts is 'void' written at greater length",
+      "args": [],
+      "cause": "A product of no fields holds nothing, and a sum of no variants has no value at all; `void` is the type of what carries no information, and the language admits one spelling per meaning.  Where a type is wanted that is a name for another type, that is what the to-do list calls an alias and the language does not have yet.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Product and sum types",
+        "requirement": "A type definition has at least one part."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 3201,
       "name": "LANG_ATTR_UNKNOWN",
       "severity": "error",
@@ -2088,6 +2179,72 @@
         "document": "spec/spec.md",
         "section": "The Language / File Structure / Function Definition / Special Functions",
         "requirement": "constructor function.  These are functions that run before control is transferred to the startup function."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4406,
+      "name": "LANG_TYPEDEF_DUPLICATE_PART",
+      "severity": "error",
+      "message": "'{name}' is already a part of this type",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the name written twice"
+        }
+      ],
+      "cause": "Two fields of one product, or two variants of one sum, cannot share a name: the name is how a part is reached, and the specification lets the compiler reorder a product's fields, so there is nothing else to reach one by.  Rename one of them.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Product and sum types",
+        "requirement": "The parts of one type have distinct names."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4408,
+      "name": "LANG_TYPEDEF_CONTAINS_ITSELF",
+      "severity": "error",
+      "message": "'{name}' contains itself, so no value of it would fit in memory",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the type that contains itself"
+        }
+      ],
+      "cause": "A product holds its fields and a sum holds one of its variants, so a type that reaches itself through either would need room for a value of itself inside a value of itself, without end.  What makes such a shape possible in other languages is indirection -- a pointer, a reference, a box -- and this language has no way to write one yet.  A chain through several definitions counts: the report names the type the chain came back to.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Product and sum types",
+        "requirement": "A type may not contain itself."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4409,
+      "name": "LANG_TYPEDEF_FIELD_OF_NOTHING",
+      "severity": "error",
+      "message": "'{name}' is a field of type 'void', which holds nothing",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the field"
+        }
+      ],
+      "cause": "A product holds all of its fields, so one of a type that carries no information is a field that says nothing about a value: the product means exactly what it would mean without it, and the language admits one spelling per meaning.  A *variant* of a sum may be `void`, and says the value is this alternative and carries nothing further -- which is how an enumeration is written.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Product and sum types",
+        "requirement": "A field of a product may not be `void`."
       },
       "since": "0.1",
       "default_enabled": true,

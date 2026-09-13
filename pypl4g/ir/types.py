@@ -164,12 +164,26 @@ class ErrorType(Type):
 
 @dataclass(frozen=True, slots=True)
 class ProductType(Type):
-    """A record.  The field order here is the declaration order, not a layout."""
+    """A record.  The field order here is the declaration order, not a layout.
+
+    A type a program defined is **nominal**: two definitions with the same
+    fields are two types, because a definition is what says what a value *is*
+    and two things that happen to be laid out alike are not one thing.  That is
+    what `name` and `origin` are for -- the name as the source wrote it, and the
+    file that wrote it, so that two files each defining `Point` define two.
+    """
 
     fields: tuple[tuple[str, Type], ...]
+    #: The name the program gave it, or nothing for one the compiler made.
+    name: str = ""
+    #: The file the definition is in, which is part of which type this is and
+    #: no part of what it is called.
+    origin: str = ""
 
     def render(self) -> str:
         """The name of this type in the textual form of the IR."""
+        if self.name:
+            return self.name
         inner = ", ".join("".join((n, ": ", t.render())) for n, t in self.fields)
         return "".join(("{", inner, "}"))
 
@@ -180,6 +194,8 @@ class ProductType(Type):
         reorder the *layout* for efficiency, but the declaration is what
         identifies the type, so that is what the name records.
         """
+        if self.name:
+            return self.name
         inner = ",".join("".join((n, ":", t.mangled())) for n, t in self.fields)
         return "".join(("{", inner, "}"))
 
@@ -211,17 +227,28 @@ class ResultType(Type):
 
 @dataclass(frozen=True, slots=True)
 class SumType(Type):
-    """A choice between named variants, the basis of the language's error model."""
+    """A choice between named variants, the basis of the language's error model.
+
+    Nominal for the same reason a product is, and by the same two fields.
+    """
 
     variants: tuple[tuple[str, Type], ...]
+    #: The name the program gave it, or nothing for one the compiler made.
+    name: str = ""
+    #: The file the definition is in, which is part of which type this is.
+    origin: str = ""
 
     def render(self) -> str:
         """The name of this type in the textual form of the IR."""
+        if self.name:
+            return self.name
         inner = " | ".join("".join((n, ": ", t.render())) for n, t in self.variants)
         return "".join(("<", inner, ">"))
 
     def mangled(self) -> str:
         """The normalized name of this type, for use inside a symbol name."""
+        if self.name:
+            return self.name
         inner = "|".join("".join((n, ":", t.mangled())) for n, t in self.variants)
         return "".join(("<", inner, ">"))
 

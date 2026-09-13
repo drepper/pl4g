@@ -1,0 +1,12 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 3019 LANG_TYPEDEF_NO_PARTS
+
+※ A product of no fields holds nothing and a sum of no variants has no value
+※ at all; `void` is the type of what carries no information, and the language
+※ admits one spelling per meaning.
+
+type Nothing = { }
+
+@[startup]
+fn main() → u8:
+    0u8

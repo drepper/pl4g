@@ -683,6 +683,84 @@ value the compiler works out for itself.  Nothing is truncated and nothing wraps
 numbers -- a program that stored 300 in a `u8` and read back 44 would not be behaving as it reads, and no rule about which bits
 survive would make it so.
 
+#### Product and sum types
+
+A program defines a type by writing
+
+```
+type NAME = NAME : TYPE ; NAME : TYPE ; ...
+type NAME = NAME : TYPE | NAME : TYPE | ...
+```
+
+**The separator says which kind of type it is.**  `;` makes a **product**, which holds all of its parts at once -- a record.  `|`
+makes a **sum**, which holds exactly one of them -- a tagged union.  Those are the two characters that already mean "and also" and
+"or else" everywhere else in the language, so which one a definition uses is the whole of what a reader has to see.  A definition
+that uses both is refused (3017).
+
+Each part is written `NAME : TYPE`, the same shape a parameter and a variable are written with.  A part with no name would be one
+that could only be reached by counting, and the compiler is allowed to reorder a product's fields, so counting is exactly what
+must not be possible.  Two parts of one type may not share a name (4406).
+
+**One pair with no separator to go by is a product.**  A record of one field is a useful thing -- a name for a number that is not
+that number -- and a choice between one alternative is not.
+
+**The sequence may be written over several lines**, in either of the two ways the language already breaks a line:
+
+```
+type Span = { first : u32 ; last : u32 }
+
+type Line =
+    from : Point ;
+    to : Point
+```
+
+Braces work because the lexer gives out no ends of lines inside them.  Indenting the parts under the definition works because the
+separator ends the line it is written on and the end of line is then skipped.  Neither notation changes what separates the pairs:
+a line may be broken after a separator and not before one, which is what keeps "this pair was the last" decidable where it is
+written rather than one line further on.
+
+**A variant of a sum may be `void`**, and says the value is this alternative and carries nothing further.  A sum every one of
+whose variants is `void` is an enumeration, and is how one is written:
+
+```
+type Colour = red : void | green : void | blue : void
+```
+
+A **field** of a product may not be (4409): a product holds all of its fields, so one that carries no information leaves the
+product meaning exactly what it would have meant without it.
+
+**A type definition may name a type defined below it**, and may name one another module exports (`m.Point`), for which the
+definition there needs `@[export]` as a function or a variable does.  What it may not do is reach itself (4408), through its own
+fields or through a chain of other definitions: a value of such a type would have to hold a value of itself, and the indirection
+that makes that finite elsewhere -- a pointer, a reference, a box -- is not something this language can yet write.
+
+**A defined type is nominal.**  Two definitions with the same parts are two types, because a definition is what says what a value
+*is*, and two things that happen to be laid out alike are not one thing.  Two files each defining `Point` define two types, even
+where the parts agree.
+
+Compare: Rust's `struct` and `enum`, which are two keywords for what is here one construct with two separators; Go's `struct`
+and its absence of a sum type; Zig's `struct` and `union(enum)`; Haskell's single `data` declaration, where `|` separates the
+alternatives exactly as it does here and a record's fields are named in braces; ML's `type ... = ... | ...`.  The shape here is
+Haskell's `|` and a `;` beside it, which is as close to one construct for both as the two ideas allow: a product and a sum differ
+in one character, which is what they differ in.
+
+Considered and rejected: `type Point = (x: i32, y: i32)`, which reuses the parenthesis shape of a parameter list but gives no
+obvious spelling for a sum; separate keywords after Rust, which is two constructs for two things that are dual; and an untagged
+`type Result = i32 | Error`, naming only the types, which leaves a sum's parts unnamed and so unreachable.
+
+**No value of one can be written yet.**  The language has no syntax for making a product or a sum, none for reading a field, and
+none for asking which variant a sum holds -- the last of which needs control flow the language also does not have.  The types are
+therefore declarable and not yet usable: a function that takes or answers with one compiles as far as the code generator, which
+says it cannot generate for it (8501).  The to-do list carries the three questions.
+
+##### What a value of one occupies
+
+The compiler decides this, and the language says only what follows from it.  A product is its fields, each starting where its own
+alignment allows; the compiler is free to choose their order, and the order it chooses today is the order they were declared.  A
+sum is its largest variant with a one-byte tag after it, the tag last rather than first because a tag ahead of a payload wanting
+eight bytes is seven bytes of padding and behind it is often none.  The whole of either is rounded up to its own alignment, which
+is the largest of its parts'.
+
 ### Names the compiler provides
 
 A name beginning with `⎕` (U+2395 APL FUNCTIONAL SYMBOL QUAD) belongs to the compiler.  A program may read and assign the ones
@@ -709,7 +787,8 @@ one; it is not what is implemented, and the entry in the to-do list holds the qu
 At the top level of a file one can find:
 - module handling
 - compile-time expressions as assertions and contracts
-- type definitions
+- type definitions, which are read before anything else in the file: a function's signature may name a type defined below it, and
+  a type definition may name one defined below itself
 - variable definitions
 - function definitions
 

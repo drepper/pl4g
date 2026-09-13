@@ -84,6 +84,8 @@ class TypeRef(Node):
     """A reference to a type by name."""
 
     name: str
+    #: The module the name was reached through, where it was written `m.Name`.
+    module: str | None = None
     #: Whether what was written is a result type: `TYPE?` or `TYPE?ERROR`.
     result: bool = False
     #: The name of the error type, where one was written.  Nothing means the
@@ -361,7 +363,40 @@ class FuncDef(Node):
     doc: str | None = None
 
 
-type Definition = FuncDef | VarDef | ModuleImport
+class TypeKind(StrEnum):
+    """Which kind of type a definition defines, which is what its separator says.
+
+    A product holds every one of its parts at once and a sum holds exactly one
+    of them, so the two are written with the two characters that already mean
+    "and also" and "or else" everywhere else in the language.
+    """
+
+    PRODUCT = ";"
+    SUM = "|"
+
+
+@dataclass(frozen=True, slots=True)
+class Field(Node):
+    """One `NAME : TYPE` of a type definition: a field, or a variant."""
+
+    name: str
+    name_span: Span
+    type: TypeRef
+
+
+@dataclass(frozen=True, slots=True)
+class TypeDef(Node):
+    """`type NAME = NAME : TYPE (';' | '|') ...`"""
+
+    name: str
+    name_span: Span
+    kind: TypeKind
+    fields: tuple[Field, ...]
+    attrs: tuple[Attribute, ...] = ()
+    doc: str | None = None
+
+
+type Definition = FuncDef | VarDef | ModuleImport | TypeDef
 
 
 @dataclass(frozen=True, slots=True)

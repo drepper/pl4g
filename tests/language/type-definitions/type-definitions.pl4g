@@ -1,0 +1,43 @@
+※ pl4g-test: compile=ok run=native,qemu exit=0 diag=none
+
+※ A type definition is `type NAME = ` and then a sequence of `NAME : TYPE`
+※ pairs.  The separator says which kind of type it is: `;` for a product,
+※ which holds all of its parts at once, and `|` for a sum, which holds exactly
+※ one of them.  Those are the two characters that already mean "and also" and
+※ "or else" everywhere else in the language.
+※
+※ The sequence may be written over several lines in either of the two ways the
+※ language already breaks a line -- inside braces, or indented under the
+※ definition -- and neither changes what separates the pairs.
+
+※ one line, one pair: a record of one field, since a choice between one
+※ alternative is not a thing worth writing
+type Handle = value : u64
+
+※ one line, several pairs
+type Point = x : f64 ; y : f64
+
+※ inside braces
+type Span = { first : u32 ; last : u32 }
+
+※ indented, with the separator ending each line
+type Line =
+    from : Point ;
+    to : Point
+
+※ a sum, whose variants may carry nothing: which is what an enumeration is
+type Colour =
+    red : void |
+    green : void |
+    blue : void
+
+※ a sum whose variants carry something, written inside braces
+type Number = { whole : i64 | fraction : f64 }
+
+※ a type may name another written below it, and may be a result
+type Outer = inner : Inner ; maybe : u8?
+type Inner = a : u8
+
+@[startup]
+fn main() → u8:
+    0u8

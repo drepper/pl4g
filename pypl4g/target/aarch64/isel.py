@@ -1322,8 +1322,15 @@ def _new_value(ty: "Type", registers: "RegisterInfo",
     The hint says where the value is wanted anyway.  Taking it turns the move
     that would put it there into a move of a register to itself, which then goes.
     """
-    from ...ir.types import FloatType
+    from ...ir.types import FloatType, ProductType, SumType
 
+    if isinstance(ty, (ProductType, SumType)):
+        # A product is every one of its fields at once and a sum is one of its
+        # variants and a tag; neither is a thing a register holds.  What they
+        # want is a place in memory, and nothing in the language makes a value
+        # of one yet, so this is where saying so belongs.
+        raise UnsupportedOperation("".join((
+            "a value of type '", ty.render(), "'")), None)
     if isinstance(ty, FloatType):
         # A floating-point value belongs to the other kind of register, and the
         # allocator now asks a value which kind it wants rather than assuming.

@@ -37,29 +37,38 @@ To Do List for the PL4g language
     this is the first thing that will want `@[required(NAME)]`; `bfloat` is narrower still and is in none of the three bases.
     Neither has a literal suffix yet and neither names a type.
 
-[?] add a product type
-    Question: no syntax has been given for declaring one, for naming its fields, or for writing a value of one, and the `type`
-    keyword is lexed but has no parse rule.  Considered: `type Point = (x: i32, y: i32)` with a value written `(x: 1i32, y: 2i32)`,
-    which reuses the parenthesis-and-colon shape the language already has for parameters and attribute arguments; a braced form
-    after Rust, Go and Zig, which reads well but takes `{}` that is already the explicit block syntax; and a layout form, one
-    field per line, which fits the rest of the language but makes an anonymous product awkward to write inside an expression.
-    Field access is a second question: `p.x` after almost everything, or an index, given that the specification lets the compiler
-    reorder fields and so has to keep names and positions apart.
+[x] add a product type and a sum type.  Done, as one construct: `type NAME = ` and then a sequence of `NAME : TYPE` pairs,
+    separated by `;` for a product and by `|` for a sum.  The sequence may be written over several lines inside braces or indented
+    under the definition.  One pair with no separator is a product.  A variant of a sum may be `void`, which is how an
+    enumeration is written; a field of a product may not.  A defined type is nominal, may name one defined below it or one
+    another module exports, and may not reach itself.  Layout is computed: a product is its fields in declaration order, a sum is
+    its largest variant with a one-byte tag after it.
+
+[?] write a value of a product or a sum.
+    Question: no syntax has been given, and nothing else can be done with these types until there is one -- a function that takes
+    or answers with one compiles as far as the code generator, which refuses it (8501).  Considered, for a product: `Point{x:
+    1f64, y: 2f64}` after Rust, Go and Zig, which reads well and takes `{}` that is also the explicit block syntax, though never
+    in a place an expression may stand; `Point(x: 1f64, y: 2f64)`, which reuses the call shape and the named-argument question
+    that is open for calls anyway; and a bare `(x: 1f64, y: 2f64)` taking its type from the context, which is what the language
+    already does for a literal without a suffix.  For a sum the value names the variant as well: `Colour.red`, `Colour{red: ...}`
+    or a bare `.red` taking its type from the context, which is Zig's and Swift's.  Whichever is chosen, the two should be one
+    shape, since the definitions are.
+
+[?] read a field of a product, and ask which variant a sum holds.
+    Question: `p.x` for a field is the obvious spelling and is what the grammar already parses for a name reached through a
+    module, so the two would be one syntax with two meanings decided by what the base is -- which is what Go, Rust and Zig all do.
+    Asking which variant a sum holds is the harder half and is control flow, so it waits on the `if` question below: the choices
+    are a `match`/`switch` over the variants, which is what a sum wants and what would also give `SwitchInst` something to
+    generate; a test-and-extract pair after Zig's `if (x) |value|`; or a form of `if` that binds a name.  A product's fields may
+    be reordered by the compiler, so a field is reached by name and never by position; a sum's tag is likewise not a number the
+    language exposes.
 
 [?] allowing definition member functions
-    Question: this needs the product type first, and then a syntax for the receiver.  Considered: Go's `fn (p: Point) length() → f64`,
-    which keeps functions at the top level and makes the receiver an ordinary parameter; a block nested inside the type after Rust's
-    `impl`, which groups them; and the receiver being implicit, as in C++ and Java, which the language's preference for saying
-    things outright argues against.  A second question rides on it: whether a member function is a different kind of thing from a
-    function whose first parameter happens to be the type, or only a different way of writing one -- the second is simpler and is
-    what Go does.
-
-[?] add a sum type
-    Question: no syntax has been given, and the specification already leans on sum types for fallible operations, so this decides
-    how errors are written throughout.  Considered: `type Result = i32 | Error`, an untagged-looking union that is tagged
-    underneath; a named-variant form after Rust and Swift, `type Result = Ok(i32) | Err(Error)`, which is what pattern matching
-    wants; and Zig's tagged union, which names the tag type explicitly.  Whichever it is, reading one needs a way to ask which
-    variant a value holds, and that is control flow -- so this also waits on the question about `if` below.
+    Question: this needs a syntax for the receiver.  Considered: Go's `fn (p: Point) length() → f64`, which keeps functions at the
+    top level and makes the receiver an ordinary parameter; a block nested inside the type after Rust's `impl`, which groups them;
+    and the receiver being implicit, as in C++ and Java, which the language's preference for saying things outright argues
+    against.  A second question rides on it: whether a member function is a different kind of thing from a function whose first
+    parameter happens to be the type, or only a different way of writing one -- the second is simpler and is what Go does.
 
 [ ] if an attribute definition is followed by an empty line or the end of the file, it is not attached to anything and the
     action is global.  Implementable now and needed by `@[required(NAME)]` below.  Note that the parser currently skips newlines
@@ -162,8 +171,9 @@ To Do List for the PL4g language
     which can be initialized with a string literal.  If not marked mut a `str` object cannot be modified and has a fixed length and
     should be placed in `.rodata`.  A `mut str` object can be resized and changed and therefore has to be an object which can
     reference allocated memory elsewhere.  Small string optimizations are welcome.
-    The immutable half is implementable as soon as there is a product type to hold the address and the length; literals already
-    lex, and `.rodata` already exists.  The `mut` half is not.
+    The immutable half now has the product type it was waiting for -- a pair of an address and a length -- and waits on the two
+    things that type still lacks: a way to write a value of one, and a pointer, which nothing in the language yet is.  Literals
+    already lex and `.rodata` already exists.  The `mut` half waits on the allocator below.
     Question: a `mut str` can be resized, so it needs a heap, and the specification forbids depending on any system runtime -- so
     the allocator is the compiler's to emit.  Which?  A `mmap`-backed bump allocator that never frees is a page of code and is
     enough for a program that builds strings and exits; a real size-class allocator is a great deal more and is the thing every
@@ -261,9 +271,9 @@ To Do List for the PL4g language
     `÷` and `%` are the operations that answer with one, on every numeric type.
 
 [ ] let the error of a result carry a value: `TYPE1?TYPE2`.  The syntax is parsed and refused (9902), because nothing in the
-    language constructs an error value -- so a program that wrote the type could put nothing in it.  Waits on the sum type, which
-    is where an error with variants comes from, and on a decision about what the error type of a division should then be: today
-    the two cases a division cannot answer, a zero divisor and the one overflowing signed pair, are not told apart.
+    language constructs an error value -- so a program that wrote the type could put nothing in it.  The sum type now exists, so
+    what this waits on is a way to *write* a value of one, and a decision about what the error type of a division should then be:
+    today the two cases a division cannot answer, a zero divisor and the one overflowing signed pair, are not told apart.
 
 [ ] let a variable at the top level hold a result, and a parameter take one.  Both are refused today (9902 and 8501).  A variable
     at the top level is a place in memory and what a result looks like in memory is not settled -- it is two things and where the

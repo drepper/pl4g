@@ -18,7 +18,7 @@ from ..ir.inst import BinOp, CastKind, CmpPred, Instruction, UnOp
 from ..ir.function import (FuncAttrs, Function, InlineHint, Linkage, SpecialKind)
 from ..ir.module import GlobalVar, Module
 from ..ir.types import (BOOL, BUILTIN_TYPES, ERROR, F64, FloatType, IntType,
-                        ResultType, Type, VOID)
+                        ProductType, ResultType, SumType, Type, VOID)
 from .modules import (ImportCycle, LoadedModule, ModuleNotFound, ModuleRegistry,
                       base_name)
 from ..ir.value import FloatConst, IntConst, UndefConst, Value
@@ -82,6 +82,25 @@ class _Local:
     #: definition itself is being read.
     expectation: Expectation | None = None
     expected_pairs: list[_Expected] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class _NamedType:
+    """A type a program defined, and what it turned out to be.
+
+    What it is made of is worked out on first ask rather than where it is
+    written, so that one definition may name another written below it.  The
+    `resolving` flag is what catches a type that reaches itself: a value of such
+    a type would have to hold a value of it, and there is no way to write the
+    indirection that makes that finite.
+    """
+
+    name: str
+    node: ast.TypeDef
+    origin: str
+    exported: bool = False
+    ty: Type | None = None
+    resolving: bool = False
 
 
 @dataclass(slots=True)
@@ -270,6 +289,9 @@ class Checker:
         self._prefix: str = prefix
         #: Where the text of a module read from here comes from.
         self._sources: SourceManager = sources if sources is not None else SourceManager()
+        #: Every type this file defines, in the order they were written, so
+        #: that one nothing names is still worked out and still reported on.
+        self._named_types: list[_NamedType] = []
         #: What the function now being lowered answers with, which is what `?`
         #: has to agree with: it leaves the function carrying an error, so the
         #: function must be one that can carry it.
@@ -317,8 +339,23 @@ class Checker:
         answer both wrongly.
         """
         collected: list[_Collected] = []
+        # Three passes over the definitions, because each needs what the one
+        # before it settled.  The imports come first, since a type may be one
+        # another module defines; then every type name, so that a definition may
+        # name one written below it; then what the types are made of; and only
+        # then the functions and the variables, whose signatures name types.
         for unit in units:
             self._module.source_paths.append(unit.path)
+            for item in unit.items:
+                if isinstance(item, ast.ModuleImport):
+                    self._collect_import(item)
+        for unit in units:
+            for item in unit.items:
+                if isinstance(item, ast.TypeDef):
+                    self._collect_type(item, unit.path)
+        for defined in self._named_types:
+            self._resolved(defined)
+        for unit in units:
             for item in unit.items:
                 match item:
                     case ast.FuncDef():
@@ -327,8 +364,8 @@ class Checker:
                             collected.append(gathered)
                     case ast.VarDef():
                         self._collect_global(item)
-                    case ast.ModuleImport():
-                        self._collect_import(item)
+                    case ast.ModuleImport() | ast.TypeDef():
+                        pass
                     case _:
                         self._diags.internal("unknown kind of top-level definition")
         for entry in collected:
@@ -1001,6 +1038,100 @@ class Checker:
 
     # -- types -----------------------------------------------------------------
 
+    # -- types the program defines ---------------------------------------------
+
+    def _collect_type(self, node: ast.TypeDef, path: str) -> None:
+        """Register one type definition without working out what it is made of.
+
+        The name is registered in the same namespace as everything else at the
+        top level, so a type and a function cannot share one: a name in this
+        language stands for one thing, and which kind of thing it is is not
+        something a reader should have to work out from where it is written.
+        """
+        if not self._declare(node.name, node.name_span, path):
+            return
+        attrs = self._bind_attributes(node.attrs, AttrTarget.TYPE)
+        defined = _NamedType(name=node.name, node=node, origin=path,
+                             exported=self._is_export(attrs))
+        self._top[node.name] = defined
+        self._named_types.append(defined)
+
+    def _resolved(self, defined: _NamedType) -> Type:
+        """What a defined type is made of, worked out on first ask."""
+        if defined.ty is not None:
+            return defined.ty
+        if defined.resolving:
+            self._diags.emit(D.LANG_TYPEDEF_CONTAINS_ITSELF,
+                             defined.node.name_span, name=defined.name)
+            defined.ty = ERROR
+            return ERROR
+        defined.resolving = True
+        try:
+            defined.ty = self._parts_of(defined)
+        finally:
+            defined.resolving = False
+        return defined.ty
+
+    def _parts_of(self, defined: _NamedType) -> Type:
+        """The type a definition's parts make, reporting what is wrong with them."""
+        node = defined.node
+        parts: list[tuple[str, Type]] = []
+        seen: dict[str, Span] = {}
+        spoiled = False
+        for field in node.fields:
+            if field.name in seen:
+                self._diags.emit(D.LANG_TYPEDEF_DUPLICATE_PART, field.name_span,
+                                 name=field.name)
+                spoiled = True
+                continue
+            seen[field.name] = field.name_span
+            ty = self._resolve_type(field.type)
+            if ty is VOID and node.kind is ast.TypeKind.PRODUCT:
+                # A field that carries nothing leaves the product meaning what
+                # it would have meant without it.  A *variant* of this type may
+                # be `void`, and is how an enumeration is written.
+                self._diags.emit(D.LANG_TYPEDEF_FIELD_OF_NOTHING, field.name_span,
+                                 name=field.name)
+                spoiled = True
+                continue
+            if ty is ERROR:
+                spoiled = True
+                continue
+            parts.append((field.name, ty))
+        if not parts:
+            # Every part was wrong, and each was reported where it was written.
+            # A definition with no parts at all never reaches here: the parser
+            # refuses one, there being nothing to read.
+            return ERROR
+        if spoiled:
+            return ERROR
+        made = tuple(parts)
+        if node.kind is ast.TypeKind.SUM:
+            return SumType(made, name=defined.name, origin=defined.origin)
+        return ProductType(made, name=defined.name, origin=defined.origin)
+
+    def _defined_type(self, ref: ast.TypeRef) -> Type | None:
+        """The type a name stands for, where a definition gave it one."""
+        if ref.module is not None:
+            held = self._top.get(ref.module)
+            if not isinstance(held, LoadedModule):
+                self._diags.emit(D.LANG_IMPORT_NOT_A_MODULE, ref.span,
+                                 name=ref.module)
+                return ERROR
+            found = held.exports.get(ref.name)
+            if found is None:
+                self._diags.emit(D.LANG_IMPORT_NOT_EXPORTED, ref.span,
+                                 name=ref.name, module=ref.module)
+                return ERROR
+            if isinstance(found, _NamedType):
+                # Already worked out: the module was checked whole before this
+                # file was allowed to name anything in it.
+                return found.ty if found.ty is not None else ERROR
+            self._diags.emit(D.LANG_TYPE_UNKNOWN, ref.span, name=ref.name)
+            return ERROR
+        held = self._top.get(ref.name)
+        return self._resolved(held) if isinstance(held, _NamedType) else None
+
     def _resolve_type(self, ref: ast.TypeRef) -> Type:
         """Resolve a type name, reporting an unknown one.
 
@@ -1008,9 +1139,13 @@ class Checker:
         anything, so that the one mistake is reported once rather than again
         wherever the type would have been checked.
         """
-        found = BUILTIN_TYPES.get(ref.name)
+        found = BUILTIN_TYPES.get(ref.name) if ref.module is None else None
+        if found is None:
+            found = self._defined_type(ref)
         if found is None:
             self._diags.emit(D.LANG_TYPE_UNKNOWN, ref.span, name=ref.name)
+            return ERROR
+        if found is ERROR:
             return ERROR
         if not ref.result:
             return found

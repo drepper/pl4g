@@ -224,6 +224,8 @@ class Parser:
             return self._parse_function(attrs, doc)
         if self._check(TokKind.KW_LET):
             return self._parse_variable(attrs, doc)
+        if self._check(TokKind.KW_TYPE):
+            return self._parse_type_definition(attrs, doc)
         self._diags.emit(D.LANG_FILESTRUCT_UNEXPECTED_TOPLEVEL, self._current.span,
                          construct=self._current.describe())
         raise _Bail()
@@ -403,22 +405,124 @@ class Parser:
     def _parse_type_ref(self) -> ast.TypeRef:
         """Parse a type: a name, and whatever says what else it may be.
 
+        A name may be reached through a module, as a function or a variable is:
+        `m.Point` is the `Point` that module `m` exports.
+
         `TYPE?` is a result: a value of that type, or the fact that there is
         none.  `TYPE?ERROR` is one whose error carries a value of its own, and
         the name after the mark is what says so -- the mark with nothing after
         it is what says the error is only the fact of it.
         """
         name_token = self._expect(TokKind.IDENT)
+        first = name_token
+        module: str | None = None
+        if self._check(TokKind.DOT):
+            self._advance()
+            module = name_token.text
+            name_token = self._expect(TokKind.IDENT, D.LANG_SYNTAX_EXPECTED_MEMBER)
         mark = self._accept(TokKind.QUESTION)
         if mark is None:
-            return ast.TypeRef(span=name_token.span, name=name_token.text)
+            return ast.TypeRef(span=first.span.to(name_token.span),
+                               name=name_token.text, module=module)
         error: str | None = None
         last = mark
         if self._check(TokKind.IDENT):
             last = self._advance()
             error = last.text
-        return ast.TypeRef(span=name_token.span.to(last.span),
-                           name=name_token.text, result=True, error=error)
+        return ast.TypeRef(span=first.span.to(last.span), name=name_token.text,
+                           module=module, result=True, error=error)
+
+    #: Which kind of definition each separator makes.
+    _TYPE_SEPARATORS: Final[dict[TokKind, ast.TypeKind]] = {
+        TokKind.SEMICOLON: ast.TypeKind.PRODUCT,
+        TokKind.PIPE: ast.TypeKind.SUM,
+    }
+
+    def _parse_type_definition(self, attrs: tuple[ast.Attribute, ...] = (),
+                               doc: str | None = None) -> ast.TypeDef:
+        """Parse ``type NAME '=' NAME ':' TYPE (SEP NAME ':' TYPE)*``.
+
+        The separator is what says which kind of type it is: `;` for a product,
+        which holds all of its parts, and `|` for a sum, which holds one of
+        them.  One pair with no separator to go by is a product -- a record of
+        one field is a useful thing and a choice between one alternative is not.
+
+        The sequence may be written over several lines in either of the two ways
+        the language already breaks a line: inside braces, where the lexer gives
+        out no ends of lines at all, or indented under the definition, where the
+        separator ends the line and this skips what follows it.  Neither changes
+        what separates the pairs.
+        """
+        start = self._expect(TokKind.KW_TYPE).span
+        name_token = self._expect(TokKind.IDENT)
+        self._expect(TokKind.EQUALS, D.LANG_TYPEDEF_EXPECTED_EQUALS)
+        braced = self._accept(TokKind.LBRACE) is not None
+        indented = False
+        if not braced and self._check(TokKind.NEWLINE) \
+                and self._peek().kind is TokKind.INDENT:
+            # An end of line with nothing indented under it is a definition
+            # that said nothing after the `=`, and is reported as that rather
+            # than as a missing indentation somewhere further down.
+            self._advance()
+            self._advance()
+            indented = True
+        fields: list[ast.Field] = []
+        kind: ast.TypeKind | None = None
+        separator: Token | None = None
+        while True:
+            if indented:
+                self._skip_newlines()
+            if not fields and self._ends_the_parts(braced, indented):
+                # Nothing at all between the delimiters, which is a definition
+                # that said nothing about what the type is.
+                self._diags.emit(D.LANG_TYPEDEF_NO_PARTS, name_token.span)
+                raise _Bail()
+            fields.append(self._parse_field())
+            # The separator ends the line it is on, where the definition is
+            # written over several.  Looking for it before skipping any end of
+            # line is what keeps "this pair was the last" decidable where it is
+            # written rather than one line further on.
+            found = self._TYPE_SEPARATORS.get(self._current.kind)
+            if found is None:
+                break
+            here = self._advance()
+            if kind is None:
+                kind, separator = found, here
+            elif found is not kind:
+                assert separator is not None
+                self._diags.emit(D.LANG_TYPEDEF_MIXED_SEPARATORS, here.span,
+                                 found=here.describe(),
+                                 first=separator.describe()).note(
+                    D.LANG_TYPEDEF_FIRST_SEPARATOR, separator.span)
+                raise _Bail()
+        end = self._current.span
+        if braced:
+            end = self._expect(TokKind.RBRACE).span
+        elif indented:
+            self._skip_newlines()
+            self._accept(TokKind.DEDENT)
+        return ast.TypeDef(span=start.to(end), name=name_token.text,
+                           name_span=name_token.span,
+                           kind=kind if kind is not None else ast.TypeKind.PRODUCT,
+                           fields=tuple(fields), attrs=attrs, doc=doc)
+
+    def _ends_the_parts(self, braced: bool, indented: bool) -> bool:
+        """Whether what comes next closes a type definition rather than opening
+        a part of it."""
+        if braced:
+            return self._check(TokKind.RBRACE)
+        if indented:
+            return self._check(TokKind.DEDENT) or self._check(TokKind.EOF)
+        return self._check(TokKind.NEWLINE) or self._check(TokKind.EOF)
+
+    def _parse_field(self) -> ast.Field:
+        """Parse one ``NAME ':' TYPE`` of a type definition."""
+        name_token = self._expect(TokKind.IDENT)
+        self._expect(TokKind.COLON, D.LANG_TYPEDEF_EXPECTED_COLON)
+        written = self._parse_type_ref()
+        return ast.Field(span=name_token.span.to(written.span),
+                         name=name_token.text, name_span=name_token.span,
+                         type=written)
 
     def _parse_params(self) -> tuple[ast.Param, ...]:
         """Parse a parameter list, which may be empty."""

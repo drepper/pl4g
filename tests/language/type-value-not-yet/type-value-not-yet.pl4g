@@ -1,0 +1,17 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 8501 IMPL_BACKEND_UNSUPPORTED
+
+※ Nothing in the language writes a value of a product or a sum yet, so a
+※ function that takes or answers with one is a function the compiler has
+※ nothing to generate.  It says so rather than putting the value in a register
+※ it does not fit in.
+
+type Point = x : f64 ; y : f64
+
+@[visible]
+fn middle(p: Point) → Point:
+    p
+
+@[startup]
+fn main() → u8:
+    0u8
