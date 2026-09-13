@@ -7,7 +7,7 @@ constants of the same type are two references, and treating them as equal would
 break every use list.
 """
 
-from .types import BoolType, IntType, Type
+from .types import BoolType, FloatType, IntType, Type
 
 
 class Value:
@@ -38,6 +38,20 @@ class IntConst(Const):
     __slots__ = ("value",)
 
     def __init__(self, ty: IntType, value: int) -> None:
+        super().__init__(ty)
+        self.value = value
+
+
+class FloatConst(Const):
+    """A floating-point constant.
+
+    Kept as the number and not as the bits, so that what the source wrote and
+    what the image holds are one rounding apart and not two.
+    """
+
+    __slots__ = ("value",)
+
+    def __init__(self, ty: FloatType, value: float) -> None:
         super().__init__(ty)
         self.value = value
 

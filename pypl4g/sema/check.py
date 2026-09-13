@@ -15,7 +15,8 @@ from ..ir.builder import IRBuilder
 from ..ir.inst import BinOp, CmpPred, Instruction, UnOp
 from ..ir.function import (FuncAttrs, Function, InlineHint, Linkage, SpecialKind)
 from ..ir.module import GlobalVar, Module
-from ..ir.types import BOOL, BUILTIN_TYPES, ERROR, IntType, Type, VOID
+from ..ir.types import (BOOL, BUILTIN_TYPES, ERROR, F64, FloatType, IntType,
+                        Type, VOID)
 from .modules import (ImportCycle, LoadedModule, ModuleNotFound, ModuleRegistry,
                       base_name)
 from ..ir.value import IntConst, UndefConst, Value
@@ -456,6 +457,8 @@ class Checker:
                 return found
             case ast.BoolLit():
                 return BOOL
+            case ast.FloatLit():
+                return BUILTIN_TYPES.get(expr.type_name) if expr.type_name else None
             case ast.NameRef():
                 resolved = self._lookup(expr)
                 return None if resolved is None else self._value_type_of(resolved)
@@ -497,6 +500,14 @@ class Checker:
                 if ty is not BOOL:
                     return self._wrong_initializer(node, ty, BOOL.render())
                 return self._module.bool_const(BOOL, node.value.value)
+            case ast.FloatLit():
+                if not isinstance(ty, FloatType):
+                    return self._wrong_initializer(node, ty, F64.render())
+                named = (BUILTIN_TYPES.get(node.value.type_name)
+                         if node.value.type_name else None)
+                if named is not None and named is not ty:
+                    return self._wrong_initializer(node, ty, named.render())
+                return self._module.float_const(ty, node.value.value)
             case _:
                 self._diags.emit(
                     D.IMPL_UNIMPLEMENTED_FEATURE, node.value.span,
@@ -1228,6 +1239,11 @@ class Checker:
                                      literal=str(expr.value), type=ty.render())
                     return builder.int_const(ty, 0)
                 return builder.int_const(ty, expr.value)
+            case ast.FloatLit():
+                ty = self._float_literal_type(expr, expected)
+                if ty is None:
+                    return UndefConst(ERROR)
+                return builder.float_const(ty, expr.value)
             case ast.BoolLit():
                 if expected is not None and expected is not BOOL:
                     self._report_mismatch(expr.span, BOOL, expected)
@@ -1601,6 +1617,25 @@ class Checker:
         found = self._top.get(name)
         return (self._value_type_of(found) if isinstance(found, GlobalVar)
                 else None)
+
+    def _float_literal_type(self, expr: ast.FloatLit,
+                            expected: Type | None) -> "FloatType | None":
+        """The type a floating-point literal has, from its suffix or its place."""
+        named = BUILTIN_TYPES.get(expr.type_name) if expr.type_name is not None else None
+        if named is not None and expected is not None and named is not expected:
+            self._report_mismatch(expr.span, named, expected)
+            return None
+        found = named if named is not None else expected
+        if found is None:
+            self._diags.emit(
+                D.IMPL_UNIMPLEMENTED_FEATURE, expr.span,
+                feature=("a floating-point literal with neither a type suffix nor a "
+                         "context that gives it a type"))
+            return None
+        if not isinstance(found, FloatType):
+            self._report_mismatch(expr.span, named or F64, found)
+            return None
+        return found
 
     def _literal_type(self, expr: ast.IntLit, expected: Type | None) -> IntType | None:
         """The type an integer literal has, from its suffix or from the context.

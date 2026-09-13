@@ -206,6 +206,7 @@ module.exports = grammar({
       $.call_expression,
       $.member_expression,
       $.parenthesized_expression,
+      $.float_literal,
       $.integer_literal,
       $.string_literal,
       $.boolean_literal,
@@ -293,6 +294,25 @@ module.exports = grammar({
       // error, so a literal with a wrong suffix is not a program either way.
       // This list grows with the types the language has.
       optional(/[iu](8|16|32|64)/),
+    )),
+
+    // A floating-point literal is written as C writes one: a decimal with a
+    // point or an exponent, or a hexadecimal with `0x` and a `p`.  A point with
+    // no digit after it is not part of one -- `1.x` is a member of something --
+    // which is why the fraction requires a digit.  Whole digits with a
+    // floating-point suffix are one too: `3f64` is the number three.
+    float_literal: _ => token(seq(
+      optional('⁻'),
+      choice(
+        seq(/0[xX]/, /[0-9a-fA-F_]+/,
+            optional(seq('.', /[0-9a-fA-F_]*/)),
+            /[pP][+-]?[0-9_]+/),
+        seq(/[0-9][0-9_]*/, '.', /[0-9][0-9_]*/,
+            optional(/[eE][+-]?[0-9_]+/)),
+        seq(/[0-9][0-9_]*/, /[eE][+-]?[0-9_]+/),
+        seq(/[0-9][0-9_]*/, /f(32|64)/),
+      ),
+      optional(/f(32|64)/),
     )),
 
     string_literal: _ => token(seq(

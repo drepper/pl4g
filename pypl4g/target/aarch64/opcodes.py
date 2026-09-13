@@ -9,7 +9,7 @@ from typing import Final
 from ...mc.desc import InstFlags, OperandKind, OperandRole, OperandSpec
 from .desc import A64InstDesc, Field, FieldKind, INSTRUCTION_SIZE
 from .fixups import ADD_LO12, ADR_PAGE21, BRANCH19, BRANCH26
-from .regs import CALLER_SAVED, GPR, NZCV, X30
+from .regs import CALLER_SAVED, GPR, NZCV, VEC, X30
 
 #: The word the architecture reserves as permanently undefined.  It is what
 #: padding is filled with, so that falling into padding traps.
@@ -37,6 +37,11 @@ def _imm(maximum: int) -> OperandSpec:
 def _sym() -> OperandSpec:
     """A branch target or an address, given as a symbol reference."""
     return OperandSpec(OperandKind.REL | OperandKind.SYM)
+
+
+def _v(bits: int) -> OperandSpec:
+    """One of the floating-point registers, named at the width of the value."""
+    return OperandSpec(OperandKind.REG, rclass=VEC, bits=bits)
 
 
 def _reg_field(operand: int, lsb: int) -> Field:
@@ -499,6 +504,79 @@ AARCH64_INSTRS: Final[tuple[A64InstDesc, ...]] = (
                 fields=(_reg_field(0, _RD), _reg_field(1, _RN),
                         _reg_field(2, _RM)),
                 est_size=INSTRUCTION_SIZE),
+    # The scalar floating-point instructions.  Floating point is in the base of
+    # the AArch64 ABI, so a binary that uses them requires nothing a binary that
+    # does not would not already have.
+    A64InstDesc("fmov", (_v(32), _v(32)), template=0x1E204000,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN)),
+                est_size=INSTRUCTION_SIZE),
+    A64InstDesc("fmov", (_v(64), _v(64)), template=0x1E604000,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN)),
+                est_size=INSTRUCTION_SIZE),
+    A64InstDesc("fabs", (_v(32), _v(32)), template=0x1E20C000,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN)),
+                est_size=INSTRUCTION_SIZE),
+    A64InstDesc("fabs", (_v(64), _v(64)), template=0x1E60C000,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN)),
+                est_size=INSTRUCTION_SIZE),
+    A64InstDesc("fadd", (_v(32), _v(32), _v(32)), template=0x1E202800,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN),
+                        _reg_field(2, _RM)),
+                est_size=INSTRUCTION_SIZE),
+    A64InstDesc("fadd", (_v(64), _v(64), _v(64)), template=0x1E602800,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN),
+                        _reg_field(2, _RM)),
+                est_size=INSTRUCTION_SIZE),
+    A64InstDesc("fsub", (_v(32), _v(32), _v(32)), template=0x1E203800,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN),
+                        _reg_field(2, _RM)),
+                est_size=INSTRUCTION_SIZE),
+    A64InstDesc("fsub", (_v(64), _v(64), _v(64)), template=0x1E603800,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN),
+                        _reg_field(2, _RM)),
+                est_size=INSTRUCTION_SIZE),
+    A64InstDesc("fmul", (_v(32), _v(32), _v(32)), template=0x1E200800,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN),
+                        _reg_field(2, _RM)),
+                est_size=INSTRUCTION_SIZE),
+    A64InstDesc("fmul", (_v(64), _v(64), _v(64)), template=0x1E600800,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN),
+                        _reg_field(2, _RM)),
+                est_size=INSTRUCTION_SIZE),
+    A64InstDesc("fdiv", (_v(32), _v(32), _v(32)), template=0x1E201800,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN),
+                        _reg_field(2, _RM)),
+                est_size=INSTRUCTION_SIZE),
+    A64InstDesc("fdiv", (_v(64), _v(64), _v(64)), template=0x1E601800,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN),
+                        _reg_field(2, _RM)),
+                est_size=INSTRUCTION_SIZE),
+    A64InstDesc("fcmp", (_v(32), _v(32)), template=0x1E202000,
+                fields=(_reg_field(0, _RN), _reg_field(1, _RM)),
+                implicit_defs=(NZCV,), est_size=INSTRUCTION_SIZE,
+                roles=_READS_BOTH),
+    A64InstDesc("fcmp", (_v(64), _v(64)), template=0x1E602000,
+                fields=(_reg_field(0, _RN), _reg_field(1, _RM)),
+                implicit_defs=(NZCV,), est_size=INSTRUCTION_SIZE,
+                roles=_READS_BOTH),
+    A64InstDesc("ldr", (_v(32), _r(64), _off(2)), template=0xBD400000,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN),
+                        _offset_field(2, 2)),
+                est_size=INSTRUCTION_SIZE),
+    A64InstDesc("ldr", (_v(64), _r(64), _off(3)), template=0xFD400000,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN),
+                        _offset_field(2, 3)),
+                est_size=INSTRUCTION_SIZE),
+    A64InstDesc("str", (_v(32), _r(64), _off(2)), template=0xBD000000,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN),
+                        _offset_field(2, 2)),
+                est_size=INSTRUCTION_SIZE,
+                flags=InstFlags.MAY_STORE, roles=_READS_ALL_THREE),
+    A64InstDesc("str", (_v(64), _r(64), _off(3)), template=0xFD000000,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN),
+                        _offset_field(2, 3)),
+                est_size=INSTRUCTION_SIZE,
+                flags=InstFlags.MAY_STORE, roles=_READS_ALL_THREE),
     # cbnz Wt, label
     A64InstDesc("cbnz", (_r(32), _sym()), template=0x35000000,
                 fields=(_reg_field(0, _RD),

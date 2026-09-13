@@ -175,6 +175,14 @@ class UnaryOp(StrEnum):
 
 
 @dataclass(frozen=True, slots=True)
+class FloatLit(Expr):
+    """A floating-point literal, with the type its suffix named."""
+
+    value: float
+    type_name: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class Call(Expr):
     """A function called with the arguments written after its name.
 

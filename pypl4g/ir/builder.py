@@ -13,7 +13,7 @@ from .inst import (CallInst, BinaryInst, BinOp, BlockTarget, BrInst, CastInst, C
                    CmpInst, CmpPred, CondBrInst, Instruction, LoadInst, MemStartInst,
                    RetInst, StoreInst, Terminator, UnaryInst, UnOp, UnreachableInst)
 from .module import Module
-from .types import BOOL, IntType, PtrType, Type
+from .types import FloatType, BOOL, IntType, PtrType, Type
 from .value import Value
 
 
@@ -65,6 +65,10 @@ class IRBuilder:
     def int_const(self, ty: IntType, value: int) -> Value:
         """An integer constant of type *ty*."""
         return self._module.int_const(ty, value)
+
+    def float_const(self, ty: "FloatType", value: float) -> Value:
+        """A floating-point constant of type *ty*."""
+        return self._module.float_const(ty, value)
 
     def bool_const(self, value: bool) -> Value:
         """A boolean constant."""

@@ -13,7 +13,8 @@ from ..diag.engine import DiagEngine
 from ..source.location import Span
 from ..source.manager import SourceFile
 from .token import (AND_GLYPH, ARROW_GLYPH, ASCII_SUBSTITUTES, ASSIGN_GLYPH,
-                    COMMENT_GLYPH, GREATER_EQUAL_GLYPH, INTEGER_TYPE_NAMES,
+                    COMMENT_GLYPH, FLOAT_TYPE_NAMES, GREATER_EQUAL_GLYPH,
+                    INTEGER_TYPE_NAMES,
                     KEYWORDS, LESS_EQUAL_GLYPH, NAND_GLYPH, NEGATIVE_GLYPH,
                     NOR_GLYPH, NOT_EQUAL_GLYPH, NOT_GLYPH, OR_GLYPH,
                     DIVIDE_GLYPH, ROTATE_LEFT_GLYPH, ROTATE_RIGHT_GLYPH,
@@ -317,8 +318,11 @@ class Lexer:
         digits_start = self._pos
         while self._peek() in digits and self._peek() != "":
             self._pos += 1
+        if self._begins_a_fraction(radix):
+            self._lex_fraction(start, digits_start, radix, negative)
+            return
         body = self._text[digits_start:self._pos]
-        suffix = self._lex_literal_suffix()
+        suffix = self._lex_literal_suffix(either=True)
         text = self._text[start:self._pos]
         try:
             value = int(body.replace("_", ""), radix)
@@ -326,10 +330,76 @@ class Lexer:
             self._diags.emit(D.LANG_SYNTAX_UNEXPECTED_CHAR, self._span(start, self._pos),
                              char="".join(("'", text, "'")))
             value = 0
+        if suffix in FLOAT_TYPE_NAMES:
+            # Whole digits and a floating-point suffix: `3f64` is the number
+            # three as a float, which is worth being able to write without
+            # having to write a point that says nothing.
+            self._emit(TokKind.FLOAT, start,
+                       float_value=float(-value if negative else value),
+                       float_type=suffix)
+            return
         self._emit(TokKind.INT, start, int_value=-value if negative else value,
                    int_type=suffix)
 
-    def _lex_literal_suffix(self) -> str | None:
+    def _begins_a_fraction(self, radix: int) -> bool:
+        """Whether what follows the digits makes this a floating-point literal.
+
+        A point with a digit after it, or an exponent -- which for a decimal
+        literal is `e` and for a hexadecimal one `p`, as in C.  The digit after
+        the point matters: `1.x` is a member of something and not a number, and
+        a language that reads it as a number has to guess.
+        """
+        if self._peek() == "." and self._digit_follows(1, radix):
+            return True
+        marker = "p" if radix == 16 else "e"
+        if self._peek().lower() != marker:
+            return False
+        offset = 2 if self._peek(1) in "+-" else 1
+        return self._peek(offset).isdigit()
+
+    def _digit_follows(self, offset: int, radix: int) -> bool:
+        """Whether the character at *offset* is a digit of this base."""
+        found = self._peek(offset)
+        return found != "" and found in _DIGITS.get(
+            "x" if radix == 16 else "", "0123456789_")
+
+    def _lex_fraction(self, start: int, digits_start: int, radix: int,
+                      negative: bool) -> None:
+        """Lex the rest of a floating-point literal, decimal or hexadecimal.
+
+        Both forms are the C ones, and the value is read by Python's own reader
+        of them, which is the same reader with the same rounding -- so a literal
+        means what it says rather than what a hand-written parser made of it.
+        A hexadecimal literal is exact by construction, which is why C has the
+        form and why the specification asks for it.
+        """
+        if self._peek() == ".":
+            self._pos += 1
+            while self._peek() in _DIGITS.get("x" if radix == 16 else "",
+                                              "0123456789_") and self._peek() != "":
+                self._pos += 1
+        marker = "p" if radix == 16 else "e"
+        if self._peek().lower() == marker:
+            self._pos += 1
+            if self._peek() in "+-":
+                self._pos += 1
+            while self._peek().isdigit() or self._peek() == "_":
+                self._pos += 1
+        body = self._text[digits_start:self._pos].replace("_", "")
+        suffix = self._lex_literal_suffix(floating=True)
+        text = "".join(("0x", body)) if radix == 16 else body
+        try:
+            value = float.fromhex(text) if radix == 16 else float(text)
+        except ValueError:
+            self._diags.emit(D.LANG_SYNTAX_UNEXPECTED_CHAR,
+                             self._span(start, self._pos),
+                             char="".join(("'", self._text[start:self._pos], "'")))
+            value = 0.0
+        self._emit(TokKind.FLOAT, start, float_value=-value if negative else value,
+                   float_type=suffix)
+
+    def _lex_literal_suffix(self, floating: bool = False,
+                            either: bool = False) -> str | None:
         """Read the type a literal names, if it names one."""
         if not _is_ident_start(self._peek()):
             return None
@@ -337,7 +407,9 @@ class Lexer:
         while _is_ident_continue(self._peek()):
             self._pos += 1
         suffix = self._text[start:self._pos]
-        if suffix not in INTEGER_TYPE_NAMES:
+        wanted = (INTEGER_TYPE_NAMES | FLOAT_TYPE_NAMES if either
+                  else FLOAT_TYPE_NAMES if floating else INTEGER_TYPE_NAMES)
+        if suffix not in wanted:
             self._diags.emit(D.LANG_SYNTAX_BAD_LITERAL_SUFFIX,
                              self._span(start, self._pos), suffix=suffix)
             return None

@@ -90,6 +90,24 @@ class ValueOutOfRangeError(Exception):
         self.ty = ty
 
 
+def encode_float(value: float, ty: Type, layout: DataLayout) -> bytes:
+    """The bytes a floating-point value occupies in memory.
+
+    Written in the format the type names, which is the one the hardware reads:
+    the number goes from the source to the image through one rounding, and the
+    bits in the image are the bits the program will load.
+    """
+    import struct
+
+    size = size_of(ty, layout)
+    order = "<" if layout.little_endian else ">"
+    if size == 4:
+        return struct.pack("".join((order, "f")), value)
+    if size == 8:
+        return struct.pack("".join((order, "d")), value)
+    raise ValueOutOfRangeError(int(size), ty)
+
+
 def encode_scalar(value: int, ty: Type, layout: DataLayout) -> bytes:
     """The bytes a scalar occupies in memory.
 

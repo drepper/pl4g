@@ -94,6 +94,7 @@ class TokKind(StrEnum):
 
     IDENT = "identifier"
     INT = "integer literal"
+    FLOAT = "floating-point literal"
     STRING = "string literal"
 
     KW_FN = "'fn'"
@@ -161,6 +162,10 @@ class TokKind(StrEnum):
     EOF = "end of file"
 
 
+#: The types a floating-point literal may name with its suffix.  There is no
+#: untyped one: a literal says what it is, as an integer literal does.
+FLOAT_TYPE_NAMES: Final[frozenset[str]] = frozenset(("f32", "f64"))
+
 #: The types an integer literal may name with its suffix.  Taken from the type
 #: table rather than listed again, so that the two cannot disagree.
 INTEGER_TYPE_NAMES: Final[frozenset[str]] = frozenset(
@@ -191,6 +196,11 @@ class Token:
     text: str = ""
     #: Value of an integer literal, or ``None`` for every other kind.
     int_value: int | None = None
+    #: Value of a floating-point literal, and the type it named.  The value is
+    #: kept as the number it is and not as the bits, so that what is written in
+    #: the source and what reaches the image are one rounding apart and not two.
+    float_value: float | None = None
+    float_type: str | None = None
     #: The type an integer literal named with its suffix, if it named one.
     int_type: str | None = None
     #: Decoded value of a string literal, or ``None`` for every other kind.
@@ -198,6 +208,6 @@ class Token:
 
     def describe(self) -> str:
         """How this token is named in a diagnostic."""
-        if self.kind in (TokKind.IDENT, TokKind.INT):
+        if self.kind in (TokKind.IDENT, TokKind.INT, TokKind.FLOAT):
             return "".join((str(self.kind), " '", self.text, "'"))
         return str(self.kind)

@@ -619,6 +619,11 @@ class Parser:
                 assert token.int_value is not None
                 return ast.IntLit(span=token.span, value=token.int_value,
                                   type_name=token.int_type)
+            case TokKind.FLOAT:
+                self._advance()
+                assert token.float_value is not None
+                return ast.FloatLit(span=token.span, value=token.float_value,
+                                    type_name=token.float_type)
             case TokKind.STRING:
                 self._advance()
                 assert token.str_value is not None

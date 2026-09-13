@@ -10,7 +10,7 @@ from typing import Final
 
 from ...mc.desc import InstFlags, OperandKind, OperandRole, OperandSpec
 from .desc import ModRMUse, OpMap, OpSize, X86InstDesc
-from .regs import CALLER_SAVED, EFLAGS, GPR, R11, RAX, RCX, RDX
+from .regs import CALLER_SAVED, EFLAGS, GPR, R11, RAX, RCX, RDX, VEC
 
 
 def _r(bits: int) -> OperandSpec:
@@ -36,6 +36,16 @@ def _rel(bits: int) -> OperandSpec:
 def _cl() -> OperandSpec:
     """The one register a variable shift takes its count in."""
     return OperandSpec(OperandKind.REG, rclass=GPR, bits=8)
+
+
+def _x() -> OperandSpec:
+    """One of the vector registers, named at the width the whole of it has."""
+    return OperandSpec(OperandKind.REG, rclass=VEC, bits=128)
+
+
+def _xm() -> OperandSpec:
+    """A vector register or a place in memory."""
+    return OperandSpec(OperandKind.REG | OperandKind.MEM, rclass=VEC, bits=128)
 
 
 def _mem() -> OperandSpec:
@@ -389,6 +399,69 @@ X86_INSTRS: Final[tuple[X86InstDesc, ...]] = (
                 modrm=ModRMUse.EXT_RM, ext=1, rm_op=0,
                 implicit_uses=(RCX,), implicit_defs=(EFLAGS,),
                 est_size=3, roles=_ACCUMULATE),
+    # The scalar floating-point instructions of SSE2, which is in the base of
+    # the x86-64 ABI: a binary that uses them requires nothing a binary that
+    # does not would not already have.  Each names the width in its own opcode
+    # through the prefix byte, so the register operand is the same either way.
+    X86InstDesc("movss", (_x(), _xm()), opcode=0x10, map=OpMap.M0F,
+                mandatory_prefix=0xF3, modrm=ModRMUse.REG_RM,
+                reg_op=0, rm_op=1, est_size=4,
+                roles=(OperandRole.DEF, OperandRole.USE)),
+    X86InstDesc("movsd", (_x(), _xm()), opcode=0x10, map=OpMap.M0F,
+                mandatory_prefix=0xF2, modrm=ModRMUse.REG_RM,
+                reg_op=0, rm_op=1, est_size=4,
+                roles=(OperandRole.DEF, OperandRole.USE)),
+    X86InstDesc("addss", (_x(), _xm()), opcode=0x58, map=OpMap.M0F,
+                mandatory_prefix=0xF3, modrm=ModRMUse.REG_RM,
+                reg_op=0, rm_op=1, est_size=4,
+                roles=_ACCUMULATE),
+    X86InstDesc("addsd", (_x(), _xm()), opcode=0x58, map=OpMap.M0F,
+                mandatory_prefix=0xF2, modrm=ModRMUse.REG_RM,
+                reg_op=0, rm_op=1, est_size=4,
+                roles=_ACCUMULATE),
+    X86InstDesc("subss", (_x(), _xm()), opcode=0x5C, map=OpMap.M0F,
+                mandatory_prefix=0xF3, modrm=ModRMUse.REG_RM,
+                reg_op=0, rm_op=1, est_size=4,
+                roles=_ACCUMULATE),
+    X86InstDesc("subsd", (_x(), _xm()), opcode=0x5C, map=OpMap.M0F,
+                mandatory_prefix=0xF2, modrm=ModRMUse.REG_RM,
+                reg_op=0, rm_op=1, est_size=4,
+                roles=_ACCUMULATE),
+    X86InstDesc("mulss", (_x(), _xm()), opcode=0x59, map=OpMap.M0F,
+                mandatory_prefix=0xF3, modrm=ModRMUse.REG_RM,
+                reg_op=0, rm_op=1, est_size=4,
+                roles=_ACCUMULATE),
+    X86InstDesc("mulsd", (_x(), _xm()), opcode=0x59, map=OpMap.M0F,
+                mandatory_prefix=0xF2, modrm=ModRMUse.REG_RM,
+                reg_op=0, rm_op=1, est_size=4,
+                roles=_ACCUMULATE),
+    X86InstDesc("divss", (_x(), _xm()), opcode=0x5E, map=OpMap.M0F,
+                mandatory_prefix=0xF3, modrm=ModRMUse.REG_RM,
+                reg_op=0, rm_op=1, est_size=4,
+                roles=_ACCUMULATE),
+    X86InstDesc("divsd", (_x(), _xm()), opcode=0x5E, map=OpMap.M0F,
+                mandatory_prefix=0xF2, modrm=ModRMUse.REG_RM,
+                reg_op=0, rm_op=1, est_size=4,
+                roles=_ACCUMULATE),
+    # movss m, x                           F3 0F 11 /r
+    X86InstDesc("movss", (_mem(), _x()), opcode=0x11, map=OpMap.M0F,
+                mandatory_prefix=0xF3, modrm=ModRMUse.REG_RM,
+                reg_op=1, rm_op=0, est_size=4,
+                flags=InstFlags.MAY_STORE,
+                roles=(OperandRole.USE, OperandRole.USE)),
+    # movsd m, x                           F2 0F 11 /r
+    X86InstDesc("movsd", (_mem(), _x()), opcode=0x11, map=OpMap.M0F,
+                mandatory_prefix=0xF2, modrm=ModRMUse.REG_RM,
+                reg_op=1, rm_op=0, est_size=4,
+                flags=InstFlags.MAY_STORE,
+                roles=(OperandRole.USE, OperandRole.USE)),
+    X86InstDesc("ucomiss", (_x(), _xm()), opcode=0x2E, map=OpMap.M0F,
+                modrm=ModRMUse.REG_RM, reg_op=0, rm_op=1,
+                implicit_defs=(EFLAGS,), est_size=4, roles=_READS_BOTH),
+    X86InstDesc("ucomisd", (_x(), _xm()), opcode=0x2E, map=OpMap.M0F,
+                mandatory_prefix=0x66,
+                modrm=ModRMUse.REG_RM, reg_op=0, rm_op=1,
+                implicit_defs=(EFLAGS,), est_size=4, roles=_READS_BOTH),
     # jmp rel32                          E9 cd
     X86InstDesc("jmp", (_rel(32),), opcode=0xE9, rel_op=0, rel_bits=32,
                 flags=InstFlags.TERMINATOR | InstFlags.BARRIER, est_size=5),

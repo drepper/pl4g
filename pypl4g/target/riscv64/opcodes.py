@@ -16,7 +16,7 @@ from typing import Final
 from ...mc.desc import InstFlags, OperandKind, OperandRole, OperandSpec
 from .desc import INSTRUCTION_SIZE, Field, FieldKind, RVInstDesc
 from .fixups import BRANCH, JAL, PCREL_HI20, PCREL_LO12_I, PCREL_PAIR_DISTANCE
-from .regs import CALLER_SAVED, GPR, RA
+from .regs import CALLER_SAVED, FPR, GPR, RA
 
 #: The word the architecture leaves undefined, which is what padding is filled
 #: with so that falling into it traps.
@@ -38,6 +38,12 @@ IMM12_MAX: Final[int] = 2047
 def _r() -> OperandSpec:
     """An integer register.  There is only one width."""
     return OperandSpec(OperandKind.REG, rclass=GPR, bits=64)
+
+
+def _f() -> OperandSpec:
+    """A floating-point register.  There is one width of them, the wider of the
+    two formats; a single-precision value sits in the low half."""
+    return OperandSpec(OperandKind.REG, rclass=FPR, bits=64)
 
 
 def _imm12() -> OperandSpec:
@@ -213,6 +219,75 @@ RISCV_INSTRS: Final[tuple[RVInstDesc, ...]] = (
     RVInstDesc("sra", (_r(), _r(), _r()), template=0x40005033,
                fields=(_reg(0, _RD), _reg(1, _RS1), _reg(2, _RS2)),
                est_size=INSTRUCTION_SIZE),
+    # The floating-point instructions of the F and D extensions.  The rounding
+    # field says "the one the rounding mode register names", which is what an
+    # assembler writes when none is spelled out.
+    RVInstDesc("fadd.s", (_f(), _f(), _f()), template=0x00007053,
+               fields=(_reg(0, _RD), _reg(1, _RS1), _reg(2, _RS2)),
+               est_size=INSTRUCTION_SIZE),
+    RVInstDesc("fadd.d", (_f(), _f(), _f()), template=0x02007053,
+               fields=(_reg(0, _RD), _reg(1, _RS1), _reg(2, _RS2)),
+               est_size=INSTRUCTION_SIZE),
+    RVInstDesc("fsub.s", (_f(), _f(), _f()), template=0x08007053,
+               fields=(_reg(0, _RD), _reg(1, _RS1), _reg(2, _RS2)),
+               est_size=INSTRUCTION_SIZE),
+    RVInstDesc("fsub.d", (_f(), _f(), _f()), template=0x0A007053,
+               fields=(_reg(0, _RD), _reg(1, _RS1), _reg(2, _RS2)),
+               est_size=INSTRUCTION_SIZE),
+    RVInstDesc("fmul.s", (_f(), _f(), _f()), template=0x10007053,
+               fields=(_reg(0, _RD), _reg(1, _RS1), _reg(2, _RS2)),
+               est_size=INSTRUCTION_SIZE),
+    RVInstDesc("fmul.d", (_f(), _f(), _f()), template=0x12007053,
+               fields=(_reg(0, _RD), _reg(1, _RS1), _reg(2, _RS2)),
+               est_size=INSTRUCTION_SIZE),
+    RVInstDesc("fdiv.s", (_f(), _f(), _f()), template=0x18007053,
+               fields=(_reg(0, _RD), _reg(1, _RS1), _reg(2, _RS2)),
+               est_size=INSTRUCTION_SIZE),
+    RVInstDesc("fdiv.d", (_f(), _f(), _f()), template=0x1A007053,
+               fields=(_reg(0, _RD), _reg(1, _RS1), _reg(2, _RS2)),
+               est_size=INSTRUCTION_SIZE),
+    RVInstDesc("fsgnj.s", (_f(), _f(), _f()), template=0x20000053,
+               fields=(_reg(0, _RD), _reg(1, _RS1), _reg(2, _RS2)),
+               est_size=INSTRUCTION_SIZE),
+    RVInstDesc("fsgnj.d", (_f(), _f(), _f()), template=0x22000053,
+               fields=(_reg(0, _RD), _reg(1, _RS1), _reg(2, _RS2)),
+               est_size=INSTRUCTION_SIZE),
+    RVInstDesc("fsgnjx.s", (_f(), _f(), _f()), template=0x20002053,
+               fields=(_reg(0, _RD), _reg(1, _RS1), _reg(2, _RS2)),
+               est_size=INSTRUCTION_SIZE),
+    RVInstDesc("fsgnjx.d", (_f(), _f(), _f()), template=0x22002053,
+               fields=(_reg(0, _RD), _reg(1, _RS1), _reg(2, _RS2)),
+               est_size=INSTRUCTION_SIZE),
+    RVInstDesc("feq.s", (_r(), _f(), _f()), template=0xA0002053,
+               fields=(_reg(0, _RD), _reg(1, _RS1), _reg(2, _RS2)),
+               est_size=INSTRUCTION_SIZE),
+    RVInstDesc("feq.d", (_r(), _f(), _f()), template=0xA2002053,
+               fields=(_reg(0, _RD), _reg(1, _RS1), _reg(2, _RS2)),
+               est_size=INSTRUCTION_SIZE),
+    RVInstDesc("flt.s", (_r(), _f(), _f()), template=0xA0001053,
+               fields=(_reg(0, _RD), _reg(1, _RS1), _reg(2, _RS2)),
+               est_size=INSTRUCTION_SIZE),
+    RVInstDesc("flt.d", (_r(), _f(), _f()), template=0xA2001053,
+               fields=(_reg(0, _RD), _reg(1, _RS1), _reg(2, _RS2)),
+               est_size=INSTRUCTION_SIZE),
+    RVInstDesc("fle.s", (_r(), _f(), _f()), template=0xA0000053,
+               fields=(_reg(0, _RD), _reg(1, _RS1), _reg(2, _RS2)),
+               est_size=INSTRUCTION_SIZE),
+    RVInstDesc("fle.d", (_r(), _f(), _f()), template=0xA2000053,
+               fields=(_reg(0, _RD), _reg(1, _RS1), _reg(2, _RS2)),
+               est_size=INSTRUCTION_SIZE),
+    RVInstDesc("flw", (_f(), _r(), _imm12()), template=0x00002007,
+               fields=(_reg(0, _RD), _reg(1, _RS1), _imm(2, _IMM12, 12)),
+               est_size=INSTRUCTION_SIZE),
+    RVInstDesc("fld", (_f(), _r(), _imm12()), template=0x00003007,
+               fields=(_reg(0, _RD), _reg(1, _RS1), _imm(2, _IMM12, 12)),
+               est_size=INSTRUCTION_SIZE),
+    RVInstDesc("fsw", (_f(), _r(), _imm12()), template=0x00002027,
+               fields=_store_fields(), flags=InstFlags.MAY_STORE,
+               est_size=INSTRUCTION_SIZE, roles=_READS_ALL_THREE),
+    RVInstDesc("fsd", (_f(), _r(), _imm12()), template=0x00003027,
+               fields=_store_fields(), flags=InstFlags.MAY_STORE,
+               est_size=INSTRUCTION_SIZE, roles=_READS_ALL_THREE),
     # lui rd, imm20
     RVInstDesc("lui", (_r(), _imm20()), template=0x00000037,
                fields=(_reg(0, _RD),

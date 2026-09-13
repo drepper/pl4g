@@ -27,6 +27,7 @@
 ; -- literals -----------------------------------------------------------------
 
 (integer_literal) @number
+(float_literal) @number.float
 (string_literal) @string
 (boolean_literal) @boolean
 

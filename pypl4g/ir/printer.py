@@ -14,7 +14,7 @@ from .inst import (BinaryInst, BlockTarget, BrInst, CastInst, CmpInst, CondBrIns
                    SwitchInst, Terminator, UnaryInst, UnreachableInst)
 from .module import Module
 from .types import VOID
-from .value import BoolConst, IntConst, UndefConst, Value
+from .value import BoolConst, FloatConst, IntConst, UndefConst, Value
 
 #: Bumped whenever the textual form changes, so that a stale golden file is
 #: rejected loudly instead of being misread.
@@ -54,6 +54,10 @@ def render_operand(value: Value, numbers: Numbering) -> str:
         return str(value.value)
     if isinstance(value, BoolConst):
         return "true" if value.value else "false"
+    if isinstance(value, FloatConst):
+        # Written the way Python writes a float, which reads back as the same
+        # number: a dump that rounded would be a dump that could not be trusted.
+        return repr(value.value)
     if isinstance(value, UndefConst):
         return "undef"
     return numbers.name_of(value)
@@ -158,7 +162,8 @@ def render_global(var: object, out: list[str]) -> None:
     which is what it said before there was anywhere for a `bool` to be read.
     """
     from .module import GlobalVar
-    from .value import BoolConst as _BoolConst, IntConst as _IntConst
+    from .value import (BoolConst as _BoolConst, FloatConst as _FloatConst,
+                        IntConst as _IntConst)
 
     assert isinstance(var, GlobalVar)
     initializer = var.initializer
@@ -166,6 +171,8 @@ def render_global(var: object, out: list[str]) -> None:
         text = str(initializer.value)
     elif isinstance(initializer, _BoolConst):
         text = "true" if initializer.value else "false"
+    elif isinstance(initializer, _FloatConst):
+        text = repr(initializer.value)
     else:
         text = "undef"
     out.append("".join(("let @", var.name, ": ", "mut " if var.mutable else "",

@@ -5,8 +5,9 @@ from dataclasses import dataclass, field
 from ..source.location import INVALID_SPAN, Span
 from .decisions import DecisionLog
 from .function import Function, Linkage
-from .types import BoolType, IntType, MEM, PtrType, Type, TypeContext
-from .value import BoolConst, IntConst, Value
+from .types import (BoolType, FloatType, IntType, MEM, PtrType, Type,
+                    TypeContext)
+from .value import BoolConst, FloatConst, IntConst, Value
 
 
 class GlobalVar(Value):
@@ -78,6 +79,7 @@ class Module:
     #: and any of them may decide something.
     decisions: DecisionLog = field(default_factory=DecisionLog)
     _int_consts: dict[tuple[int, bool, int], IntConst] = field(default_factory=dict)
+    _float_consts: dict[tuple[int, bytes], FloatConst] = field(default_factory=dict)
     _bool_consts: dict[bool, BoolConst] = field(default_factory=dict)
 
     def add_function(self, func: Function, key: str | None = None) -> Function:
@@ -102,6 +104,21 @@ class Module:
         if found is None:
             found = IntConst(ty, value)
             self._int_consts[key] = found
+        return found
+
+    def float_const(self, ty: FloatType, value: float) -> FloatConst:
+        """Return the interned constant *value* of type *ty*.
+
+        Interned by the bits and not by the number, so that the two zeroes stay
+        two constants: they compare equal and are not the same value.
+        """
+        import struct
+
+        key = (ty.bits, struct.pack("<d", value))
+        found = self._float_consts.get(key)
+        if found is None:
+            found = FloatConst(ty, value)
+            self._float_consts[key] = found
         return found
 
     def bool_const(self, ty: BoolType, value: bool) -> BoolConst:

@@ -32,13 +32,13 @@ TABLE = InstrTable(RISCV_INSTRS)
 OBJDUMP = ARCH_TOOLS["riscv64"]["objdump"]
 ASSEMBLER = "/usr/bin/riscv64-linux-gnu-as"
 
-#: What the compiler emits for.  The base integer set plus the multiply and
-#: divide extension, which every Linux-capable RISC-V implementation has and
-#: which the standard sixty-four bit Linux ABI requires; multiplying without it
-#: would mean calling a routine, and there is nothing to call yet.  The
-#: compressed encoding is deliberately not included: nothing emits it, and the
-#: header flag that would announce it stays clear.
-MARCH = "rv64im"
+#: What the compiler emits for.  The base integer set, the multiply and divide
+#: extension, and single and double precision floating point -- which together
+#: are what the standard sixty-four bit Linux ABI requires, and what every
+#: Linux-capable RISC-V implementation has.  The compressed encoding is
+#: deliberately not included: nothing emits it, and the header flag that would
+#: announce it stays clear.
+MARCH = "rv64imfd"
 
 
 def assemble(mnemonic: str, *operands: object) -> bytes:
@@ -101,6 +101,50 @@ SAMPLES = [
     ("srl a0, a1, a2", "srl", MCReg(reg("a0")), MCReg(reg("a1")), MCReg(reg("a2"))),
     ("sra a0, a1, a2", "sra", MCReg(reg("a0")), MCReg(reg("a1")), MCReg(reg("a2"))),
     ("srai a0, a1, 56", "srai", MCReg(reg("a0")), MCReg(reg("a1")), MCImm(56, 6)),
+    ("fadd.s f0, f1, f2", "fadd.s", MCReg(reg("f0")), MCReg(reg("f1")),
+     MCReg(reg("f2"))),
+    ("fadd.d f0, f1, f2", "fadd.d", MCReg(reg("f0")), MCReg(reg("f1")),
+     MCReg(reg("f2"))),
+    ("fsub.s f0, f1, f2", "fsub.s", MCReg(reg("f0")), MCReg(reg("f1")),
+     MCReg(reg("f2"))),
+    ("fsub.d f0, f1, f2", "fsub.d", MCReg(reg("f0")), MCReg(reg("f1")),
+     MCReg(reg("f2"))),
+    ("fmul.s f0, f1, f2", "fmul.s", MCReg(reg("f0")), MCReg(reg("f1")),
+     MCReg(reg("f2"))),
+    ("fmul.d f0, f1, f2", "fmul.d", MCReg(reg("f0")), MCReg(reg("f1")),
+     MCReg(reg("f2"))),
+    ("fdiv.s f0, f1, f2", "fdiv.s", MCReg(reg("f0")), MCReg(reg("f1")),
+     MCReg(reg("f2"))),
+    ("fdiv.d f0, f1, f2", "fdiv.d", MCReg(reg("f0")), MCReg(reg("f1")),
+     MCReg(reg("f2"))),
+    ("fsgnj.s f0, f1, f2", "fsgnj.s", MCReg(reg("f0")), MCReg(reg("f1")),
+     MCReg(reg("f2"))),
+    ("fsgnj.d f0, f1, f2", "fsgnj.d", MCReg(reg("f0")), MCReg(reg("f1")),
+     MCReg(reg("f2"))),
+    ("fsgnjx.s f0, f1, f2", "fsgnjx.s", MCReg(reg("f0")), MCReg(reg("f1")),
+     MCReg(reg("f2"))),
+    ("fsgnjx.d f0, f1, f2", "fsgnjx.d", MCReg(reg("f0")), MCReg(reg("f1")),
+     MCReg(reg("f2"))),
+    ("feq.s a0, f1, f2", "feq.s", MCReg(reg("a0")), MCReg(reg("f1")),
+     MCReg(reg("f2"))),
+    ("feq.d a0, f1, f2", "feq.d", MCReg(reg("a0")), MCReg(reg("f1")),
+     MCReg(reg("f2"))),
+    ("flt.s a0, f1, f2", "flt.s", MCReg(reg("a0")), MCReg(reg("f1")),
+     MCReg(reg("f2"))),
+    ("flt.d a0, f1, f2", "flt.d", MCReg(reg("a0")), MCReg(reg("f1")),
+     MCReg(reg("f2"))),
+    ("fle.s a0, f1, f2", "fle.s", MCReg(reg("a0")), MCReg(reg("f1")),
+     MCReg(reg("f2"))),
+    ("fle.d a0, f1, f2", "fle.d", MCReg(reg("a0")), MCReg(reg("f1")),
+     MCReg(reg("f2"))),
+    ("flw f0, 8(a1)", "flw", MCReg(reg("f0")), MCReg(reg("a1")),
+     MCImm(8, 12)),
+    ("fld f0, 8(a1)", "fld", MCReg(reg("f0")), MCReg(reg("a1")),
+     MCImm(8, 12)),
+    ("fsw f0, 8(a1)", "fsw", MCReg(reg("f0")), MCReg(reg("a1")),
+     MCImm(8, 12)),
+    ("fsd f0, 8(a1)", "fsd", MCReg(reg("f0")), MCReg(reg("a1")),
+     MCImm(8, 12)),
     ("j .", "j", MCSymRef(SymExpr(MCSymbol("s")))),
     ("beq a0, a1, .", "beq", MCReg(reg("a0")), MCReg(reg("a1")),
      MCSymRef(SymExpr(MCSymbol("s")))),

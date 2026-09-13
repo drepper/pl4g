@@ -18,10 +18,11 @@ targets -- how an address is computed and how a value of a given width is loaded
 
 from collections.abc import Sequence
 
-from ..ir.layout import DataLayout, align_of, encode_scalar, size_of
+from ..ir.layout import (DataLayout, align_of, encode_float, encode_scalar,
+                         size_of)
 from ..ir.function import Linkage
 from ..ir.module import GlobalVar, Module
-from ..ir.value import BoolConst, IntConst
+from ..ir.value import BoolConst, FloatConst, IntConst
 from ..mc.asmbuilder import Assembler
 from ..mc.symbol import SymBinding, SymKind, SymVisibility
 
@@ -88,5 +89,7 @@ def initial_bytes(var: GlobalVar, layout: DataLayout) -> bytes:
             return encode_scalar(initializer.value, var.value_type, layout)
         case BoolConst():
             return encode_scalar(1 if initializer.value else 0, var.value_type, layout)
+        case FloatConst():
+            return encode_float(initializer.value, var.value_type, layout)
         case _:
             return bytes(size_of(var.value_type, layout))

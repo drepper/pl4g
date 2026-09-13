@@ -34,6 +34,10 @@
             "named": true
           },
           {
+            "type": "float_literal",
+            "named": true
+          },
+          {
             "type": "identifier",
             "named": true
           },
@@ -232,6 +236,10 @@
           "named": true
         },
         {
+          "type": "float_literal",
+          "named": true
+        },
+        {
           "type": "identifier",
           "named": true
         },
@@ -288,6 +296,10 @@
             "named": true
           },
           {
+            "type": "float_literal",
+            "named": true
+          },
+          {
             "type": "identifier",
             "named": true
           },
@@ -331,6 +343,10 @@
           },
           {
             "type": "call_expression",
+            "named": true
+          },
+          {
+            "type": "float_literal",
             "named": true
           },
           {
@@ -379,6 +395,10 @@
           },
           {
             "type": "call_expression",
+            "named": true
+          },
+          {
+            "type": "float_literal",
             "named": true
           },
           {
@@ -462,6 +482,10 @@
             "named": true
           },
           {
+            "type": "float_literal",
+            "named": true
+          },
+          {
             "type": "identifier",
             "named": true
           },
@@ -542,6 +566,10 @@
         },
         {
           "type": "comparison_expression",
+          "named": true
+        },
+        {
+          "type": "float_literal",
           "named": true
         },
         {
@@ -691,6 +719,10 @@
             "named": true
           },
           {
+            "type": "float_literal",
+            "named": true
+          },
+          {
             "type": "identifier",
             "named": true
           },
@@ -771,6 +803,10 @@
             "named": true
           },
           {
+            "type": "float_literal",
+            "named": true
+          },
+          {
             "type": "identifier",
             "named": true
           },
@@ -815,6 +851,10 @@
         },
         {
           "type": "comparison_expression",
+          "named": true
+        },
+        {
+          "type": "float_literal",
           "named": true
         },
         {
@@ -866,6 +906,10 @@
           },
           {
             "type": "call_expression",
+            "named": true
+          },
+          {
+            "type": "float_literal",
             "named": true
           },
           {
@@ -1008,6 +1052,10 @@
           "named": true
         },
         {
+          "type": "float_literal",
+          "named": true
+        },
+        {
           "type": "identifier",
           "named": true
         },
@@ -1060,6 +1108,10 @@
         },
         {
           "type": "comparison_expression",
+          "named": true
+        },
+        {
+          "type": "float_literal",
           "named": true
         },
         {
@@ -1168,6 +1220,10 @@
           "named": true
         },
         {
+          "type": "float_literal",
+          "named": true
+        },
+        {
           "type": "identifier",
           "named": true
         },
@@ -1236,6 +1292,10 @@
           },
           {
             "type": "comparison_expression",
+            "named": true
+          },
+          {
+            "type": "float_literal",
             "named": true
           },
           {
@@ -1326,6 +1386,10 @@
           },
           {
             "type": "comparison_expression",
+            "named": true
+          },
+          {
+            "type": "float_literal",
             "named": true
           },
           {
@@ -1458,6 +1522,10 @@
   {
     "type": "false",
     "named": false
+  },
+  {
+    "type": "float_literal",
+    "named": true
   },
   {
     "type": "fn",
