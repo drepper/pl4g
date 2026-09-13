@@ -52,6 +52,7 @@ the parser does, and they are the floor everything else is measured against.
 | `03887ff` | 1.15 | 1.91 | 1.76 | 1.57 |
 | `87c066b` | 1.25 | 2.04 | 1.81 | 1.51 |
 | `ca395a6` | 0.96 | 2.07 | 1.53 | 1.29 |
+| `230b8a7` | 1.05 | 1.87 | 1.71 | 1.42 |
 
 ### Variables and memory
 
@@ -88,6 +89,7 @@ backend do.
 | `03887ff` | 1.36 | 1.81 | 1.60 |
 | `87c066b` | 1.54 | 2.02 | 1.59 |
 | `ca395a6` | 1.14 | 1.55 | 1.67 |
+| `230b8a7` | 1.27 | 1.74 | 1.49 |
 
 ### Register pressure
 
@@ -124,6 +126,7 @@ and they are the only ones that reach the frame.
 | `03887ff` | 2.04 | 7.24 |
 | `87c066b` | 2.10 | 7.18 |
 | `ca395a6` | 1.76 | 6.76 |
+| `230b8a7` | 2.02 | 7.22 |
 
 ### What is left out
 
@@ -160,42 +163,44 @@ decision log does.
 | `03887ff` | 1.54 | 1.62 |
 | `87c066b` | 1.72 | 1.68 |
 | `ca395a6` | 1.36 | 1.45 |
+| `230b8a7` | 1.56 | 1.74 |
 
 ### Expressions
 
 Operators, and the folding of them.  These move when the expression parser, the semantic analysis or the
 optimizer does.
 
-| commit | bitwise-operators | bitwise-precedence | comparison-operators | logic-operators | logic-short-circuit | saturating-precedence | arithmetic-operators | call-nested | arithmetic-division | shift-operators | float-arithmetic | float-approximate |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| `eee64a3` |  |  |  |  |  |  |  |  |  |  |  |  |
-| `af657ad` |  |  |  |  |  |  |  |  |  |  |  |  |
-| `2f564cb` | 1.47 | 1.22 |  |  |  |  |  |  |  |  |  |  |
-| `37dbb28` | 1.55 | 1.22 |  |  |  |  |  |  |  |  |  |  |
-| `1c4ae78` | 1.56 | 1.42 |  |  |  |  |  |  |  |  |  |  |
-| `f391839` | 1.57 | 1.40 |  |  |  |  |  |  |  |  |  |  |
-| `04c20c9` | 1.58 | 1.39 |  |  |  |  |  |  |  |  |  |  |
-| `3020cf6` | 1.44 | 1.28 |  |  |  |  |  |  |  |  |  |  |
-| `9bcaf84` | 1.46 | 1.28 |  |  |  |  |  |  |  |  |  |  |
-| `40c35bb` | 1.51 | 1.31 |  |  |  |  |  |  |  |  |  |  |
-| `9437d8a` | 1.54 | 1.45 |  |  |  |  |  |  |  |  |  |  |
-| `d0c8cf5` | 1.55 | 1.36 |  |  |  |  |  |  |  |  |  |  |
-| `73ce857` | 1.58 | 1.39 |  |  |  |  |  |  |  |  |  |  |
-| `ed1c028` | 1.65 | 1.45 |  |  |  |  |  |  |  |  |  |  |
-| `1269bd5` | 1.58 | 1.43 | 2.40 |  |  |  |  |  |  |  |  |  |
-| `db0b436` | 1.66 | 1.42 | 2.36 |  |  |  |  |  |  |  |  |  |
-| `25bb4e0` | 1.67 | 1.39 | 2.29 | 2.39 | 2.33 |  |  |  |  |  |  |  |
-| `baf1f3c` | 1.69 | 1.48 | 2.37 | 2.55 | 2.35 |  |  |  |  |  |  |  |
-| `74ac227` | 1.71 | 1.37 | 2.29 | 2.41 | 2.27 | 1.57 |  |  |  |  |  |  |
-| `c0f29f2` | 1.60 | 1.41 | 2.43 | 2.48 | 2.43 | 1.73 | 1.83 |  |  |  |  |  |
-| `5c3aec4` | 1.83 | 1.55 | 2.67 | 2.79 | 2.56 | 1.76 | 1.95 |  |  |  |  |  |
-| `f7ba2fc` | 1.65 | 1.44 | 2.61 | 2.65 | 2.43 | 1.67 | 1.75 |  |  |  |  |  |
-| `3e9eb27` | 1.54 | 1.34 | 2.16 | 2.27 | 2.09 | 1.54 | 1.81 | 2.23 |  |  |  |  |
-| `0990c74` | 1.56 | 1.36 | 2.17 | 2.31 | 2.09 | 1.52 | 1.79 | 2.25 | 2.09 |  |  |  |
-| `05d8da1` | 1.45 | 1.22 | 2.06 | 2.13 | 2.01 | 1.42 | 1.70 | 2.16 | 1.86 | 2.00 |  |  |
-| `03887ff` | 1.78 | 1.57 | 2.49 | 2.59 | 2.41 | 1.67 | 2.01 | 2.55 | 2.17 | 2.34 | 5.54 |  |
-| `87c066b` | 1.78 | 1.56 | 2.63 | 2.76 | 2.46 | 1.80 | 2.08 | 2.59 | 2.21 | 2.29 | 6.22 |  |
-| `ca395a6` | 1.53 | 1.66 | 2.60 | 2.72 | 2.45 | 1.85 | 2.12 | 2.68 | 2.28 | 2.41 | 5.91 | 9.15 |
+| commit | bitwise-operators | bitwise-precedence | comparison-operators | logic-operators | logic-short-circuit | saturating-precedence | arithmetic-operators | call-nested | arithmetic-division | shift-operators | float-arithmetic | float-approximate | result-type |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| `eee64a3` |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| `af657ad` |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| `2f564cb` | 1.47 | 1.22 |  |  |  |  |  |  |  |  |  |  |  |
+| `37dbb28` | 1.55 | 1.22 |  |  |  |  |  |  |  |  |  |  |  |
+| `1c4ae78` | 1.56 | 1.42 |  |  |  |  |  |  |  |  |  |  |  |
+| `f391839` | 1.57 | 1.40 |  |  |  |  |  |  |  |  |  |  |  |
+| `04c20c9` | 1.58 | 1.39 |  |  |  |  |  |  |  |  |  |  |  |
+| `3020cf6` | 1.44 | 1.28 |  |  |  |  |  |  |  |  |  |  |  |
+| `9bcaf84` | 1.46 | 1.28 |  |  |  |  |  |  |  |  |  |  |  |
+| `40c35bb` | 1.51 | 1.31 |  |  |  |  |  |  |  |  |  |  |  |
+| `9437d8a` | 1.54 | 1.45 |  |  |  |  |  |  |  |  |  |  |  |
+| `d0c8cf5` | 1.55 | 1.36 |  |  |  |  |  |  |  |  |  |  |  |
+| `73ce857` | 1.58 | 1.39 |  |  |  |  |  |  |  |  |  |  |  |
+| `ed1c028` | 1.65 | 1.45 |  |  |  |  |  |  |  |  |  |  |  |
+| `1269bd5` | 1.58 | 1.43 | 2.40 |  |  |  |  |  |  |  |  |  |  |
+| `db0b436` | 1.66 | 1.42 | 2.36 |  |  |  |  |  |  |  |  |  |  |
+| `25bb4e0` | 1.67 | 1.39 | 2.29 | 2.39 | 2.33 |  |  |  |  |  |  |  |  |
+| `baf1f3c` | 1.69 | 1.48 | 2.37 | 2.55 | 2.35 |  |  |  |  |  |  |  |  |
+| `74ac227` | 1.71 | 1.37 | 2.29 | 2.41 | 2.27 | 1.57 |  |  |  |  |  |  |  |
+| `c0f29f2` | 1.60 | 1.41 | 2.43 | 2.48 | 2.43 | 1.73 | 1.83 |  |  |  |  |  |  |
+| `5c3aec4` | 1.83 | 1.55 | 2.67 | 2.79 | 2.56 | 1.76 | 1.95 |  |  |  |  |  |  |
+| `f7ba2fc` | 1.65 | 1.44 | 2.61 | 2.65 | 2.43 | 1.67 | 1.75 |  |  |  |  |  |  |
+| `3e9eb27` | 1.54 | 1.34 | 2.16 | 2.27 | 2.09 | 1.54 | 1.81 | 2.23 |  |  |  |  |  |
+| `0990c74` | 1.56 | 1.36 | 2.17 | 2.31 | 2.09 | 1.52 | 1.79 | 2.25 | 2.09 |  |  |  |  |
+| `05d8da1` | 1.45 | 1.22 | 2.06 | 2.13 | 2.01 | 1.42 | 1.70 | 2.16 | 1.86 | 2.00 |  |  |  |
+| `03887ff` | 1.78 | 1.57 | 2.49 | 2.59 | 2.41 | 1.67 | 2.01 | 2.55 | 2.17 | 2.34 | 5.54 |  |  |
+| `87c066b` | 1.78 | 1.56 | 2.63 | 2.76 | 2.46 | 1.80 | 2.08 | 2.59 | 2.21 | 2.29 | 6.22 |  |  |
+| `ca395a6` | 1.53 | 1.66 | 2.60 | 2.72 | 2.45 | 1.85 | 2.12 | 2.68 | 2.28 | 2.41 | 5.91 | 9.15 |  |
+| `230b8a7` | 1.70 | 1.44 | 2.54 | 2.61 | 2.43 | 1.65 | 1.94 | 2.68 | 2.40 | 2.27 | 6.34 | 9.70 | 3.80 |
 
 Process
 -------
@@ -236,6 +241,7 @@ worth showing here, and every figure is in the JSON beside this file.
 | `03887ff` | 75 | 90 |
 | `87c066b` | 77 | 90 |
 | `ca395a6` | 66 | 86 |
+| `230b8a7` | 75 | 84 |
 
 What each row is:
 
@@ -267,6 +273,7 @@ What each row is:
 - `03887ff` -- 📝 Time the floating-point sample too
 - `87c066b` -- ✨ A floating-point answer that is not a number stops the program
 - `ca395a6` -- 📝 Time the approximate comparisons too
+- `230b8a7` -- 📝 Time the result type too
 
 What each program exercises:
 
@@ -293,3 +300,4 @@ What each program exercises:
 - `shift-operators` -- two shifts, each with its distance checked
 - `float-arithmetic` -- ten floating-point answers, each asserted
 - `float-approximate` -- every approximate comparison, in both widths
+- `result-type` -- a result made, propagated with ? and read with ??

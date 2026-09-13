@@ -22,7 +22,8 @@
     "arithmetic-division": "a division and a remainder, each checked twice",
     "shift-operators": "two shifts, each with its distance checked",
     "float-arithmetic": "ten floating-point answers, each asserted",
-    "float-approximate": "every approximate comparison, in both widths"
+    "float-approximate": "every approximate comparison, in both widths",
+    "result-type": "a result made, propagated with ? and read with ??"
   },
   "commits": [
     {
@@ -136,6 +137,10 @@
     {
       "hash": "ca395a6",
       "subject": "📝 Time the approximate comparisons too"
+    },
+    {
+      "hash": "230b8a7",
+      "subject": "📝 Time the result type too"
     }
   ],
   "times": {
@@ -1769,6 +1774,104 @@
       "float-approximate": [
         9.155,
         85.56570898508653
+      ]
+    },
+    "230b8a7": {
+      "exit0": [
+        1.053,
+        74.89532401086763
+      ],
+      "global-variable": [
+        1.266,
+        76.93284400738776
+      ],
+      "assign-widths": [
+        1.735,
+        75.21367399021983
+      ],
+      "many-values-at-once": [
+        2.015,
+        77.5001390138641
+      ],
+      "unreached-function": [
+        1.558,
+        78.05455499328673
+      ],
+      "export-visibility": [
+        1.7449999999999999,
+        80.45462099835277
+      ],
+      "digit-separators": [
+        1.7139999999999997,
+        80.13984700664878
+      ],
+      "boolean-values": [
+        1.415,
+        76.23120700009167
+      ],
+      "bitwise-operators": [
+        1.704,
+        78.9131079800427
+      ],
+      "bitwise-precedence": [
+        1.4449999999999998,
+        77.35306798713282
+      ],
+      "spill-to-the-frame": [
+        7.218,
+        82.98725599888712
+      ],
+      "boolean-in-memory": [
+        1.494,
+        75.07535599870607
+      ],
+      "comparison-operators": [
+        2.539,
+        79.1040159529075
+      ],
+      "logic-operators": [
+        2.612,
+        78.05780903436244
+      ],
+      "logic-short-circuit": [
+        2.427,
+        77.63640402117744
+      ],
+      "saturating-precedence": [
+        1.648,
+        76.61643798928708
+      ],
+      "arithmetic-operators": [
+        1.943,
+        80.6761040003039
+      ],
+      "semicolon-separates-statements": [
+        1.871,
+        78.39999499265105
+      ],
+      "call-nested": [
+        2.6829999999999994,
+        79.33999103261158
+      ],
+      "arithmetic-division": [
+        2.395,
+        78.63812398863956
+      ],
+      "shift-operators": [
+        2.266,
+        77.74476701160893
+      ],
+      "float-arithmetic": [
+        6.3389999999999995,
+        83.16615701187402
+      ],
+      "float-approximate": [
+        9.695,
+        84.00199597235769
+      ],
+      "result-type": [
+        3.796,
+        77.70248298766091
       ]
     }
   }
