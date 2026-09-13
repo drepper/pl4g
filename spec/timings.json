@@ -43,6 +43,10 @@
     {
       "hash": "3020cf6",
       "subject": "✨ Spilling to a stack frame, by rewriting and starting again"
+    },
+    {
+      "hash": "9bcaf84",
+      "subject": "⚡ A spilled value is read from the frame once for as many instructions as read it"
     }
   ],
   "times": {
@@ -364,6 +368,48 @@
       "bitwise-precedence": [
         1.2759999999999998,
         72.65555899357423
+      ]
+    },
+    "9bcaf84": {
+      "exit0": [
+        0.99,
+        73.19195399759337
+      ],
+      "global-variable": [
+        1.1609999999999998,
+        70.99456200376153
+      ],
+      "assign-widths": [
+        1.605,
+        74.49425698723644
+      ],
+      "many-values-at-once": [
+        1.784,
+        74.10512102069333
+      ],
+      "unreached-function": [
+        1.3849999999999998,
+        71.13194896373898
+      ],
+      "export-visibility": [
+        1.393,
+        72.23905803402886
+      ],
+      "digit-separators": [
+        1.552,
+        71.08588999835774
+      ],
+      "boolean-values": [
+        1.314,
+        70.15520700952038
+      ],
+      "bitwise-operators": [
+        1.4600000000000002,
+        72.47864897362888
+      ],
+      "bitwise-precedence": [
+        1.2799999999999998,
+        70.70782000664622
       ]
     }
   }
