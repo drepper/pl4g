@@ -1,6 +1,9 @@
 To Do List for the pypl4g compiler
 ==================================
 
+`[ ]` open, `[x]` done, `[?]` needs a decision before it can be started -- such an entry carries a
+`Question:` paragraph saying what is undecided and what the choices are.
+
 [x] By default, all functions and variables are not visible to the outside, including when used as a module.  The `@[export]` attribute
     can be attached to a function or variable.  This also determines ELF symbol visibility.
 
@@ -15,8 +18,12 @@ To Do List for the pypl4g compiler
     instruction nothing uses and that has no effect, which is the same question and stays right once a reference to a local can be
     kept, since a reference will be a use.  Each instruction shape says for itself whether it has an effect.
 
-[ ] a local that was dropped should be defined as a constant expression in the debug information, so that a debugger can still
+[?] a local that was dropped should be defined as a constant expression in the debug information, so that a debugger can still
     show it.  Waits on there being any debug information at all.
+    Question: the compiler emits no debug information and neither specification document mentions any.  Should it emit DWARF, and
+    if so which version -- 4, which every tool reads, or 5, which is smaller and what current toolchains default to?  The
+    alternative is a format of the compiler's own, which would be smaller still and which the incremental rebuild could update in
+    place, but which no debugger reads.  Until this is answered the entry above cannot start.
 
 [x] functions not called, not exported, and not referenced can be dropped and should not appear in the binary.  Done: reachability
     is computed forwards from roots -- the startup function, the constructors, the destructors, the tests and everything exported --
@@ -25,6 +32,30 @@ To Do List for the pypl4g compiler
 [x] a variable at the top level that nothing reaches should be dropped as well.  Done: each instruction says which places it reads
     and which it writes, the reachability walk carries variables after the functions in the same pass, and an exported variable is
     a root of its own.  The pass is now `dropunreached`, since it no longer drops only functions.
+
+[ ] implement a register allocator.  Every value a function computes goes to the one register a result is returned in, which is
+    correct only while nothing else needs one at the same time; `_check_single_use` in each backend refuses anything more and
+    reports 8501.  That makes `a + b` impossible, so this blocks every operator entry in TODO-language.md.  The slot is prepared:
+    `VirtReg` exists, `MachineFunction.virtual_registers()` collects them, the encoders refuse a virtual register so nothing can
+    skip allocation, and `Assembler._assign_registers` is the one method to replace.  Linear scan with spilling to a frame slot.
+    This is also the first stack frame the compiler emits, which the unwinder below needs.
+
+[ ] emit conditional branches.  `CondBrInst`, `BrInst`, `SwitchInst` and `UnreachableInst` all exist in the IR and none is lowered;
+    there is no `jcc`, `b.cond` or `beq` row in any of the three opcode tables, the selector protocol has no `select_branch`, and
+    `MachineBasicBlock.successors` is never populated.  Needs per target: `jcc rel32`; `b.cond` with `adds`/`subs` and a new fixup;
+    `beq`/`bne`/`blt`/`bltu` with the B-type split immediate plus `slt`/`sltu`, RISC-V having no condition codes at all.  Blocks
+    short-circuit operators, saturated operations, overflow traps and all control flow.
+
+[ ] parse expressions with precedence, and lower `BinaryInst` and `CmpInst`.  `_parse_expression` is a four-arm match consuming one
+    token and the syntax tree has no interior expression node, so there is nothing for an operator to be.  No backend matches
+    `BinaryInst`, so `BinOp` never reaches instruction selection; only constant folding ever looks at one.  A precedence-climbing
+    parser with a table, so that each operator entry is a row rather than a new level.
+
+[ ] emit frame information and an unwinder.  Decided: a fault -- an arithmetic overflow to begin with -- aborts with a real
+    multi-frame backtrace, so this is frame information plus an unwinder in the generated code rather than a bare trap.  Needs the
+    register allocator's frame layout first.  One question inside it to settle when it is written: `.symtab` is in the image but is
+    not mapped, so a backtrace carrying names needs either a table that is loaded or addresses only.  The message goes out through
+    a raw system call, which is also what the pre-`io_uring` error path in TODO-language.md needs.
 
 [ ] implement module system.  A module is loaded at compile-time.  The syntax is `let modname := import("somename")` where `modname`
     is the name the module is known as in the compilation unit and `somename` is the name of the module.  There will be built-in
@@ -48,10 +79,17 @@ To Do List for the pypl4g compiler
     In case a module is imported more than once only one instance is used and the name which is used is the shortest and in case
     of a tie in length, the one sorting first.
 
-[ ] patching a binary while it is in use.  spec/details.md asks for hooks into the system that controls binary creation so that a
+[?] patching a binary while it is in use.  spec/details.md asks for hooks into the system that controls binary creation so that a
     binary can be changed while it is being used.  Linux refuses to write to a running executable's file, so this needs a concrete
     mechanism -- writing to the process's memory, a `memfd`-backed scheme, or a supervisor built into the generated runtime -- and
     none has been chosen.
+    Question: which of the three?  Writing to the process's memory with `process_vm_writev` or `ptrace` needs no cooperation from
+    the program but needs privilege and cannot change the file on disk, so the patch is lost at the next start.  A `memfd`-backed
+    scheme -- the program runs from an anonymous file it can rewrite -- keeps the change but needs the program to be started
+    through something that sets it up.  A supervisor inside the generated runtime is the only one that needs neither privilege nor
+    a special launcher, but it puts a thread and a channel into every program, which the requirement to depend on no system runtime
+    makes a heavy thing to add by default.  This also decides who initiates: the compiler pushing a patch, or the program pulling
+    one.
 
 [x] report a value written to a variable at the top level that nothing reads.  Done: diagnostic 4007, controllable as
     `unread-variable`, answered in the whole-program phase once every function has been checked.  What the definition says it
@@ -74,5 +112,6 @@ To Do List for the pypl4g compiler
 Optimizations
 -------------
 
-[ ] Implement value range propagation.  The result is obviously usable in many situations, including:
+[ ] Implement value range propagation.  Needs the arithmetic entry in TODO-language.md, which is what produces the checks this
+    would remove.  The result is obviously usable in many situations, including:
     [ ] skip overflow/underflow checking of arithmetic operations

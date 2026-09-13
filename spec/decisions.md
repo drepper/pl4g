@@ -888,6 +888,44 @@ all but a negation — a wrinkle this arrangement does not have: `⁻128i8` is s
 
 This also closes the separate entry observing that there was no way to write a negative number.  It and the sign were one question.
 
+## 2026-09-14T13:00+02:00 — process
+
+**The to-do lists gain a third state, and the four things nothing had written down**
+
+Working through both lists in order made two things necessary.
+
+*A third state.* An entry that cannot be started until something is decided is neither open nor done, and leaving it `[ ]`
+alongside work that can simply be picked up hides which is which.  Entries are now `[ ]`, `[x]` or `[?]`, and a `[?]` carries a
+`Question:` paragraph naming what is undecided, the choices, and what each costs.  Twelve language entries and two compiler entries
+are marked, which is most of what is left of the language: the product, sum and member-function syntaxes; calls and control flow;
+strings that can be resized; `@[required]`; the error path before `io_uring`; naming a symbol; whether an unread variable is an
+error; patching a live binary; debug information; and the streams entry, which ends mid-sentence.
+
+*Four things on neither list.* The operator half of the language list is unreachable without them, and none needs new syntax, so
+none of them is a language question:
+
+- a register allocator, without which `a + b` cannot be compiled at all, since every value goes to the one register a result is
+  returned in and anything more is refused outright;
+- conditional branches, of which there is not one row in any of the three instruction tables, although the representation has had
+  branches and block parameters from the start;
+- an expression parser with precedence, the current one being a four-arm match that consumes a single token;
+- lowering `BinaryInst`, which no backend matches, so arithmetic in the representation reaches only the constant folder.
+
+They are now entries, in that order, because that is the order they unblock each other in.  The allocator comes first for a second
+reason: it introduces the first stack frame the compiler emits, and the unwinder needs one.
+
+*The fault path.* Decided: an overflow aborts with a real multi-frame backtrace, so the compiler emits frame information and an
+unwinder rather than a bare trap instruction.  All three backends already have a trap and could have used it in an afternoon; the
+reason not to is that a trap tells the program's author where nothing and leaves them to reconstruct it from a core dump, which is
+the sort of thing a language that refuses to truncate a number should not ask of anyone.  The same decision settles half of the
+"error path before `io_uring`" entry, since the backtrace has to be written somewhere and the only thing available is a raw system
+call; what that path may assume is what is left, and it is marked.
+
+What other languages do about the ordering rather than the features: C and C++ push the whole question to the linker and the
+debugger, and their unwinders are a separate library.  Go's runtime carries its own unwinder and prints a goroutine backtrace on a
+fault, which is the behaviour this decision chooses.  Rust's panic path also unwinds, and its `-C panic=abort` is the trap-only
+option being declined here.
+
 ---
 
 Open questions
