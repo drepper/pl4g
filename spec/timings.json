@@ -35,6 +35,10 @@
     {
       "hash": "f391839",
       "subject": "✨ A local the sweep removes is logged too, by the name it was given"
+    },
+    {
+      "hash": "04c20c9",
+      "subject": "✨ A grammar for editors, and a program that shows a log against its source"
     }
   ],
   "times": {
@@ -272,6 +276,48 @@
       "bitwise-precedence": [
         1.3979999999999997,
         67.96715199016035
+      ]
+    },
+    "04c20c9": {
+      "exit0": [
+        1.068,
+        69.11681799101643
+      ],
+      "global-variable": [
+        1.2049999999999998,
+        67.51765901572071
+      ],
+      "assign-widths": [
+        1.659,
+        70.14861301286146
+      ],
+      "many-values-at-once": [
+        1.8680000000000003,
+        68.12844899832271
+      ],
+      "unreached-function": [
+        1.443,
+        68.67848799447529
+      ],
+      "export-visibility": [
+        1.438,
+        67.98564401105978
+      ],
+      "digit-separators": [
+        1.623,
+        69.94710897561163
+      ],
+      "boolean-values": [
+        1.375,
+        67.36416701460257
+      ],
+      "bitwise-operators": [
+        1.577,
+        69.0252399945166
+      ],
+      "bitwise-precedence": [
+        1.3929999999999998,
+        67.61870998889208
       ]
     }
   }
