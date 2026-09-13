@@ -7,14 +7,15 @@ generated identifier module that matches the catalog it was generated from.
 
 import json
 import re
+from dataclasses import replace
 from pathlib import Path
 
 import jsonschema
 import pytest
 
 from pypl4g.diag import ids as D
-from pypl4g.diag.catalog import (generate_ids_source, load_catalog,
-                                 message_placeholders)
+from pypl4g.diag.catalog import (UnblockedNumber, generate_ids_source,
+                                 load_catalog, message_placeholders)
 from pypl4g.paths import share_file
 
 NAME_PATTERN = re.compile(r"^(LANG|IMPL)_[A-Z][A-Z0-9_]*$")
@@ -117,3 +118,43 @@ def test_every_identifier_resolves() -> None:
         if name.startswith("_") or not name.isupper():
             continue
         assert getattr(D, name) in catalog.by_number
+
+
+# -- the two places the blocks are written down --------------------------------
+
+def declared_blocks(root: Path) -> list[tuple[int, int, str]]:
+    """The block table as `spec/details.md` states it."""
+    text = (root / "spec" / "details.md").read_text(encoding="utf-8")
+    found: list[tuple[int, int, str]] = []
+    for line in text.splitlines():
+        match = re.fullmatch(r"\|\s*(\d{4})-(\d{4})\s*\|\s*(.+?)\s*\|", line)
+        if match is not None:
+            found.append((int(match.group(1)), int(match.group(2)), match.group(3)))
+    return found
+
+
+def test_the_documented_blocks_are_the_declared_blocks(root: Path) -> None:
+    """The specification states the blocks and so does the catalog.
+
+    Two places saying the same thing is two places to change, and a block added
+    to one and not the other leaves the document quietly wrong.  Nothing else
+    checks the table, so this does.
+    """
+    catalog = load_catalog()
+    assert declared_blocks(root) == [(b.first, b.last, b.topic) for b in catalog.blocks], \
+        "the block table in spec/details.md and share/diagnostics.json disagree"
+
+
+def test_a_number_outside_every_block_is_refused() -> None:
+    """Not merely reported by a test: the generator itself refuses it.
+
+    Writing such a number out anyway would put it under the heading of whatever
+    block came before, saying it belongs to a family it does not -- which is the
+    one way the generated file could be quietly misleading.
+    """
+    catalog = load_catalog()
+    entry = next(iter(catalog.by_number.values()))
+    stray = replace(entry, number=4700)
+    broken = replace(catalog, by_number={4700: stray})
+    with pytest.raises(UnblockedNumber, match="between two blocks"):
+        generate_ids_source(broken)

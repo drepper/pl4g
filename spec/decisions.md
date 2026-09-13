@@ -1047,6 +1047,24 @@ written down a second time.  x86-64 has a form of `and` that takes an immediate;
 which is not generated.  The selector tries the operands as they stand and materializes whatever was refused, so adding a row that
 carries an immediate is all it takes for one to be used.
 
+## 2026-09-14T20:30+02:00 — implementation
+
+**The generated identifier module refuses a number no block covers**
+
+The blocks of diagnostic numbers are far apart on purpose, and the generated `pypl4g/diag/ids.py` puts the names under a heading
+for each.  A number falling in a gap got no heading *and* left the previous one standing, so it was written out under the heading
+of the block before it -- reading as a member of a family it is not in.  Nothing in the generator noticed; the only thing
+preventing it was a test in the catalog's own test module, which is the wrong place for it: the generator is what produces the
+misleading file, so the generator is what should refuse.
+
+It now names the diagnostic and says what to do about it.  The test stays, as a second line rather than the only one.
+
+The same shape of problem elsewhere: the table of blocks in this document is written out by hand and nothing compared it with the
+catalog, so a block added to one and not the other would have left the document quietly wrong.  A test now compares them.
+
+Both are the same rule -- a fact stated twice is a fact that can disagree with itself -- and the answer in both cases is to check
+rather than to remember.
+
 ---
 
 Open questions

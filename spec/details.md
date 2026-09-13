@@ -334,6 +334,11 @@ that diagnostics of one family stay numerically adjacent as they grow while unre
 | 9000-9499 | image generation and incremental compilation |
 | 9900-9999 | internal compiler errors |
 
+The gaps between the blocks are wide on purpose, and a number that lands in one is refused rather than written out: the generated
+identifier module groups the names under the heading of the block they are in, so a number belonging to no block would be printed
+under whatever heading came before it and would read as a member of a family it is not in.  The generator says so instead.  A test
+checks that the table above and the catalog agree, since two places stating the same thing are two places to change.
+
 A number is the stable identity of a diagnostic and never changes -- not even when a warning is later promoted to an error, since
 a program may be reacting to that number.  The symbolic name is derived from the heading chain of the section that states the
 violated requirement, prefixed `LANG_` for the language specification and `IMPL_` for this document; each entry quotes that

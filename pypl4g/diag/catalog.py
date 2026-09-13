@@ -146,6 +146,18 @@ def message_placeholders(message: str) -> frozenset[str]:
                      if name is not None and name != "")
 
 
+class UnblockedNumber(Exception):
+    """A diagnostic has a number that no declared block covers."""
+
+    def __init__(self, name: str, number: int) -> None:
+        super().__init__("".join((
+            name, " has the number ", str(number),
+            ", which lies between two blocks rather than in one; give it a number "
+            "inside the block its family belongs to, or declare a block for it")))
+        self.name = name
+        self.number = number
+
+
 def generate_ids_source(cat: Catalog) -> str:
     """Return the text of ``pypl4g/diag/ids.py`` for *cat*.
 
@@ -169,7 +181,13 @@ def generate_ids_source(cat: Catalog) -> str:
     for number in sorted(cat.by_number):
         entry = cat.by_number[number]
         block = next((b for b in cat.blocks if b.first <= number <= b.last), None)
-        if block is not previous_block and block is not None:
+        if block is None:
+            # Writing it out anyway would put it under the heading of whatever
+            # block came before, which says it belongs to a family it does not.
+            # The blocks are deliberately far apart, so a number landing between
+            # two of them is a number chosen without reading the table.
+            raise UnblockedNumber(entry.name, number)
+        if block is not previous_block:
             out.append("")
             out.append("".join(("# ", str(block.first), "-", str(block.last), ": ", block.topic)))
             previous_block = block
