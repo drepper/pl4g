@@ -1,0 +1,86 @@
+================================================================================
+The smallest program
+================================================================================
+
+@[startup]
+fn main() → u8:
+    0u8
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_definition
+    (attribute_list (attribute name: (identifier)))
+    name: (identifier)
+    parameters: (parameter_list)
+    return_type: (type (identifier))
+    body: (layout_block
+      (expression_statement (integer_literal)))))
+
+================================================================================
+A variable, mutable and not
+================================================================================
+
+let ready: bool = true
+let seen: mut u8 = 0u8
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (variable_definition
+    name: (identifier)
+    type: (type (identifier))
+    value: (boolean_literal))
+  (variable_definition
+    name: (identifier)
+    (mutable)
+    type: (type (identifier))
+    value: (integer_literal)))
+
+================================================================================
+A type left out, to be taken from the value
+================================================================================
+
+let count: = 3u8
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (variable_definition
+    name: (identifier)
+    value: (integer_literal)))
+
+================================================================================
+Parameters and the ASCII substitute for the arrow
+================================================================================
+
+fn absdiff(left: i32, right: i32) -> i32:
+    left
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_definition
+    name: (identifier)
+    parameters: (parameter_list
+      (parameter name: (identifier) type: (type (identifier)))
+      (parameter name: (identifier) type: (type (identifier))))
+    return_type: (type (identifier))
+    body: (layout_block
+      (expression_statement (identifier)))))
+
+================================================================================
+A block written with braces
+================================================================================
+
+fn one() → u8 { 1u8 }
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_definition
+    name: (identifier)
+    parameters: (parameter_list)
+    return_type: (type (identifier))
+    body: (explicit_block
+      (expression_statement (integer_literal)))))

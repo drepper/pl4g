@@ -216,7 +216,8 @@ class Driver:
         """Write the log of the decisions the compiler made.
 
         A decision is something the compiler chose that the program did not
-        state -- what it left out, above all.  It is not a diagnostic: nothing
+        state -- what it left out, above all.  The log records the directory the
+        compiler ran in, so that the paths in it can be resolved from anywhere.  It is not a diagnostic: nothing
         is wrong, and burying "this function is not in your binary" among the
         warnings would either be noise or be missed.  It is written as JSON so
         that a build can keep it beside the binary and something can ask it a
@@ -225,8 +226,15 @@ class Driver:
         if self.options.decision_log is None:
             return
         document = {
-            "format_version": 1,
+            "format_version": 2,
             "compiler": "".join(("pypl4g ", VERSION)),
+            # Where the compiler ran, so that every path below can be found from
+            # anywhere: a path that is not absolute is relative to this.  It is
+            # the arrangement DWARF uses, where a compilation unit records the
+            # directory it was compiled in beside the name it was compiled from,
+            # and it is what lets a log be read on another machine or from
+            # another directory without guessing what the paths were relative to.
+            "directory": Path.cwd().as_posix(),
             "inputs": [p.as_posix() for p in self.options.inputs],
             "decisions": [self._rendered_decision(d) for d in self.decisions],
         }

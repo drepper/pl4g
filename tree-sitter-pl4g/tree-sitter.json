@@ -1,0 +1,19 @@
+{
+  "grammars": [
+    {
+      "name": "pl4g",
+      "camelcase": "PL4G",
+      "scope": "source.pl4g",
+      "path": ".",
+      "file-types": ["pl4g"],
+      "highlights": ["queries/highlights.scm"],
+      "injection-regex": "^pl4g$"
+    }
+  ],
+  "metadata": {
+    "version": "0.1.0",
+    "license": "MIT",
+    "description": "PL4G grammar for tree-sitter",
+    "authors": [{ "name": "the PL4G project" }]
+  }
+}

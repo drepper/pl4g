@@ -1,0 +1,9 @@
+# Nothing generated is ignored: `src/parser.c` and `src/node-types.json` are
+# committed so that anything reading the grammar needs no tree-sitter command,
+# and a test checks they are the ones `grammar.js` produces.  What is ignored is
+# what a build leaves behind.
+node_modules/
+build/
+*.so
+*.dylib
+*.wasm

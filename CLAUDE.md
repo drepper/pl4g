@@ -31,6 +31,10 @@ specification document.
 The different architectures can be tested because the QEmu infrastructure available on the host system allows executing binaries
 compiled for all the target architectures as long as they use the Linux kernel interface.
 
+A change to the syntax of the language changes `tree-sitter-pl4g/grammar.js` in the same commit, and `tree-sitter generate` is run
+so that the committed parser matches.  A test requires the grammar and the compiler to agree on every program in the test suite, so
+a syntax added to one and not the other fails the suite.
+
 Every change that lands is timed.  Run `bin/pl4g-timing` after committing it, which appends a column for that commit to
 `spec/timings.md`, and report what it shows.  Add a sample to the list in the script whenever a feature lands that could plausibly
 cost time; samples are never removed, so that an older column stays meaningful.

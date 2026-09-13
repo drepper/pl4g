@@ -150,8 +150,11 @@ def test_decision_log_is_written(source: Path, tmp_path: Path) -> None:
                          "".join(("--decision-log=", str(log))), str(source)])
     assert proc.returncode == ExitCode.SUCCESS
     document = json.loads(log.read_text(encoding="utf-8"))
-    assert document["format_version"] == 1
+    assert document["format_version"] == 2
     assert document["decisions"] == []
+    # Where the compiler ran, so that a path in the log can be found from
+    # anywhere -- the arrangement DWARF uses for a compilation unit.
+    assert Path(document["directory"]).is_absolute()
 
 
 DROPPED = """let used: u8 = 7u8

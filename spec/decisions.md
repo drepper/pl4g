@@ -1111,6 +1111,42 @@ is deliberate.  One is a possible mistake, reported at every optimization level;
 something was optimized.  They come apart in both directions: at `-O0` there is a warning and no decision, and a local that *is*
 read can still go when the thing that read it went, which is a decision with no warning.
 
+## 2026-09-14T23:00+02:00 — implementation
+
+**The log says where it was made, a grammar says what a program looks like, and a program shows the two together**
+
+*Where the log was made.*  A decision names a file and a line, and a file named by a path that is relative is only findable from
+the directory the compiler ran in.  The log now records that directory, and every path in it is relative to that -- which is
+exactly what DWARF does, where a compilation unit carries the directory it was compiled in beside the name it was compiled from.
+A project directory was considered instead and rejected: there is no marker that says where a project begins, so it would have had
+to be guessed, and a guess in a machine-readable record is worse than a fact.  The format version went to 2.
+
+*A grammar in a second language.*  `tree-sitter-pl4g` is what an editor reads.  It is a second statement of what a program is, and
+the risk with any second statement is that it drifts from the first.  So a test requires the two to agree on every program in the
+language test suite -- both ways round, since a grammar that is too loose is as wrong as one that is too strict and shows up as an
+editor offering to complete what cannot be written.  All ninety-one agree, and the deliberately malformed programs are refused by
+both.
+
+Writing it turned up one thing worth recording: the accepted ASCII substitute `->` had to be in the grammar, because a grammar that
+refused what the compiler accepts would disagree about what a program is.  The literal suffix went the other way -- the compiler's
+lexer reads any identifier there and then reports one that is not a type, but it reports it as an *error*, so a literal with a wrong
+suffix is not a program either way and the grammar lists only the real type names.  That list grows as the language gains types.
+
+The layout rules cannot be expressed in a context-free grammar, so an external scanner gives out the newline, indent and dedent.
+The one subtlety was that these are markers with no text: the whitespace before them is skipped rather than consumed, and the
+column is read from the lexer rather than counted, so that the newline ending a statement and the indent opening a block can both
+stand at one place.  Counting it by hand meant the indent had nothing left to measure, which is the bug that took the longest to
+see.
+
+*Showing them together.*  `bin/pl4g-decisions` puts each record back under the line it is about.  The log on its own is a list of
+names and line numbers, which is not something anyone reads; the question a decision answers is "I wrote that, where did it go?",
+and that is answered by looking at the place it was written.
+
+It highlights with the grammar's own queries rather than with a set of its own, so that what it colours and what an editor colours
+cannot come apart.  It colours a terminal and not a pipe, which is the convention every tool that does this has settled on, and
+`--color` overrides either way.  Everything the highlighting needs may be missing on a machine that only wants to read a log, and
+none of it being there is not an error -- the source is shown plain, which is what a pipe gets anyway.
+
 ---
 
 Open questions

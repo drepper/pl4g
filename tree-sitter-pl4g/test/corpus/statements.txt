@@ -1,0 +1,72 @@
+================================================================================
+An attribute on a statement, and an assignment
+================================================================================
+
+@[startup]
+fn main() → u8:
+    @[expect(4006)]
+    let unread: u8 = g
+    counter ← 7u8
+    return counter
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_definition
+    (attribute_list (attribute name: (identifier)))
+    name: (identifier)
+    parameters: (parameter_list)
+    return_type: (type (identifier))
+    body: (layout_block
+      (attribute_list
+        (attribute name: (identifier) (attribute_argument (integer_literal))))
+      (variable_statement
+        name: (identifier)
+        type: (type (identifier))
+        value: (identifier))
+      (assignment target: (identifier) value: (integer_literal))
+      (return_statement (identifier)))))
+
+================================================================================
+Comments between statements and inside a block
+================================================================================
+
+@[startup]
+fn main() → u8:
+    ※ one
+    ※ two
+    0u8
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_definition
+    (attribute_list (attribute name: (identifier)))
+    name: (identifier)
+    parameters: (parameter_list)
+    return_type: (type (identifier))
+    body: (layout_block
+      (line_comment)
+      (line_comment)
+      (expression_statement (integer_literal)))))
+
+================================================================================
+A documentation comment
+================================================================================
+
+※※ What this function is for.
+@[export]
+fn shared() → u8:
+    1u8
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (doc_comment)
+  (function_definition
+    (attribute_list (attribute name: (identifier)))
+    name: (identifier)
+    parameters: (parameter_list)
+    return_type: (type (identifier))
+    body: (layout_block
+      (expression_statement (integer_literal)))))

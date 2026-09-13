@@ -1,0 +1,14 @@
+{
+  "name": "tree-sitter-pl4g",
+  "version": "0.1.0",
+  "description": "Tree-sitter grammar for PL4G",
+  "license": "MIT",
+  "main": "bindings/node",
+  "tree-sitter": [
+    {
+      "scope": "source.pl4g",
+      "file-types": ["pl4g"],
+      "highlights": "queries/highlights.scm"
+    }
+  ]
+}

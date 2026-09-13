@@ -283,6 +283,34 @@ The log travels on the module, since every stage has the module and any of them 
 [decisions.md](decisions.md), which records what was decided about the *language* and is written by hand; this one is about one
 program and is written by the compiler.
 
+Reading the Log
+---------------
+
+`bin/pl4g-decisions` shows a program's source with the records of the log set against the lines they are about.  A list of names
+and line numbers is not something anyone reads; the question a decision answers is "I wrote that, where did it go?", and it is
+answered by looking at the place it was written.  A pattern on the command line chooses which source files to show.
+
+Where the output is a terminal the source is highlighted, and where it is a pipe it is not, unless `--color=always` says otherwise.
+The highlighting is done with the tree-sitter grammar in `tree-sitter-pl4g` and its own highlight queries, so what this colours and
+what an editor colours are the same thing and cannot drift apart.  Everything the highlighting needs may be absent on a machine
+that only wants to read a log, and none of it being there is not an error: the source is shown without colour, which is what a pipe
+gets anyway.
+
+The Grammar
+-----------
+
+`tree-sitter-pl4g` is a grammar for the language in the form editors and highlighters read.  It is a second statement of what a
+program is, and two statements of one thing can disagree, so a test requires the grammar and the compiler to agree on whether each
+program in the language test suite parses -- in both directions, since a grammar that is too loose is as wrong as one that is too
+strict and shows up as an editor offering what cannot be written.
+
+A change to the syntax changes the grammar in the same commit.  Nothing could make that automatic; it is a rule, and the test is
+what notices when it was not followed.
+
+The layout rules cannot be expressed in a context-free grammar, so the tokens that stand for them come from an external scanner,
+which is the arrangement tree-sitter's Python grammar uses for the same reason.  The generated parser is committed, so that reading
+the grammar needs no tools, and a test checks that it is the one the grammar produces.
+
 Timing
 ------
 

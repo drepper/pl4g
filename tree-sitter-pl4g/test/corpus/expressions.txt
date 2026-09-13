@@ -1,0 +1,68 @@
+================================================================================
+The operators bind as the specification says
+================================================================================
+
+@[startup]
+fn main() → u8:
+    1u8 | 6u8 ^ 3u8 & 2u8
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_definition
+    (attribute_list (attribute name: (identifier)))
+    name: (identifier)
+    parameters: (parameter_list)
+    return_type: (type (identifier))
+    body: (layout_block
+      (expression_statement
+        (binary_expression
+          (integer_literal)
+          (binary_expression
+            (integer_literal)
+            (binary_expression (integer_literal) (integer_literal))))))))
+
+================================================================================
+Grouping and the operator written before its operand
+================================================================================
+
+@[startup]
+fn main() → u8:
+    ~(a | b) & c
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_definition
+    (attribute_list (attribute name: (identifier)))
+    name: (identifier)
+    parameters: (parameter_list)
+    return_type: (type (identifier))
+    body: (layout_block
+      (expression_statement
+        (binary_expression
+          (unary_expression
+            (parenthesized_expression
+              (binary_expression (identifier) (identifier))))
+          (identifier))))))
+
+================================================================================
+Literals in every base, with separators and a sign
+================================================================================
+
+let a: u8 = 0b1100_0011u8
+let b: u16 = 0o1_777u16
+let c: u32 = 0x_dead_beefu32
+let d: i8 = ⁻128i8
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (variable_definition name: (identifier) type: (type (identifier))
+    value: (integer_literal))
+  (variable_definition name: (identifier) type: (type (identifier))
+    value: (integer_literal))
+  (variable_definition name: (identifier) type: (type (identifier))
+    value: (integer_literal))
+  (variable_definition name: (identifier) type: (type (identifier))
+    value: (integer_literal)))
