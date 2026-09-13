@@ -1,0 +1,12 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4206 LANG_TYPE_OPERAND_MISMATCH
+
+※ Both sides of a comparison have one type, as both sides of every other
+※ operator do.  A literal without a suffix takes the type of the other side;
+※ two named types that differ do not meet in the middle.
+let narrow: u8 = 1u8
+let wide: u16 = 2u16
+
+@[startup]
+fn main() → bool:
+    narrow < wide

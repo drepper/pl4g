@@ -762,21 +762,6 @@
       "option": null
     },
     {
-      "number": 3008,
-      "name": "LANG_ASSIGN_EXPECTED_ARROW",
-      "severity": "error",
-      "message": "'=' does not assign; an assignment is written with '←'",
-      "cause": "Assignment and comparison are different things and are written differently: '←' changes a variable and '=' asks whether two values are equal.  Languages that spell assignment with '=' have to spell comparison with something else, and a comparison written by mistake where an assignment belongs is then a statement that silently does nothing -- or worse, one that silently assigns.  Neither can happen here.",
-      "spec": {
-        "document": "spec/spec.md",
-        "section": "The Language / File Structure / Assignment",
-        "requirement": "An assignment is written `NAME ← VALUE`."
-      },
-      "since": "0.1",
-      "default_enabled": true,
-      "option": null
-    },
-    {
       "number": 3009,
       "name": "LANG_SYNTAX_EXPECTED_CLOSING_PAREN",
       "severity": "error",
@@ -860,6 +845,33 @@
         "document": "spec/spec.md",
         "section": "The Language / File Structure / Modules",
         "requirement": "A module is brought into a file with `let NAME := import(\"somename\")`, at the top level of that file."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 3014,
+      "name": "LANG_SYNTAX_COMPARISON_CHAINED",
+      "severity": "error",
+      "message": "'{first}' and '{second}' cannot be written one after the other",
+      "args": [
+        {
+          "name": "first",
+          "type": "string",
+          "description": "the comparison already made"
+        },
+        {
+          "name": "second",
+          "type": "string",
+          "description": "the one written after it"
+        }
+      ],
+      "cause": "A comparison answers with a truth value, so a second comparison beside the first would be asking a question about that answer -- `a < b < c` would mean `(a < b) < c`, which compares a truth value with a number.  That is almost never what was meant, and where it was meant, writing the parentheses says so.  Where the intent was to say that a value lies between two others, that is two comparisons joined with `\\u2227`.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Comparisons",
+        "requirement": "The six comparisons share one level of precedence and do not associate."
       },
       "since": "0.1",
       "default_enabled": true,
@@ -1562,6 +1574,33 @@
       "option": null
     },
     {
+      "number": 4207,
+      "name": "LANG_TYPE_OPERAND_NOT_COMPARABLE",
+      "severity": "error",
+      "message": "'{operator}' compares numbers and truth values, not '{found}'",
+      "args": [
+        {
+          "name": "operator",
+          "type": "string",
+          "description": "the comparison"
+        },
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type of the operand"
+        }
+      ],
+      "cause": "Equality is defined on the types whose values can be told apart one from another -- numbers, truth values, and in time strings.  It is not defined on a type whose values have no such notion, and answering such a comparison with anything would be inventing an answer.  Ordering is narrower still and is defined on numbers alone, which is a different diagnostic.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Comparisons",
+        "requirement": "Exact comparisons are defined for numbers, truth values and strings."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 4401,
       "name": "LANG_FUNCDEF_SPECIAL_NO_STARTUP",
       "severity": "error",
@@ -1754,6 +1793,28 @@
         "document": "spec/spec.md",
         "section": "The Language / File Structure / Function Definition",
         "requirement": "Function return values are specified with the `return` keyword.  The function immediately returns and the remaining statements in the block are ignored (the compiler must issue a warning in this case).  If the `return` statement is the last statement in the function then the `return` keywords can and should be skipped (a warning is issued in this case)."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 5005,
+      "name": "LANG_STMT_COMPARISON_DISCARDED",
+      "severity": "error",
+      "message": "'{operator}' asks a question here and the answer is not used",
+      "args": [
+        {
+          "name": "operator",
+          "type": "string",
+          "description": "the comparison"
+        }
+      ],
+      "cause": "A comparison computes a truth value and does nothing else, so one whose answer goes nowhere is a statement with no effect at all.  The case worth naming is `count = 1u8`: '=' compares and '\\u2190' assigns, so what looks like an assignment to anyone coming from another language is a question asked and not listened to.  Where the answer is wanted, it is the value of something -- the last statement of a body is the body's result, and a comparison there is the point of the line, so it is not reported.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Comparisons",
+        "requirement": "A comparison answers with a truth value.  An assignment is written `NAME \\u2190 VALUE`."
       },
       "since": "0.1",
       "default_enabled": true,

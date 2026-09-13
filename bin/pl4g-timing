@@ -83,7 +83,8 @@ GROUPS: tuple[Group, ...] = (
           "Operators, and the folding of them.  These move when the expression "
           "parser, the semantic analysis or the optimizer does.",
           {"bitwise-operators": "four operators over two variables",
-           "bitwise-precedence": "an expression the folder collapses entirely"}),
+           "bitwise-precedence": "an expression the folder collapses entirely",
+           "comparison-operators": "all six comparisons, none of them folded"}),
 )
 
 #: How many times each sample is compiled.  The best is kept.

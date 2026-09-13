@@ -1,0 +1,16 @@
+※ pl4g-test: compile=ok run=native,qemu exit=0 diag=none
+
+※ The comparisons bind looser than the bitwise operators, which is where every
+※ language since C has put them: `flags & mask = mask` asks about `flags & mask`
+※ and not about `mask = mask`.  C binds them the other way round and is alone.
+
+let flags: u8 = 0b1010_1010u8
+let mask: u8 = 0b0000_1010u8
+
+@[visible]
+let set: mut bool = false
+
+@[startup]
+fn main() → u8:
+    set ← flags & mask = mask
+    0u8

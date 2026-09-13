@@ -1,0 +1,11 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4205 LANG_TYPE_OPERAND_NOT_INTEGER
+
+※ Two truth values can be the same or different; neither comes before the
+※ other.  Equality is defined on them and ordering is not.
+let ready: bool = true
+let seen: bool = false
+
+@[startup]
+fn main() → bool:
+    ready < seen

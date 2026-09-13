@@ -1,0 +1,16 @@
+※ pl4g-test: compile=ok run=native,qemu exit=0 diag=none
+
+※ Equality is defined on truth values, since two of them can be told apart.
+let ready: bool = true
+let seen: bool = false
+
+@[visible]
+let same: mut bool = false
+@[visible]
+let different: mut bool = false
+
+@[startup]
+fn main() → u8:
+    same ← ready = seen
+    different ← ready ≠ seen
+    0u8

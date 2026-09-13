@@ -1,0 +1,22 @@
+※ pl4g-test: compile=ok run=native,qemu exit=0 diag=none
+
+※ A signed ordering and an unsigned ordering are different questions, and the
+※ type of what is compared is what says which one was asked.  ⁻1i8 is below
+※ 1i8; as unsigned bits it would be above.
+
+let negative: i8 = ⁻1i8
+let positive: i8 = 1i8
+
+let big: u8 = 255u8
+let one: u8 = 1u8
+
+@[visible]
+let signed_says: mut bool = false
+@[visible]
+let unsigned_says: mut bool = false
+
+@[startup]
+fn main() → u8:
+    signed_says ← negative < positive
+    unsigned_says ← big < one
+    0u8

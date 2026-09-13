@@ -1,0 +1,32 @@
+※ pl4g-test: compile=ok run=native,qemu exit=0 diag=none
+
+※ All six comparisons, on values the compiler cannot fold away.  Nothing can
+※ yet turn a truth value back into a number, so what a program can do with the
+※ answers is keep them; that they are the right answers is checked where the
+※ answer is observable, in tests/compiler.
+
+let small: u8 = 3u8
+let large: u8 = 9u8
+
+@[visible]
+let equal: mut bool = false
+@[visible]
+let differ: mut bool = false
+@[visible]
+let below: mut bool = false
+@[visible]
+let above: mut bool = false
+@[visible]
+let at_most: mut bool = false
+@[visible]
+let at_least: mut bool = false
+
+@[startup]
+fn main() → u8:
+    equal ← small = large
+    differ ← small ≠ large
+    below ← small < large
+    above ← small > large
+    at_most ← small ≤ large
+    at_least ← small ≥ large
+    0u8

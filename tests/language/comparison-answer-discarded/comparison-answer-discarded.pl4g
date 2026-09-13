@@ -1,0 +1,14 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 5005 LANG_STMT_COMPARISON_DISCARDED
+
+※ A comparison computes a truth value and does nothing else, so one whose
+※ answer goes nowhere is a statement with no effect.  The last statement of a
+※ body is the body's result, so the second one here is the point of the
+※ function and only the first is reported.
+let a: u8 = 1u8
+let b: u8 = 2u8
+
+@[startup]
+fn main() → bool:
+    a < b
+    a > b

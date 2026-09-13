@@ -12,7 +12,7 @@ from ..diag import ids as D
 from ..diag.engine import DiagEngine, Expectation
 from ..front import ast
 from ..ir.builder import IRBuilder
-from ..ir.inst import BinOp, Instruction, UnOp
+from ..ir.inst import BinOp, CmpPred, Instruction, UnOp
 from ..ir.function import (FuncAttrs, Function, InlineHint, Linkage, SpecialKind)
 from ..ir.module import GlobalVar, Module
 from ..ir.types import BOOL, BUILTIN_TYPES, ERROR, IntType, Type, VOID
@@ -111,6 +111,25 @@ def _is_exported(what: object) -> bool:
 #: separate because the source names an operator and the representation names an
 #: operation: several spellings may come to mean one operation later, and the
 #: front end is deliberately free of any knowledge of the representation.
+#: The comparisons, and what each asks of two values.  A pair per operator,
+#: because a signed and an unsigned ordering are different questions and the
+#: type of the operands is what says which one was asked; equality is the same
+#: question either way and names one predicate twice.
+_COMPARISONS: Final[dict[ast.BinaryOp, tuple[CmpPred, CmpPred]]] = {
+    ast.BinaryOp.EQUAL: (CmpPred.EQ, CmpPred.EQ),
+    ast.BinaryOp.NOT_EQUAL: (CmpPred.NE, CmpPred.NE),
+    ast.BinaryOp.LESS: (CmpPred.SLT, CmpPred.ULT),
+    ast.BinaryOp.GREATER: (CmpPred.SGT, CmpPred.UGT),
+    ast.BinaryOp.LESS_EQUAL: (CmpPred.SLE, CmpPred.ULE),
+    ast.BinaryOp.GREATER_EQUAL: (CmpPred.SGE, CmpPred.UGE),
+}
+
+#: The comparisons that put the two values in an order.  Ordering is defined on
+#: numbers; equality is defined on anything whose values can be told apart.
+_ORDERINGS: Final[frozenset[ast.BinaryOp]] = frozenset((
+    ast.BinaryOp.LESS, ast.BinaryOp.GREATER,
+    ast.BinaryOp.LESS_EQUAL, ast.BinaryOp.GREATER_EQUAL))
+
 _BINARY_OPS: Final[dict[ast.BinaryOp, BinOp]] = {
     ast.BinaryOp.BIT_AND: BinOp.AND,
     ast.BinaryOp.BIT_OR: BinOp.OR,
@@ -972,9 +991,25 @@ class Checker:
                     value = self._lower_expr(builder, stmt.value, func.ty.ret)
                     builder.ret(value, stmt.span)
                 else:
+                    self._check_answer_is_used(stmt.value)
                     self._lower_expr(builder, stmt.value, None)
             case _:
                 self._diags.internal("unknown statement kind in lowering")
+
+    def _check_answer_is_used(self, expr: ast.Expr) -> None:
+        """Report a comparison written where its answer goes nowhere.
+
+        A comparison computes a truth value and does nothing else, so one whose
+        answer is discarded is a statement with no effect.  The case worth
+        naming is `count = 1u8`, which reads as an assignment to anyone coming
+        from another language and is a question asked and not listened to here.
+
+        Only the statement that is not the body's result reaches this, since the
+        result is the one place the answer is wanted.
+        """
+        if isinstance(expr, ast.Binary) and expr.op in _COMPARISONS:
+            self._diags.emit(D.LANG_STMT_COMPARISON_DISCARDED, expr.span,
+                             operator=expr.op.value)
 
     def _lower_local(self, builder: IRBuilder, node: ast.VarDef) -> None:
         """Lower a variable defined inside a function body.
@@ -1115,6 +1150,8 @@ class Checker:
                 return builder.bool_const(expr.value)
             case ast.NameRef():
                 return self._lower_name(builder, expr, expected)
+            case ast.Binary() if expr.op in _COMPARISONS:
+                return self._lower_comparison(builder, expr, expected)
             case ast.Binary():
                 return self._lower_binary(builder, expr, expected)
             case ast.Unary():
@@ -1128,6 +1165,65 @@ class Checker:
             case _:
                 self._diags.internal("unknown expression kind in lowering")
                 return UndefConst(ERROR)
+
+    def _lower_comparison(self, builder: IRBuilder, expr: ast.Binary,
+                          expected: Type | None) -> Value:
+        """Lower a comparison, whose answer is a truth value.
+
+        The result type and the operand type are two different things here,
+        which is what makes this its own path.  What is wanted of the whole
+        expression is a truth value and says nothing about what is being
+        compared, so the operands take their type from each other -- which is
+        what lets `count = 1u8` and `1u8 = count` mean the same thing, the same
+        way the bitwise operators do it.
+        """
+        if expected is not None and expected is not BOOL:
+            self._report_mismatch(expr.span, BOOL, expected)
+            return UndefConst(ERROR)
+        context = self._hint_of(expr.left) or self._hint_of(expr.right)
+        outer, self._operand_of = self._operand_of, expr.op.value
+        try:
+            left = self._lower_expr(builder, expr.left, context)
+            ty = self._comparable(expr.left.span, expr.op, self._value_type_of(left))
+            right = self._lower_expr(builder, expr.right,
+                                     ty if ty is not ERROR else context)
+        finally:
+            self._operand_of = outer
+        found = self._comparable(expr.right.span, expr.op, self._value_type_of(right))
+        if ty is ERROR or found is ERROR:
+            return UndefConst(ERROR)
+        if found is not ty:
+            self._diags.emit(D.LANG_TYPE_OPERAND_MISMATCH, expr.right.span,
+                             operator=expr.op.value, expected=ty.render(),
+                             found=found.render())
+            return UndefConst(ERROR)
+        signed, unsigned = _COMPARISONS[expr.op]
+        # A truth value is one or zero, so where it is ordered at all it is
+        # ordered as an unsigned number; nothing else here is.
+        return builder.compare(
+            signed if isinstance(ty, IntType) and ty.signed else unsigned,
+            left, right, expr.span)
+
+    def _comparable(self, span: Span, op: ast.BinaryOp, ty: Type) -> Type:
+        """*ty* itself where it may stand on one side of *op*, and ERROR else.
+
+        Ordering asks which of two values comes first, which numbers answer and
+        nothing else here does.  Equality asks whether two values are the one
+        value, which truth values answer as well.
+        """
+        if ty is ERROR:
+            return ERROR
+        if isinstance(ty, IntType):
+            return ty
+        if ty is BOOL and op not in _ORDERINGS:
+            return ty
+        if op in _ORDERINGS:
+            self._diags.emit(D.LANG_TYPE_OPERAND_NOT_INTEGER, span,
+                             operator=op.value, found=ty.render())
+        else:
+            self._diags.emit(D.LANG_TYPE_OPERAND_NOT_COMPARABLE, span,
+                             operator=op.value, found=ty.render())
+        return ERROR
 
     def _lower_binary(self, builder: IRBuilder, expr: ast.Binary,
                       expected: Type | None) -> Value:
@@ -1197,6 +1293,10 @@ class Checker:
                 return BOOL
             case ast.NameRef():
                 return self._type_of_name(expr.name)
+            case ast.Binary() if expr.op in _COMPARISONS:
+                # What a comparison answers with, not what it compares: the
+                # answer is what whatever reads the expression will get.
+                return BOOL
             case ast.Binary():
                 return self._hint_of(expr.left) or self._hint_of(expr.right)
             case ast.Unary():

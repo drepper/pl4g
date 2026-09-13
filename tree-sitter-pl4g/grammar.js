@@ -156,11 +156,20 @@ module.exports = grammar({
 
     // -- expressions -------------------------------------------------------
     //
-    // The precedences are the ones `spec/spec.md` states: bitwise "and" binds
-    // tighter than "exclusive or", which binds tighter than "or", and an
-    // operator written before its operand binds tighter than any of them.
+    // The precedences are the ones `spec/spec.md` states: the comparisons bind
+    // loosest, then bitwise "or", "exclusive or" and "and" in that order, and
+    // an operator written before its operand binds tighter than any of them.
 
     _expression: $ => choice(
+      $.comparison_expression,
+      $._non_comparison,
+    ),
+
+    // Everything an expression can be except a comparison.  A comparison takes
+    // one of these on each side rather than an expression, which is how the
+    // grammar says that `a < b < c` is not written: a comparison answers with a
+    // truth value, so a second one beside it would be comparing that answer.
+    _non_comparison: $ => choice(
       $.binary_expression,
       $.unary_expression,
       $.member_expression,
@@ -171,18 +180,35 @@ module.exports = grammar({
       $.identifier,
     ),
 
-    binary_expression: $ => choice(
-      prec.left(1, seq($._expression, field('operator', '|'), $._expression)),
-      prec.left(2, seq($._expression, field('operator', '^'), $._expression)),
-      prec.left(3, seq($._expression, field('operator', '&'), $._expression)),
+    // All six share one level.  '<=' and '>=' are the accepted substitutes for
+    // the two glyphs, by the rule that a substitute is never one character.
+    //
+    // Every operand below is a `_non_comparison` rather than an expression,
+    // which is the whole of what says that the comparisons bind loosest and do
+    // not chain -- there is nowhere for a bare comparison to appear except at
+    // the top of an expression or inside parentheses.  That is said in the
+    // shape of the rules rather than with precedence numbers, because a shape
+    // cannot be read two ways.  Chaining still works for the bitwise operators,
+    // since `_non_comparison` holds `binary_expression` itself.
+    comparison_expression: $ => seq(
+      field('left', $._non_comparison),
+      field('operator', choice('=', '\u2260', '<', '>', '\u2264', '\u2265',
+                               '<=', '>=')),
+      field('right', $._non_comparison),
     ),
 
-    unary_expression: $ => prec(4, seq(field('operator', '~'), $._expression)),
+    binary_expression: $ => choice(
+      prec.left(1, seq($._non_comparison, field('operator', '|'), $._non_comparison)),
+      prec.left(2, seq($._non_comparison, field('operator', '^'), $._non_comparison)),
+      prec.left(3, seq($._non_comparison, field('operator', '&'), $._non_comparison)),
+    ),
+
+    unary_expression: $ => prec(4, seq(field('operator', '~'), $._non_comparison)),
 
     // Something named through the module it belongs to, which binds tighter
     // than any operator: `a.b & c` is `(a.b) & c`.
     member_expression: $ => prec(5, seq(
-      field('base', $._expression), '.', field('name', $.identifier),
+      field('base', $._non_comparison), '.', field('name', $.identifier),
     )),
 
     parenthesized_expression: $ => seq('(', $._expression, ')'),

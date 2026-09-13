@@ -1,8 +1,11 @@
 ※ pl4g-test: compile=fail
-※ pl4g-test: expect-diag 3008 LANG_ASSIGN_EXPECTED_ARROW
+※ pl4g-test: expect-diag 5005 LANG_STMT_COMPARISON_DISCARDED
 
-※ '=' does not assign.  It is reserved for comparison, so the habit every other
-※ language teaches is answered with the rule rather than with a parse error.
+※ '=' does not assign; it compares.  So this line asks whether 'status' is five
+※ and then throws the answer away, which is what the habit every other language
+※ teaches turns into here -- and it is reported rather than silently obeyed.
+※ The last statement of a body is the function's result, so a comparison there
+※ is the point of the line and is not reported; this one is not the last.
 @[startup]
 fn main() → u8:
     let status: mut = 3u8

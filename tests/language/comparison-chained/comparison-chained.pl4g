@@ -1,0 +1,13 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 3014 LANG_SYNTAX_COMPARISON_CHAINED
+
+※ A comparison answers with a truth value, so a second one beside it would be
+※ comparing that answer with a number.  Rust refuses the same thing; C and Go
+※ give it that meaning and let it be a mistake.
+let a: u8 = 1u8
+let b: u8 = 2u8
+let c: u8 = 3u8
+
+@[startup]
+fn main() → bool:
+    a < b < c

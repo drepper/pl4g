@@ -1,0 +1,12 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4203 LANG_TYPE_INITIALIZER_MISMATCH
+
+※ What a comparison answers with is a truth value, whatever it compared.
+let a: u8 = 1u8
+let b: u8 = 2u8
+
+@[startup]
+fn main() → u8:
+    @[ignore(4006)]
+    let answer: u8 = a < b
+    0u8

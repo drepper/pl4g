@@ -151,13 +151,23 @@ def render_function(func: Function, out: list[str]) -> None:
 
 
 def render_global(var: object, out: list[str]) -> None:
-    """Append the textual form of one global variable to *out*."""
+    """Append the textual form of one global variable to *out*.
+
+    An initializer is rendered the same way a constant operand is, so that a
+    truth value reads as `true` rather than as "not a number, so undefined" --
+    which is what it said before there was anywhere for a `bool` to be read.
+    """
     from .module import GlobalVar
-    from .value import IntConst as _IntConst
+    from .value import BoolConst as _BoolConst, IntConst as _IntConst
 
     assert isinstance(var, GlobalVar)
     initializer = var.initializer
-    text = str(initializer.value) if isinstance(initializer, _IntConst) else "undef"
+    if isinstance(initializer, _IntConst):
+        text = str(initializer.value)
+    elif isinstance(initializer, _BoolConst):
+        text = "true" if initializer.value else "false"
+    else:
+        text = "undef"
     out.append("".join(("let @", var.name, ": ", "mut " if var.mutable else "",
                         var.value_type.render(), " ", var.linkage.value, " = ", text)))
 

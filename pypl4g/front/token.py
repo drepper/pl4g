@@ -33,8 +33,25 @@ ASSIGN_GLYPH: Final[str] = "\N{LEFTWARDS ARROW}"
 #: spaces around it, which is the distinction APL draws with its own high minus.
 NEGATIVE_GLYPH: Final[str] = "\N{SUPERSCRIPT MINUS}"
 
+#: Compares two values.  The three that have a glyph are written with one; the
+#: other three are the characters everyone already writes them with.  There is
+#: no separate operator for assignment to be confused with, since assignment is
+#: written with an arrow, so '=' asks a question and nothing else.
+NOT_EQUAL_GLYPH: Final[str] = "\N{NOT EQUAL TO}"
+LESS_EQUAL_GLYPH: Final[str] = "\N{LESS-THAN OR EQUAL TO}"
+GREATER_EQUAL_GLYPH: Final[str] = "\N{GREATER-THAN OR EQUAL TO}"
+
 #: Accepted substitute for the arrow.  Two characters, so it claims nothing.
 ARROW_ASCII: Final[str] = "->"
+
+#: Every ASCII substitute, and the glyph it stands for.  Each is at least two
+#: characters, by the rule at the top of this module, and each is tried before
+#: the single characters are, since '<=' begins with one of them.
+ASCII_SUBSTITUTES: Final[dict[str, str]] = {
+    ARROW_ASCII: ARROW_GLYPH,
+    "<=": LESS_EQUAL_GLYPH,
+    ">=": GREATER_EQUAL_GLYPH,
+}
 
 
 class TokKind(StrEnum):
@@ -72,6 +89,12 @@ class TokKind(StrEnum):
     PIPE = "'|'"
     CARET = "'^'"
     TILDE = "'~'"
+
+    NOT_EQUAL = "'\N{NOT EQUAL TO}'"
+    LESS = "'<'"
+    GREATER = "'>'"
+    LESS_EQUAL = "'\N{LESS-THAN OR EQUAL TO}'"
+    GREATER_EQUAL = "'\N{GREATER-THAN OR EQUAL TO}'"
 
     DOC_COMMENT = "documentation comment"
     NEWLINE = "end of line"

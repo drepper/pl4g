@@ -1390,6 +1390,56 @@ here is LLVM's, said in the one place that can see both readers.
 
 ---
 
+## 2026-09-13T16:30+02:00 — language
+
+**The six comparisons: `=` `≠` `<` `>` `≤` `≥`, one precedence level, no chaining**
+
+Implemented as the to-do list specifies them.  Four decisions were taken inside that, each with what else was possible.
+
+**They bind looser than everything else.**  `a & b = c` is `(a & b) = c`.  C binds comparison looser than `&&` but *tighter* than
+`&`, which is why `flags & MASK == MASK` is a famous bug there; Go, Rust, Zig and Python all corrected it, and this is that
+correction.  Nothing was really open here -- the bitwise section of the specification had already promised this outcome in so many
+words, before there were comparisons to give it to.
+
+**All six share one level.**  C, C++ and Java put the orderings tighter than the equalities; Go and Rust put all six together.
+Splitting them decides exactly one thing -- what `a < b = c` means -- and that expression is refused here, so the split would buy
+nothing and would be one more table row for a reader to hold.
+
+**They do not chain.**  `a < b < c` is an error (3014).  Three positions exist.  C and Go give it a meaning, `(a < b) < c`, which
+compares a truth value with a number and is a mistake in every program that has ever written it.  Python gives it a third meaning,
+the mathematical one, which reads beautifully and which no other language in this family has adopted.  Rust refuses it.  Refusing
+is taken here for two reasons: a language meant to be generated gains nothing from a notation that saves a human keystrokes, and
+refusing is the only one of the three that can be changed later without changing the meaning of a program that already exists.
+Where the chain was meant, `(a < b) = ready` says the first and `∧` will say the third.
+
+This is said in the tree-sitter grammar by the shape of the rules rather than by precedence numbers: a comparison's operands are
+"any expression that is not a comparison", which is also what makes the comparisons bind loosest, since there is nowhere for a
+bare comparison to appear except at the top of an expression or inside parentheses.  A shape cannot be read two ways, and the test
+that the grammar and the compiler agree about every language test is what holds the two readings together.
+
+**Equality on truth values, ordering not.**  Two truth values can be the same or different; neither comes before the other.
+Rust and Haskell order `bool` (`false < true`), C orders it by way of the integer it secretly is, Go refuses.  Go's answer is
+taken, and for Go's reason: the specification says outright that `bool` has no representation the language promises, so an
+ordering would have to invent one.
+
+**`=` compares, and a discarded comparison is refused.**  Assignment is `←` and has no other spelling, so `=` was free.
+The diagnostic that used to catch `count = 1u8` (3008, a syntax error, because `=` had no meaning in an expression) is retired and
+replaced by 5005, which reports a comparison whose answer is not used.  The move is not cosmetic: the program now *parses*, and
+what is wrong with it is what it means, so the phase that knows whether a statement's value is wanted is the phase that has to
+say.  It also catches `a < b` written as a statement, which the old check did not.  The last statement of a body is the body's
+result, and a comparison there is the point of the line.
+
+Retiring a number rather than reusing it leaves 3008 unused.  That is the right way round: a number is how a program names a
+diagnostic in `@[expect]`, so a number that meant one thing must not come to mean another.
+
+**What was left for later.**  Strings, once there are strings.  Floats, once there are floats -- with them comes the warning the
+to-do list asks for, that `=` on floating point is an unsafe question, and the rule that an integer literal compared with a float
+must be exactly representable in it.  Nothing here forecloses any of that.
+
+A comparison of constants folds, and its answer needs no range check: there is no truth value that does not fit in a `bool`.
+
+---
+
 ---
 
 Open questions

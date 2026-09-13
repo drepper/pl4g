@@ -3,12 +3,33 @@
 Replaces an operation on constants by the constant it computes.  The result is
 checked against the range of its type rather than wrapped silently, since the
 language admits no surprising interpretation of values.
+
+A comparison of constants folds too, and its answer is a truth value rather
+than a number, so it needs no range check: there is no truth value that does
+not fit in a `bool`.
 """
 
-from ...ir.inst import BinaryInst, BinOp, Instruction
+from ...ir.inst import BinaryInst, BinOp, CmpInst, CmpPred, Instruction
 from ...ir.module import Module
-from ...ir.types import IntType
-from ...ir.value import IntConst, Value
+from ...ir.types import BOOL, IntType
+from ...ir.value import BoolConst, IntConst, Value
+
+#: What each comparison asks, as a question about two numbers.  The signed and
+#: the unsigned orderings are separate entries because they are separate
+#: questions; the values reaching here are already in the range of their type,
+#: so asking the question in Python asks the right one.
+_COMPARISONS = {
+    CmpPred.EQ: lambda a, b: a == b,
+    CmpPred.NE: lambda a, b: a != b,
+    CmpPred.SLT: lambda a, b: a < b,
+    CmpPred.SLE: lambda a, b: a <= b,
+    CmpPred.SGT: lambda a, b: a > b,
+    CmpPred.SGE: lambda a, b: a >= b,
+    CmpPred.ULT: lambda a, b: a < b,
+    CmpPred.ULE: lambda a, b: a <= b,
+    CmpPred.UGT: lambda a, b: a > b,
+    CmpPred.UGE: lambda a, b: a >= b,
+}
 
 _FOLDERS = {
     BinOp.ADD: lambda a, b: a + b,
@@ -53,6 +74,8 @@ class ConstantFolding:
 
     def _fold(self, module: Module, inst: Instruction) -> Value | None:
         """Return the constant *inst* computes, if it computes one."""
+        if isinstance(inst, CmpInst):
+            return self._fold_comparison(module, inst)
         if not isinstance(inst, BinaryInst):
             return None
         folder = _FOLDERS.get(inst.op)
@@ -69,6 +92,21 @@ class ConstantFolding:
             return None
         return module.int_const(ty, value)
 
+    def _fold_comparison(self, module: Module, inst: CmpInst) -> Value | None:
+        """Return the truth value *inst* answers with, if both sides are known.
+
+        Truth values are compared as the numbers they are, one and zero, which
+        is what the backends do with them and what makes `true = true` answer
+        the same here as it would have at run time.
+        """
+        numbers = [_as_number(operand) for operand in inst.operands]
+        if any(number is None for number in numbers):
+            return None
+        asking = _COMPARISONS.get(inst.pred)
+        if asking is None:
+            return None
+        return module.bool_const(BOOL, asking(numbers[0], numbers[1]))
+
     def _apply(self, func: object, replacements: dict[int, Value]) -> None:
         """Rewrite every use of a folded instruction and drop the instruction."""
         blocks = getattr(func, "blocks")
@@ -84,3 +122,12 @@ class ConstantFolding:
                         if found is not None:
                             target.args[index] = found
             block.insts = [i for i in block.insts if id(i) not in replacements]
+
+
+def _as_number(value: Value) -> int | None:
+    """The number a constant operand stands for, where it is a constant."""
+    if isinstance(value, IntConst):
+        return value.value
+    if isinstance(value, BoolConst):
+        return 1 if value.value else 0
+    return None

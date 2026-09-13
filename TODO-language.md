@@ -164,13 +164,20 @@ To Do List for the PL4g language
     Needs conditional branches as well as the parser and the allocator, since saturating is choosing between the result and the
     bound.  These are the operations that do not trap, so they are what a program uses where an overflow is meant.
 
-[ ] implement exact comparisons, defined for numbers, strings, booleans.  Needs the expression parser and the register allocator;
-    comparing needs no branch, since the result is a value -- and producing that value is now done, so nothing in the compiler is
-    in the way of this.  Strings need the string entry first and floats the float entry.  Use
-    `=`, `≠`, `<`, `>`, `≤`, `≥` as the operators.  Using
-    `=` as a comparison of floats creates a warning that this is an unsafe operation which can be suppressed with `@[ignore(…)]`.
-    it is possible to use untyped integer literals when comparing it with a float.  In this case the integer must have a representation
-    which is exact with the numbe rof bits available in the float format.  Allow ASCII representations for ≤ and ≥.
+[x] implement exact comparisons, defined for numbers, strings, booleans.  Done for numbers and truth values: `=`, `≠`, `<`,
+    `>`, `≤`, `≥`, with `<=` and `>=` accepted for the last two.  All six share one level, bind looser
+    than the bitwise operators, and do not chain (3014).  Equality is defined on truth values and ordering is not (4205).  A
+    comparison of constants folds.  `=` compares rather than assigns, and one whose answer is discarded is refused (5005), which
+    replaces the syntax error 3008 that existed while `=` had no meaning in an expression.
+    Left open, in the entries they belong to: strings, once there are strings; floats, once there are floats -- and with them the
+    warning that `=` on floating point is an unsafe question, and the rule that an integer literal compared with a float must be
+    exactly representable in it.
+
+[ ] decide whether `≠` should have an ASCII substitute.  `≤` and `≥` have `<=` and `>=`, which the two rules for
+    substitutes admit: two characters, ambiguous with nothing.  `!=` would pass the same two rules, and `/=` (Haskell, Ada) and
+    `<>` (Pascal, SQL, BASIC) would as well.  Nothing needs it, and the asymmetry of having a substitute for two of the three
+    glyphs but not the third is the only argument for adding one.  `!` and `<>` would stay free either way, since a substitute
+    claims only the sequence.
 
 [ ] implement comparisons for floating point values that are sensitive to small, accumulated errors.  Needs the float entry above
     and the exact comparisons.  Use this equivalency table:
@@ -186,9 +193,11 @@ To Do List for the PL4g language
     The comparison here is true as long as the difference is not larger than a limit.  For the time being, make this a builtin
     variable with the value 1e-13.  In future this will be a runtime-time variable.  Compare this with `⎕CT` in APL.
 
-[ ] implement binary logic operations.  The boolean type they work on exists, and so does a truth value in a register.  The six glyph operators need the expression parser
-    and the register allocator; `and` and `or` short-circuit, so those two also need conditional branches, which is the only place
-    the language will generate a branch before there is an `if`.  Use this table for guidance:
+[ ] implement binary logic operations.  The boolean type they work on exists, a truth value in a register does too, and so do the
+    comparisons that produce most of the values these will be given.  Everything in the compiler that these need is now built:
+    `and` and `or` short-circuit, so those two need conditional branches, which is the only place the language will generate a
+    branch before there is an `if`.  One thing to settle while writing it: where the six glyph operators sit relative to the
+    comparisons -- looser, as in every language that has both, so that `a < b ∧ c < d` reads as it looks.  Use this table for guidance:
     | Glyph | Name | Arity  | Definition |
     |-------|------|--------|------------|
     | `∧`   | AND  | binary | true when both operands are true |

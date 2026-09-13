@@ -29,12 +29,32 @@ class _Operator:
     precedence: int
     #: Whether `a op b op c` means `a op (b op c)` rather than `(a op b) op c`.
     right_associative: bool = False
+    #: Whether `a op b op c` means nothing at all and is refused.  A comparison
+    #: answers with a truth value, so a second comparison would be asking about
+    #: that answer -- which is almost never what was meant, and is a mistake a
+    #: language can simply not have.
+    non_associative: bool = False
 
 
-#: What may stand between two operands, and how tightly each binds.  The order
-#: is the one C settled on and Rust, Go and Zig kept: bitwise "and" binds
-#: tighter than "exclusive or", which binds tighter than "or".
+#: What may stand between two operands, and how tightly each binds.
+#:
+#: The bitwise order is the one C settled on and Rust, Go and Zig kept: "and"
+#: binds tighter than "exclusive or", which binds tighter than "or".  The
+#: comparisons bind looser than all of them, which is where C put them wrongly
+#: and where every language since has put them: `a & b = c` asks about `a & b`,
+#: not about `b = c`.
+#:
+#: All six comparisons share one level, as they do in Go and Rust.  Splitting
+#: equality from ordering, as C does, only decides what `a < b = c` means, and
+#: that expression is refused here rather than given a meaning.
 _BINARY_OPERATORS: Final[dict[TokKind, _Operator]] = {
+    TokKind.EQUALS: _Operator(ast.BinaryOp.EQUAL, 5, non_associative=True),
+    TokKind.NOT_EQUAL: _Operator(ast.BinaryOp.NOT_EQUAL, 5, non_associative=True),
+    TokKind.LESS: _Operator(ast.BinaryOp.LESS, 5, non_associative=True),
+    TokKind.GREATER: _Operator(ast.BinaryOp.GREATER, 5, non_associative=True),
+    TokKind.LESS_EQUAL: _Operator(ast.BinaryOp.LESS_EQUAL, 5, non_associative=True),
+    TokKind.GREATER_EQUAL: _Operator(ast.BinaryOp.GREATER_EQUAL, 5,
+                                     non_associative=True),
     TokKind.PIPE: _Operator(ast.BinaryOp.BIT_OR, 10),
     TokKind.CARET: _Operator(ast.BinaryOp.BIT_XOR, 20),
     TokKind.AMPERSAND: _Operator(ast.BinaryOp.BIT_AND, 30),
@@ -410,8 +430,7 @@ class Parser:
                                  name=found.name)
                 raise _Bail()
             return found
-        if self._check(TokKind.IDENT) and self._peek().kind in (TokKind.ASSIGN,
-                                                               TokKind.EQUALS):
+        if self._check(TokKind.IDENT) and self._peek().kind is TokKind.ASSIGN:
             return self._parse_assignment()
         if self._check(TokKind.KW_RETURN):
             start = self._advance().span
@@ -424,16 +443,8 @@ class Parser:
         return ast.ExprStmt(span=value.span, value=value)
 
     def _parse_assignment(self) -> ast.Stmt:
-        """Parse ``NAME ← VALUE``.
-
-        A name followed by '=' is caught here rather than left to the expression
-        grammar, so that the habit every other language teaches is answered with
-        the rule instead of with a token nobody expected.
-        """
+        """Parse ``NAME ← VALUE``."""
         name_token = self._advance()
-        if self._check(TokKind.EQUALS):
-            self._diags.emit(D.LANG_ASSIGN_EXPECTED_ARROW, self._current.span)
-            raise _Bail()
         self._expect(TokKind.ASSIGN)
         value = self._parse_expression()
         return ast.AssignStmt(span=name_token.span.to(value.span), name=name_token.text,
@@ -459,6 +470,14 @@ class Parser:
                 operator.precedence + (0 if operator.right_associative else 1))
             left = ast.Binary(span=left.span.to(right.span), op=operator.op,
                               left=left, right=right)
+            if operator.non_associative:
+                following = _BINARY_OPERATORS.get(self._current.kind)
+                if following is not None \
+                        and following.precedence == operator.precedence:
+                    self._diags.emit(D.LANG_SYNTAX_COMPARISON_CHAINED,
+                                     self._current.span, first=operator.op.value,
+                                     second=following.op.value)
+                    raise _Bail()
 
     def _parse_unary(self) -> ast.Expr:
         """Parse an operand, with any operators written before it."""

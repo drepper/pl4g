@@ -10,17 +10,22 @@ fn main() → u8:
 
 (source_file
   (function_definition
-    (attribute_list (attribute name: (identifier)))
+    (attribute_list
+      (attribute
+        name: (identifier)))
     name: (identifier)
     parameters: (parameter_list)
-    return_type: (type (identifier))
+    return_type: (type
+      (identifier))
     body: (layout_block
       (expression_statement
         (binary_expression
           (integer_literal)
           (binary_expression
             (integer_literal)
-            (binary_expression (integer_literal) (integer_literal))))))))
+            (binary_expression
+              (integer_literal)
+              (integer_literal))))))))
 
 ================================================================================
 Grouping and the operator written before its operand
@@ -34,16 +39,21 @@ fn main() → u8:
 
 (source_file
   (function_definition
-    (attribute_list (attribute name: (identifier)))
+    (attribute_list
+      (attribute
+        name: (identifier)))
     name: (identifier)
     parameters: (parameter_list)
-    return_type: (type (identifier))
+    return_type: (type
+      (identifier))
     body: (layout_block
       (expression_statement
         (binary_expression
           (unary_expression
             (parenthesized_expression
-              (binary_expression (identifier) (identifier))))
+              (binary_expression
+                (identifier)
+                (identifier))))
           (identifier))))))
 
 ================================================================================
@@ -58,11 +68,111 @@ let d: i8 = ⁻128i8
 --------------------------------------------------------------------------------
 
 (source_file
-  (variable_definition name: (identifier) type: (type (identifier))
+  (variable_definition
+    name: (identifier)
+    type: (type
+      (identifier))
     value: (integer_literal))
-  (variable_definition name: (identifier) type: (type (identifier))
+  (variable_definition
+    name: (identifier)
+    type: (type
+      (identifier))
     value: (integer_literal))
-  (variable_definition name: (identifier) type: (type (identifier))
+  (variable_definition
+    name: (identifier)
+    type: (type
+      (identifier))
     value: (integer_literal))
-  (variable_definition name: (identifier) type: (type (identifier))
+  (variable_definition
+    name: (identifier)
+    type: (type
+      (identifier))
     value: (integer_literal)))
+
+================================================================================
+The comparisons bind looser than the bitwise operators
+================================================================================
+
+@[startup]
+fn main() → bool:
+    a & b = c
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_definition
+    (attribute_list
+      (attribute
+        name: (identifier)))
+    name: (identifier)
+    parameters: (parameter_list)
+    return_type: (type
+      (identifier))
+    body: (layout_block
+      (expression_statement
+        (comparison_expression
+          left: (binary_expression
+            (identifier)
+            (identifier))
+          right: (identifier))))))
+
+================================================================================
+Every comparison, including the substitutes for two of them
+================================================================================
+
+@[startup]
+fn main() → bool:
+    (a = b) & (a ≠ b) & (a < b) & (a > b) & (a ≤ b) & (a ≥ b) & (a <= b) & (a >= b)
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_definition
+    (attribute_list
+      (attribute
+        name: (identifier)))
+    name: (identifier)
+    parameters: (parameter_list)
+    return_type: (type
+      (identifier))
+    body: (layout_block
+      (expression_statement
+        (binary_expression
+          (binary_expression
+            (binary_expression
+              (binary_expression
+                (binary_expression
+                  (binary_expression
+                    (binary_expression
+                      (parenthesized_expression
+                        (comparison_expression
+                          left: (identifier)
+                          right: (identifier)))
+                      (parenthesized_expression
+                        (comparison_expression
+                          left: (identifier)
+                          right: (identifier))))
+                    (parenthesized_expression
+                      (comparison_expression
+                        left: (identifier)
+                        right: (identifier))))
+                  (parenthesized_expression
+                    (comparison_expression
+                      left: (identifier)
+                      right: (identifier))))
+                (parenthesized_expression
+                  (comparison_expression
+                    left: (identifier)
+                    right: (identifier))))
+              (parenthesized_expression
+                (comparison_expression
+                  left: (identifier)
+                  right: (identifier))))
+            (parenthesized_expression
+              (comparison_expression
+                left: (identifier)
+                right: (identifier))))
+          (parenthesized_expression
+            (comparison_expression
+              left: (identifier)
+              right: (identifier))))))))

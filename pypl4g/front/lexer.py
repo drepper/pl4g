@@ -12,8 +12,10 @@ from ..diag import ids as D
 from ..diag.engine import DiagEngine
 from ..source.location import Span
 from ..source.manager import SourceFile
-from .token import (ARROW_ASCII, ARROW_GLYPH, ASSIGN_GLYPH, COMMENT_GLYPH,
-                    INTEGER_TYPE_NAMES, KEYWORDS, NEGATIVE_GLYPH, TokKind, Token)
+from .token import (ARROW_GLYPH, ASCII_SUBSTITUTES, ASSIGN_GLYPH,
+                    COMMENT_GLYPH, GREATER_EQUAL_GLYPH, INTEGER_TYPE_NAMES,
+                    KEYWORDS, LESS_EQUAL_GLYPH, NEGATIVE_GLYPH, NOT_EQUAL_GLYPH,
+                    TokKind, Token)
 
 _SIMPLE: Final[dict[str, TokKind]] = {
     "(": TokKind.LPAREN,
@@ -33,6 +35,11 @@ _SIMPLE: Final[dict[str, TokKind]] = {
     "|": TokKind.PIPE,
     "^": TokKind.CARET,
     "~": TokKind.TILDE,
+    NOT_EQUAL_GLYPH: TokKind.NOT_EQUAL,
+    "<": TokKind.LESS,
+    ">": TokKind.GREATER,
+    LESS_EQUAL_GLYPH: TokKind.LESS_EQUAL,
+    GREATER_EQUAL_GLYPH: TokKind.GREATER_EQUAL,
 }
 
 _OPEN: Final[frozenset[TokKind]] = frozenset(
@@ -199,11 +206,15 @@ class Lexer:
             self._bracket_depth += 1
             self._emit(TokKind.AT_LBRACKET, start)
             return True
-        if self._text.startswith(ARROW_ASCII, self._pos):
-            self._pos += len(ARROW_ASCII)
+        for ascii_form, glyph in ASCII_SUBSTITUTES.items():
+            # Before the single characters below, because '<=' begins with one
+            # of them and the longer reading is the one that was meant.
+            if not self._text.startswith(ascii_form, self._pos):
+                continue
+            self._pos += len(ascii_form)
             self._diags.emit(D.LANG_SYNTAX_ASCII_SUBSTITUTE, self._span(start, self._pos),
-                             ascii=ARROW_ASCII, glyph=ARROW_GLYPH)
-            self._emit(TokKind.ARROW, start)
+                             ascii=ascii_form, glyph=glyph)
+            self._emit(_SIMPLE[glyph], start)
             return True
         kind = _SIMPLE.get(ch)
         if kind is not None:

@@ -1,0 +1,21 @@
+※ pl4g-test: compile=ok run=native,qemu exit=0
+※ pl4g-test: args -Wascii-substitute
+※ pl4g-test: expect-diag 2005 LANG_SYNTAX_ASCII_SUBSTITUTE
+
+※ '<=' and '>=' are accepted for '≤' and '≥'.  Both are two characters, so
+※ neither claims a single character that the language may want later -- which
+※ is the rule every ASCII substitute here follows.
+
+let a: u8 = 1u8
+let b: u8 = 2u8
+
+@[visible]
+let at_most: mut bool = false
+@[visible]
+let at_least: mut bool = false
+
+@[startup]
+fn main() → u8:
+    at_most ← a <= b
+    at_least ← a >= b
+    0u8

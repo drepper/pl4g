@@ -164,7 +164,8 @@ operator binds as tightly as the table below says: a tighter one takes its opera
 | `~` | bitwise complement, written before its operand | tightest |
 | `&` | bitwise and | |
 | `^` | bitwise exclusive or | |
-| `|` | bitwise or | loosest |
+| `|` | bitwise or | |
+| `=` `≠` `<` `>` `≤` `≥` | comparison | loosest |
 
 The bitwise operators are defined on integer values only, and both sides of one have the same type; the result has it too.  Nothing
 is widened to make two types meet, so `1u8 & 2u16` does not compile: a value of one width silently becoming a value of another is
@@ -176,8 +177,44 @@ a bitwise operator to work on; the logical operators are what applies to a truth
 `&` on two conditions is legal and usually a mistake, is the example not followed.
 
 The relative binding of the three is the one C settled on and Rust, Go and Zig kept, so that a reader coming from any of them reads
-these the same way.  It is worth saying that C's choice of making them bind *looser* than comparison is a famous defect, which this
-language does not inherit: when comparison is added it will bind looser than these, so `a & b = c` will read as `(a & b) = c`.
+these the same way.  C's choice of making them bind *looser* than comparison is a famous defect, which this language does not
+inherit: the comparisons bind looser than the bitwise operators, so `a & b = c` reads as `(a & b) = c`.
+
+#### Comparisons
+
+Six operators compare two values.  All six bind equally, and looser than every other operator.
+
+| Operator | Asks | Substitute |
+|---|---|---|
+| `=` | whether the two are the same value | |
+| `≠` | whether they are not | |
+| `<` | whether the left comes before the right | |
+| `>` | whether it comes after | |
+| `≤` | whether it comes before it or is it | `<=` |
+| `≥` | whether it comes after it or is it | `>=` |
+
+**A comparison answers with a truth value**, whatever it compared, so the result of one is a `bool` and the type of what was
+compared says nothing about it.  As with every other operator, both sides have one type and nothing is widened to make two types
+meet; a literal without a suffix takes the type of the other side, so `count < 3` and `3 > count` mean what they look like.
+
+`=` compares and does not assign.  An assignment is written `NAME ← VALUE` and there is no other way to write one, so `=` is
+free to ask a question and asks nothing else.  That is why a comparison whose answer is discarded is refused: `count = 1u8`
+written as a statement is what someone writes who has spent years in a language where `=` assigns, and it would otherwise be a
+line that quietly does nothing.  The last statement of a body is the body's result, so a comparison there is the point of the
+line and is not reported.
+
+**Equality is defined on numbers and on truth values**; ordering is defined on numbers alone.  Two truth values can be the same or
+different, but neither comes before the other, so `ready < seen` is refused rather than given an answer by way of the
+representation.  Strings will be added to both when there are strings.
+
+**The comparisons do not chain.**  `a < b < c` is refused, because a comparison answers with a truth value and a second one beside
+it would be comparing that answer with a number.  Where that is what was meant, parentheses say so: `(a < b) = ready` compares two
+truth values and is well formed.  Where the intent was that a value lies between two others, that is two comparisons joined with
+`∧`.  Rust refuses the same writing for the same reason.  Python gives it a third meaning by chaining, which reads
+well and is the only language that does it; C and Go give it the meaning above and leave it to be a mistake.
+
+Splitting equality from ordering, as C does, would decide only what `a < b = c` means, and that expression has no meaning here.
+One level for all six is what Go and Rust do.
 
 #### Comments
 
@@ -205,7 +242,10 @@ then be unavailable to every future feature of the language.  So `->` is accepte
 accepted for `※` and remains free.
 
 The second rule decides `←`, which has no substitute at all: `<-` is two characters, but `x <- y` and `x < -y`
-would be told apart only by the spaces around them, and the language makes no other distinction of that kind.
+would be told apart only by the spaces around them, and the language makes no other distinction of that kind.  The same two rules
+give `≤` and `≥` the substitutes `<=` and `>=`, which are two characters and
+are ambiguous with nothing: `<` and `=` cannot stand next to each other in any other way, since a comparison's operands are never
+comparisons.  `≠` has none, for want of a candidate rather than for a reason of its own.
 
 Using an accepted substitute is not an error.  A warning reports it for anyone who wants their sources in canonical form; it is
 off by default, since the substitute is accepted usage and not a defect.

@@ -137,6 +137,13 @@ class BinaryOp(StrEnum):
     BIT_OR = "|"
     BIT_XOR = "^"
 
+    EQUAL = "="
+    NOT_EQUAL = "\N{NOT EQUAL TO}"
+    LESS = "<"
+    GREATER = ">"
+    LESS_EQUAL = "\N{LESS-THAN OR EQUAL TO}"
+    GREATER_EQUAL = "\N{GREATER-THAN OR EQUAL TO}"
+
 
 class UnaryOp(StrEnum):
     """An operator written before its operand."""
