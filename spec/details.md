@@ -225,6 +225,22 @@ rather than a finished stream of bytes.  That is where the register allocator, t
 peephole rewrite states the condition under which it is valid and checks it: replacing a register-clearing move by an exclusive-or
 is three bytes shorter but writes the flags, so the rewrite fires only where a liveness scan has shown the flags to be dead.
 
+Timing
+------
+
+The compiler must be fast, so how long it takes is measured rather than assumed.  `bin/pl4g-timing` compiles a set of sample
+programs drawn from the language tests and appends a column to [the timing tables](timings.md), one column per commit and one row
+per sample.  Both axes grow: a sample is added when a feature lands that could plausibly cost time and is never removed, so a
+column recorded earlier stays meaningful, and a sample that did not exist yet simply has no figure.
+
+Two numbers are kept.  *Work* is the sum of the compiler's own stages, which is what a change to the compiler moves.  *Process* is
+the whole run, which is what someone waiting for the compiler waits for; for the bootstrap compiler it is dominated by starting the
+interpreter and importing the package, so it says little about code generation and a good deal about how much of the compiler an
+ordinary compilation has to import.  The best of five runs is recorded rather than the mean, because the best is the one least
+disturbed by whatever else the machine was doing.
+
+The figures are from one machine and are worth comparing with each other and with nobody else's.
+
 The Generated Image
 -------------------
 

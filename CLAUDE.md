@@ -30,3 +30,7 @@ specification document.
 
 The different architectures can be tested because the QEmu infrastructure available on the host system allows executing binaries
 compiled for all the target architectures as long as they use the Linux kernel interface.
+
+Every change that lands is timed.  Run `bin/pl4g-timing` after committing it, which appends a column for that commit to
+`spec/timings.md`, and report what it shows.  Add a sample to the list in the script whenever a feature lands that could plausibly
+cost time; samples are never removed, so that an older column stays meaningful.
