@@ -7,7 +7,9 @@
     "unreached-function": "a function and a variable that are dropped",
     "export-visibility": "several definitions, some exported",
     "digit-separators": "literals in every base",
-    "boolean-values": "truth values in both sections"
+    "boolean-values": "truth values in both sections",
+    "bitwise-operators": "an expression with four operators and two variables",
+    "bitwise-precedence": "an expression the folder collapses entirely"
   },
   "commits": [
     {
@@ -17,6 +19,10 @@
     {
       "hash": "af657ad",
       "subject": "✨ Conditional branches, selected with their comparison and turned round"
+    },
+    {
+      "hash": "2f564cb",
+      "subject": "✨ Expressions, by precedence climbing, with the bitwise operators"
     }
   ],
   "times": {
@@ -86,6 +92,48 @@
       "boolean-values": [
         1.2369999999999999,
         67.30157198035158
+      ]
+    },
+    "2f564cb": {
+      "exit0": [
+        0.876,
+        67.2037560143508
+      ],
+      "global-variable": [
+        1.038,
+        68.55952899786644
+      ],
+      "assign-widths": [
+        1.5,
+        69.92401499883272
+      ],
+      "many-values-at-once": [
+        1.8729999999999998,
+        68.92543999128975
+      ],
+      "unreached-function": [
+        1.331,
+        68.47561299218796
+      ],
+      "export-visibility": [
+        1.2950000000000002,
+        69.03809998766519
+      ],
+      "digit-separators": [
+        1.4900000000000002,
+        67.89063001633622
+      ],
+      "boolean-values": [
+        1.2269999999999999,
+        71.9130820070859
+      ],
+      "bitwise-operators": [
+        1.47,
+        71.99495600070804
+      ],
+      "bitwise-precedence": [
+        1.222,
+        67.52777399378829
       ]
     }
   }
