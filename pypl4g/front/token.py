@@ -54,6 +54,12 @@ ABOVE_OR_ALIKE_GLYPH: Final[str] = "\N{GREATER-THAN OR APPROXIMATE}"
 BELOW_NOT_ALIKE_GLYPH: Final[str] = "\N{LESS-THAN AND NOT APPROXIMATE}"
 ABOVE_NOT_ALIKE_GLYPH: Final[str] = "\N{GREATER-THAN AND NOT APPROXIMATE}"
 
+#: What encloses a tuple, and the type of one.  Angle brackets rather than
+#: parentheses, which group an expression, so that a tuple of one thing is
+#: still a tuple and not the thing with brackets round it.
+TUPLE_OPEN_GLYPH: Final[str] = "\N{LEFT ANGLE BRACKET}"
+TUPLE_CLOSE_GLYPH: Final[str] = "\N{RIGHT ANGLE BRACKET}"
+
 #: What encloses a set or a dictionary, and what a lookup in one is written
 #: with.  A double parenthesis rather than braces, which are the explicit block
 #: notation, and rather than square brackets, which an array will want: a
@@ -193,6 +199,9 @@ class TokKind(StrEnum):
     GREATER = "'>'"
     LESS_EQUAL = "'\N{LESS-THAN OR EQUAL TO}'"
     GREATER_EQUAL = "'\N{GREATER-THAN OR EQUAL TO}'"
+
+    TUPLE_OPEN = "'\N{LEFT ANGLE BRACKET}'"
+    TUPLE_CLOSE = "'\N{RIGHT ANGLE BRACKET}'"
 
     SET_OPEN = "'\N{LEFT DOUBLE PARENTHESIS}'"
     SET_CLOSE = "'\N{RIGHT DOUBLE PARENTHESIS}'"

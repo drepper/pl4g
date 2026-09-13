@@ -23,6 +23,15 @@ To Do List for the PL4g language
     It needed no new machinery: the block the arms join at, the names it carries across, the memory token it merges and the value
     it hands out were all built for `match`.
 
+[x] add tuple types.  Done: `〈a, b〉` is a tuple and `〈T, T〉` the type of one, and names written next to
+    each other take one apart in a definition or an assignment.  In registers a tuple is one register per member, which is the
+    result type's arrangement generalized.
+
+[ ] answer with a tuple that wants more registers than the convention has.  Refused today (8501): a tuple is one register per
+    member and these conventions answer in two per kind, so a tuple of three integers cannot be answered with.  What every ABI
+    does instead is hand the callee a place to put it, which needs the caller to reserve one -- so it waits on holding a value in
+    memory at all, which the entry in TODO-pypl4g.md carries.
+
 [x] add sets and dictionaries with Python's semantics and a lookup that does not grow with what is in the collection.  The front
     end is done: `⸨a, b⸩` is a set and `⸨k: v⸩` a dictionary, a type is written the same way, a lookup in a set answers with a
     `bool` and one in a dictionary with a result, `d⸨k⸩ ← v` puts a value under a key, and `|`, `&`, `^` and `-` join two sets.

@@ -851,6 +851,52 @@ is written `~(a | b)`.
 A value of a flag enumeration may be a combination that no single name stands for, which is the point of one.  So the names do not
 account for every value, and **a `match` over a flag enumeration needs an arm taking the rest** (4425).
 
+#### Tuples
+
+A tuple is several values travelling as one, written between `〈` and `〉` (U+3008 and U+3009).
+
+```
+fn both(x: u8, y: u8) → 〈u8, u8〉:
+    〈x + y, x × y〉
+
+let sum, product := both(a, b)
+```
+
+A type is written the same way: `〈u8, u8〉`.  Angle brackets rather than parentheses, so that a tuple of one thing is still a
+tuple and not the thing with brackets round it.
+
+**A tuple is a product with no names**, and that is the point of it: naming the parts of an answer that is taken apart on the spot
+would be naming something that does not outlive the line it is written on.  Where the parts mean something beyond their position,
+a product type with named fields is what says so.
+
+**Names written next to each other take one apart**, one name per member, in a definition or in an assignment:
+
+```
+let sum, product := both(a, b)
+low, high ← sorted(b, a)
+```
+
+There have to be exactly as many names as the tuple has members (4435): a member with no name would be a value the program worked
+out and threw away without saying so.  Only a tuple can be taken apart that way (4436).
+
+Each name of an assignment is assigned as it would be on its own, so a name that is not a variable, or one nothing may change, is
+reported where it is written.
+
+Compare: C++'s `auto [a, b]` and `std::tie`, which this follows in what it does and not in how it is written -- there is no second
+pair of brackets around the names, the comma being enough to say that several names are being bound.  Python and Go write the same
+thing the same way.  Rust writes `let (a, b)`, keeping the brackets so that a pattern looks like the value it matches, which
+matters there because a pattern may be nested and here it may not.
+
+##### What a tuple occupies
+
+The compiler decides this.  In registers a tuple is one register per member, of whatever kind each member wants, which is what a
+function that answers with two things needs and is the same arrangement a result already has.  In memory it is laid out as a
+product of the same members would be.
+
+Because a tuple is one register per member, a tuple answered with has to fit in the registers the convention answers in -- two on
+each of these targets, counted per kind -- and one that does not is refused rather than silently put somewhere else.  A tuple of
+two is therefore always fine, and a tuple of three integers is not yet.
+
 #### Sets and dictionaries
 
 A **set** holds keys and says nothing about them beyond whether it holds them.  A **dictionary** says what each of its keys stands

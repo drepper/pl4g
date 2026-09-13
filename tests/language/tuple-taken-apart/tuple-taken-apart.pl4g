@@ -1,0 +1,32 @@
+※ pl4g-test: compile=ok run=native,qemu exit=24 diag=none
+
+※ An assignment takes a tuple apart as a definition does, and each name is
+※ assigned as it would be on its own -- so a name that is not a variable, or
+※ one nothing may change, is reported where it is written.
+
+let a: mut u8 = 3u8
+let b: mut u8 = 9u8
+
+@[visible]
+let low: mut u8 = 0u8
+@[visible]
+let high: mut u8 = 0u8
+
+fn sorted(x: u8, y: u8) → 〈u8, u8〉:
+    ※ a tuple carried out of an `if`, which the block the arms join at holds
+    ※ as as many parameters as the tuple has members
+    if x < y:
+        〈x, y〉
+    else:
+        〈y, x〉
+
+@[startup]
+fn main() → u8:
+    ※ into variables at the top level
+    low, high ← sorted(b, a)
+    ※ and into names inside the body
+    let first: mut u8 = 0u8
+    let second: mut u8 = 0u8
+    @[ignore(4006)]
+    first, second ← sorted(a, b)
+    low + high + first + second

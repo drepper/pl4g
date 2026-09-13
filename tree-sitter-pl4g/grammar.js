@@ -141,6 +141,7 @@ module.exports = grammar({
       optional($.attribute_list),
       'let',
       field('name', $.identifier),
+      repeat(seq(',', field('name', $.identifier))),
       ':',
       optional($.mutable),
       optional(field('type', $.type)),
@@ -174,6 +175,8 @@ module.exports = grammar({
       // a value of it look alike -- which a parameter list and a call do.
       seq('\u2e28', field('element', $.type),
           optional(seq(':', field('value', $.type))), '\u2e29'),
+      // And a tuple likewise.
+      seq('\u3008', sepBy1(',', field('member', $.type)), '\u3009'),
     ),
 
     // -- attributes --------------------------------------------------------
@@ -260,7 +263,8 @@ module.exports = grammar({
     // their own so that aliasing one keeps the shape it would have had: an
     // alias over an inline sequence flattens the fields inside it.
     _trailing_variable: $ => seq(
-      'let', field('name', $.identifier), ':', optional($.mutable),
+      'let', field('name', $.identifier),
+      repeat(seq(',', field('name', $.identifier))), ':', optional($.mutable),
       optional(field('type', $.type)), '=', field('value', $._block_expression),
     ),
 
@@ -338,6 +342,8 @@ module.exports = grammar({
     variable_statement: $ => seq(
       'let',
       field('name', $.identifier),
+      // Names next to each other take a tuple apart, one name per member.
+      repeat(seq(',', field('name', $.identifier))),
       ':',
       optional($.mutable),
       optional(field('type', $.type)),
@@ -349,6 +355,8 @@ module.exports = grammar({
     // dictionary written the way one is read.
     assignment: $ => seq(
       field('target', choice($.identifier, $.index_expression)),
+      // Targets next to each other take a tuple apart, one name per member.
+      repeat(seq(',', field('target', $.identifier))),
       '←', field('value', $._expression),
     ),
 
@@ -393,6 +401,7 @@ module.exports = grammar({
     _non_comparison: $ => choice(
       $.match_expression,
       $.if_expression,
+      $.tuple_literal,
       $.set_literal,
       $.dictionary_literal,
       $.index_expression,
@@ -480,6 +489,11 @@ module.exports = grammar({
       '??',
       field('default', $._non_comparison),
     )),
+
+    // Several values travelling as one, written between angle brackets rather
+    // than parentheses so that a tuple of one thing is still a tuple and not
+    // the thing with brackets round it.
+    tuple_literal: $ => seq('\u3008', sepBy1(',', $._expression), '\u3009'),
 
     // `\u2e28a, b\u2e29` is a set and `\u2e28k: v\u2e29` a dictionary; which of the two a
     // collection is is decided by its first entry, and one written with nothing

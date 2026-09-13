@@ -862,10 +862,11 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
                     # Not a value and never in a register: what it says is which
                     # path's ordering of the memory operations holds from here.
                     continue
-                if isinstance(param.ty, ResultType):
-                    raise UnsupportedOperation(
-                        "a block parameter whose type is a result", None)
-                held[id(param)] = _new_value(param.ty, registers)
+                pieces = parts_of(param.ty)
+                given = [_new_value(part, registers) for part in pieces]
+                held[id(param)] = given[0]
+                if len(given) > 1:
+                    extra[id(param)] = given[1:]
                 continue
             pieces = parts_of(param.ty)
             given = [_new_value(part, registers,

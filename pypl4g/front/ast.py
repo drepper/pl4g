@@ -94,6 +94,13 @@ class TypeRef(Node):
 
 
 @dataclass(frozen=True, slots=True)
+class TupleTypeRef(Node):
+    """`\N{LEFT ANGLE BRACKET}T, T\N{RIGHT ANGLE BRACKET}`: several values travelling as one."""
+
+    members: tuple["TypeExpr", ...]
+
+
+@dataclass(frozen=True, slots=True)
 class CollectionTypeRef(Node):
     """`\N{LEFT DOUBLE PARENTHESIS}T\N{RIGHT DOUBLE PARENTHESIS}`, a set, or `\N{LEFT DOUBLE PARENTHESIS}K: V\N{RIGHT DOUBLE PARENTHESIS}`, a dictionary.
 
@@ -106,7 +113,7 @@ class CollectionTypeRef(Node):
     value: "TypeExpr | None" = None
 
 
-type TypeExpr = TypeRef | CollectionTypeRef
+type TypeExpr = TypeRef | CollectionTypeRef | TupleTypeRef
 
 
 @dataclass(frozen=True, slots=True)
@@ -252,6 +259,13 @@ class Try(Expr):
 
 
 @dataclass(frozen=True, slots=True)
+class TupleLit(Expr):
+    """`\N{LEFT ANGLE BRACKET}a, b\N{RIGHT ANGLE BRACKET}`: several values written as one."""
+
+    members: tuple[Expr, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class SetLit(Expr):
     """`\N{LEFT DOUBLE PARENTHESIS}a, b, c\N{RIGHT DOUBLE PARENTHESIS}`: a set written down."""
 
@@ -338,6 +352,8 @@ class VarDef(Stmt):
     #: Whether the type said the variable may be changed.
     mutable: bool = False
     doc: str | None = None
+    #: The names after the first, where the definition takes a tuple apart.
+    more: tuple[tuple[str, Span], ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -413,6 +429,8 @@ class AssignStmt(Stmt):
     name: str
     name_span: Span
     value: Expr
+    #: The names after the first, where the assignment takes a tuple apart.
+    more: tuple[tuple[str, Span], ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

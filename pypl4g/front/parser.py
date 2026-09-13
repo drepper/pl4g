@@ -242,13 +242,21 @@ class Parser:
         """
         start = self._expect(TokKind.KW_LET).span
         name_token = self._expect(TokKind.IDENT)
+        # Names next to each other take a tuple apart, each name standing for
+        # one of its members -- the same thing `auto[a, b]` does in C++ and with
+        # nothing written to say so beyond the comma.
+        more: list[tuple[str, Span]] = []
+        while self._accept(TokKind.COMMA) is not None:
+            written = self._expect(TokKind.IDENT)
+            more.append((written.text, written.span))
         self._expect(TokKind.COLON, D.LANG_VARDEF_EXPECTED_COLON)
         # 'mut' qualifies the type, so it stands where the type does.  Either
         # part may be left out: the type is then the value's, and without 'mut'
         # the variable keeps whatever it was given.
         mutable = self._accept(TokKind.KW_MUT) is not None
         declared: "ast.TypeExpr | None" = None
-        if self._check(TokKind.IDENT) or self._check(TokKind.SET_OPEN):
+        if self._check(TokKind.IDENT) or self._check(TokKind.SET_OPEN) \
+                or self._check(TokKind.TUPLE_OPEN):
             declared = self._parse_type_ref()
         if self._accept(TokKind.EQUALS) is None:
             self._diags.emit(D.LANG_VARDEF_MISSING_INITIALIZER, name_token.span,
@@ -259,7 +267,8 @@ class Parser:
         value = self._parse_expression()
         return ast.VarDef(span=start.to(value.span), name=name_token.text,
                           name_span=name_token.span, type=declared, value=value,
-                          mutable=mutable, doc=doc, attrs=attrs)
+                          mutable=mutable, doc=doc, attrs=attrs,
+                          more=tuple(more))
 
     def _parse_import(self, start: Span, name_token: Token, mutable: bool,
                       declared: "ast.TypeExpr | None",
@@ -408,7 +417,19 @@ class Parser:
         """Parse a type, which may be a collection written the way a value is."""
         if self._check(TokKind.SET_OPEN):
             return self._parse_collection_type()
+        if self._check(TokKind.TUPLE_OPEN):
+            return self._parse_tuple_type()
         return self._parse_named_type()
+
+    def _parse_tuple_type(self) -> ast.TupleTypeRef:
+        """Parse ``\N{LEFT ANGLE BRACKET}TYPE, TYPE\N{RIGHT ANGLE BRACKET}``."""
+        start = self._expect(TokKind.TUPLE_OPEN).span
+        members = [self._parse_type_ref()]
+        while self._accept(TokKind.COMMA) is not None:
+            members.append(self._parse_type_ref())
+        end = self._expect(TokKind.TUPLE_CLOSE,
+                           D.LANG_SYNTAX_EXPECTED_CLOSING_TUPLE).span
+        return ast.TupleTypeRef(span=start.to(end), members=tuple(members))
 
     def _parse_collection_type(self) -> ast.CollectionTypeRef:
         """Parse ``\N{LEFT DOUBLE PARENTHESIS}TYPE\N{RIGHT DOUBLE PARENTHESIS}`` or ``\N{LEFT DOUBLE PARENTHESIS}TYPE ':' TYPE\N{RIGHT DOUBLE PARENTHESIS}``."""
@@ -759,9 +780,23 @@ class Parser:
             value = self._parse_expression()
             return ast.ReturnStmt(span=start.to(value.span), value=value, explicit=True)
         value = self._parse_expression()
+        if self._check(TokKind.COMMA) and isinstance(value, ast.NameRef):
+            return self._parse_unpacking(value)
         if self._check(TokKind.ASSIGN):
             return self._parse_assignment(value)
         return ast.ExprStmt(span=value.span, value=value)
+
+    def _parse_unpacking(self, first: ast.NameRef) -> ast.Stmt:
+        """Parse ``NAME, NAME \N{LEFTWARDS ARROW} VALUE``, which takes a tuple apart."""
+        more: list[tuple[str, Span]] = []
+        while self._accept(TokKind.COMMA) is not None:
+            written = self._expect(TokKind.IDENT)
+            more.append((written.text, written.span))
+        self._expect(TokKind.ASSIGN)
+        value = self._parse_expression()
+        return ast.AssignStmt(span=first.span.to(value.span), name=first.name,
+                              name_span=first.span, value=value,
+                              more=tuple(more))
 
     def _parse_if(self) -> ast.If:
         """Parse ``if COND BODY`` with its `elif`s and its `else`.
@@ -963,6 +998,16 @@ class Parser:
         end = self._expect(TokKind.RPAREN, D.LANG_SYNTAX_EXPECTED_CLOSING_PAREN).span
         return ast.Call(span=callee.span.to(end), callee=callee, args=tuple(args))
 
+    def _parse_tuple(self) -> ast.Expr:
+        """Parse ``\N{LEFT ANGLE BRACKET}a, b\N{RIGHT ANGLE BRACKET}``."""
+        start = self._expect(TokKind.TUPLE_OPEN).span
+        members = [self._parse_expression()]
+        while self._accept(TokKind.COMMA) is not None:
+            members.append(self._parse_expression())
+        end = self._expect(TokKind.TUPLE_CLOSE,
+                           D.LANG_SYNTAX_EXPECTED_CLOSING_TUPLE).span
+        return ast.TupleLit(span=start.to(end), members=tuple(members))
+
     def _parse_collection(self) -> ast.Expr:
         """Parse ``\N{LEFT DOUBLE PARENTHESIS}a, b\N{RIGHT DOUBLE PARENTHESIS}`` or ``\N{LEFT DOUBLE PARENTHESIS}k: v, k: v\N{RIGHT DOUBLE PARENTHESIS}``.
 
@@ -1018,6 +1063,8 @@ class Parser:
             case TokKind.KW_TRUE | TokKind.KW_FALSE:
                 self._advance()
                 return ast.BoolLit(span=token.span, value=token.kind is TokKind.KW_TRUE)
+            case TokKind.TUPLE_OPEN:
+                return self._parse_tuple()
             case TokKind.SET_OPEN:
                 return self._parse_collection()
             case TokKind.KW_MATCH:

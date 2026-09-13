@@ -1088,6 +1088,22 @@
       "option": null
     },
     {
+      "number": 3028,
+      "name": "LANG_SYNTAX_EXPECTED_CLOSING_TUPLE",
+      "severity": "error",
+      "message": "expected '〉'",
+      "args": [],
+      "cause": "A tuple and the type of one are written between `〈` and `〉`, and the closing one is missing here.  What is usually behind it is a comma left out between two members.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Tuples",
+        "requirement": "A tuple is closed with `〉`."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 3201,
       "name": "LANG_ATTR_UNKNOWN",
       "severity": "error",
@@ -2912,6 +2928,60 @@
         "document": "spec/spec.md",
         "section": "The Language / Types / Sets and dictionaries",
         "requirement": "Only an entry of a dictionary is assigned to."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4435,
+      "name": "LANG_TUPLE_WRONG_COUNT",
+      "severity": "error",
+      "message": "this takes apart {wanted} names, and '{found}' has {count}",
+      "args": [
+        {
+          "name": "wanted",
+          "type": "string",
+          "description": "how many names were written"
+        },
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type of the value"
+        },
+        {
+          "name": "count",
+          "type": "string",
+          "description": "how many members it has"
+        }
+      ],
+      "cause": "Names written next to each other take a tuple apart, one name for each member, so there have to be as many names as the tuple has members.  Nothing is left out and nothing is left over: a member with no name would be a value the program worked out and threw away without saying so.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Tuples",
+        "requirement": "Taking a tuple apart names every one of its members."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4436,
+      "name": "LANG_TUPLE_NOT_A_TUPLE",
+      "severity": "error",
+      "message": "'{found}' is one value, and this takes several apart",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type of the value"
+        }
+      ],
+      "cause": "Names written next to each other take a tuple apart.  A value that is not a tuple is the one value it is, and there is nothing in it for a second name to stand for.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Tuples",
+        "requirement": "Only a tuple is taken apart by several names."
       },
       "since": "0.1",
       "default_enabled": true,

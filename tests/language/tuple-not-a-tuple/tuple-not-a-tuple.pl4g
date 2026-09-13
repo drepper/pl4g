@@ -1,0 +1,13 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4436 LANG_TUPLE_NOT_A_TUPLE
+
+※ Names written next to each other take a tuple apart.  A value that is not
+※ one is the one value it is, and there is nothing in it for a second name to
+※ stand for.
+
+let n: mut u8 = 3u8
+
+@[startup]
+fn main() → u8:
+    let a, b := n
+    a + b

@@ -1,0 +1,27 @@
+※ pl4g-test: compile=ok run=native,qemu exit=36 diag=none
+
+※ A tuple is several values travelling as one, written between `〈` and `〉`.
+※ A product with no names, which is what makes it the right thing for a
+※ function that answers with two of something: naming the parts of an answer
+※ that is taken apart on the spot would be naming something that does not
+※ outlive the line it is written on.
+※
+※ Names written next to each other take one apart, one name per member -- the
+※ same thing `auto[a, b]` and `std::tie` do in C++, with nothing written to
+※ say so beyond the comma.
+
+let a: mut u8 = 3u8
+let b: mut u8 = 9u8
+
+fn both(x: u8, y: u8) → 〈u8, u8〉:
+    〈x + y, x × y〉
+
+@[startup]
+fn main() → u8:
+    ※ the type of the names comes from what the call answered with
+    let sum, product := both(a, b)
+    ※ and a tuple may be written down and named like any other value
+    let pair: 〈u8, u8〉 = 〈1u8, 2u8〉
+    let one, two := pair
+    ※ 12 + 27 - 1 - 2
+    sum + product - one - two

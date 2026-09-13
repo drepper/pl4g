@@ -401,3 +401,70 @@ fn main() → u8:
         value: (integer_literal))
       (expression_statement
         (integer_literal)))))
+
+================================================================================
+Tuples, their type, and names that take one apart
+================================================================================
+
+fn both(x: u8, y: u8) → 〈u8, u8〉:
+    〈x + y, x × y〉
+
+@[startup]
+fn main() → u8:
+    let sum, product := both(a, b)
+    low, high ← both(a, b)
+    sum
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_definition
+    name: (identifier)
+    parameters: (parameter_list
+      (parameter
+        name: (identifier)
+        type: (type
+          (identifier)))
+      (parameter
+        name: (identifier)
+        type: (type
+          (identifier))))
+    return_type: (type
+      member: (type
+        (identifier))
+      member: (type
+        (identifier)))
+    body: (layout_block
+      (expression_statement
+        (tuple_literal
+          (binary_expression
+            (identifier)
+            (identifier))
+          (binary_expression
+            (identifier)
+            (identifier))))))
+  (function_definition
+    (attribute_list
+      (attribute
+        name: (identifier)))
+    name: (identifier)
+    parameters: (parameter_list)
+    return_type: (type
+      (identifier))
+    body: (layout_block
+      (variable_statement
+        name: (identifier)
+        name: (identifier)
+        value: (call_expression
+          function: (identifier)
+          argument: (identifier)
+          argument: (identifier)))
+      (assignment
+        target: (identifier)
+        target: (identifier)
+        value: (call_expression
+          function: (identifier)
+          argument: (identifier)
+          argument: (identifier)))
+      (expression_statement
+        (identifier)))))

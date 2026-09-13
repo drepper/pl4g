@@ -2222,6 +2222,42 @@ capacity, growth at about seven eighths full, a tombstone for a key taken out, a
 multiply-and-shift for an integer or an enumeration, and the value itself for a truth value.  The table is a block of memory
 holding the capacity, the count, and the entries; the handle points at it.  Nothing of that is written yet.
 
+## 2026-09-15T21:00+02:00 — language and compiler
+
+**Tuples, and one register per part for everything that has more than one**
+
+Decided on the user's direction: tuples between `〈` and `〉`, a comma-separated list, and names written next to each other taking
+one apart in a definition or an assignment -- what `auto [a, b]` and `std::tie` do in C++, without the second pair of brackets.
+
+**Angle brackets rather than parentheses**, so that a tuple of one thing is still a tuple and not the thing with brackets round
+it; parentheses already group an expression and cannot also make one.  **No brackets around the names** that take one apart: the
+comma is enough, which is what the user asked for and what Python and Go do.  Rust keeps them so that a pattern looks like the
+value it matches, which matters where a pattern may be nested; here one may not.
+
+**A tuple is a product with no names**, and that is what it is for: naming the parts of an answer that is taken apart on the spot
+would be naming something that does not outlive the line it is written on.  Where the parts mean something beyond their position,
+the product type says so.
+
+**The representation generalizes what the result type already had.**  A result is two registers; a tuple is as many as it has
+members, of whatever kind each wants.  So the second register a result kept in a map of its own became a list of the registers
+after the first, and everything that places a value -- an argument, an answer, a parameter, a block parameter, a branch that hands
+one over -- now asks `parts_of` what the parts are rather than knowing the shapes.  That also lifted the refusal on a block
+parameter of a result type, which had been refused because nothing could generate one; a tuple carried out of an `if` generates
+exactly that.
+
+A tuple answered with has to fit the registers the convention answers in, which is two per kind here, and one that does not is
+refused rather than put somewhere else.  A tuple of three integers is therefore not yet returnable, and the entry in the to-do
+list says what that waits on.
+
+**Two defects came out of it.**  A loop variable named `index` inside the instruction walk shadowed the block index the branch
+lowering reads, so a conditional branch after a call with a multi-part argument chose its fall-through from the wrong block -- it
+emitted a jump to the instruction after itself and left the other arm unreachable.  It was caught by an existing language test
+rather than by the new ones, which is the argument for keeping every one of them running.  And `〉` was not in the lexer's list of
+closing brackets, so a line ending in a tuple type never ended: the newline was swallowed as though it were inside brackets.
+
+**A variable with no type written now takes it from the value.**  `let a, b := f()` needs it, a call being the usual thing to take
+a tuple from, and the rule reads better than the one it replaces: what is written nowhere is what the value turned out to be.
+
 ---
 
 ---

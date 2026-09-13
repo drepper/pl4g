@@ -21,7 +21,7 @@ from ..ir.function import (BasicBlock, FuncAttrs, Function, InlineHint,
 from ..ir.module import GlobalVar, Module
 from ..ir.types import (BOOL, BUILTIN_TYPES, DictType, ERROR, EnumType, F64,
                         FloatType, IntType, MEM, ProductType, ResultType,
-                        SetType, SumType, Type, VOID)
+                        SetType, SumType, TupleType, Type, VOID)
 from .modules import (ImportCycle, LoadedModule, ModuleNotFound, ModuleRegistry,
                       base_name)
 from ..ir.value import (Const, EnumConst, FloatConst, IntConst, UndefConst,
@@ -140,6 +140,22 @@ class _Global:
 def found_name(prefix: str, base: str) -> str:
     """The name a module goes by when reached through *prefix*."""
     return ".".join((prefix, base)) if prefix else base
+
+
+def _says_its_type(expr: ast.Expr) -> bool:
+    """Whether an expression says on its own what type it has.
+
+    A literal does, where it carries a suffix.  Anything else has to be lowered
+    before the question can be answered, which is what a variable with no type
+    written now does.
+    """
+    match expr:
+        case ast.IntLit() | ast.FloatLit():
+            return expr.type_name is not None
+        case ast.BoolLit() | ast.StringLit():
+            return True
+        case _:
+            return False
 
 
 def _can_be_a_key(ty: Type) -> bool:
@@ -1351,6 +1367,11 @@ class Checker:
         """Resolve a type written down, collection or name."""
         if isinstance(ref, ast.CollectionTypeRef):
             return self._collection_type(ref)
+        if isinstance(ref, ast.TupleTypeRef):
+            members = [self._resolve_type(m) for m in ref.members]
+            if any(m is ERROR for m in members):
+                return ERROR
+            return self._module.types.tuple_type(members)
         return self._named_type(ref)
 
     def _collection_type(self, ref: ast.CollectionTypeRef) -> Type:
@@ -1605,6 +1626,45 @@ class Checker:
                     self._lower_expr(builder, stmt.value, None)
             case _:
                 self._diags.internal("unknown statement kind in lowering")
+
+    # -- tuples -----------------------------------------------------------------
+
+    def _lower_tuple(self, builder: IRBuilder, expr: ast.TupleLit,
+                     expected: Type | None) -> Value:
+        """Lower `〈a, b〉`: several values made into one."""
+        wanted = expected.members if isinstance(expected, TupleType) \
+            and len(expected.members) == len(expr.members) else None
+        values = [self._lower_into(builder, written,
+                                   wanted[index] if wanted is not None else ERROR,
+                                   written.span)
+                  if wanted is not None
+                  else self._lower_expr(builder, written, None)
+                  for index, written in enumerate(expr.members)]
+        types = [self._value_type_of(value) for value in values]
+        if any(ty is ERROR for ty in types):
+            return UndefConst(ERROR)
+        ty = self._module.types.tuple_type(types)
+        if expected is not None and expected is not ty:
+            self._report_mismatch(expr.span, ty, expected)
+            return UndefConst(ERROR)
+        return builder.make_tuple(values, ty, expr.span)
+
+    def _taken_apart(self, value: Value, names: "Sequence[tuple[str, Span]]",
+                     span: Span) -> "list[Type] | None":
+        """The type each name of a destructuring stands for, or nothing where
+        the value cannot be taken apart that way."""
+        ty = self._value_type_of(value)
+        if ty is ERROR:
+            return None
+        if not isinstance(ty, TupleType):
+            self._diags.emit(D.LANG_TUPLE_NOT_A_TUPLE, span, found=ty.render())
+            return None
+        if len(ty.members) != len(names):
+            self._diags.emit(D.LANG_TUPLE_WRONG_COUNT, span,
+                             wanted=str(len(names)), found=ty.render(),
+                             count=str(len(ty.members)))
+            return None
+        return list(ty.members)
 
     # -- sets and dictionaries --------------------------------------------------
 
@@ -2130,6 +2190,13 @@ class Checker:
         branch, which is why the representation has them.
         """
         self._bind_attributes(node.attrs, AttrTarget.VARIABLE)
+        if node.type is None and not _says_its_type(node.value):
+            # Nothing written and nothing to read off the value: it is lowered
+            # first and what it turned out to be is what the name stands for.
+            # That is what lets `let a, b := f()` work, a call being the usual
+            # thing to take a tuple from.
+            self._lower_derived(builder, node)
+            return
         declared = (self._resolve_type(node.type) if node.type is not None
                     else self._variable_type(node))
         if declared is None or not self._literal_matches(node, declared):
@@ -2143,10 +2210,41 @@ class Checker:
             value = self._lower_into(builder, node.value, declared, node.span)
         finally:
             self._initializing = None
+        if node.more:
+            self._bind_apart(builder, node, value)
+            return
         bound = self._as_declared(value, declared)
         self._name_value(bound, node.name)
         self._bind_local(node.name, bound, node.name_span, node.mutable,
                          value_span=node.span)
+
+    def _lower_derived(self, builder: IRBuilder, node: ast.VarDef) -> None:
+        """Lower a variable whose type is whatever its value turns out to be."""
+        self._initializing = node.name
+        try:
+            value = self._lower_expr(builder, node.value, None)
+        finally:
+            self._initializing = None
+        if node.more:
+            self._bind_apart(builder, node, value)
+            return
+        self._name_value(value, node.name)
+        self._bind_local(node.name, value, node.name_span, node.mutable,
+                         value_span=node.span)
+
+    def _bind_apart(self, builder: IRBuilder, node: ast.VarDef,
+                    value: Value) -> None:
+        """Bind each name of a definition that takes a tuple apart."""
+        names = [(node.name, node.name_span), *node.more]
+        members = self._taken_apart(value, names, node.span)
+        for index, (name, where) in enumerate(names):
+            if members is None:
+                self._bind_local(name, UndefConst(ERROR), where, node.mutable,
+                                 value_span=node.span)
+                continue
+            part = builder.extract(value, index, members[index], node.span)
+            self._name_value(part, name)
+            self._bind_local(name, part, where, node.mutable, value_span=node.span)
 
     def _name_value(self, value: Value, name: str) -> None:
         """Record which local a computed value belongs to.
@@ -2178,6 +2276,9 @@ class Checker:
         where the result is wanted, since reading a place nothing looks at would
         be an instruction the program never asked for.
         """
+        if node.more:
+            self._assign_apart(builder, node)
+            return None
         local = self._find_local(node.name)
         if local is not None:
             if not self._check_mutable(node, local.mutable, local.span):
@@ -2216,6 +2317,53 @@ class Checker:
                          name=node.name).note(
             D.LANG_VARDEF_DEFINED_HERE, where, name=node.name)
         return False
+
+    def _assign_apart(self, builder: IRBuilder, node: ast.AssignStmt) -> None:
+        """Lower an assignment that takes a tuple apart.
+
+        Each name is assigned as it would be on its own, so a name that is not
+        a variable, or one nothing may change, is reported where it is written.
+        """
+        value = self._lower_expr(builder, node.value, None)
+        names = [(node.name, node.name_span), *node.more]
+        members = self._taken_apart(value, names, node.span)
+        if members is None:
+            return
+        for index, (name, where) in enumerate(names):
+            part = builder.extract(value, index, members[index], node.span)
+            one = ast.AssignStmt(span=where, name=name, name_span=where,
+                                 value=node.value)
+            self._store_into(builder, one, part)
+
+    def _store_into(self, builder: IRBuilder, node: ast.AssignStmt,
+                    value: Value) -> None:
+        """Put an already lowered value into the variable *node* names."""
+        local = self._find_local(node.name)
+        if local is not None:
+            if not self._check_mutable(node, local.mutable, local.span):
+                return
+            if self._value_type_of(local.value) is not self._value_type_of(value):
+                self._report_mismatch(node.span, self._value_type_of(value),
+                                      self._value_type_of(local.value))
+                return
+            if id(local) not in self._carried:
+                self._report_unused(local)
+            local.value = value
+            local.value_span = node.span
+            local.read = False
+            return
+        target = self._provided(node.name)
+        if not isinstance(target, GlobalVar):
+            self._diags.emit(D.LANG_FILESTRUCT_UNDEFINED_NAME, node.name_span,
+                             name=node.name)
+            return
+        if not self._check_mutable(node, target.mutable, target.span):
+            return
+        if self._value_type_of(value) is not target.value_type:
+            self._report_mismatch(node.span, self._value_type_of(value),
+                                  target.value_type)
+            return
+        builder.store(target, value, node.span)
 
     def _checked_value(self, builder: IRBuilder, node: ast.AssignStmt,
                        expected: Type) -> Value:
@@ -2296,6 +2444,8 @@ class Checker:
                 return self._lower_call(builder, expr, expected)
             case ast.NameRef():
                 return self._lower_name(builder, expr, expected)
+            case ast.TupleLit():
+                return self._lower_tuple(builder, expr, expected)
             case ast.SetLit() | ast.DictLit():
                 return self._lower_collection(builder, expr, expected)
             case ast.Index():

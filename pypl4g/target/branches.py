@@ -32,10 +32,10 @@ from typing import Protocol, Sequence
 from ..ir.function import BasicBlock, Function
 from ..ir.inst import (BlockTarget, BrInst, CmpInst, CmpPred, CondBrInst,
                        Instruction, Terminator)
-from ..ir.types import MEM
+from ..ir.types import MEM, parts_of
 from ..ir.value import BlockParam
 from ..mc.asmbuilder import Assembler
-from ..mc.operand import MCImm, MCOperand
+from ..mc.operand import MCImm, MCOperand, MCReg
 from ..mc.ops import Condition
 from ..mc.reg import Reg
 from ..source.location import Span
@@ -83,6 +83,10 @@ class Operands(Protocol):
     def destination(self, value: object) -> Reg:
         """The register *value* is computed into, for a value that is written
         rather than read: a block parameter, which a branch writes."""
+        ...
+
+    def part_of(self, value: object, index: int, span: "Span | None") -> Reg:
+        """The register holding one of a value's several parts."""
         ...
 
 
@@ -219,7 +223,16 @@ def _pass_arguments(asm: Assembler, target: BlockTarget, operands: Operands,
         raise UnsupportedBranch(
             "a branch that passes a block's own parameters back to it", span)
     for param, argument in carried:
-        asm.loadreg(operands.destination(param), operands.value(argument, span), span)
+        pieces = parts_of(param.ty)
+        if len(pieces) == 1:
+            asm.loadreg(operands.destination(param),
+                        operands.value(argument, span), span)
+            continue
+        # A value of several parts is that many registers, and a branch that
+        # hands one over hands over every one of them.
+        for index in range(len(pieces)):
+            asm.loadreg(operands.part_of(param, index, span),
+                        MCReg(operands.part_of(argument, index, span)), span)
 
 
 def _lower_conditional(asm: Assembler, func: Function, labels: Sequence[str],
