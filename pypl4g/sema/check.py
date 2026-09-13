@@ -18,7 +18,7 @@ from ..ir.inst import BinOp, CastKind, CmpPred, Instruction, UnOp
 from ..ir.function import (FuncAttrs, Function, InlineHint, Linkage, SpecialKind)
 from ..ir.module import GlobalVar, Module
 from ..ir.types import (BOOL, BUILTIN_TYPES, ERROR, F64, FloatType, IntType,
-                        Type, VOID)
+                        ResultType, Type, VOID)
 from .modules import (ImportCycle, LoadedModule, ModuleNotFound, ModuleRegistry,
                       base_name)
 from ..ir.value import FloatConst, IntConst, UndefConst, Value
@@ -270,6 +270,10 @@ class Checker:
         self._prefix: str = prefix
         #: Where the text of a module read from here comes from.
         self._sources: SourceManager = sources if sources is not None else SourceManager()
+        #: What the function now being lowered answers with, which is what `?`
+        #: has to agree with: it leaves the function carrying an error, so the
+        #: function must be one that can carry it.
+        self._answering: Type | None = None
         #: Where each definition's name is written, for pointing at it in a note.
         self._name_spans: dict[str, Span] = {}
         #: The names bound inside the function being checked, innermost last.
@@ -563,6 +567,15 @@ class Checker:
         if ty is ERROR:
             # The type was already reported; saying anything about the value it
             # was given would be a second message about the same mistake.
+            return None
+        if isinstance(ty, ResultType):
+            # A variable at the top level is a place in memory, and what a
+            # result looks like in memory is not settled: it is two things, and
+            # where the second goes is a layout question the compiler has not
+            # answered.  A local is a value and needs no answer, which is why
+            # one of those works today and this does not.
+            self._diags.emit(D.IMPL_UNIMPLEMENTED_FEATURE, node.span,
+                             feature="a variable at the top level holding a result")
             return None
         match node.value:
             case ast.IntLit():
@@ -999,7 +1012,19 @@ class Checker:
         if found is None:
             self._diags.emit(D.LANG_TYPE_UNKNOWN, ref.span, name=ref.name)
             return ERROR
-        return found
+        if not ref.result:
+            return found
+        if ref.error is not None:
+            # Nothing in the language makes one, so a program that wrote the
+            # type could not put a value in it.  Refused as a thing the compiler
+            # lacks rather than as a thing the language does not have.
+            self._diags.emit(D.IMPL_UNIMPLEMENTED_FEATURE, ref.span,
+                             feature="a result whose error carries a value")
+            return ERROR
+        if found is VOID:
+            self._diags.emit(D.LANG_TYPE_RESULT_OF_NOTHING, ref.span)
+            return ERROR
+        return self._module.types.result_type(found)
 
     # -- bodies ----------------------------------------------------------------
 
@@ -1042,6 +1067,7 @@ class Checker:
         node, func = entry.node, entry.func
         block = func.add_block()
         builder = IRBuilder(self._module, func)
+        outer_answer, self._answering = self._answering, func.ty.ret
         self._push_scope()
         for index, param in enumerate(node.params):
             value = block.add_param(func.ty.params[index], param.name)
@@ -1050,6 +1076,7 @@ class Checker:
         assert node.body is not None
         self._lower_block(builder, node.body, func)
         self._pop_scope()
+        self._answering = outer_answer
         if not builder.is_terminated:
             if func.ty.ret is VOID:
                 builder.ret()
@@ -1130,7 +1157,8 @@ class Checker:
                 # The value of the last statement is the function's result, which
                 # is why the canonical form of the language omits the keyword.
                 if is_last and func.ty.ret is not VOID:
-                    value = self._lower_expr(builder, stmt.value, func.ty.ret)
+                    value = self._lower_into(builder, stmt.value, func.ty.ret,
+                                             stmt.span)
                     builder.ret(value, stmt.span)
                 else:
                     self._check_value_is_used(stmt.value)
@@ -1189,7 +1217,7 @@ class Checker:
             return
         self._initializing = node.name
         try:
-            value = self._lower_expr(builder, node.value, declared)
+            value = self._lower_into(builder, node.value, declared, node.span)
         finally:
             self._initializing = None
         bound = self._as_declared(value, declared)
@@ -1281,7 +1309,7 @@ class Checker:
         """
         if ref is None:
             return VOID
-        if ref.name == "void":
+        if ref.name == "void" and not ref.result:
             self._diags.emit(D.LANG_TYPE_NOTHING_IS_NOT_WRITTEN, ref.span)
             return VOID
         return self._resolve_type(ref)
@@ -1308,7 +1336,8 @@ class Checker:
             self._diags.emit(D.LANG_FUNCDEF_RETURN_VALUE_IN_VOID, stmt.span, name=func.name)
             builder.ret(None, stmt.span)
             return
-        builder.ret(self._lower_expr(builder, stmt.value, func.ty.ret), stmt.span)
+        builder.ret(self._lower_into(builder, stmt.value, func.ty.ret, stmt.span),
+                    stmt.span)
 
     def _lower_expr(self, builder: IRBuilder, expr: ast.Expr,
                     expected: Type | None) -> Value:
@@ -1339,6 +1368,10 @@ class Checker:
                 return self._lower_call(builder, expr, expected)
             case ast.NameRef():
                 return self._lower_name(builder, expr, expected)
+            case ast.Try():
+                return self._lower_try(builder, expr, expected)
+            case ast.Binary() if expr.op is ast.BinaryOp.OR_ELSE:
+                return self._lower_or_else(builder, expr, expected)
             case ast.Binary() if expr.op in _APPROXIMATE:
                 return self._lower_approximate(builder, expr, expected)
             case ast.Binary() if expr.op in _COMPARISONS:
@@ -1496,6 +1529,98 @@ class Checker:
         found = builder.binary(operation, left, right, expr.span)
         return self._negate(builder, found, expr.span) if inverted else found
 
+    def _lower_try(self, builder: IRBuilder, expr: ast.Try,
+                   expected: Type | None) -> Value:
+        """Lower `EXPR?`: the answer, or the function leaving with the error.
+
+        The shape is the one the short-circuiting operators use, with the
+        difference that the branch nothing comes back from leaves the function
+        rather than joining:
+
+            entry:    condbr failed → leaving, answered
+            leaving:  ret the error
+            answered: unwrap
+
+        The function must itself answer with a result, since it is that result
+        the error leaves in.  Its *answer* type need not be the same as this
+        one's -- what travels is the error, and so far an error carries nothing,
+        so nothing about the two answer types has to agree.
+        """
+        value = self._lower_expr(builder, expr.operand, None)
+        ty = self._value_type_of(value)
+        if ty is ERROR:
+            return UndefConst(ERROR)
+        if not isinstance(ty, ResultType):
+            self._diags.emit(D.LANG_TYPE_NOT_A_RESULT, expr.operand.span,
+                             operator="?", found=ty.render())
+            return UndefConst(ERROR)
+        answering = self._answering
+        if not isinstance(answering, ResultType) or answering.err != ty.err:
+            self._diags.emit(D.LANG_TYPE_TRY_NEEDS_A_RESULT, expr.span,
+                             found=(answering.render() if answering is not None
+                                    else VOID.render()))
+            return UndefConst(ERROR)
+        if expected is not None and expected is not ty.ok:
+            self._report_mismatch(expr.span, ty.ok, expected)
+            return UndefConst(ERROR)
+        leaving = builder.new_block("leaving")
+        answered = builder.new_block("answered")
+        builder.condbr(builder.failed(value, expr.span), leaving, answered,
+                       span=expr.span)
+        builder.position_at(leaving)
+        # An error carries nothing, so what is handed back is an answer nothing
+        # may read beside the truth value that forbids reading it.
+        builder.ret(builder.wrap(UndefConst(answering.ok),
+                                 builder.bool_const(True), answering, expr.span),
+                    expr.span)
+        builder.position_at(answered)
+        return builder.unwrap(value, ty.ok, expr.span)
+
+    def _lower_or_else(self, builder: IRBuilder, expr: ast.Binary,
+                       expected: Type | None) -> Value:
+        """Lower `EXPR ?? DEFAULT`: the answer, or the value written instead.
+
+        The default is only computed where there is no answer, which is the
+        same rule `and` and `or` follow and for the same reason: a program that
+        wrote a default meant it as what to do instead, not as something to do
+        anyway.
+
+            entry:    condbr failed → instead, answered
+            instead:  br joined(the default)
+            answered: br joined(the answer)
+            joined(p): p
+        """
+        value = self._lower_expr(builder, expr.left, None)
+        ty = self._value_type_of(value)
+        if ty is ERROR:
+            return UndefConst(ERROR)
+        if not isinstance(ty, ResultType):
+            self._diags.emit(D.LANG_TYPE_NOT_A_RESULT, expr.left.span,
+                             operator=expr.op.value, found=ty.render())
+            return UndefConst(ERROR)
+        if expected is not None and expected is not ty.ok:
+            self._report_mismatch(expr.span, ty.ok, expected)
+            return UndefConst(ERROR)
+        instead = builder.new_block("instead")
+        answered = builder.new_block("answered")
+        joined = builder.new_block("joined")
+        answer = joined.add_param(ty.ok, "answer")
+        builder.condbr(builder.failed(value, expr.span), instead, answered,
+                       span=expr.span)
+        builder.position_at(instead)
+        default = self._lower_expr(builder, expr.right, ty.ok)
+        found = self._value_type_of(default)
+        if found is not ty.ok and found is not ERROR:
+            self._report_mismatch(expr.right.span, found, ty.ok)
+            default = UndefConst(ty.ok)
+        elif found is ERROR:
+            default = UndefConst(ty.ok)
+        builder.br(joined, (default,), expr.span)
+        builder.position_at(answered)
+        builder.br(joined, (builder.unwrap(value, ty.ok, expr.span),), expr.span)
+        builder.position_at(joined)
+        return answer
+
     def _lower_short_circuit(self, builder: IRBuilder, expr: ast.Binary,
                              expected: Type | None) -> Value:
         """Lower `and` or `or`, which do not compute the right side unless the
@@ -1645,11 +1770,15 @@ class Checker:
             return builder.binary(_SHIFTS[expr.op][0 if signed else 1],
                                   left, right, expr.span)
         if expr.op in (ast.BinaryOp.DIVIDE, ast.BinaryOp.REMAINDER):
+            # These are the operations that have no answer for some pairs of
+            # operands, so what they answer with is a result: the number where
+            # there is one, and the fact that there is none where there is not.
+            answer = self._module.types.result_type(ty)
             if isinstance(ty, FloatType):
                 # A third question again, and not either of the two below: the
-                # answer is not truncated towards anything, and there is no pair
-                # of operands it has no answer for.
-                return builder.binary(BinOp.FDIV, left, right, expr.span)
+                # answer is not truncated towards anything, and the only divisor
+                # it has no answer for is zero.
+                return builder.binary(BinOp.FDIV, left, right, expr.span, answer)
             # One operator, two instructions: dividing signed numbers and
             # dividing unsigned ones are different questions, and the type of
             # what is divided is what says which was asked.
@@ -1657,7 +1786,7 @@ class Checker:
             wanted = ((BinOp.SDIV, BinOp.UDIV) if expr.op is ast.BinaryOp.DIVIDE
                       else (BinOp.SREM, BinOp.UREM))
             return builder.binary(wanted[0] if signed else wanted[1],
-                                  left, right, expr.span)
+                                  left, right, expr.span, answer)
         return builder.binary(_BINARY_OPS[expr.op], left, right, expr.span)
 
     #: What each operator that can fault does, where both sides are known.  The
@@ -1689,16 +1818,17 @@ class Checker:
         if not isinstance(left, IntConst) or not isinstance(right, IntConst):
             return False
         if expr.op in (ast.BinaryOp.DIVIDE, ast.BinaryOp.REMAINDER):
+            # A division answers with a result, so one that cannot answer is
+            # still well formed and its value is the error.  It is reported
+            # anyway, as a warning: both operands are written down, so the
+            # error is the only thing this program will ever get out of it.
             if right.value == 0:
                 self._diags.emit(D.LANG_TYPE_DIVISION_BY_ZERO, expr.span)
-                return True
-            if not isinstance(ty, IntType) or not ty.signed:
-                return False
-            # The one division that overflows, and the one pair that does it.
-            if left.value == ty.low and right.value == -1:
-                self._diags.emit(D.LANG_TYPE_ANSWER_DOES_NOT_FIT, expr.span,
+            elif isinstance(ty, IntType) and ty.signed \
+                    and left.value == ty.low and right.value == -1:
+                # The one division that overflows, and the one pair that does it.
+                self._diags.emit(D.LANG_TYPE_DIVISION_DOES_NOT_FIT, expr.span,
                                  value=str(-ty.low), type=ty.render())
-                return True
             return False
         working = self._ARITHMETIC.get(expr.op)
         if working is None or not isinstance(ty, IntType):
@@ -1732,8 +1862,10 @@ class Checker:
         """
         if expr.op is ast.BinaryOp.DIVIDE:
             if right.value == 0.0:
+                # Well formed, and the answer is the error; saying so is a
+                # warning for the same reason it is for a whole number.
                 self._diags.emit(D.LANG_TYPE_DIVISION_BY_ZERO, expr.span)
-                return True
+                return False
             answer = left.value / right.value
         else:
             working = self._FLOAT_ARITHMETIC.get(expr.op)
@@ -1888,7 +2020,7 @@ class Checker:
         for position, (written, ty) in enumerate(zip(expr.args, wanted), start=1):
             outer, self._handing_over = self._handing_over, (func.name, position)
             try:
-                args.append(self._lower_expr(builder, written, ty))
+                args.append(self._lower_into(builder, written, ty, written.span))
             finally:
                 self._handing_over = outer
         if any(value.ty is ERROR for value in args):
@@ -1965,6 +2097,30 @@ class Checker:
         if expected is not None and resolved.ty != expected:
             self._report_mismatch(ref.span, resolved.ty, expected)
         return resolved
+
+    def _lower_into(self, builder: IRBuilder, expr: ast.Expr, expected: Type,
+                    span: Span) -> Value:
+        """Lower *expr* where a value of *expected* is wanted.
+
+        It differs from lowering with an expectation in one case: where a result
+        is wanted, an expression that answers with the result's answer type is
+        the *successful* result, and is wrapped as one.  That is the only way a
+        program writes a successful result, there being no syntax for one --
+        which is Zig's arrangement for its error unions and C++'s for
+        `std::expected`, and not Rust's, where `Ok(x)` is written out.  Rust can
+        ask for it because its `Ok` is an ordinary constructor; here it would be
+        a piece of syntax existing for one purpose.
+        """
+        if not isinstance(expected, ResultType):
+            return self._lower_expr(builder, expr, expected)
+        value = self._lower_expr(builder, expr, None)
+        found = self._value_type_of(value)
+        if found is expected or found is ERROR:
+            return value
+        if found is expected.ok:
+            return builder.wrap(value, builder.bool_const(False), expected, span)
+        self._report_mismatch(span, found, expected)
+        return UndefConst(ERROR)
 
     def _as_declared(self, value: Value, expected: Type) -> Value:
         """Keep a value whose type matches; stand in for one whose type does not.

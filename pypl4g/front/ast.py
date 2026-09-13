@@ -84,6 +84,11 @@ class TypeRef(Node):
     """A reference to a type by name."""
 
     name: str
+    #: Whether what was written is a result type: `TYPE?` or `TYPE?ERROR`.
+    result: bool = False
+    #: The name of the error type, where one was written.  Nothing means the
+    #: error carries no value beyond the fact that there is one.
+    error: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -143,6 +148,8 @@ class BinaryOp(StrEnum):
     GREATER = ">"
     LESS_EQUAL = "\N{LESS-THAN OR EQUAL TO}"
     GREATER_EQUAL = "\N{GREATER-THAN OR EQUAL TO}"
+
+    OR_ELSE = "??"
 
     ALIKE = "\N{APPROXIMATELY EQUAL TO}"
     UNALIKE = "\N{NEITHER APPROXIMATELY NOR ACTUALLY EQUAL TO}"
@@ -217,6 +224,13 @@ class Binary(Expr):
     op: BinaryOp
     left: Expr
     right: Expr
+
+
+@dataclass(frozen=True, slots=True)
+class Try(Expr):
+    """`EXPR?`: the answer, or the whole function leaving with the error."""
+
+    operand: Expr
 
 
 @dataclass(frozen=True, slots=True)

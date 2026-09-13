@@ -11,10 +11,11 @@ from typing import Iterable
 from ..diag.engine import InternalError
 from .function import BasicBlock, Function, SpecialKind
 from .mangle import symbol_name
-from .inst import (BinaryInst, BlockTarget, CmpInst, Instruction, LoadInst,
-                   RetInst, StoreInst, Terminator, UnaryInst)
+from .inst import (BinaryInst, BlockTarget, CmpInst, FailedInst, Instruction,
+                   LoadInst, RetInst, StoreInst, Terminator, UnaryInst,
+                   UnwrapInst, WrapInst)
 from .module import GlobalVar, Module
-from .types import IntType, MEM, PtrType, VOID
+from .types import BOOL, IntType, MEM, PtrType, ResultType, VOID
 from .value import Const, IntConst, Value
 
 
@@ -153,9 +154,30 @@ class Verifier:
                 if inst.operands[0].ty != inst.operands[1].ty:
                     self._fail(where, "".join(("'", inst.opcode,
                                                "' applied to operands of different types")))
-                if inst.ty != inst.operands[0].ty:
+                # An operation that may have no answer says so in its type: the
+                # answer type is the operands' and the whole is a result.
+                answered = (inst.ty.ok if isinstance(inst.ty, ResultType)
+                            else inst.ty)
+                if answered != inst.operands[0].ty:
                     self._fail(where, "".join(("'", inst.opcode,
                                                "' result type differs from its operands")))
+            case WrapInst():
+                if not isinstance(inst.ty, ResultType):
+                    self._fail(where, "making something that is not a result")
+                elif inst.operands[0].ty != inst.ty.ok:
+                    self._fail(where, "".join((
+                        "making a ", inst.ty.render(), " out of ",
+                        inst.operands[0].ty.render())))
+                elif inst.operands[1].ty is not BOOL:
+                    self._fail(where, "whether a result failed is not a truth value")
+            case UnwrapInst() | FailedInst():
+                inner = inst.operands[0].ty
+                if not isinstance(inner, ResultType):
+                    self._fail(where, "".join(("'", inst.opcode,
+                                               "' applied to something that is not a result")))
+                elif isinstance(inst, UnwrapInst) and inst.ty != inner.ok:
+                    self._fail(where, "".join((
+                        "reading ", inst.ty.render(), " out of ", inner.render())))
             case UnaryInst():
                 if inst.ty != inst.operands[0].ty:
                     self._fail(where, "".join(("'", inst.opcode,

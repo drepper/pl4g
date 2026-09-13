@@ -1,0 +1,17 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4220 LANG_TYPE_NOT_A_RESULT
+
+※ Both operators exist to get at the answer inside a value that may not have
+※ one.  A value that is not a result has its answer and nothing else, so
+※ neither has anything to take out of it.
+
+let hundred: mut u8 = 100u8
+
+fn asking() → u8?:
+    hundred?
+
+@[startup]
+fn main() → u8:
+    @[ignore(5005)]
+    hundred ?? 1u8
+    0u8

@@ -1,0 +1,16 @@
+※ pl4g-test: compile=ok run=native,qemu exit=-4 diag=none
+
+※ A division whose answer will not fit stops the program, as every other
+※ operation that overflows does.  It is worth a test of its own because a
+※ division takes the other path first: what it answers with is a result, so
+※ the divisor being zero is asked about and answered with the error, and only
+※ where there *is* an answer is that answer asked to be a finite number.
+
+let huge: mut f64 = 1e308f64
+let tiny: mut f64 = 1e-308f64
+
+@[startup]
+fn main() → u8:
+    @[ignore(5005)]
+    huge ÷ tiny ?? 0f64
+    0u8

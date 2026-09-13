@@ -323,6 +323,52 @@ def lower_division(asm: Assembler, op: BinOp, ty: Type, left: MCOperand,
                op in (BinOp.SREM, BinOp.UREM), bits, span)
 
 
+def lower_division_result(asm: Assembler, op: BinOp, ty: Type, left: MCOperand,
+                          right: MCOperand, destination: Reg, failed: Reg,
+                          scratch: Scratch, register_bits: int,
+                          span: Span) -> None:
+    """Emit a division that answers with a result rather than stopping.
+
+    The two questions are the same two the stopping form asks -- a divisor of
+    zero, and the one signed pair whose quotient is one past the end of the type
+    -- and what differs is what is done about them.  Here they are put together
+    into one truth value, which is the half of the result that says whether
+    there is an answer, and the division is jumped over where there is not: two
+    of these architectures fault on a division by zero themselves, so asking
+    first is not an optimization but the only way to reach the next
+    instruction.
+
+    The answer half is written either way.  A register holding whatever it held
+    before would be a value the program could read, and what makes reading it
+    harmless is that it is zero rather than that nothing may look.
+    """
+    if not isinstance(ty, IntType):
+        raise Unsupported("a division of something that is not an integer")
+    bits = max(32, ty.bits) if register_bits < 64 else 64
+    held = _in_a_register(asm, left, scratch, span)
+    divisor = _in_a_register(asm, right, scratch, span)
+    zero = MCImm(0, 32, signed=False)
+    asm.setcond(Condition.EQ, failed, divisor, zero, span)
+    if ty.signed:
+        # Only this one pair overflows, so it is asked about as one thing: the
+        # dividend being the most negative number *and* the divisor minus one.
+        smallest = MCReg(scratch.scratch())
+        asm.setcond(Condition.EQ, smallest.reg, held,
+                    MCImm(ty.low, bits, signed=True), span)
+        negative_one = MCReg(scratch.scratch())
+        asm.setcond(Condition.EQ, negative_one.reg, divisor,
+                    MCImm(-1, 32, signed=True), span)
+        asm.op(ops.AND, smallest.reg, smallest, negative_one, span=span)
+        asm.op(ops.OR, failed, MCReg(failed),
+               MCReg(smallest.reg, bits=failed.bits), span=span)
+    asm.loadreg(destination, MCImm(0, max(32, ty.bits), signed=False), span)
+    answered = asm.reserve_label("no.answer")
+    asm.branch(Condition.NE, MCReg(failed), zero, answered, span)
+    asm.divide(destination, held, divisor, ty.signed,
+               op in (BinOp.SREM, BinOp.UREM), bits, span)
+    asm.block(answered)
+
+
 def _in_a_register(asm: Assembler, operand: MCOperand, scratch: Scratch,
                    span: Span) -> MCReg:
     """*operand* where reading it twice is possible."""

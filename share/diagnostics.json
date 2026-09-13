@@ -1771,18 +1771,18 @@
     {
       "number": 4215,
       "name": "LANG_TYPE_DIVISION_BY_ZERO",
-      "severity": "error",
-      "message": "this divides by zero",
+      "severity": "warning",
+      "message": "this divides by zero, so it never has an answer",
       "args": [],
-      "cause": "Dividing by zero has no answer, and the divisor is known here, so this faults every time the program runs.  Like any other fault that can be seen while the program is being compiled, it is reported then rather than left to happen.",
+      "cause": "Dividing by zero has no answer, and a division answers with a result -- so this is well formed and its value is the error.  It is still almost certainly a mistake: the divisor is written down and is zero, so the error branch is the only one this program ever takes.  Where it is meant, `@[ignore(4215)]` says so.",
       "spec": {
         "document": "spec/spec.md",
-        "section": "The Language / Expressions / Arithmetic",
-        "requirement": "Where a fault can be shown at compile time it is a compilation error rather than a fault."
+        "section": "The Language / Expressions / Results",
+        "requirement": "A division by a divisor written as zero is diagnosed."
       },
       "since": "0.1",
       "default_enabled": true,
-      "option": null
+      "option": "always-fails"
     },
     {
       "number": 4216,
@@ -1881,6 +1881,98 @@
       "since": "0.1",
       "default_enabled": true,
       "option": null
+    },
+    {
+      "number": 4220,
+      "name": "LANG_TYPE_NOT_A_RESULT",
+      "severity": "error",
+      "message": "'{operator}' takes a result, not '{found}'",
+      "args": [
+        {
+          "name": "operator",
+          "type": "string",
+          "description": "the operator as written"
+        },
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type of what it was applied to"
+        }
+      ],
+      "cause": "`?` and `??` exist to get at the answer inside a result, which is a value that may not have one.  A value that is not a result has its answer and nothing else: there is nothing for either operator to take out of it and no other case for them to handle.  Where the value came from a division, it is a result and this is not it; everywhere else the operator can simply be left off.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Results",
+        "requirement": "`?` and `??` apply to a value of a result type."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4221,
+      "name": "LANG_TYPE_TRY_NEEDS_A_RESULT",
+      "severity": "error",
+      "message": "'?' leaves the function with an error, and this one answers with '{found}'",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "what the enclosing function answers with"
+        }
+      ],
+      "cause": "`?` hands the answer back where there is one and leaves the function carrying the error where there is not, so the function has to be one that can carry an error -- its own type must be a result whose error type is the same.  Where the function should not fail, `??` gives a value to use instead; where it should, say so in its type.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Results",
+        "requirement": "`?` requires the enclosing function to answer with a result whose error type is the same."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4222,
+      "name": "LANG_TYPE_RESULT_OF_NOTHING",
+      "severity": "error",
+      "message": "'void?' is not a type: there is no answer for it to hold",
+      "args": [],
+      "cause": "A result is an answer or the fact that there is none, and `void` is the type of what carries no information.  A result of it would be a truth value written as though it were something more, which is the kind of second spelling this language does not admit.  A function that either works or does not, and answers with nothing when it works, says so by answering with `bool` -- or, once an error carries a value, with that.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Results",
+        "requirement": "The answer type of a result may not be `void`."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4223,
+      "name": "LANG_TYPE_DIVISION_DOES_NOT_FIT",
+      "severity": "warning",
+      "message": "the answer to this would be {value}, which does not fit '{type}', so it never has one",
+      "args": [
+        {
+          "name": "value",
+          "type": "string",
+          "description": "the answer, written out"
+        },
+        {
+          "name": "type",
+          "type": "string",
+          "description": "the type it does not fit"
+        }
+      ],
+      "cause": "The most negative number of a signed type divided by minus one has a quotient one past the largest that type holds.  It is the only pair of operands other than a zero divisor that a division has no answer for.  A division answers with a result, so this is well formed and its value is the error -- but both operands are written down here, so the error is the only thing this program will get out of it.  `@[ignore(4223)]` says it is meant.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Results",
+        "requirement": "A division written with operands that cannot have an answer is diagnosed."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": "always-fails"
     },
     {
       "number": 4401,

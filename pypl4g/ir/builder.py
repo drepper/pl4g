@@ -11,7 +11,8 @@ from typing import Sequence
 
 from .inst import (CallInst, BinaryInst, BinOp, BlockTarget, BrInst, CastInst, CastKind,
                    CmpInst, CmpPred, CondBrInst, Instruction, LoadInst, MemStartInst,
-                   RetInst, StoreInst, Terminator, UnaryInst, UnOp, UnreachableInst)
+                   FailedInst, RetInst, StoreInst, Terminator, UnaryInst, UnOp,
+                   UnreachableInst, UnwrapInst, WrapInst)
 from .module import Module
 from .types import FloatType, BOOL, IntType, PtrType, Type
 from .value import Value
@@ -76,9 +77,23 @@ class IRBuilder:
 
     # -- instructions ----------------------------------------------------------
 
-    def binary(self, op: BinOp, lhs: Value, rhs: Value, span: Span = INVALID_SPAN) -> Value:
+    def binary(self, op: BinOp, lhs: Value, rhs: Value, span: Span = INVALID_SPAN,
+               ty: Type | None = None) -> Value:
         """Append a binary operation."""
-        return self._append(BinaryInst(op, lhs, rhs, span))
+        return self._append(BinaryInst(op, lhs, rhs, span, ty))
+
+    def wrap(self, value: Value, failed: Value, result_ty: Type,
+             span: Span = INVALID_SPAN) -> Value:
+        """Append the making of a result out of an answer and a truth value."""
+        return self._append(WrapInst(value, failed, result_ty, span))
+
+    def unwrap(self, value: Value, ok_ty: Type, span: Span = INVALID_SPAN) -> Value:
+        """Append the reading of a result's answer."""
+        return self._append(UnwrapInst(value, ok_ty, span))
+
+    def failed(self, value: Value, span: Span = INVALID_SPAN) -> Value:
+        """Append the asking of whether a result is the error."""
+        return self._append(FailedInst(value, BOOL, span))
 
     def unary(self, op: UnOp, value: Value, span: Span = INVALID_SPAN) -> Value:
         """Append a unary operation."""

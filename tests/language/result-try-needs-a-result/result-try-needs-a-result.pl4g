@@ -1,0 +1,14 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4221 LANG_TYPE_TRY_NEEDS_A_RESULT
+
+※ `?` leaves the function carrying the error, so the function must be one that
+※ can carry it.  This one answers with a plain number and has nowhere to put
+※ an error, so `?` has no meaning in it; `??` is what a function that must not
+※ fail uses instead.
+
+let hundred: mut u8 = 100u8
+let seven: mut u8 = 7u8
+
+@[startup]
+fn main() → u8:
+    (hundred ÷ seven)?

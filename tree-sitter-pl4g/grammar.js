@@ -86,7 +86,10 @@ module.exports = grammar({
 
     mutable: _ => 'mut',
 
-    type: $ => $.identifier,
+    // A type is a name, and after it the mark that says a value of it may not
+    // be there: `TYPE?` is a result whose error carries nothing, `TYPE?ERROR`
+    // one whose error is a value of its own.
+    type: $ => seq($.identifier, optional(seq('?', optional($.identifier)))),
 
     // -- attributes --------------------------------------------------------
 
@@ -201,6 +204,8 @@ module.exports = grammar({
     // grammar says that `a < b < c` is not written: a comparison answers with a
     // truth value, so a second one beside it would be comparing that answer.
     _non_comparison: $ => choice(
+      $.or_else_expression,
+      $.try_expression,
       $.binary_expression,
       $.unary_expression,
       $.call_expression,
@@ -267,6 +272,23 @@ module.exports = grammar({
     // A call and a member both bind tighter than any operator, and to whatever
     // stands immediately before them: `a.b(c)` calls `a.b`, and `f(x) & 1` ands
     // what the call answered with.  Arguments are positional.
+    // `EXPR?` hands back the answer inside a result and leaves the function
+    // with the error where there is none.  It binds as tightly as a call does,
+    // to whatever stands immediately before it.
+    try_expression: $ => prec(10, seq(
+      field('value', $._non_comparison), '?',
+    )),
+
+    // `EXPR ?? DEFAULT`: the answer, or the value written instead.  Tighter
+    // than the comparisons and looser than everything that computes a number,
+    // and right associative, so that `a ?? b ?? c` is "a, or else b, or else
+    // c" -- the only reading of it that is well typed.
+    or_else_expression: $ => prec.right(6, seq(
+      field('value', $._non_comparison),
+      '??',
+      field('default', $._non_comparison),
+    )),
+
     call_expression: $ => prec(10, seq(
       field('function', $._non_comparison),
       '(', sepBy(',', field('argument', $._expression)), ')',

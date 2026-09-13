@@ -3,19 +3,20 @@
 ※ The four operations on floating-point values, and the comparisons that say
 ※ what they came to.  Nothing can turn a floating-point value into a number a
 ※ program can hand back, so an answer is checked by the only means there is:
-※ a division by zero stops the program, and `∨` does not compute its right
-※ side unless the left one left the answer open.  So the program runs to the
-※ end exactly when every answer was the right one.
-
-let zero: mut u8 = 0u8
-let one: u8 = 1u8
+※ a sum that will not fit stops the program, and `or` does not compute its
+※ right side unless the left one left the answer open.  So the program runs
+※ to the end exactly when every answer was the right one.
 
 let three: mut f64 = 3f64
 let quarter: mut f32 = 0.25f32
 
+let two_hundred: mut u8 = 200u8
+
 fn stop_unless(ok: bool):
+    ※ An addition whose answer will not fit stops the program, and `or` does
+    ※ not compute its right side unless the left one left the answer open.
     @[ignore(5005)]
-    ok or (one ÷ zero = one)
+    ok or (two_hundred + two_hundred = 0u8)
 
 fn twice(x: f64) → f64:
     x + x
@@ -27,7 +28,8 @@ fn main() → u8:
     @[ignore(4217)]
     stop_unless(three × three - 1f64 = 8f64)
     @[ignore(4217)]
-    stop_unless(three ÷ 2f64 = 1.5f64)
+    ※ a division answers with a result, so what it came to is asked for
+    stop_unless((three ÷ 2f64 ?? 0f64) = 1.5f64)
     @[ignore(4217)]
     stop_unless(quarter + quarter = 0.5f32)
     @[ignore(4217)]

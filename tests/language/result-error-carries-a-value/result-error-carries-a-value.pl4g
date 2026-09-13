@@ -1,0 +1,14 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 9902 IMPL_UNIMPLEMENTED_FEATURE
+
+※ `TYPE?ERROR` is a result whose error is a value of its own.  The syntax is
+※ specified and nothing in the language makes such a value yet, so a program
+※ that wrote the type could not put anything in it: the compiler says it lacks
+※ the feature rather than pretending to have it.
+
+fn asking() → u8?u16:
+    0u8
+
+@[startup]
+fn main() → u8:
+    0u8

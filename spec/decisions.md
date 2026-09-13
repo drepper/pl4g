@@ -1881,6 +1881,55 @@ conversion the compiler emits, which every wider floating-point format holds exa
 the lexer, which had been stepping over the first character of a name only because every character that could begin one could also
 continue one.
 
+## 2026-09-14T19:00+02:00 — language and compiler
+
+**The result type `TYPE?`, its two operators, and the division that answers with one**
+
+Decided on the user's direction: the language gets the builtin result type the to-do list specified, and the division operator
+answers with one, giving the error where the division has none.  What the to-do list already settled -- the spelling `TYPE1?TYPE2`
+with the second name omissible, `?` for "the answer, or leave the function with the error", `??` for "the answer, or this instead"
+-- is implemented as written.  What follows is what had to be decided beyond it.
+
+**The error carries nothing, so `TYPE?` is what works and `TYPE?ERROR` is refused.**  Nothing in the language constructs an error
+value, so a result whose error had a payload would be a type no program could put anything in.  The syntax is parsed and the
+compiler says it lacks the feature (9902), which is the honest answer and leaves the spelling in the specification where it
+belongs.  This is what waits on the sum type, which is where an error type with variants will come from.
+
+**A value of the answer type, written where a result is wanted, is the successful result.**  There is no syntax for writing one,
+and inventing a constructor for a type with no others would be a piece of syntax existing for one purpose.  Zig does exactly this
+for its error unions (`return 5;` in a function returning `!u32`) and C++'s `std::expected` converts implicitly from `T`; Rust
+writes `Ok(x)` and can, because `Ok` is an ordinary constructor of an ordinary sum type, which this is not yet.  The reverse is
+not admitted: a result where a plain value is wanted is refused, since accepting it would drop the error in silence -- which is
+the whole thing the type exists to prevent.
+
+**`%` follows `÷`, and floating point follows both.**  Every operation that has no answer for some operands answers with a
+result; anything else would be a rule with an exception in it.  For floating point the pair with no answer is a zero divisor,
+which is also what keeps `1f64 ÷ 0f64` from being an infinity that the finiteness rule would then stop the program over.  So a
+zero divisor is an error value on every type, and an overflowing *answer* is still a fault -- the distinction being that one is a
+division the operands did not define and the other is a type that was too narrow.
+
+**Two compile-time reports become warnings.**  `1u8 ÷ 0u8` was an error (4215) because the program could only fault; it is now a
+well formed expression whose value is the error, so it is a warning, as is the overflowing signed pair (4223, new).  Both are
+reported because the error is the only thing such a division will ever produce.
+
+**`?` requires the enclosing function to answer with a result** whose error type is the same (4221), which is what "leaves the
+function with the error" means.  Its answer type need not agree, since what travels is the error and an error carries nothing.
+
+**Precedence.**  `?` binds as tightly as a call, to whatever stands immediately before it, so `a ÷ b?` is `a ÷ (b?)` and the whole
+division is `(a ÷ b)?` -- Rust's arrangement.  `??` binds tighter than the comparisons and looser than everything that computes a
+number, and is right associative so that `a ?? b ?? c` reads as "a, or else b, or else c"; C# puts its `??` lower still, just
+above assignment, which this language has no place for since assignment is a statement.
+
+**How a result is represented.**  Two registers, never one: the answer in the register an answer goes in, and a truth value beside
+it in the second register the convention returns a two-word answer in, which is what every one of the three ABIs already does with
+a two-word aggregate.  The register allocator therefore sees two ordinary values and nothing aggregate at all, which is what made
+this a change to the lowering rather than to the allocator.  Three instructions carry it in the representation -- `wrap`,
+`unwrap`, `failed` -- and `unwrap` emits nothing, being the statement that the answer half is what is wanted from here on.
+
+**What is left, and is written in the to-do lists.**  A variable at the top level cannot hold a result (9902): that needs a layout
+in memory, which is a question the compiler has not answered.  Neither can a parameter, which needs the positional mapping to
+account for a value that takes two registers.  A local holds one today, because a local is a value and needs no layout.
+
 ---
 
 ---

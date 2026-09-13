@@ -1,0 +1,31 @@
+※ pl4g-test: compile=ok run=native,qemu exit=215 diag=none
+
+※ A result is a value of one type or the fact that there is none.  `TYPE?` is
+※ how one is written; the error carries nothing beyond the fact of it, which
+※ is what leaving the second name off says.
+※
+※ A division is the operation that answers with one, since it has no answer
+※ for a divisor of zero and, for a signed type, for one pair besides.  The two
+※ operators that read one are `?`, which hands the answer back and leaves the
+※ function carrying the error where there is none, and `??`, which says what
+※ to use instead.
+
+let hundred: mut u8 = 100u8
+let seven: mut u8 = 7u8
+let none: mut u8 = 0u8
+
+※ A function that answers with a result may use `?`: what `?` does where there
+※ is no answer is leave this function with the error, so this function has to
+※ be one that can carry it.  A value of the answer type written where the
+※ result is wanted is the successful one -- here the sum, and there is no
+※ other way to write it.
+fn share(a: u8, b: u8) → u8?:
+    (a ÷ b)? + 1u8
+
+@[startup]
+fn main() → u8:
+    ※ a local holds a result like any other value
+    let good: u8? = share(hundred, seven)
+    let bad: u8? = share(hundred, none)
+    ※ 15 from the first, and the default from the second
+    (good ?? 0u8) + (bad ?? 200u8)

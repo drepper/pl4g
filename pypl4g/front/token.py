@@ -54,6 +54,15 @@ ABOVE_OR_ALIKE_GLYPH: Final[str] = "\N{GREATER-THAN OR APPROXIMATE}"
 BELOW_NOT_ALIKE_GLYPH: Final[str] = "\N{LESS-THAN AND NOT APPROXIMATE}"
 ABOVE_NOT_ALIKE_GLYPH: Final[str] = "\N{GREATER-THAN AND NOT APPROXIMATE}"
 
+#: The two operators a result type has.  `?` written after an expression takes
+#: the answer out of it and leaves the function with the error where there is
+#: none; `??` takes the answer or the value written after it.  Both are ASCII
+#: because neither is a question about numbers: there is no mathematical glyph
+#: for "or else" that a reader would recognize, and `?` for "this may have no
+#: answer" is what Swift, Kotlin, C#, Zig and Rust have all settled on.
+QUESTION_GLYPH: Final[str] = "?"
+OR_ELSE_GLYPH: Final[str] = "??"
+
 #: What a name the compiler provides begins with.  A program may read and write
 #: the ones that exist and may not define one of its own, so the glyph is what
 #: keeps the two apart: no name a program writes can begin with it, and there is
@@ -159,6 +168,9 @@ class TokKind(StrEnum):
     GREATER = "'>'"
     LESS_EQUAL = "'\N{LESS-THAN OR EQUAL TO}'"
     GREATER_EQUAL = "'\N{GREATER-THAN OR EQUAL TO}'"
+
+    QUESTION = "'?'"
+    OR_ELSE = "'??'"
 
     ALIKE = "'\N{APPROXIMATELY EQUAL TO}'"
     UNALIKE = "'\N{NEITHER APPROXIMATELY NOR ACTUALLY EQUAL TO}'"

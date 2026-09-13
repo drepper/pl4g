@@ -28,7 +28,7 @@ from ..faults import Messages, describe
 from ..pool import Constants
 from ..narrow import normalize
 from ..saturate import (DIVISION, NAMES, SATURATING, TRAPPING, Unsupported,
-                        SHIFTS, lower_division, lower_saturating,
+                        SHIFTS, lower_division_result, lower_saturating,
                         lower_shift, lower_trapping)
 from . import ops as rvops
 from .startup import ABORT_SYMBOL
@@ -686,9 +686,10 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
     from ...ir.function import Function as _Function
     from ...ir.mangle import symbol_name
     from ...ir.module import GlobalVar
-    from ...ir.types import BoolType, FloatType, IntType, VOID
-    from ...ir.inst import CastInst, CastKind
-    from ...ir.value import FloatConst
+    from ...ir.types import BOOL, BoolType, FloatType, IntType, ResultType, VOID
+    from ...ir.inst import (CastInst, CastKind, FailedInst, UnwrapInst,
+                            WrapInst)
+    from ...ir.value import FloatConst, UndefConst
     from ...ir.layout import DataLayout, encode_float
     from ..globals import symbol_of
 
@@ -697,6 +698,10 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
     #: Where each value the function computes is held.  A value gets a register
     #: of its own and the allocator decides which; nothing here knows or cares.
     held: dict[int, VirtReg] = {}
+    #: The other half of a value whose type is a result: the truth value saying
+    #: whether there is an answer.  A result is two registers and never one, so
+    #: the allocator sees two ordinary values and nothing aggregate at all.
+    flags: dict[int, VirtReg] = {}
     returned = _returned_value(func)
     symbol = symbol_name(func)
     labels = labels_of(symbol, func)
@@ -737,6 +742,33 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
                     "a value this backend did not compute",
                     span if span.is_valid else None)
             return MCReg(found)
+
+        def register_of(self, value: object, span: "Span | None") -> VirtReg:
+            """The register a value the function computed is held in."""
+            found = held.get(id(value))
+            if found is None:
+                raise UnsupportedOperation(
+                    "a value this backend did not compute", span)
+            return found
+
+        def flag_of(self, value: object, span: "Span | None") -> VirtReg:
+            """The register holding whether a result has an answer."""
+            found = flags.get(id(value))
+            if found is None:
+                raise UnsupportedOperation(
+                    "a result this backend did not compute", span)
+            return found
+
+        def undefined(self, value: object, ty: "Type", span: Span) -> MCOperand:
+            """The operand for *value*, where it may be one nothing may read.
+
+            The answer half of an error is such a value.  It is written as zero
+            rather than left alone, so that a register still holds something a
+            program could read without the reading meaning anything.
+            """
+            if isinstance(value, UndefConst):
+                return MCImm(0, max(32, _width_of(ty)), signed=False)
+            return self.value(value, span)
 
         def destination(self, value: object) -> Reg:
             """The register a value is computed into, for one that is written.
@@ -802,6 +834,9 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
     for index, block in enumerate(func.blocks):
         incoming = cconv.int_arg_regs if index == 0 else ()
         for position, param in enumerate(block.params):
+            if isinstance(param.ty, ResultType):
+                raise UnsupportedOperation(
+                    "a parameter whose type is a result", None)
             arriving = incoming[position] if position < len(incoming) else None
             held[id(param)] = _new_value(param.ty, registers, hint=arriving)
     entry = func.blocks[0] if func.blocks else None
@@ -878,6 +913,17 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
                 case RetInst():
                     value = inst.operands[0]
                     ty = value.ty
+                    if isinstance(ty, ResultType):
+                        # Two registers, which is what every one of these
+                        # architectures returns a two-word answer in.
+                        asm.loadreg(_result_register(ty.ok, cconv, registers),
+                                    MCReg(operands.register_of(value, span)),
+                                    inst.span)
+                        asm.loadreg(_result_register(BOOL, cconv, registers, 1),
+                                    MCReg(operands.flag_of(value, span)),
+                                    inst.span)
+                        asm.ret(inst.span)
+                        continue
                     if isinstance(ty, FloatType):
                         # A floating-point value goes back in a register of its
                         # own kind, and a constant one is read out of the image
@@ -899,25 +945,49 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
                         asm.loadreg(result, MCReg(_value_of(value, held, span)),
                                     inst.span)
                     asm.ret(inst.span)
-                case BinaryInst() if isinstance(inst.ty, FloatType):
+                case BinaryInst() if _is_floating(inst.ty):
+                    answer = inst.ty.ok if isinstance(inst.ty, ResultType) \
+                        else inst.ty
+                    assert isinstance(answer, FloatType)
                     operation = _FLOAT_OPERATIONS.get(inst.op)
                     if operation is None:
                         raise UnsupportedOperation("".join((
                             "'", inst.op.value, "' on a floating-point value")), span)
                     destination = _new_value(
-                        inst.ty, registers,
-                        hint=(_result_register(inst.ty, cconv, registers)
+                        answer, registers,
+                        hint=(_result_register(answer, cconv, registers)
                               if inst is returned else None))
                     held[id(inst)] = destination
+                    divisor = operands.in_register(inst.operands[1], inst.span)
+                    failed: VirtReg | None = None
+                    if isinstance(inst.ty, ResultType):
+                        # The one pair a floating-point division has no answer
+                        # for is a divisor of zero.  Every other pair has one,
+                        # an overflowing one included -- that answer is an
+                        # infinity, which is the fault below and not this.
+                        failed = _new_value(
+                            BOOL, registers,
+                            hint=(_result_register(BOOL, cconv, registers, 1)
+                                  if inst is returned else None))
+                        flags[id(inst)] = failed
+                        asm.float_compare(
+                            Condition.EQ, failed, divisor,
+                            MCReg(operands.floating(FloatConst(answer, 0.0),
+                                                    inst.span)),
+                            answer.bits, inst.span)
                     asm.float_op(operation, destination,
                                  operands.in_register(inst.operands[0], inst.span),
-                                 operands.in_register(inst.operands[1], inst.span),
-                                 inst.ty.bits, inst.span)
+                                 divisor, answer.bits, inst.span)
                     # An answer that is an infinity or a not-a-number is an
                     # answer the operation did not have, the way a sum that
                     # will not fit is, and the program stops the same way.
                     carry_on = asm.reserve_label("is.finite")
-                    asm.branch_if_finite(destination, inst.ty.bits, carry_on,
+                    if failed is not None:
+                        # Where there is no answer there is nothing to ask about
+                        # one: dividing by zero is what the result already says.
+                        asm.branch(Condition.NE, MCReg(failed), ZERO_IMMEDIATE,
+                                   carry_on, inst.span)
+                    asm.branch_if_finite(destination, answer.bits, carry_on,
                                          inst.span)
                     _Fault("".join((NAMES[inst.op], " with no number for an answer")),
                            inst.span).out_of_range(asm, inst.span)
@@ -976,21 +1046,28 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
                         raise UnsupportedOperation(unsupported.what, span) \
                             from unsupported
                 case BinaryInst() if inst.op in DIVISION:
+                    # The answer of a division is a result: the number where
+                    # there is one, and the truth value beside it that says
+                    # whether there is.
+                    answer = inst.ty.ok if isinstance(inst.ty, ResultType) \
+                        else inst.ty
                     destination = _new_value(
-                        inst.ty, registers,
-                        hint=(_result_register(inst.ty, cconv, registers)
+                        answer, registers,
+                        hint=(_result_register(answer, cconv, registers)
+                              if inst is returned else None))
+                    failed = _new_value(
+                        BOOL, registers,
+                        hint=(_result_register(BOOL, cconv, registers, 1)
                               if inst is returned else None))
                     held[id(inst)] = destination
+                    flags[id(inst)] = failed
                     try:
-                        lower_division(
-                            asm, inst.op, inst.ty,
+                        lower_division_result(
+                            asm, inst.op, answer,
                             operands.value(inst.operands[0], inst.span),
                             operands.value(inst.operands[1], inst.span),
-                            destination, operands, 64,
-                            _Fault("".join((NAMES[inst.op],
-                                            " that does not fit")), inst.span),
-                            _Fault("division by zero", inst.span),
-                            inst.span)
+                            destination, failed, operands,
+                            max(32, _width_of(answer)), inst.span)
                     except Unsupported as unsupported:
                         raise UnsupportedOperation(unsupported.what, span) \
                             from unsupported
@@ -1008,6 +1085,34 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
                            operands.value(inst.operands[0], inst.span),
                            operands.value(inst.operands[1], inst.span),
                            span=inst.span)
+                case WrapInst():
+                    # One value made of two, which here is two registers with
+                    # nothing between them: the answer goes where an answer
+                    # goes, and the truth value beside it.
+                    answer = inst.ty.ok if isinstance(inst.ty, ResultType) \
+                        else inst.ty
+                    destination = _new_value(
+                        answer, registers,
+                        hint=(_result_register(answer, cconv, registers)
+                              if inst is returned else None))
+                    failed = _new_value(
+                        BOOL, registers,
+                        hint=(_result_register(BOOL, cconv, registers, 1)
+                              if inst is returned else None))
+                    held[id(inst)] = destination
+                    flags[id(inst)] = failed
+                    asm.loadreg(destination,
+                                operands.undefined(inst.operands[0], answer,
+                                                   inst.span),
+                                inst.span)
+                    asm.loadreg(failed, operands.value(inst.operands[1], inst.span),
+                                inst.span)
+                case UnwrapInst():
+                    # Nothing to emit: the answer half is already in a register
+                    # of its own, and this says to go on using it.
+                    held[id(inst)] = operands.register_of(inst.operands[0], span)
+                case FailedInst():
+                    held[id(inst)] = operands.flag_of(inst.operands[0], span)
                 case UnaryInst() if inst.op is UnOp.FABS:
                     destination = _new_value(
                         inst.ty, registers,
@@ -1092,7 +1197,24 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
                                                registers),
                             operands.value(argument, inst.span), inst.span)
                     asm.call(symbol_name(callee), inst.span)
-                    if inst.ty is not VOID:
+                    if isinstance(inst.ty, ResultType):
+                        destination = _new_value(
+                            inst.ty.ok, registers,
+                            hint=(_result_register(inst.ty.ok, cconv, registers)
+                                  if inst is returned else None))
+                        failed = _new_value(
+                            BOOL, registers,
+                            hint=(_result_register(BOOL, cconv, registers, 1)
+                                  if inst is returned else None))
+                        held[id(inst)] = destination
+                        flags[id(inst)] = failed
+                        asm.loadreg(destination,
+                                    MCReg(_result_register(inst.ty.ok, cconv,
+                                                           registers)), inst.span)
+                        asm.loadreg(failed,
+                                    MCReg(_result_register(BOOL, cconv, registers,
+                                                           1)), inst.span)
+                    elif inst.ty is not VOID:
                         destination = _new_value(
                             inst.ty, registers,
                             hint=(_result_register(inst.ty, cconv, registers)
@@ -1117,6 +1239,15 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
                     raise UnsupportedOperation("".join((
                         "the instruction '", inst.opcode, "'")), span)
     asm.end_function()
+
+def _is_floating(ty: "Type") -> bool:
+    """Whether *ty* is a floating-point type, or a result answering with one."""
+    from ...ir.types import FloatType, ResultType
+
+    if isinstance(ty, ResultType):
+        ty = ty.ok
+    return isinstance(ty, FloatType)
+
 
 def _bits_of(ty: "Type") -> int:
     """How wide a floating-point type is, which is the width the format has."""
@@ -1145,7 +1276,7 @@ def _argument_register(cconv: "CallConvDesc", index: int, ty: "Type",
 
 
 def _result_register(ty: "Type", cconv: "CallConvDesc",
-                     registers: "RegisterInfo") -> "PhysReg":
+                     registers: "RegisterInfo", index: int = 0) -> "PhysReg":
     """The register an instruction's result is put in.
 
     There is only one register width here, so a narrow value simply sits in a
@@ -1155,9 +1286,9 @@ def _result_register(ty: "Type", cconv: "CallConvDesc",
     from ...ir.types import FloatType
 
     if isinstance(ty, FloatType):
-        return cconv.float_ret_regs[0]
+        return cconv.float_ret_regs[index]
     del registers
-    return cconv.int_ret_regs[0]
+    return cconv.int_ret_regs[index]
 
 
 #: How wide a floating-point register is declared to be.  What an instruction

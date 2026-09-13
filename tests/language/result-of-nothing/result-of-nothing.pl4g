@@ -1,0 +1,14 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4222 LANG_TYPE_RESULT_OF_NOTHING
+
+※ A result is an answer or the fact that there is none, and `void` is the type
+※ of what carries no information.  A result of it would be a truth value
+※ written as though it were something more, which is the kind of second
+※ spelling this language does not admit.
+
+fn nothing() → void?:
+    0u8
+
+@[startup]
+fn main() → u8:
+    0u8

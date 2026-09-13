@@ -56,13 +56,11 @@ _FOLDERS = {
     BinOp.SAT_ADD: lambda a, b: a + b,
     BinOp.SAT_SUB: lambda a, b: a - b,
     BinOp.SAT_MUL: lambda a, b: a * b,
-    # Truncating toward zero, which is what all three architectures do and what
-    # the language says it does -- Python's own division floors, so neither of
-    # these can be written with its operators.
-    BinOp.SDIV: _towards_zero,
-    BinOp.UDIV: _towards_zero,
-    BinOp.SREM: _left_over,
-    BinOp.UREM: _left_over,
+    # The divisions are not here.  What one answers with is a result -- the
+    # number where there is one, and the fact that there is none where there is
+    # not -- and there is no constant of that shape to fold it to.  `_towards_zero`
+    # and `_left_over` stay because they say what the language means by the two,
+    # and a folder that has a result constant to make will want them.
     BinOp.AND: lambda a, b: a & b,
     BinOp.OR: lambda a, b: a | b,
     BinOp.XOR: lambda a, b: a ^ b,

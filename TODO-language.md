@@ -254,6 +254,22 @@ To Do List for the PL4g language
     In addition use the infix operations `and` and `or` similar to logic AND and OR except that they short-circuit.  These
     operators only work and binary values.
 
+[x] the language has a builtin type result, similar to Rust's `Result` type and C++'s `std::expected`.  Done: `TYPE?` is a
+    result whose error carries nothing, `?` hands the answer back and leaves the function with the error where there is none, and
+    `EXPR ?? DEFVAL` hands the answer back or the value written instead.  A value of the answer type written where a result is
+    wanted is the successful one, which is Zig's arrangement and C++'s and the only way to write one, there being no constructor.
+    `÷` and `%` are the operations that answer with one, on every numeric type.
+
+[ ] let the error of a result carry a value: `TYPE1?TYPE2`.  The syntax is parsed and refused (9902), because nothing in the
+    language constructs an error value -- so a program that wrote the type could put nothing in it.  Waits on the sum type, which
+    is where an error with variants comes from, and on a decision about what the error type of a division should then be: today
+    the two cases a division cannot answer, a zero divisor and the one overflowing signed pair, are not told apart.
+
+[ ] let a variable at the top level hold a result, and a parameter take one.  Both are refused today (9902 and 8501).  A variable
+    at the top level is a place in memory and what a result looks like in memory is not settled -- it is two things and where the
+    second goes is a layout question.  A parameter needs the positional mapping to account for a value that takes two registers.
+    A local holds one already, a local being a value and needing no layout.
+
 
 Runtime
 -------

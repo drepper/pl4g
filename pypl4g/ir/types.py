@@ -185,6 +185,31 @@ class ProductType(Type):
 
 
 @dataclass(frozen=True, slots=True)
+class ResultType(Type):
+    """A value of one type, or the fact that it could not be produced.
+
+    The sum type in the one shape the language needs before it has sum types:
+    two variants, one of which is the answer and the other of which says there
+    is none.  Where the error carries nothing -- which is every result the
+    compiler produces so far -- ``err`` is nothing and the value is the answer
+    and one truth value beside it.
+    """
+
+    ok: Type
+    err: Type | None = None
+
+    def render(self) -> str:
+        """The name of this type in the textual form of the IR."""
+        return "".join((self.ok.render(), "?",
+                        self.err.render() if self.err is not None else ""))
+
+    def mangled(self) -> str:
+        """The normalized name of this type, for use inside a symbol name."""
+        return "".join((self.ok.mangled(), "?",
+                        self.err.mangled() if self.err is not None else ""))
+
+
+@dataclass(frozen=True, slots=True)
 class SumType(Type):
     """A choice between named variants, the basis of the language's error model."""
 
@@ -230,10 +255,20 @@ class TypeContext:
     """Interns constructed types so that identity comparison is valid."""
 
     def __init__(self) -> None:
+        self._results: dict[tuple[Type, Type | None], ResultType] = {}
         self._pointers: dict[tuple[Type, bool], PtrType] = {}
         self._functions: dict[tuple[tuple[Type, ...], Type], FuncType] = {}
         self._integers: dict[tuple[int, bool], IntType] = {
             (t.bits, t.signed): t for t in (I8, I16, I32, I64, U8, U16, U32, U64)}
+
+    def result_type(self, ok: Type, err: Type | None = None) -> ResultType:
+        """Return the result type with this answer type and error type."""
+        key = (ok, err)
+        found = self._results.get(key)
+        if found is None:
+            found = ResultType(ok, err)
+            self._results[key] = found
+        return found
 
     def int_type(self, bits: int, signed: bool) -> IntType:
         """Return the integer type of the given width and signedness."""

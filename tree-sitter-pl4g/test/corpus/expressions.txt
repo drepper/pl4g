@@ -263,3 +263,66 @@ fn main() → bool:
             (comparison_expression
               left: (identifier)
               right: (identifier))))))))
+
+================================================================================
+A result type, and the two operators that read one
+================================================================================
+
+fn share(a: u8, b: u8) → u8?:
+    (a ÷ b)? + 1u8
+
+@[startup]
+fn main() → u8:
+    let kept: u8?u16 = share(1u8, 2u8)
+    share(1u8, 0u8) ?? 3u8
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_definition
+    name: (identifier)
+    parameters: (parameter_list
+      (parameter
+        name: (identifier)
+        type: (type
+          (identifier)))
+      (parameter
+        name: (identifier)
+        type: (type
+          (identifier))))
+    return_type: (type
+      (identifier))
+    body: (layout_block
+      (expression_statement
+        (binary_expression
+          (try_expression
+            value: (parenthesized_expression
+              (binary_expression
+                (identifier)
+                (identifier))))
+          (integer_literal)))))
+  (function_definition
+    (attribute_list
+      (attribute
+        name: (identifier)))
+    name: (identifier)
+    parameters: (parameter_list)
+    return_type: (type
+      (identifier))
+    body: (layout_block
+      (variable_statement
+        name: (identifier)
+        type: (type
+          (identifier)
+          (identifier))
+        value: (call_expression
+          function: (identifier)
+          argument: (integer_literal)
+          argument: (integer_literal)))
+      (expression_statement
+        (or_else_expression
+          value: (call_expression
+            function: (identifier)
+            argument: (integer_literal)
+            argument: (integer_literal))
+          default: (integer_literal))))))

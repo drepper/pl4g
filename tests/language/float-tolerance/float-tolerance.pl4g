@@ -9,12 +9,13 @@
 let one_value: mut f64 = 1f64
 let other: mut f64 = 1.5f64
 
-let zero: mut u8 = 0u8
-let one: u8 = 1u8
+let two_hundred: mut u8 = 200u8
 
 fn stop_unless(ok: bool):
+    ※ An addition whose answer will not fit stops the program, and `or` does
+    ※ not compute its right side unless the left one left the answer open.
     @[ignore(5005)]
-    ok or (one ÷ zero = one)
+    ok or (two_hundred + two_hundred = 0u8)
 
 @[startup]
 fn main() → u8:

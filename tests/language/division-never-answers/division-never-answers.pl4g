@@ -1,0 +1,20 @@
+※ pl4g-test: compile=ok run=native,qemu exit=0 diag=none
+
+※ A division answers with a result, so one whose operands are both written
+※ down and have no answer between them is well formed: its value is the error.
+※ It is still worth saying, since the error is the only thing such a division
+※ will ever produce -- so both cases are warnings rather than errors, and
+※ `@[expect]` here both means them and asserts the compiler noticed.
+
+@[visible]
+let kept: mut u8 = 0u8
+
+@[startup]
+fn main() → u8:
+    @[expect(4215)]
+    kept ← 100u8 ÷ 0u8 ?? 1u8
+    @[expect(4215)]
+    kept ← 100u8 % 0u8 ?? 2u8
+    @[expect(4223), ignore(5005)]
+    ⁻128i8 ÷ ⁻1i8 ?? ⁻3i8
+    0u8

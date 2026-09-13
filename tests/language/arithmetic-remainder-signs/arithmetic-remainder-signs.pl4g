@@ -14,6 +14,6 @@ let rest: mut i8 = 0i8
 
 @[startup]
 fn main() → u8:
-    quotient ← minus_seven ÷ two
-    rest ← minus_seven % two
+    quotient ← minus_seven ÷ two ?? 0i8
+    rest ← minus_seven % two ?? 0i8
     0u8

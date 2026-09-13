@@ -3,6 +3,9 @@
 ※ Division truncates toward zero, which is what all three architectures do and
 ※ what every language in this family says it does.  '%' is what is left over
 ※ after it, and so carries the sign of what was divided.
+※
+※ Both answer with a result, since neither has an answer for every pair of
+※ operands, and `??` is what takes the number out of one.
 
 let hundred: u8 = 100u8
 let seven: u8 = 7u8
@@ -12,5 +15,5 @@ let rest: mut u8 = 0u8
 
 @[startup]
 fn main() → u8:
-    rest ← hundred % seven
-    hundred ÷ seven
+    rest ← hundred % seven ?? 0u8
+    hundred ÷ seven ?? 0u8

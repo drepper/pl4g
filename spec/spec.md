@@ -282,10 +282,16 @@ divided: `⁻7i8 ÷ 2i8` is `⁻3i8` and `⁻7i8 % 2i8` is `⁻1i8`.  That is wh
 Java and Zig all say; Python floors instead, and would answer `⁻4` and `1`.  Taking the hardware's answer costs nothing and means
 `a` is always `(a ÷ b) × b + a % b`.
 
-**Two divisions have no answer, and both stop the program.**  Dividing by zero is the obvious one -- and the three architectures
-do three different things about it, one raising a fault of its own, one answering with all ones and one with zero, so it is asked
-about first and the program stops the same way everywhere.  The other is the most negative number divided by `⁻1`, whose quotient is
-one past the largest the type can hold; it is the only pair that overflows, and an unsigned type never meets it.
+**Two divisions have no answer, and neither stops the program: a division answers with a result.**  Dividing by zero is the
+obvious one -- and the three architectures do three different things about it, one raising a fault of its own, one answering with
+all ones and one with zero, so it is asked about first and the same thing happens everywhere.  The other is the most negative
+number divided by `⁻1`, whose quotient is one past the largest the type can hold; it is the only pair that overflows, and an
+unsigned type never meets it.  `u8 ÷ u8` is therefore a `u8?` and not a `u8`, and what takes the number out of one is `?` or
+`??`; **Results** below says how.
+
+That is the one place the language answers a missing answer with a value rather than by stopping.  The difference is that these
+two cases are ordinary -- a divisor a program did not choose is zero often enough that every program dividing by one has to say
+what to do about it -- where an addition that overflows says the type was wrong.
 
 Compare C, where signed overflow is undefined and unsigned overflow wraps, and where `-ftrapv` and the sanitizers exist because
 neither answer is what anyone wanted; Rust, which panics in a debug build and wraps in a release one, so that a program means two
@@ -410,12 +416,14 @@ than given a meaning:
 | `⊞` `⊟` `⊠` | saturating means the nearest end of a range of whole numbers, which a floating-point type has no notion of |
 | `%` | what is left of a division that stopped at a whole number, which is not the division this type does |
 
-`÷` on floating point is a third operation and neither of the two that integers have: it truncates towards nothing and there is no
-pair of operands it has no answer for.
+`÷` on floating point is a third operation and neither of the two that integers have: it truncates towards nothing.  It answers
+with a result, as the whole-number divisions do, and the one pair it has no answer for is a divisor of zero -- which is what keeps
+`1f64 ÷ 0f64` from being an infinity that the rule below would then stop the program over.  `f64 ÷ f64` is an `f64?`.
 
 **An answer that is not a finite number stops the program.**  Every one of the four operations is followed by a check, and a
 result that is an infinity or a not-a-number reports where it happened and stops, exactly as an integer sum that will not fit
-does.  Where both operands are written down, the compiler sees it while compiling and reports it then (4214, 4215) rather than
+does.  A division asks its own question first, so a divisor of zero is the error and never reaches this.  Where both operands are
+written down, the compiler sees it while compiling and reports it then (4214) rather than
 building a program that must stop whenever it is started.
 
 That is the language's own rule applied to this type rather than an exception carved out of it: everywhere else a value a program
@@ -465,6 +473,54 @@ error in one for a tolerance to allow for.
 
 The two sides have one type, as everywhere else.  Where that type is `f32` the difference is computed in `f32` and then widened to
 `f64` to be measured, which every `f32` value fits in exactly; the tolerance itself is one number and is not narrowed to meet it.
+
+#### Results
+
+Some operations have no answer for some of their operands.  A division by zero is the first, and the most negative number of a
+signed type divided by minus one is the second.  What such an operation answers with is a **result**: a value of the type it would
+have answered with, or the fact that there is none.
+
+A result type is written `TYPE?`, where `TYPE` is the **answer type**.  The mark with nothing after it says the error carries
+nothing beyond the fact of it.  `TYPE?ERROR` is a result whose error is a value of its own; the syntax is part of the language and
+nothing in the language makes such a value yet, so a program that writes it is told the compiler lacks the feature.
+
+`÷` and `%` answer with one: `u8 ÷ u8` is a `u8?`, and so is `u8 % u8`.  That is the whole of what a division does about a divisor
+it has no answer for -- it does not stop the program, and it does not answer with a number that stands for nothing.
+
+**Two operators read a result.**
+
+`EXPR?` hands back the answer where there is one, and **leaves the function carrying the error** where there is not.  So the
+function it is written in must itself answer with a result, and with one whose error type is the same (4221); its *answer* type
+need not be the same, since what travels is the error.  Applied to something that is not a result it is refused (4220).  It binds
+as tightly as a call does and to whatever stands immediately before it, so `a ÷ b?` is `a ÷ (b?)` and the whole division is
+written `(a ÷ b)?`.
+
+`EXPR ?? DEFAULT` hands back the answer where there is one and the value written after it where there is not.  The default is
+computed only in that case, which is the rule `and` and `or` follow and for the same reason.  It binds tighter than the
+comparisons and looser than everything that computes a number, so `a ÷ b ?? c + d` takes the whole of each side; it is right
+associative, so `a ?? b ?? c` is "a, or else b, or else c", which is the only reading of it that is well typed.
+
+**A value of the answer type, written where a result is wanted, is the successful result.**  That is how a function that answers
+with a result says it succeeded -- `fn share(a: u8, b: u8) → u8?` ending in `(a ÷ b)? + 1u8` answers with the sum -- and there is
+no other way to write one.  The reverse is not admitted: a result where a plain value is wanted is refused, since accepting it
+would be dropping the error silently.
+
+The answer type may not be `void` (4222): a result of nothing is a truth value written as though it were more, and the language
+admits one spelling per meaning.
+
+Compare: Rust's `Result<T, E>` and `?`, which this follows in the operator and not in the constructor -- Rust writes `Ok(x)`,
+which it can because `Ok` is an ordinary constructor of an ordinary sum type.  Zig's error unions write `!T` and accept a plain
+`T` as the success, which is what is done here.  C++'s `std::expected<T, E>` converts implicitly from `T` likewise.  Go returns a
+second value and leaves checking it to discipline, which is the arrangement this one exists to avoid: here the answer cannot be
+read without the error having been dealt with, because reading it is what `?` and `??` do.
+
+`??` is C#'s and Swift's spelling for the same idea, applied there to a value that may be absent rather than to one that may have
+failed; Rust spells it `unwrap_or`, a method call, which this language has no way to write.
+
+**A division whose operands are both written down and have no answer between them is diagnosed** -- 4215 for a zero divisor, 4223
+for the one overflowing pair.  Both are warnings, since the expression is well formed and its value is the error; they are
+reported because the error is the only thing such a division will ever produce, which is nearly always a mistake.  `@[ignore]`
+says it is meant.
 
 #### Logical operators
 

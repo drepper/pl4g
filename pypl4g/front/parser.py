@@ -76,6 +76,12 @@ _BINARY_OPERATORS: Final[dict[TokKind, _Operator]] = {
     TokKind.LESS: _Operator(ast.BinaryOp.LESS, 5, non_associative=True),
     TokKind.GREATER: _Operator(ast.BinaryOp.GREATER, 5, non_associative=True),
     TokKind.LESS_EQUAL: _Operator(ast.BinaryOp.LESS_EQUAL, 5, non_associative=True),
+    # Tighter than the comparisons and looser than everything that computes a
+    # number, so that `a ÷ b ?? c + d` takes the whole of each side, and
+    # `x = a ÷ b ?? c` asks about what the division came to.  Right
+    # associative, so that `a ?? b ?? c` is "a, or else b, or else c" -- which
+    # is the only reading of it that is well typed.
+    TokKind.OR_ELSE: _Operator(ast.BinaryOp.OR_ELSE, 6, right_associative=True),
     TokKind.ALIKE: _Operator(ast.BinaryOp.ALIKE, 5, non_associative=True),
     TokKind.UNALIKE: _Operator(ast.BinaryOp.UNALIKE, 5, non_associative=True),
     TokKind.BELOW_OR_ALIKE: _Operator(ast.BinaryOp.BELOW_OR_ALIKE, 5,
@@ -239,8 +245,7 @@ class Parser:
         mutable = self._accept(TokKind.KW_MUT) is not None
         declared: ast.TypeRef | None = None
         if self._check(TokKind.IDENT):
-            type_token = self._advance()
-            declared = ast.TypeRef(span=type_token.span, name=type_token.text)
+            declared = self._parse_type_ref()
         if self._accept(TokKind.EQUALS) is None:
             self._diags.emit(D.LANG_VARDEF_MISSING_INITIALIZER, name_token.span,
                              name=name_token.text)
@@ -389,12 +394,31 @@ class Parser:
         # being two ways of saying one thing.
         ret_type: ast.TypeRef | None = None
         if self._accept(TokKind.ARROW) is not None:
-            ret_token = self._expect(TokKind.IDENT)
-            ret_type = ast.TypeRef(span=ret_token.span, name=ret_token.text)
+            ret_type = self._parse_type_ref()
         body = self._parse_body()
         return ast.FuncDef(span=start.to(body.span), name=name_token.text,
                            name_span=name_token.span, params=params, ret_type=ret_type,
                            body=body, attrs=attrs, doc=doc)
+
+    def _parse_type_ref(self) -> ast.TypeRef:
+        """Parse a type: a name, and whatever says what else it may be.
+
+        `TYPE?` is a result: a value of that type, or the fact that there is
+        none.  `TYPE?ERROR` is one whose error carries a value of its own, and
+        the name after the mark is what says so -- the mark with nothing after
+        it is what says the error is only the fact of it.
+        """
+        name_token = self._expect(TokKind.IDENT)
+        mark = self._accept(TokKind.QUESTION)
+        if mark is None:
+            return ast.TypeRef(span=name_token.span, name=name_token.text)
+        error: str | None = None
+        last = mark
+        if self._check(TokKind.IDENT):
+            last = self._advance()
+            error = last.text
+        return ast.TypeRef(span=name_token.span.to(last.span),
+                           name=name_token.text, result=True, error=error)
 
     def _parse_params(self) -> tuple[ast.Param, ...]:
         """Parse a parameter list, which may be empty."""
@@ -405,15 +429,15 @@ class Parser:
         while True:
             name_token = self._expect(TokKind.IDENT)
             self._expect(TokKind.COLON)
-            type_token = self._expect(TokKind.IDENT)
+            written = self._parse_type_ref()
             if name_token.text in seen:
                 self._diags.emit(D.LANG_FUNCDEF_DUPLICATE_PARAMETER, name_token.span,
                                  name=name_token.text)
             else:
                 seen[name_token.text] = name_token.span
             params.append(ast.Param(
-                span=name_token.span.to(type_token.span), name=name_token.text,
-                type=ast.TypeRef(span=type_token.span, name=type_token.text)))
+                span=name_token.span.to(written.span), name=name_token.text,
+                type=written))
             if self._accept(TokKind.COMMA) is None:
                 break
         return tuple(params)
@@ -595,6 +619,10 @@ class Parser:
                 continue
             if self._check(TokKind.LPAREN):
                 found = self._parse_call(found)
+                continue
+            if self._check(TokKind.QUESTION):
+                mark = self._advance()
+                found = ast.Try(span=found.span.to(mark.span), operand=found)
                 continue
             return found
 

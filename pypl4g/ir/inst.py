@@ -150,8 +150,12 @@ class BinaryInst(Instruction):
 
     __slots__ = ("op",)
 
-    def __init__(self, op: BinOp, lhs: Value, rhs: Value, span: Span = INVALID_SPAN) -> None:
-        super().__init__(lhs.ty, (lhs, rhs), span)
+    def __init__(self, op: BinOp, lhs: Value, rhs: Value, span: Span = INVALID_SPAN,
+                 ty: Type | None = None) -> None:
+        # The answer has the operands' type except where the operation may not
+        # have one: a division answers with a result type, whose answer type is
+        # what the operands are.
+        super().__init__(lhs.ty if ty is None else ty, (lhs, rhs), span)
         self.op = op
 
     @property
@@ -189,6 +193,57 @@ class CmpInst(Instruction):
     def opcode(self) -> str:
         """The mnemonic used in the textual form."""
         return "".join(("icmp.", self.pred.value))
+
+
+class WrapInst(Instruction):
+    """A value, and whether it is the answer, as one value of a result type.
+
+    Both halves are always given: a result is the answer beside a truth value
+    saying whether there is one, and an error that carries nothing still leaves
+    the answer half a value -- an undefined one, which nothing may read, since
+    reading it is what the truth value forbids.
+    """
+
+    __slots__ = ()
+
+    def __init__(self, value: Value, failed: Value, result_ty: Type,
+                 span: Span = INVALID_SPAN) -> None:
+        super().__init__(result_ty, (value, failed), span)
+
+    @property
+    def opcode(self) -> str:
+        """The mnemonic used in the textual form."""
+        return "wrap"
+
+
+class UnwrapInst(Instruction):
+    """The answer half of a result, which means nothing where there is none."""
+
+    __slots__ = ()
+
+    def __init__(self, value: Value, ok_ty: Type,
+                 span: Span = INVALID_SPAN) -> None:
+        super().__init__(ok_ty, (value,), span)
+
+    @property
+    def opcode(self) -> str:
+        """The mnemonic used in the textual form."""
+        return "unwrap"
+
+
+class FailedInst(Instruction):
+    """Whether a result is the error rather than the answer."""
+
+    __slots__ = ()
+
+    def __init__(self, value: Value, bool_ty: Type,
+                 span: Span = INVALID_SPAN) -> None:
+        super().__init__(bool_ty, (value,), span)
+
+    @property
+    def opcode(self) -> str:
+        """The mnemonic used in the textual form."""
+        return "failed"
 
 
 class CastInst(Instruction):

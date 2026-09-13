@@ -23,6 +23,7 @@ from .token import (ABOVE_NOT_ALIKE_GLYPH, ABOVE_OR_ALIKE_GLYPH, ALIKE_GLYPH,
                     DIVIDE_GLYPH, ROTATE_LEFT_GLYPH, ROTATE_RIGHT_GLYPH,
                     SAT_ADD_GLYPH, SAT_MUL_GLYPH, SHIFT_LEFT_GLYPH,
                     SHIFT_RIGHT_GLYPH,
+                    QUESTION_GLYPH,
                     SAT_SUB_GLYPH, TIMES_GLYPH, TokKind, Token,
                     UNALIKE_GLYPH, XOR_GLYPH)
 
@@ -73,6 +74,7 @@ _SIMPLE: Final[dict[str, TokKind]] = {
     SHIFT_RIGHT_GLYPH: TokKind.SHIFT_RIGHT,
     ROTATE_LEFT_GLYPH: TokKind.ROTATE_LEFT,
     ROTATE_RIGHT_GLYPH: TokKind.ROTATE_RIGHT,
+    QUESTION_GLYPH: TokKind.QUESTION,
 }
 
 _OPEN: Final[frozenset[TokKind]] = frozenset(
@@ -244,6 +246,12 @@ class Lexer:
             self._pos += 2
             self._bracket_depth += 1
             self._emit(TokKind.AT_LBRACKET, start)
+            return True
+        if ch == "?" and self._peek(1) == "?":
+            # Before the single character below, for the same reason '<=' comes
+            # before '<': the longer reading is the one that was meant.
+            self._pos += 2
+            self._emit(TokKind.OR_ELSE, start)
             return True
         for ascii_form, glyph in ASCII_SUBSTITUTES.items():
             # Before the single characters below, because '<=' begins with one

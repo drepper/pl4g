@@ -1,8 +1,9 @@
-※ pl4g-test: compile=ok run=native,qemu exit=-4 diag=none
+※ pl4g-test: compile=ok run=native,qemu exit=0 diag=none
 
 ※ The most negative number divided by minus one has no answer either: the
 ※ quotient is one past the largest the type can hold.  It is the only pair
-※ that overflows, and the only one an unsigned type never meets.
+※ that overflows, and the only one an unsigned type never meets.  So it is the
+※ second thing a division asks about, and the answer is the error.
 
 let smallest: i8 = ⁻128i8
 let minus_one: i8 = ⁻1i8
@@ -12,5 +13,5 @@ let kept: mut i8 = 0i8
 
 @[startup]
 fn main() → u8:
-    kept ← smallest ÷ minus_one
+    kept ← smallest ÷ minus_one ?? ⁻7i8
     0u8
