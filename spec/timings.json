@@ -18,7 +18,8 @@
     "saturating-precedence": "a sum and a product that saturate",
     "arithmetic-operators": "a sum and a product that check and can fault",
     "semicolon-separates-statements": "two statements on one line",
-    "call-nested": "four calls, two of them nested"
+    "call-nested": "four calls, two of them nested",
+    "arithmetic-division": "a division and a remainder, each checked twice"
   },
   "commits": [
     {
@@ -112,6 +113,10 @@
     {
       "hash": "3e9eb27",
       "subject": "✨ Function calls, with positional arguments"
+    },
+    {
+      "hash": "0990c74",
+      "subject": "✨ Division and what is left over: `÷` and `%`"
     }
   ],
   "times": {
@@ -1303,6 +1308,88 @@
       "call-nested": [
         2.231,
         68.22730199201033
+      ]
+    },
+    "0990c74": {
+      "exit0": [
+        1.051,
+        70.02670899964869
+      ],
+      "global-variable": [
+        1.198,
+        65.51651802146807
+      ],
+      "assign-widths": [
+        1.589,
+        67.35447596292943
+      ],
+      "many-values-at-once": [
+        1.814,
+        66.56410498544574
+      ],
+      "unreached-function": [
+        1.437,
+        67.06967705395073
+      ],
+      "export-visibility": [
+        1.4840000000000004,
+        65.89570996584371
+      ],
+      "digit-separators": [
+        1.556,
+        65.020210982766
+      ],
+      "boolean-values": [
+        1.367,
+        67.80121801421046
+      ],
+      "bitwise-operators": [
+        1.563,
+        65.81539800390601
+      ],
+      "bitwise-precedence": [
+        1.3559999999999999,
+        65.65787096042186
+      ],
+      "spill-to-the-frame": [
+        5.973999999999999,
+        70.14179299585521
+      ],
+      "boolean-in-memory": [
+        1.391,
+        66.20510498760268
+      ],
+      "comparison-operators": [
+        2.17,
+        67.10194499464706
+      ],
+      "logic-operators": [
+        2.309,
+        71.18443300714716
+      ],
+      "logic-short-circuit": [
+        2.0909999999999997,
+        67.09123001201078
+      ],
+      "saturating-precedence": [
+        1.525,
+        66.89570500748232
+      ],
+      "arithmetic-operators": [
+        1.7919999999999998,
+        67.17967300210148
+      ],
+      "semicolon-separates-statements": [
+        1.689,
+        65.56384899886325
+      ],
+      "call-nested": [
+        2.2520000000000002,
+        65.98100799601525
+      ],
+      "arithmetic-division": [
+        2.086,
+        68.50042100995779
       ]
     }
   }
