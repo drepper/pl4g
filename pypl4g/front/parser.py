@@ -247,8 +247,8 @@ class Parser:
         # part may be left out: the type is then the value's, and without 'mut'
         # the variable keeps whatever it was given.
         mutable = self._accept(TokKind.KW_MUT) is not None
-        declared: ast.TypeRef | None = None
-        if self._check(TokKind.IDENT):
+        declared: "ast.TypeExpr | None" = None
+        if self._check(TokKind.IDENT) or self._check(TokKind.SET_OPEN):
             declared = self._parse_type_ref()
         if self._accept(TokKind.EQUALS) is None:
             self._diags.emit(D.LANG_VARDEF_MISSING_INITIALIZER, name_token.span,
@@ -262,7 +262,7 @@ class Parser:
                           mutable=mutable, doc=doc, attrs=attrs)
 
     def _parse_import(self, start: Span, name_token: Token, mutable: bool,
-                      declared: "ast.TypeRef | None",
+                      declared: "ast.TypeExpr | None",
                       doc: str | None) -> ast.ModuleImport:
         """Parse the rest of ``let NAME ':=' import(STRING)``.
 
@@ -396,7 +396,7 @@ class Parser:
         # Leaving them off is how a function says it answers with nothing;
         # there is no name to write for that, which is what keeps the two from
         # being two ways of saying one thing.
-        ret_type: ast.TypeRef | None = None
+        ret_type: "ast.TypeExpr | None" = None
         if self._accept(TokKind.ARROW) is not None:
             ret_type = self._parse_type_ref()
         body = self._parse_body()
@@ -404,7 +404,23 @@ class Parser:
                            name_span=name_token.span, params=params, ret_type=ret_type,
                            body=body, attrs=attrs, doc=doc)
 
-    def _parse_type_ref(self) -> ast.TypeRef:
+    def _parse_type_ref(self) -> "ast.TypeExpr":
+        """Parse a type, which may be a collection written the way a value is."""
+        if self._check(TokKind.SET_OPEN):
+            return self._parse_collection_type()
+        return self._parse_named_type()
+
+    def _parse_collection_type(self) -> ast.CollectionTypeRef:
+        """Parse ``\N{LEFT DOUBLE PARENTHESIS}TYPE\N{RIGHT DOUBLE PARENTHESIS}`` or ``\N{LEFT DOUBLE PARENTHESIS}TYPE ':' TYPE\N{RIGHT DOUBLE PARENTHESIS}``."""
+        start = self._expect(TokKind.SET_OPEN).span
+        element = self._parse_type_ref()
+        value: "ast.TypeExpr | None" = None
+        if self._accept(TokKind.COLON) is not None:
+            value = self._parse_type_ref()
+        end = self._expect(TokKind.SET_CLOSE, D.LANG_SYNTAX_EXPECTED_CLOSING_SET).span
+        return ast.CollectionTypeRef(span=start.to(end), element=element, value=value)
+
+    def _parse_named_type(self) -> ast.TypeRef:
         """Parse a type: a name, and whatever says what else it may be.
 
         A name may be reached through a module, as a function or a variable is:
@@ -530,7 +546,7 @@ class Parser:
         """
         start = self._expect(TokKind.KW_ENUM).span
         name_token = self._expect(TokKind.IDENT)
-        holder: ast.TypeRef | None = None
+        holder: "ast.TypeExpr | None" = None
         indented = False
         if self._accept(TokKind.COLON) is not None:
             if self._check(TokKind.IDENT):
@@ -735,8 +751,6 @@ class Parser:
         if self._check(TokKind.KW_IF):
             asked = self._parse_if()
             return ast.ExprStmt(span=asked.span, value=asked)
-        if self._check(TokKind.IDENT) and self._peek().kind is TokKind.ASSIGN:
-            return self._parse_assignment()
         if self._check(TokKind.KW_RETURN):
             start = self._advance().span
             if self._check(TokKind.NEWLINE) or self._check(TokKind.SEMICOLON) \
@@ -745,6 +759,8 @@ class Parser:
             value = self._parse_expression()
             return ast.ReturnStmt(span=start.to(value.span), value=value, explicit=True)
         value = self._parse_expression()
+        if self._check(TokKind.ASSIGN):
+            return self._parse_assignment(value)
         return ast.ExprStmt(span=value.span, value=value)
 
     def _parse_if(self) -> ast.If:
@@ -841,13 +857,23 @@ class Parser:
         return ast.Pattern(span=start.to(end), type=written, name=name_token.text,
                            name_span=name_token.span)
 
-    def _parse_assignment(self) -> ast.Stmt:
-        """Parse ``NAME ← VALUE``."""
-        name_token = self._advance()
+    def _parse_assignment(self, target: ast.Expr) -> ast.Stmt:
+        """Parse the rest of ``TARGET ← VALUE``.
+
+        What may stand on the left is a name, and an entry of a dictionary
+        written the way one is read.  Anything else is a value the program
+        worked out, and there is nowhere for an assignment to put anything.
+        """
         self._expect(TokKind.ASSIGN)
         value = self._parse_expression()
-        return ast.AssignStmt(span=name_token.span.to(value.span), name=name_token.text,
-                              name_span=name_token.span, value=value)
+        if isinstance(target, ast.NameRef):
+            return ast.AssignStmt(span=target.span.to(value.span), name=target.name,
+                                  name_span=target.span, value=value)
+        if isinstance(target, ast.Index):
+            return ast.EntryAssign(span=target.span.to(value.span),
+                                   base=target.base, key=target.key, value=value)
+        self._diags.emit(D.LANG_ASSIGN_NOT_A_PLACE, target.span)
+        raise _Bail()
 
     def _parse_expression(self, minimum: int = 0) -> ast.Expr:
         """Parse an expression whose operators bind at least as tightly as *minimum*.
@@ -907,6 +933,13 @@ class Parser:
             if self._check(TokKind.LPAREN):
                 found = self._parse_call(found)
                 continue
+            if self._check(TokKind.SET_OPEN):
+                self._advance()
+                key = self._parse_expression()
+                end = self._expect(TokKind.SET_CLOSE,
+                                   D.LANG_SYNTAX_EXPECTED_CLOSING_SET).span
+                found = ast.Index(span=found.span.to(end), base=found, key=key)
+                continue
             if self._check(TokKind.QUESTION):
                 mark = self._advance()
                 found = ast.Try(span=found.span.to(mark.span), operand=found)
@@ -929,6 +962,35 @@ class Parser:
                     break
         end = self._expect(TokKind.RPAREN, D.LANG_SYNTAX_EXPECTED_CLOSING_PAREN).span
         return ast.Call(span=callee.span.to(end), callee=callee, args=tuple(args))
+
+    def _parse_collection(self) -> ast.Expr:
+        """Parse ``\N{LEFT DOUBLE PARENTHESIS}a, b\N{RIGHT DOUBLE PARENTHESIS}`` or ``\N{LEFT DOUBLE PARENTHESIS}k: v, k: v\N{RIGHT DOUBLE PARENTHESIS}``.
+
+        Which of the two it is is decided by the first entry: a colon after it
+        makes it a dictionary, and its absence a set.  One written with nothing
+        in it is neither until something says which, and what says so is the
+        type it is wanted as.
+        """
+        start = self._expect(TokKind.SET_OPEN).span
+        if self._check(TokKind.SET_CLOSE):
+            end = self._advance().span
+            return ast.SetLit(span=start.to(end), elements=())
+        first = self._parse_expression()
+        if self._accept(TokKind.COLON) is None:
+            elements = [first]
+            while self._accept(TokKind.COMMA) is not None:
+                elements.append(self._parse_expression())
+            end = self._expect(TokKind.SET_CLOSE,
+                               D.LANG_SYNTAX_EXPECTED_CLOSING_SET).span
+            return ast.SetLit(span=start.to(end), elements=tuple(elements))
+        entries = [(first, self._parse_expression())]
+        while self._accept(TokKind.COMMA) is not None:
+            key = self._parse_expression()
+            self._expect(TokKind.COLON, D.LANG_SYNTAX_EXPECTED_ENTRY_VALUE)
+            entries.append((key, self._parse_expression()))
+        end = self._expect(TokKind.SET_CLOSE,
+                           D.LANG_SYNTAX_EXPECTED_CLOSING_SET).span
+        return ast.DictLit(span=start.to(end), entries=tuple(entries))
 
     def _parse_atom(self) -> ast.Expr:
         """Parse an expression with nothing binding it to what is around it."""
@@ -956,6 +1018,8 @@ class Parser:
             case TokKind.KW_TRUE | TokKind.KW_FALSE:
                 self._advance()
                 return ast.BoolLit(span=token.span, value=token.kind is TokKind.KW_TRUE)
+            case TokKind.SET_OPEN:
+                return self._parse_collection()
             case TokKind.KW_MATCH:
                 return self._parse_match()
             case TokKind.KW_IF:

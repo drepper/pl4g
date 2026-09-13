@@ -23,6 +23,23 @@ To Do List for the PL4g language
     It needed no new machinery: the block the arms join at, the names it carries across, the memory token it merges and the value
     it hands out were all built for `match`.
 
+[x] add sets and dictionaries with Python's semantics and a lookup that does not grow with what is in the collection.  The front
+    end is done: `⸨a, b⸩` is a set and `⸨k: v⸩` a dictionary, a type is written the same way, a lookup in a set answers with a
+    `bool` and one in a dictionary with a result, `d⸨k⸩ ← v` puts a value under a key, and `|`, `&`, `^` and `-` join two sets.
+    A key is a type `=` answers exactly -- integers, `bool`, enumerations -- and floating point is refused.  Nothing builds one:
+    see the entry below.
+
+[ ] build a set and a dictionary at run time.  Refused today (9902).  It needs two things the compiler does not have, and neither
+    is about collections: a **heap** for the table to be in, which is the open question below, and a **loop** for a lookup to
+    walk, which is the other open question.  The design, so that it is not done twice: open addressing with linear probing, a
+    power-of-two capacity, growth at about seven eighths full, a tombstone for a key taken out, and a hash emitted per key type --
+    a multiply-and-shift for an integer or an enumeration, the value itself for a truth value.  The table is a block holding the
+    capacity, the count and the entries; the handle a program passes around is where that block is and how many entries are in it,
+    which is the two words `pypl4g/ir/layout.py` already gives one.
+    Two questions ride on it.  Whether a collection is copied when it is assigned or shared, which Python answers with sharing and
+    a reference count and which this language has no reference count for.  And what happens when the table cannot grow, given that
+    an allocation that fails is not obviously a fallible operation the way a read is -- the same question the string entry asks.
+
 [?] there is no repetition.  A function body cannot loop: there is no `while`, no `for` and no recursion that terminates by
     anything the compiler checks.  Branches and block parameters carry it already, and `if` and `match` show the shape a
     construct with bodies takes here.

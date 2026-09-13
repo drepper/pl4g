@@ -94,6 +94,22 @@ class TypeRef(Node):
 
 
 @dataclass(frozen=True, slots=True)
+class CollectionTypeRef(Node):
+    """`\N{LEFT DOUBLE PARENTHESIS}T\N{RIGHT DOUBLE PARENTHESIS}`, a set, or `\N{LEFT DOUBLE PARENTHESIS}K: V\N{RIGHT DOUBLE PARENTHESIS}`, a dictionary.
+
+    Written the way a value of one is, so that a type and a value of it look
+    alike -- which is what a parameter list and a call already do.
+    """
+
+    element: "TypeExpr"
+    #: What a key stands for, where the type is a dictionary.
+    value: "TypeExpr | None" = None
+
+
+type TypeExpr = TypeRef | CollectionTypeRef
+
+
+@dataclass(frozen=True, slots=True)
 class Expr(Node):
     """Base of every expression."""
 
@@ -236,6 +252,28 @@ class Try(Expr):
 
 
 @dataclass(frozen=True, slots=True)
+class SetLit(Expr):
+    """`\N{LEFT DOUBLE PARENTHESIS}a, b, c\N{RIGHT DOUBLE PARENTHESIS}`: a set written down."""
+
+    elements: tuple[Expr, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class DictLit(Expr):
+    """`\N{LEFT DOUBLE PARENTHESIS}k: v, k: v\N{RIGHT DOUBLE PARENTHESIS}`: a dictionary written down."""
+
+    entries: tuple[tuple[Expr, Expr], ...]
+
+
+@dataclass(frozen=True, slots=True)
+class Index(Expr):
+    """`c\N{LEFT DOUBLE PARENTHESIS}k\N{RIGHT DOUBLE PARENTHESIS}`: whether a set holds a key, or what a dictionary has for one."""
+
+    base: Expr
+    key: Expr
+
+
+@dataclass(frozen=True, slots=True)
 class Unary(Expr):
     """An operator applied to one operand."""
 
@@ -295,7 +333,7 @@ class VarDef(Stmt):
 
     name: str
     name_span: Span
-    type: TypeRef | None
+    type: "TypeExpr | None"
     value: Expr
     #: Whether the type said the variable may be changed.
     mutable: bool = False
@@ -316,7 +354,7 @@ class Pattern(Node):
     #: The type this arm takes -- or, where what is taken apart is an
     #: enumeration, the name of one of its values.  Nothing where the arm is
     #: the error one or the wildcard.
-    type: TypeRef | None
+    type: "TypeExpr | None"
     name: str | None = None
     name_span: Span = INVALID_SPAN
     #: Whether this arm takes every alternative no earlier arm took.
@@ -378,6 +416,15 @@ class AssignStmt(Stmt):
 
 
 @dataclass(frozen=True, slots=True)
+class EntryAssign(Stmt):
+    """`d\N{LEFT DOUBLE PARENTHESIS}k\N{RIGHT DOUBLE PARENTHESIS} \N{LEFTWARDS ARROW} v`: what a dictionary has for a key, changed."""
+
+    base: Expr
+    key: Expr
+    value: Expr
+
+
+@dataclass(frozen=True, slots=True)
 class ModuleImport(Node):
     """A module brought into a file, and the name it is known by there.
 
@@ -411,7 +458,7 @@ class Param(Node):
     """One parameter of a function."""
 
     name: str
-    type: TypeRef
+    type: "TypeExpr"
 
 
 @dataclass(frozen=True, slots=True)
@@ -423,7 +470,7 @@ class FuncDef(Node):
     params: tuple[Param, ...]
     #: What the function answers with, or nothing where it answers with
     #: nothing -- which is written by leaving the arrow off altogether.
-    ret_type: TypeRef | None
+    ret_type: "TypeExpr | None"
     body: Block | None
     attrs: tuple[Attribute, ...] = ()
     doc: str | None = None
@@ -447,7 +494,7 @@ class Field(Node):
 
     name: str
     name_span: Span
-    type: TypeRef
+    type: "TypeExpr"
 
 
 @dataclass(frozen=True, slots=True)
@@ -486,7 +533,7 @@ class EnumDef(Node):
     #: What a value of it occupies, where the definition said.  Nothing means
     #: the compiler chooses, and what it chooses is written in the
     #: specification.
-    holder: TypeRef | None = None
+    holder: "TypeExpr | None" = None
     attrs: tuple[Attribute, ...] = ()
     doc: str | None = None
 

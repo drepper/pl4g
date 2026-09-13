@@ -851,6 +851,83 @@ is written `~(a | b)`.
 A value of a flag enumeration may be a combination that no single name stands for, which is the point of one.  So the names do not
 account for every value, and **a `match` over a flag enumeration needs an arm taking the rest** (4425).
 
+#### Sets and dictionaries
+
+A **set** holds keys and says nothing about them beyond whether it holds them.  A **dictionary** says what each of its keys stands
+for.  Both find a key by hashing it, so a lookup in either takes a time that does not grow with how much is in it.
+
+```
+let s: ⸨u8⸩ = ⸨1u8, 2u8, 3u8⸩
+let d: ⸨Key: u8⸩ = ⸨Key.a: 1u8, Key.b: 2u8⸩
+```
+
+**A type is written the way a value of one is**: `⸨T⸩` is a set of `T` and `⸨K: V⸩` a dictionary from `K` to `V`.  That is the
+arrangement a parameter list and a call already have -- what a thing is and what a thing looks like are written alike.
+
+`⸨` and `⸩` are U+2E28 and U+2E29, a double parenthesis.  Braces are the explicit block notation and square brackets are what an
+array will want, so neither was free; and a collection written down and a lookup in one are then the same shape, which is what
+lets `s⸨k⸩` read as "the set at k" without a second pair of characters to learn.
+
+**Which of the two a collection is is decided by its first entry.**  A colon after it makes it a dictionary and its absence a set
+(3026 where a later entry then has none).  One written with nothing in it, `⸨⸩`, is neither until something says which, and what
+says so is the type it is wanted as (4432).
+
+**Every key of one collection is of one type**, and so is every value of one dictionary (4431).  Nothing is widened to make two
+meet, here as anywhere else.
+
+##### What can be a key
+
+A key is hashed to find where it might be and then compared to see whether it is there, so a type that can be one is a type `=` is
+defined on and answers **exactly**: the integer types, `bool`, and enumerations (4429).
+
+Floating point is left out on purpose, and the reason is worth stating: a not-a-number is equal to nothing, including itself, so a
+key put in could never be found again; the two zeroes are equal and have different bits, so hashing them by their bits would put
+one where the other is not; and two values arrived at by different routes rarely are one value, which is the thing the approximate
+comparisons exist for and which a hash table cannot use.  A product, a sum and a result have no equality at all yet, so none of
+them can be a key either.
+
+The value type of a dictionary may be anything that is not `void` (4430) -- a dictionary whose keys stand for nothing is a set.
+
+##### Reading and writing
+
+`s⸨k⸩` on a set answers **whether it holds the key**, which is a `bool`.
+
+`d⸨k⸩` on a dictionary answers with a **result**: `V?`, the value where there is one and the fact that there is none where there
+is not.  So a key that is not there cannot be read past by accident, and `d⸨k⸩ ?? 0u8` says "or this instead" with nothing new to
+learn -- it is Python's `d.get(k, 0)` written with the operator the language already has, and `d⸨k⸩?` hands the miss back to the
+caller.  Python raises `KeyError`; this language has no exceptions and has a type that says the same thing in the signature.
+
+`d⸨k⸩ ← v` puts a value in a dictionary under a key.  A set has nothing to assign to (4434): a key goes into one by joining it
+with a set holding that key.
+
+**Four operators join two sets**, with the meanings and the spellings Python gives them:
+
+| Written | Holds |
+|---|---|
+| `a \| b` | everything in either |
+| `a & b` | everything in both |
+| `a ^ b` | everything in one and not the other |
+| `a - b` | everything in `a` and not in `b` |
+
+`=` and `≠` compare two sets, or two dictionaries, for holding the same thing.  Ordering is not defined on them: Python reads `<=`
+as "is part of", and here ordering is about which of two comes first, which neither does.
+
+##### What one costs
+
+The compiler decides this and the language says only what follows.  A value of a set or a dictionary type is a **handle** -- where
+the table is, and how many entries are in it -- which is two words; the table itself is elsewhere and is no part of the value,
+which is what lets a collection be passed to a function and answered with like anything else.
+
+Compare: Python, whose semantics these are and whose `{}` and `set()` this replaces with one pair of brackets and a rule about the
+first entry; Go, whose maps are built in and which has no set; Rust, where both are library types and neither has syntax.  A
+language emitted by a generator wants the shape written down rather than constructed by a call, which is why these have syntax
+here.
+
+**Nothing builds one yet.**  Everything above is written, typed and checked; a program that uses a collection is told the compiler
+lacks the feature (9902).  What is missing is not the collection: it is a heap for the table to be in, which the compiler must
+emit itself and whose shape is an open question, and a loop for a lookup to walk, which the language does not have.  Both are in
+the to-do lists.
+
 ### Statements
 
 #### if

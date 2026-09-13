@@ -1,0 +1,12 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4434 LANG_ENTRY_ASSIGN_NOT_A_DICT
+
+※ A set attaches nothing to its keys, so there is nothing in one to assign to.
+※ A key goes into a set by joining it with a set holding that key.
+
+fn put(s: ⸨u8⸩):
+    s⸨1u8⸩ ← true
+
+@[startup]
+fn main() → u8:
+    0u8

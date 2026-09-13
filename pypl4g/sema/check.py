@@ -19,9 +19,9 @@ from ..ir.inst import BinOp, CastKind, CmpPred, Instruction, UnOp
 from ..ir.function import (BasicBlock, FuncAttrs, Function, InlineHint,
                            Linkage, SpecialKind)
 from ..ir.module import GlobalVar, Module
-from ..ir.types import (BOOL, BUILTIN_TYPES, ERROR, EnumType, F64, FloatType,
-                        IntType, MEM, ProductType, ResultType, SumType, Type,
-                        VOID)
+from ..ir.types import (BOOL, BUILTIN_TYPES, DictType, ERROR, EnumType, F64,
+                        FloatType, IntType, MEM, ProductType, ResultType,
+                        SetType, SumType, Type, VOID)
 from .modules import (ImportCycle, LoadedModule, ModuleNotFound, ModuleRegistry,
                       base_name)
 from ..ir.value import (Const, EnumConst, FloatConst, IntConst, UndefConst,
@@ -142,6 +142,21 @@ def found_name(prefix: str, base: str) -> str:
     return ".".join((prefix, base)) if prefix else base
 
 
+def _can_be_a_key(ty: Type) -> bool:
+    """Whether a value of *ty* may be a key of a set or a dictionary.
+
+    A key is hashed and then compared, so a type that can be one is a type `=`
+    is defined on and answers exactly: the integers, truth values and
+    enumerations.  Floating point is left out on purpose -- two values that
+    stand for one number may be two values, a not-a-number is equal to nothing
+    including itself, and the two zeroes are equal and hash differently, so
+    every one of the three properties a key wants fails.
+    """
+    from ..ir.types import BoolType
+
+    return isinstance(ty, (IntType, BoolType, EnumType))
+
+
 def _is_exported(what: object) -> bool:
     """Whether a top-level definition is one an importing file may name."""
     return bool(getattr(what, "exported", False))
@@ -239,6 +254,13 @@ _BINARY_OPS: Final[dict[ast.BinaryOp, BinOp]] = {
 #: asking what the *number* is, which is the one thing the type does not say.
 _ON_FLAGS: Final[frozenset[ast.BinaryOp]] = frozenset((
     ast.BinaryOp.BIT_AND, ast.BinaryOp.BIT_OR, ast.BinaryOp.BIT_XOR))
+
+#: What a set answers: everything in both, in either, in one and not the other,
+#: and in the first and not the second.  The same four Python gives a set, and
+#: written with the same characters.
+_ON_SETS: Final[frozenset[ast.BinaryOp]] = frozenset((
+    ast.BinaryOp.BIT_AND, ast.BinaryOp.BIT_OR, ast.BinaryOp.BIT_XOR,
+    ast.BinaryOp.SUBTRACT))
 
 #: The operators that ask a question about a number rather than about a pattern
 #: of bits, and so are defined on a floating-point value as well as on an
@@ -1325,7 +1347,31 @@ class Checker:
         held = self._top.get(ref.name)
         return self._resolved(held) if isinstance(held, _NamedType) else None
 
-    def _resolve_type(self, ref: ast.TypeRef) -> Type:
+    def _resolve_type(self, ref: "ast.TypeExpr") -> Type:
+        """Resolve a type written down, collection or name."""
+        if isinstance(ref, ast.CollectionTypeRef):
+            return self._collection_type(ref)
+        return self._named_type(ref)
+
+    def _collection_type(self, ref: ast.CollectionTypeRef) -> Type:
+        """Resolve `⸨T⸩` or `⸨K: V⸩`, checking that the key can be one."""
+        element = self._resolve_type(ref.element)
+        if element is not ERROR and not _can_be_a_key(element):
+            self._diags.emit(D.LANG_COLLECTION_KEY_NOT_HASHABLE, ref.element.span,
+                             found=element.render())
+            element = ERROR
+        if ref.value is None:
+            return (self._module.types.set_type(element) if element is not ERROR
+                    else ERROR)
+        value = self._resolve_type(ref.value)
+        if element is ERROR or value is ERROR:
+            return ERROR
+        if value is VOID:
+            self._diags.emit(D.LANG_COLLECTION_VALUE_IS_NOTHING, ref.value.span)
+            return ERROR
+        return self._module.types.dict_type(element, value)
+
+    def _named_type(self, ref: ast.TypeRef) -> Type:
         """Resolve a type name, reporting an unknown one.
 
         A name that resolves to nothing stands in as the type that matches
@@ -1531,6 +1577,8 @@ class Checker:
                     if result.ty is not func.ty.ret:
                         self._report_mismatch(stmt.span, result.ty, func.ty.ret)
                     builder.ret(result, stmt.span)
+            case ast.EntryAssign():
+                self._lower_entry_assign(builder, stmt)
             case ast.EmptyStmt():
                 # Nothing to lower.  What it does is be a statement, so that a
                 # body ending in a semicolon ends in one that produces no value.
@@ -1557,6 +1605,123 @@ class Checker:
                     self._lower_expr(builder, stmt.value, None)
             case _:
                 self._diags.internal("unknown statement kind in lowering")
+
+    # -- sets and dictionaries --------------------------------------------------
+
+    def _lower_collection(self, builder: IRBuilder,
+                          expr: "ast.SetLit | ast.DictLit",
+                          expected: Type | None) -> Value:
+        """Check a set or a dictionary written down.
+
+        Nothing is built: a collection is a table somewhere in memory, and there
+        is nowhere yet for one to be -- the compiler has no allocator and the
+        language no way to write the loop a lookup walks.  What is checked is
+        everything about the types, so that a program that will work when there
+        is one is known to be right now.
+        """
+        empty = (isinstance(expr, ast.SetLit) and not expr.elements) or \
+            (isinstance(expr, ast.DictLit) and not expr.entries)
+        if empty:
+            if not isinstance(expected, (SetType, DictType)):
+                self._diags.emit(D.LANG_COLLECTION_EMPTY_UNKNOWN, expr.span)
+                return UndefConst(ERROR)
+            ty: Type = expected
+        elif isinstance(expr, ast.SetLit):
+            wanted = expected.element if isinstance(expected, SetType) else None
+            element = self._one_type(builder, expr.elements, wanted)
+            if element is ERROR:
+                return UndefConst(ERROR)
+            if not _can_be_a_key(element):
+                self._diags.emit(D.LANG_COLLECTION_KEY_NOT_HASHABLE,
+                                 expr.elements[0].span, found=element.render())
+                return UndefConst(ERROR)
+            ty = self._module.types.set_type(element)
+        else:
+            wanted_key = expected.key if isinstance(expected, DictType) else None
+            wanted_value = expected.value if isinstance(expected, DictType) else None
+            key = self._one_type(builder, tuple(k for k, _ in expr.entries),
+                                 wanted_key)
+            value = self._one_type(builder, tuple(v for _, v in expr.entries),
+                                   wanted_value)
+            if key is ERROR or value is ERROR:
+                return UndefConst(ERROR)
+            if not _can_be_a_key(key):
+                self._diags.emit(D.LANG_COLLECTION_KEY_NOT_HASHABLE,
+                                 expr.entries[0][0].span, found=key.render())
+                return UndefConst(ERROR)
+            ty = self._module.types.dict_type(key, value)
+        if expected is not None and expected is not ty:
+            self._report_mismatch(expr.span, ty, expected)
+            return UndefConst(ERROR)
+        self._diags.emit(D.IMPL_UNIMPLEMENTED_FEATURE, expr.span,
+                         feature="a set or a dictionary")
+        return UndefConst(ty)
+
+    def _one_type(self, builder: IRBuilder, written: "Sequence[ast.Expr]",
+                  wanted: Type | None) -> Type:
+        """Lower each of *written* and give back the one type they share."""
+        found: Type | None = wanted
+        spoiled = False
+        # Nothing is expected of an entry: what it is, is what the collection
+        # is made of, and a mismatch between two of them is about the
+        # collection rather than about wherever it is being given to.
+        outer = self._initializing, self._assigning
+        self._initializing, self._assigning = None, None
+        for entry in written:
+            value = self._lower_expr(builder, entry, None)
+            ty = self._value_type_of(value)
+            if ty is ERROR:
+                spoiled = True
+                continue
+            if found is None:
+                found = ty
+            elif ty is not found:
+                self._diags.emit(D.LANG_COLLECTION_MIXED_ENTRIES, entry.span,
+                                 found=ty.render(), expected=found.render())
+                spoiled = True
+        self._initializing, self._assigning = outer
+        return ERROR if spoiled or found is None else found
+
+    def _lower_index(self, builder: IRBuilder, expr: ast.Index,
+                     expected: Type | None) -> Value:
+        """Check `c⸨k⸩`: whether a set holds a key, or what a dictionary has.
+
+        A dictionary answers with a *result*: the value where there is one, and
+        the fact that there is none where there is not.  That is what makes a
+        key that is not there impossible to read past by accident, and what lets
+        `d⸨k⸩ ?? 0u8` say "or this instead" with nothing new to learn.
+        """
+        base = self._lower_expr(builder, expr.base, None)
+        ty = self._value_type_of(base)
+        if ty is ERROR:
+            return UndefConst(ERROR)
+        if not isinstance(ty, (SetType, DictType)):
+            self._diags.emit(D.LANG_INDEX_NOT_A_COLLECTION, expr.base.span,
+                             found=ty.render())
+            return UndefConst(ERROR)
+        key_ty = ty.element if isinstance(ty, SetType) else ty.key
+        key = self._lower_expr(builder, expr.key, key_ty)
+        if self._value_type_of(key) is ERROR:
+            return UndefConst(ERROR)
+        answer: Type = (BOOL if isinstance(ty, SetType)
+                        else self._module.types.result_type(ty.value))
+        if expected is not None and expected is not answer:
+            self._report_mismatch(expr.span, answer, expected)
+            return UndefConst(ERROR)
+        return UndefConst(answer)
+
+    def _lower_entry_assign(self, builder: IRBuilder, stmt: ast.EntryAssign) -> None:
+        """Check `d⸨k⸩ ← v`, which puts a value under a key."""
+        base = self._lower_expr(builder, stmt.base, None)
+        ty = self._value_type_of(base)
+        if ty is ERROR:
+            return
+        if not isinstance(ty, DictType):
+            self._diags.emit(D.LANG_ENTRY_ASSIGN_NOT_A_DICT, stmt.base.span,
+                             found=ty.render())
+            return
+        self._lower_expr(builder, stmt.key, ty.key)
+        self._lower_into(builder, stmt.value, ty.value, stmt.span)
 
     # -- if --------------------------------------------------------------------
 
@@ -1745,11 +1910,15 @@ class Checker:
         if isinstance(ty, EnumType):
             # The alternatives of an enumeration are its values, so an arm of one
             # names a value and not a type.
-            index = ty.index_of(pattern.type.name)
-            if index is None or pattern.type.module is not None \
-                    or pattern.type.result:
+            written = pattern.type
+            if not isinstance(written, ast.TypeRef):
                 self._diags.emit(D.LANG_ENUM_UNKNOWN_VALUE, pattern.span,
-                                 name=pattern.type.name, type=ty.render())
+                                 name="that", type=ty.render())
+                return None
+            index = ty.index_of(written.name)
+            if index is None or written.module is not None or written.result:
+                self._diags.emit(D.LANG_ENUM_UNKNOWN_VALUE, pattern.span,
+                                 name=written.name, type=ty.render())
                 return None
             # Which alternative, which is which *number*: two names given one
             # number name one alternative between them.
@@ -2058,7 +2227,7 @@ class Checker:
             self._assigning = None
         return self._as_declared(value, expected)
 
-    def _return_type(self, ref: ast.TypeRef | None) -> Type:
+    def _return_type(self, ref: "ast.TypeExpr | None") -> Type:
         """What a function answers with, from what its definition wrote.
 
         Nothing written means nothing answered with.  Writing `void` out is
@@ -2068,7 +2237,7 @@ class Checker:
         """
         if ref is None:
             return VOID
-        if ref.name == "void" and not ref.result:
+        if isinstance(ref, ast.TypeRef) and ref.name == "void" and not ref.result:
             self._diags.emit(D.LANG_TYPE_NOTHING_IS_NOT_WRITTEN, ref.span)
             return VOID
         return self._resolve_type(ref)
@@ -2127,6 +2296,10 @@ class Checker:
                 return self._lower_call(builder, expr, expected)
             case ast.NameRef():
                 return self._lower_name(builder, expr, expected)
+            case ast.SetLit() | ast.DictLit():
+                return self._lower_collection(builder, expr, expected)
+            case ast.Index():
+                return self._lower_index(builder, expr, expected)
             case ast.If():
                 return self._lower_if(builder, expr, builder.function, expected,
                                       True)
@@ -2477,6 +2650,11 @@ class Checker:
             return ERROR
         if isinstance(ty, (IntType, FloatType)):
             return ty
+        if isinstance(ty, (SetType, DictType)) and op not in _ORDERINGS:
+            # Two collections are one collection or they are not.  Whether one
+            # is part of another is a question Python answers with `<=`; here
+            # ordering is about which comes first, and neither does.
+            return ty
         if isinstance(ty, EnumType) and op not in _ORDERINGS:
             # Two values of an enumeration are one value or they are not.
             # Which comes first is not a question it answers: the order is the
@@ -2573,6 +2751,11 @@ class Checker:
         """Whether a value of *ty* may stand on one side of *op*."""
         if isinstance(ty, IntType):
             return True
+        if isinstance(ty, SetType):
+            # The four Python gives a set, written with the same characters:
+            # what is in both, in either, in one and not the other, and in the
+            # first and not the second.
+            return op in _ON_SETS
         if isinstance(ty, EnumType):
             # Only where the definition said the values are meant to be
             # combined.  On an ordinary enumeration a bitwise operator would be

@@ -164,10 +164,16 @@ module.exports = grammar({
     // A type is a name, and after it the mark that says a value of it may not
     // be there: `TYPE?` is a result whose error carries nothing, `TYPE?ERROR`
     // one whose error is a value of its own.
-    type: $ => seq(
-      field('module', optional(seq($.identifier, '.'))),
-      $.identifier,
-      optional(seq('?', optional($.identifier))),
+    type: $ => choice(
+      seq(
+        field('module', optional(seq($.identifier, '.'))),
+        $.identifier,
+        optional(seq('?', optional($.identifier))),
+      ),
+      // A collection is written the way a value of one is, so that a type and
+      // a value of it look alike -- which a parameter list and a call do.
+      seq('\u2e28', field('element', $.type),
+          optional(seq(':', field('value', $.type))), '\u2e29'),
     ),
 
     // -- attributes --------------------------------------------------------
@@ -339,8 +345,11 @@ module.exports = grammar({
       field('value', $._expression),
     ),
 
+    // What may stand on the left is a place: a name, or an entry of a
+    // dictionary written the way one is read.
     assignment: $ => seq(
-      field('target', $.identifier), '←', field('value', $._expression),
+      field('target', choice($.identifier, $.index_expression)),
+      '←', field('value', $._expression),
     ),
 
     // A line may end without an end of line where the statement took it, so
@@ -384,6 +393,9 @@ module.exports = grammar({
     _non_comparison: $ => choice(
       $.match_expression,
       $.if_expression,
+      $.set_literal,
+      $.dictionary_literal,
+      $.index_expression,
       $.or_else_expression,
       $.try_expression,
       $.binary_expression,
@@ -467,6 +479,25 @@ module.exports = grammar({
       field('value', $._non_comparison),
       '??',
       field('default', $._non_comparison),
+    )),
+
+    // `\u2e28a, b\u2e29` is a set and `\u2e28k: v\u2e29` a dictionary; which of the two a
+    // collection is is decided by its first entry, and one written with nothing
+    // in it is neither until the type it is wanted as says which.
+    set_literal: $ => seq('\u2e28', sepBy(',', $._expression), '\u2e29'),
+
+    dictionary_literal: $ => seq(
+      '\u2e28',
+      sepBy1(',', seq(field('key', $._expression), ':',
+                      field('value', $._expression))),
+      '\u2e29',
+    ),
+
+    // Whether a set holds a key, or what a dictionary has for one.  It binds
+    // as tightly as a call does, and to whatever stands immediately before it.
+    index_expression: $ => prec(10, seq(
+      field('collection', $._non_comparison),
+      '\u2e28', field('key', $._expression), '\u2e29',
     )),
 
     call_expression: $ => prec(10, seq(

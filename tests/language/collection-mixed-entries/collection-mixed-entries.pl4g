@@ -1,0 +1,10 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4431 LANG_COLLECTION_MIXED_ENTRIES
+
+※ Every key of one set is of one type, and nothing is widened to make two
+※ meet, here as anywhere else.
+
+@[startup]
+fn main() → u8:
+    let mixed: ⸨u8⸩ = ⸨1u8, 2u16⸩
+    0u8

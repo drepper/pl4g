@@ -1,0 +1,11 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 3027 LANG_ASSIGN_NOT_A_PLACE
+
+※ What may stand on the left of `←` is a place: a name, or an entry of a
+※ dictionary.  Anything else is a value the program worked out, and there is
+※ nowhere for an assignment to put anything.
+
+@[startup]
+fn main() → u8:
+    3u8 ← 4u8
+    0u8

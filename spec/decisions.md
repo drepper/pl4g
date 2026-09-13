@@ -2176,6 +2176,52 @@ statements a block expression can end are written as rules of their own and alia
 the fields inside it, which showed up as a variable definition whose name, type and value all came out as siblings called
 `variable_statement`; aliasing a named rule keeps the shape.
 
+## 2026-09-15T17:00+02:00 — language and compiler
+
+**Sets and dictionaries: written, typed and checked, and not yet built**
+
+Decided on the user's direction: sets and dictionaries with Python's semantics and a lookup that does not grow with what is in
+the collection, written between `⸨` and `⸩`.  What is here is the whole of the front end -- the syntax, the types, the rules
+about keys, the operators, the lookups and the assignment -- and code generation says the compiler lacks the feature (9902).
+
+**Why it stops there, and this is the part worth recording.**  A hash table needs a heap for the table to be in and a loop for a
+lookup to walk.  The compiler emits no allocator, and which one it should emit is an open question in TODO-language.md with three
+answers written out and none chosen; the language has no loop, and whether it should have a general one is the other open
+question.  Both are the user's to answer, and choosing either to get a hash table would be deciding a larger thing in order to
+reach a smaller one.  So everything that does not depend on them is done, and what does is written down in the to-do lists in
+enough detail that the next step is execution rather than design.
+
+**A type is written the way a value of one is.**  `⸨T⸩` and `⸨K: V⸩`, as `⸨a, b⸩` and `⸨k: v⸩` are.  A parameter list and a
+call already have that arrangement; a language emitted by a generator wants the shape written down rather than constructed by a
+call, which is why these have syntax at all where Rust has library types.
+
+**Which of the two a collection is is decided by its first entry**, and an empty one by the type it is wanted as.  Python needs
+`set()` for the empty set because `{}` was already the empty dictionary; one pair of brackets and a rule about the first entry
+avoids that, at the cost of an empty collection needing a context -- which it has everywhere one can be written.
+
+**A dictionary lookup answers with a result.**  `d⸨k⸩` is `V?`, not `V`.  Python raises `KeyError` and Go answers with a second
+value nothing makes you read; this language has a type that says "or not" in the signature, so a key that is not there cannot be
+read past by accident, and `d⸨k⸩ ?? 0u8` is `d.get(k, 0)` written with an operator that was already there.  That is the decision
+this feature most turns on, and it fell out of the result type rather than being invented for it.
+
+**What can be a key.**  A type `=` is defined on and answers exactly: integers, `bool`, enumerations.  Floating point is refused
+and the reason is three-fold -- a not-a-number is equal to nothing including itself, so a key put in could never be found again;
+the two zeroes are equal and have different bits; and two values arrived at by different routes rarely are one value, which is
+what the approximate comparisons are for and what a table cannot use.  Python allows floats as keys and has all three problems.
+
+**The four set operators are Python's**, with Python's spellings -- `|`, `&`, `^`, `-` -- which are the characters the language
+already gives a number's bits, asking the same question of a different kind of collection.  Equality compares two collections;
+ordering does not, Python's reading of `<=` as "is part of" being a different question from which of two comes first.
+
+**A value of one is a handle**: where the table is and how many entries are in it, two words, with the table elsewhere.  That is
+what lets a collection be passed and answered with like anything else, and it is provisional in the way a layout is -- nothing a
+program can observe depends on it.
+
+**What the runtime will need**, written here so it is not designed twice: open addressing with linear probing, a power-of-two
+capacity, growth at about seven eighths full, a tombstone for a key taken out, and a hash the compiler emits per key type -- a
+multiply-and-shift for an integer or an enumeration, and the value itself for a truth value.  The table is a block of memory
+holding the capacity, the count, and the entries; the handle points at it.  Nothing of that is written yet.
+
 ---
 
 ---

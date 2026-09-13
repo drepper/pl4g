@@ -101,6 +101,16 @@ To Do List for the pypl4g compiler
     work that position-independent code needs anyway.  Worth measuring against the chain before it is written: an enumeration with
     three values is better off with the comparisons.
 
+[ ] emit an allocator.  Nothing in the compiler can put a value in memory that was not there when the program started, and three
+    features now wait on it: a `mut str`, a set and a dictionary.  The choice is written in TODO-language.md and is the user's;
+    what belongs here is what the compiler has to emit once it is made -- a `brk` or `mmap` system call, since the specification
+    forbids depending on any system runtime, and a fault path for an allocation that cannot be met, which the existing
+    `__pl4g_abort` already gives a shape for.
+
+[ ] hash a value.  A set and a dictionary want one function per key type, emitted rather than called: a multiply-and-shift for an
+    integer or an enumeration, the value itself for a truth value.  It is a handful of instructions and none of it is new; what it
+    waits on is something to hash *for*.
+
 [ ] hold a value whose type is a product or a sum.  Both are refused today (8501): a product is every one of its fields at once
     and a sum is one variant and a tag, and neither is a thing a register holds.  What they want is a place in memory, an address
     to reach it by, and a convention for passing one to a function and answering with one -- which on all three targets means

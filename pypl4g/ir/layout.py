@@ -10,8 +10,8 @@ width of a pointer is the target's business and not the type's.
 from dataclasses import dataclass
 from typing import Final
 
-from .types import (BoolType, EnumType, FloatType, IntType, MemType,
-                    ProductType, PtrType,
+from .types import (BoolType, DictType, EnumType, FloatType, IntType, MemType,
+                    ProductType, PtrType, SetType,
                     ResultType, SumType, Type, VoidType)
 
 
@@ -41,6 +41,11 @@ def size_of(ty: Type, layout: DataLayout) -> int:
             return 1
         case EnumType():
             return size_of(ty.holder, layout)
+        case SetType() | DictType():
+            # A handle: where the table is, and how many entries are in it.
+            # The table itself is elsewhere and is not part of the value, which
+            # is what lets one be passed and answered with like any other.
+            return 2 * layout.pointer_size
         case PtrType():
             return layout.pointer_size
         case VoidType():
@@ -80,6 +85,8 @@ def align_of(ty: Type, layout: DataLayout) -> int:
             return 1
         case EnumType():
             return align_of(ty.holder, layout)
+        case SetType() | DictType():
+            return layout.pointer_size
         case PtrType():
             return layout.pointer_size
         case VoidType():

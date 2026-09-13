@@ -23,7 +23,7 @@ from .token import (ABOVE_NOT_ALIKE_GLYPH, ABOVE_OR_ALIKE_GLYPH, ALIKE_GLYPH,
                     DIVIDE_GLYPH, ROTATE_LEFT_GLYPH, ROTATE_RIGHT_GLYPH,
                     SAT_ADD_GLYPH, SAT_MUL_GLYPH, SHIFT_LEFT_GLYPH,
                     SHIFT_RIGHT_GLYPH,
-                    QUESTION_GLYPH,
+                    QUESTION_GLYPH, SET_CLOSE_GLYPH, SET_OPEN_GLYPH,
                     SAT_SUB_GLYPH, TIMES_GLYPH, TokKind, Token,
                     UNALIKE_GLYPH, XOR_GLYPH)
 
@@ -74,14 +74,17 @@ _SIMPLE: Final[dict[str, TokKind]] = {
     SHIFT_RIGHT_GLYPH: TokKind.SHIFT_RIGHT,
     ROTATE_LEFT_GLYPH: TokKind.ROTATE_LEFT,
     ROTATE_RIGHT_GLYPH: TokKind.ROTATE_RIGHT,
+    SET_OPEN_GLYPH: TokKind.SET_OPEN,
+    SET_CLOSE_GLYPH: TokKind.SET_CLOSE,
     QUESTION_GLYPH: TokKind.QUESTION,
     BOTTOM_GLYPH: TokKind.BOTTOM,
 }
 
 _OPEN: Final[frozenset[TokKind]] = frozenset(
-    (TokKind.LPAREN, TokKind.LBRACKET, TokKind.LBRACE, TokKind.AT_LBRACKET))
+    (TokKind.LPAREN, TokKind.LBRACKET, TokKind.LBRACE, TokKind.AT_LBRACKET,
+     TokKind.SET_OPEN))
 _CLOSE: Final[frozenset[TokKind]] = frozenset(
-    (TokKind.RPAREN, TokKind.RBRACKET, TokKind.RBRACE))
+    (TokKind.RPAREN, TokKind.RBRACKET, TokKind.RBRACE, TokKind.SET_CLOSE))
 
 _SIMPLE_ESCAPES: Final[dict[str, str]] = {
     "a": "\a", "b": "\b", "f": "\f", "n": "\n", "r": "\r", "t": "\t", "v": "\v",

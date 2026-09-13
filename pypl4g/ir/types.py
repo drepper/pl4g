@@ -226,6 +226,38 @@ class ResultType(Type):
 
 
 @dataclass(frozen=True, slots=True)
+class SetType(Type):
+    """A set: the keys it holds, and nothing said about them beyond membership."""
+
+    element: Type
+
+    def render(self) -> str:
+        """The name of this type in the textual form of the IR."""
+        return "".join(("\N{LEFT DOUBLE PARENTHESIS}", self.element.render(), "\N{RIGHT DOUBLE PARENTHESIS}"))
+
+    def mangled(self) -> str:
+        """The normalized name of this type, for use inside a symbol name."""
+        return "".join(("set<", self.element.mangled(), ">"))
+
+
+@dataclass(frozen=True, slots=True)
+class DictType(Type):
+    """A dictionary: what a key is, and what it stands for."""
+
+    key: Type
+    value: Type
+
+    def render(self) -> str:
+        """The name of this type in the textual form of the IR."""
+        return "".join(("\N{LEFT DOUBLE PARENTHESIS}", self.key.render(), ": ",
+                        self.value.render(), "\N{RIGHT DOUBLE PARENTHESIS}"))
+
+    def mangled(self) -> str:
+        """The normalized name of this type, for use inside a symbol name."""
+        return "".join(("dict<", self.key.mangled(), ",", self.value.mangled(), ">"))
+
+
+@dataclass(frozen=True, slots=True)
 class EnumType(Type):
     """A fixed set of named values, and nothing else.
 
@@ -325,6 +357,8 @@ class TypeContext:
 
     def __init__(self) -> None:
         self._results: dict[tuple[Type, Type | None], ResultType] = {}
+        self._sets: dict[Type, SetType] = {}
+        self._dicts: dict[tuple[Type, Type], DictType] = {}
         self._pointers: dict[tuple[Type, bool], PtrType] = {}
         self._functions: dict[tuple[tuple[Type, ...], Type], FuncType] = {}
         self._integers: dict[tuple[int, bool], IntType] = {
@@ -342,6 +376,22 @@ class TypeContext:
             if count <= limit:
                 return self.int_type(bits, False)
         return self.int_type(64, False)
+
+    def set_type(self, element: Type) -> SetType:
+        """Return the set type over *element*."""
+        found = self._sets.get(element)
+        if found is None:
+            found = SetType(element)
+            self._sets[element] = found
+        return found
+
+    def dict_type(self, key: Type, value: Type) -> DictType:
+        """Return the dictionary type from *key* to *value*."""
+        found = self._dicts.get((key, value))
+        if found is None:
+            found = DictType(key, value)
+            self._dicts[(key, value)] = found
+        return found
 
     def result_type(self, ok: Type, err: Type | None = None) -> ResultType:
         """Return the result type with this answer type and error type."""

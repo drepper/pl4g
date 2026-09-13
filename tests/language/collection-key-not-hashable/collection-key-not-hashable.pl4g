@@ -1,0 +1,14 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4429 LANG_COLLECTION_KEY_NOT_HASHABLE
+
+※ A key is hashed to find where it might be and then compared to see whether
+※ it is there, so a type that can be one is a type `=` answers exactly.
+※ Floating point answers none of the three: two values standing for one number
+※ may be two values, a not-a-number is equal to nothing including itself, and
+※ the two zeroes are equal and hash differently.
+
+let bad: ⸨f64⸩ = ⸨1f64⸩
+
+@[startup]
+fn main() → u8:
+    0u8

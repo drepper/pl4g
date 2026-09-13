@@ -1,0 +1,11 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4432 LANG_COLLECTION_EMPTY_UNKNOWN
+
+※ A collection with nothing in it is neither a set nor a dictionary until
+※ something says which, and what says so is the type it is wanted as.
+
+@[startup]
+fn main() → u8:
+    @[ignore(5005)]
+    ⸨⸩
+    0u8

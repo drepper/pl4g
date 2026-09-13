@@ -326,3 +326,78 @@ fn main() → u8:
             argument: (integer_literal)
             argument: (integer_literal))
           default: (integer_literal))))))
+
+================================================================================
+Sets and dictionaries, their types and a lookup in one
+================================================================================
+
+fn holds(s: ⸨u8⸩, k: u8) → bool:
+    s⸨k⸩
+
+@[startup]
+fn main() → u8:
+    let s: ⸨u8⸩ = ⸨1u8, 2u8⸩
+    let d: ⸨Key: u8⸩ = ⸨Key.a: 1u8⸩
+    d⸨Key.c⸩ ← 42u8
+    0u8
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_definition
+    name: (identifier)
+    parameters: (parameter_list
+      (parameter
+        name: (identifier)
+        type: (type
+          element: (type
+            (identifier))))
+      (parameter
+        name: (identifier)
+        type: (type
+          (identifier))))
+    return_type: (type
+      (identifier))
+    body: (layout_block
+      (expression_statement
+        (index_expression
+          collection: (identifier)
+          key: (identifier)))))
+  (function_definition
+    (attribute_list
+      (attribute
+        name: (identifier)))
+    name: (identifier)
+    parameters: (parameter_list)
+    return_type: (type
+      (identifier))
+    body: (layout_block
+      (variable_statement
+        name: (identifier)
+        type: (type
+          element: (type
+            (identifier)))
+        value: (set_literal
+          (integer_literal)
+          (integer_literal)))
+      (variable_statement
+        name: (identifier)
+        type: (type
+          element: (type
+            (identifier))
+          value: (type
+            (identifier)))
+        value: (dictionary_literal
+          key: (member_expression
+            base: (identifier)
+            name: (identifier))
+          value: (integer_literal)))
+      (assignment
+        target: (index_expression
+          collection: (identifier)
+          key: (member_expression
+            base: (identifier)
+            name: (identifier)))
+        value: (integer_literal))
+      (expression_statement
+        (integer_literal)))))

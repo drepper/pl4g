@@ -1040,6 +1040,54 @@
       "option": null
     },
     {
+      "number": 3025,
+      "name": "LANG_SYNTAX_EXPECTED_CLOSING_SET",
+      "severity": "error",
+      "message": "expected '⸩'",
+      "args": [],
+      "cause": "A set, a dictionary and a lookup in either are written between `⸨` and `⸩`, and the closing one is missing here.  What is usually behind it is a comma left out between two entries, or a key written with no value after it.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Sets and dictionaries",
+        "requirement": "A set, a dictionary and a lookup are closed with `⸩`."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 3026,
+      "name": "LANG_SYNTAX_EXPECTED_ENTRY_VALUE",
+      "severity": "error",
+      "message": "an entry of a dictionary is written 'KEY : VALUE'",
+      "args": [],
+      "cause": "The first entry of this one had a value, so it is a dictionary and every entry of it has one.  A collection whose entries are keys alone is a set, and the two are told apart by the first entry: that is what keeps `⸨a, b⸩` and `⸨a: 1, b: 2⸩` from needing two spellings of the brackets.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Sets and dictionaries",
+        "requirement": "Every entry of a dictionary written down has a value."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 3027,
+      "name": "LANG_ASSIGN_NOT_A_PLACE",
+      "severity": "error",
+      "message": "this is a value, and a value cannot be assigned to",
+      "args": [],
+      "cause": "What may stand on the left of `←` is a place: a name, or an entry of a dictionary written the way one is read.  Anything else is a value the program worked out, and there is nowhere for an assignment to put anything.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Assignment",
+        "requirement": "The left of an assignment is a name or an entry of a dictionary."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 3201,
       "name": "LANG_ATTR_UNKNOWN",
       "severity": "error",
@@ -2739,6 +2787,131 @@
         "document": "spec/spec.md",
         "section": "The Language / Statements / if",
         "requirement": "An `if` a value is wanted of has an `else`."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4429,
+      "name": "LANG_COLLECTION_KEY_NOT_HASHABLE",
+      "severity": "error",
+      "message": "'{found}' cannot be a key: it is hashed and compared, and this type answers neither exactly",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type written as the key"
+        }
+      ],
+      "cause": "A key is hashed to find where it might be and then compared to see whether it is there, so a type that can be one is a type `=` is defined on and answers exactly: the integers, truth values and enumerations.  Floating point is left out on purpose -- two values that stand for one number may be two values, a not-a-number is equal to nothing including itself, and the two zeroes are equal and hash differently.  A product, a sum and a result have no equality at all yet.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Sets and dictionaries",
+        "requirement": "The key type of a set or a dictionary is an integer, a truth value or an enumeration."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4430,
+      "name": "LANG_COLLECTION_VALUE_IS_NOTHING",
+      "severity": "error",
+      "message": "'void' carries no information, so there is nothing for a key to stand for",
+      "args": [],
+      "cause": "A dictionary says what each of its keys stands for.  Where that is `void` it says nothing, and what is wanted is a set -- the collection that holds keys and attaches nothing to them.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Sets and dictionaries",
+        "requirement": "The value type of a dictionary is not `void`."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4431,
+      "name": "LANG_COLLECTION_MIXED_ENTRIES",
+      "severity": "error",
+      "message": "this entry is of type '{found}', and the ones before it are of type '{expected}'",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type of this entry"
+        },
+        {
+          "name": "expected",
+          "type": "string",
+          "description": "the type the earlier entries had"
+        }
+      ],
+      "cause": "Every key of one set is of one type, and so is every key of one dictionary and every value of one.  Nothing is widened to make two meet, here as anywhere else: a value of one width becoming a value of another is the kind of quiet reinterpretation this language does not admit.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Sets and dictionaries",
+        "requirement": "The entries of a set or a dictionary written down are each of one type."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4432,
+      "name": "LANG_COLLECTION_EMPTY_UNKNOWN",
+      "severity": "error",
+      "message": "nothing says whether this is a set or a dictionary, or what it holds",
+      "args": [],
+      "cause": "A collection written down with nothing in it is neither until something says which, and what says so is the type it is wanted as -- the type of the variable it is given to, of the parameter it is passed to, or of what the function answers with.  Written where nothing wants a particular type, it says too little to be anything.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Sets and dictionaries",
+        "requirement": "An empty collection takes its type from where it is written."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4433,
+      "name": "LANG_INDEX_NOT_A_COLLECTION",
+      "severity": "error",
+      "message": "'{found}' is not a set or a dictionary, so there is nothing to look up in it",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type of what was written"
+        }
+      ],
+      "cause": "`c⸨k⸩` asks a set whether it holds a key, and asks a dictionary what a key stands for.  A value of any other type holds no keys.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Sets and dictionaries",
+        "requirement": "A lookup applies to a set or a dictionary."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4434,
+      "name": "LANG_ENTRY_ASSIGN_NOT_A_DICT",
+      "severity": "error",
+      "message": "'{found}' has no entry to assign to",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type of what was written"
+        }
+      ],
+      "cause": "`d⸨k⸩ ← v` puts a value in a dictionary under a key.  A set attaches nothing to its keys, so there is nothing in one to assign to: a key is put into a set by joining it with a set holding that key, `s ← s | ⸨k⸩`.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Sets and dictionaries",
+        "requirement": "Only an entry of a dictionary is assigned to."
       },
       "since": "0.1",
       "default_enabled": true,

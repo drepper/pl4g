@@ -1,0 +1,11 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4430 LANG_COLLECTION_VALUE_IS_NOTHING
+
+※ A dictionary says what each of its keys stands for.  Where that is `void` it
+※ says nothing, and what is wanted is a set.
+
+let nothing: ⸨u8: void⸩ = ⸨1u8: 0u8⸩
+
+@[startup]
+fn main() → u8:
+    0u8
