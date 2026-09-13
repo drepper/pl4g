@@ -23,6 +23,10 @@
     {
       "hash": "2f564cb",
       "subject": "✨ Expressions, by precedence climbing, with the bitwise operators"
+    },
+    {
+      "hash": "37dbb28",
+      "subject": "🐛 A diagnostic number no block covers is refused, not mis-grouped"
     }
   ],
   "times": {
@@ -134,6 +138,48 @@
       "bitwise-precedence": [
         1.222,
         67.52777399378829
+      ]
+    },
+    "37dbb28": {
+      "exit0": [
+        0.8919999999999999,
+        68.17460100864992
+      ],
+      "global-variable": [
+        1.0519999999999998,
+        65.70970700704493
+      ],
+      "assign-widths": [
+        1.635,
+        67.42671399842948
+      ],
+      "many-values-at-once": [
+        1.896,
+        69.25248497282155
+      ],
+      "unreached-function": [
+        1.4369999999999998,
+        66.09101098729298
+      ],
+      "export-visibility": [
+        1.4709999999999999,
+        68.6083439795766
+      ],
+      "digit-separators": [
+        1.626,
+        67.82897000084631
+      ],
+      "boolean-values": [
+        1.2659999999999998,
+        68.5543330037035
+      ],
+      "bitwise-operators": [
+        1.554,
+        67.86852001096122
+      ],
+      "bitwise-precedence": [
+        1.218,
+        67.48710499959998
       ]
     }
   }
