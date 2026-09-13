@@ -34,7 +34,8 @@ except the move to the register a result is returned in, which nothing outlives.
 """
 
 from dataclasses import dataclass, field
-from typing import Protocol, Sequence
+from collections.abc import Mapping
+from typing import Final, Protocol, Sequence
 
 from .desc import OperandRole
 from .inst import MCInst
@@ -124,18 +125,47 @@ def defs_and_uses(inst: MCInst) -> tuple[list[Reg], list[Reg]]:
     return defs, uses
 
 
+#: What the one class is called where a target names no classes at all.  Every
+#: value then belongs to it, which is the arrangement a target has until it has
+#: a value that is not an integer.
+_ONE_CLASS: Final[str] = ""
+
+
 class LinearScan:
     """Assigns a register to every virtual register of a function."""
 
-    def __init__(self, registers: RegisterInfo, order: Sequence[RegUnit],
+    def __init__(self, registers: RegisterInfo,
+                 order: "Sequence[RegUnit] | Mapping[str, Sequence[RegUnit]]",
                  selector: "SpillSelector") -> None:
         self._registers = registers
         #: What the target says a read or a write of a frame slot looks like.
         self._selector = selector
-        #: The units that may be given out, in the order they are preferred.
-        #: The convention states it, since which registers are free to use is
-        #: what a convention is about.
-        self._order = list(order)
+        #: The units that may be given out, in the order they are preferred,
+        #: for each class of register.  The convention states it, since which
+        #: registers are free to use is what a convention is about.
+        #:
+        #: A value belongs to one class and can only be held by a register of
+        #: that class: an integer cannot go in a floating-point register and the
+        #: other way round, whatever the widths say.  So the orders are kept
+        #: apart and a value is given one from its own -- which is the whole of
+        #: what having more than one class comes to here, the rest of the
+        #: allocator working on units and never asking what kind they are.
+        self._orders: dict[str, list[RegUnit]] = (
+            {name: list(units) for name, units in order.items()}
+            if isinstance(order, Mapping)
+            else {_ONE_CLASS: list(order)})
+
+    def _order_for(self, reg: Reg) -> list[RegUnit]:
+        """The units *reg* may be given, in the order they are preferred."""
+        if len(self._orders) == 1 and _ONE_CLASS in self._orders:
+            return self._orders[_ONE_CLASS]
+        return self._orders.get(reg.cls.name, [])
+
+    @property
+    def _widest_order(self) -> int:
+        """How many registers the largest class has, which is how many rounds of
+        spilling can be needed before every value has somewhere to be."""
+        return max((len(units) for units in self._orders.values()), default=0)
 
     def run(self, function: MachineFunction) -> Assignment:
         """Assign every virtual register of *function* and rewrite it.
@@ -147,7 +177,7 @@ class LinearScan:
         the rounds run out.
         """
         assignment = Assignment()
-        for _ in range(len(self._order) + 1):
+        for _ in range(self._widest_order + 1):
             ranges, blocked = self._live_ranges(function.instructions())
             assignment.ranges = ranges
             crowded = self._assign(ranges, blocked, assignment)
@@ -157,7 +187,7 @@ class LinearScan:
                 return assignment
             self._spill(function, crowded, assignment)
         raise RegisterPressureError(function.name, len(assignment.spilled) + 1,
-                                    len(self._order))
+                                    self._widest_order)
 
     # -- liveness --------------------------------------------------------------
 
@@ -270,10 +300,11 @@ class LinearScan:
         there into a move of a register to itself, which then goes.
         """
         reg = found.reg
+        order = self._order_for(reg)
         if isinstance(reg, VirtReg) and reg.hint is not None:
-            if reg.hint.unit not in taken and reg.hint.unit in self._order:
+            if reg.hint.unit not in taken and reg.hint.unit in order:
                 return reg.hint.unit
-        for unit in self._order:
+        for unit in order:
             if unit not in taken:
                 return unit
         return None
@@ -294,7 +325,7 @@ class LinearScan:
         for victim in victims:
             if not victim.spillable:
                 raise RegisterPressureError(function.name, len(victims),
-                                            len(self._order))
+                                            len(self._order_for(victim)))
             if victim.ident in assignment.spilled:
                 continue
             slots[victim.ident] = function.frame.allocate()
@@ -470,6 +501,11 @@ class SpillSelector(Protocol):
 
 
 def allocate(function: MachineFunction, registers: RegisterInfo,
-             order: Sequence[RegUnit], selector: SpillSelector) -> Assignment:
-    """Assign every virtual register of *function*."""
+             order: "Sequence[RegUnit] | Mapping[str, Sequence[RegUnit]]",
+             selector: SpillSelector) -> Assignment:
+    """Assign every virtual register of *function*.
+
+    *order* is either the units of the one class a target has values in, or a
+    mapping from the name of a class to its units.
+    """
     return LinearScan(registers, order, selector).run(function)

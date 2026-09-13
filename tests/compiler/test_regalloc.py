@@ -387,3 +387,46 @@ def test_a_value_used_right_after_it_is_computed_is_not_read_back() -> None:
                   for slot in result.spilled.values() if _reads_slot(i, slot))
     assert reloads <= len(result.spilled), reloads
 
+
+
+# -- more than one kind of register ---------------------------------------------
+
+def test_the_two_kinds_do_not_take_registers_from_each_other() -> None:
+    """An integer cannot live in a floating-point register nor the other way
+    round, whatever the widths say.
+
+    Until there was a second kind the allocator had one list and gave from it,
+    which was right while every value was an integer and would silently have
+    been wrong the moment one was not.  Now it has a list per kind and asks the
+    value which it belongs to -- so one kind running out says nothing about the
+    other, which is the point of keeping the lists apart.
+    """
+    from pypl4g.mc.regalloc import Assignment, LiveRange
+    from pypl4g.target.x86_64.regs import VEC
+
+    orders = {GPR.name: list(CC_PL4G_V0.allocation_order)[:1],
+              VEC.name: INFO.members_of(VEC)[:1]}
+    scan = LinearScan(INFO, orders, SELECTOR)
+    whole = INFO.new_virtual(GPR, 64)
+    fractional = INFO.new_virtual(VEC, 64)
+    # Both are wanted over the same stretch, so one list of one register would
+    # have had to send one of them to the frame.
+    ranges = [LiveRange(reg=whole, start=0, end=10),
+              LiveRange(reg=fractional, start=0, end=10)]
+    assignment = Assignment()
+    assert scan._assign(ranges, [], assignment) == []
+    assert assignment.units[whole.ident] is orders[GPR.name][0]
+    assert assignment.units[fractional.ident] is orders[VEC.name][0]
+
+
+def test_a_target_with_one_kind_needs_no_list_of_lists() -> None:
+    """Handing the allocator a plain list still works and means what it did:
+    every value belongs to the one kind there is.  That is what keeps this
+    change from reaching a target that has nothing to say about it."""
+    from pypl4g.mc.regalloc import Assignment, LiveRange
+
+    scan = LinearScan(INFO, ORDER, SELECTOR)
+    whole = INFO.new_virtual(GPR, 64)
+    assignment = Assignment()
+    assert scan._assign([LiveRange(reg=whole, start=0, end=4)], [], assignment) == []
+    assert assignment.units[whole.ident] in ORDER
