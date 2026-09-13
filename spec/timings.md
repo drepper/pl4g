@@ -36,6 +36,7 @@ the parser does, and they are the floor everything else is measured against.
 | `40c35bb` | 1.00 | 1.52 | 1.29 |
 | `9437d8a` | 1.00 | 1.64 | 1.55 |
 | `d0c8cf5` | 1.05 | 1.60 | 1.43 |
+| `73ce857` | 1.01 | 1.69 | 1.44 |
 
 ### Variables and memory
 
@@ -56,6 +57,7 @@ backend do.
 | `40c35bb` | 1.18 | 1.62 |
 | `9437d8a` | 1.22 | 1.68 |
 | `d0c8cf5` | 1.13 | 1.59 |
+| `73ce857` | 1.19 | 1.65 |
 
 ### Register pressure
 
@@ -76,6 +78,7 @@ and they are the only ones that reach the frame.
 | `40c35bb` | 1.83 | 6.26 |
 | `9437d8a` | 1.88 | 6.51 |
 | `d0c8cf5` | 1.87 | 6.33 |
+| `73ce857` | 1.89 | 6.48 |
 
 ### What is left out
 
@@ -96,6 +99,7 @@ decision log does.
 | `40c35bb` | 1.41 | 1.37 |
 | `9437d8a` | 1.54 | 1.47 |
 | `d0c8cf5` | 1.41 | 1.46 |
+| `73ce857` | 1.50 | 1.57 |
 
 ### Expressions
 
@@ -116,6 +120,7 @@ optimizer does.
 | `40c35bb` | 1.51 | 1.31 |
 | `9437d8a` | 1.54 | 1.45 |
 | `d0c8cf5` | 1.55 | 1.36 |
+| `73ce857` | 1.58 | 1.39 |
 
 Process
 -------
@@ -140,6 +145,7 @@ worth showing here, and every figure is in the JSON beside this file.
 | `40c35bb` | 70 | 78 |
 | `9437d8a` | 73 | 82 |
 | `d0c8cf5` | 73 | 81 |
+| `73ce857` | 73 | 81 |
 
 What each row is:
 
@@ -155,6 +161,7 @@ What each row is:
 - `40c35bb` -- 📝 Timing tables grow down, not across, and are grouped
 - `9437d8a` -- ✨ Modules: read while compiling, read once, named by the shortest route
 - `d0c8cf5` -- ✨ `export` and `visible` are two attributes, because they were two questions
+- `73ce857` -- ✨ One meaning, one spelling: attributes are written one way
 
 What each program exercises:
 
