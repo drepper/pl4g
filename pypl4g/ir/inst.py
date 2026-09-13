@@ -31,6 +31,14 @@ class BinOp(Enum):
     ASHR = "ashr"
     LSHR = "lshr"
 
+    #: The three that answer with the nearest value their type can hold rather
+    #: than going past it.  They are operations of their own and not a flag on
+    #: the three above, because what a backend emits for one has the comparison
+    #: and the bound in it and looks nothing like an addition.
+    SAT_ADD = "sat.add"
+    SAT_SUB = "sat.sub"
+    SAT_MUL = "sat.mul"
+
 
 class UnOp(Enum):
     """The unary operations."""

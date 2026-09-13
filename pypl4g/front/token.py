@@ -55,6 +55,13 @@ NAND_GLYPH: Final[str] = "\N{NAND}"
 NOR_GLYPH: Final[str] = "\N{NOR}"
 NOT_GLYPH: Final[str] = "\N{NOT SIGN}"
 
+#: The saturating operations, which answer with the nearest value their type can
+#: hold rather than going past it.  Each is the sign of the operation it is built
+#: from, in a box: what the box says is that the answer stays inside something.
+SAT_ADD_GLYPH: Final[str] = "\N{SQUARED PLUS}"
+SAT_SUB_GLYPH: Final[str] = "\N{SQUARED MINUS}"
+SAT_MUL_GLYPH: Final[str] = "\N{SQUARED TIMES}"
+
 #: Accepted substitute for the arrow.  Two characters, so it claims nothing.
 ARROW_ASCII: Final[str] = "->"
 
@@ -118,6 +125,10 @@ class TokKind(StrEnum):
     LOGIC_NAND = "'\N{NAND}'"
     LOGIC_NOR = "'\N{NOR}'"
     LOGIC_NOT = "'\N{NOT SIGN}'"
+
+    SAT_ADD = "'\N{SQUARED PLUS}'"
+    SAT_SUB = "'\N{SQUARED MINUS}'"
+    SAT_MUL = "'\N{SQUARED TIMES}'"
 
     DOC_COMMENT = "documentation comment"
     NEWLINE = "end of line"

@@ -86,7 +86,8 @@ GROUPS: tuple[Group, ...] = (
            "bitwise-precedence": "an expression the folder collapses entirely",
            "comparison-operators": "all six comparisons, none of them folded",
            "logic-operators": "all six logical operators, none of them folded",
-           "logic-short-circuit": "three short circuits, which is six blocks"}),
+           "logic-short-circuit": "three short circuits, which is six blocks",
+           "saturating-precedence": "a sum and a product that saturate"}),
 )
 
 #: How many times each sample is compiled.  The best is kept.

@@ -432,6 +432,10 @@ AARCH64_INSTRS: Final[tuple[A64InstDesc, ...]] = (
                 fields=(_reg_field(0, _RD), _reg_field(1, _RN),
                         _reg_field(2, _RM)),
                 implicit_uses=(NZCV,), est_size=INSTRUCTION_SIZE),
+    # sxtw Xd, Wn   is  sbfm Xd, Xn, 0, 31
+    A64InstDesc("sxtw", (_r(64), _r(32)), template=0x93407C00,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN)),
+                est_size=INSTRUCTION_SIZE),
     # cbnz Wt, label
     A64InstDesc("cbnz", (_r(32), _sym()), template=0x35000000,
                 fields=(_reg_field(0, _RD),

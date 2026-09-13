@@ -162,6 +162,8 @@ operator binds as tightly as the table below says: a tighter one takes its opera
 | Operator | Meaning | Binds |
 |---|---|---|
 | `~` `¬` | complement, written before its operand | tightest |
+| `⊠` | saturating multiplication | |
+| `⊞` `⊟` | saturating addition and subtraction | |
 | `&` | bitwise and | |
 | `^` | bitwise exclusive or | |
 | `|` | bitwise or | |
@@ -183,6 +185,33 @@ where `&` on two conditions is legal and usually a mistake, is the example not f
 The relative binding of the three is the one C settled on and Rust, Go and Zig kept, so that a reader coming from any of them reads
 these the same way.  C's choice of making them bind *looser* than comparison is a famous defect, which this language does not
 inherit: the comparisons bind looser than the bitwise operators, so `a & b = c` reads as `(a & b) = c`.
+
+#### Saturating arithmetic
+
+Three operators compute a sum, a difference and a product that **answer with the nearest value the type can hold** rather than
+going past it.
+
+| Operator | Meaning |
+|---|---|
+| `⊞` | saturating addition |
+| `⊟` | saturating subtraction |
+| `⊠` | saturating multiplication |
+
+Each is the sign of the operation it is built from, in a box; what the box says is that the answer stays inside something.  So
+`200u8 ⊞ 100u8` is 255 and not 44, and `5u8 ⊟ 9u8` is 0 and not 65532.  Both operands have the same type, as everywhere, and
+the result has it too.  They are defined on integers.
+
+**These are the operations for which going past the end is the intended answer.**  The ordinary `+`, `-` and `×` fault when a
+result does not fit, which is the right answer where a result that does not fit is a mistake; these are for the places where it
+is not -- a counter that stops at its maximum, a difference that stops at zero.  A language with only the first kind makes the
+second kind be written as three statements and a comparison, and one with only the second makes every mistake silent.
+
+Multiplication binds tighter than addition, as it does in writing, and all three bind tighter than the bitwise operators.  That
+last is C's order too, and the one place C's order of operations was not a mistake.
+
+Compare Rust, which has `saturating_add` and its relatives as methods and no operators; Zig, which has `+|`, `-|` and `*|`; and C
+and Go, which have neither and leave it to be written out.  Zig's position is the one taken here -- that these are common enough
+to deserve a notation -- with glyphs instead of punctuation pairs, for the reason every glyph in this language is a glyph.
 
 #### Comparisons
 

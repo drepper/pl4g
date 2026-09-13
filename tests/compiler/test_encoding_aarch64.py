@@ -132,6 +132,7 @@ SAMPLES = [
      MCReg(reg("x2"))),
     ("csel x0, x1, x2, hs", "csel.hs", MCReg(reg("x0")), MCReg(reg("x1")),
      MCReg(reg("x2"))),
+    ("sxtw x0, w1", "sxtw", MCReg(reg("x0")), MCReg(reg("w1"))),
     ("b .", "b", MCSymRef(SymExpr(MCSymbol("s")))),
     ("b.eq .", "b.eq", MCSymRef(SymExpr(MCSymbol("s")))),
     ("b.ne .", "b.ne", MCSymRef(SymExpr(MCSymbol("s")))),

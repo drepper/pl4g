@@ -24,6 +24,7 @@ from ...source.location import Span
 from ..branches import (UnsupportedBranch, folded_into_branch, labels_of,
                         lower_branch, lower_comparison)
 from ..narrow import normalize
+from ..saturate import SATURATING, Unsupported, lower_saturating
 from . import ops as rvops
 from .opcodes import IMM12_MAX, IMM12_MIN, RISCV_INSTRS
 from .regs import GPR, INFO, SP, ZERO
@@ -371,6 +372,40 @@ class RVSelector(InstructionSelector):
             held.append(self._inst("xori", (answer, answer, MCImm(1, 12)), span))
         return tuple(held)
 
+    def select_widen(self, dst: Reg, src: MCOperand, bits: int, signed: bool,
+                     span: Span) -> Sequence[MCInst]:
+        """Instructions that put a *bits*-wide value into the whole of *dst*.
+
+        There is one register width here, so a value of any narrower type is
+        already the whole of one and this is a move.
+        """
+        del bits, signed
+        return self.select_move(dst, src, span)
+
+    def select_clamp(self, cond: Condition, dst: Reg, lhs: MCOperand, rhs: MCOperand,
+                     bound: MCOperand, span: Span) -> Sequence[MCInst]:
+        """Instructions that put *bound* into *dst* where the two stand in *cond*.
+
+        There is nothing here that moves a register only sometimes, so the
+        answer is built as a number and used as a mask: one or zero, taken from
+        zero to give all ones or none, and the difference between the two values
+        let through it.  Five instructions where the other two need one, and no
+        branch, which is what makes it worth doing this way rather than jumping
+        over a move.
+        """
+        held: list[MCInst] = []
+        flag = INFO.new_virtual(GPR, 64)
+        held.extend(self.select_set(cond, flag, lhs, rhs, span))
+        mask = MCReg(flag)
+        held.append(self._inst("sub", (mask, MCReg(ZERO), mask), span))
+        carried, before = self._as_register(bound, span)
+        held.extend(before)
+        difference = MCReg(INFO.new_virtual(GPR, 64))
+        held.append(self._inst("xor", (difference, MCReg(dst), carried), span))
+        held.append(self._inst("and", (difference, difference, mask), span))
+        held.append(self._inst("xor", (MCReg(dst), MCReg(dst), difference), span))
+        return tuple(held)
+
     def _as_register(self, operand: MCOperand,
                      span: Span) -> tuple[MCReg, Sequence[MCInst]]:
         """The operand as a register, with whatever it takes to put it in one."""
@@ -468,6 +503,10 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
                                            None)
             return found
 
+        def scratch(self) -> VirtReg:
+            """A register of the full width, for a value with no name of its own."""
+            return registers.new_virtual(GPR, 64)
+
     operands = _Operands()
 
     # Every block parameter gets its register before any block is walked: a
@@ -544,6 +583,22 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
                         asm.loadreg(result, MCReg(_value_of(value, held, span)),
                                     inst.span)
                     asm.ret(inst.span)
+                case BinaryInst() if inst.op in SATURATING:
+                    destination = _new_value(
+                        inst.ty, registers,
+                        hint=(_result_register(inst.ty, cconv, registers)
+                              if inst is returned else None))
+                    held[id(inst)] = destination
+                    try:
+                        lower_saturating(
+                            asm, inst.op, inst.ty,
+                            operands.value(inst.operands[0], inst.span),
+                            operands.value(inst.operands[1], inst.span),
+                            destination, operands, 64,
+                            inst.span)
+                    except Unsupported as unsupported:
+                        raise UnsupportedOperation(unsupported.what, span) \
+                            from unsupported
                 case BinaryInst():
                     operation = _OPERATIONS.get(inst.op)
                     if operation is None:

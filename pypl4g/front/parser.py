@@ -58,6 +58,11 @@ class _Operator:
 #: comparisons bind looser than all of them, which is where C put them wrongly
 #: and where every language since has put them: `a & b = c` asks about `a & b`,
 #: not about `b = c`.
+#:
+#: The **arithmetic** binds tightest of all, multiplication tighter than
+#: addition, as it does everywhere and as it does in writing.  It is tighter
+#: than the bitwise operators, which is C's order too and the one place C's
+#: order was not a mistake.
 _BINARY_OPERATORS: Final[dict[TokKind, _Operator]] = {
     TokKind.LOGIC_OR: _Operator(ast.BinaryOp.LOGIC_OR, 1),
     TokKind.KW_OR: _Operator(ast.BinaryOp.SHORT_OR, 1),
@@ -76,6 +81,9 @@ _BINARY_OPERATORS: Final[dict[TokKind, _Operator]] = {
     TokKind.PIPE: _Operator(ast.BinaryOp.BIT_OR, 10),
     TokKind.CARET: _Operator(ast.BinaryOp.BIT_XOR, 20),
     TokKind.AMPERSAND: _Operator(ast.BinaryOp.BIT_AND, 30),
+    TokKind.SAT_ADD: _Operator(ast.BinaryOp.SAT_ADD, 40),
+    TokKind.SAT_SUB: _Operator(ast.BinaryOp.SAT_SUB, 40),
+    TokKind.SAT_MUL: _Operator(ast.BinaryOp.SAT_MUL, 50),
 }
 
 #: What may stand before an operand.  These bind tighter than anything above.

@@ -72,6 +72,11 @@ To Do List for the pypl4g compiler
     same entry covers a branch handing a block its own parameters rearranged, which needs a temporary the way any parallel copy
     does.
 
+[ ] let an operand require a particular register, so that an instruction with a fixed register pair can be used.  x86-64 needs
+    it for the one-operand multiply, which is the only way to see the upper half of a product there, and for division, which
+    writes its quotient and remainder to a fixed pair.  Until then a saturating multiplication of the widest type is refused on
+    every target rather than on the one that cannot do it, so that a program means the same thing wherever it is compiled.
+
 [ ] lower `SwitchInst`.  It exists in the representation and nothing generates one, since the language has no construct that would.
     A chain of comparisons is correct and is what a first version should do; a jump table wants the relocation work that
     position-independent code needs anyway.

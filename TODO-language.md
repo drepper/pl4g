@@ -160,9 +160,14 @@ To Do List for the PL4g language
     since the three architectures disagree and leaving it to the hardware would be exactly the kind of surprise the language
     refuses.
 
-[ ] implement saturated operations.  Use `⊞` for saturated addition, `⊟` for saturated subtraction, `⊠` for saturated multiplication.
-    Needs conditional branches as well as the parser and the allocator, since saturating is choosing between the result and the
-    bound.  These are the operations that do not trap, so they are what a program uses where an overflow is meant.
+[x] implement saturated operations.  Done: `⊞`, `⊟` and `⊠`, binding tighter than the bitwise operators with
+    multiplication tighter than addition.  A type narrower than its register is computed as it stands, the answer being exact,
+    and compared with the two ends of the type; a thirty-two bit type on the two architectures with thirty-two bit registers has
+    its operands widened first; a type as wide as the widest register is allowed to wrap and the wrapped answer is asked what
+    happened.  No branch is needed anywhere: the clamp is a conditional move on two targets and a mask on the third.
+    One case is refused rather than guessed (8501): a saturating multiplication of `u64` or `i64`, which needs the upper half of
+    the product.  That is one instruction on AArch64 and RISC-V and on x86-64 only in a form with a fixed pair of registers, so
+    it waits on fixed-register operands in the allocator -- the same thing division will need.
 
 [x] implement exact comparisons, defined for numbers, strings, booleans.  Done for numbers and truth values: `=`, `≠`, `<`,
     `>`, `≤`, `≥`, with `<=` and `>=` accepted for the last two.  All six share one level, bind looser

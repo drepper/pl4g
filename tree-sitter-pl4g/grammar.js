@@ -220,22 +220,28 @@ module.exports = grammar({
       field('right', $._non_comparison),
     ),
 
+    // The arithmetic binds tighter than the bitwise operators, multiplication
+    // tighter than addition -- the order of writing, and the one place C's
+    // order of operations was not a mistake.
     binary_expression: $ => choice(
       prec.left(4, seq($._non_comparison, field('operator', '|'), $._non_comparison)),
       prec.left(5, seq($._non_comparison, field('operator', '^'), $._non_comparison)),
       prec.left(6, seq($._non_comparison, field('operator', '&'), $._non_comparison)),
+      prec.left(7, seq($._non_comparison,
+                       field('operator', choice('\u229e', '\u229f')), $._non_comparison)),
+      prec.left(8, seq($._non_comparison, field('operator', '\u22a0'), $._non_comparison)),
     ),
 
     // Both bind tighter than every operator written between two operands, so
     // `\u00ac ready \u2227 seen` is `(\u00ac ready) \u2227 seen` and `\u00ac (a < b)` needs its parentheses --
     // the same rule '!' follows in C, Go and Rust.
-    unary_expression: $ => prec(7, seq(
+    unary_expression: $ => prec(9, seq(
       field('operator', choice('~', '\u00ac')), $._non_comparison,
     )),
 
     // Something named through the module it belongs to, which binds tighter
     // than any operator: `a.b & c` is `(a.b) & c`.
-    member_expression: $ => prec(8, seq(
+    member_expression: $ => prec(10, seq(
       field('base', $._non_comparison), '.', field('name', $.identifier),
     )),
 

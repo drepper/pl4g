@@ -1583,6 +1583,59 @@ that describes what is missing decays, where one that describes what is wanted d
 
 ---
 
+## 2026-09-14T02:10+02:00 — language and compiler
+
+**Saturating arithmetic: `⊞` `⊟` `⊠`, and the three shapes a saturating operation takes**
+
+The first arithmetic the language has.  These are the operations for which going past the end is the intended answer, which is
+why they come before `+`, `-` and `×`: those fault, and faulting needs an unwinder that does not exist yet.
+
+**The notation.**  Each is the sign of the operation it is built from, in a box, the box saying that the answer stays inside
+something.  Zig has `+|`, `-|` and `*|`; Rust has `saturating_add` and its relatives as methods and no operator at all; C and Go
+have neither.  Zig's position is taken -- that these are common enough to deserve a notation -- with glyphs rather than
+punctuation pairs, for the reason every glyph here is a glyph.  Multiplication binds tighter than addition and all three bind
+tighter than the bitwise operators, which is C's order and the one place C's order of operations was not a mistake.
+
+**How it is done, which turned on a question the compiler had not had to answer before.**  Saturating means computing the answer
+and bringing it back to the ends of the type, and computing it means knowing what an operation on a value narrower than its
+register produces.  That question -- what a narrow value looks like in a wide register -- had never had to be settled, because
+nothing had ever read one at a different width from the one it was computed at.
+
+The answer taken is the one the compiler already half had: **a value is correct in the register it is held in, and says nothing
+about what is above that.**  A `u8` lives in a thirty-two bit register on two of the targets and a sixty-four bit one on the
+third, correct to that width.  It is not "always sign-extended to sixty-four bits", which was the other candidate: that one would
+make every narrow operation cost an extension, where this one costs nothing and needs a widening only where an operation is
+computed at a width other than its own.
+
+From that the three shapes follow.  A type **narrower than its register** is computed as it stands and the answer is exact, two
+values under 2^31 being unable to make a sum, a difference or a product a register cannot hold; so saturating it is two
+comparisons.  A type **as wide as its register but not as the widest** -- a thirty-two bit type on x86-64 and AArch64 -- has its
+operands widened into whole registers first, one instruction each and none at all on RISC-V, and is then the first case.  A type
+**as wide as the widest register** has nowhere wider to go, so it is allowed to wrap and the wrapped answer is asked what
+happened: a sum below what it was given has carried, a difference asked of too small a number had the smaller on the left, and a
+sum of two numbers of one sign that comes out with the other has gone past that end.
+
+**No branch anywhere.**  The clamp is a conditional move on x86-64 and AArch64 and, on RISC-V which has neither, the answer built
+as a number and used as a mask: one or zero, taken from zero to give all ones or none, and the difference between the two values
+let through it.  Five instructions rather than one, and no branch, which is worth more than the four instructions.
+
+**One case refused rather than guessed.**  A saturating multiplication of `u64` or `i64` needs the upper half of the product.
+AArch64 has `umulh`/`smulh` and RISC-V `mulhu`/`mulh`, each one instruction; x86-64 has it only in the form that writes a fixed
+pair of registers, which the allocator cannot yet be told about.  It is refused on **every** target rather than on the one that
+cannot do it, so that a program means the same thing wherever it is compiled -- and the to-do entry names what it waits on, which
+division will want as well.
+
+**Three defects found by the tests.**  All three were silent wrong answers, and all three needed a value to be read at a width
+other than the one it was written at, which nothing had done before.  An immediate narrower than the register it was moved into
+was sign-extended, so `0xFFFFFFFF` became minus one.  A constant put in a register to stand beside an operation's other operands
+was given thirty-two bits whatever they had.  And a comparison whose constant had to be carried in a register compared at
+sixty-four bits, which is wrong for a value that is only correct at thirty-two.
+
+Every case in the table is compiled and run: the program computes the operation, compares the answer with the one written down,
+and exits with whether they agree.  Fifty-one cases, three architectures.
+
+---
+
 ---
 
 Open questions

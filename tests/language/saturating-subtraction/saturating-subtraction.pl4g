@@ -1,0 +1,11 @@
+※ pl4g-test: compile=ok run=native,qemu exit=0 diag=none
+
+※ Nothing below zero for an unsigned type: 5 ⊟ 9 is 0 and not a very large
+※ number, which is what a subtraction that wrapped would give.
+
+let five: u8 = 5u8
+let nine: u8 = 9u8
+
+@[startup]
+fn main() → u8:
+    five ⊟ nine

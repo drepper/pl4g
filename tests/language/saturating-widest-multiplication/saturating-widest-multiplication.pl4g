@@ -1,0 +1,18 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 8501 IMPL_BACKEND_UNSUPPORTED
+
+※ Seeing that a product of two whole registers went past the end needs the
+※ upper half of it, which two of the three architectures have as a single
+※ instruction and the third has only in a form with a fixed pair of registers.
+※ Refused on every target, so that a program means the same thing wherever it
+※ is compiled.
+
+let big: u64 = 4294967296u64
+
+@[visible]
+let answer: mut u64 = 0u64
+
+@[startup]
+fn main() → u8:
+    answer ← big ⊠ big
+    0u8

@@ -1,0 +1,9 @@
+※ pl4g-test: compile=ok run=native,qemu exit=100 diag=none
+
+※ A product that fits is the product.  10 × 10 is 100, which a u8 holds.
+
+let ten: u8 = 10u8
+
+@[startup]
+fn main() → u8:
+    ten ⊠ ten

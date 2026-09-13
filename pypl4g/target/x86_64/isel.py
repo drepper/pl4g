@@ -21,6 +21,7 @@ from ...source.location import Span
 from ..branches import (UnsupportedBranch, folded_into_branch, labels_of,
                         lower_branch, lower_comparison)
 from ..narrow import normalize
+from ..saturate import SATURATING, Unsupported, lower_saturating
 
 if TYPE_CHECKING:
     from ...mc.reg import PhysReg
@@ -67,6 +68,16 @@ _SET: Final[dict[Condition, str]] = {
     Condition.SGT: "setg", Condition.SGE: "setge",
     Condition.ULT: "setb", Condition.ULE: "setbe",
     Condition.UGT: "seta", Condition.UGE: "setae",
+}
+
+#: The conditional move that takes a bound, for each condition.  The condition
+#: is part of the opcode here as it is for the jumps and the sets above.
+_CMOV: Final[dict[Condition, str]] = {
+    Condition.EQ: "cmove", Condition.NE: "cmovne",
+    Condition.SLT: "cmovl", Condition.SLE: "cmovle",
+    Condition.SGT: "cmovg", Condition.SGE: "cmovge",
+    Condition.ULT: "cmovb", Condition.ULE: "cmovbe",
+    Condition.UGT: "cmova", Condition.UGE: "cmovae",
 }
 
 #: Operations that map to a single instruction with no operands.
@@ -130,7 +141,7 @@ class X86Selector(InstructionSelector):
         # flags.  Selection always emits the form that is valid everywhere; the
         # peephole pass substitutes the shorter one where it has checked that
         # the flags are dead.
-        return (self._inst("mov", (MCReg(dst), src), span),)
+        return (self._inst("mov", (MCReg(dst), _carried(src, dst.bits)), span),)
 
     def _select_load(self, dst: Reg, src: MCMem, span: Span) -> Sequence[MCInst]:
         """Instructions that read memory into a register.
@@ -167,7 +178,7 @@ class X86Selector(InstructionSelector):
             if not isinstance(operand, MCImm):
                 rewritten.append(operand)
                 continue
-            carried = REGISTERS.new_virtual(GPR, 32)
+            carried = REGISTERS.new_virtual(GPR, _operand_width(operands))
             before.extend(self.select_move(carried, operand, span))
             rewritten.append(MCReg(carried))
         return before, rewritten
@@ -211,7 +222,8 @@ class X86Selector(InstructionSelector):
         before: list[MCInst] = []
         left = sources[0]
         if isinstance(left, MCImm):
-            carried = REGISTERS.new_virtual(GPR, 32)
+            carried = REGISTERS.new_virtual(
+                GPR, _operand_width((MCReg(dst), *sources)))
             before.extend(self.select_move(carried, left, span))
             left = MCReg(carried)
         after, ready = self._accepting(mnemonic, (MCReg(dst), sources[1]), span)
@@ -299,6 +311,45 @@ class X86Selector(InstructionSelector):
                 self._inst(_SET[cond], (low,), span),
                 self._inst("movzx", (MCReg(dst, bits=32), low), span))
 
+    def select_widen(self, dst: Reg, src: MCOperand, bits: int, signed: bool,
+                     span: Span) -> Sequence[MCInst]:
+        """Instructions that put a *bits*-wide value into the whole of *dst*.
+
+        Writing a four-byte register clears the four above it, so widening an
+        unsigned value is an ordinary move and costs nothing beyond it.  A
+        signed one has an instruction of its own.
+        """
+        if bits >= 64:
+            return self.select_move(dst, src, span)
+        if not isinstance(src, MCReg):
+            return self.select_move(dst, src, span)
+        if not signed:
+            return (self._inst("mov", (MCReg(dst, bits=32),
+                                       MCReg(src.reg, bits=32)), span),)
+        mnemonic = "movsxd" if bits == 32 else "movsx"
+        return (self._inst(mnemonic, (MCReg(dst, bits=64),
+                                      MCReg(src.reg, bits=bits)), span),)
+
+    def select_clamp(self, cond: Condition, dst: Reg, lhs: MCOperand, rhs: MCOperand,
+                     bound: MCOperand, span: Span) -> Sequence[MCInst]:
+        """Instructions that put *bound* into *dst* where the two stand in *cond*.
+
+        The conditional move reads a register or memory and this only ever hands
+        it a register, so a bound that arrives as a constant is built first.  It
+        moves the whole eight bytes, which is right for a value of any width:
+        what is above the value is its own zeroes or its own sign.
+        """
+        if isinstance(lhs, MCImm) and not isinstance(rhs, MCImm):
+            lhs, rhs, cond = rhs, lhs, cond.swapped()
+        before: list[MCInst] = []
+        if not isinstance(bound, MCReg):
+            carried = REGISTERS.new_virtual(GPR, 64)
+            before.extend(self.select_move(carried, bound, span))
+            bound = MCReg(carried)
+        return (*before, *self._select_compare(lhs, rhs, cond, span),
+                self._inst(_CMOV[cond], (MCReg(dst, bits=64),
+                                         MCReg(bound.reg, bits=64)), span))
+
     def _select_compare(self, lhs: MCOperand, rhs: MCOperand, cond: Condition,
                         span: Span) -> Sequence[MCInst]:
         """The instructions that set the flags for a comparison.
@@ -316,13 +367,13 @@ class X86Selector(InstructionSelector):
             try:
                 self.table.select("cmp", (lhs, rhs))
             except SelectionError:
-                # The comparison is made at the full width of the register, which
-                # is what the two operands have to agree on.  That is right
-                # whatever the type: a value narrower than its register carries
-                # its own zeroes or its own sign above itself.
-                carried = REGISTERS.new_virtual(GPR, 64)
+                # The two operands have to be the same width, and the width
+                # is the left one's: a value is correct in the register it is
+                # held in and says nothing about what is above that.
+                width = lhs.reg.bits if isinstance(lhs, MCReg) else 64
+                carried = REGISTERS.new_virtual(GPR, width)
                 return (*self.select_move(carried, rhs, span),
-                        self._inst("cmp", (_whole(lhs), MCReg(carried)), span))
+                        self._inst("cmp", (lhs, MCReg(carried)), span))
         return (self._inst("cmp", (lhs, rhs), span),)
 
     # -- the stack -------------------------------------------------------------
@@ -422,6 +473,10 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
                                            None)
             return found
 
+        def scratch(self) -> VirtReg:
+            """A register of the full width, for a value with no name of its own."""
+            return registers.new_virtual(GPR, 64)
+
     operands = _Operands()
 
     # Every block parameter gets its register before any block is walked: a
@@ -498,6 +553,22 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
                         asm.loadreg(result, MCReg(_value_of(value, held, span)),
                                     inst.span)
                     asm.ret(inst.span)
+                case BinaryInst() if inst.op in SATURATING:
+                    destination = _new_value(
+                        inst.ty, registers,
+                        hint=(_result_register(inst.ty, cconv, registers)
+                              if inst is returned else None))
+                    held[id(inst)] = destination
+                    try:
+                        lower_saturating(
+                            asm, inst.op, inst.ty,
+                            operands.value(inst.operands[0], inst.span),
+                            operands.value(inst.operands[1], inst.span),
+                            destination, operands, max(32, _width_of(inst.ty)),
+                            inst.span)
+                    except Unsupported as unsupported:
+                        raise UnsupportedOperation(unsupported.what, span) \
+                            from unsupported
                 case BinaryInst():
                     operation = _OPERATIONS.get(inst.op)
                     if operation is None:
@@ -671,6 +742,36 @@ def _immediate_width(value: int, signed: bool, width: int = 64) -> int:
 
 
 
+def _carried(src: MCOperand, into: int) -> MCOperand:
+    """*src*, declared wide enough that moving it into *into* bits says what it
+    means.
+
+    An immediate narrower than the register it is moved into is sign-extended,
+    so a value that does not read the same as a signed number of its declared
+    width has to be declared wider before it is moved -- otherwise the four
+    bytes of `0xFFFFFFFF` become eight bytes of minus one.
+    """
+    if not isinstance(src, MCImm) or src.bits >= into:
+        return src
+    if -(1 << (src.bits - 1)) <= src.value < (1 << (src.bits - 1)):
+        return src
+    return MCImm(src.value, into, signed=src.signed)
+
+
 def _whole(operand: MCOperand) -> MCOperand:
     """*operand* naming the whole of the register it is in, where it is one."""
     return MCReg(operand.reg, bits=64) if isinstance(operand, MCReg) else operand
+
+
+def _operand_width(operands: "Sequence[MCOperand]") -> int:
+    """How wide a register holding one of these operands has to be.
+
+    An instruction's register operands are all of one width, so a constant put
+    into a register beside them has to be of that width too; thirty-two is the
+    answer where there is nothing to take it from, that being the narrowest an
+    operation here is ever done at.
+    """
+    for operand in operands:
+        if isinstance(operand, MCReg):
+            return operand.bits if operand.bits is not None else operand.reg.bits
+    return 32

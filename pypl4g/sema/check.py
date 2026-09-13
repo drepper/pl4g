@@ -152,6 +152,9 @@ _BINARY_OPS: Final[dict[ast.BinaryOp, BinOp]] = {
     ast.BinaryOp.BIT_AND: BinOp.AND,
     ast.BinaryOp.BIT_OR: BinOp.OR,
     ast.BinaryOp.BIT_XOR: BinOp.XOR,
+    ast.BinaryOp.SAT_ADD: BinOp.SAT_ADD,
+    ast.BinaryOp.SAT_SUB: BinOp.SAT_SUB,
+    ast.BinaryOp.SAT_MUL: BinOp.SAT_MUL,
 }
 
 _UNARY_OPS: Final[dict[ast.UnaryOp, UnOp]] = {

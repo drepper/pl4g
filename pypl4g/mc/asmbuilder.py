@@ -100,6 +100,28 @@ class InstructionSelector(Protocol):
         """
         ...
 
+    def select_widen(self, dst: Reg, src: MCOperand, bits: int, signed: bool,
+                     span: Span) -> Sequence[MCInst]:
+        """Instructions that put a *bits*-wide value into the whole of *dst*,
+        filling what is above it with zeroes or with its sign.
+
+        What it costs differs: an architecture with only one register width has
+        the value there already, and one with narrow views has an instruction
+        for it or, for the unsigned case, a move that clears the rest.
+        """
+        ...
+
+    def select_clamp(self, cond: Condition, dst: Reg, lhs: MCOperand, rhs: MCOperand,
+                     bound: MCOperand, span: Span) -> Sequence[MCInst]:
+        """Instructions that put *bound* into *dst* where *lhs* and *rhs* stand
+        in *cond*, and leave what *dst* holds where they do not.
+
+        One call, like the two above, and for the same reason: two of these
+        architectures test into flags and read them back, and the third has no
+        flags and has to build the answer and use it as a mask.
+        """
+        ...
+
     def select_set(self, cond: Condition, dst: Reg, lhs: MCOperand, rhs: MCOperand,
                    span: Span) -> Sequence[MCInst]:
         """Instructions that put one into *dst* when *lhs* and *rhs* stand in
@@ -365,6 +387,20 @@ class Assembler:
         exactly that, so the representation is not a choice being made here.
         """
         self._emit(self._selector.select_set(cond, dst, lhs, rhs, span))
+
+    def widen(self, dst: Reg, src: MCOperand, bits: int, signed: bool,
+              span: Span = INVALID_SPAN) -> None:
+        """Put a *bits*-wide value into the whole of *dst*."""
+        self._emit(self._selector.select_widen(dst, src, bits, signed, span))
+
+    def clamp(self, cond: Condition, dst: Reg, lhs: MCOperand, rhs: MCOperand,
+              bound: MCOperand, span: Span = INVALID_SPAN) -> None:
+        """Put *bound* into *dst* where *lhs* and *rhs* stand in *cond*.
+
+        The one thing every saturating operation is made of: a value has been
+        computed and a bound replaces it where it went past.
+        """
+        self._emit(self._selector.select_clamp(cond, dst, lhs, rhs, bound, span))
 
     def falls_through(self, target: str) -> None:
         """Record an edge control takes by simply going on to the next block.

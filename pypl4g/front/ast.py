@@ -152,6 +152,10 @@ class BinaryOp(StrEnum):
     SHORT_AND = "and"
     SHORT_OR = "or"
 
+    SAT_ADD = "\N{SQUARED PLUS}"
+    SAT_SUB = "\N{SQUARED MINUS}"
+    SAT_MUL = "\N{SQUARED TIMES}"
+
 
 class UnaryOp(StrEnum):
     """An operator written before its operand."""

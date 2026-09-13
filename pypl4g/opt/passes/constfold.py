@@ -32,10 +32,16 @@ _COMPARISONS = {
     CmpPred.UGE: lambda a, b: a >= b,
 }
 
+#: The operations that clamp rather than going past the ends of their type.
+_SATURATING = frozenset((BinOp.SAT_ADD, BinOp.SAT_SUB, BinOp.SAT_MUL))
+
 _FOLDERS = {
     BinOp.ADD: lambda a, b: a + b,
     BinOp.SUB: lambda a, b: a - b,
     BinOp.MUL: lambda a, b: a * b,
+    BinOp.SAT_ADD: lambda a, b: a + b,
+    BinOp.SAT_SUB: lambda a, b: a - b,
+    BinOp.SAT_MUL: lambda a, b: a * b,
     BinOp.AND: lambda a, b: a & b,
     BinOp.OR: lambda a, b: a | b,
     BinOp.XOR: lambda a, b: a ^ b,
@@ -97,7 +103,12 @@ class ConstantFolding:
         if not isinstance(ty, IntType):
             return None
         value = folder(lhs.value, rhs.value)
-        if not ty.holds(value):
+        if inst.op in _SATURATING:
+            # These do not go past the ends of their type, so an answer outside
+            # it is the end it went past and not a reason to leave the operation
+            # standing.
+            value = max(ty.low, min(ty.high, value))
+        elif not ty.holds(value):
             return None
         return module.int_const(ty, value)
 
