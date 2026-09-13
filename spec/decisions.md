@@ -1844,6 +1844,43 @@ what says the two were unordered; on AArch64 `fsub`, `fcmp` and `b.eq`, unordere
 off the sign and comparing with the largest finite value, which needs a constant in the image and one more instruction to reach
 it.
 
+## 2026-09-14T16:00+02:00 — language and compiler
+
+**The approximate comparisons, and `⎕tolerance`, which is the first name the compiler provides**
+
+Decided on the user's direction that the approximate comparisons come with the floating-point types and that the tolerance is a
+global variable for now.  Six operators, `≅ ≇ ⪅ ⪆ ⪉ ⪊`, each of the exact comparisons with the question asked of the tolerance
+rather than of the values; the table in TODO-language.md is what they mean and is now in the specification.  None has an ASCII
+substitute, there being no ASCII spelling of "approximate" that is not read as something else.
+
+Each of the six lowers to a subtraction, a read of the tolerance and one ordinary comparison, with the magnitude in between for
+the two that ask about likeness in either direction.  The two strict ones are the loose ones with the operands exchanged and the
+answer turned round, which is why there are three shapes and not six.  Where the operands are `f32` the difference is computed in
+`f32` and widened to `f64` to be measured -- one instruction, and the same answer as widening both operands first, which would be
+two.
+
+**`⎕tolerance` is the first name the compiler provides**, and the glyph is the decision worth recording.  A name beginning with
+`⎕` is the compiler's; a program may read and assign the ones that exist and may not define one (4219).  So the compiler can add
+another later without taking a name away from a program written before it existed -- the problem every language has that puts its
+own names in a program's namespace, and which C answers with a reserved-identifier rule that nothing enforces, Rust with `std::`
+and a prelude that can still be shadowed, and Go with predeclared identifiers that a program *may* shadow, quietly.
+
+Considered: a plain name like `tolerance`, which collides; a reserved word, which is a name taken away from every program that had
+it; a builtin module, which needs an import for one number and makes the tolerance a thing that might not be there.  The quad is
+APL's own arrangement, and `⎕CT` is the variable this one is modelled on.
+
+**The tolerance is absolute and not relative.**  APL's `⎕CT` is relative: two values are alike when they differ by less than `⎕CT`
+times the larger of them, which is the better rule for values of widely differing size and costs a multiplication and a magnitude
+more.  Absolute is what was decided when floating point was sized -- "a load, a subtraction, an absolute value and one ordinary
+comparison" -- and the question of whether to change it is in the to-do list rather than settled here.  The default, 10⁻¹³, is
+APL's.
+
+**Three things it needed underneath.**  A `FABS` in the representation, which is one instruction on two targets and an `and` with
+a mask out of the constant pool on the third, nothing there clearing one bit of a vector register.  A `CastKind.FEXT`, the first
+conversion the compiler emits, which every wider floating-point format holds exactly so there is nothing to check.  And a fix in
+the lexer, which had been stepping over the first character of a name only because every character that could begin one could also
+continue one.
+
 ---
 
 ---

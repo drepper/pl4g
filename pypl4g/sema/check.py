@@ -12,8 +12,9 @@ from typing import Callable, Final, Sequence
 from ..diag import ids as D
 from ..diag.engine import DiagEngine, Expectation
 from ..front import ast
+from ..front.token import BUILTIN_GLYPH, TOLERANCE_DEFAULT, TOLERANCE_NAME
 from ..ir.builder import IRBuilder
-from ..ir.inst import BinOp, CmpPred, Instruction, UnOp
+from ..ir.inst import BinOp, CastKind, CmpPred, Instruction, UnOp
 from ..ir.function import (FuncAttrs, Function, InlineHint, Linkage, SpecialKind)
 from ..ir.module import GlobalVar, Module
 from ..ir.types import (BOOL, BUILTIN_TYPES, ERROR, F64, FloatType, IntType,
@@ -159,6 +160,26 @@ _ORDERINGS: Final[frozenset[ast.BinaryOp]] = frozenset((
     ast.BinaryOp.LESS, ast.BinaryOp.GREATER,
     ast.BinaryOp.LESS_EQUAL, ast.BinaryOp.GREATER_EQUAL))
 
+#: The approximate comparisons, and how each is asked.  Every one of them is a
+#: subtraction, a comparison of what came of it against the tolerance, and for
+#: two of them the magnitude in between: the first field says which way round
+#: the subtraction goes, the second whether the magnitude is taken, and the
+#: third which question is asked of the tolerance.
+#:
+#: `a ≅ b` is |a-b| ≤ t, and `a ≇ b` is the same question answered the other
+#: way.  `a ⪅ b` is "below it or alike", which is a-b ≤ t with no magnitude: a
+#: that is far below b answers a large negative difference, which is below the
+#: tolerance as it should be.  `a ⪉ b` is "below it and not alike", which is that
+#: question turned round with the operands exchanged.
+_APPROXIMATE: Final[dict[ast.BinaryOp, tuple[bool, bool, CmpPred]]] = {
+    ast.BinaryOp.ALIKE: (False, True, CmpPred.SLE),
+    ast.BinaryOp.UNALIKE: (False, True, CmpPred.SGT),
+    ast.BinaryOp.BELOW_OR_ALIKE: (False, False, CmpPred.SLE),
+    ast.BinaryOp.ABOVE_OR_ALIKE: (True, False, CmpPred.SLE),
+    ast.BinaryOp.BELOW_NOT_ALIKE: (True, False, CmpPred.SGT),
+    ast.BinaryOp.ABOVE_NOT_ALIKE: (False, False, CmpPred.SGT),
+}
+
 #: The two comparisons that ask whether two values are the one value.  On a
 #: floating-point value that is a question worth warning about.
 _EXACT_ON_FLOATS: Final[frozenset[ast.BinaryOp]] = frozenset((
@@ -189,6 +210,34 @@ _ON_FLOATS: Final[frozenset[ast.BinaryOp]] = frozenset((
 _UNARY_OPS: Final[dict[ast.UnaryOp, UnOp]] = {
     ast.UnaryOp.BIT_NOT: UnOp.NOT,
 }
+
+
+#: What the tolerance is called in the image.  The name a program writes it by
+#: is not a name an assembler or a debugger would take, so the two differ; the
+#: one in the image says whose it is.
+TOLERANCE_SYMBOL: Final[str] = "__pl4g_tolerance"
+
+
+def _tolerance(module: Module) -> GlobalVar:
+    """The variable the approximate comparisons read, made once per module.
+
+    It is a variable and not a constant of the compiler because a program may
+    want another tolerance -- the right one depends on how far the numbers being
+    compared have travelled, which is the program's business and not the
+    language's.  APL's `⎕CT` is the same arrangement and the same default.
+
+    Every file of a compilation gets the same one: a program has one tolerance,
+    however many files it is written in.  A program that reads it nowhere drops
+    it along with everything else nothing reaches.
+    """
+    found = module.globals.get(TOLERANCE_NAME)
+    if isinstance(found, GlobalVar):
+        return found
+    return module.add_global(GlobalVar(
+        name=TOLERANCE_SYMBOL, value_type=F64,
+        ptr_type=module.types.ptr_type(F64, mutable=True),
+        initializer=module.float_const(F64, TOLERANCE_DEFAULT),
+        linkage=Linkage.INTERNAL), key=TOLERANCE_NAME)
 
 
 class Checker:
@@ -286,6 +335,19 @@ class Checker:
 
     # -- variables -------------------------------------------------------------
 
+    def _provided(self, name: str) -> object | None:
+        """What a name the compiler provides stands for, made on first ask.
+
+        On first ask rather than always, so that a program that never names one
+        carries nothing for it and its decision log says nothing about dropping
+        it.  There is one such name so far.
+        """
+        found = self._top.get(name)
+        if found is None and name == TOLERANCE_NAME:
+            found = _tolerance(self._module)
+            self._top[name] = found
+        return found
+
     def _key(self, name: str) -> str:
         """What a definition of this file is filed under.
 
@@ -299,6 +361,12 @@ class Checker:
 
     def _declare(self, name: str, span: Span, path: str = "") -> bool:
         """Record a top-level name, reporting one that is already taken."""
+        if name.startswith(BUILTIN_GLYPH):
+            # Not "already taken": the whole shape of name is the compiler's,
+            # so this is not a clash with one definition but a rule about the
+            # glyph, and saying so is what tells a reader what to do about it.
+            self._diags.emit(D.LANG_NAME_IS_THE_COMPILERS, span, name=name)
+            return False
         previous = self._defined.get(name)
         if previous is not None:
             self._diags.emit(D.LANG_FILESTRUCT_DUPLICATE_DEFINITION, span,
@@ -662,7 +730,7 @@ class Checker:
         if found is not None:
             found.read = True
             return found.value
-        found_global = self._top.get(ref.name)
+        found_global = self._provided(ref.name)
         if isinstance(found_global, GlobalVar):
             return found_global
         if isinstance(found_global, LoadedModule):
@@ -1171,7 +1239,7 @@ class Checker:
             local.value_span = node.span
             local.read = wants_value
             return value
-        target = self._top.get(node.name)
+        target = self._provided(node.name)
         if not isinstance(target, GlobalVar):
             target = None
         if target is None:
@@ -1271,6 +1339,8 @@ class Checker:
                 return self._lower_call(builder, expr, expected)
             case ast.NameRef():
                 return self._lower_name(builder, expr, expected)
+            case ast.Binary() if expr.op in _APPROXIMATE:
+                return self._lower_approximate(builder, expr, expected)
             case ast.Binary() if expr.op in _COMPARISONS:
                 return self._lower_comparison(builder, expr, expected)
             case ast.Binary() if expr.op in _LOGIC_OPS:
@@ -1338,6 +1408,66 @@ class Checker:
                                                        and ty.signed)
         return builder.compare(signed if signed_reading else unsigned,
                                left, right, expr.span)
+
+    def _lower_approximate(self, builder: IRBuilder, expr: ast.Binary,
+                           expected: Type | None) -> Value:
+        """Lower a comparison that allows for the errors floating point makes.
+
+        Each of the six is the difference between the two values measured
+        against the tolerance, which is a variable the program can set rather
+        than a number built into the compiler.  So the answer is a subtraction,
+        a read of that variable and one ordinary comparison -- and for the two
+        that ask about likeness in either direction, the magnitude in between.
+
+        The difference is computed in the type that was compared and then
+        widened to the tolerance's own, which every narrower format fits in
+        exactly.  Doing it that way round rather than widening both operands
+        first is one instruction instead of two and gives the same answer.
+        """
+        if expected is not None and expected is not BOOL:
+            self._report_mismatch(expr.span, BOOL, expected)
+            return UndefConst(ERROR)
+        context = self._hint_of(expr.left) or self._hint_of(expr.right)
+        outer, self._operand_of = self._operand_of, expr.op.value
+        try:
+            left = self._lower_expr(builder, expr.left, context)
+            ty = self._value_type_of(left)
+            if ty is not ERROR and not isinstance(ty, FloatType):
+                self._diags.emit(D.LANG_TYPE_APPROXIMATE_NEEDS_A_FLOAT,
+                                 expr.left.span, operator=expr.op.value,
+                                 found=ty.render())
+                ty = ERROR
+            right = self._lower_expr(builder, expr.right,
+                                     ty if ty is not ERROR else context)
+        finally:
+            self._operand_of = outer
+        found = self._value_type_of(right)
+        if ty is ERROR or found is ERROR:
+            return UndefConst(ERROR)
+        if not isinstance(found, FloatType):
+            self._diags.emit(D.LANG_TYPE_APPROXIMATE_NEEDS_A_FLOAT, expr.right.span,
+                             operator=expr.op.value, found=found.render())
+            return UndefConst(ERROR)
+        if found is not ty:
+            self._diags.emit(D.LANG_TYPE_OPERAND_MISMATCH, expr.right.span,
+                             operator=expr.op.value, expected=ty.render(),
+                             found=found.render())
+            return UndefConst(ERROR)
+        exchanged, magnitude, pred = _APPROXIMATE[expr.op]
+        first, second = (right, left) if exchanged else (left, right)
+        difference = builder.binary(BinOp.SUB, first, second, expr.span)
+        if magnitude:
+            difference = builder.unary(UnOp.FABS, difference, expr.span)
+        if ty is not F64:
+            difference = builder.cast(CastKind.FEXT, difference, F64, expr.span)
+        tolerance = builder.load(self._tolerance_variable(), expr.span)
+        return builder.compare(pred, difference, tolerance, expr.span)
+
+    def _tolerance_variable(self) -> GlobalVar:
+        """The variable the approximate comparisons measure against."""
+        found = self._provided(TOLERANCE_NAME)
+        assert isinstance(found, GlobalVar)
+        return found
 
     def _lower_logic(self, builder: IRBuilder, expr: ast.Binary,
                      expected: Type | None) -> Value:
@@ -1691,7 +1821,7 @@ class Checker:
         local = self._find_local(name)
         if local is not None:
             return self._value_type_of(local.value)
-        found = self._top.get(name)
+        found = self._provided(name)
         return (self._value_type_of(found) if isinstance(found, GlobalVar)
                 else None)
 

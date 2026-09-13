@@ -208,3 +208,58 @@ fn main() → bool:
           (comparison_expression
             left: (identifier)
             right: (identifier)))))))
+
+================================================================================
+The approximate comparisons, and a name the compiler provides
+================================================================================
+
+@[startup]
+fn main() → bool:
+    ⎕tolerance ← 1e-9f64
+    (a ≅ b) & (a ≇ b) & (a ⪅ b) & (a ⪆ b) & (a ⪉ b) & (a ⪊ b)
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_definition
+    (attribute_list
+      (attribute
+        name: (identifier)))
+    name: (identifier)
+    parameters: (parameter_list)
+    return_type: (type
+      (identifier))
+    body: (layout_block
+      (assignment
+        target: (identifier)
+        value: (float_literal))
+      (expression_statement
+        (binary_expression
+          (binary_expression
+            (binary_expression
+              (binary_expression
+                (binary_expression
+                  (parenthesized_expression
+                    (comparison_expression
+                      left: (identifier)
+                      right: (identifier)))
+                  (parenthesized_expression
+                    (comparison_expression
+                      left: (identifier)
+                      right: (identifier))))
+                (parenthesized_expression
+                  (comparison_expression
+                    left: (identifier)
+                    right: (identifier))))
+              (parenthesized_expression
+                (comparison_expression
+                  left: (identifier)
+                  right: (identifier))))
+            (parenthesized_expression
+              (comparison_expression
+                left: (identifier)
+                right: (identifier))))
+          (parenthesized_expression
+            (comparison_expression
+              left: (identifier)
+              right: (identifier))))))))

@@ -76,10 +76,11 @@ To Do List for the pypl4g compiler
     reach a convention, so each backend names them beside its registers and the call row uses them.  It costs nothing today,
     every convention each target has naming the same set; the day one does not, the call will have to carry them per instance.
 
-[ ] teach the register allocator about register classes.  It has one allocation order today and gives every virtual register a
-    general-purpose one, which is right while every value is an integer and wrong the moment one is not.  What it wants: an order
-    per class, a virtual register saying which class it belongs to, and a frame slot of the right width per class.  Floating point
-    waits on this and so will vectors, and it is the first thing to do for either.
+[x] teach the register allocator about register classes.  Done: the allocator takes an allocation order per class rather than
+    one order, a virtual register says which class it belongs to, and `_choose` hands out from the order for that register's
+    class.  The calling convention names the floating-point argument, result and allocation registers beside the integer ones and
+    builds the mapping the allocator wants.  A frame slot is still eight bytes whatever the class, which is right until there is a
+    value wider than that.
 
 [ ] let an operand require a particular register, so that an instruction with a fixed register pair can be used.  Division turned
     out not to need it -- an instruction that declares it writes a register is already enough to keep other values out of it, so

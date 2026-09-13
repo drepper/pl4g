@@ -167,6 +167,7 @@ SAMPLES = [
     ("fmov d0, d1", "fmov", MCReg(reg("d0")), MCReg(reg("d1"))),
     ("fabs s0, s1", "fabs", MCReg(reg("s0")), MCReg(reg("s1"))),
     ("fabs d0, d1", "fabs", MCReg(reg("d0")), MCReg(reg("d1"))),
+    ("fcvt d0, s1", "fcvt", MCReg(reg("d0")), MCReg(reg("s1"))),
     ("fadd s0, s1, s2", "fadd", MCReg(reg("s0")), MCReg(reg("s1")),
      MCReg(reg("s2"))),
     ("fadd d0, d1, d2", "fadd", MCReg(reg("d0")), MCReg(reg("d1")),

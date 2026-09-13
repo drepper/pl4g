@@ -1,0 +1,18 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4218 LANG_TYPE_APPROXIMATE_NEEDS_A_FLOAT
+
+※ Two integers are equal or they are not: there is no error in one for a
+※ tolerance to allow for, so the approximate comparisons have nothing to ask
+※ of them.  A truth value is not ordered at all.
+
+let a: u8 = 3u8
+let b: u8 = 3u8
+let ready: bool = true
+
+@[startup]
+fn main() → u8:
+    @[ignore(5005)]
+    a ≅ b
+    @[ignore(5005)]
+    ready ≇ ready
+    0u8

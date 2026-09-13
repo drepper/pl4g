@@ -121,6 +121,7 @@ SAMPLES = [
      MCReg(reg("f2"))),
     ("fsgnj.d f0, f1, f2", "fsgnj.d", MCReg(reg("f0")), MCReg(reg("f1")),
      MCReg(reg("f2"))),
+    ("fcvt.d.s f0, f1", "fcvt.d.s", MCReg(reg("f0")), MCReg(reg("f1"))),
     ("fsgnjx.s f0, f1, f2", "fsgnjx.s", MCReg(reg("f0")), MCReg(reg("f1")),
      MCReg(reg("f2"))),
     ("fsgnjx.d f0, f1, f2", "fsgnjx.d", MCReg(reg("f0")), MCReg(reg("f1")),

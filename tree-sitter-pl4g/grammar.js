@@ -233,7 +233,11 @@ module.exports = grammar({
     comparison_expression: $ => seq(
       field('left', $._non_comparison),
       field('operator', choice('=', '\u2260', '<', '>', '\u2264', '\u2265',
-                               '<=', '>=')),
+                               '<=', '>=',
+                               // The same six asked of the tolerance rather
+                               // than of the values, for floating point.
+                               '\u2245', '\u2247', '\u2a85', '\u2a86',
+                               '\u2a89', '\u2a8a')),
       field('right', $._non_comparison),
     ),
 
@@ -323,7 +327,11 @@ module.exports = grammar({
 
     boolean_literal: _ => choice('true', 'false'),
 
-    identifier: _ => /[A-Za-z_][A-Za-z0-9_]*/,
+    // A name the compiler provides begins with a quad, which is what keeps it
+    // from ever being a name a program wrote.  A program may read and assign
+    // the ones that exist and may not define one, which the grammar does not
+    // say: it is a rule about what a name means, not about how one is written.
+    identifier: _ => /[\u2395A-Za-z_][A-Za-z0-9_]*/,
 
     // Neither kind swallows the newline after it: the layout depends on that
     // newline, and a comment that took it would end a block.

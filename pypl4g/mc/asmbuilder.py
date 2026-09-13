@@ -123,6 +123,17 @@ class InstructionSelector(Protocol):
         """
         ...
 
+    def select_float_abs(self, dst: Reg, src: MCOperand, bits: int,
+                         span: Span) -> Sequence[MCInst]:
+        """Instructions that put the magnitude of *src* into *dst*."""
+        ...
+
+    def select_float_extend(self, dst: Reg, src: MCOperand, from_bits: int,
+                            to_bits: int, span: Span) -> Sequence[MCInst]:
+        """Instructions that put *src* into *dst* in a wider floating-point
+        format, which holds every value of the narrower one exactly."""
+        ...
+
     def select_branch_if_finite(self, value: Reg, bits: int, target: MCSymRef,
                                 span: Span) -> Sequence[MCInst]:
         """Instructions that go to *target* when *value* is a finite number.
@@ -554,6 +565,17 @@ class Assembler:
               span: Span = INVALID_SPAN) -> None:
         """Put a *bits*-wide value into the whole of *dst*."""
         self._emit(self._selector.select_widen(dst, src, bits, signed, span))
+
+    def float_abs(self, dst: Reg, src: MCOperand, bits: int,
+                  span: Span = INVALID_SPAN) -> None:
+        """Put the magnitude of *src* into *dst*."""
+        self._emit(self._selector.select_float_abs(dst, src, bits, span))
+
+    def float_extend(self, dst: Reg, src: MCOperand, from_bits: int, to_bits: int,
+                     span: Span = INVALID_SPAN) -> None:
+        """Put *src* into *dst* in the wider floating-point format *to_bits*."""
+        self._emit(self._selector.select_float_extend(dst, src, from_bits,
+                                                      to_bits, span))
 
     def branch_if_finite(self, value: Reg, bits: int, target: str,
                          span: Span = INVALID_SPAN) -> None:

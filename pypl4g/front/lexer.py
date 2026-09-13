@@ -12,7 +12,10 @@ from ..diag import ids as D
 from ..diag.engine import DiagEngine
 from ..source.location import Span
 from ..source.manager import SourceFile
-from .token import (AND_GLYPH, ARROW_GLYPH, ASCII_SUBSTITUTES, ASSIGN_GLYPH,
+from .token import (ABOVE_NOT_ALIKE_GLYPH, ABOVE_OR_ALIKE_GLYPH, ALIKE_GLYPH,
+                    BUILTIN_GLYPH,
+                    AND_GLYPH, ARROW_GLYPH, ASCII_SUBSTITUTES, ASSIGN_GLYPH,
+                    BELOW_NOT_ALIKE_GLYPH, BELOW_OR_ALIKE_GLYPH,
                     COMMENT_GLYPH, FLOAT_TYPE_NAMES, GREATER_EQUAL_GLYPH,
                     INTEGER_TYPE_NAMES,
                     KEYWORDS, LESS_EQUAL_GLYPH, NAND_GLYPH, NEGATIVE_GLYPH,
@@ -20,7 +23,8 @@ from .token import (AND_GLYPH, ARROW_GLYPH, ASCII_SUBSTITUTES, ASSIGN_GLYPH,
                     DIVIDE_GLYPH, ROTATE_LEFT_GLYPH, ROTATE_RIGHT_GLYPH,
                     SAT_ADD_GLYPH, SAT_MUL_GLYPH, SHIFT_LEFT_GLYPH,
                     SHIFT_RIGHT_GLYPH,
-                    SAT_SUB_GLYPH, TIMES_GLYPH, TokKind, Token, XOR_GLYPH)
+                    SAT_SUB_GLYPH, TIMES_GLYPH, TokKind, Token,
+                    UNALIKE_GLYPH, XOR_GLYPH)
 
 _SIMPLE: Final[dict[str, TokKind]] = {
     "(": TokKind.LPAREN,
@@ -45,6 +49,12 @@ _SIMPLE: Final[dict[str, TokKind]] = {
     ">": TokKind.GREATER,
     LESS_EQUAL_GLYPH: TokKind.LESS_EQUAL,
     GREATER_EQUAL_GLYPH: TokKind.GREATER_EQUAL,
+    ALIKE_GLYPH: TokKind.ALIKE,
+    UNALIKE_GLYPH: TokKind.UNALIKE,
+    BELOW_OR_ALIKE_GLYPH: TokKind.BELOW_OR_ALIKE,
+    ABOVE_OR_ALIKE_GLYPH: TokKind.ABOVE_OR_ALIKE,
+    BELOW_NOT_ALIKE_GLYPH: TokKind.BELOW_NOT_ALIKE,
+    ABOVE_NOT_ALIKE_GLYPH: TokKind.ABOVE_NOT_ALIKE,
     AND_GLYPH: TokKind.LOGIC_AND,
     OR_GLYPH: TokKind.LOGIC_OR,
     XOR_GLYPH: TokKind.LOGIC_XOR,
@@ -85,8 +95,14 @@ _RADIX: Final[dict[str, int]] = {"x": 16, "o": 8, "b": 2}
 
 
 def _is_ident_start(ch: str) -> bool:
-    """Whether *ch* may begin an identifier."""
-    return ch.isalpha() or ch == "_"
+    """Whether *ch* may begin an identifier.
+
+    The quad begins one too, and only a name the compiler provides: what makes
+    such a name impossible to collide with is that a program cannot write the
+    glyph, which the semantic analysis is where it is refused, so that the
+    message is about the name and not about the character.
+    """
+    return ch.isalpha() or ch == "_" or ch == BUILTIN_GLYPH
 
 
 def _is_ident_continue(ch: str) -> bool:
@@ -281,7 +297,13 @@ class Lexer:
                 self._tokens.append(Token(TokKind.NEWLINE, self._span(end, self._pos)))
 
     def _lex_identifier(self, start: int) -> None:
-        """Lex an identifier or a keyword."""
+        """Lex an identifier or a keyword.
+
+        The first character was only looked at, so it is stepped over here: what
+        may begin a name and what may go on with it are two questions, and the
+        quad that begins one the compiler provides answers only the first.
+        """
+        self._pos += 1
         while _is_ident_continue(self._peek()):
             self._pos += 1
         text = self._text[start:self._pos]

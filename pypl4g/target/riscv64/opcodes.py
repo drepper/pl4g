@@ -246,6 +246,11 @@ RISCV_INSTRS: Final[tuple[RVInstDesc, ...]] = (
     RVInstDesc("fdiv.d", (_f(), _f(), _f()), template=0x1A007053,
                fields=(_reg(0, _RD), _reg(1, _RS1), _reg(2, _RS2)),
                est_size=INSTRUCTION_SIZE),
+    # fcvt.d.s: a single-precision value in the double-precision format, which
+    # holds every one of them exactly, so the rounding mode says nothing.
+    RVInstDesc("fcvt.d.s", (_f(), _f()), template=0x42000053,
+               fields=(_reg(0, _RD), _reg(1, _RS1)),
+               est_size=INSTRUCTION_SIZE),
     RVInstDesc("fsgnj.s", (_f(), _f(), _f()), template=0x20000053,
                fields=(_reg(0, _RD), _reg(1, _RS1), _reg(2, _RS2)),
                est_size=INSTRUCTION_SIZE),

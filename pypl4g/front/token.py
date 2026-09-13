@@ -41,6 +41,32 @@ NOT_EQUAL_GLYPH: Final[str] = "\N{NOT EQUAL TO}"
 LESS_EQUAL_GLYPH: Final[str] = "\N{LESS-THAN OR EQUAL TO}"
 GREATER_EQUAL_GLYPH: Final[str] = "\N{GREATER-THAN OR EQUAL TO}"
 
+#: Compares two floating-point values, allowing for the small errors that
+#: accumulate in one.  Each is the exact comparison beside it with the question
+#: asked of the tolerance rather than of the values: `≅` is `=`, `≇` is `≠`, `⪅` is
+#: `≤`, `⪆` is `≥`, `⪉` is `<` and `⪊` is `>`.  None has an ASCII
+#: substitute: there is no sequence of ASCII characters that says "approximate"
+#: without being read as something else.
+ALIKE_GLYPH: Final[str] = "\N{APPROXIMATELY EQUAL TO}"
+UNALIKE_GLYPH: Final[str] = "\N{NEITHER APPROXIMATELY NOR ACTUALLY EQUAL TO}"
+BELOW_OR_ALIKE_GLYPH: Final[str] = "\N{LESS-THAN OR APPROXIMATE}"
+ABOVE_OR_ALIKE_GLYPH: Final[str] = "\N{GREATER-THAN OR APPROXIMATE}"
+BELOW_NOT_ALIKE_GLYPH: Final[str] = "\N{LESS-THAN AND NOT APPROXIMATE}"
+ABOVE_NOT_ALIKE_GLYPH: Final[str] = "\N{GREATER-THAN AND NOT APPROXIMATE}"
+
+#: What a name the compiler provides begins with.  A program may read and write
+#: the ones that exist and may not define one of its own, so the glyph is what
+#: keeps the two apart: no name a program writes can begin with it, and there is
+#: therefore no name the compiler can add later that takes a program's name
+#: away.  It is APL's quad, which marks that language's system names for the
+#: same reason.
+BUILTIN_GLYPH: Final[str] = "\N{APL FUNCTIONAL SYMBOL QUAD}"
+
+#: The tolerance the approximate comparisons read, and what it holds until a
+#: program sets it.  APL's own tolerance defaults to the same number.
+TOLERANCE_NAME: Final[str] = "".join((BUILTIN_GLYPH, "tolerance"))
+TOLERANCE_DEFAULT: Final[float] = 1e-13
+
 #: The logical operators, which work on truth values and on nothing else.  Each
 #: is a glyph, and none has an ASCII substitute: the candidates would be `&&`,
 #: `||` and `!`, and spelling two of them with the characters the *bitwise*
@@ -133,6 +159,13 @@ class TokKind(StrEnum):
     GREATER = "'>'"
     LESS_EQUAL = "'\N{LESS-THAN OR EQUAL TO}'"
     GREATER_EQUAL = "'\N{GREATER-THAN OR EQUAL TO}'"
+
+    ALIKE = "'\N{APPROXIMATELY EQUAL TO}'"
+    UNALIKE = "'\N{NEITHER APPROXIMATELY NOR ACTUALLY EQUAL TO}'"
+    BELOW_OR_ALIKE = "'\N{LESS-THAN OR APPROXIMATE}'"
+    ABOVE_OR_ALIKE = "'\N{GREATER-THAN OR APPROXIMATE}'"
+    BELOW_NOT_ALIKE = "'\N{LESS-THAN AND NOT APPROXIMATE}'"
+    ABOVE_NOT_ALIKE = "'\N{GREATER-THAN AND NOT APPROXIMATE}'"
 
     LOGIC_AND = "'\N{LOGICAL AND}'"
     LOGIC_OR = "'\N{LOGICAL OR}'"

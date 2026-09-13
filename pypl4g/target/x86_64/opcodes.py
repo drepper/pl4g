@@ -461,6 +461,23 @@ X86_INSTRS: Final[tuple[X86InstDesc, ...]] = (
                 reg_op=1, rm_op=0, est_size=4,
                 flags=InstFlags.MAY_STORE,
                 roles=(OperandRole.USE, OperandRole.USE)),
+    # andps xmm, xmm/m128                   0F 54 /r
+    # andpd xmm, xmm/m128                66 0F 54 /r
+    # The magnitude of a floating-point number is the number with its sign bit
+    # cleared, and there is no instruction that clears one bit of a vector
+    # register: the mask is a constant in the image, and a place in memory that
+    # one of these reads must be sixteen bytes aligned.
+    X86InstDesc("andps", (_x(), _xm(128)), opcode=0x54, map=OpMap.M0F,
+                modrm=ModRMUse.REG_RM, reg_op=0, rm_op=1, est_size=4,
+                roles=_ACCUMULATE),
+    X86InstDesc("andpd", (_x(), _xm(128)), opcode=0x54, map=OpMap.M0F,
+                mandatory_prefix=0x66, modrm=ModRMUse.REG_RM,
+                reg_op=0, rm_op=1, est_size=4, roles=_ACCUMULATE),
+    # cvtss2sd xmm, xmm/m32              F3 0F 5A /r
+    X86InstDesc("cvtss2sd", (_x(), _xm(32)), opcode=0x5A, map=OpMap.M0F,
+                mandatory_prefix=0xF3, modrm=ModRMUse.REG_RM,
+                reg_op=0, rm_op=1, est_size=4,
+                roles=(OperandRole.DEF, OperandRole.USE)),
     X86InstDesc("ucomiss", (_x(), _xm(32)), opcode=0x2E, map=OpMap.M0F,
                 modrm=ModRMUse.REG_RM, reg_op=0, rm_op=1,
                 implicit_defs=(EFLAGS,), est_size=4, roles=_READS_BOTH),

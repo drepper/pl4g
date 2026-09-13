@@ -52,6 +52,10 @@ class UnOp(Enum):
 
     NEG = "neg"
     NOT = "not"
+    #: The magnitude of a floating-point number, which is the number with its
+    #: sign cleared.  There is no integer form: the magnitude of the smallest
+    #: signed number is not a number of its type.
+    FABS = "fabs"
 
 
 class CmpPred(Enum):
@@ -76,6 +80,10 @@ class CastKind(Enum):
     SEXT = "sext"
     TRUNC = "trunc"
     BITCAST = "bitcast"
+    #: A floating-point value in a wider floating-point type.  Every wider
+    #: format holds every value of a narrower one exactly, so nothing is lost
+    #: and there is nothing to check.
+    FEXT = "fext"
 
 
 class Instruction(Value):

@@ -519,6 +519,11 @@ AARCH64_INSTRS: Final[tuple[A64InstDesc, ...]] = (
     A64InstDesc("fabs", (_v(64), _v(64)), template=0x1E60C000,
                 fields=(_reg_field(0, _RD), _reg_field(1, _RN)),
                 est_size=INSTRUCTION_SIZE),
+    # fcvt d, s: a single-precision value in the double-precision format,
+    # which holds every one of them exactly.
+    A64InstDesc("fcvt", (_v(64), _v(32)), template=0x1E22C000,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN)),
+                est_size=INSTRUCTION_SIZE),
     A64InstDesc("fadd", (_v(32), _v(32), _v(32)), template=0x1E202800,
                 fields=(_reg_field(0, _RD), _reg_field(1, _RN),
                         _reg_field(2, _RM)),

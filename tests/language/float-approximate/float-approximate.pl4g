@@ -1,0 +1,51 @@
+※ pl4g-test: compile=ok run=native,qemu exit=0 diag=none
+
+※ The six comparisons that allow for the errors a floating-point computation
+※ accumulates.  Each is the exact comparison beside it asked of the tolerance
+※ rather than of the values, so `≅` is `=`, `⪅` is `≤` and `⪉` is `<`.
+※
+※ Three tenths reached by multiplying a tenth by three is not three tenths:
+※ it is about five hundredths of a quintillionth above it, which is far below
+※ the tolerance and far above zero.  That one number is what makes this test
+※ say something the exact comparisons would not.
+
+let tenth: mut f64 = 0.1f64
+let three: mut f64 = 3f64
+let three_tenths: mut f64 = 0.3f64
+let half: mut f32 = 0.5f32
+let quarter: mut f32 = 0.25f32
+
+let zero: mut u8 = 0u8
+let one: u8 = 1u8
+
+fn stop_unless(ok: bool):
+    @[ignore(5005)]
+    ok or (one ÷ zero = one)
+
+@[startup]
+fn main() → u8:
+    ※ alike, though not equal
+    stop_unless(tenth × three ≅ three_tenths)
+    @[ignore(4217)]
+    stop_unless(tenth × three ≠ three_tenths)
+    ※ and not alike where the difference is a real one
+    stop_unless(tenth ≇ three_tenths)
+    ※ the four that are orderings
+    stop_unless(tenth × three ⪅ three_tenths)
+    stop_unless(tenth × three ⪆ three_tenths)
+    stop_unless(tenth ⪅ three_tenths)
+    stop_unless(three_tenths ⪆ tenth)
+    stop_unless(tenth ⪉ three_tenths)
+    stop_unless(three_tenths ⪊ tenth)
+    ※ and the two that are strict refuse what is merely alike
+    stop_unless(¬ (tenth × three ⪉ three_tenths))
+    stop_unless(¬ (tenth × three ⪊ three_tenths))
+    ※ the same six on the narrower format, whose difference is widened to the
+    ※ tolerance's own rather than the tolerance being narrowed to it
+    stop_unless(half × half ≅ quarter)
+    stop_unless(half ≇ quarter)
+    stop_unless(quarter ⪅ half)
+    stop_unless(half ⪆ quarter)
+    stop_unless(quarter ⪉ half)
+    stop_unless(half ⪊ quarter)
+    0u8

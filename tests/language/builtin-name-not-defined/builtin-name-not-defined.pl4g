@@ -1,0 +1,16 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4219 LANG_NAME_IS_THE_COMPILERS
+
+※ A name beginning with `⎕` belongs to the compiler.  A program may read and
+※ assign the ones that exist and may not define one, which is what keeps the
+※ compiler free to add another without taking a name away from a program
+※ written before it existed.
+
+let ⎕tolerance: mut f64 = 1f64
+
+fn ⎕mine() → u8:
+    0u8
+
+@[startup]
+fn main() → u8:
+    0u8

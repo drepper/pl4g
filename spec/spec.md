@@ -442,6 +442,30 @@ several lint tools offer and no compiler turns on.  This language turns it on be
 rule is the language's way of stating a rule the reader may not know, and because a generator that emits an exact comparison has
 almost certainly emitted the wrong one.
 
+#### Approximate comparisons
+
+Six more operators compare two floating-point values, allowing for the small errors such a computation accumulates.  Each is one
+of the exact comparisons with the question asked of a **tolerance** rather than of the values themselves.  They bind exactly as
+the exact comparisons do, and like them they do not chain.
+
+| Tolerant | Exact | Reads as | Asks |
+|---|---|---|---|
+| `≅` | `=` | alike | \|a-b\| ≤ t |
+| `≇` | `≠` | not alike | \|a-b\| > t |
+| `⪅` | `≤` | less than or alike | a-b ≤ t |
+| `⪆` | `≥` | greater than or alike | b-a ≤ t |
+| `⪉` | `<` | less than and not alike | b-a > t |
+| `⪊` | `>` | greater than and not alike | a-b > t |
+
+None has an ASCII substitute.  There is no sequence of ASCII characters that says "approximate" without being read as something
+else, and inventing one would be the kind of spelling a reader has to learn rather than see.
+
+**They are defined on floating-point values and on nothing else** (4218).  Two integers are equal or they are not: there is no
+error in one for a tolerance to allow for.
+
+The two sides have one type, as everywhere else.  Where that type is `f32` the difference is computed in `f32` and then widened to
+`f64` to be measured, which every `f32` value fits in exactly; the tolerance itself is one number and is not narrowed to meet it.
+
 #### Logical operators
 
 Six operators and two words work on truth values, and on nothing else.
@@ -554,6 +578,10 @@ all pass both rules, so the question was which of three to bless, and blessing n
 the one way to write it.  A substitute exists to rescue a glyph that is hard to enter; `≤` and `≥` have theirs because `<=` and
 `>=` are what every keyboard and every reader already produces for them, which is not true of any of the three candidates here.
 
+The six approximate comparisons have none for the first rule's sake as much as the second: there is no sequence of ASCII
+characters that says "approximate" without being read as something else, and `~=` or `=~` would be a spelling to learn rather than
+one to see.
+
 Using an accepted substitute is not an error.  A warning reports it for anyone who wants their sources in canonical form; it is
 off by default, since the substitute is accepted usage and not a defect.
 
@@ -598,6 +626,27 @@ A value that its type cannot represent is an error, wherever it appears: a liter
 value the compiler works out for itself.  Nothing is truncated and nothing wraps around.  This is the no-surprises rule applied to
 numbers -- a program that stored 300 in a `u8` and read back 44 would not be behaving as it reads, and no rule about which bits
 survive would make it so.
+
+### Names the compiler provides
+
+A name beginning with `⎕` (U+2395 APL FUNCTIONAL SYMBOL QUAD) belongs to the compiler.  A program may read and assign the ones
+that exist and may **not define one** (4219).  That is what lets the compiler add another later without taking a name away from a
+program written before it existed -- the problem every language has that puts its own names in the same namespace as a program's.
+APL marks its system names with the same glyph for the same reason, and `⎕CT` is the one this language's tolerance is modelled on.
+
+There is one such name so far.
+
+| Name | Type | Holds |
+|---|---|---|
+| `⎕tolerance` | `mut f64` | the tolerance the approximate comparisons measure against; 10⁻¹³ until a program sets it |
+
+It is a variable and not a number built into the compiler because the right tolerance depends on how far the values being compared
+have travelled, which is the program's business and not the language's.  A program that never names it carries nothing for it: it
+is dropped along with everything else nothing reaches.
+
+Compare: APL's `⎕CT`, which is a *relative* tolerance -- two values are alike when they differ by less than `⎕CT` times the larger
+of them.  That is the better rule for values of widely differing size and costs a multiplication and a magnitude more than this
+one; it is not what is implemented, and the entry in the to-do list holds the question of whether it should be.
 
 ### File Structure
 

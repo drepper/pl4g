@@ -27,26 +27,15 @@ To Do List for the PL4g language
     one.  For repetition the question is whether a generated language needs a general loop at all, or whether iteration over
     something is enough -- a generator emitting a counted loop can emit whatever the language gives it.
 
-[ ] add floating-point types `f16`, `f32`, `f64`, and `bfloat`.  `f16` and `bfloat` optional, if there is no hardware support.
-    Allow both the decimal and the hexadecimal format as specified in the C standard.
-    Decided by the user, to be done with it: the hardware's floating point is assumed on all three targets, and the requirement is
-    recorded in the binary.  On RISC-V that is the header's flag word, which already carries the floating-point convention and
-    would say DOUBLE instead of SOFT -- the field and its three values are already named in `target/riscv64/target.py` waiting for
-    it, and the differential encoding test would assemble against `rv64imfd` rather than `rv64im`.  On x86-64 and AArch64 there is
-    nothing to record: floating point is in the base of both ABIs, so a binary that uses it requires nothing a binary that does not
-    would not already have.  Saying that in the specification is the whole of what those two need.
-    **What the compiler needs first, which is the reason this is not begun.**  The register allocator has one allocation order and
-    hands out one register class; a value of float type would be given a general-purpose register.  Teaching it about classes --
-    an order per class, a spill slot per class, and a virtual register saying which class it wants -- is a piece of work of its own
-    and is the thing to do before any of the rest.  It is also what a vector type will want later, so it is worth doing properly
-    rather than around.
-    **And then, in rough order:** a `FloatConst` in the representation and a literal in the lexer, decimal and hexadecimal; the
-    calling convention saying which registers a float is passed and returned in; and per target the loads, stores, moves, the four
-    operations, the comparison, and the absolute value -- about twenty rows each, every one to be checked against the assembler by
-    the differential test the way every other row is.
-    **Two rules are already decided and wait for it.**  An operation whose answer is an IEEE infinity or a not-a-number faults, the
-    way an integer overflow does, which is what makes floating point behave like the rest of the language rather than like an
-    exception to it.  And `=` on floating point warns that it is an unsafe question, which `@[ignore]` is the way out of.
+[ ] add floating-point types `f16` and `bfloat`, optional if there is no hardware support.
+    `f32` and `f64` are done: a value can be written, held, passed, returned, computed with and compared, and the hardware's
+    floating point is assumed on all three targets with the requirement recorded in the binary -- on RISC-V the header's flag word
+    saying the double-precision convention, and on x86-64 and AArch64 nothing, floating point being in the base of both ABIs.
+    Both rules that were decided beforehand are in: an answer that is an infinity or a not-a-number stops the program, and `=` on
+    a floating-point value warns.
+    What is left is the two narrow formats.  `f16` is in the base of neither x86-64 nor RISC-V and is an extension on AArch64, so
+    this is the first thing that will want `@[required(NAME)]`; `bfloat` is narrower still and is in none of the three bases.
+    Neither has a literal suffix yet and neither names a type.
 
 [?] add a product type
     Question: no syntax has been given for declaring one, for naming its fields, or for writing a value of one, and the `type`
@@ -226,18 +215,19 @@ To Do List for the PL4g language
     which needed a new kind of error: the shared catalog now marks with `well_formed` an error the construct is still well formed
     despite, and quieting one of those leaves it in the program where quieting any other error discards it.
 
-[ ] implement comparisons for floating point values that are sensitive to small, accumulated errors.  Needs the float entry above
-    and the exact comparisons.  Decided by the user: the tolerance is a global variable for now, so that a program can set it,
-    rather than a constant built into the compiler -- which also means the comparison reads it, and so is a load and a subtraction
-    and an absolute value and one ordinary comparison, with no new machinery beyond the absolute value.  Use this equivalency table:
-    | Tolerant | Exact | Reads as |
-    |----------|-------|----------|
-    | `≅` | `=` | alike |
-    | `≇` | `≠` | not alike |
-    | `⪅` | `≤` | less than or alike |
-    | `⪆` | `≥` | greater than or alike |
-    | `⪉` | `<` | less than and not alike |
-    | `⪊` | `>` | greater than and not alike |
+[x] implement comparisons for floating point values that are sensitive to small, accumulated errors.  Done: `≅ ≇ ⪅ ⪆ ⪉ ⪊`,
+    each of the exact comparisons with the question asked of `⎕tolerance` rather than of the values.  One subtraction, a read of
+    that variable and one ordinary comparison, with the magnitude in between for the two that ask about likeness either way; an
+    `f32` difference is widened to the tolerance's own type, which holds it exactly.  `⎕tolerance` is the first name the compiler
+    provides, and a name beginning with `⎕` is the compiler's: a program may read and assign the ones that exist and may not
+    define one.
+
+[ ] decide whether the tolerance should be relative rather than absolute.  Today `a ≅ b` asks whether |a-b| is at most the
+    tolerance, which is one subtraction and one comparison and is wrong for values of widely differing size: two numbers near
+    10^20 that agree to fifteen digits are not alike by it, and two near 10^-20 are alike whatever they are.  APL's `⎕CT`, which
+    this is modelled on, is relative -- |a-b| ≤ t × max(|a|,|b|) -- which costs two magnitudes and a multiplication and a
+    comparison, and answers both of those correctly.  The question is whether that cost is worth paying by default, whether both
+    should exist under separate spellings, or whether the tolerance itself should say which kind it is.
 
     The comparison here is true as long as the difference is not larger than a limit.  For the time being, make this a builtin
     variable with the value 1e-13.  In future this will be a runtime-time variable.  Compare this with `⎕CT` in APL.

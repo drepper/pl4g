@@ -467,7 +467,36 @@ class X86Selector(InstructionSelector):
         (ops.MINUS.name, 32): "subss", (ops.MINUS.name, 64): "subsd",
         (ops.TIMES.name, 32): "mulss", (ops.TIMES.name, 64): "mulsd",
         (ops.DIVIDE.name, 32): "divss", (ops.DIVIDE.name, 64): "divsd",
+        # Not an operation of the language: what the magnitude is built from,
+        # the mask being a constant in the image.
+        (ops.AND.name, 32): "andps", (ops.AND.name, 64): "andpd",
     }
+
+    def select_float_abs(self, dst: Reg, src: MCOperand, bits: int,
+                         span: Span) -> Sequence[MCInst]:
+        """Never selected here.
+
+        There is no instruction on this architecture that clears one bit of a
+        vector register, so the magnitude is an `and` with a mask that has every
+        bit but the sign set -- and a mask is a constant in the image, which is
+        reached where the constants are, not from here.
+        """
+        del dst, src, bits
+        raise UnsupportedOperation(
+            "a magnitude, which here is an and with a mask in the image", span)
+
+    #: What widens a floating-point value to each wider format.
+    _FLOAT_EXTEND: Final[dict[tuple[int, int], str]] = {(32, 64): "cvtss2sd"}
+
+    def select_float_extend(self, dst: Reg, src: MCOperand, from_bits: int,
+                            to_bits: int, span: Span) -> Sequence[MCInst]:
+        """Instructions that put *src* into *dst* in the wider format."""
+        mnemonic = self._FLOAT_EXTEND.get((from_bits, to_bits))
+        if mnemonic is None:
+            raise UnsupportedOperation("".join((
+                "widening ", str(from_bits), " bits of floating point to ",
+                str(to_bits))), span)
+        return (self._inst(mnemonic, (MCReg(dst, bits=128), src), span),)
 
     def select_branch_if_finite(self, value: Reg, bits: int, target: MCSymRef,
                                 span: Span) -> Sequence[MCInst]:
@@ -650,6 +679,7 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
     from ...ir.mangle import symbol_name
     from ...ir.module import GlobalVar
     from ...ir.types import BoolType, FloatType, IntType, VOID
+    from ...ir.inst import CastInst, CastKind
     from ...ir.value import FloatConst
     from ...ir.layout import DataLayout, encode_float
     from ..globals import symbol_of
@@ -728,6 +758,18 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
             asm.loadreg(held, asm.mem(disp_sym=SymExpr(asm.streamer.symbol(symbol)),
                                       rip_relative=True, size_bits=bits), span)
             return held
+
+        def mask(self, bits: int, span: Span) -> VirtReg:
+            """A register holding every bit of a *bits*-wide float but the sign."""
+            if constants is None:
+                raise UnsupportedOperation(
+                    "a magnitude, with nowhere to put its mask", None)
+            data = ((1 << (bits - 1)) - 1).to_bytes(bits // 8, "little")
+            symbol = constants.symbol(data, bits // 8)
+            into = registers.new_virtual(VEC, _FLOAT_REGISTER_BITS)
+            asm.loadreg(into, asm.mem(disp_sym=SymExpr(asm.streamer.symbol(symbol)),
+                                      rip_relative=True, size_bits=bits), span)
+            return into
 
         def scratch(self) -> VirtReg:
             """A register of the full width, for a value with no name of its own."""
@@ -810,6 +852,17 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
                         raise UnsupportedOperation(
                             "writing through an address that is not a variable", span)
                     written = inst.operands[2]
+                    if isinstance(written.ty, FloatType):
+                        # A floating-point value goes to memory from a register
+                        # of its own kind, and a constant one is read out of the
+                        # image first, which is what the operand helper does.
+                        asm.store(
+                            asm.mem(disp_sym=SymExpr(
+                                asm.streamer.symbol(symbol_of(address))),
+                                rip_relative=True,
+                                size_bits=_bits_of(written.ty)),
+                            operands.in_register(written, inst.span), inst.span)
+                        continue
                     place = asm.mem(
                         disp_sym=SymExpr(asm.streamer.symbol(symbol_of(address))),
                         rip_relative=True, size_bits=_width_of(written.ty),
@@ -961,6 +1014,20 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
                            operands.value(inst.operands[0], inst.span),
                            operands.value(inst.operands[1], inst.span),
                            span=inst.span)
+                case UnaryInst() if inst.op is UnOp.FABS:
+                    # Nothing here clears one bit of a vector register, so the
+                    # magnitude is an `and` with a mask that has every bit but
+                    # the sign set, and the mask is a constant in the image.
+                    bits = _bits_of(inst.ty)
+                    destination = _new_value(
+                        inst.ty, registers,
+                        hint=(_result_register(inst.ty, cconv, registers)
+                              if inst is returned else None))
+                    held[id(inst)] = destination
+                    asm.float_op(ops.AND, destination,
+                                 operands.in_register(inst.operands[0], inst.span),
+                                 MCReg(operands.mask(bits, inst.span)),
+                                 bits, inst.span)
                 case UnaryInst():
                     unary = _UNARY_OPERATIONS.get(inst.op)
                     if unary is None:
@@ -977,6 +1044,17 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
                     # The complement of a narrow unsigned value sets the bits
                     # above it, where the value it stands for has zeroes there.
                     normalize(asm, inst.ty, destination, max(32, _width_of(inst.ty)), inst.span)
+                case CastInst() if inst.kind is CastKind.FEXT:
+                    destination = _new_value(
+                        inst.ty, registers,
+                        hint=(_result_register(inst.ty, cconv, registers)
+                              if inst is returned else None))
+                    held[id(inst)] = destination
+                    asm.float_extend(destination,
+                                     operands.in_register(inst.operands[0],
+                                                          inst.span),
+                                     _bits_of(inst.operands[0].ty),
+                                     _bits_of(inst.ty), inst.span)
                 case CmpInst() if isinstance(inst.operands[0].ty, FloatType):
                     # A floating-point comparison is never folded into a branch:
                     # what a branch would read is the flags, and the answer a
@@ -1050,6 +1128,14 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
                     raise UnsupportedOperation("".join((
                         "the instruction '", inst.opcode, "'")), span)
     asm.end_function()
+
+def _bits_of(ty: "Type") -> int:
+    """How wide a floating-point type is, which is the width the format has."""
+    from ...ir.types import FloatType
+
+    assert isinstance(ty, FloatType)
+    return ty.bits
+
 
 def _argument_register(cconv: "CallConvDesc", index: int, ty: "Type",
                        registers: "RegisterInfo") -> "PhysReg":

@@ -1834,6 +1834,55 @@
       "option": "exact-float-comparison"
     },
     {
+      "number": 4218,
+      "name": "LANG_TYPE_APPROXIMATE_NEEDS_A_FLOAT",
+      "severity": "error",
+      "message": "'{operator}' compares floating-point values, not '{found}'",
+      "args": [
+        {
+          "name": "operator",
+          "type": "string",
+          "description": "the comparison as written"
+        },
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type of the operand"
+        }
+      ],
+      "cause": "The approximate comparisons exist because a floating-point value is an approximation, and two of them arrived at by different routes are rarely the one value.  An integer is not an approximation of anything: two integers are equal or they are not, and there is no error in one for a tolerance to allow for.  A truth value is not ordered at all.  So these six ask a question that only a floating-point type has, and the exact comparisons are what every other type is compared with.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Approximate comparisons",
+        "requirement": "The approximate comparisons are defined on floating-point values only."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4219,
+      "name": "LANG_NAME_IS_THE_COMPILERS",
+      "severity": "error",
+      "message": "'{name}' is a name the compiler provides and cannot be defined",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the name as written"
+        }
+      ],
+      "cause": "A name beginning with ⎕ belongs to the compiler.  A program may read and assign the ones that exist -- `⎕tolerance` is the only one so far -- and may not define one, which is what keeps the compiler free to add another without taking a name away from a program that was written before it existed.  APL marks its own system names with the same glyph for the same reason.  A name of your own is written without it.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Names the compiler provides",
+        "requirement": "A name beginning with ⎕ may not be defined by a program."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 4401,
       "name": "LANG_FUNCDEF_SPECIAL_NO_STARTUP",
       "severity": "error",
