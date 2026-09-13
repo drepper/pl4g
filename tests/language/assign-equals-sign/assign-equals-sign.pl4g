@@ -1,5 +1,5 @@
 ※ pl4g-test: compile=fail
-※ pl4g-test: expect-diag 5005 LANG_STMT_COMPARISON_DISCARDED
+※ pl4g-test: expect-diag 5005 LANG_STMT_VALUE_DISCARDED
 
 ※ '=' does not assign; it compares.  So this line asks whether 'status' is five
 ※ and then throws the answer away, which is what the habit every other language

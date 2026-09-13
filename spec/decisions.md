@@ -1440,6 +1440,52 @@ A comparison of constants folds, and its answer needs no range check: there is n
 
 ---
 
+## 2026-09-13T18:15+02:00 — language
+
+**A statement that is an expression must have its value used, and `≠` gets no ASCII substitute**
+
+Two things the user settled, one of which generalized a diagnostic that had just been written.
+
+**No ASCII substitute for `≠`.**  Decided by the user.  `!=`, `/=` (Haskell, Ada) and `<>` (Pascal, SQL, BASIC) all pass the two
+rules a substitute has to pass -- more than one character, ambiguous with nothing -- so the question was which of three to bless,
+and the answer is none.  What `≤` and `≥` have that these do not is that `<=` and `>=` are already what every keyboard and
+every reader produces for those two; there is no such agreed spelling for `≠`, so a substitute would be a second way to write it
+rather than the way it is written.
+
+**A statement whose value is not used is an error.**  5005 was written as a rule about comparisons -- `count = 1u8`, the mistake
+someone makes who has spent years in a language where `=` assigns -- and the user generalized it to every expression: a bare
+literal, a bare name, anything computed.  It is right, and for a reason stronger than tidiness.  Every expression the language has
+computes a value and does nothing else, so a statement that is only an expression does nothing unless something takes the value,
+and something takes it in exactly one place: the last statement of a body is the body's result.
+
+An error rather than a warning, because this language is emitted by a program.  A human writing a line with no effect has made a
+slip; a generator emitting one has a defect, and a warning is how a defect gets into a program nobody reads the warnings of.  Go
+refuses a discarded expression outright for the weaker version of this reason -- that such a line is almost always a mistake -- and
+admits a handful of statement forms instead.  C, C++ and Java allow it and warn about parts of it, which is `-Wunused-value`.
+Rust warns and has `#[must_use]` for what it cannot warn about in general.  Go's position, with Go's list of exceptions left for
+when there is anything to put on it: a call will be the first expression that does something besides produce a value.
+
+The comparison case keeps what it had, as a note (5006) attached to the general error rather than a diagnostic of its own.  What
+is wrong with the line is that the value goes nowhere; that `=` compares and `←` assigns is why the line was probably written,
+which is exactly what a note is for.
+
+**A new kind of error, and a field in the catalog to say so.**  The rule collided with an existing one: quieting an error with
+`@[ignore]` discards the construct it is attached to, because an error usually means what was read could not be built and half of
+something is worse than none.  But the user's requirement is that `@[ignore(5005)]` *accepts* the line -- and the construct here is
+whole; the compiler could compile it and is refusing on a rule about how code is written.
+
+So diagnostics now say which kind they are: `well_formed` in the shared catalog marks an error the construct is still well formed
+despite.  Quieting one of those leaves it in the program; quieting any other error still discards it.  Putting it in the catalog
+rather than in the compiler is what makes it a fact about the language: every implementation draws the line in the same place, and
+a new diagnostic has to answer the question rather than inherit an answer.  Without the distinction the attribute would be a way to
+delete code, which is the opposite of what someone writing `@[ignore]` on a line they mean to keep is asking for.
+
+Rust has the same split without naming it -- `#[allow(unused_must_use)]` keeps the statement, while an error about a type does not
+become ignorable at all -- because there the two are different mechanisms.  Here there is one mechanism, so the catalog has to
+carry the difference.
+
+---
+
 ---
 
 Open questions

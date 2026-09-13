@@ -5,19 +5,32 @@
   "description": "The definitive, implementation-independent collection of the errors and warnings the PL4G compiler emits.  spec/spec.md requires that these numbers be unique, constant and consistent between implementations so that code can react to them.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["format_version", "blocks", "diagnostics"],
+  "required": [
+    "format_version",
+    "blocks",
+    "diagnostics"
+  ],
   "properties": {
-    "$schema": { "type": "string" },
-    "format_version": { "type": "integer", "minimum": 1 },
+    "$schema": {
+      "type": "string"
+    },
+    "format_version": {
+      "type": "integer",
+      "minimum": 1
+    },
     "blocks": {
       "description": "The partitioning of the four-digit number space.  Related diagnostics stay numerically adjacent; unrelated families are separated by reserved gaps.",
       "type": "array",
       "minItems": 1,
-      "items": { "$ref": "#/$defs/block" }
+      "items": {
+        "$ref": "#/$defs/block"
+      }
     },
     "diagnostics": {
       "type": "array",
-      "items": { "$ref": "#/$defs/diagnostic" }
+      "items": {
+        "$ref": "#/$defs/diagnostic"
+      }
     }
   },
   "$defs": {
@@ -34,49 +47,111 @@
     },
     "severity": {
       "type": "string",
-      "enum": ["fatal", "error", "warning", "note"]
+      "enum": [
+        "fatal",
+        "error",
+        "warning",
+        "note"
+      ]
     },
     "specref": {
       "description": "Back-reference to the requirement this diagnostic enforces.  The requirement is quoted verbatim so that drift between specification and implementation is visible.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["document", "section"],
+      "required": [
+        "document",
+        "section"
+      ],
       "properties": {
-        "document": { "type": "string", "enum": ["spec/spec.md", "spec/details.md"] },
-        "section": { "type": "string", "minLength": 1 },
-        "requirement": { "type": "string", "minLength": 1 }
+        "document": {
+          "type": "string",
+          "enum": [
+            "spec/spec.md",
+            "spec/details.md"
+          ]
+        },
+        "section": {
+          "type": "string",
+          "minLength": 1
+        },
+        "requirement": {
+          "type": "string",
+          "minLength": 1
+        }
       }
     },
     "block": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["first", "last", "topic"],
+      "required": [
+        "first",
+        "last",
+        "topic"
+      ],
       "properties": {
-        "first": { "$ref": "#/$defs/number" },
-        "last": { "$ref": "#/$defs/number" },
-        "topic": { "type": "string", "minLength": 1 },
-        "spec": { "$ref": "#/$defs/specref" }
+        "first": {
+          "$ref": "#/$defs/number"
+        },
+        "last": {
+          "$ref": "#/$defs/number"
+        },
+        "topic": {
+          "type": "string",
+          "minLength": 1
+        },
+        "spec": {
+          "$ref": "#/$defs/specref"
+        }
       }
     },
     "argument": {
       "description": "A declared placeholder of the message text.  Declaring them lets a self-test verify that message and args agree.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["name", "type"],
+      "required": [
+        "name",
+        "type"
+      ],
       "properties": {
-        "name": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
-        "type": { "type": "string", "enum": ["string", "integer", "number"] },
-        "description": { "type": "string" }
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "string",
+            "integer",
+            "number"
+          ]
+        },
+        "description": {
+          "type": "string"
+        }
       }
     },
     "diagnostic": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["number", "name", "severity", "message", "cause", "spec", "since"],
+      "required": [
+        "number",
+        "name",
+        "severity",
+        "message",
+        "cause",
+        "spec",
+        "since"
+      ],
       "properties": {
-        "number": { "$ref": "#/$defs/number" },
-        "name": { "$ref": "#/$defs/name" },
-        "severity": { "$ref": "#/$defs/severity" },
+        "number": {
+          "$ref": "#/$defs/number"
+        },
+        "name": {
+          "$ref": "#/$defs/name"
+        },
+        "severity": {
+          "$ref": "#/$defs/severity"
+        },
         "message": {
           "description": "One-line message.  Placeholders use str.format syntax and must match the declared args exactly.",
           "type": "string",
@@ -84,30 +159,50 @@
         },
         "args": {
           "type": "array",
-          "items": { "$ref": "#/$defs/argument" }
+          "items": {
+            "$ref": "#/$defs/argument"
+          }
         },
         "cause": {
           "description": "The fuller description of the potential sources of the problem that spec/details.md asks for.",
           "type": "string",
           "minLength": 1
         },
-        "spec": { "$ref": "#/$defs/specref" },
-        "since": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+$" },
-        "default_enabled": { "type": "boolean", "default": true },
+        "spec": {
+          "$ref": "#/$defs/specref"
+        },
+        "since": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+$"
+        },
+        "default_enabled": {
+          "type": "boolean",
+          "default": true
+        },
         "internal": {
           "description": "True for internal compiler errors, which report a compiler defect rather than a defect in the compiled program.",
           "type": "boolean",
           "default": false
         },
+        "well_formed": {
+          "description": "True for an error the construct is still well formed despite: the compiler could compile it and refuses because of a rule about how code is written, not because there is nothing to compile.  Silencing such an error with @[ignore] leaves the construct in the program; silencing any other error discards it, since what was built from it is not usable.",
+          "type": "boolean",
+          "default": false
+        },
         "option": {
           "description": "Name used with -W and -Wno- to control this diagnostic.  Null when it cannot be controlled.",
-          "type": ["string", "null"],
+          "type": [
+            "string",
+            "null"
+          ],
           "pattern": "^[a-z][a-z0-9-]*$"
         },
         "notes": {
           "description": "Symbolic names of note-severity diagnostics this one may attach.",
           "type": "array",
-          "items": { "$ref": "#/$defs/name" }
+          "items": {
+            "$ref": "#/$defs/name"
+          }
         }
       }
     }

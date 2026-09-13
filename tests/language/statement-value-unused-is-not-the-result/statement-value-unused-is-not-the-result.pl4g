@@ -1,0 +1,9 @@
+※ pl4g-test: compile=ok run=native,qemu exit=7 diag=none
+
+※ The one place a value is used: the last statement of a body is its result,
+※ and nothing about it is reported.
+let count: u8 = 7u8
+
+@[startup]
+fn main() → u8:
+    count

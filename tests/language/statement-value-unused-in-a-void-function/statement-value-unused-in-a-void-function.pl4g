@@ -1,0 +1,15 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 5005 LANG_STMT_VALUE_DISCARDED
+
+※ The last statement of a body is the body's result -- but a body with no
+※ result has nowhere for the value to go, so the last statement of one is as
+※ much a discarded value as any other statement.
+let count: u8 = 7u8
+
+@[constructor]
+fn prepare() → void:
+    count
+
+@[startup]
+fn main() → u8:
+    0u8

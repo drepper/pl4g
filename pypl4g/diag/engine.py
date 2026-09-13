@@ -81,6 +81,8 @@ class Expectation:
     required: frozenset[DiagID] = frozenset()
     raised: set[DiagID] = field(default_factory=set)
     #: Whether anything it absorbed prevents a construct from being compiled.
+    #: An error about how code is written does not: the construct is whole, and
+    #: saying the rule is meant to be broken here leaves it standing.
     saw_error: bool = False
 
     @property
@@ -174,7 +176,8 @@ class DiagEngine:
         for expectation in reversed(self._expectations):
             if info.number in expectation.numbers:
                 expectation.raised.add(info.number)
-                expectation.saw_error = expectation.saw_error or info.is_error
+                expectation.saw_error = (expectation.saw_error
+                                         or info.spoils_the_construct)
                 return True
         return False
 

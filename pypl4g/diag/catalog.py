@@ -51,11 +51,26 @@ class DiagInfo:
     internal: bool = False
     option: str | None = None
     notes: tuple[str, ...] = ()
+    #: True for an error the construct is still well formed despite.  The
+    #: compiler could compile it and refuses because of a rule about how code is
+    #: written, not because there is nothing left to compile.
+    well_formed: bool = False
 
     @property
     def is_error(self) -> bool:
         """Whether this diagnostic prevents a successful compilation."""
         return self.severity in ("fatal", "error")
+
+    @property
+    def spoils_the_construct(self) -> bool:
+        """Whether silencing this error leaves nothing worth compiling.
+
+        An error usually means what was being read could not be built, so what
+        was built from it is a half of something and is thrown away.  An error
+        about how code is *written* is different: the construct is there and is
+        whole, and saying the rule is meant to be broken here leaves it there.
+        """
+        return self.is_error and not self.well_formed
 
 
 @dataclass(frozen=True, slots=True)
@@ -107,6 +122,7 @@ def parse_catalog(raw: Mapping[str, Any]) -> Catalog:
             internal=item.get("internal", False),
             option=item.get("option"),
             notes=tuple(item.get("notes", ())),
+            well_formed=item.get("well_formed", False),
         ))
     blocks = tuple(NumberBlock(
         first=b["first"], last=b["last"], topic=b["topic"],

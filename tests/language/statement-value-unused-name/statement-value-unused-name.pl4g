@@ -1,0 +1,10 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 5005 LANG_STMT_VALUE_DISCARDED
+
+※ Naming a variable reads it and then throws what it read away.
+let count: u8 = 7u8
+
+@[startup]
+fn main() → u8:
+    count
+    0u8

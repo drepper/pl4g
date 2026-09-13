@@ -867,7 +867,7 @@
           "description": "the one written after it"
         }
       ],
-      "cause": "A comparison answers with a truth value, so a second comparison beside the first would be asking a question about that answer -- `a < b < c` would mean `(a < b) < c`, which compares a truth value with a number.  That is almost never what was meant, and where it was meant, writing the parentheses says so.  Where the intent was to say that a value lies between two others, that is two comparisons joined with `\\u2227`.",
+      "cause": "A comparison answers with a truth value, so a second comparison beside the first would be asking a question about that answer -- `a < b < c` would mean `(a < b) < c`, which compares a truth value with a number.  That is almost never what was meant, and where it was meant, writing the parentheses says so.  Where the intent was to say that a value lies between two others, that is two comparisons joined with `∧`.",
       "spec": {
         "document": "spec/spec.md",
         "section": "The Language / Expressions / Comparisons",
@@ -1800,21 +1800,35 @@
     },
     {
       "number": 5005,
-      "name": "LANG_STMT_COMPARISON_DISCARDED",
+      "name": "LANG_STMT_VALUE_DISCARDED",
       "severity": "error",
-      "message": "'{operator}' asks a question here and the answer is not used",
-      "args": [
-        {
-          "name": "operator",
-          "type": "string",
-          "description": "the comparison"
-        }
-      ],
-      "cause": "A comparison computes a truth value and does nothing else, so one whose answer goes nowhere is a statement with no effect at all.  The case worth naming is `count = 1u8`: '=' compares and '\\u2190' assigns, so what looks like an assignment to anyone coming from another language is a question asked and not listened to.  Where the answer is wanted, it is the value of something -- the last statement of a body is the body's result, and a comparison there is the point of the line, so it is not reported.",
+      "message": "the value of this statement is not used",
+      "args": [],
+      "cause": "An expression computes a value and does nothing else, so a statement that is nothing but an expression is a statement with no effect unless something takes the value.  Something does take it in exactly one place: the last statement of a body is the body's result.  Everywhere else the value goes nowhere, and a line that goes nowhere is either a mistake or a leftover -- a generator that emits one has a defect, which is the reason this is an error rather than a warning.  Where the line is meant to stand as it is, `@[ignore(5005)]` on the statement says so.",
+      "well_formed": true,
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Statements that are expressions",
+        "requirement": "A statement that is an expression must have its value used; the last statement of a body is the body's result."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null,
+      "notes": [
+        "LANG_STMT_ASSIGNMENT_IS_AN_ARROW"
+      ]
+    },
+    {
+      "number": 5006,
+      "name": "LANG_STMT_ASSIGNMENT_IS_AN_ARROW",
+      "severity": "note",
+      "message": "'=' compares two values; an assignment is written '←'",
+      "args": [],
+      "cause": "Attached where the discarded value is a comparison written with '=', which is what someone writes who has spent years in a language where '=' assigns.  The diagnostic itself says the value goes nowhere; this says why the line was probably written.",
       "spec": {
         "document": "spec/spec.md",
         "section": "The Language / Expressions / Comparisons",
-        "requirement": "A comparison answers with a truth value.  An assignment is written `NAME \\u2190 VALUE`."
+        "requirement": "An assignment is written `NAME ← VALUE`."
       },
       "since": "0.1",
       "default_enabled": true,

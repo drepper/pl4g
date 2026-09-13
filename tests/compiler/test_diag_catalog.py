@@ -158,3 +158,14 @@ def test_a_number_outside_every_block_is_refused() -> None:
     broken = replace(catalog, by_number={4700: stray})
     with pytest.raises(UnblockedNumber, match="between two blocks"):
         generate_ids_source(broken)
+
+
+def test_only_an_error_is_marked_well_formed(raw: dict) -> None:
+    """The flag says an *error* leaves the construct standing.
+
+    A warning leaves it standing whatever it says, and a note is not a
+    judgement at all, so the flag would say nothing on either.
+    """
+    for entry in raw["diagnostics"]:
+        if entry.get("well_formed"):
+            assert entry["severity"] in ("fatal", "error"), entry["name"]

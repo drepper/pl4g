@@ -1,0 +1,18 @@
+※ pl4g-test: compile=ok run=native,qemu exit=0 diag=none
+
+※ Where the line is meant to stand as it is, the attribute says so.  It is
+※ attached to the statement, which is the thing being spoken about.
+※ 'ignore' and not 'expect': what is asserted here is that the line is allowed,
+※ and 'expect' on an error says the construct is known to be wrong, which
+※ discards the function it is in.
+let count: u8 = 7u8
+
+@[startup]
+fn main() → u8:
+    @[ignore(5005)]
+    1u8
+    @[ignore(5005)]
+    count
+    @[ignore(5005)]
+    count & 3u8
+    0u8

@@ -216,6 +216,39 @@ well and is the only language that does it; C and Go give it the meaning above a
 Splitting equality from ordering, as C does, would decide only what `a < b = c` means, and that expression has no meaning here.
 One level for all six is what Go and Rust do.
 
+#### Statements that are expressions
+
+A statement may be an expression on its own.  **Its value must be used**, and there is exactly one place where it is: the last
+statement of a body is the body's result.  Anywhere else the value goes nowhere, and a statement that is nothing but an expression
+does nothing at all, so it is refused.
+
+```
+@[startup]
+fn main() → u8:
+    1u8                    ※ refused: this value is not used
+    count = 1u8            ※ refused, and the same mistake C makes easy
+    count & mask           ※ refused
+    0u8                    ※ the result of the function
+```
+
+It is an error and not a warning, and it applies to a bare literal and a bare name as much as to anything computed.  The reason is
+the same one that runs through the rest of this document: the language is generated rather than written, and a generator that
+emits a line with no effect has a defect in it -- one that a warning would let through into a program nobody reads the warnings
+of.  Where the line is meant to stand as it is, `@[ignore(5005)]` on the statement says so, which is what that attribute is for.
+
+The rule is what makes `=` safe to use for comparison.  `count = 1u8` written as a statement is what someone writes who has spent
+years in a language where `=` assigns; here it compares and throws the answer away, and is reported with a note saying that an
+assignment is written `←`.
+
+C, C++ and Java allow a discarded expression and warn about some of it, which is where `-Wunused-value` comes from.  Go refuses it
+outright, admitting only a call, a receive and a few others as statements; Rust warns by default and has `#[must_use]` for the
+cases it cannot warn about in general.  Go's position is the one taken here, and for a stronger version of Go's reason: Go refuses
+it because such a line is almost always a mistake, and this refuses it because such a line was emitted by a program.
+
+An expression that does something besides produce a value is a different question, and a call will be the first of them.  There is
+no way to write a call yet; when there is, this rule asks the expression whether it has an effect rather than knowing that none
+has.
+
 #### Comments
 
 A comment is introduced by `※` (U+203B REFERENCE MARK) and runs to the end of the line.  A comment introduced by `※※` is a
@@ -245,7 +278,10 @@ The second rule decides `←`, which has no substitute at all: `<-` is two chara
 would be told apart only by the spaces around them, and the language makes no other distinction of that kind.  The same two rules
 give `≤` and `≥` the substitutes `<=` and `>=`, which are two characters and
 are ambiguous with nothing: `<` and `=` cannot stand next to each other in any other way, since a comparison's operands are never
-comparisons.  `≠` has none, for want of a candidate rather than for a reason of its own.
+comparisons.  `≠` has none, and that is a decision rather than an omission: `!=`, `/=` and `<>`
+all pass both rules, so the question was which of three to bless, and blessing none of them is the answer that leaves the glyph as
+the one way to write it.  A substitute exists to rescue a glyph that is hard to enter; `≤` and `≥` have theirs because `<=` and
+`>=` are what every keyboard and every reader already produces for them, which is not true of any of the three candidates here.
 
 Using an accepted substitute is not an error.  A warning reports it for anyone who wants their sources in canonical form; it is
 off by default, since the substitute is accepted usage and not a defect.
@@ -436,6 +472,13 @@ raises an error cannot be compiled, and half of one would be worse than none: th
 program entirely.  What follows from leaving it out is not itself hidden -- discarding the only startup function is still reported
 as there being none.
 
+**Except where the error is about how the code is written.**  A few errors say that something the compiler could perfectly well
+compile breaks a rule about how programs are to be written -- a statement whose value is not used is the first of them.  The
+construct is whole, so quieting such an error leaves it standing and the program is compiled with it.  The distinction is not a
+judgement made case by case: each diagnostic states in the shared catalog which kind it is, so every implementation of the language
+draws the line in the same place.  Without it the attribute would be a way to delete code, which is the opposite of what someone
+writing `@[ignore]` on a line they meant to keep is asking for.
+
 Considered were `#[...]` (Rust), `[[...]]` with namespaces (C++11, and the aspect clauses of Ada), `{. .}` pragmas (Nim),
 `@(...)` (Odin), a bare `@name` in the manner of a decorator (Python, Java, D), `pragma` statements (Ada), and magic comments
 (Go's `//go:...`).  The chosen notation takes the list-in-brackets shape from Odin and Rust and puts it behind `@`, which no other
@@ -532,7 +575,7 @@ Compare C and C++, where an assignment is an expression yielding the value assig
 variable, as here.  An assignment is a statement here too and cannot appear inside an expression, so the C hazard does not arise;
 what it has is a result, which only the last statement of a block is in a position to use.
 
-**Assignment is written `←`, not `=`.**  `=` is reserved for comparison, which is not specified yet.
+**Assignment is written `←`, not `=`.**  `=` compares two values and does nothing else.
 
 The arrow is the older notation: Algol, Smalltalk and APL all wrote assignment with a left-pointing arrow, and it was ASCII rather
 than any argument about language design that replaced it with `=` in C and everything that followed C.  Having done so, those

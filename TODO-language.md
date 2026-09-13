@@ -173,11 +173,17 @@ To Do List for the PL4g language
     warning that `=` on floating point is an unsafe question, and the rule that an integer literal compared with a float must be
     exactly representable in it.
 
-[ ] decide whether `≠` should have an ASCII substitute.  `≤` and `≥` have `<=` and `>=`, which the two rules for
-    substitutes admit: two characters, ambiguous with nothing.  `!=` would pass the same two rules, and `/=` (Haskell, Ada) and
-    `<>` (Pascal, SQL, BASIC) would as well.  Nothing needs it, and the asymmetry of having a substitute for two of the three
-    glyphs but not the third is the only argument for adding one.  `!` and `<>` would stay free either way, since a substitute
-    claims only the sequence.
+[x] decide whether `≠` should have an ASCII substitute.  No.  `!=`, `/=` and `<>` all pass the two rules a substitute has to
+    pass, so the question was which of three to bless, and blessing none leaves the glyph as the one way to write it.  `<=` and
+    `>=` earn theirs by already being what every keyboard and every reader produces for those two glyphs, which is true of none
+    of the three candidates here.
+
+[x] a statement whose value is not used is an error (5005), with a note (5006) where the value is a comparison written with `=`.
+    Every expression computes a value and does nothing else, so a statement that is only an expression does nothing unless
+    something takes the value -- and the last statement of a body, which is the body's result, is the one place anything does.
+    A bare literal and a bare name count as much as anything computed.  `@[ignore(5005)]` on the statement accepts the line,
+    which needed a new kind of error: the shared catalog now marks with `well_formed` an error the construct is still well formed
+    despite, and quieting one of those leaves it in the program where quieting any other error discards it.
 
 [ ] implement comparisons for floating point values that are sensitive to small, accumulated errors.  Needs the float entry above
     and the exact comparisons.  Use this equivalency table:

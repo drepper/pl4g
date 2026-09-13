@@ -230,3 +230,32 @@ def test_the_stale_assertion_is_an_error_in_the_catalog() -> None:
     entry = load_catalog().by_number[3206]
     assert entry.severity == "error"
     assert entry.option is None, "an error cannot be turned off"
+
+
+# -- an error the construct is well formed despite ------------------------------
+
+def test_ignoring_a_rule_about_writing_keeps_the_function(compile_source) -> None:  # noqa: ANN001
+    """Most errors mean what was read could not be built, so what was half built
+    is thrown away -- and `@[ignore]` on one silences the report and discards the
+    construct all the same.  An error about how code is *written* is different:
+    the construct is whole, and saying the rule is meant to be broken here has to
+    leave it in the program, or the attribute would be a way to delete code.
+    """
+    proc, _ = compile_source("".join((
+        "let count: u8 = 7u8\n\n@[startup]\nfn main() ", ARROW, " u8:\n",
+        "    @[ignore(5005)]\n    count\n    0u8\n")))
+    assert proc.returncode == 0, describe(proc)
+    assert proc.stderr.strip() == "", proc.stderr
+
+
+def test_ignoring_an_error_that_leaves_nothing_still_discards_it(compile_source) -> None:  # noqa: ANN001
+    """The other side of the same rule, so that the flag is not simply unused.
+
+    A type mismatch leaves a value that was never built, so the function goes --
+    and with it the startup function, which is what the remaining report is.
+    """
+    proc, _ = compile_source("".join((
+        "@[startup]\n@[ignore(4203)]\nfn main() ", ARROW, " u8:\n",
+        "    @[ignore(4006)]\n    let wrong: bool = 1u8\n    0u8\n")))
+    assert proc.returncode != 0, describe(proc)
+    assert "[PL4G-4401]" in proc.stderr, describe(proc)

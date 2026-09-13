@@ -1,0 +1,12 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 5005 LANG_STMT_VALUE_DISCARDED
+
+※ Computing something and discarding it is the same rule; that work was done
+※ for the answer makes no difference to the answer going nowhere.
+let flags: u8 = 0b1010u8
+let mask: u8 = 0b0010u8
+
+@[startup]
+fn main() → u8:
+    flags & mask
+    0u8

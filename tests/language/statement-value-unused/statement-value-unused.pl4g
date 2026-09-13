@@ -1,0 +1,10 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 5005 LANG_STMT_VALUE_DISCARDED
+
+※ A statement that is nothing but an expression computes a value and does
+※ nothing else, so unless something takes the value the line does nothing.
+※ A bare literal is as much such a line as anything computed is.
+@[startup]
+fn main() → u8:
+    1u8
+    0u8

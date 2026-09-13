@@ -991,25 +991,36 @@ class Checker:
                     value = self._lower_expr(builder, stmt.value, func.ty.ret)
                     builder.ret(value, stmt.span)
                 else:
-                    self._check_answer_is_used(stmt.value)
+                    self._check_value_is_used(stmt.value)
                     self._lower_expr(builder, stmt.value, None)
             case _:
                 self._diags.internal("unknown statement kind in lowering")
 
-    def _check_answer_is_used(self, expr: ast.Expr) -> None:
-        """Report a comparison written where its answer goes nowhere.
+    def _check_value_is_used(self, expr: ast.Expr) -> None:
+        """Report a statement that is an expression whose value goes nowhere.
 
-        A comparison computes a truth value and does nothing else, so one whose
-        answer is discarded is a statement with no effect.  The case worth
-        naming is `count = 1u8`, which reads as an assignment to anyone coming
-        from another language and is a question asked and not listened to here.
+        Every expression the language has computes a value and does nothing
+        else, so a statement that is nothing but an expression does nothing
+        unless something takes the value.  Something takes it in exactly one
+        place -- the last statement of a body is the body's result -- and that
+        statement does not reach here.  Everywhere else the line is a mistake
+        or a leftover, and in a language emitted by a generator a leftover is a
+        defect in the generator, which is why this is an error.
 
-        Only the statement that is not the body's result reaches this, since the
-        result is the one place the answer is wanted.
+        It applies to the whole of an expression and not to any part of it: a
+        bare `1u8` or a bare name is as much a statement that does nothing as a
+        comparison is, and all of them are written the same way for a reader.
+        `@[ignore(5005)]` on the statement says the line is meant.
+
+        A call will be the first expression this cannot say that about, since a
+        call does whatever the callee does whether or not anyone wants its
+        result.  There is no way to write one yet, and when there is, this asks
+        the expression whether it has an effect instead of knowing that none
+        has.
         """
-        if isinstance(expr, ast.Binary) and expr.op in _COMPARISONS:
-            self._diags.emit(D.LANG_STMT_COMPARISON_DISCARDED, expr.span,
-                             operator=expr.op.value)
+        found = self._diags.emit(D.LANG_STMT_VALUE_DISCARDED, expr.span)
+        if isinstance(expr, ast.Binary) and expr.op is ast.BinaryOp.EQUAL:
+            found.note(D.LANG_STMT_ASSIGNMENT_IS_AN_ARROW, expr.span)
 
     def _lower_local(self, builder: IRBuilder, node: ast.VarDef) -> None:
         """Lower a variable defined inside a function body.
