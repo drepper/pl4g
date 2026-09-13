@@ -1351,6 +1351,45 @@ test is what holds the two together: a shape one of them refuses and the other a
 
 ---
 
+## 2026-09-13T14:05+02:00 — compiler
+
+**A truth value in a register is one or zero, and a byte in memory**
+
+Decided on the user's direction, and mostly not a decision at all: it is what the instructions produce.  A comparison whose answer
+is wanted as a value -- rather than as a place to go, which is the case that already worked -- is now computed, which is what every
+comparison operator and every binary logic operator the language is about to gain will use.
+
+The three architectures diverge further here than they do on branches, which is why the shared part is only *which* condition and
+*what* stands in it, and the rest is per target.  x86-64 reads the flags into a byte with `setcc` and leaves the rest of the
+register alone, so a widening move follows; the usual trick of clearing the register first is not open, because clearing it writes
+the flags the comparison just set.  AArch64 reads them into a word with `cset`, which clears the rest of the register itself.
+RISC-V has no flags at all: it has one comparison, "set if less than", signed and unsigned, and the other six orderings are that
+one with the operands exchanged, its answer inverted with an exclusive or, or both -- equality having no ordering in it is a
+subtraction and then a question about the difference.
+
+The representation follows from that rather than being chosen: every one of those instructions writes one or zero.  Nothing was
+free to decide, which is the best kind of answer to this sort of question.  C says any nonzero value is true and `_Bool` normalizes
+to 0/1 on assignment, which is two rules where one would do; Rust, Go and Zig all make the value 0/1 and nothing else, and this is
+that.
+
+A comparison is folded into a branch only where that branch is its **sole** reader and reads it as its condition.  Read once by
+anything else -- a return, a store, one day a call -- it is a value something wants, and a value something wants has to be
+somewhere.  Two branches cannot each absorb one comparison, so that case computes it once and both branches test the result
+against zero, which two of the three architectures have a flagless instruction for.  The old rule was "read exactly once", which
+was right only because a branch was the only thing that could read one.
+
+**A latent miscompilation came out with it.**  Every backend answered "how wide is a value of this type" with the integer's width
+or, failing that, a word -- and a `bool` fell into "failing that".  A one-byte variable was therefore read and written eight bytes
+at a time, reaching seven bytes past itself into whatever was laid out next.  Nothing had caught it because nothing had yet been
+laid out next to a `bool`.  The width now comes from the layout, which already said one byte, and the language test that shows it
+puts a guard variable on each side.
+
+What other languages do about the folding.  LLVM keeps `icmp` as a value and lets the backend fold it into a branch when it has a
+single use in the same block; GCC keeps the comparison in the branch and splits it out when something else wants it.  The rule
+here is LLVM's, said in the one place that can see both readers.
+
+---
+
 ---
 
 Open questions

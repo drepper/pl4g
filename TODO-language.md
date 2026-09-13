@@ -165,7 +165,8 @@ To Do List for the PL4g language
     bound.  These are the operations that do not trap, so they are what a program uses where an overflow is meant.
 
 [ ] implement exact comparisons, defined for numbers, strings, booleans.  Needs the expression parser and the register allocator;
-    comparing needs no branch, since the result is a value.  Strings need the string entry first and floats the float entry.  Use
+    comparing needs no branch, since the result is a value -- and producing that value is now done, so nothing in the compiler is
+    in the way of this.  Strings need the string entry first and floats the float entry.  Use
     `=`, `≠`, `<`, `>`, `≤`, `≥` as the operators.  Using
     `=` as a comparison of floats creates a warning that this is an unsafe operation which can be suppressed with `@[ignore(…)]`.
     it is possible to use untyped integer literals when comparing it with a float.  In this case the integer must have a representation
@@ -185,7 +186,7 @@ To Do List for the PL4g language
     The comparison here is true as long as the difference is not larger than a limit.  For the time being, make this a builtin
     variable with the value 1e-13.  In future this will be a runtime-time variable.  Compare this with `⎕CT` in APL.
 
-[ ] implement binary logic operations.  The boolean type they work on exists.  The six glyph operators need the expression parser
+[ ] implement binary logic operations.  The boolean type they work on exists, and so does a truth value in a register.  The six glyph operators need the expression parser
     and the register allocator; `and` and `or` short-circuit, so those two also need conditional branches, which is the only place
     the language will generate a branch before there is an `if`.  Use this table for guidance:
     | Glyph | Name | Arity  | Definition |

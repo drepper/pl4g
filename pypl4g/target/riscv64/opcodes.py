@@ -141,6 +141,25 @@ RISCV_INSTRS: Final[tuple[RVInstDesc, ...]] = (
     RVInstDesc("not", (_r(), _r()), template=0xFFF04013,
                fields=(Field(FieldKind.REGISTER, 0, 7), Field(FieldKind.REGISTER, 1, 15)),
                est_size=INSTRUCTION_SIZE),
+    # The only comparison the architecture has is "less than", which writes one
+    # or zero into a register.  Every other ordering is this instruction with
+    # the operands exchanged, its answer inverted, or both.
+    # slt rd, rs1, rs2
+    RVInstDesc("slt", (_r(), _r(), _r()), template=0x00002033,
+               fields=(_reg(0, _RD), _reg(1, _RS1), _reg(2, _RS2)),
+               est_size=INSTRUCTION_SIZE),
+    # sltu rd, rs1, rs2
+    RVInstDesc("sltu", (_r(), _r(), _r()), template=0x00003033,
+               fields=(_reg(0, _RD), _reg(1, _RS1), _reg(2, _RS2)),
+               est_size=INSTRUCTION_SIZE),
+    # sltiu rd, rs1, imm12
+    RVInstDesc("sltiu", (_r(), _r(), _imm12()), template=0x00003013,
+               fields=(_reg(0, _RD), _reg(1, _RS1), _imm(2, _IMM12, 12)),
+               est_size=INSTRUCTION_SIZE),
+    # xori rd, rs1, imm12
+    RVInstDesc("xori", (_r(), _r(), _imm12()), template=0x00004013,
+               fields=(_reg(0, _RD), _reg(1, _RS1), _imm(2, _IMM12, 12)),
+               est_size=INSTRUCTION_SIZE),
     # lui rd, imm20
     RVInstDesc("lui", (_r(), _imm20()), template=0x00000037,
                fields=(_reg(0, _RD),

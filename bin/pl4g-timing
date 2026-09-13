@@ -66,7 +66,8 @@ GROUPS: tuple[Group, ...] = (
           "Reading and writing variables, including one of every width.  These "
           "move when the loads and stores of a backend do.",
           {"global-variable": "one variable, read once",
-           "assign-widths": "a store of every width"}),
+           "assign-widths": "a store of every width",
+           "boolean-in-memory": "a truth value, which is one byte"}),
     Group("Register pressure",
           "More values wanted at once than a backend can hold in registers.  "
           "These move when the register allocator does, and they are the only "

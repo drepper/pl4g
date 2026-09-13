@@ -285,6 +285,51 @@ AARCH64_INSTRS: Final[tuple[A64InstDesc, ...]] = (
                               reloc=BRANCH19),),
                 implicit_uses=(NZCV,), flags=InstFlags.TERMINATOR,
                 est_size=INSTRUCTION_SIZE),
+    # cset Wd, <cond> is csinc Wd, wzr, wzr, <the opposite condition>, so the
+    # condition in the word is the opposite of the one the name says.  One row
+    # per condition, as for the branches above: the condition is a field of the
+    # instruction, and baking it into the template is what lets a row be chosen
+    # by naming it.
+    # cset Wd, eq
+    A64InstDesc("cset.eq", (_r(32),), template=0x1A9F17E0,
+                fields=(_reg_field(0, _RD),), implicit_uses=(NZCV,),
+                est_size=INSTRUCTION_SIZE),
+    # cset Wd, ne
+    A64InstDesc("cset.ne", (_r(32),), template=0x1A9F07E0,
+                fields=(_reg_field(0, _RD),), implicit_uses=(NZCV,),
+                est_size=INSTRUCTION_SIZE),
+    # cset Wd, lt
+    A64InstDesc("cset.lt", (_r(32),), template=0x1A9FA7E0,
+                fields=(_reg_field(0, _RD),), implicit_uses=(NZCV,),
+                est_size=INSTRUCTION_SIZE),
+    # cset Wd, le
+    A64InstDesc("cset.le", (_r(32),), template=0x1A9FC7E0,
+                fields=(_reg_field(0, _RD),), implicit_uses=(NZCV,),
+                est_size=INSTRUCTION_SIZE),
+    # cset Wd, gt
+    A64InstDesc("cset.gt", (_r(32),), template=0x1A9FD7E0,
+                fields=(_reg_field(0, _RD),), implicit_uses=(NZCV,),
+                est_size=INSTRUCTION_SIZE),
+    # cset Wd, ge
+    A64InstDesc("cset.ge", (_r(32),), template=0x1A9FB7E0,
+                fields=(_reg_field(0, _RD),), implicit_uses=(NZCV,),
+                est_size=INSTRUCTION_SIZE),
+    # cset Wd, lo
+    A64InstDesc("cset.lo", (_r(32),), template=0x1A9F27E0,
+                fields=(_reg_field(0, _RD),), implicit_uses=(NZCV,),
+                est_size=INSTRUCTION_SIZE),
+    # cset Wd, ls
+    A64InstDesc("cset.ls", (_r(32),), template=0x1A9F87E0,
+                fields=(_reg_field(0, _RD),), implicit_uses=(NZCV,),
+                est_size=INSTRUCTION_SIZE),
+    # cset Wd, hi
+    A64InstDesc("cset.hi", (_r(32),), template=0x1A9F97E0,
+                fields=(_reg_field(0, _RD),), implicit_uses=(NZCV,),
+                est_size=INSTRUCTION_SIZE),
+    # cset Wd, hs
+    A64InstDesc("cset.hs", (_r(32),), template=0x1A9F37E0,
+                fields=(_reg_field(0, _RD),), implicit_uses=(NZCV,),
+                est_size=INSTRUCTION_SIZE),
     # cbnz Wt, label
     A64InstDesc("cbnz", (_r(32), _sym()), template=0x35000000,
                 fields=(_reg_field(0, _RD),

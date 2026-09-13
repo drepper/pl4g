@@ -255,6 +255,24 @@ codes there would be nothing to remember.  A condition arriving as a value rathe
 truth value, one day the result of a call -- is branched on by testing it against zero, which two of the three have an instruction
 for that needs no flags at all.
 
+A comparison whose answer is wanted as a *value* rather than as a place to go is the other half of that question, and it is
+selected in one call for the same reason.  The three architectures diverge further here than they do on branches.  x86-64 reads
+its flags into a byte with `setcc`, which leaves the rest of the register as it was, so the byte is widened into the register
+afterwards -- clearing the register first instead is the usual trick and is not open here, because clearing it writes the flags the
+comparison has just set.  AArch64 reads them into a word with `cset`, which clears the rest of the register itself, so two
+instructions do.  RISC-V has no flags: it has one comparison, "set if less than", in a signed and an unsigned form, and the other
+six orderings are that one with the operands exchanged, its answer inverted with an exclusive or, or both.  Equality has no
+ordering in it at all and is a subtraction followed by a question about the difference.
+
+**A truth value is one or zero.**  That is not a representation chosen for the language; it is what every instruction on all three
+architectures that produces one produces, and what the byte in the image already holds.  It is a byte in memory, which is what the
+layout says of `bool`, so it is read and written a byte at a time -- reading or writing one any wider would reach past it into
+whatever is laid out beside it.  In a register it occupies a whole one, like every other value narrower than a word.
+
+A comparison is folded into a branch only where the branch is its *sole* reader and reads it as its condition.  Read once by
+anything else, or read twice, it is a value that something wants, and a value something wants has to be in a register.  Two
+branches cannot each absorb one comparison, so that case computes it once and both branches test the result against zero.
+
 Which way round a branch is written is decided where the order of the blocks is known, and not by a backend.  A two-way branch is a
 conditional branch and a jump; the jump is not needed when the block it would go to is the next one in the image, so the condition
 is inverted when that is what makes it so.  For a branch whose two blocks both follow it -- which is every branch a conditional

@@ -194,12 +194,19 @@ def test_an_unreachable_point_traps(triple: str, tmp_path) -> None:  # noqa: ANN
     assert run(triple, path) == 3
 
 
-# -- what it refuses ------------------------------------------------------------
+# -- what a branch does not absorb ----------------------------------------------
 
 @pytest.mark.parametrize("triple", compiler_targets())
-def test_a_comparison_wanted_as_a_value_is_reported(triple: str) -> None:
-    """Folding one into a branch is all that is generated; anything else would
-    need it computed into a register, which is reported rather than got wrong."""
+def test_a_comparison_two_branches_read_becomes_a_value(triple: str,
+                                                        tmp_path) -> None:  # noqa: ANN001
+    """A branch absorbs the comparison it reads, and two branches cannot each
+    absorb the same one, so it is computed into a register instead.
+
+    What that costs is one instruction, and it is what every comparison
+    operator the language gains will use; the shape of it is tested in
+    test_truthvalue.py.  What matters here is that the branch still goes the
+    right way when the condition arrives as a value rather than as flags.
+    """
     module = Module("t", triple=triple)
     func = Function("main", module.types.func_type((), U8),
                     FuncAttrs(special=SpecialKind.STARTUP))
@@ -211,16 +218,13 @@ def test_a_comparison_wanted_as_a_value_is_reported(triple: str) -> None:
     # Read twice: once by each branch, so neither can simply absorb it.
     entry.append(CondBrInst(cond, BlockTarget(yes), BlockTarget(no)))
     yes.append(CondBrInst(cond, BlockTarget(no), BlockTarget(no)))
-    no.append(RetInst(module.int_const(U8, 0)))
+    no.append(RetInst(module.int_const(U8, 6)))
     module.add_function(func)
     module.startup = func
-    target = lookup_target(triple)
-    assert target is not None
-    engine, collected = collecting_engine(None)
-    streamer = MCStreamer(encode=target.encode)
-    target.generate(module, target.new_assembler(streamer, 0), engine, 0)
-    assert 8501 in [d.info.number for d in collected], \
-        [d.info.name for d in collected]
+    verify(module)
+    path = tmp_path / "out"
+    build(module, triple, path)
+    assert run(triple, path) == 6
 
 
 # -- the condition vocabulary ---------------------------------------------------

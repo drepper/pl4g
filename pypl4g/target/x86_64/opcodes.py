@@ -202,6 +202,50 @@ X86_INSTRS: Final[tuple[X86InstDesc, ...]] = (
     X86InstDesc("test", (_rm(64), _r(64)), opcode=0x85, opsize=OpSize.REXW,
                 modrm=ModRMUse.REG_RM, reg_op=1, rm_op=0, implicit_defs=(EFLAGS,),
                 est_size=3, roles=_READS_BOTH),
+    # The condition is part of the opcode, as it is for a jump, so one row per
+    # condition.  What is written is a byte, and only a byte: the rest of the
+    # register keeps whatever it held, which is why a truth value is widened
+    # into it afterwards rather than being taken from here directly.
+    # sete r/m8                        0F 94 /0
+    X86InstDesc("sete", (_rm(8),), opcode=0x94, map=OpMap.M0F,
+                modrm=ModRMUse.EXT_RM, ext=0, rm_op=0,
+                implicit_uses=(EFLAGS,), est_size=3),
+    # setne r/m8                       0F 95 /0
+    X86InstDesc("setne", (_rm(8),), opcode=0x95, map=OpMap.M0F,
+                modrm=ModRMUse.EXT_RM, ext=0, rm_op=0,
+                implicit_uses=(EFLAGS,), est_size=3),
+    # setl r/m8                        0F 9C /0
+    X86InstDesc("setl", (_rm(8),), opcode=0x9C, map=OpMap.M0F,
+                modrm=ModRMUse.EXT_RM, ext=0, rm_op=0,
+                implicit_uses=(EFLAGS,), est_size=3),
+    # setle r/m8                       0F 9E /0
+    X86InstDesc("setle", (_rm(8),), opcode=0x9E, map=OpMap.M0F,
+                modrm=ModRMUse.EXT_RM, ext=0, rm_op=0,
+                implicit_uses=(EFLAGS,), est_size=3),
+    # setg r/m8                        0F 9F /0
+    X86InstDesc("setg", (_rm(8),), opcode=0x9F, map=OpMap.M0F,
+                modrm=ModRMUse.EXT_RM, ext=0, rm_op=0,
+                implicit_uses=(EFLAGS,), est_size=3),
+    # setge r/m8                       0F 9D /0
+    X86InstDesc("setge", (_rm(8),), opcode=0x9D, map=OpMap.M0F,
+                modrm=ModRMUse.EXT_RM, ext=0, rm_op=0,
+                implicit_uses=(EFLAGS,), est_size=3),
+    # setb r/m8                        0F 92 /0
+    X86InstDesc("setb", (_rm(8),), opcode=0x92, map=OpMap.M0F,
+                modrm=ModRMUse.EXT_RM, ext=0, rm_op=0,
+                implicit_uses=(EFLAGS,), est_size=3),
+    # setbe r/m8                       0F 96 /0
+    X86InstDesc("setbe", (_rm(8),), opcode=0x96, map=OpMap.M0F,
+                modrm=ModRMUse.EXT_RM, ext=0, rm_op=0,
+                implicit_uses=(EFLAGS,), est_size=3),
+    # seta r/m8                        0F 97 /0
+    X86InstDesc("seta", (_rm(8),), opcode=0x97, map=OpMap.M0F,
+                modrm=ModRMUse.EXT_RM, ext=0, rm_op=0,
+                implicit_uses=(EFLAGS,), est_size=3),
+    # setae r/m8                       0F 93 /0
+    X86InstDesc("setae", (_rm(8),), opcode=0x93, map=OpMap.M0F,
+                modrm=ModRMUse.EXT_RM, ext=0, rm_op=0,
+                implicit_uses=(EFLAGS,), est_size=3),
     # jmp rel32                          E9 cd
     X86InstDesc("jmp", (_rel(32),), opcode=0xE9, rel_op=0, rel_bits=32,
                 flags=InstFlags.TERMINATOR | InstFlags.BARRIER, est_size=5),

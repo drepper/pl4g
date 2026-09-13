@@ -19,6 +19,12 @@ comparison in the branch itself and the other two set flags in the instruction
 before.  A condition arriving any other way -- a variable holding a truth value,
 one day the result of a call -- is a value, and branching on it is branching on
 its being other than zero.
+
+**A comparison whose answer is wanted as a value** is the other half of the same
+question, and it is here for the same reason: the condition and what stands in
+it are the part that is the same everywhere, and the instructions that say so
+are the part that is not.  A truth value is one or zero, which is what every
+instruction producing one on these architectures produces.
 """
 
 from typing import Protocol, Sequence
@@ -29,6 +35,7 @@ from ..ir.inst import (BrInst, CmpInst, CmpPred, CondBrInst, Instruction,
 from ..mc.asmbuilder import Assembler
 from ..mc.operand import MCImm, MCOperand
 from ..mc.ops import Condition
+from ..mc.reg import Reg
 from ..source.location import Span
 
 #: What each comparison of the representation tests, in the assembler's terms.
@@ -79,15 +86,48 @@ def labels_of(symbol: str, func: Function) -> list[str]:
 def condition_used_once(func: Function, value: Instruction) -> bool:
     """Whether *value* is read by exactly one instruction of *func*.
 
-    A comparison read once is folded into the branch that reads it.  One read
-    anywhere else would have to be computed into a register, which is what
-    materializing a truth value means and which is not generated yet.
+    A comparison read once is folded into the branch that reads it, because that
+    is the shape every one of these architectures has.  One read anywhere else
+    is computed into a register instead, by `lower_comparison` below, and the
+    branch then tests that register against zero like any other value.
     """
     users = 0
     for block in func.blocks:
         for inst in block.insts:
             users += sum(1 for operand in inst.operands if operand is value)
     return users == 1
+
+
+def folded_into_branch(func: Function, value: Instruction) -> bool:
+    """Whether *value* is a comparison that the branch reading it absorbs.
+
+    Being read once is not enough: it has to be read once *by a branch*, and as
+    that branch's condition.  A comparison read once by anything else -- a
+    return, a store, one day a call -- is a value that something wants, and a
+    value something wants has to be somewhere, which means a register.
+    """
+    if not condition_used_once(func, value):
+        return False
+    for block in func.blocks:
+        for inst in block.insts:
+            if value in inst.operands:
+                return isinstance(inst, CondBrInst) and inst.operands[0] is value
+    return False
+
+
+def lower_comparison(asm: Assembler, inst: CmpInst, operands: Operands,
+                     destination: Reg) -> None:
+    """Compute the truth value of *inst* into *destination*.
+
+    This is the case the branch above does not take: a comparison whose answer
+    is wanted as a value rather than as a place to go.  Which instructions say
+    that differs on all three targets -- and on one of them the comparison is
+    the only instruction there is -- so what is written here is the part that
+    does not: which condition, and which two things stand in it.
+    """
+    asm.setcond(CONDITIONS[inst.pred], destination,
+                operands.in_register(inst.operands[0], inst.span),
+                operands.value(inst.operands[1], inst.span), inst.span)
 
 
 def lower_branch(asm: Assembler, func: Function, labels: Sequence[str], index: int,
@@ -143,7 +183,7 @@ def _condition_of(func: Function, terminator: CondBrInst, operands: Operands,
                   zero: MCImm, span: Span) -> tuple[Condition, MCOperand, MCOperand]:
     """What the branch tests, and the two things it tests."""
     value = terminator.operands[0]
-    if isinstance(value, CmpInst) and condition_used_once(func, value):
+    if isinstance(value, CmpInst) and folded_into_branch(func, value):
         return (CONDITIONS[value.pred],
                 operands.in_register(value.operands[0], span),
                 operands.value(value.operands[1], span))

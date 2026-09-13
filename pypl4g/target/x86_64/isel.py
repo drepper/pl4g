@@ -18,7 +18,8 @@ from ...ir.inst import BinOp, UnOp
 from ...mc.reg import Reg, VirtReg
 from ...mc.operand import SymExpr
 from ...source.location import Span
-from ..branches import condition_used_once, labels_of, lower_branch
+from ..branches import (folded_into_branch, labels_of, lower_branch,
+                        lower_comparison)
 
 if TYPE_CHECKING:
     from ...mc.reg import PhysReg
@@ -53,6 +54,17 @@ _CONDITIONAL: Final[dict[Condition, str]] = {
     Condition.SGT: "jg", Condition.SGE: "jge",
     Condition.ULT: "jb", Condition.ULE: "jbe",
     Condition.UGT: "ja", Condition.UGE: "jae",
+}
+
+#: The instruction that writes a condition into a byte, for each condition.
+#: The condition is part of the opcode here too, so this is the same shape as
+#: the table above and not a second mechanism.
+_SET: Final[dict[Condition, str]] = {
+    Condition.EQ: "sete", Condition.NE: "setne",
+    Condition.SLT: "setl", Condition.SLE: "setle",
+    Condition.SGT: "setg", Condition.SGE: "setge",
+    Condition.ULT: "setb", Condition.ULE: "setbe",
+    Condition.UGT: "seta", Condition.UGE: "setae",
 }
 
 #: Operations that map to a single instruction with no operands.
@@ -249,6 +261,23 @@ class X86Selector(InstructionSelector):
         compare = self._select_compare(lhs, rhs, cond, span)
         return (compare, self._inst(_CONDITIONAL[cond], (target,), span))
 
+    def select_set(self, cond: Condition, dst: Reg, lhs: MCOperand, rhs: MCOperand,
+                   span: Span) -> Sequence[MCInst]:
+        """Instructions that put whether *lhs* and *rhs* stand in *cond* into *dst*.
+
+        Three instructions, and the third is not optional.  The one that reads
+        the flags writes a byte and leaves the rest of the register as it was,
+        so the byte is widened into the register afterwards; the usual trick of
+        clearing the register first instead is not open here, because clearing
+        it writes the flags that the comparison has just set.
+        """
+        if isinstance(lhs, MCImm) and not isinstance(rhs, MCImm):
+            lhs, rhs, cond = rhs, lhs, cond.swapped()
+        low = MCReg(dst, bits=8)
+        return (self._select_compare(lhs, rhs, cond, span),
+                self._inst(_SET[cond], (low,), span),
+                self._inst("movzx", (MCReg(dst, bits=32), low), span))
+
     def _select_compare(self, lhs: MCOperand, rhs: MCOperand, cond: Condition,
                         span: Span) -> MCInst:
         """The instruction that sets the flags for a comparison.
@@ -300,8 +329,7 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
                             UnreachableInst)
     from ...ir.mangle import symbol_name
     from ...ir.module import GlobalVar
-    from ...ir.types import IntType
-    from ...ir.value import IntConst
+    from ...ir.types import BoolType, IntType
     from ..globals import symbol_of
 
     asm.begin_function(symbol_name(func),
@@ -318,21 +346,23 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
 
         def value(self, value: object, span: Span) -> MCOperand:
             """The operand for *value*, a constant being an immediate."""
-            if isinstance(value, IntConst):
-                return MCImm(value.value,
-                             _immediate_width(value.value, _is_signed(value.ty)),
-                             signed=_is_signed(value.ty))
+            constant = _number_of(value)
+            if constant is not None:
+                number, ty = constant
+                return MCImm(number, _immediate_width(number, _is_signed(ty)),
+                             signed=_is_signed(ty))
             return self.in_register(value, span)
 
         def in_register(self, value: object, span: Span) -> MCOperand:
             """The operand for *value*, put in a register if it is not in one."""
-            if isinstance(value, IntConst):
+            constant = _number_of(value)
+            if constant is not None:
                 # Every comparison here wants a register on its left, and two
                 # constants compared with each other is what a program that has
                 # not been folded looks like.
-                ty = value.ty
+                number, ty = constant
                 carried = _new_value(ty, registers)
-                asm.loadreg(carried, MCImm(value.value, max(32, ty.bits) if isinstance(ty, IntType) else 32,
+                asm.loadreg(carried, MCImm(number, max(32, _width_of(ty)),
                                            signed=_is_signed(ty)), span)
                 return MCReg(carried)
             found = held.get(id(value))
@@ -382,10 +412,11 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
                         disp_sym=SymExpr(asm.streamer.symbol(symbol_of(address))),
                         rip_relative=True, size_bits=_width_of(written.ty),
                         signed=_is_signed(written.ty))
-                    if isinstance(written, IntConst):
+                    constant = _number_of(written)
+                    if constant is not None:
                         asm.store(place, MCImm(
-                            written.value,
-                            _immediate_width(written.value, _is_signed(written.ty)),
+                            constant[0],
+                            _immediate_width(constant[0], _is_signed(written.ty)),
                             signed=_is_signed(written.ty)), inst.span)
                     else:
                         # A store names how much of memory it writes, so it
@@ -397,13 +428,14 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
                 case RetInst():
                     value = inst.operands[0]
                     ty = value.ty
-                    if not isinstance(ty, IntType):
+                    if not isinstance(ty, (IntType, BoolType)):
                         raise UnsupportedOperation("".join((
                             "returning a value of type '", ty.render(), "'")), span)
                     result = _result_register(ty, cconv, registers)
-                    if isinstance(value, IntConst):
-                        asm.loadreg(result, MCImm(value.value, max(32, ty.bits),
-                                                  signed=ty.signed), inst.span)
+                    constant = _number_of(value)
+                    if constant is not None:
+                        asm.loadreg(result, MCImm(constant[0], max(32, _width_of(ty)),
+                                                  signed=_is_signed(ty)), inst.span)
                     else:
                         asm.loadreg(result, MCReg(_value_of(value, held, span)),
                                     inst.span)
@@ -436,12 +468,17 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
                            operands.in_register(inst.operands[0], inst.span),
                            span=inst.span)
                 case CmpInst():
-                    # A comparison is folded into the branch that reads it; one
-                    # read anywhere else would have to be computed into a
-                    # register, which is not generated yet.
-                    if not condition_used_once(func, inst):
-                        raise UnsupportedOperation(
-                            "a comparison whose result is wanted as a value", span)
+                    # A comparison read exactly once is folded into the branch
+                    # that reads it and nothing is emitted here; read any other
+                    # number of times, its answer is a value like any other.
+                    if folded_into_branch(func, inst):
+                        continue
+                    destination = _new_value(
+                        inst.ty, registers,
+                        hint=(_result_register(inst.ty, cconv, registers)
+                              if inst is returned else None))
+                    held[id(inst)] = destination
+                    lower_comparison(asm, inst, operands, destination)
                 case UnreachableInst():
                     asm.op(ops.TRAP, None, span=inst.span)
                 case BrInst() | CondBrInst():
@@ -460,9 +497,7 @@ def _result_register(ty: "Type", cconv: "CallConvDesc",
     result is returned in: the architecture has narrower views, but writing one
     of the narrow ones would leave the rest of the register as it was.
     """
-    from ...ir.types import IntType
-
-    bits = ty.bits if isinstance(ty, IntType) else 64
+    bits = _width_of(ty)
     return registers.view(cconv.int_ret_regs[0].unit, max(32, bits))
 
 
@@ -478,9 +513,7 @@ def _new_value(ty: "Type", registers: "RegisterInfo",
     The hint says where the value is wanted anyway.  Taking it turns the move
     that would put it there into a move of a register to itself, which then goes.
     """
-    from ...ir.types import IntType
-
-    bits = ty.bits if isinstance(ty, IntType) else 64
+    bits = _width_of(ty)
     return registers.new_virtual(GPR, max(32, bits), hint=hint)
 
 
@@ -509,10 +542,33 @@ def _value_of(value: object, held: "dict[int, VirtReg]",
 
 
 def _width_of(ty: "Type") -> int:
-    """How many bits a value of *ty* occupies in memory."""
-    from ...ir.types import IntType
+    """How many bits a value of *ty* occupies in memory.
 
-    return ty.bits if isinstance(ty, IntType) else 64
+    A truth value is a byte, which is what the layout says it is.  Reading or
+    writing one any wider would touch whatever is laid out beside it.
+    """
+    from ...ir.types import BoolType, IntType
+
+    if isinstance(ty, IntType):
+        return ty.bits
+    return 8 if isinstance(ty, BoolType) else 64
+
+
+def _number_of(value: object) -> "tuple[int, Type] | None":
+    """The number a constant stands for and its type, or nothing where it is
+    not a constant.
+
+    A truth value is one or zero.  That is not a choice made here: it is what
+    every instruction on this architecture that produces one produces, and what
+    the byte in the image already holds.
+    """
+    from ...ir.value import BoolConst, IntConst
+
+    if isinstance(value, IntConst):
+        return value.value, value.ty
+    if isinstance(value, BoolConst):
+        return (1 if value.value else 0), value.ty
+    return None
 
 
 def _is_signed(ty: "Type") -> bool:

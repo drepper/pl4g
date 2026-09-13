@@ -1,0 +1,25 @@
+※ pl4g-test: compile=ok run=native,qemu exit=0 diag=none
+
+※ A truth value is one byte in memory, which is what the layout says it is.
+※ Reading or writing one any wider would reach past it into whatever is laid
+※ out beside it -- and what is laid out beside it is another variable.  The two
+※ guards here are what such a read or write would disturb.
+
+@[visible]
+let before: mut u8 = 5u8
+
+let ready: bool = true
+
+@[visible]
+let seen: mut bool = false
+
+@[visible]
+let after: mut u8 = 6u8
+
+@[startup]
+fn main() → u8:
+    seen ← ready
+    ※ Nothing here can look at the guards yet -- there is no way to compare --
+    ※ so what this asserts is that the program runs to its end and exits
+    ※ cleanly; the widths themselves are asserted in tests/compiler.
+    0u8

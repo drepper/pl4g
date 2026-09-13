@@ -100,6 +100,19 @@ class InstructionSelector(Protocol):
         """
         ...
 
+    def select_set(self, cond: Condition, dst: Reg, lhs: MCOperand, rhs: MCOperand,
+                   span: Span) -> Sequence[MCInst]:
+        """Instructions that put one into *dst* when *lhs* and *rhs* stand in
+        *cond*, and zero into it when they do not.
+
+        One call for the same reason `select_branch` is one: two of these
+        architectures compare into flags and read them back with a second
+        instruction, and the third has no flags at all and computes the answer
+        directly, so which instruction does the comparing is the target's
+        business and not the caller's.
+        """
+        ...
+
 
 class MachinePass(Protocol):
     """A rewrite applied to a function before it is streamed."""
@@ -342,6 +355,16 @@ class Assembler:
         self._block.successors.append(target)
         self._emit(self._selector.select_branch(cond, lhs, rhs,
                                                 self._symref(target), span))
+
+    def setcond(self, cond: Condition, dst: Reg, lhs: MCOperand, rhs: MCOperand,
+                span: Span = INVALID_SPAN) -> None:
+        """Put into *dst* whether *lhs* and *rhs* stand in *cond*.
+
+        The truth value that comes out is one or zero, and nothing else: every
+        instruction that produces one on these three architectures produces
+        exactly that, so the representation is not a choice being made here.
+        """
+        self._emit(self._selector.select_set(cond, dst, lhs, rhs, span))
 
     def falls_through(self, target: str) -> None:
         """Record an edge control takes by simply going on to the next block.

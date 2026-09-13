@@ -65,13 +65,15 @@ To Do List for the pypl4g compiler
     A chain of comparisons is correct and is what a first version should do; a jump table wants the relocation work that
     position-independent code needs anyway.
 
-[ ] produce a truth value in a register.  A comparison feeding one branch is folded into it; one whose result is wanted as a value
-    needs `setcc` on x86-64, `cset` on AArch64 and `slt`/`sltu` with a fixup-up for equality on RISC-V.  Needed by the comparison
-    operators in TODO-language.md, and reported (8501) until then.
+[x] produce a truth value in a register.  Done: `setcc` and a widening move on x86-64, `cset` on AArch64, and `slt`/`sltu` with
+    the operands exchanged or the answer inverted on RISC-V, equality there being a subtraction and then a question about the
+    difference.  A comparison is folded into a branch only where that branch is its sole reader and reads it as its condition;
+    anything else computes it.  A truth value is one or zero, and a byte in memory -- which also fixed a `bool` in memory being
+    read and written eight bytes wide.  The comparison operators in TODO-language.md are now unblocked.
 
 [x] parse expressions with precedence, and lower `BinaryInst`.  Done: precedence climbing with a table, so an operator is a row and
     not a new level of the grammar; `Binary` and `Unary` nodes in the syntax tree; `BinaryInst` and `UnaryInst` lowered on all
-    three targets, with an operand no table row can carry put in a register.  `CmpInst` as a value is the entry below.
+    three targets, with an operand no table row can carry put in a register.  `CmpInst` as a value is the entry above.
 
 [ ] emit frame information and an unwinder.  Decided: a fault -- an arithmetic overflow to begin with -- aborts with a real
     multi-frame backtrace, so this is frame information plus an unwinder in the generated code rather than a bare trap.  Needs the
