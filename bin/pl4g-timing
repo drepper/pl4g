@@ -101,7 +101,8 @@ GROUPS: tuple[Group, ...] = (
     Group("Types",
           "Definitions the program writes.  These move when the parser, the "
           "name resolution or the layout does.",
-          {"type-definitions": "eight definitions in all three notations"}),
+          {"type-definitions": "eight definitions in all three notations",
+           "enum-values": "two enumerations, and three matches over them"}),
 )
 
 #: How many times each sample is compiled.  The best is kept.
