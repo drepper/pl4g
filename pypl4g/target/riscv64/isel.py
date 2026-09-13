@@ -539,6 +539,22 @@ class RVSelector(InstructionSelector):
         (ops.DIVIDE.name, 32): "fdiv.s", (ops.DIVIDE.name, 64): "fdiv.d",
     }
 
+    def select_branch_if_finite(self, value: Reg, bits: int, target: MCSymRef,
+                                span: Span) -> Sequence[MCInst]:
+        """Instructions that go to *target* when *value* is a finite number.
+
+        There are no flags here, so the question is asked as a value: the
+        difference against itself compared with itself, which answers one where
+        it is a number and zero where it is not, and a branch on that.
+        """
+        suffix = ".s" if bits == 32 else ".d"
+        held = MCReg(INFO.new_virtual(FPR, _FLOAT_REGISTER_BITS))
+        answer = MCReg(INFO.new_virtual(GPR, 64))
+        return (self._inst("".join(("fsub", suffix)),
+                           (held, MCReg(value), MCReg(value)), span),
+                self._inst("".join(("feq", suffix)), (answer, held, held), span),
+                self._inst("bne", (answer, MCReg(ZERO), target), span))
+
     def select_float_op(self, op: Op, dst: Reg, left: MCOperand, right: MCOperand,
                         bits: int, span: Span) -> Sequence[MCInst]:
         """Instructions that compute *op* over two floating-point values."""
@@ -865,6 +881,15 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
                                  operands.in_register(inst.operands[0], inst.span),
                                  operands.in_register(inst.operands[1], inst.span),
                                  inst.ty.bits, inst.span)
+                    # An answer that is an infinity or a not-a-number is an
+                    # answer the operation did not have, the way a sum that
+                    # will not fit is, and the program stops the same way.
+                    carry_on = asm.reserve_label("is.finite")
+                    asm.branch_if_finite(destination, inst.ty.bits, carry_on,
+                                         inst.span)
+                    _Fault("".join((NAMES[inst.op], " with no number for an answer")),
+                           inst.span).out_of_range(asm, inst.span)
+                    asm.block(carry_on)
                 case BinaryInst() if inst.op in TRAPPING:
                     destination = _new_value(
                         inst.ty, registers,

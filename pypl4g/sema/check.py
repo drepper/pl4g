@@ -5,6 +5,7 @@ collected first and only then is any body checked, which is what lets the whole
 compilation be parallelized and what makes a forward reference legal.
 """
 
+import math
 from dataclasses import dataclass, field
 from typing import Callable, Final, Sequence
 
@@ -19,7 +20,7 @@ from ..ir.types import (BOOL, BUILTIN_TYPES, ERROR, F64, FloatType, IntType,
                         Type, VOID)
 from .modules import (ImportCycle, LoadedModule, ModuleNotFound, ModuleRegistry,
                       base_name)
-from ..ir.value import IntConst, UndefConst, Value
+from ..ir.value import FloatConst, IntConst, UndefConst, Value
 from pathlib import Path
 
 from ..source.location import INVALID_SPAN, Span
@@ -1553,6 +1554,8 @@ class Checker:
         down.  This is the checker and not the folder, because the folder is an
         optimization and a program means the same thing whether or not one runs.
         """
+        if isinstance(left, FloatConst) and isinstance(right, FloatConst):
+            return self._float_answer_is_already_known(expr, left, right)
         if not isinstance(left, IntConst) or not isinstance(right, IntConst):
             return False
         if expr.op in (ast.BinaryOp.DIVIDE, ast.BinaryOp.REMAINDER):
@@ -1575,6 +1578,44 @@ class Checker:
             return False
         self._diags.emit(D.LANG_TYPE_ANSWER_DOES_NOT_FIT, expr.span,
                          value=str(answer), type=ty.render())
+        return True
+
+    #: What each of the four does to two numbers.  Python's own arithmetic on
+    #: a `float` is the hardware's double precision, so an answer worked out
+    #: here is the answer the program would compute -- for `f64`.  For `f32` it
+    #: is the answer rounded once instead of twice, which can differ in the last
+    #: place, so only the question asked of it is used: whether it is finite.
+    _FLOAT_ARITHMETIC: Final[dict[ast.BinaryOp, "Callable[[float, float], float]"]] = {
+        ast.BinaryOp.ADD: lambda a, b: a + b,
+        ast.BinaryOp.SUBTRACT: lambda a, b: a - b,
+        ast.BinaryOp.MULTIPLY: lambda a, b: a * b,
+    }
+
+    def _float_answer_is_already_known(self, expr: ast.Binary, left: FloatConst,
+                                       right: FloatConst) -> bool:
+        """Report a floating-point operation that can be seen to fault.
+
+        The same rule the integers get, for the same reason: a program that must
+        stop whenever it is started need not be built.  What stops it here is an
+        answer that is an infinity or is not a number, which is what the check
+        after every floating-point operation asks about.
+        """
+        if expr.op is ast.BinaryOp.DIVIDE:
+            if right.value == 0.0:
+                self._diags.emit(D.LANG_TYPE_DIVISION_BY_ZERO, expr.span)
+                return True
+            answer = left.value / right.value
+        else:
+            working = self._FLOAT_ARITHMETIC.get(expr.op)
+            if working is None:
+                return False
+            answer = working(left.value, right.value)
+        if math.isfinite(answer):
+            return False
+        self._diags.emit(
+            D.LANG_TYPE_ANSWER_DOES_NOT_FIT, expr.span,
+            value="not a number" if math.isnan(answer) else "an infinity",
+            type=left.ty.render())
         return True
 
     def _lower_unary(self, builder: IRBuilder, expr: ast.Unary,

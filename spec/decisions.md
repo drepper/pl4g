@@ -1816,6 +1816,34 @@ and `or` does not compute its right side unless the left one leaves the answer o
 the program stops; the test runs to the end exactly when every answer was right.  It is worth writing down because it is the
 shape every test of a value that cannot be handed back will use until there are conversions.
 
+## 2026-09-14T15:00+02:00 — language and compiler
+
+**An answer that is not a finite number stops the program**
+
+The second of the two rules that were decided when floating point was sized, now implemented.  Every one of the four operations
+is followed by a check; an answer that is an infinity or a not-a-number reports where it happened and stops, the way an integer
+sum that will not fit does.  Where both operands are constants the compiler sees it while compiling and reports it there (4214,
+4215), because a program that must stop whenever it is started need not be built -- which is the rule the integers already got.
+
+This is the language's rule applied to the type rather than an exception carved out of it.  Everywhere else a value a program
+holds is one its type can represent; an infinity is what the format says when it cannot say the number, and a program that carried
+one would compute every answer after it from a value standing for no number.  That is how a mistake in a floating-point program
+usually travels a long way from where it was made, and stopping at the first one is what makes the distance zero.
+
+Considered: carrying the infinities, which is what Java, Go, Rust, Zig, Odin, C and C++ all do, and what IEEE 754 is designed to
+allow -- the infinities and the not-a-numbers exist precisely so that a computation need not stop.  It was rejected for the same
+reason the integer overflow check was: a value a program cannot have is a value it does not get, and a language whose types say
+what a value is cannot hold one that says "no number" and still mean what it reads.  Also considered was raising the IEEE
+exception and leaving the program to read the flags, which is C's arrangement and which almost no program does.
+
+**How the check is written.**  Subtracting a value from itself answers zero where it is finite and not-a-number where it is an
+infinity or already a not-a-number, so one subtraction and one comparison settle both cases at once, and the branch that carries
+on is the one not taken.  On x86-64 that is `subsd`, `ucomisd` of the difference against itself and `jnp`, the parity flag being
+what says the two were unordered; on AArch64 `fsub`, `fcmp` and `b.eq`, unordered not being equal; on RISC-V `fsub`, `feq` and
+`bne`, there being no flags and the answer being a value.  Three instructions on every target, against the alternative of masking
+off the sign and comparing with the largest finite value, which needs a constant in the image and one more instruction to reach
+it.
+
 ---
 
 ---

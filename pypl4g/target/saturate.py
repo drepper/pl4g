@@ -104,7 +104,8 @@ DIVISION = frozenset((BinOp.SDIV, BinOp.UDIV, BinOp.SREM, BinOp.UREM))
 
 #: What each of them is called where a message has to say which went wrong.
 NAMES.update({BinOp.SDIV: "division", BinOp.UDIV: "division",
-              BinOp.SREM: "remainder", BinOp.UREM: "remainder"})
+              BinOp.SREM: "remainder", BinOp.UREM: "remainder",
+              BinOp.FDIV: "division"})
 
 #: The unsaturating operation each saturating one corresponds to, so that one
 #: table of shapes serves both.

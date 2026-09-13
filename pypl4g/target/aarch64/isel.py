@@ -549,6 +549,21 @@ class A64Selector(InstructionSelector):
         ops.TIMES.name: "fmul", ops.DIVIDE.name: "fdiv",
     }
 
+    def select_branch_if_finite(self, value: Reg, bits: int, target: MCSymRef,
+                                span: Span) -> Sequence[MCInst]:
+        """Instructions that go to *target* when *value* is a finite number.
+
+        A comparison of the difference against itself is equal where it is a
+        number and unordered where it is not, and "unordered" is not "equal",
+        so the branch taken on equality is the branch taken on a finite value.
+        """
+        held = INFO.new_virtual(VEC, _FLOAT_REGISTER_BITS)
+        view = MCReg(value, bits=bits)
+        difference = MCReg(held, bits=bits)
+        return (self._inst("fsub", (difference, view, view), span),
+                self._inst("fcmp", (difference, difference), span),
+                self._inst("b.eq", (target,), span))
+
     def select_float_op(self, op: Op, dst: Reg, left: MCOperand, right: MCOperand,
                         bits: int, span: Span) -> Sequence[MCInst]:
         """Instructions that compute *op* over two floating-point values."""
@@ -886,6 +901,15 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
                                  operands.in_register(inst.operands[0], inst.span),
                                  operands.in_register(inst.operands[1], inst.span),
                                  inst.ty.bits, inst.span)
+                    # An answer that is an infinity or a not-a-number is an
+                    # answer the operation did not have, the way a sum that
+                    # will not fit is, and the program stops the same way.
+                    carry_on = asm.reserve_label("is.finite")
+                    asm.branch_if_finite(destination, inst.ty.bits, carry_on,
+                                         inst.span)
+                    _Fault("".join((NAMES[inst.op], " with no number for an answer")),
+                           inst.span).out_of_range(asm, inst.span)
+                    asm.block(carry_on)
                 case BinaryInst() if inst.op in TRAPPING:
                     destination = _new_value(
                         inst.ty, registers,

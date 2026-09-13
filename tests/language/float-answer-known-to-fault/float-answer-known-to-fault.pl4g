@@ -1,0 +1,18 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4214 LANG_TYPE_ANSWER_DOES_NOT_FIT
+※ pl4g-test: expect-diag 4215 LANG_TYPE_DIVISION_BY_ZERO
+
+※ A program that must stop whenever it is started need not be built, so an
+※ operation written down with both its operands and no answer that is a finite
+※ number is reported where it is written rather than left to fault.  The same
+※ rule the integers get, and for the same reason.
+
+@[startup]
+fn main() → u8:
+    @[ignore(5005)]
+    1f64 ÷ 0f64
+    @[ignore(5005)]
+    1e308f64 × 10f64
+    @[ignore(5005)]
+    ⁻1e308f64 - 1e308f64
+    0u8

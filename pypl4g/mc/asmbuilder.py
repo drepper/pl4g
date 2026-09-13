@@ -123,6 +123,17 @@ class InstructionSelector(Protocol):
         """
         ...
 
+    def select_branch_if_finite(self, value: Reg, bits: int, target: MCSymRef,
+                                span: Span) -> Sequence[MCInst]:
+        """Instructions that go to *target* when *value* is a finite number.
+
+        Subtracting a value from itself answers zero where it is finite and
+        not-a-number where it is an infinity or already a not-a-number, so one
+        subtraction and one question about whether the answer is a number
+        settles both cases at once.
+        """
+        ...
+
     def select_float_op(self, op: Op, dst: Reg, left: MCOperand, right: MCOperand,
                         bits: int, span: Span) -> Sequence[MCInst]:
         """Instructions that compute *op* over two floating-point values."""
@@ -543,6 +554,14 @@ class Assembler:
               span: Span = INVALID_SPAN) -> None:
         """Put a *bits*-wide value into the whole of *dst*."""
         self._emit(self._selector.select_widen(dst, src, bits, signed, span))
+
+    def branch_if_finite(self, value: Reg, bits: int, target: str,
+                         span: Span = INVALID_SPAN) -> None:
+        """Go to the block called *target* when *value* is a finite number."""
+        assert self._block is not None
+        self._block.successors.append(target)
+        self._emit(self._selector.select_branch_if_finite(
+            value, bits, self._symref(target), span))
 
     def float_op(self, op: Op, dst: Reg, left: MCOperand, right: MCOperand,
                  bits: int, span: Span = INVALID_SPAN) -> None:

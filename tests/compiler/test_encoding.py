@@ -205,6 +205,7 @@ SAMPLES = [
     ("jbe", "jbe", MCSymRef(SymExpr(MCSymbol("there")))),
     ("ja", "ja", MCSymRef(SymExpr(MCSymbol("there")))),
     ("jae", "jae", MCSymRef(SymExpr(MCSymbol("there")))),
+    ("jnp", "jnp", MCSymRef(SymExpr(MCSymbol("there")))),
 ]
 
 

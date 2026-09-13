@@ -413,6 +413,24 @@ than given a meaning:
 `÷` on floating point is a third operation and neither of the two that integers have: it truncates towards nothing and there is no
 pair of operands it has no answer for.
 
+**An answer that is not a finite number stops the program.**  Every one of the four operations is followed by a check, and a
+result that is an infinity or a not-a-number reports where it happened and stops, exactly as an integer sum that will not fit
+does.  Where both operands are written down, the compiler sees it while compiling and reports it then (4214, 4215) rather than
+building a program that must stop whenever it is started.
+
+That is the language's own rule applied to this type rather than an exception carved out of it: everywhere else a value a program
+holds is a value its type can represent, and an infinity is what the format says when it cannot say the number.  A program that
+carried one would then be computing with a value that stands for no number, and every answer after it would stand for no number
+either, which is how a mistake in a floating-point program usually travels a long way from where it was made.
+
+The check costs a subtraction, a comparison and a branch not taken.  Subtracting a value from itself answers zero where the value
+is finite and not-a-number where it is an infinity or already a not-a-number, so one question settles both cases.
+
+Compare: C leaves it to the floating-point environment, where the flags are raised and almost no program reads them, and to
+`-ftrapping-math`, which is on by default and traps nothing without the exceptions being unmasked.  Java and Go define the
+infinities into the language and carry them.  Rust does the same and offers `checked` arithmetic for the integers alone.  Nothing
+in common use stops by default, and the reason is compatibility with C rather than a judgement that carrying on is right.
+
 **All six comparisons are defined**, and `=` and `≠` on floating point are diagnosed (4217).  Two floating-point values arrived at
 by different routes are rarely the one value even where the numbers they stand for are equal, so asking whether they are is nearly
 always the wrong question.  It is a warning and not an error because the question is sometimes the right one -- a value compared

@@ -521,6 +521,12 @@ X86_INSTRS: Final[tuple[X86InstDesc, ...]] = (
     X86InstDesc("jae", (_rel(32),), opcode=0x83, map=OpMap.M0F,
                 rel_op=0, rel_bits=32, implicit_uses=(EFLAGS,),
                 flags=InstFlags.TERMINATOR, est_size=6),
+    # jnp rel32                          0F 8B cd   (the parity flag again: a
+    # branch taken where the two compared were ordered, which is what says
+    # neither of them was a not-a-number)
+    X86InstDesc("jnp", (_rel(32),), opcode=0x8B, map=OpMap.M0F,
+                rel_op=0, rel_bits=32, implicit_uses=(EFLAGS,),
+                flags=InstFlags.TERMINATOR, est_size=6),
     # A call destroys every register the convention calls caller-saved, so the
     # allocator has to be told -- otherwise a value held across one is silently
     # lost.  Naming them here puts a convention's business in the instruction
