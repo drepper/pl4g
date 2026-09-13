@@ -95,7 +95,8 @@ GROUPS: tuple[Group, ...] = (
            "shift-operators": "two shifts, each with its distance checked",
            "float-arithmetic": "ten floating-point answers, each asserted",
            "float-approximate": "every approximate comparison, in both widths",
-           "result-type": "a result made, propagated with ? and read with ??"}),
+           "result-type": "a result made, propagated with ? and read with ??",
+           "result-as-an-argument": "results passed and answered with, both kinds"}),
     Group("Types",
           "Definitions the program writes.  These move when the parser, the "
           "name resolution or the layout does.",
