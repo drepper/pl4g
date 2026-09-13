@@ -1,0 +1,11 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 3209 LANG_ATTR_EMPTY_ARGUMENTS
+
+※ The parentheses are how an attribute carries arguments, so an attribute
+※ carrying none is written without them.
+@[export()]
+let shared: u8 = 7u8
+
+@[startup]
+fn main() → u8:
+    shared

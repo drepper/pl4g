@@ -275,9 +275,15 @@ An attribute list is written before the definition it applies to:
 @[NAME, NAME(ARGUMENTS), ...]
 ```
 
-Several attributes may be given in one list, and several lists may precede one definition.
+Several attributes may be given in one list, separated by commas.  **One list, and only one, may precede one definition.**  Two
+lists attached to one thing say exactly what one list holding both would say, and a language that admits two shapes for one
+meaning makes every reader and every tool learn both.  A blank line between two lists does not make them two things, because it
+changes nothing about what they attach to; both are still read as attached to the definition that follows, and both are refused.
+The exception this rule leaves room for is an attribute that attaches to nothing -- an instruction to the compiler rather than a
+description of what follows -- which may stand before a list without being part of it.  There are none yet.
 
-Arguments are written as in a call: positional arguments first, named arguments after.
+Arguments are written as in a call: positional arguments first, named arguments after.  Each line below is one list on its own,
+shown as an example of a shape; they are four separate examples and not four lists before one definition.
 
 ```
 @[startup]
@@ -285,6 +291,19 @@ Arguments are written as in a call: positional arguments first, named arguments 
 @[abi("sysv64", variadic=false)]
 @[align(64), section(name=".hot")]
 ```
+
+The parentheses are how an attribute carries its arguments, so **an attribute carrying none is written without them**: `@[inline]`
+and not `@[inline()]`.  This holds even where the attribute could have taken arguments and they were all left to their defaults,
+which is exactly the case where the two spellings would otherwise both be available and mean the same thing.  For the same reason a
+list holds at least one attribute: `@[]` says what writing nothing says.
+
+Both rules follow from one principle, and the principle is worth stating on its own because it governs more of the notation than
+attributes.  **Where two ways of writing something would mean the same thing in every respect, the language admits one of them.**
+A second spelling buys nothing and costs everyone who reads the language: a person learns two shapes, a tool matches two shapes,
+and a program comparing two sources has to know the two are the same.  This does not narrow what can be said -- every one of these
+rules leaves a shape that says exactly what the refused shape said -- and it is not applied where the shapes differ in meaning,
+however slightly.  A type written out where it could have been taken from the value is not a second spelling of the same thing:
+it says the type, and says it whatever the value later becomes.
 
 Each attribute declares the kinds of object it accepts and the parameters it takes, so the compiler checks the number, the order,
 the names and the kinds of the arguments.  An attribute name the compiler does not know is an error, never an ignored annotation:
@@ -352,8 +371,10 @@ fn main() → u8:
 ```
 
 In the layout notation the attribute stands on its own line, indented with the statement it belongs to; that indentation is what
-says which statement that is.  In the brace notation it simply precedes the statement.  Either may be given more than once, since
-one of them names one diagnostic and a construct may raise several, and the number must be one the compiler can emit.
+says which statement that is.  In the brace notation it simply precedes the statement.  Either may be given more than once in the
+one list -- `@[ignore(5002), expect(4006)]` -- since one of them names one diagnostic and a construct may raise several; they are
+not written as a list apiece, which is the general rule about attribute lists and not something about these two.  The number must
+be one the compiler can emit.
 
 What is said covers the construct it is attached to.  For a definition it also covers the variable being defined for as long as
 that variable exists, because not everything a definition raises is raised while the definition is being read: that nothing ever

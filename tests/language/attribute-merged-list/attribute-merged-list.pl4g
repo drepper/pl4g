@@ -1,0 +1,10 @@
+※ pl4g-test: compile=ok run=native,qemu exit=7 diag=none
+
+※ The shape the two refusals leave: one list, holding everything that is said
+※ about the definition, with parentheses only where they carry something.
+@[export, visible, align(1)]
+let shared: u8 = 7u8
+
+@[startup]
+fn main() → u8:
+    shared

@@ -1035,6 +1035,50 @@
       "option": null
     },
     {
+      "number": 3208,
+      "name": "LANG_ATTR_SEPARATE_LISTS",
+      "severity": "error",
+      "message": "attributes attached to one thing are written as one list, not {count}",
+      "args": [
+        {
+          "name": "count",
+          "type": "string",
+          "description": "which list this is"
+        }
+      ],
+      "cause": "Two lists attached to one definition say exactly what one list holding both would say, so there would be two ways to write one thing and a reader would have to know both.  Write `@[one, two]` rather than `@[one]` followed by `@[two]`.  A blank line between them makes no difference: it changes nothing about what they attach to.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Attributes",
+        "requirement": "Several attributes may be given in one list, and one list precedes a definition."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 3209,
+      "name": "LANG_ATTR_EMPTY_ARGUMENTS",
+      "severity": "error",
+      "message": "attribute '{name}' takes no arguments here, so it is written without parentheses",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the attribute"
+        }
+      ],
+      "cause": "An empty argument list says exactly what no argument list says, so there would be two ways to write one thing.  Write `@[inline]` rather than `@[inline()]`.  The parentheses are how an attribute carries arguments, and an attribute carrying none does not need them.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Attributes",
+        "requirement": "Several attributes may be given in one list, and one list precedes a definition."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 4001,
       "name": "LANG_FILESTRUCT_DUPLICATE_DEFINITION",
       "severity": "error",

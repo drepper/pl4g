@@ -1305,6 +1305,52 @@ nothing imports the main file.  It is not an error, because the main file is a m
 something later; but a warning for an attribute that cannot have an effect where it stands may be worth having, and that is a
 question for the list rather than for here.
 
+## 2026-09-13T11:20+02:00 — language
+
+**One meaning, one spelling: one attribute list per definition, and no empty argument parentheses**
+
+Decided on the user's direction.  Two rules, and one principle underneath them that the specification now states outright: where
+two ways of writing something would mean the same thing in every respect, the language admits one of them.
+
+The first rule.  Everything said about one definition is written in one list.  `@[export]` on one line and `@[visible]` on the
+next is refused (3208) and `@[export, visible]` is how it is written.  A blank line or a comment between the two lists changes
+nothing, because it changes nothing about what they attach to — both still attach to the definition that follows, so both are
+still two lists before one definition.  The check is in the parser, which counts the lists it reads before one thing; the second
+and every later one is reported, and the report points at the list that has to go rather than at the definition.
+
+The second rule.  The parentheses are how an attribute carries arguments, so an attribute carrying none is written without them:
+`@[export]`, not `@[export()]` (3209).  This matters most for an attribute that *could* have taken arguments and was given none
+— `@[inline()]` parses today and means `@[inline]` — since that is exactly where both spellings would otherwise be available.
+For the same reason a list holds at least one attribute; `@[]` says what writing nothing says, and the parser already refused it.
+
+Why, rather than merely tidiness.  A second spelling is paid for by everyone downstream of the language and by nobody in it: a
+person reading a program has to know both shapes mean one thing, an editor and a formatter have to match both, a tool that
+compares two sources has to normalize before it can compare, and the machine generating this language — which is what it is for
+— has to be told which of the two to emit, for no reason it could derive.  The generator is the argument that makes this
+different from a human-facing language: choice in the notation is a burden on a program, where for a person it is sometimes a
+convenience.
+
+What was deliberately left alone.  The rule is only about shapes that mean the same thing in every respect, so it does not touch:
+the ASCII substitutes `->` for `→`, which exist for input methods and already draw a diagnostic of their own (2005); the brace
+notation beside the layout notation, which exists because a generator should not have to count spaces and which cannot be mixed
+within one block (2102); a type written out where it could have been taken from the value, which says the type whatever the value
+later becomes; an attribute parameter given by name where it could have been given by position, which is the same generalization
+a call has; and `ignore` and `expect` being repeatable, since each names one diagnostic and a construct may raise several — they
+repeat within the one list, which is where the first rule puts them.
+
+What other languages do.  Rust allows any number of `#[...]` attributes in a row and `#[a] #[b]` is identical to `#[a, b]`; both
+are written in practice and `rustfmt` does not unify them, so the two shapes are permanently in the language.  C++ allows
+`[[a]] [[b]]` beside `[[a, b]]`, and additionally `__attribute__` and `_Pragma` as further spellings of neighbouring things.  Go
+takes the opposite position throughout — one way to write a thing, enforced by `gofmt` being the formatting rather than a
+formatting — and this is the same position taken in the grammar rather than in a tool, because a grammar that admits only one
+shape needs no tool to normalize it.  Python's decorators stack by design and each is an application, so the question does not
+arise there in the same form.
+
+The tree-sitter grammar was tightened in step, and the test that checks the grammar and the compiler agree about every language
+test is what holds the two together: a shape one of them refuses and the other accepts fails there.
+
+---
+
 ---
 
 Open questions

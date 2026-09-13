@@ -213,10 +213,29 @@ class Parser:
     # -- attributes ------------------------------------------------------------
 
     def _parse_attributes(self) -> tuple[ast.Attribute, ...]:
-        """Parse any number of ``@[...]`` attribute lists."""
+        """Parse the ``@[...]`` list that precedes a definition or a statement.
+
+        One list, not several.  Two lists attached to one thing say exactly what
+        one list holding both would say, and having two ways to write a thing
+        means reading two shapes and diffing two shapes for no gain.  A blank
+        line between them does not make them two, since it changes nothing about
+        what they attach to.
+
+        The exception this rule will need is the attribute that attaches to
+        nothing, which is an action rather than a description of what follows;
+        one of those before a list is two lists in a row with nothing wrong
+        about it.  There are none yet, and the check is written at the one place
+        that would have to ask.
+        """
         attrs: list[ast.Attribute] = []
+        lists = 0
         while self._check(TokKind.AT_LBRACKET):
+            start = self._current.span
             self._advance()
+            lists += 1
+            if lists > 1:
+                self._diags.emit(D.LANG_ATTR_SEPARATE_LISTS, start,
+                                 count=str(lists))
             while True:
                 attrs.append(self._parse_attribute())
                 if self._accept(TokKind.COMMA) is None:
@@ -226,12 +245,22 @@ class Parser:
         return tuple(attrs)
 
     def _parse_attribute(self) -> ast.Attribute:
-        """Parse one attribute and its arguments."""
+        """Parse one attribute and its arguments.
+
+        The parentheses are how an attribute carries arguments, so an attribute
+        carrying none is written without them.  An empty pair says exactly what
+        no pair says, and one meaning with two spellings is one spelling too
+        many -- the same reason two attribute lists are refused above.
+        """
         name_token = self._expect(TokKind.IDENT)
         args: list[ast.AttrArg] = []
         end = name_token.span
-        if self._accept(TokKind.LPAREN) is not None:
-            if not self._check(TokKind.RPAREN):
+        if (opening := self._accept(TokKind.LPAREN)) is not None:
+            if self._check(TokKind.RPAREN):
+                self._diags.emit(D.LANG_ATTR_EMPTY_ARGUMENTS,
+                                 opening.span.to(self._current.span),
+                                 name=name_token.text)
+            else:
                 while True:
                     args.append(self._parse_attr_arg())
                     if self._accept(TokKind.COMMA) is None:

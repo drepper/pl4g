@@ -58,6 +58,13 @@ To Do List for the PL4g language
     action is global.  Implementable now and needed by `@[required(NAME)]` below.  Note that the parser currently skips newlines
     after an attribute list precisely so that one can stand on its own line above the thing it belongs to, so the rule has to
     distinguish a blank line from a line break.
+    This is now also the one exception the one-list-per-definition rule leaves room for: a list attached to nothing is an
+    instruction to the compiler rather than a description of what follows, so one of those standing before a list is two lists in
+    a row with nothing wrong about it.  `Parser._parse_attributes` counts lists and reports the second (3208); whatever decides
+    that a list is attached to nothing has to reset that count, and the check is written at the one place that would have to ask.
+    A blank line between two lists deliberately does *not* make them two things today, so this entry changes that reading: the
+    blank line will mean the earlier list attached to nothing rather than meaning nothing at all, and the diagnostic for two lists
+    before one definition then only arises where they really are both attached.
 
 [?] add an attribute `@[required(NAME)]` which does not have to be attached to a variable, function, or statement but can be.
     The attribute checks whether the implementation or supported language version supports the feature named by NAME.  The
@@ -203,6 +210,13 @@ Runtime
 [x] decide whether `@[export]` should mean one thing or two.  Two: `export` says what a file importing this module may name,
     `visible` says whether the finished image offers the symbol, and neither implies the other.  A definition a module lends and
     nothing imports is now dropped, which is what the one attribute made impossible.
+
+[x] make the use of attributes strict: one list per definition, and no empty argument parentheses.  Everything said about one
+    definition is written in one list (3208), and an attribute carrying no arguments is written without parentheses (3209).  The
+    principle is now stated in the specification and governs more than attributes: where two ways of writing something would mean
+    the same thing in every respect, the language admits one of them.  Surveyed for other places it applies; the ASCII
+    substitutes, the brace notation, an omitted type and a named argument all differ in meaning or in what they are for, so none
+    of them is a second spelling of one thing.
 
 [ ] consider warning where an attribute cannot have an effect where it stands.  `@[export]` in the file named on the command line
     is the case that prompted it: nothing imports that file, so the attribute says nothing.  It is not an error -- the file is a

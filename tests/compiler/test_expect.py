@@ -204,10 +204,11 @@ def test_ignore_also_discards_on_an_error(compile_source) -> None:  # noqa: ANN0
 
 def test_both_attributes_may_be_mixed(compile_source) -> None:  # noqa: ANN001
     """One names one diagnostic, so a construct raising several says so several
-    times, and may assert some while merely allowing others."""
+    times, and may assert some while merely allowing others -- in one list, as
+    everything attached to one thing is written."""
     proc, _ = compile_source("".join((
         "@[startup]\nfn main() ", ARROW, " u8:\n",
-        "    @[ignore(5002)]\n    @[expect(4006)]\n    let a: mut u8 = 5u8\n",
+        "    @[ignore(5002), expect(4006)]\n    let a: mut u8 = 5u8\n",
         "    a ", ASSIGN, " 4u8\n")))
     assert proc.returncode == 0, describe(proc)
     assert proc.stderr.strip() == "", proc.stderr

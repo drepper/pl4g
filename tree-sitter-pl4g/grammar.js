@@ -39,7 +39,7 @@ module.exports = grammar({
     ),
 
     function_definition: $ => seq(
-      repeat($.attribute_list),
+      optional($.attribute_list),
       'fn',
       field('name', $.identifier),
       field('parameters', $.parameter_list),
@@ -48,7 +48,7 @@ module.exports = grammar({
       field('body', $._block),
     ),
 
-    parameter_list: $ => seq('(', optional(sepBy(',', $.parameter)), ')'),
+    parameter_list: $ => seq('(', sepBy(',', $.parameter), ')'),
 
     // The glyph is canonical and `->` is an accepted substitute, which the
     // compiler takes and warns about; a grammar that refused it would disagree
@@ -60,7 +60,7 @@ module.exports = grammar({
     ),
 
     variable_definition: $ => seq(
-      repeat($.attribute_list),
+      optional($.attribute_list),
       'let',
       field('name', $.identifier),
       ':',
@@ -74,7 +74,7 @@ module.exports = grammar({
     // what it is: a name bound to something.  Nothing about it may be
     // qualified, so there is no place here for `mut` or for a type.
     module_import: $ => seq(
-      repeat($.attribute_list),
+      optional($.attribute_list),
       'let',
       field('name', $.identifier),
       ':', '=',
@@ -87,12 +87,17 @@ module.exports = grammar({
 
     // -- attributes --------------------------------------------------------
 
-    attribute_list: $ => seq('@[', sepBy(',', $.attribute), ']',
+    // A list holds at least one attribute, and an attribute at least one
+    // argument where it is written with parentheses at all: an empty pair of
+    // either would be a second spelling of something already spelled.
+    attribute_list: $ => seq('@[', sepBy1(',', $.attribute), ']',
                              repeat($._newline)),
 
     attribute: $ => seq(
       field('name', $.identifier),
-      optional(seq('(', optional(sepBy(',', $.attribute_argument)), ')')),
+      // An attribute carrying no arguments is written without parentheses; an
+      // empty pair would be a second spelling of the same thing.
+      optional(seq('(', sepBy1(',', $.attribute_argument), ')')),
     ),
 
     attribute_argument: $ => choice(
@@ -121,7 +126,7 @@ module.exports = grammar({
 
     _statement_line: $ => seq($._statement, repeat1($._newline)),
 
-    _statement: $ => seq(repeat($.attribute_list), $._bare_statement),
+    _statement: $ => seq(optional($.attribute_list), $._bare_statement),
 
     _bare_statement: $ => choice(
       $.variable_statement,
@@ -220,5 +225,9 @@ module.exports = grammar({
 });
 
 function sepBy(separator, rule) {
-  return optional(seq(rule, repeat(seq(separator, rule))));
+  return optional(sepBy1(separator, rule));
+}
+
+function sepBy1(separator, rule) {
+  return seq(rule, repeat(seq(separator, rule)));
 }

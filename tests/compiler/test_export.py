@@ -156,8 +156,7 @@ let lent: u8 = 1u8
 @[visible]
 let offered: u8 = 2u8
 
-@[export]
-@[visible]
+@[export, visible]
 let both: u8 = 3u8
 
 @[startup]
