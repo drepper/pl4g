@@ -96,6 +96,10 @@ GROUPS: tuple[Group, ...] = (
            "float-arithmetic": "ten floating-point answers, each asserted",
            "float-approximate": "every approximate comparison, in both widths",
            "result-type": "a result made, propagated with ? and read with ??"}),
+    Group("Types",
+          "Definitions the program writes.  These move when the parser, the "
+          "name resolution or the layout does.",
+          {"type-definitions": "eight definitions in all three notations"}),
 )
 
 #: How many times each sample is compiled.  The best is kept.
