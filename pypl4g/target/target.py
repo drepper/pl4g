@@ -6,6 +6,7 @@ from typing import Protocol
 from ..diag.engine import DiagEngine
 from ..ir.module import Module
 from ..mc.asmbuilder import Assembler, InstructionSelector
+from ..source.manager import SourceManager
 from ..mc.fixup import FixupApplier, MCFixup
 from ..mc.inst import MCInst
 from ..mc.reg import RegisterInfo
@@ -73,8 +74,13 @@ class Target(Protocol):
         ...
 
     def generate(self, module: Module, asm: Assembler, diags: DiagEngine,
-                 opt_level: int) -> None:
-        """Generate the whole image for *module* through *asm*."""
+                 opt_level: int, sources: "SourceManager | None" = None) -> None:
+        """Generate the whole image for *module* through *asm*.
+
+        *sources* is what turns a span into a place a person can find, for the
+        messages a fault reports.  It is optional because a caller building a
+        representation by hand has no sources for it to point at.
+        """
         ...
 
     def image_defaults(self) -> ImageDefaults:

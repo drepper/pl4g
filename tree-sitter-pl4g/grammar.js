@@ -228,8 +228,11 @@ module.exports = grammar({
       prec.left(5, seq($._non_comparison, field('operator', '^'), $._non_comparison)),
       prec.left(6, seq($._non_comparison, field('operator', '&'), $._non_comparison)),
       prec.left(7, seq($._non_comparison,
-                       field('operator', choice('\u229e', '\u229f')), $._non_comparison)),
-      prec.left(8, seq($._non_comparison, field('operator', '\u22a0'), $._non_comparison)),
+                       field('operator', choice('+', '-', '\u229e', '\u229f')),
+                       $._non_comparison)),
+      prec.left(8, seq($._non_comparison,
+                       field('operator', choice('\u00d7', '\u00f7', '\u22a0')),
+                       $._non_comparison)),
     ),
 
     // Both bind tighter than every operator written between two operands, so

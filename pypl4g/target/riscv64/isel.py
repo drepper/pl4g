@@ -23,9 +23,12 @@ from ...mc.operand import SymExpr
 from ...source.location import Span
 from ..branches import (UnsupportedBranch, folded_into_branch, labels_of,
                         lower_branch, lower_comparison)
+from ..faults import Messages, describe
 from ..narrow import normalize
-from ..saturate import SATURATING, Unsupported, lower_saturating
+from ..saturate import (DIVISION, NAMES, SATURATING, TRAPPING, Unsupported,
+                        lower_saturating, lower_trapping)
 from . import ops as rvops
+from .startup import ABORT_SYMBOL
 from .opcodes import IMM12_MAX, IMM12_MIN, RISCV_INSTRS
 from .regs import GPR, INFO, SP, ZERO
 
@@ -36,6 +39,7 @@ if TYPE_CHECKING:
     from ...mc.reg import RegisterInfo
     from ...ir.types import Type
     from ..callconv import CallConvDesc
+    from ...source.manager import SourceManager
 
 #: The mnemonic that implements each architecture-neutral binary operation.
 _BINARY: Final[dict[str, str]] = {
@@ -372,6 +376,19 @@ class RVSelector(InstructionSelector):
             held.append(self._inst("xori", (answer, answer, MCImm(1, 12)), span))
         return tuple(held)
 
+    def select_address(self, dst: Reg, symbol: MCSymRef,
+                       span: Span) -> Sequence[MCInst]:
+        """Instructions that put the address of *symbol* into *dst*.
+
+        The two halves are not independent here: the second is measured from the
+        label of the first, so the two must stay together and the register
+        between them must be one the allocator will not send to the frame.
+        """
+        held = MCReg(INFO.new_virtual(GPR, 64, spillable=False))
+        return (self._inst("auipc.hi20", (held, symbol), span),
+                self._inst("addi.lo12", (held, held, symbol), span),
+                self._inst("mv", (MCReg(dst), held), span))
+
     def select_widen(self, dst: Reg, src: MCOperand, bits: int, signed: bool,
                      span: Span) -> Sequence[MCInst]:
         """Instructions that put a *bits*-wide value into the whole of *dst*.
@@ -440,7 +457,8 @@ class RVSelector(InstructionSelector):
 
 
 def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
-                   registers: "RegisterInfo") -> None:
+                   registers: "RegisterInfo", messages: "Messages | None" = None,
+                   sources: "SourceManager | None" = None) -> None:
     """Build the machine form of one IR function."""
     from ...ir.inst import (BinaryInst, BrInst, CmpInst, CondBrInst, LoadInst,
                             MemStartInst, RetInst, StoreInst, UnaryInst,
@@ -508,6 +526,24 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
             return registers.new_virtual(GPR, 64)
 
     operands = _Operands()
+
+    class _Fault:
+        """What is emitted where an answer will not fit its type."""
+
+        def __init__(self, what: str, span: "Span") -> None:
+            self.text = describe(what, func.name, span, sources)
+
+        def out_of_range(self, asm: "Assembler", span: "Span") -> None:
+            """Report the fault and stop; this does not come back."""
+            if messages is None:
+                raise UnsupportedOperation(
+                    "an operation that can fault, with nowhere to report it", None)
+            symbol = messages.symbol(self.text)
+            first, second = cconv.int_arg_regs[:2]
+            asm.address(first, symbol, span)
+            asm.loadreg(second, asm.imm(len(self.text.encode("utf-8")), 32,
+                                        signed=False), span)
+            asm.call(ABORT_SYMBOL, span)
 
     # Every block parameter gets its register before any block is walked: a
     # branch writes the parameters of the block it goes to, and that block may
@@ -583,6 +619,24 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
                         asm.loadreg(result, MCReg(_value_of(value, held, span)),
                                     inst.span)
                     asm.ret(inst.span)
+                case BinaryInst() if inst.op in TRAPPING:
+                    destination = _new_value(
+                        inst.ty, registers,
+                        hint=(_result_register(inst.ty, cconv, registers)
+                              if inst is returned else None))
+                    held[id(inst)] = destination
+                    try:
+                        lower_trapping(
+                            asm, inst.op, inst.ty,
+                            operands.value(inst.operands[0], inst.span),
+                            operands.value(inst.operands[1], inst.span),
+                            destination, operands, 64,
+                            _Fault("".join((NAMES[inst.op], " that does not fit")),
+                                   inst.span),
+                            inst.span)
+                    except Unsupported as unsupported:
+                        raise UnsupportedOperation(unsupported.what, span) \
+                            from unsupported
                 case BinaryInst() if inst.op in SATURATING:
                     destination = _new_value(
                         inst.ty, registers,
@@ -599,6 +653,11 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
                     except Unsupported as unsupported:
                         raise UnsupportedOperation(unsupported.what, span) \
                             from unsupported
+                case BinaryInst() if inst.op in DIVISION:
+                    raise UnsupportedOperation(
+                        "division, which writes its quotient and its remainder "
+                        "to a fixed pair of registers on one of the targets and "
+                        "so waits on an operand being able to require one", span)
                 case BinaryInst():
                     operation = _OPERATIONS.get(inst.op)
                     if operation is None:

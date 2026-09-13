@@ -59,3 +59,46 @@ def emit_start(asm: Assembler, module: Module, cconv: CallConvDesc) -> None:
     # letting control run off the end of the section.
     asm.op(ops.TRAP)
     asm.end_function()
+
+
+#: The number of the Linux system call that writes to a file descriptor, and
+#: the descriptor a fault reports through.  A fault has nowhere else to go: the
+#: program depends on nothing from the system, and the input and output the
+#: language will have does not exist at the point where the first faults can
+#: happen.
+NR_WRITE: Final[int] = 64
+
+#: What a fault writes to, which is standard error by the number every system
+#: gives it.  Whether it is open is not checked: a program started with it
+#: closed would have the message go to whatever was opened next, and that is
+#: still better than the message going nowhere.
+STANDARD_ERROR: Final[int] = 2
+
+#: The name the helper a fault leaves the program through is given.
+ABORT_SYMBOL: Final[str] = "__pl4g_abort"
+
+
+def emit_abort(asm: Assembler, cconv: CallConvDesc) -> None:
+    """Emit the helper that reports a fault and stops the program.
+
+    It takes the message and its length, writes them, and traps.  Everything
+    that could be worked out beforehand was: the message is built whole at
+    compile time, so there is no formatting here, no number to turn into text,
+    and nothing that could itself fail.
+
+    It ends by trapping rather than by exiting, so the program dies by a signal
+    at the point of the fault with its stack still standing, which is what a
+    debugger wants to be handed.  The message has already been written by then,
+    so nothing is lost to the signal.
+    """
+    first, second, third = cconv.int_arg_regs[:3]
+    asm.begin_function(ABORT_SYMBOL, exported=False)
+    # The three arguments of the system call are the two this was given, moved
+    # up one place, with the descriptor put in front of them.
+    asm.loadreg(third, asm.reg(second))
+    asm.loadreg(second, asm.reg(first))
+    asm.loadreg(first, asm.imm(STANDARD_ERROR, 32, signed=False))
+    asm.loadreg(A7, asm.imm(NR_WRITE, 12))
+    asm.op(rvops.ENVIRONMENT_CALL)
+    asm.op(ops.TRAP)
+    asm.end_function()

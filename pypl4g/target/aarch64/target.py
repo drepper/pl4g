@@ -6,6 +6,7 @@ from ...diag import ids as D
 from ...diag.engine import DiagEngine
 from ...ir.module import Module
 from ...mc.asmbuilder import Assembler
+from ...source.manager import SourceManager
 from ...mc.desc import InstrTable
 from ...mc.fixup import FixupApplier, MCFixup
 from ...mc.inst import MCInst
@@ -13,6 +14,7 @@ from ...mc.reg import RegisterInfo
 from ...mc.regalloc import RegisterPressureError
 from ...mc.streamer import MCStreamer
 from ...ir.layout import DataLayout
+from ..faults import Messages
 from ..globals import emit_globals
 from ..target import ImageDefaults
 from .abi import CC_PL4G_V0, lookup as lookup_cconv
@@ -21,7 +23,7 @@ from .fixups import apply_fixup
 from .isel import A64Selector, UnsupportedOperation, lower_function
 from .opcodes import AARCH64_INSTRS, PAD_BYTE
 from .regs import INFO
-from .startup import ENTRY_SYMBOL, emit_start
+from .startup import ENTRY_SYMBOL, emit_abort, emit_start
 
 #: EM_AARCH64.  The page size is the largest a kernel may be configured with, so
 #: that one image loads whatever the running kernel chose; the congruence the
@@ -67,9 +69,10 @@ class AArch64Target:
                          allocation_order=CC_PL4G_V0.allocation_order)
 
     def generate(self, module: Module, asm: Assembler, diags: DiagEngine,
-                 opt_level: int) -> None:
+                 opt_level: int, sources: "SourceManager | None" = None) -> None:
         """Generate the whole image for *module*."""
         del opt_level
+        messages = Messages()
         emit_globals(asm, module, DataLayout(pointer_size=self.pointer_bits // 8))
         asm.section(".text", executable=True,
                     alignment=IMAGE_DEFAULTS.text_alignment)
@@ -77,7 +80,8 @@ class AArch64Target:
             if func.is_declaration:
                 continue
             try:
-                lower_function(asm, func, lookup_cconv(func.cconv), self.registers)
+                lower_function(asm, func, lookup_cconv(func.cconv), self.registers,
+                               messages, sources)
             except UnsupportedOperation as exc:
                 diags.emit(D.IMPL_BACKEND_UNSUPPORTED,
                            exc.span if exc.span is not None else func.span,
@@ -97,7 +101,10 @@ class AArch64Target:
                 return
         if module.startup is None:
             return
+        if messages.wanted:
+            emit_abort(asm, lookup_cconv(module.startup.cconv))
         emit_start(asm, module, lookup_cconv(module.startup.cconv))
+        messages.emit(asm)
 
     @property
     def entry_symbol(self) -> str:

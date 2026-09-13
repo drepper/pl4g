@@ -162,8 +162,8 @@ operator binds as tightly as the table below says: a tighter one takes its opera
 | Operator | Meaning | Binds |
 |---|---|---|
 | `~` `¬` | complement, written before its operand | tightest |
-| `⊠` | saturating multiplication | |
-| `⊞` `⊟` | saturating addition and subtraction | |
+| `×` `÷` `⊠` | multiplication and division | |
+| `+` `-` `⊞` `⊟` | addition and subtraction | |
 | `&` | bitwise and | |
 | `^` | bitwise exclusive or | |
 | `|` | bitwise or | |
@@ -186,6 +186,48 @@ The relative binding of the three is the one C settled on and Rust, Go and Zig k
 these the same way.  C's choice of making them bind *looser* than comparison is a famous defect, which this language does not
 inherit: the comparisons bind looser than the bitwise operators, so `a & b = c` reads as `(a & b) = c`.
 
+#### Arithmetic
+
+| Operator | Meaning |
+|---|---|
+| `+` | addition |
+| `-` | subtraction |
+| `×` | multiplication |
+| `÷` | division |
+
+Multiplication and division are glyphs rather than `*` and `/`, for the reason every glyph here is a glyph: a single ASCII
+character spent on an operator is one no future feature can have, and `×` and `÷` are what the operations are written with
+outside programming.  `+` and `-` keep their characters, there being nothing else they could reasonably mean -- and `-` is
+unambiguous because the sign of a negative literal is `⁻` and not a minus, so `a - ⁻1i8` needs no rule about spaces.
+
+Both operands have the same type, as everywhere, and the result has it too.
+
+**An answer that will not fit stops the program.**  `200u8 + 100u8` is 300, which a `u8` cannot hold, so the program does not
+continue with 44 and does not continue with 255: it stops, and says so.  Nothing is wrapped and nothing is left undefined.
+
+```
+t.pl4g:6:5: pl4g: addition that does not fit in 'main'
+```
+
+The message is built whole when the program is compiled -- the compiler knows which operation it was, in which function, at which
+line -- so what runs at the moment of the fault is a write and a trap: no formatting, no number to turn into text, no allocation,
+nothing that could itself fail.  That matters more here than anywhere else, because this is the code that runs when something has
+already gone wrong.  It goes to standard error through a raw system call, that being the only place a program depending on nothing
+from the system can write to.
+
+The program then **dies by a signal at the point of the fault**, with its stack still standing, which is what a debugger wants to
+be handed.  It is the same signal on every target.  A status would say less and could not be told from a program that meant to
+exit with it.
+
+Where an overflow can be shown at compile time it is a compilation error rather than a fault, since a program that must stop every
+time it runs is a program that need not be run.
+
+Compare C, where signed overflow is undefined and unsigned overflow wraps, and where `-ftrapv` and the sanitizers exist because
+neither answer is what anyone wanted; Rust, which panics in a debug build and wraps in a release one, so that a program means two
+different things depending on how it was built; Zig, which faults in both and has `+%` for wrapping; and Swift, which faults and
+has `&+`.  Zig's and Swift's position is the one taken here, with `⊞` and its relatives in place of `+%` -- and with no wrapping
+operator at all, wrapping being a thing to ask for by writing the wrap rather than by writing an operator that hides it.
+
 #### Saturating arithmetic
 
 Three operators compute a sum, a difference and a product that **answer with the nearest value the type can hold** rather than
@@ -201,8 +243,8 @@ Each is the sign of the operation it is built from, in a box; what the box says 
 `200u8 ⊞ 100u8` is 255 and not 44, and `5u8 ⊟ 9u8` is 0 and not 65532.  Both operands have the same type, as everywhere, and
 the result has it too.  They are defined on integers.
 
-**These are the operations for which going past the end is the intended answer.**  The ordinary `+`, `-` and `×` fault when a
-result does not fit, which is the right answer where a result that does not fit is a mistake; these are for the places where it
+**These are the operations for which going past the end is the intended answer.**  The ordinary `+`, `-` and `×` above fault when
+a result does not fit, which is the right answer where a result that does not fit is a mistake; these are for the places where it
 is not -- a counter that stops at its maximum, a difference that stops at zero.  A language with only the first kind makes the
 second kind be written as three statements and a comparison, and one with only the second makes every mistake silent.
 

@@ -170,8 +170,19 @@ def test_the_sign_before_something_that_is_not_a_number_is_reported() -> None:
     assert D.LANG_SYNTAX_LONELY_NEGATIVE in diags
 
 
-def test_the_ordinary_minus_is_still_not_a_token() -> None:
-    """'-' is left for subtraction, which is the point of the separate sign."""
-    _, diags = lex("3u8 - 1u8\n")
-    assert D.LANG_SYNTAX_UNEXPECTED_CHAR in diags
+def test_the_ordinary_minus_is_subtraction_and_not_a_sign() -> None:
+    """'-' was left for subtraction, which is the point of the separate sign,
+    and subtraction is what it now is."""
+    kinds, diags = lex("3u8 - 1u8\n")
+    assert diags == []
+    assert kinds[:3] == [TokKind.INT, TokKind.MINUS, TokKind.INT]
+
+
+def test_the_sign_and_the_operator_are_told_apart() -> None:
+    """`3 - ⁻1` is a subtraction of a negative number, and neither character
+    has to be worked out from the spaces around it -- which is the whole reason
+    the sign is a glyph of its own."""
+    kinds, diags = lex("3u8 - \N{SUPERSCRIPT MINUS}1u8\n")
+    assert diags == []
+    assert kinds[:3] == [TokKind.INT, TokKind.MINUS, TokKind.INT]
 

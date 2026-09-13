@@ -1,0 +1,12 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4205 LANG_TYPE_OPERAND_NOT_INTEGER
+
+※ Arithmetic is defined on numbers.  Two truth values have no sum.
+let ready: bool = true
+let seen: bool = false
+
+@[startup]
+fn main() → u8:
+    @[ignore(5005)]
+    ready + seen
+    0u8

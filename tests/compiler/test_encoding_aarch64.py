@@ -154,6 +154,7 @@ SAMPLES = [
     ("ret", "ret"),
     ("svc #0", "svc", MCImm(0, 16, False)),
     ("brk #1", "brk", MCImm(1, 16, False)),
+    ("udf #0", "udf", MCImm(0, 16, False)),
     ("nop", "nop"),
 ]
 

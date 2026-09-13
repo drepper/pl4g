@@ -152,6 +152,9 @@ _BINARY_OPS: Final[dict[ast.BinaryOp, BinOp]] = {
     ast.BinaryOp.BIT_AND: BinOp.AND,
     ast.BinaryOp.BIT_OR: BinOp.OR,
     ast.BinaryOp.BIT_XOR: BinOp.XOR,
+    ast.BinaryOp.ADD: BinOp.ADD,
+    ast.BinaryOp.SUBTRACT: BinOp.SUB,
+    ast.BinaryOp.MULTIPLY: BinOp.MUL,
     ast.BinaryOp.SAT_ADD: BinOp.SAT_ADD,
     ast.BinaryOp.SAT_SUB: BinOp.SAT_SUB,
     ast.BinaryOp.SAT_MUL: BinOp.SAT_MUL,
@@ -1402,6 +1405,13 @@ class Checker:
                              operator=expr.op.value, expected=ty.render(),
                              found=found.render())
             return UndefConst(ERROR)
+        if expr.op is ast.BinaryOp.DIVIDE:
+            # One operator, two instructions: dividing signed numbers and
+            # dividing unsigned ones are different questions, and the type of
+            # what is divided is what says which was asked.
+            signed = isinstance(ty, IntType) and ty.signed
+            return builder.binary(BinOp.SDIV if signed else BinOp.UDIV,
+                                  left, right, expr.span)
         return builder.binary(_BINARY_OPS[expr.op], left, right, expr.span)
 
     def _lower_unary(self, builder: IRBuilder, expr: ast.Unary,

@@ -1636,6 +1636,59 @@ and exits with whether they agree.  Fifty-one cases, three architectures.
 
 ---
 
+## 2026-09-14T05:30+02:00 — language and compiler
+
+**Arithmetic that checks: `+`, `-`, `×`, and the path a fault leaves the program through**
+
+The two remaining steps of the four asked for, and they turned out to be one thing: arithmetic that faults is only as good as what
+happens when it does.
+
+**An answer that will not fit stops the program.**  `200u8 + 100u8` does not continue with 44 and does not continue with 255.
+C leaves signed overflow undefined and wraps unsigned, which is why `-ftrapv` and the sanitizers exist; Rust panics in a debug
+build and wraps in a release one, so a program means two things depending on how it was built; Zig and Swift fault in both and
+offer `+%` and `&+` for wrapping.  Zig's and Swift's position is taken, with `⊞` and its relatives in place of `+%` -- and with
+no wrapping operator at all, since wrapping is a thing to ask for by writing the wrap rather than by writing an operator that
+hides it.
+
+The checks are the same three shapes the saturating operations use.  That is not a coincidence worth congratulating: finding that
+an answer went past the end of its type is one question, and whether the end is then used in its place or the program stops is the
+only difference.  One module answers both.
+
+**`×` and `÷` are glyphs; `+` and `-` are not.**  A single ASCII character spent on an operator is one no future feature can
+have, and these two are what the operations are written with outside programming.  `+` and `-` keep their characters because
+nothing else could reasonably want them -- and `-` is unambiguous only because the sign of a negative literal is `⁻`, which is what
+that glyph was for.  The decision made months ago pays here.
+
+**The fault path.**  Everything that could be worked out beforehand was: the message is built whole at compile time and put in the
+image, so what runs at the moment of the fault is a raw `write` and a trap.  No formatting, no number to turn into text, nothing
+that could itself fail -- which matters more here than anywhere, this being the code that runs when something has already gone
+wrong.  It answers the open question about the pre-`io_uring` error path in the same breath: it assumes nothing about the
+descriptor, allocates nothing, and formats nothing.
+
+It ends by **trapping rather than exiting**.  The program dies by a signal at the point of the fault with its stack still
+standing, which is what a debugger wants to be handed; a status would say less and could not be told from a program that meant to
+exit with it.  The signal is the same on all three targets, which took changing AArch64's trap from `brk` to `udf`: `brk` raises a
+different signal from the other two, and a program should die the same way wherever it was compiled.  The trap carries a one where
+the padding between functions carries a zero, so a disassembly tells a deliberate trap from a fall into padding.
+
+**The unwinder is deliberately not built.**  The recorded decision was a fault aborting with a real multi-frame backtrace, and
+that is still the intent -- but the language has no way to call a function, so every stack is one frame deep, and an unwinder
+written now could not be tested against the thing it exists for.  What the message carries instead is what the compiler knew:
+which operation, in which function, at which line.  The to-do entry now carries the analysis rather than the intention, so that
+the work is a decision already made when there is something to unwind: a frame pointer chain costs a register and two
+instructions in every function and needs no table; frame information costs nothing at run time and is what a debugger and a
+profiler want anyway, at the price of an absolute relocation in data that nothing generates yet.  The second is the better answer
+and the same table can carry the names, which `.symtab` cannot because it is not mapped.
+
+**Division is refused on every target** (8501), not on the one that cannot do it.  x86-64 writes a quotient and a remainder to a
+fixed pair of registers, which the allocator cannot yet be told about; AArch64 and RISC-V have one instruction each.  Refusing it
+everywhere is what keeps a program meaning the same thing wherever it is compiled, and it is the same call made for the widest
+saturating multiplication, which waits on the same machinery.  **Exponentiation is not begun** and needs a decision first: with a
+constant exponent it is a few checked multiplications, and with an exponent known only at run time it is a loop the language
+cannot write and the compiler would have to emit.
+
+---
+
 ---
 
 Open questions

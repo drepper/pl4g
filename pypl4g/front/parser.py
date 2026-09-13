@@ -81,8 +81,12 @@ _BINARY_OPERATORS: Final[dict[TokKind, _Operator]] = {
     TokKind.PIPE: _Operator(ast.BinaryOp.BIT_OR, 10),
     TokKind.CARET: _Operator(ast.BinaryOp.BIT_XOR, 20),
     TokKind.AMPERSAND: _Operator(ast.BinaryOp.BIT_AND, 30),
+    TokKind.PLUS: _Operator(ast.BinaryOp.ADD, 40),
+    TokKind.MINUS: _Operator(ast.BinaryOp.SUBTRACT, 40),
     TokKind.SAT_ADD: _Operator(ast.BinaryOp.SAT_ADD, 40),
     TokKind.SAT_SUB: _Operator(ast.BinaryOp.SAT_SUB, 40),
+    TokKind.TIMES: _Operator(ast.BinaryOp.MULTIPLY, 50),
+    TokKind.DIVIDE: _Operator(ast.BinaryOp.DIVIDE, 50),
     TokKind.SAT_MUL: _Operator(ast.BinaryOp.SAT_MUL, 50),
 }
 

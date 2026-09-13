@@ -55,6 +55,12 @@ NAND_GLYPH: Final[str] = "\N{NAND}"
 NOR_GLYPH: Final[str] = "\N{NOR}"
 NOT_GLYPH: Final[str] = "\N{NOT SIGN}"
 
+#: The arithmetic that faults where the answer will not fit.  Multiplication is
+#: a glyph rather than an asterisk because the asterisk is one character and
+#: says nothing; division is the same.
+TIMES_GLYPH: Final[str] = "\N{MULTIPLICATION SIGN}"
+DIVIDE_GLYPH: Final[str] = "\N{DIVISION SIGN}"
+
 #: The saturating operations, which answer with the nearest value their type can
 #: hold rather than going past it.  Each is the sign of the operation it is built
 #: from, in a box: what the box says is that the answer stays inside something.
@@ -125,6 +131,11 @@ class TokKind(StrEnum):
     LOGIC_NAND = "'\N{NAND}'"
     LOGIC_NOR = "'\N{NOR}'"
     LOGIC_NOT = "'\N{NOT SIGN}'"
+
+    PLUS = "'+'"
+    MINUS = "'-'"
+    TIMES = "'\N{MULTIPLICATION SIGN}'"
+    DIVIDE = "'\N{DIVISION SIGN}'"
 
     SAT_ADD = "'\N{SQUARED PLUS}'"
     SAT_SUB = "'\N{SQUARED MINUS}'"

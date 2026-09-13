@@ -1,0 +1,11 @@
+※ pl4g-test: compile=ok run=native,qemu exit=61 diag=none
+
+※ The ordinary arithmetic.  Multiplication binds tighter than addition, as it
+※ does in writing, so this is (20 × 3) + 1.
+
+let twenty: u8 = 20u8
+let three: u8 = 3u8
+
+@[startup]
+fn main() → u8:
+    twenty × three + 1u8

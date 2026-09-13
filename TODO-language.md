@@ -126,14 +126,28 @@ To Do List for the PL4g language
     thousand separator, just ignore the `_` characters.  Done for integers in every base, and tested; the float half follows when
     float literals exist, since there are none to put a separator in yet.
 
-[ ] implement operations on numbers.  Needs the expression parser, the register allocator and conditional branches in
-    TODO-pypl4g.md, and the overflow check needs the unwinder there: decided, a fault aborts with a real multi-frame backtrace
-    rather than a bare trap.  Use `+` for addition, `-` for subtraction, `×` for multiplication, `÷` for division.
-    Both sides of the operator need to have the same type or one side can be an untyped integer/float.  The result must fit into
-    the respective type.  An overflow that can be detected at compile time is a compilation error.  Unless it can be proven to
-    not be necessary (e.g., using value range propagation) all operation using the operators above need an overflow check.  The
-    program aborts with a backtrace in case of an overflow/underflow.  For floating-point values the values like IEEE Inf and
-    IEEE NaN cause the trap for an overflow/underflow.  Implement `↑` for exponentiation.
+[x] implement operations on numbers, for `+`, `-` and `×` on integers.  Every one of them checks, and an answer that will not
+    fit stops the program with a message saying which operation it was, in which function, at which line.  The message is built
+    whole at compile time, so what runs at the moment of the fault is a write and a trap.  The three shapes the check takes are
+    the ones the saturating operations use, the question being the same and only the reply differing.
+    Left open, each with an entry of its own below: division, exponentiation, and the same for floating point.
+
+[ ] implement `÷`.  Parsed, typed and refused (8501).  What it waits on is in TODO-pypl4g.md: on x86-64 a division writes
+    its quotient and its remainder to a fixed pair of registers, which the register allocator cannot yet be told about.  It is
+    refused on every target rather than on the one that cannot do it, so that a program means the same thing wherever it is
+    compiled.  Dividing by zero is a fault like an overflow and wants the same path, which now exists.
+
+[ ] implement `↑` for exponentiation.  Not begun, and it needs a decision first: with a constant exponent it is a few
+    multiplications and every one of them checks, which is straightforward; with an exponent that is not known until the program
+    runs it is a loop, and the language has no way to write one, so the loop would have to be emitted -- or the operator
+    restricted to constant exponents, which is what every language that has an integer `**` other than Python effectively does.
+
+[ ] the same arithmetic on floating-point values, where IEEE infinity and IEEE not-a-number are what an overflow or an underflow
+    produces and are what the check looks for.  Waits on the float entry above.
+
+[ ] report an overflow that can be seen at compile time as a compilation error rather than leaving it to fault at run time.  The
+    constant folder already computes the answer and declines to fold where it does not fit, which is where the report belongs;
+    what it needs is somewhere to report from, the folder being an optimization that does not run at every level.
 
 [?] Implement strings.  Literal strings are always encoded in UTF-8.  They are not mutable.  Variables can be defined as type `str`
     which can be initialized with a string literal.  If not marked mut a `str` object cannot be modified and has a fixed length and

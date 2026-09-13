@@ -148,7 +148,8 @@ class Driver:
         streamer = MCStreamer(encode=target.encode)
         asm = target.new_assembler(streamer, self.options.opt_level)
         try:
-            target.generate(module, asm, self.diags, self.options.opt_level)
+            target.generate(module, asm, self.diags, self.options.opt_level,
+                            self.sources)
         except RegisterAssignmentError as exc:
             self.diags.internal(str(exc))
             return ExitCode.ERRORS

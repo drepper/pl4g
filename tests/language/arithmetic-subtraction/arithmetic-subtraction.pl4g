@@ -1,0 +1,16 @@
+※ pl4g-test: compile=ok run=native,qemu exit=17 diag=none
+
+※ '-' is subtraction and '⁻' is the sign of a negative literal, so neither has
+※ to be worked out from the spaces around it.  This is 20 - 3 and then 20 - 3
+※ again, written the second time as an addition of a negative number.
+
+let twenty: u8 = 20u8
+let three: i8 = 3i8
+
+@[visible]
+let same: mut i8 = 0i8
+
+@[startup]
+fn main() → u8:
+    same ← three + ⁻3i8
+    twenty - 3u8

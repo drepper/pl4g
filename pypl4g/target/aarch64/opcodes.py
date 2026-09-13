@@ -489,6 +489,13 @@ AARCH64_INSTRS: Final[tuple[A64InstDesc, ...]] = (
                 fields=(Field(FieldKind.IMMEDIATE, 0, 5, 16),),
                 est_size=INSTRUCTION_SIZE),
     # brk #imm16
+    # udf #imm16   permanently undefined, which is what a trap should be: the
+    # program is dying, and it should die the same way on every architecture.
+    # `brk` would raise a different signal here than the other two raise.
+    A64InstDesc("udf", (_imm(0xFFFF),), template=0x00000000,
+                fields=(Field(FieldKind.IMMEDIATE, 0, 0, 16),),
+                flags=InstFlags.TERMINATOR | InstFlags.BARRIER,
+                est_size=INSTRUCTION_SIZE),
     A64InstDesc("brk", (_imm(0xFFFF),), template=0xD4200000,
                 fields=(Field(FieldKind.IMMEDIATE, 0, 5, 16),),
                 flags=InstFlags.TERMINATOR | InstFlags.BARRIER,

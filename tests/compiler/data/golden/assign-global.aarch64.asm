@@ -23,4 +23,4 @@ _start:
     00 00 00 94              bl main()u8   ※ fixup aarch64_branch26 → main()u8
     c8 0b 80 d2              movz x8, 94
     01 00 00 d4              svc 0
-    20 00 20 d4              brk 1
+    01 00 00 00              udf 1

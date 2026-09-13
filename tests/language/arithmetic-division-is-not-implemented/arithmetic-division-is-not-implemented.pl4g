@@ -1,0 +1,14 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 8501 IMPL_BACKEND_UNSUPPORTED
+
+※ Division writes its quotient and its remainder to a fixed pair of registers
+※ on one of the three targets, which the register allocator cannot yet be told
+※ about.  Refused on every target rather than on the one that cannot do it, so
+※ that a program means the same thing wherever it is compiled.
+
+let twenty: u8 = 20u8
+let four: u8 = 4u8
+
+@[startup]
+fn main() → u8:
+    twenty ÷ four

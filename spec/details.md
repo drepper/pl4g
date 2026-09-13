@@ -273,6 +273,23 @@ A comparison is folded into a branch only where the branch is its *sole* reader 
 anything else, or read twice, it is a value that something wants, and a value something wants has to be in a register.  Two
 branches cannot each absorb one comparison, so that case computes it once and both branches test the result against zero.
 
+**A fault is reported by writing a string and trapping, and nothing else.**  The
+compiler knows which operation could not be done, in which function and at which
+line, so the whole message is built while the program is compiled and put in the
+image beside its constants.  What runs at the moment of the fault is a raw
+`write` and a trap: no formatting, no number to turn into text, no allocation,
+no second thing that could fail.  That is worth more here than anywhere else in
+the compiler, this being the code that runs when something has already gone
+wrong.
+
+Standard error is where it goes, that being the only place a program depending
+on nothing from the system can write to, and whether the descriptor is open is
+not asked -- a program started with it closed has the message go wherever that
+number now points, which is still better than nowhere.  The trap is the same
+signal on every target, and is told apart in a disassembly from the padding
+between functions, which on one target is otherwise the same instruction.
+Nothing of this is emitted for a program in which nothing can fault.
+
 **A value narrower than a register carries its own zeroes or its own sign above
 itself.**  Every integer value of width *w* is held in a register with the bits
 above *w* equal to the zero- or sign-extension of the value, according to the

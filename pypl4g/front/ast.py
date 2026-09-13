@@ -152,6 +152,11 @@ class BinaryOp(StrEnum):
     SHORT_AND = "and"
     SHORT_OR = "or"
 
+    ADD = "+"
+    SUBTRACT = "-"
+    MULTIPLY = "\N{MULTIPLICATION SIGN}"
+    DIVIDE = "\N{DIVISION SIGN}"
+
     SAT_ADD = "\N{SQUARED PLUS}"
     SAT_SUB = "\N{SQUARED MINUS}"
     SAT_MUL = "\N{SQUARED TIMES}"

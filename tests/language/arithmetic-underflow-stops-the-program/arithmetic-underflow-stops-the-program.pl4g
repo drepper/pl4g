@@ -1,0 +1,11 @@
+※ pl4g-test: compile=ok run=native,qemu exit=-4 diag=none
+
+※ Nothing below zero for an unsigned type either.  This is what '⊟' is for
+※ where going below zero is meant.
+
+let five: u8 = 5u8
+let nine: u8 = 9u8
+
+@[startup]
+fn main() → u8:
+    five - nine

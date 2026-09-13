@@ -100,6 +100,16 @@ class InstructionSelector(Protocol):
         """
         ...
 
+    def select_address(self, dst: Reg, symbol: MCSymRef,
+                       span: Span) -> Sequence[MCInst]:
+        """Instructions that put the address of *symbol* into *dst*.
+
+        Always computed from the program counter and never written into the
+        image, which is the rule that keeps the image free of anything a loader
+        would have to patch.
+        """
+        ...
+
     def select_widen(self, dst: Reg, src: MCOperand, bits: int, signed: bool,
                      span: Span) -> Sequence[MCInst]:
         """Instructions that put a *bits*-wide value into the whole of *dst*,
@@ -186,6 +196,9 @@ class Assembler:
         self._machine_passes = list(machine_passes)
         self._function: MachineFunction | None = None
         self._block: MachineBasicBlock | None = None
+        #: How many labels have been reserved inside functions, so that two
+        #: of them are never the same.
+        self._reserved: int = 0
         self.functions: list[MachineFunction] = []
 
     @property
@@ -232,6 +245,18 @@ class Assembler:
         self._block = function.add_block("".join((".L", name, "_entry")))
         self.functions.append(function)
         return function
+
+    def reserve_label(self, hint: str) -> str:
+        """A label no other block in this function has.
+
+        For code generated inside a function rather than for a block of the
+        representation -- the place an arithmetic check carries on from, and
+        whatever else wants somewhere to land.
+        """
+        assert self._function is not None
+        self._reserved += 1
+        return "".join((".L", self._function.name, ".", hint, ".",
+                        str(self._reserved)))
 
     def block(self, label: str | None = None) -> MachineBasicBlock:
         """Start a new block within the current function."""
@@ -387,6 +412,10 @@ class Assembler:
         exactly that, so the representation is not a choice being made here.
         """
         self._emit(self._selector.select_set(cond, dst, lhs, rhs, span))
+
+    def address(self, dst: Reg, name: str, span: Span = INVALID_SPAN) -> None:
+        """Put the address of the symbol *name* into *dst*."""
+        self._emit(self._selector.select_address(dst, self.symref(name), span))
 
     def widen(self, dst: Reg, src: MCOperand, bits: int, signed: bool,
               span: Span = INVALID_SPAN) -> None:

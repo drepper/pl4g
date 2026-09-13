@@ -51,7 +51,7 @@ EXPECTED = {
         "".join(("bl <", MAIN, ">")),
         "mov x8, #0x5e",
         "svc #0x0",
-        "brk #0x1",
+        "udf #1",
     ]),
     "riscv64": (243, [
         "li a0,0",
@@ -67,8 +67,10 @@ EXPECTED = {
 
 #: What a disassembler shows for the padding between functions.  One spells the
 #: bytes out, the others collapse a run of zeros into a marker that carries no
-#: mnemonic and is skipped before this is consulted.
-FILLER = {"int3", "udf", "(bad)"}
+#: mnemonic and is skipped before this is consulted.  On AArch64 the padding and
+#: a deliberate trap are the same instruction with different immediates, which
+#: is why this matches the whole text as well as the mnemonic alone.
+FILLER = {"int3", "(bad)", "udf #0"}
 
 
 @dataclass(frozen=True, slots=True)
@@ -242,7 +244,7 @@ def test_disassembles_to_the_expected_code(built: Built) -> None:
         # One disassembler puts the mnemonic and its operands in one field,
         # the other separates them, so take everything after the bytes.
         text = " ".join(" ".join(parts[2:]).split())
-        if text.split()[0] in FILLER:
+        if text in FILLER or text.split()[0] in FILLER:
             continue
         # A call prints the address it resolved to; only the symbol matters here.
         if "<" in text:

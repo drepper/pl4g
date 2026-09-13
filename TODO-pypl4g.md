@@ -91,11 +91,23 @@ To Do List for the pypl4g compiler
     not a new level of the grammar; `Binary` and `Unary` nodes in the syntax tree; `BinaryInst` and `UnaryInst` lowered on all
     three targets, with an operand no table row can carry put in a register.  `CmpInst` as a value is the entry above.
 
-[ ] emit frame information and an unwinder.  Decided: a fault -- an arithmetic overflow to begin with -- aborts with a real
-    multi-frame backtrace, so this is frame information plus an unwinder in the generated code rather than a bare trap.  Needs the
-    register allocator's frame layout first.  One question inside it to settle when it is written: `.symtab` is in the image but is
-    not mapped, so a backtrace carrying names needs either a table that is loaded or addresses only.  The message goes out through
-    a raw system call, which is also what the pre-`io_uring` error path in TODO-language.md needs.
+[x] emit the path a fault leaves the program through.  Done: the message is built whole at compile time and put in the image, and
+    `__pl4g_abort` writes it to standard error through a raw system call and traps.  The program dies by the same signal on every
+    target, at the point of the fault, with its stack still standing.  Nothing is emitted for a program in which nothing can
+    fault.  This is also the pre-`io_uring` error path the entry in TODO-language.md asks about, and it answers that question: it
+    assumes nothing about the descriptor, allocates nothing, and formats nothing.
+
+[ ] walk the stack, so that a fault reports where it was called from and not only where it happened.  Deferred deliberately: the
+    language has no way to call a function, so every stack is one frame deep and an unwinder could not be tested against the thing
+    it exists for.  The analysis, so that it is not done twice:
+    Two ways to walk.  A **frame pointer chain** is what `_start` already prepares for -- it sets the frame pointer and the return
+    address to zero so that a walk knows where to stop -- and needs no table at all, at the cost of a register and two
+    instructions in every function.  **Frame information**, a table from a code address to the frame size and to where the return
+    address was put, costs nothing at run time and is what a debugger and a profiler want anyway; it is more to emit and needs an
+    absolute relocation in data, which nothing generates yet.  The second is the better answer for a language that cares about
+    what it emits, and the first is what to reach for if the second proves slow to write.
+    Names are a third question: `.symtab` is in the image but is not mapped, so a walk that prints names needs a table of its own
+    that is.  The same table can carry both, which is an argument for the second way.
 
 [x] implement module system.  Done: `let name := import("somename")`, found in the importing file's directory, then the
     directories `--module-path` gives, then the installation's; read once however many routes reach it; named by the shortest of
