@@ -44,6 +44,15 @@ def _reg_field(operand: int, lsb: int) -> Field:
     return Field(FieldKind.REGISTER, operand, lsb)
 
 
+def _shift() -> OperandSpec:
+    """How far a move-wide instruction shifts its sixteen bits.
+
+    One of four places in a word, named in bits rather than as an index, because
+    that is how the assembly writes it: `lsl #32` and not `hw=2`.
+    """
+    return OperandSpec(OperandKind.IMM, imm_min=0, imm_max=48)
+
+
 def _off(scale: int) -> OperandSpec:
     """The offset of a load, which the encoding holds divided by the access size."""
     return OperandSpec(OperandKind.IMM, imm_min=0, imm_max=0xFFF << scale)
@@ -78,6 +87,33 @@ AARCH64_INSTRS: Final[tuple[A64InstDesc, ...]] = (
     A64InstDesc("movz", (_r(64), _imm(0xFFFF)), template=0xD2800000,
                 fields=(_reg_field(0, _RD),
                         Field(FieldKind.IMMEDIATE, 1, 5, 16)),
+                est_size=INSTRUCTION_SIZE),
+    # A constant wider than sixteen bits is written a quarter of a word at a
+    # time: one instruction sets a quarter and clears the rest, and each that
+    # follows sets a quarter and leaves the rest alone.  `movn` sets a quarter
+    # and turns every bit round, which is what makes a small negative number one
+    # instruction instead of four.
+    #
+    # The shift is written in bits and encoded as the count of quarters, which
+    # is what the field's own shift is for.
+    # movz Xd, #imm16, lsl #shift
+    A64InstDesc("movz", (_r(64), _imm(0xFFFF), _shift()), template=0xD2800000,
+                fields=(_reg_field(0, _RD),
+                        Field(FieldKind.IMMEDIATE, 1, 5, 16),
+                        Field(FieldKind.IMMEDIATE, 2, 21, 2, shift=4)),
+                est_size=INSTRUCTION_SIZE),
+    # movk Xd, #imm16, lsl #shift
+    A64InstDesc("movk", (_r(64), _imm(0xFFFF), _shift()), template=0xF2800000,
+                fields=(_reg_field(0, _RD),
+                        Field(FieldKind.IMMEDIATE, 1, 5, 16),
+                        Field(FieldKind.IMMEDIATE, 2, 21, 2, shift=4)),
+                roles=(OperandRole.DEF_USE, OperandRole.USE, OperandRole.USE),
+                est_size=INSTRUCTION_SIZE),
+    # movn Xd, #imm16, lsl #shift
+    A64InstDesc("movn", (_r(64), _imm(0xFFFF), _shift()), template=0x92800000,
+                fields=(_reg_field(0, _RD),
+                        Field(FieldKind.IMMEDIATE, 1, 5, 16),
+                        Field(FieldKind.IMMEDIATE, 2, 21, 2, shift=4)),
                 est_size=INSTRUCTION_SIZE),
     # mov Wd, Wm   is  orr Wd, WZR, Wm
     A64InstDesc("mov", (_r(32), _r(32)), template=0x2A0003E0,

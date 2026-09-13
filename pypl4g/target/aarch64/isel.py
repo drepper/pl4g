@@ -132,14 +132,55 @@ class A64Selector(InstructionSelector):
         if isinstance(src, MCReg):
             return (self._inst("mov", (MCReg(dst), src), span),)
         if isinstance(src, MCImm):
-            if src.value < 0 or src.value > MAX_MOVE_IMMEDIATE:
-                # A wider constant takes a sequence of move-wide instructions,
-                # or a load from a constant pool.  Neither is generated yet.
-                raise UnsupportedOperation("".join((
-                    "a constant of ", str(src.value),
-                    ", which does not fit one move-wide instruction")), span)
-            return (self._inst("movz", (MCReg(dst), src), span),)
+            if 0 <= src.value <= MAX_MOVE_IMMEDIATE:
+                return (self._inst("movz", (MCReg(dst), src), span),)
+            return self._materialize(dst, src.value, span)
         raise UnsupportedOperation("moving from this kind of operand", span)
+
+    def _materialize(self, dst: Reg, value: int, span: Span) -> Sequence[MCInst]:
+        """Instructions that build the constant *value* a quarter of a word at a
+        time.
+
+        One instruction can set sixteen bits, so a wider constant takes up to
+        four.  Which four is decided by the value: the first sets a quarter and
+        clears the rest, each after it sets a quarter and leaves the rest alone,
+        and a quarter that is already what it should be is skipped -- so a
+        constant with a small number in it costs a small number of instructions
+        however wide its type.
+
+        Where the value has more quarters of ones than of zeroes, the first
+        instruction is the one that turns every bit round instead.  That is what
+        makes -1 one instruction rather than four, and small negative numbers
+        two rather than four.
+
+        The whole register is written, whatever the width of the value: the
+        quarters are the quarters of the eight-byte pattern, and a value of a
+        narrower type has zeroes or sign in the quarters above it either way.
+        """
+        pattern = value & 0xFFFFFFFFFFFFFFFF
+        quarters = [(pattern >> (16 * index)) & 0xFFFF for index in range(4)]
+        turned = [quarter ^ 0xFFFF for quarter in quarters]
+        wide = MCReg(dst, bits=64)
+
+        def _set(index: int, quarter: int, mnemonic: str) -> MCInst:
+            return self._inst(mnemonic, (wide, MCImm(quarter, 16, signed=False),
+                                         MCImm(16 * index, 8, signed=False)), span)
+
+        if sum(1 for quarter in turned if quarter) < sum(1 for q in quarters if q):
+            # Every quarter turned round being zero means the value is every
+            # bit set, which is what one `movn` of zero says.
+            first = next((index for index, q in enumerate(turned) if q), 0)
+            built = [_set(first, turned[first], "movn")]
+            built.extend(_set(index, quarter, "movk")
+                         for index, quarter in enumerate(quarters)
+                         if index != first and quarter != 0xFFFF)
+            return tuple(built)
+        present = [index for index, quarter in enumerate(quarters) if quarter]
+        if not present:
+            return (_set(0, 0, "movz"),)
+        built = [_set(present[0], quarters[present[0]], "movz")]
+        built.extend(_set(index, quarters[index], "movk") for index in present[1:])
+        return tuple(built)
 
     def _select_load(self, dst: Reg, src: MCMem, span: Span) -> Sequence[MCInst]:
         """Instructions that read memory into a register.
@@ -299,8 +340,25 @@ class A64Selector(InstructionSelector):
             mnemonic = "cbz" if cond is Condition.EQ else "cbnz"
             if mnemonic in self.table.mnemonics:
                 return (self._inst(mnemonic, (lhs, target), span),)
-        return (self._inst("cmp", (lhs, rhs), span),
+        return (*self._select_compare(lhs, rhs, span),
                 self._inst(_CONDITIONAL[cond], (target,), span))
+
+    def _select_compare(self, lhs: MCOperand, rhs: MCOperand,
+                        span: Span) -> Sequence[MCInst]:
+        """The instructions that set the flags for a comparison.
+
+        Usually one.  A comparison carries twelve bits of constant, so anything
+        wider is built in a register first -- which is the same answer every
+        other instruction here gives to the same question.
+        """
+        if isinstance(rhs, MCImm):
+            try:
+                self.table.select("cmp", (lhs, rhs))
+            except SelectionError:
+                carried = INFO.new_virtual(GPR, 64)
+                return (*self.select_move(carried, rhs, span),
+                        self._inst("cmp", (lhs, MCReg(carried)), span))
+        return (self._inst("cmp", (lhs, rhs), span),)
 
     def select_set(self, cond: Condition, dst: Reg, lhs: MCOperand, rhs: MCOperand,
                    span: Span) -> Sequence[MCInst]:
@@ -312,7 +370,7 @@ class A64Selector(InstructionSelector):
         """
         if isinstance(lhs, MCImm) and not isinstance(rhs, MCImm):
             lhs, rhs, cond = rhs, lhs, cond.swapped()
-        return (self._inst("cmp", (lhs, rhs), span),
+        return (*self._select_compare(lhs, rhs, span),
                 self._inst(_SET[cond], (MCReg(dst, bits=32),), span))
 
     # -- the stack -------------------------------------------------------------

@@ -81,6 +81,7 @@ SAMPLES = [
     ("sltu a0, a1, a2", "sltu", MCReg(reg("a0")), MCReg(reg("a1")), MCReg(reg("a2"))),
     ("sltiu a0, a1, 1", "sltiu", MCReg(reg("a0")), MCReg(reg("a1")), MCImm(1, 12)),
     ("xori a0, a1, 1", "xori", MCReg(reg("a0")), MCReg(reg("a1")), MCImm(1, 12)),
+    ("slli a0, a1, 32", "slli", MCReg(reg("a0")), MCReg(reg("a1")), MCImm(32, 6)),
     ("j .", "j", MCSymRef(SymExpr(MCSymbol("s")))),
     ("beq a0, a1, .", "beq", MCReg(reg("a0")), MCReg(reg("a1")),
      MCSymRef(SymExpr(MCSymbol("s")))),

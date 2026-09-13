@@ -62,6 +62,7 @@ def build(module: Module, triple: str, path) -> list[str]:  # noqa: ANN001
     settings = ImageSettings(machine=defaults.machine, base_vaddr=defaults.base_vaddr,
                              page_size=defaults.page_size,
                              entry_symbol=target.entry_symbol,
+                             header_flags=defaults.header_flags,
                              kind=ImageKind.EXECUTABLE)
     image, _ = write_image(settings, list(streamer.sections.values()),
                            list(streamer.symbols.values()), ["t.pl4g"],

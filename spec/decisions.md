@@ -1543,6 +1543,46 @@ but the fix belongs where the label is made, since a block is found by the objec
 
 ---
 
+## 2026-09-13T22:30+02:00 — compiler
+
+**A wide constant is built, not loaded from a pool; and two miscompilations that came out with it**
+
+Done first of the four the user asked for, because the two after it need it: the bounds a saturating operation clamps to are the
+ends of the type, and for a sixty-four bit type those are constants no instruction can carry.
+
+**Built rather than pooled.**  A constant pool costs a relocation, a section and a cache line that a program pays for whether it
+reads the constant or not; a sequence costs two to four instructions that nothing else waits for.  Every compiler for these
+architectures makes the same choice for the same reason, and the sequences here are theirs: AArch64 sets a quarter of a word at a
+time with `movz` and `movk`, with `movn` first where the value has more quarters of ones than of zeroes -- which makes -1 one
+instruction rather than four.  RISC-V follows LLVM's sequence exactly, and deliberately: it is what the disassembly of every other
+RISC-V program looks like, so a reader comparing the two is comparing like with like.  x86-64 already had a move that takes eight
+bytes; only a store and a comparison, whose immediates are narrower, needed a register.
+
+**Two real defects came out of testing it.**  Both were silent wrong answers, and both had gone unnoticed because nothing had yet
+used a wide constant.
+
+The first: x86-64 chose an immediate's width by what the number needs, ignoring that an instruction sign-extends one narrower than
+the operation.  `0xFFFFFFFF` compared against a sixty-four bit value was encoded as four bytes and read as minus one.  The rule is
+now stated where the width is chosen -- narrower than the operation means sign-extended, so only a value that reads the same as a
+signed number of that width may go there; at the operation's own width nothing is extended and any pattern will do.
+
+The second: RISC-V was handed the unsigned reading of a pattern with its top bit set -- 2^64-1 rather than -1 -- and computed a
+shift of sixty-four.  The two readings are now made one where the sequence begins.
+
+**What made the test worth trusting.**  The program compares a constant it *built* against the same constant as the image writer
+*wrote* into memory, and exits with whether they agree.  Two separate paths from one number, with nowhere for both to be wrong in
+the same way.  Sixteen values, three architectures, run under emulation.
+
+**The header flag word** now comes from the target rather than being zero by omission.  Only RISC-V has anything to say in it, and
+zero there is not "unset": it says the base integer set and the soft-float convention, which is what is emitted.  The three
+floating-point values are named beside it so that choosing one later is a constant and not a change to the image writer.
+
+**One entry closed as already done.**  Materializing the address of a symbol on RISC-V was written up as missing; the work that
+made loads and stores reach a variable had done it, and the entry had gone stale.  Worth noticing as a process point: an entry
+that describes what is missing decays, where one that describes what is wanted does not.
+
+---
+
 ---
 
 Open questions

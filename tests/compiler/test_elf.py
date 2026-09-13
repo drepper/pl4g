@@ -286,3 +286,32 @@ def test_a_section_both_writable_and_executable_is_refused() -> None:
                                      entry_symbol="_start"), [section], [], [])
     with pytest.raises(ImageError, match="permissions"):
         writer.plan()
+
+
+# -- the architecture's own flag word -------------------------------------------
+
+@pytest.mark.parametrize("triple", compiler_targets())
+def test_the_header_carries_the_flags_the_target_states(triple: str,
+                                                        tmp_path: Path) -> None:
+    """The flag word of the header is the architecture's, and only RISC-V has
+    anything to say in it.
+
+    Zero is not "unset" there: it says the base integer set and the soft-float
+    convention, which is what is emitted.  What this checks is that whatever the
+    target states arrives in the header -- so that the day floating point picks
+    a convention, saying so is a constant and not a change to the writer.
+    """
+    from pypl4g.target.registry import lookup as lookup_target
+
+    target = lookup_target(triple)
+    assert target is not None
+    source = tmp_path / "t.pl4g"
+    source.write_text(SOURCE, encoding="utf-8")
+    output = tmp_path / "out"
+    proc = run_compiler(["-o", str(output), "".join(("--target=", triple)),
+                         str(source)])
+    assert proc.returncode == 0, describe(proc)
+    header = output.read_bytes()[:64]
+    # e_flags is four bytes at offset 48 of a sixty-four bit header.
+    flags = int.from_bytes(header[48:52], "little")
+    assert flags == target.image_defaults().header_flags

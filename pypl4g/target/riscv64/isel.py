@@ -125,14 +125,58 @@ class RVSelector(InstructionSelector):
         if isinstance(src, MCReg):
             return (self._inst("mv", (MCReg(dst), src), span),)
         if isinstance(src, MCImm):
-            if src.value < IMM12_MIN or src.value > IMM12_MAX:
-                # A wider constant is an upper-immediate load followed by an
-                # add, or a load from a constant pool.  Neither is generated yet.
-                raise UnsupportedOperation("".join((
-                    "a constant of ", str(src.value),
-                    ", which does not fit one instruction")), span)
-            return (self._inst("li", (MCReg(dst), src), span),)
+            return self._materialize(dst, src.value, span)
         raise UnsupportedOperation("moving from this kind of operand", span)
+
+    def _materialize(self, dst: Reg, value: int, span: Span) -> Sequence[MCInst]:
+        """Instructions that build the constant *value*.
+
+        Three cases, each built out of the one below it.  Twelve bits is one
+        instruction.  Thirty-two is an upper-immediate load and an add, where
+        the add's twelve bits are *signed* -- so the upper half is rounded up
+        when the lower one will come out negative, which is what the
+        sign-adjustment below does.  Anything wider is the upper part built the
+        same way, shifted into place, and the last twelve bits added.
+
+        The shift goes as far left as the upper part's own trailing zeroes
+        allow, so that a constant like a power of two costs two instructions
+        rather than five.  This is the sequence LLVM generates and it is worth
+        following exactly: it is the one the disassembly of every other RISC-V
+        program looks like.
+        """
+        register = MCReg(dst)
+        built: list[MCInst] = []
+        # What arrives may be the unsigned reading of a pattern whose top bit is
+        # set; every instruction below works on the pattern read as signed, so
+        # the two readings are made one here and not in four places further on.
+        if value >= (1 << 63):
+            value -= 1 << 64
+
+        def build(remaining: int) -> None:
+            if IMM12_MIN <= remaining <= IMM12_MAX:
+                built.append(self._inst("li", (register, MCImm(remaining, 12)), span))
+                return
+            low = _signed_twelve(remaining)
+            upper = (remaining - low) >> 12
+            if -(1 << 31) <= remaining < (1 << 31):
+                built.append(self._inst(
+                    "lui", (register, MCImm(upper & 0xFFFFF, 20, signed=False)), span))
+                if low:
+                    built.append(self._inst(
+                        "addiw", (register, register, MCImm(low, 12)), span))
+                return
+            # The upper part is built first and then shifted into place, so the
+            # zeroes it ends in are shifted through rather than materialized.
+            spare = (upper & -upper).bit_length() - 1
+            build(upper >> spare)
+            built.append(self._inst(
+                "slli", (register, register, MCImm(12 + spare, 6, signed=False)), span))
+            if low:
+                built.append(self._inst(
+                    "addi", (register, register, MCImm(low, 12)), span))
+
+        build(value)
+        return tuple(built)
 
     def _select_load(self, dst: Reg, src: MCMem, span: Span) -> Sequence[MCInst]:
         """Instructions that read memory into a register.
@@ -653,3 +697,13 @@ def _immediate_width(value: int, signed: bool) -> int:
         elif 0 <= value < (1 << bits):
             return bits
     return 64
+
+
+def _signed_twelve(value: int) -> int:
+    """The low twelve bits of *value*, read as a signed number.
+
+    An instruction that carries twelve bits sign-extends them, so what it adds
+    is this and not the bits themselves.
+    """
+    low = value & 0xFFF
+    return low - 0x1000 if low >= 0x800 else low

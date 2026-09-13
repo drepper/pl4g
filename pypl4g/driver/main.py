@@ -172,6 +172,7 @@ class Driver:
         settings = ImageSettings(machine=defaults.machine, base_vaddr=defaults.base_vaddr,
                                  page_size=defaults.page_size,
                                  entry_symbol=target.entry_symbol,
+                                 header_flags=defaults.header_flags,
                                  kind=ImageKind.EXECUTABLE)
         try:
             image, _ = write_image(settings, list(streamer.sections.values()),

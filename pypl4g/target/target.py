@@ -24,6 +24,12 @@ class ImageDefaults:
     page_size: int
     text_alignment: int
     function_alignment: int
+    #: What the ELF header's flag word says about the image.  Every field in it
+    #: is the architecture's own, and only one architecture here has any: RISC-V
+    #: states which extensions the code uses and which floating-point convention
+    #: it follows.  Zero is not "unset" there -- it says the base integer set and
+    #: the soft-float convention, which is what is emitted.
+    header_flags: int = 0
 
 
 class Target(Protocol):

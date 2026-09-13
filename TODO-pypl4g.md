@@ -54,8 +54,9 @@ To Do List for the pypl4g compiler
     such a model on until there are loops, where the count of times a load runs stops being the count of times it is written.
 
 [ ] a frame larger than the immediate a stack adjustment can carry is reported rather than built in steps.  RISC-V reaches this
-    first, at about two hundred and fifty slots, and AArch64 at about five hundred; x86-64 does not.  The same question as
-    materializing a wide constant, and it wants the same answer.
+    first, at about two hundred and fifty slots, and AArch64 at about five hundred; x86-64 does not.  Now that a constant of any
+    width can be built, the answer is to build the size in a register and add it -- and the register has to be one the frame does
+    not yet exist to spill.
 
 [x] emit conditional branches.  Done for `BrInst`, `CondBrInst` and `UnreachableInst`: a branch is selected together with the
     comparison that feeds it, since that is the shape all three architectures have, and the condition is inverted where that lets
@@ -112,18 +113,24 @@ To Do List for the pypl4g compiler
     `unread-variable`, answered in the whole-program phase once every function has been checked.  What the definition says it
     raises is carried on the variable so that `@[expect(4007)]` still stands where a reader would write it.
 
-[ ] materialize a constant wider than one instruction can carry.  It needs a sequence -- two move-wide instructions on one
-    architecture, an upper-immediate load and an add on another -- and none is generated, so such a constant is reported instead.
+[x] materialize a constant wider than one instruction can carry.  Done: AArch64 sets a quarter of a word at a time with
+    `movz`/`movk`, and turns every bit round with `movn` first where that costs fewer instructions; RISC-V uses the sequence LLVM
+    generates, an upper part built the same way, shifted as far as its own trailing zeroes allow, and the last twelve bits added;
+    x86-64 already had a move that takes eight bytes and needed only a register for the places -- a store and a comparison -- whose
+    immediate is narrower.  Checked by compiling a program that compares a constant it built against the same constant as the image
+    writer wrote it, which is two separate paths from one number.
+    Two real defects came out with it.  x86-64 chose the width of an immediate by what the number needs, ignoring that an
+    instruction sign-extends one narrower than the operation, so `0xFFFFFFFF` in an eight-byte comparison was minus one.  And
+    RISC-V was handed the unsigned reading of a pattern with its top bit set and tried to shift by sixty-four.
 
-[ ] materialize the address of a symbol on RISC-V.  The rule adopted for position-independent code is that an address is only ever
-    produced by one helper emitting a program-counter-relative computation.  On x86-64 that is one instruction and on AArch64 a
-    pair whose halves are independent; on RISC-V the pair is not, since the second instruction's relocation refers to the label of
-    the first rather than to its own address.  The backend has neither relocation rather than half of the pair, and the two
-    instructions are present only in the form taking a plain immediate.
+[x] materialize the address of a symbol on RISC-V.  Already done, by the work that made loads and stores reach a variable: the
+    `auipc.hi20` and `addi.lo12` rows carry the two relocations the pair needs, the second measured from the label of the first,
+    and the register holding the address between them is marked as one the allocator must not send to the frame.  The entry was
+    written before that landed and was stale.
 
-[ ] set the RISC-V header flags.  The ELF header of a RISC-V image carries flags saying which extensions the code uses and which
-    floating-point convention it follows.  Zero is correct while only the base integer set is emitted; emitting floating point
-    will mean setting them, and the image writer has no field for them yet.
+[x] set the RISC-V header flags.  Done: the target states its flag word and the image writer carries it into the header, with the
+    three values named in `target.py` so that choosing between them is a constant rather than a change to the writer.  It is zero
+    today, which is not "unset" -- it says the base integer set and the soft-float convention, which is what is emitted.
 
 
 Optimizations

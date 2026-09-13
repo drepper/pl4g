@@ -71,6 +71,9 @@ class ImageSettings:
     base_vaddr: int
     page_size: int
     entry_symbol: str
+    #: The architecture's own flag word, which the header carries and nothing
+    #: else in the file refers to.
+    header_flags: int = 0
     kind: ImageKind = ImageKind.EXECUTABLE
     #: Whether to keep the section headers and the symbol table.
     with_symbols: bool = True
@@ -350,7 +353,8 @@ class ElfWriter:
             e_shoff=layout.by_name["shdrs"].file_offset if "shdrs" in layout.by_name else 0,
             e_phnum=len(layout.segments),
             e_shnum=len(layout.sections) + 1 if layout.sections else 0,
-            e_shstrndx=self._index_of(layout, ".shstrtab"))
+            e_shstrndx=self._index_of(layout, ".shstrtab"),
+            e_flags=self._settings.header_flags)
 
         phdrs = layout.by_name["phdrs"]
         position = phdrs.file_offset

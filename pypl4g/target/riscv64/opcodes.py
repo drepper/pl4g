@@ -50,6 +50,12 @@ def _imm20() -> OperandSpec:
     return OperandSpec(OperandKind.IMM, imm_min=0, imm_max=0xFFFFF)
 
 
+def _shamt() -> OperandSpec:
+    """How far a shift shifts.  Six bits here, this being the sixty-four bit
+    width; a shift of the whole register is the largest that means anything."""
+    return OperandSpec(OperandKind.IMM, imm_min=0, imm_max=63)
+
+
 def _sym() -> OperandSpec:
     """A branch target, given as a symbol reference."""
     return OperandSpec(OperandKind.REL | OperandKind.SYM)
@@ -159,6 +165,11 @@ RISCV_INSTRS: Final[tuple[RVInstDesc, ...]] = (
     # xori rd, rs1, imm12
     RVInstDesc("xori", (_r(), _r(), _imm12()), template=0x00004013,
                fields=(_reg(0, _RD), _reg(1, _RS1), _imm(2, _IMM12, 12)),
+               est_size=INSTRUCTION_SIZE),
+    # slli rd, rs1, shamt        the shift is six bits wide on this width
+    RVInstDesc("slli", (_r(), _r(), _shamt()), template=0x00001013,
+               fields=(_reg(0, _RD), _reg(1, _RS1),
+                       Field(FieldKind.IMMEDIATE, 2, 20, 6)),
                est_size=INSTRUCTION_SIZE),
     # lui rd, imm20
     RVInstDesc("lui", (_r(), _imm20()), template=0x00000037,

@@ -273,6 +273,18 @@ A comparison is folded into a branch only where the branch is its *sole* reader 
 anything else, or read twice, it is a value that something wants, and a value something wants has to be in a register.  Two
 branches cannot each absorb one comparison, so that case computes it once and both branches test the result against zero.
 
+**A constant wider than an instruction can carry is built rather than loaded.**  No constant pool is emitted and none is planned:
+a pool costs a relocation, a cache line and a section, where a sequence costs two to four instructions that no other value has to
+wait for.  AArch64 sets a quarter of a word at a time, and turns every bit round first where the value has more quarters of ones
+than of zeroes, which makes a small negative number two instructions rather than four.  RISC-V builds the upper part the same way,
+shifts it as far left as its own trailing zeroes allow so that a power of two costs two instructions, and adds the last twelve
+bits.  x86-64 has a move that takes the whole eight bytes, so only the places whose immediate is narrower -- a store and a
+comparison -- have to put the value in a register first.
+
+An immediate narrower than the operation is sign-extended, which is what decides whether one may be used at all: `0xFFFFFFFF` in an
+eight-byte operation is not four bytes of immediate, it is minus one.  At the operation's own width nothing is extended and any
+pattern will do, which is what lets a one-byte store carry two hundred.
+
 **A block parameter is a value like any other, and lives in a register.**  Every parameter of every block is given one before any
 block is walked, since a branch writes the parameters of a block that may come later in the layout than the branch does; what a
 branch carries is then the instruction to put something there, emitted immediately before the jump.  The register allocator's hint

@@ -228,10 +228,29 @@ class X86Selector(InstructionSelector):
         """Instructions that write *value* into the memory *address* names.
 
         This architecture writes to a place in memory directly, and takes the
-        value as an immediate where there is one, so a store is one instruction
-        and needs no register at all.
+        value as an immediate where there is one, so a store is usually one
+        instruction and needs no register at all.
+
+        The exception is a constant too wide for the immediate a store carries.
+        The widest is four bytes, which the instruction sign-extends to eight,
+        so a value with anything in its upper half has to go through a register
+        -- and a register *can* hold one, since there is a move that takes the
+        whole eight bytes.
         """
+        if isinstance(value, MCImm) and not self._fits_a_store(address, value):
+            carried = REGISTERS.new_virtual(GPR, 64)
+            return (*self.select_move(carried, value, span),
+                    self._inst("mov", (address, MCReg(carried,
+                                                      bits=address.size_bits)), span))
         return (self._inst("mov", (address, value), span),)
+
+    def _fits_a_store(self, address: MCMem, value: MCImm) -> bool:
+        """Whether a store of *value* into *address* has an encoding."""
+        try:
+            self.table.select("mov", (address, value))
+        except SelectionError:
+            return False
+        return True
 
     def select_call(self, target: MCOperand, span: Span) -> Sequence[MCInst]:
         """Instructions that call *target*."""
@@ -258,8 +277,8 @@ class X86Selector(InstructionSelector):
             # The comparison takes its immediate second, so the operands are
             # exchanged and the condition with them.
             lhs, rhs, cond = rhs, lhs, cond.swapped()
-        compare = self._select_compare(lhs, rhs, cond, span)
-        return (compare, self._inst(_CONDITIONAL[cond], (target,), span))
+        return (*self._select_compare(lhs, rhs, cond, span),
+                self._inst(_CONDITIONAL[cond], (target,), span))
 
     def select_set(self, cond: Condition, dst: Reg, lhs: MCOperand, rhs: MCOperand,
                    span: Span) -> Sequence[MCInst]:
@@ -274,21 +293,31 @@ class X86Selector(InstructionSelector):
         if isinstance(lhs, MCImm) and not isinstance(rhs, MCImm):
             lhs, rhs, cond = rhs, lhs, cond.swapped()
         low = MCReg(dst, bits=8)
-        return (self._select_compare(lhs, rhs, cond, span),
+        return (*self._select_compare(lhs, rhs, cond, span),
                 self._inst(_SET[cond], (low,), span),
                 self._inst("movzx", (MCReg(dst, bits=32), low), span))
 
     def _select_compare(self, lhs: MCOperand, rhs: MCOperand, cond: Condition,
-                        span: Span) -> MCInst:
-        """The instruction that sets the flags for a comparison.
+                        span: Span) -> Sequence[MCInst]:
+        """The instructions that set the flags for a comparison.
 
-        Testing a register against itself sets the same flags as comparing it
-        with zero and is a byte shorter, so it is what a test for zero uses.
+        Usually one.  Testing a register against itself sets the same flags as
+        comparing it with zero and is a byte shorter, so it is what a test for
+        zero uses.  A constant too wide for the four bytes a comparison carries
+        goes into a register first, which is the same answer a store gives to
+        the same question.
         """
         if (isinstance(rhs, MCImm) and rhs.value == 0 and isinstance(lhs, MCReg)
                 and cond in (Condition.EQ, Condition.NE)):
-            return self._inst("test", (lhs, lhs), span)
-        return self._inst("cmp", (lhs, rhs), span)
+            return (self._inst("test", (lhs, lhs), span),)
+        if isinstance(rhs, MCImm):
+            try:
+                self.table.select("cmp", (lhs, rhs))
+            except SelectionError:
+                carried = REGISTERS.new_virtual(GPR, 64)
+                return (*self.select_move(carried, rhs, span),
+                        self._inst("cmp", (lhs, MCReg(carried)), span))
+        return (self._inst("cmp", (lhs, rhs), span),)
 
     # -- the stack -------------------------------------------------------------
 
@@ -349,7 +378,9 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
             constant = _number_of(value)
             if constant is not None:
                 number, ty = constant
-                return MCImm(number, _immediate_width(number, _is_signed(ty)),
+                return MCImm(number,
+                             _immediate_width(number, _is_signed(ty),
+                                              max(32, _width_of(ty))),
                              signed=_is_signed(ty))
             return self.in_register(value, span)
 
@@ -436,7 +467,8 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
                     if constant is not None:
                         asm.store(place, MCImm(
                             constant[0],
-                            _immediate_width(constant[0], _is_signed(written.ty)),
+                            _immediate_width(constant[0], _is_signed(written.ty),
+                                             _width_of(written.ty)),
                             signed=_is_signed(written.ty)), inst.span)
                     else:
                         # A store names how much of memory it writes, so it
@@ -604,19 +636,27 @@ def _is_signed(ty: "Type") -> bool:
     return isinstance(ty, IntType) and ty.signed
 
 
-def _immediate_width(value: int, signed: bool) -> int:
-    """The narrowest standard width that holds *value*.
+def _immediate_width(value: int, signed: bool, width: int = 64) -> int:
+    """The narrowest standard width that can carry *value* into an operation
+    *width* bits wide.
 
     It is the width the *encoding* uses, which is not the width of the access:
     an eight-byte store carries a four-byte immediate that the instruction
     widens, so what the operand has to say is how large the number is.
+
+    And how it widens it is the whole of the rule.  An immediate narrower than
+    the operation is **sign-extended**, so it can only carry a value that reads
+    the same as a signed number of that width -- 0xFFFFFFFF in an eight-byte
+    operation is not four bytes of immediate, it is minus one.  At the
+    operation's own width nothing is extended and any pattern will do, which is
+    what lets a one-byte store carry 200.
     """
-    for bits in (8, 16, 32, 64):
-        if signed:
-            if -(1 << (bits - 1)) <= value < (1 << (bits - 1)):
-                return bits
-        elif 0 <= value < (1 << bits):
+    for bits in (8, 16, 32):
+        if bits >= width:
+            break
+        if -(1 << (bits - 1)) <= value < (1 << (bits - 1)):
             return bits
-    return 64
+    del signed
+    return width
 
 

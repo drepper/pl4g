@@ -23,12 +23,22 @@ from .opcodes import PAD_BYTE, RISCV_INSTRS
 from .regs import INFO
 from .startup import ENTRY_SYMBOL, emit_start
 
-#: EM_RISCV.  The header also carries flags describing which extensions and
-#: which floating-point convention the code uses; zero is the right value while
-#: nothing beyond the base integer set is emitted.
+#: What the header's flag word says on this architecture.  The low bit says the
+#: code uses the compressed encoding, the two above it say which floating-point
+#: convention its functions follow, and the rest are reserved.  Zero is not
+#: "unset": it says the base integer set and the soft-float convention, which is
+#: exactly what is emitted.  Emitting floating point will mean choosing between
+#: SINGLE and DOUBLE here, and a program that links against one convention with
+#: the other is what the field exists to prevent.
+FLOAT_ABI_SOFT: Final[int] = 0x0
+FLOAT_ABI_SINGLE: Final[int] = 0x2
+FLOAT_ABI_DOUBLE: Final[int] = 0x4
+COMPRESSED: Final[int] = 0x1
+
+#: EM_RISCV.
 IMAGE_DEFAULTS: Final[ImageDefaults] = ImageDefaults(
     machine=243, base_vaddr=0x400000, page_size=0x1000, text_alignment=16,
-    function_alignment=16)
+    function_alignment=16, header_flags=FLOAT_ABI_SOFT)
 
 
 class RISCV64Target:
