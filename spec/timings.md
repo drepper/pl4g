@@ -22,28 +22,29 @@ compiler moves.
 What a compilation costs when there is next to nothing to compile.  These move when the driver, the lexer or
 the parser does, and they are the floor everything else is measured against.
 
-| commit | exit0 | digit-separators | boolean-values |
-|---|---|---|---|
-| `eee64a3` | 0.90 | 1.46 | 1.25 |
-| `af657ad` | 0.89 | 1.47 | 1.24 |
-| `2f564cb` | 0.88 | 1.49 | 1.23 |
-| `37dbb28` | 0.89 | 1.63 | 1.27 |
-| `1c4ae78` | 1.06 | 1.64 | 1.39 |
-| `f391839` | 1.05 | 1.60 | 1.45 |
-| `04c20c9` | 1.07 | 1.62 | 1.38 |
-| `3020cf6` | 0.93 | 1.51 | 1.40 |
-| `9bcaf84` | 0.99 | 1.55 | 1.31 |
-| `40c35bb` | 1.00 | 1.52 | 1.29 |
-| `9437d8a` | 1.00 | 1.64 | 1.55 |
-| `d0c8cf5` | 1.05 | 1.60 | 1.43 |
-| `73ce857` | 1.01 | 1.69 | 1.44 |
-| `ed1c028` | 1.06 | 1.64 | 1.45 |
-| `1269bd5` | 1.13 | 1.65 | 1.41 |
-| `db0b436` | 1.13 | 1.65 | 1.40 |
-| `25bb4e0` | 1.10 | 1.70 | 1.45 |
-| `baf1f3c` | 1.08 | 1.72 | 1.47 |
-| `74ac227` | 1.06 | 1.66 | 1.42 |
-| `c0f29f2` | 1.05 | 1.65 | 1.37 |
+| commit | exit0 | semicolon-separates-statements | digit-separators | boolean-values |
+|---|---|---|---|---|
+| `eee64a3` | 0.90 |  | 1.46 | 1.25 |
+| `af657ad` | 0.89 |  | 1.47 | 1.24 |
+| `2f564cb` | 0.88 |  | 1.49 | 1.23 |
+| `37dbb28` | 0.89 |  | 1.63 | 1.27 |
+| `1c4ae78` | 1.06 |  | 1.64 | 1.39 |
+| `f391839` | 1.05 |  | 1.60 | 1.45 |
+| `04c20c9` | 1.07 |  | 1.62 | 1.38 |
+| `3020cf6` | 0.93 |  | 1.51 | 1.40 |
+| `9bcaf84` | 0.99 |  | 1.55 | 1.31 |
+| `40c35bb` | 1.00 |  | 1.52 | 1.29 |
+| `9437d8a` | 1.00 |  | 1.64 | 1.55 |
+| `d0c8cf5` | 1.05 |  | 1.60 | 1.43 |
+| `73ce857` | 1.01 |  | 1.69 | 1.44 |
+| `ed1c028` | 1.06 |  | 1.64 | 1.45 |
+| `1269bd5` | 1.13 |  | 1.65 | 1.41 |
+| `db0b436` | 1.13 |  | 1.65 | 1.40 |
+| `25bb4e0` | 1.10 |  | 1.70 | 1.45 |
+| `baf1f3c` | 1.08 |  | 1.72 | 1.47 |
+| `74ac227` | 1.06 |  | 1.66 | 1.42 |
+| `c0f29f2` | 1.05 |  | 1.65 | 1.37 |
+| `5c3aec4` | 1.15 | 1.87 | 1.86 | 1.55 |
 
 ### Variables and memory
 
@@ -72,6 +73,7 @@ backend do.
 | `baf1f3c` | 1.22 | 1.67 | 1.54 |
 | `74ac227` | 1.23 | 1.66 | 1.43 |
 | `c0f29f2` | 1.21 | 1.69 | 1.46 |
+| `5c3aec4` | 1.35 | 1.83 | 1.61 |
 
 ### Register pressure
 
@@ -100,6 +102,7 @@ and they are the only ones that reach the frame.
 | `baf1f3c` | 2.02 | 6.75 |
 | `74ac227` | 1.94 | 6.73 |
 | `c0f29f2` | 1.89 | 6.71 |
+| `5c3aec4` | 2.06 | 6.97 |
 
 ### What is left out
 
@@ -128,6 +131,7 @@ decision log does.
 | `baf1f3c` | 1.52 | 1.58 |
 | `74ac227` | 1.48 | 1.50 |
 | `c0f29f2` | 1.52 | 1.56 |
+| `5c3aec4` | 1.63 | 1.75 |
 
 ### Expressions
 
@@ -156,6 +160,7 @@ optimizer does.
 | `baf1f3c` | 1.69 | 1.48 | 2.37 | 2.55 | 2.35 |  |  |
 | `74ac227` | 1.71 | 1.37 | 2.29 | 2.41 | 2.27 | 1.57 |  |
 | `c0f29f2` | 1.60 | 1.41 | 2.43 | 2.48 | 2.43 | 1.73 | 1.83 |
+| `5c3aec4` | 1.83 | 1.55 | 2.67 | 2.79 | 2.56 | 1.76 | 1.95 |
 
 Process
 -------
@@ -188,6 +193,7 @@ worth showing here, and every figure is in the JSON beside this file.
 | `baf1f3c` | 75 | 82 |
 | `74ac227` | 73 | 85 |
 | `c0f29f2` | 72 | 81 |
+| `5c3aec4` | 79 | 86 |
 
 What each row is:
 
@@ -211,10 +217,12 @@ What each row is:
 - `baf1f3c` -- ✨ Constants of any width, and the header flags they travel under
 - `74ac227` -- ✨ Saturating arithmetic: ⊞ ⊟ ⊠
 - `c0f29f2` -- ✨ Arithmetic that checks, and the path a fault leaves through
+- `5c3aec4` -- ✨ No arrow means nothing answered with; a semicolon separates and never ends
 
 What each program exercises:
 
 - `exit0` -- the smallest conforming program
+- `semicolon-separates-statements` -- two statements on one line
 - `digit-separators` -- literals in every base
 - `boolean-values` -- truth values in both sections
 - `global-variable` -- one variable, read once
