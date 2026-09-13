@@ -48,8 +48,12 @@ def view(log: Path, *args: str, cwd: Path | None = None) -> subprocess.Completed
                           cwd=str(cwd) if cwd is not None else None)
 
 
-def test_each_decision_stands_under_the_line_it_is_about(compiled) -> None:  # noqa: ANN001
-    """Putting it back where it belongs is the whole point of the program."""
+def test_each_decision_stands_above_the_line_it_is_about(compiled) -> None:  # noqa: ANN001
+    """Putting it back where it belongs is the whole point of the program.
+
+    Above rather than below: the line is then read already knowing what became
+    of it, instead of being read, understood, and then corrected.
+    """
     _, log = compiled
     proc = view(log)
     assert proc.returncode == 0, proc.stderr
@@ -58,8 +62,9 @@ def test_each_decision_stands_under_the_line_it_is_about(compiled) -> None:  # n
                                  ("let only_by_dropped", "only_by_dropped"),
                                  ("let unread", "unread")):
         index = next(i for i, line in enumerate(lines) if source_line in line)
-        assert subject in lines[index + 1], \
-            "".join((subject, " does not follow the line it is about"))
+        assert subject in lines[index - 1], \
+            "".join((subject, " does not stand above the line it is about"))
+        assert "▼" in lines[index - 1], "the mark does not point at the line"
 
 
 def test_the_whole_source_is_shown_not_only_the_lines_with_records(compiled) -> None:  # noqa: ANN001

@@ -3,9 +3,9 @@
 
 A decision log says what the compiler left out and why, but a list of names and
 line numbers is not something anyone reads.  This puts each record back where it
-belongs -- against the line it is about -- so that the question it answers, "I
-wrote that, where did it go?", is answered by looking at the place it was
-written.
+belongs -- just above the line it is about -- so that the question it answers,
+"I wrote that, where did it go?", is answered by looking at the place it was
+written, and answered before that line is read rather than after.
 
 The sources are found through the directory the log records, so the log can be
 read from anywhere and on another machine.  Where the output is a terminal the
@@ -238,18 +238,25 @@ def show_file(name: str, path: Path, records: list[Record], spans, colour: bool,
                    RESET if colour else "")), file=stream)
     width = len(str(len(lines)))
     for number, line in enumerate(lines, start=1):
+        # The record stands above the line it is about, so that the line is read
+        # already knowing what became of it.  Reading it the other way round
+        # means reading the line, forming a view of it, and then being corrected.
+        for record in at_line.get(number, ()):
+            print(_decision_line(record, width, colour), file=stream)
         gutter = str(number).rjust(width)
         print("".join((GUTTER if colour else "", gutter, " │ ",
                        RESET if colour else "", line)), file=stream)
-        for record in at_line.get(number, ()):
-            print(_decision_line(record, width, colour), file=stream)
     print(file=stream)
 
 
 def _decision_line(record: Record, width: int, colour: bool) -> str:
-    """One decision, written under the line it is about."""
+    """One decision, written above the line it is about.
+
+    The mark points down at the line, since that is the way the reader is about
+    to go.
+    """
     lead = "".join((" " * width, " │ "))
-    body = "".join(("◀ ", record.kind, ": ", record.subject, " — ", record.reason))
+    body = "".join(("▼ ", record.kind, ": ", record.subject, " — ", record.reason))
     if not colour:
         return "".join((lead, body))
     return "".join((GUTTER, lead, RESET, DECISION, body, RESET))

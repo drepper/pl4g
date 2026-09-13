@@ -286,7 +286,8 @@ program and is written by the compiler.
 Reading the Log
 ---------------
 
-`bin/pl4g-decisions` shows a program's source with the records of the log set against the lines they are about.  A list of names
+`bin/pl4g-decisions` shows a program's source with each record of the log standing just above the line it is about -- above rather
+than below, so that the line is read already knowing what became of it instead of being read, understood, and then corrected.  A list of names
 and line numbers is not something anyone reads; the question a decision answers is "I wrote that, where did it go?", and it is
 answered by looking at the place it was written.  A pattern on the command line chooses which source files to show.
 
