@@ -37,27 +37,29 @@ the parser does, and they are the floor everything else is measured against.
 | `9437d8a` | 1.00 | 1.64 | 1.55 |
 | `d0c8cf5` | 1.05 | 1.60 | 1.43 |
 | `73ce857` | 1.01 | 1.69 | 1.44 |
+| `ed1c028` | 1.06 | 1.64 | 1.45 |
 
 ### Variables and memory
 
 Reading and writing variables, including one of every width.  These move when the loads and stores of a
 backend do.
 
-| commit | global-variable | assign-widths |
-|---|---|---|
-| `eee64a3` | 1.05 | 1.50 |
-| `af657ad` | 1.10 | 1.49 |
-| `2f564cb` | 1.04 | 1.50 |
-| `37dbb28` | 1.05 | 1.64 |
-| `1c4ae78` | 1.22 | 1.63 |
-| `f391839` | 1.22 | 1.63 |
-| `04c20c9` | 1.20 | 1.66 |
-| `3020cf6` | 1.15 | 1.55 |
-| `9bcaf84` | 1.16 | 1.60 |
-| `40c35bb` | 1.18 | 1.62 |
-| `9437d8a` | 1.22 | 1.68 |
-| `d0c8cf5` | 1.13 | 1.59 |
-| `73ce857` | 1.19 | 1.65 |
+| commit | global-variable | assign-widths | boolean-in-memory |
+|---|---|---|---|
+| `eee64a3` | 1.05 | 1.50 |  |
+| `af657ad` | 1.10 | 1.49 |  |
+| `2f564cb` | 1.04 | 1.50 |  |
+| `37dbb28` | 1.05 | 1.64 |  |
+| `1c4ae78` | 1.22 | 1.63 |  |
+| `f391839` | 1.22 | 1.63 |  |
+| `04c20c9` | 1.20 | 1.66 |  |
+| `3020cf6` | 1.15 | 1.55 |  |
+| `9bcaf84` | 1.16 | 1.60 |  |
+| `40c35bb` | 1.18 | 1.62 |  |
+| `9437d8a` | 1.22 | 1.68 |  |
+| `d0c8cf5` | 1.13 | 1.59 |  |
+| `73ce857` | 1.19 | 1.65 |  |
+| `ed1c028` | 1.22 | 1.73 | 1.43 |
 
 ### Register pressure
 
@@ -79,6 +81,7 @@ and they are the only ones that reach the frame.
 | `9437d8a` | 1.88 | 6.51 |
 | `d0c8cf5` | 1.87 | 6.33 |
 | `73ce857` | 1.89 | 6.48 |
+| `ed1c028` | 1.94 | 6.32 |
 
 ### What is left out
 
@@ -100,6 +103,7 @@ decision log does.
 | `9437d8a` | 1.54 | 1.47 |
 | `d0c8cf5` | 1.41 | 1.46 |
 | `73ce857` | 1.50 | 1.57 |
+| `ed1c028` | 1.49 | 1.59 |
 
 ### Expressions
 
@@ -121,6 +125,7 @@ optimizer does.
 | `9437d8a` | 1.54 | 1.45 |
 | `d0c8cf5` | 1.55 | 1.36 |
 | `73ce857` | 1.58 | 1.39 |
+| `ed1c028` | 1.65 | 1.45 |
 
 Process
 -------
@@ -146,6 +151,7 @@ worth showing here, and every figure is in the JSON beside this file.
 | `9437d8a` | 73 | 82 |
 | `d0c8cf5` | 73 | 81 |
 | `73ce857` | 73 | 81 |
+| `ed1c028` | 74 | 80 |
 
 What each row is:
 
@@ -162,6 +168,7 @@ What each row is:
 - `9437d8a` -- ✨ Modules: read while compiling, read once, named by the shortest route
 - `d0c8cf5` -- ✨ `export` and `visible` are two attributes, because they were two questions
 - `73ce857` -- ✨ One meaning, one spelling: attributes are written one way
+- `ed1c028` -- ✨ A truth value in a register, on all three architectures
 
 What each program exercises:
 
@@ -170,6 +177,7 @@ What each program exercises:
 - `boolean-values` -- truth values in both sections
 - `global-variable` -- one variable, read once
 - `assign-widths` -- a store of every width
+- `boolean-in-memory` -- a truth value, which is one byte
 - `many-values-at-once` -- four values live at once
 - `spill-to-the-frame` -- thirty-two at once, which no target can hold
 - `unreached-function` -- a function and a variable that are dropped
