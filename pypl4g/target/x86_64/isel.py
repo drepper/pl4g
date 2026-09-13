@@ -14,7 +14,7 @@ from ...mc.desc import InstrTable, SelectionError
 from ...mc.inst import MCInst
 from ...mc.operand import MCImm, MCMem, MCOperand, MCReg, MCSymRef
 from ...mc.ops import Op
-from ...mc.reg import Reg
+from ...mc.reg import Reg, VirtReg
 from ...mc.operand import SymExpr
 from ...source.location import Span
 
@@ -27,6 +27,7 @@ if TYPE_CHECKING:
     from ..callconv import CallConvDesc
 from . import ops as x86ops
 from .opcodes import X86_INSTRS
+from .regs import GPR
 
 #: The mnemonic that implements each architecture-neutral binary operation.
 _BINARY: Final[dict[str, str]] = {
@@ -159,10 +160,12 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
     from ...ir.value import IntConst
     from ..globals import symbol_of
 
-    _check_single_use(func)
     asm.begin_function(symbol_name(func),
                        exported=func.linkage.value == "exported")
-    previous: object = None
+    #: Where each value the function computes is held.  A value gets a register
+    #: of its own and the allocator decides which; nothing here knows or cares.
+    held: dict[int, VirtReg] = {}
+    returned = _returned_value(func)
     for block in func.blocks:
         for inst in block.insts:
             span = inst.span if inst.span.is_valid else None
@@ -177,8 +180,13 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
                     if not isinstance(address, GlobalVar):
                         raise UnsupportedOperation(
                             "reading through an address that is not a variable", span)
+                    destination = _new_value(
+                        inst.ty, registers,
+                        hint=(_result_register(inst.ty, cconv, registers)
+                              if inst is returned else None))
+                    held[id(inst)] = destination
                     asm.loadreg(
-                        _result_register(inst.ty, cconv, registers),
+                        destination,
                         asm.mem(disp_sym=SymExpr(
                                     asm.streamer.symbol(symbol_of(address))),
                                 rip_relative=True, size_bits=_width_of(inst.ty),
@@ -199,11 +207,11 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
                             written.value,
                             _immediate_width(written.value, _is_signed(written.ty)),
                             signed=_is_signed(written.ty)), inst.span)
-                    elif written is previous:
-                        asm.store(place, MCReg(_store_register(written.ty, cconv,
-                                                               registers)), inst.span)
                     else:
-                        raise UnsupportedOperation("writing a computed value", span)
+                        # A store names how much of memory it writes, so it
+                        # reads the view of that width of wherever the value is.
+                        asm.store(place, MCReg(_value_of(written, held, span),
+                                               bits=_width_of(written.ty)), inst.span)
                 case RetInst() if not inst.operands:
                     asm.ret(inst.span)
                 case RetInst():
@@ -212,19 +220,17 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
                     if not isinstance(ty, IntType):
                         raise UnsupportedOperation("".join((
                             "returning a value of type '", ty.render(), "'")), span)
+                    result = _result_register(ty, cconv, registers)
                     if isinstance(value, IntConst):
-                        asm.loadreg(_result_register(ty, cconv, registers),
-                                    MCImm(value.value, max(32, ty.bits),
-                                          signed=ty.signed), inst.span)
-                    elif value is not previous:
-                        # Anything else is a value the single register was no
-                        # longer holding by the time the return was reached.
-                        raise UnsupportedOperation("returning a computed value", span)
+                        asm.loadreg(result, MCImm(value.value, max(32, ty.bits),
+                                                  signed=ty.signed), inst.span)
+                    else:
+                        asm.loadreg(result, MCReg(_value_of(value, held, span)),
+                                    inst.span)
                     asm.ret(inst.span)
                 case _:
                     raise UnsupportedOperation("".join((
                         "the instruction '", inst.opcode, "'")), span)
-            previous = inst
     asm.end_function()
 
 def _result_register(ty: "Type", cconv: "CallConvDesc",
@@ -241,33 +247,46 @@ def _result_register(ty: "Type", cconv: "CallConvDesc",
     return registers.view(cconv.int_ret_regs[0].unit, max(32, bits))
 
 
-def _check_single_use(func: "Function") -> None:
-    """Refuse a function that would need more than one value live at once.
+def _new_value(ty: "Type", registers: "RegisterInfo",
+               hint: "PhysReg | None" = None) -> VirtReg:
+    """A register for a value the function computes.
 
-    Every value a function computes is put in the same register, which is only
-    correct while nothing else needs one at the same time.  Where a value is
-    used anywhere but in the instruction directly after it, that no longer
-    holds, and the function is reported as beyond what this compiler generates
-    rather than quietly compiled wrong.  A register allocator is what lifts this.
+    A value narrower than a word gets a word-wide register: the architecture has
+    narrower views and an instruction that wants one asks for it, but writing a
+    narrow view would leave the rest of the register as it was, so what a value
+    is computed into is always at least a word.
+
+    The hint says where the value is wanted anyway.  Taking it turns the move
+    that would put it there into a move of a register to itself, which then goes.
     """
-    from ...ir.types import MEM
+    from ...ir.types import IntType
+
+    bits = ty.bits if isinstance(ty, IntType) else 64
+    return registers.new_virtual(GPR, max(32, bits), hint=hint)
+
+
+def _returned_value(func: "Function") -> object:
+    """The value the function returns, where it computes one.
+
+    It is worth knowing before the value is computed, because that is when the
+    register it will be wanted in can be asked for.
+    """
+    from ...ir.inst import RetInst
 
     for block in func.blocks:
-        for index, inst in enumerate(block.insts):
-            if not inst.has_result or inst.ty is MEM:
-                # A memory token occupies no register: it orders the operations
-                # that touch memory and is never held anywhere.
-                continue
-            users = [position for position, other in enumerate(block.insts)
-                     if any(operand is inst for operand in other.operands)]
-            # A value nothing reads needs no register at all.  One that is read
-            # must be read by the instruction directly after it, since the
-            # register it sits in is about to hold the next value.
-            if users and users != [index + 1]:
-                raise UnsupportedOperation(
-                    "a function needing more than one value at a time, which needs "
-                    "a register allocator",
-                    inst.span if inst.span.is_valid else None)
+        for inst in block.insts:
+            if isinstance(inst, RetInst) and inst.operands:
+                return inst.operands[0]
+    return None
+
+
+def _value_of(value: object, held: "dict[int, VirtReg]",
+              span: "Span | None") -> VirtReg:
+    """The register a value the function computed is in."""
+    found = held.get(id(value))
+    if found is None:
+        raise UnsupportedOperation("a value this backend did not compute", span)
+    return found
 
 
 def _width_of(ty: "Type") -> int:
@@ -300,12 +319,3 @@ def _immediate_width(value: int, signed: bool) -> int:
     return 64
 
 
-def _store_register(ty: "Type", cconv: "CallConvDesc",
-                    registers: "RegisterInfo") -> "PhysReg":
-    """The register a store reads its value from.
-
-    A store names how much of memory it writes, so the register it reads has to
-    be the view of that width: a byte store reads a byte register, which is a
-    different name for part of the one the value was computed in.
-    """
-    return registers.view(_result_register(ty, cconv, registers).unit, _width_of(ty))

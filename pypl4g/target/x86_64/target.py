@@ -10,11 +10,12 @@ from ...mc.desc import InstrTable
 from ...mc.fixup import FixupApplier, MCFixup, apply_little_endian
 from ...mc.inst import MCInst
 from ...mc.reg import RegisterInfo
+from ...mc.regalloc import RegisterPressureError
 from ...mc.streamer import MCStreamer
 from ...ir.layout import DataLayout
 from ..globals import emit_globals
 from ..target import ImageDefaults
-from .abi import lookup as lookup_cconv
+from .abi import CC_PL4G_V0, lookup as lookup_cconv
 from .encoder import EncodingError, encode
 from .isel import UnsupportedOperation, X86Selector, lower_function
 from .opcodes import X86_INSTRS
@@ -65,7 +66,9 @@ class X86_64Target:
         return Assembler(self.selector(streamer), streamer,
                          function_alignment=self.image_defaults().function_alignment,
                          pad_byte=PAD_BYTE,
-                         machine_passes=passes_for(self.table, opt_level))
+                         machine_passes=passes_for(self.table, opt_level),
+                         registers=self.registers,
+                         allocation_order=CC_PL4G_V0.allocation_order)
 
     def generate(self, module: Module, asm: Assembler, diags: DiagEngine,
                  opt_level: int) -> None:
@@ -88,6 +91,13 @@ class X86_64Target:
                 diags.emit(D.IMPL_BACKEND_UNSUPPORTED,
                            exc.span if exc.span is not None else func.span,
                            construct=exc.detail)
+                return
+            except RegisterPressureError as exc:
+                # Running out of registers is a limit of this compiler like any
+                # other, so it is reported where the function is rather than
+                # raised at whoever called it.
+                diags.emit(D.IMPL_BACKEND_UNSUPPORTED, func.span,
+                           construct=str(exc))
                 return
             except EncodingError as exc:
                 diags.emit(D.IMPL_BACKEND_UNENCODABLE,

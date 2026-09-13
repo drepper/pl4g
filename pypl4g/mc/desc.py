@@ -10,7 +10,7 @@ works on the part they have in common.
 """
 
 from dataclasses import dataclass, field
-from enum import Flag, auto
+from enum import Enum, Flag, auto
 from typing import Iterable, Sequence
 
 from .operand import MCImm, MCMem, MCOperand, MCReg, MCSymRef
@@ -25,6 +25,26 @@ class OperandKind(Flag):
     IMM = auto()
     REL = auto()
     SYM = auto()
+
+
+class OperandRole(Enum):
+    """Whether an instruction reads an operand, writes it, or both.
+
+    This is what a register allocator needs and nothing else asks for: where a
+    register's value is still wanted and where it stops being wanted.  A slot
+    that is written but not read starts a value; one that is read ends it; one
+    that is both is the two-operand form some architectures have, where the
+    destination is also the first source and the old value is still needed.
+
+    A role of ``DEF`` says something about the slot, not about every operand
+    that can fill it: registers inside a memory operand are read wherever the
+    slot stands, because computing an address reads them whatever the
+    instruction then does with the place they name.
+    """
+
+    USE = "use"
+    DEF = "def"
+    DEF_USE = "def+use"
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,7 +74,7 @@ class OperandSpec:
                     return isinstance(reg, PhysReg) and reg is self.fixed
                 if self.rclass is not None and reg.cls is not self.rclass:
                     return False
-                return self.bits is None or reg.bits == self.bits
+                return self.bits is None or operand.width == self.bits
             case MCMem():
                 if OperandKind.MEM not in self.kinds:
                     return False
@@ -95,6 +115,10 @@ class InstFlags(Flag):
     #: peephole that widens a value depends on it.
     ZEXT32 = auto()
     LOCKABLE = auto()
+    #: Copies one operand to another and does nothing else.  The allocator
+    #: removes one whose two ends it put in the same register, which is what
+    #: makes hinting a value towards where it is wanted worth doing.
+    MOVE = auto()
 
 
 @dataclass(frozen=True, slots=True)
@@ -114,6 +138,18 @@ class InstDesc:
     #: a fixed-width architecture every row states the same number, and the
     #: choice falls through to the order the rows are written in.
     est_size: int = 0
+    #: What the instruction does with each operand.  The builder speaks with the
+    #: destination first and the rows follow it, so a row that says nothing
+    #: writes its first operand and reads the rest.  A row that writes none -- a
+    #: store, a comparison -- says so, and so does one whose destination is also
+    #: a source, which is the two-operand form of some architectures.
+    roles: tuple[OperandRole, ...] | None = None
+
+    def role_of(self, index: int) -> OperandRole:
+        """What this instruction does with the operand in position *index*."""
+        if self.roles is not None:
+            return self.roles[index]
+        return OperandRole.DEF if index == 0 else OperandRole.USE
 
     def matches(self, operands: Sequence[MCOperand]) -> bool:
         """Whether this row accepts the given operands."""

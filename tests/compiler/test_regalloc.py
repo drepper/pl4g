@@ -1,0 +1,292 @@
+"""The register allocator: what it reads, what it decides, and what it refuses."""
+
+import subprocess
+
+import pytest
+
+from conftest import compiler_targets, describe, run_compiler, runner_for
+from pypl4g.mc.desc import InstFlags, InstrTable, OperandRole
+from pypl4g.mc.inst import MCInst
+from pypl4g.mc.machine import MachineFunction
+from pypl4g.mc.operand import MCImm, MCMem, MCOperand, MCReg
+from pypl4g.mc.regalloc import (LinearScan, RegisterPressureError, allocate,
+                                defs_and_uses)
+from pypl4g.mc.reg import PhysReg, VirtReg
+from pypl4g.target.x86_64.abi import CC_PL4G_V0
+from pypl4g.target.x86_64.opcodes import X86_INSTRS
+from pypl4g.target.x86_64.regs import GPR, INFO, reg
+
+TABLE = InstrTable(X86_INSTRS)
+ORDER = CC_PL4G_V0.allocation_order
+
+
+def virtual(bits: int = 32, hint: PhysReg | None = None) -> VirtReg:
+    """A fresh virtual register of the given width."""
+    return INFO.new_virtual(GPR, bits, hint=hint)
+
+
+def inst(mnemonic: str, *operands: MCOperand) -> MCInst:
+    """Select *mnemonic* for the given operands."""
+    return MCInst(desc=TABLE.select(mnemonic, operands), operands=operands)
+
+
+def function(*instructions: MCInst) -> MachineFunction:
+    """A one-block function holding the given instructions."""
+    built = MachineFunction(name="t")
+    block = built.add_block("entry")
+    for one in instructions:
+        block.append(one)
+    return built
+
+
+def assigned(function_: MachineFunction) -> list[MCInst]:
+    """Allocate and return the instructions as they came out."""
+    allocate(function_, INFO, ORDER)
+    return function_.instructions()
+
+
+# -- what an instruction does with its operands ---------------------------------
+
+def test_a_move_writes_its_first_operand_and_reads_the_second() -> None:
+    """The convention the builder speaks in, which the rows follow."""
+    left, right = virtual(), virtual()
+    defs, uses = defs_and_uses(inst("mov", MCReg(left), MCReg(right)))
+    assert defs == [left]
+    assert uses == [right]
+
+
+def test_a_two_operand_arithmetic_reads_the_operand_it_writes() -> None:
+    """The old value is still wanted when the instruction runs, which is what
+    keeps the allocator from handing that register to something else."""
+    left, right = virtual(), virtual()
+    added = inst("add", MCReg(left), MCReg(right))
+    assert added.desc.role_of(0) is OperandRole.DEF_USE
+    defs, uses = defs_and_uses(added)
+    assert left in defs, "the destination is not written"
+    assert set(uses) == {left, right}
+
+
+def test_a_store_writes_nothing_it_names() -> None:
+    """Its first operand is a place in memory, not a register it fills."""
+    value = virtual()
+    base = virtual(64)
+    stored = inst("mov", MCMem(base=base, size_bits=32), MCReg(value))
+    defs, uses = defs_and_uses(stored)
+    assert defs == [], "a store was read as writing a register"
+    assert set(uses) == {base, value}
+
+
+def test_a_register_inside_an_address_is_read_wherever_it_stands() -> None:
+    """Computing the address reads it whatever the instruction then does."""
+    destination, base = virtual(), virtual(64)
+    loaded = inst("mov", MCReg(destination), MCMem(base=base, size_bits=32))
+    defs, uses = defs_and_uses(loaded)
+    assert defs == [destination]
+    assert uses == [base]
+
+
+def test_what_an_instruction_touches_besides_its_operands_counts() -> None:
+    """The flags are written by arithmetic and the rows say so."""
+    defs, _ = defs_and_uses(inst("add", MCReg(virtual()), MCReg(virtual())))
+    assert any(isinstance(d, PhysReg) and d.name == "eflags" for d in defs)
+
+
+# -- what it decides ------------------------------------------------------------
+
+def test_two_values_wanted_at_once_get_different_registers() -> None:
+    """This is the whole of what the allocator is for."""
+    first, second = virtual(), virtual()
+    built = function(
+        inst("mov", MCReg(first), MCImm(1, 32)),
+        inst("mov", MCReg(second), MCImm(2, 32)),
+        inst("add", MCReg(first), MCReg(second)))
+    out = assigned(built)
+    one = out[0].operands[0]
+    other = out[1].operands[0]
+    assert isinstance(one, MCReg) and isinstance(other, MCReg)
+    assert isinstance(one.reg, PhysReg) and isinstance(other.reg, PhysReg)
+    assert one.reg.unit is not other.reg.unit
+
+
+def test_a_register_is_given_again_once_nothing_wants_it() -> None:
+    """A value that is read and never read again frees what held it."""
+    first, second = virtual(), virtual()
+    built = function(
+        inst("mov", MCReg(first), MCImm(1, 32)),
+        inst("mov", MCMem(disp_sym=None, disp=8, size_bits=32), MCReg(first)),
+        inst("mov", MCReg(second), MCImm(2, 32)))
+    out = assigned(built)
+    one = out[0].operands[0]
+    other = out[2].operands[0]
+    assert isinstance(one, MCReg) and isinstance(other, MCReg)
+    assert one.reg is other.reg, "a register nothing wanted was not given again"
+
+
+def test_an_instruction_may_write_the_register_it_read() -> None:
+    """One instruction is two points, a read and then a write.
+
+    Without that a value could never be moved into the register it is read from,
+    which is what makes hinting a value towards where it is wanted worth doing.
+    """
+    value = virtual()
+    target = reg("eax")
+    built = function(
+        inst("mov", MCReg(value), MCImm(1, 32)),
+        inst("mov", MCReg(target), MCReg(value)))
+    scan = LinearScan(INFO, ORDER)
+    result = scan.run(built)
+    assert result.units[value.ident] is target.unit
+
+
+def test_a_value_hinted_where_it_is_wanted_needs_no_move() -> None:
+    """Granting the hint turns the move into one of a register to itself."""
+    target = reg("eax")
+    value = virtual(hint=target)
+    built = function(
+        inst("mov", MCReg(value), MCImm(7, 32)),
+        inst("mov", MCReg(target), MCReg(value)))
+    result = LinearScan(INFO, ORDER).run(built)
+    assert result.coalesced == 1
+    assert [i.mnemonic for i in built.instructions()] == ["mov"]
+    remaining = built.instructions()[0].operands[0]
+    assert isinstance(remaining, MCReg) and remaining.reg is target
+
+
+def test_a_register_something_else_holds_is_not_given_out() -> None:
+    """A value live across a point that wants a particular register is put
+    somewhere else rather than being moved out of the way."""
+    held = reg("ecx")
+    value = virtual()
+    built = function(
+        inst("mov", MCReg(value), MCImm(1, 32)),
+        inst("mov", MCReg(held), MCImm(2, 32)),
+        inst("add", MCReg(value), MCReg(held)))
+    result = LinearScan(INFO, ORDER).run(built)
+    assert result.units[value.ident] is not held.unit
+
+
+def test_an_operand_may_name_a_narrower_part_of_the_register() -> None:
+    """A byte store reads the byte view of wherever the value was computed."""
+    value = virtual()
+    built = function(
+        inst("mov", MCReg(value), MCImm(1, 32)),
+        inst("mov", MCMem(disp=8, size_bits=8), MCReg(value, bits=8)))
+    out = assigned(built)
+    wide = out[0].operands[0]
+    narrow = out[1].operands[1]
+    assert isinstance(wide, MCReg) and isinstance(narrow, MCReg)
+    assert isinstance(wide.reg, PhysReg) and isinstance(narrow.reg, PhysReg)
+    assert narrow.reg.bits == 8 and wide.reg.bits == 32
+    assert narrow.reg.unit is wide.reg.unit, "the two views name different registers"
+
+
+def test_a_register_inside_an_address_is_assigned_too() -> None:
+    """It is a value like any other, which is what lets the backends stop
+    setting one aside that nothing else may then use."""
+    base = virtual(64)
+    built = function(
+        inst("lea", MCReg(base), MCMem(disp=16, rip_relative=True)),
+        inst("mov", MCReg(virtual()), MCMem(base=base, size_bits=32)))
+    out = assigned(built)
+    address = out[1].operands[1]
+    assert isinstance(address, MCMem)
+    assert isinstance(address.base, PhysReg), "the base was left unassigned"
+
+
+# -- what it refuses ------------------------------------------------------------
+
+def test_more_values_than_registers_is_reported_not_compiled_wrongly() -> None:
+    """It cannot spill yet, so it says so rather than getting it wrong."""
+    values = [virtual() for _ in range(len(ORDER) + 1)]
+    instructions = [inst("mov", MCReg(v), MCImm(1, 32)) for v in values]
+    # Reading them all at the end is what keeps every one of them wanted.
+    instructions += [inst("mov", MCMem(disp=8, size_bits=32), MCReg(v))
+                     for v in reversed(values)]
+    with pytest.raises(RegisterPressureError, match="cannot spill"):
+        allocate(function(*instructions), INFO, ORDER)
+
+
+def test_nothing_is_left_unassigned() -> None:
+    """The encoders refuse a virtual register, so this is their contract."""
+    built = function(
+        inst("mov", MCReg(virtual()), MCImm(1, 32)),
+        inst("mov", MCReg(virtual()), MCImm(2, 32)))
+    allocate(built, INFO, ORDER)
+    assert built.virtual_registers() == []
+
+
+def test_only_a_move_of_a_register_to_itself_is_dropped() -> None:
+    """A move between two registers is not an identity and has to stay."""
+    left, right = reg("eax"), reg("ecx")
+    built = function(inst("mov", MCReg(left), MCReg(right)))
+    assert LinearScan(INFO, ORDER).run(built).coalesced == 0
+    assert len(built.instructions()) == 1
+
+
+def test_the_move_flag_is_what_marks_one() -> None:
+    """A pass asks the row rather than the mnemonic."""
+    assert InstFlags.MOVE in TABLE.select(
+        "mov", (MCReg(reg("eax")), MCReg(reg("ecx")))).flags
+    assert InstFlags.MOVE not in TABLE.select(
+        "add", (MCReg(reg("eax")), MCReg(reg("ecx")))).flags
+
+
+# -- through the compiler -------------------------------------------------------
+
+PRESSURE = """let a: u8 = 1u8
+let b: u8 = 2u8
+let c: u8 = 3u8
+
+let wa: mut u8 = 0u8
+
+@[expect(4007)]
+let wb: mut u8 = 0u8
+
+@[expect(4007)]
+let wc: mut u8 = 0u8
+
+@[startup]
+fn main() \N{RIGHTWARDS ARROW} u8:
+    let va: u8 = a
+    let vb: u8 = b
+    let vc: u8 = c
+    wc \N{LEFTWARDS ARROW} vc
+    wb \N{LEFTWARDS ARROW} vb
+    wa \N{LEFTWARDS ARROW} va
+    wa
+"""
+
+
+@pytest.mark.parametrize("triple", compiler_targets())
+def test_the_value_read_first_survives_longest(triple: str, tmp_path) -> None:  # noqa: ANN001
+    """Written back in the reverse of the order they were read, so the first is
+    wanted across every other one."""
+    source = tmp_path / "t.pl4g"
+    source.write_text(PRESSURE, encoding="utf-8")
+    output = tmp_path / "out"
+    proc = run_compiler(["-o", str(output), "".join(("--target=", triple)), str(source)])
+    assert proc.returncode == 0, describe(proc)
+    ran = subprocess.run([*runner_for(triple), str(output)], capture_output=True,
+                         timeout=60)
+    assert ran.returncode == 1, describe(ran)
+
+
+@pytest.mark.parametrize("triple", compiler_targets())
+def test_running_out_of_registers_is_a_diagnostic(triple: str, tmp_path) -> None:  # noqa: ANN001
+    """Not a traceback: it is a limit of this compiler like any other."""
+    names = [f"v{n}" for n in range(40)]
+    lines = ["".join(("let g", n, ": u8 = 1u8")) for n in names]
+    lines += ["".join(("@[expect(4007)]\nlet w", n, ": mut u8 = 0u8")) for n in names]
+    lines += ["@[startup]", "fn main() \N{RIGHTWARDS ARROW} u8:"]
+    lines += ["".join(("    let ", n, ": u8 = g", n)) for n in names]
+    lines += ["".join(("    w", n, " \N{LEFTWARDS ARROW} ", n))
+              for n in reversed(names)]
+    lines.append("    1u8")
+    source = tmp_path / "t.pl4g"
+    source.write_text("\n".join(lines), encoding="utf-8")
+    proc = run_compiler(["-o", str(tmp_path / "out"),
+                         "".join(("--target=", triple)), str(source)])
+    assert proc.returncode != 0
+    assert "[PL4G-8501]" in proc.stderr, proc.stderr
+    assert "cannot spill" in proc.stderr, proc.stderr
+    assert "Traceback" not in proc.stderr

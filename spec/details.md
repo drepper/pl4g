@@ -184,7 +184,8 @@ Three parts of the interface are built to be extended:
   general-purpose, vector, mask, flags and segment registers are entries in it, and a new kind is another entry.  The
   general-purpose class holds thirty-two units from the start, so the extended registers are already addressable and only the
   prefix the encoder emits has to be added.  Virtual registers are in the operand model from the beginning; the encoder refuses to
-  encode one, and that refusal is the contract the future register allocator has to satisfy.
+  encode one, and that refusal is the contract the register allocator satisfies.  A register operand may also state a width that is
+  not the register's own, which is how a byte store names the byte view of a register whose identity is not yet known.
 - **Encodings** are declarative table rows plus one generic emitter that walks a fixed sequence of phases: legacy prefixes, the
   prefix carrying the register extensions, the opcode map escape and the opcode, the ModRM byte with its SIB byte and
   displacement, and finally the immediate or the branch displacement.  A new prefix family is one more emitter in the second phase;
@@ -393,9 +394,34 @@ instruction, and a patched displacement -- refuse one too rather than storing it
 reached from a program that compiled, so reaching one reports a defect in the compiler; a wrapped value would be the same quiet
 reinterpretation there as anywhere, and it would be harder to notice.
 
-There is no register allocator, so every value a function computes goes to the register a result is returned in.  That is correct
-exactly while no two values are live at once, and the backend checks it: a function that would need two is reported as beyond what
-this compiler generates rather than compiled wrongly.
+Instruction selection names each value it computes with a register of its own and says nothing about where that register is; the
+allocator decides.  The method is linear scan: every instruction is given a position, each register gets the range between the
+first position that writes it and the last that reads it, and the ranges are walked in order of their start, a unit being held for
+as long as a range needs one and released as soon as it ends.  That is much less than a colouring allocator does and it is the
+right amount for straight-line code, which is all the language can express -- with no branches there is no interference graph, only
+an interval on a line.  The entry that adds a branch backwards has to replace the liveness with an analysis over the control-flow
+graph, and the pass says so where it computes the ranges.
+
+One instruction is two positions, a read and then a write.  That is not a detail: it is what lets a value be moved into the
+register it is read from, so that a value hinted towards the register a result is returned in gets that register, the move becomes
+one of a register to itself, and it goes.  Removing such a move is safe even where the instruction widens what it writes, because
+on the architectures that widen, a narrow write has already cleared the rest of the unit and the value being moved got there by
+such a write.
+
+What an instruction does with each operand is stated by the table row, since only the allocator asks and the answer is a property
+of the instruction.  A row that says nothing writes its first operand and reads the rest, which is the convention the builder
+already speaks in; a store and a comparison write none, and the two-operand arithmetic of x86-64 reads the operand it writes.  A
+register inside a memory operand is read wherever the operand stands, because computing an address reads it whatever the
+instruction then does with the place it names.
+
+Which registers may be given out is stated by the calling convention rather than worked out by the allocator, since that is what a
+convention is about.  The order puts the registers a call would destroy first: using one of those costs a leaf function nothing,
+while using a callee-saved one would cost it a save and a restore.  The stack and frame pointers are left out, and so is the
+register holding a return address where there is one, because a frame and the unwinder that will walk it need somewhere to stand.
+
+The allocator does not spill.  A function wanting more values at once than the target has registers is reported rather than
+compiled wrongly, which is how every other thing this compiler cannot yet do behaves.  Spilling needs a stack frame, and the frame
+is worth designing once, with the unwinder that also needs one, rather than twice.
 
 
 Expectations

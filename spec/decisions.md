@@ -926,6 +926,46 @@ debugger, and their unwinders are a separate library.  Go's runtime carries its 
 fault, which is the behaviour this decision chooses.  Rust's panic path also unwinds, and its `-C panic=abort` is the trap-only
 option being declined here.
 
+## 2026-09-14T15:00+02:00 — implementation
+
+**A register allocator, by linear scan, which does not spill**
+
+Until now every value a function computed went into the register a result is returned in, and a function wanting two at once was
+refused outright.  That made `a + b` impossible, so it blocked every operator the language list still asks for.
+
+*Linear scan rather than colouring.*  Straight-line code has no interference graph worth building: a value is an interval on a
+line, and two values conflict exactly when their intervals overlap.  Graph colouring pays for what control flow makes necessary,
+and there is no control flow.  The comment where liveness is computed says what has to change when a branch backwards exists,
+because that is the point at which the linear order stops being the order control takes.
+
+*One instruction is two positions.*  It reads at the first and writes at the second.  Treating an instruction as a single point
+would mean a value could never be moved into the register it is read from, and that case is not an edge case -- it is every
+return.  With the two positions, a value hinted towards the register its result is returned in gets that register, the move becomes
+a move of a register to itself, and it goes.  The generated code for the programs that already existed is byte-for-byte what it
+was, which is the evidence that the hint is granted wherever it used to be taken for granted.
+
+*The table row says what an instruction does with each operand.*  Only the allocator asks, but the answer is a property of the
+instruction and not of the pass, so a row that says nothing writes its first operand and reads the rest -- the convention the
+builder already spoke in -- and the sixteen rows that deviate say so.  A pass holding that list would be a list to forget.
+
+*Which registers may be given out is the convention's to say.*  That is what a calling convention is about, and it also puts the
+question in the one place a function that wants a bespoke convention could answer differently.  The order prefers the registers a
+call would destroy, which costs a leaf function nothing.
+
+*It does not spill.*  A function wanting more values at once than the target has registers is reported -- fourteen on x86-64,
+twenty-eight on AArch64, twenty-six on RISC-V -- rather than compiled wrongly.  Spilling needs a stack frame, and the frame wants
+designing once, together with the unwinder that also needs one and that the fault path has already been decided to use.  Writing
+the frame twice to have spilling a little earlier would be the wrong trade.
+
+What other languages do.  LLVM's fast allocator is what a build at no optimization gets and is close to this; its greedy allocator
+splits live ranges and is what the rest gets.  Go's compiler also uses a linear-scan-shaped allocator rather than colouring, on
+the grounds that compilation speed matters more than the last few percent, which is the same argument the requirement to be fast
+makes here.  GCC uses integrated register allocation, a colouring allocator, and pays for it in compile time.
+
+A consequence worth recording: the two fixed-width backends had each set aside two registers for the addresses and values a store
+needs, because with no allocator there was nowhere else to put them.  Those are ordinary values now, which is why the generated
+code for a store uses whatever is free rather than always the same two registers.
+
 ---
 
 Open questions

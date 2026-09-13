@@ -8,10 +8,10 @@ counter:
 section .text executable
 main()u8:
                              ※ align 16
-    13 03 70 00              li t1, 7
-    97 02 00 00              auipc.hi20 t0, counter   ※ fixup riscv_pcrel_hi20 → counter
-    93 82 02 00              addi.lo12 t0, t0, counter   ※ fixup riscv_pcrel_lo12_i → counter
-    23 80 62 00              sb t1, t0, 0
+    93 02 70 00              li t0, 7
+    17 03 00 00              auipc.hi20 t1, counter   ※ fixup riscv_pcrel_hi20 → counter
+    13 03 03 00              addi.lo12 t1, t1, counter   ※ fixup riscv_pcrel_lo12_i → counter
+    23 00 53 00              sb t0, t1, 0
     17 05 00 00              auipc.hi20 a0, counter   ※ fixup riscv_pcrel_hi20 → counter
     13 05 05 00              addi.lo12 a0, a0, counter   ※ fixup riscv_pcrel_lo12_i → counter
     03 45 05 00              lbu a0, a0, 0

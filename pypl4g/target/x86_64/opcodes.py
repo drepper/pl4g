@@ -8,7 +8,7 @@ fields it needs in ``desc``.
 
 from typing import Final
 
-from ...mc.desc import InstFlags, OperandKind, OperandSpec
+from ...mc.desc import InstFlags, OperandKind, OperandRole, OperandSpec
 from .desc import ModRMUse, OpMap, OpSize, X86InstDesc
 from .regs import EFLAGS, GPR, R11, RCX
 
@@ -38,6 +38,11 @@ def _mem() -> OperandSpec:
     return OperandSpec(OperandKind.MEM)
 
 
+#: This architecture's arithmetic takes two operands, so the destination is also
+#: the first source: the value it held is still wanted when the instruction runs.
+_ACCUMULATE: Final[tuple[OperandRole, ...]] = (OperandRole.DEF_USE, OperandRole.USE)
+
+
 X86_INSTRS: Final[tuple[X86InstDesc, ...]] = (
     # mov r32, imm32                     B8+rd id
     X86InstDesc("mov", (_r(32), _imm(32)), opcode=0xB8, plus_reg=True, reg_op=0,
@@ -61,49 +66,49 @@ X86_INSTRS: Final[tuple[X86InstDesc, ...]] = (
                 rm_op=0, imm_op=1, imm_bits=32, est_size=6),
     # mov r/m16, r16                     66 89 /r
     X86InstDesc("mov", (_rm(16), _r(16)), opcode=0x89, opsize=OpSize.P66,
-                modrm=ModRMUse.REG_RM, reg_op=1, rm_op=0, est_size=3),
+                modrm=ModRMUse.REG_RM, reg_op=1, rm_op=0, est_size=3, flags=InstFlags.MOVE),
     # mov r/m8, r8                       88 /r
     X86InstDesc("mov", (_rm(8), _r(8)), opcode=0x88, modrm=ModRMUse.REG_RM,
-                reg_op=1, rm_op=0, est_size=2),
+                reg_op=1, rm_op=0, est_size=2, flags=InstFlags.MOVE),
     # mov r8, r/m8                       8A /r
     X86InstDesc("mov", (_r(8), _rm(8)), opcode=0x8A, modrm=ModRMUse.REG_RM,
-                reg_op=0, rm_op=1, est_size=2),
+                reg_op=0, rm_op=1, est_size=2, flags=InstFlags.MOVE),
     # mov r/m32, r32                     89 /r
     X86InstDesc("mov", (_rm(32), _r(32)), opcode=0x89, modrm=ModRMUse.REG_RM,
-                reg_op=1, rm_op=0, flags=InstFlags.ZEXT32, est_size=2),
+                reg_op=1, rm_op=0, flags=InstFlags.MOVE | InstFlags.ZEXT32, est_size=2),
     # mov r32, r/m32                     8B /r   (the load direction)
     X86InstDesc("mov", (_r(32), _rm(32)), opcode=0x8B, modrm=ModRMUse.REG_RM,
-                reg_op=0, rm_op=1, flags=InstFlags.ZEXT32, est_size=2),
+                reg_op=0, rm_op=1, flags=InstFlags.MOVE | InstFlags.ZEXT32, est_size=2),
     # mov r/m64, r64                     REX.W 89 /r
     X86InstDesc("mov", (_rm(64), _r(64)), opcode=0x89, opsize=OpSize.REXW,
-                modrm=ModRMUse.REG_RM, reg_op=1, rm_op=0, est_size=3),
+                modrm=ModRMUse.REG_RM, reg_op=1, rm_op=0, est_size=3, flags=InstFlags.MOVE),
     # mov r64, r/m64                     REX.W 8B /r
     X86InstDesc("mov", (_r(64), _rm(64)), opcode=0x8B, opsize=OpSize.REXW,
-                modrm=ModRMUse.REG_RM, reg_op=0, rm_op=1, est_size=3),
+                modrm=ModRMUse.REG_RM, reg_op=0, rm_op=1, est_size=3, flags=InstFlags.MOVE),
     # xor r/m32, r32                     31 /r
     X86InstDesc("xor", (_rm(32), _r(32)), opcode=0x31, modrm=ModRMUse.REG_RM,
                 reg_op=1, rm_op=0, implicit_defs=(EFLAGS,), flags=InstFlags.ZEXT32,
-                est_size=2),
+                est_size=2, roles=_ACCUMULATE),
     # xor r/m64, r64                     REX.W 31 /r
     X86InstDesc("xor", (_rm(64), _r(64)), opcode=0x31, opsize=OpSize.REXW,
                 modrm=ModRMUse.REG_RM, reg_op=1, rm_op=0, implicit_defs=(EFLAGS,),
-                est_size=3),
+                est_size=3, roles=_ACCUMULATE),
     # add r/m32, r32                     01 /r
     X86InstDesc("add", (_rm(32), _r(32)), opcode=0x01, modrm=ModRMUse.REG_RM,
                 reg_op=1, rm_op=0, implicit_defs=(EFLAGS,), flags=InstFlags.ZEXT32,
-                est_size=2),
+                est_size=2, roles=_ACCUMULATE),
     # add r/m64, r64                     REX.W 01 /r
     X86InstDesc("add", (_rm(64), _r(64)), opcode=0x01, opsize=OpSize.REXW,
                 modrm=ModRMUse.REG_RM, reg_op=1, rm_op=0, implicit_defs=(EFLAGS,),
-                est_size=3),
+                est_size=3, roles=_ACCUMULATE),
     # sub r/m32, r32                     29 /r
     X86InstDesc("sub", (_rm(32), _r(32)), opcode=0x29, modrm=ModRMUse.REG_RM,
                 reg_op=1, rm_op=0, implicit_defs=(EFLAGS,), flags=InstFlags.ZEXT32,
-                est_size=2),
+                est_size=2, roles=_ACCUMULATE),
     # sub r/m64, r64                     REX.W 29 /r
     X86InstDesc("sub", (_rm(64), _r(64)), opcode=0x29, opsize=OpSize.REXW,
                 modrm=ModRMUse.REG_RM, reg_op=1, rm_op=0, implicit_defs=(EFLAGS,),
-                est_size=3),
+                est_size=3, roles=_ACCUMULATE),
     # movzx r32, r/m8                    0F B6 /r
     X86InstDesc("movzx", (_r(32), _rm(8)), opcode=0xB6, map=OpMap.M0F,
                 modrm=ModRMUse.REG_RM, reg_op=0, rm_op=1, flags=InstFlags.ZEXT32,

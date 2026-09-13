@@ -172,21 +172,26 @@ def test_the_program_reads_it(image: tuple) -> None:
     assert proc.returncode == 42, describe(proc)
 
 
-def test_more_than_one_value_at_a_time_is_refused(tmp_path) -> None:  # noqa: ANN001
-    """Without a register allocator, a function needing two at once is reported.
+@pytest.mark.parametrize("triple", compiler_targets())
+def test_more_than_one_value_at_a_time_now_works(triple: str, tmp_path) -> None:  # noqa: ANN001
+    """What the single-register limitation used to refuse, on every target.
 
-    It is reported rather than compiled wrongly, which is the only honest thing
-    to do while every value the compiler produces goes to the same register.
+    Every value the compiler produced went to the register a result is returned
+    in, so a function wanting two at once was reported rather than compiled
+    wrongly.  The allocator is what lifted that, and this is the case it lifted.
     """
     source = tmp_path / "t.pl4g"
     source.write_text("let a: u8 = 1u8\nlet b: u8 = 2u8\n"
                       "@[startup]\nfn main() \N{RIGHTWARDS ARROW} u8:\n"
-                      "    let first: u8 = a\n    let second: u8 = b\n    first\n",
+                      "    @[ignore(4006)]\n    let first: u8 = a\n"
+                      "    @[ignore(4006)]\n    let second: u8 = b\n    first\n",
                       encoding="utf-8")
-    proc = run_compiler(["-o", str(tmp_path / "out"), str(source)])
-    assert proc.returncode != 0
-    assert "[PL4G-8501]" in proc.stderr, proc.stderr
-    assert "register allocator" in proc.stderr
+    output = tmp_path / "out"
+    proc = run_compiler(["-o", str(output), "".join(("--target=", triple)), str(source)])
+    assert proc.returncode == 0, describe(proc)
+    ran = subprocess.run([*runner_for(triple), str(output)], capture_output=True,
+                         timeout=60)
+    assert ran.returncode == 1, describe(ran)
 
 
 # -- nothing narrows a value without saying so ---------------------------------

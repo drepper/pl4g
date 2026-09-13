@@ -10,11 +10,12 @@ from ...mc.desc import InstrTable
 from ...mc.fixup import FixupApplier, MCFixup
 from ...mc.inst import MCInst
 from ...mc.reg import RegisterInfo
+from ...mc.regalloc import RegisterPressureError
 from ...mc.streamer import MCStreamer
 from ...ir.layout import DataLayout
 from ..globals import emit_globals
 from ..target import ImageDefaults
-from .abi import lookup as lookup_cconv
+from .abi import CC_PL4G_V0, lookup as lookup_cconv
 from .encoder import EncodingError, encode
 from .fixups import apply_fixup
 from .isel import RVSelector, UnsupportedOperation, lower_function
@@ -62,7 +63,8 @@ class RISCV64Target:
         del opt_level
         return Assembler(self.selector(streamer), streamer,
                          function_alignment=IMAGE_DEFAULTS.function_alignment,
-                         pad_byte=PAD_BYTE)
+                         pad_byte=PAD_BYTE, registers=self.registers,
+                         allocation_order=CC_PL4G_V0.allocation_order)
 
     def generate(self, module: Module, asm: Assembler, diags: DiagEngine,
                  opt_level: int) -> None:
@@ -80,6 +82,13 @@ class RISCV64Target:
                 diags.emit(D.IMPL_BACKEND_UNSUPPORTED,
                            exc.span if exc.span is not None else func.span,
                            construct=exc.detail)
+                return
+            except RegisterPressureError as exc:
+                # Running out of registers is a limit of this compiler like any
+                # other, so it is reported where the function is rather than
+                # raised at whoever called it.
+                diags.emit(D.IMPL_BACKEND_UNSUPPORTED, func.span,
+                           construct=str(exc))
                 return
             except EncodingError as exc:
                 diags.emit(D.IMPL_BACKEND_UNENCODABLE,

@@ -8,10 +8,10 @@ counter:
 section .text executable
 main()u8:
                              ※ align 16
-    4a 05 80 52              movz w10, 42
-    09 00 00 90              adrp x9, counter   ※ fixup aarch64_adr_page21 → counter
-    29 01 00 91              add.lo12 x9, x9, counter   ※ fixup aarch64_add_lo12 → counter
-    2a 01 00 39              strb w10, x9, 0
+    40 05 80 52              movz w0, 42
+    01 00 00 90              adrp x1, counter   ※ fixup aarch64_adr_page21 → counter
+    21 00 00 91              add.lo12 x1, x1, counter   ※ fixup aarch64_add_lo12 → counter
+    20 00 00 39              strb w0, x1, 0
     00 00 00 90              adrp x0, counter   ※ fixup aarch64_adr_page21 → counter
     00 00 00 91              add.lo12 x0, x0, counter   ※ fixup aarch64_add_lo12 → counter
     00 00 40 39              ldrb w0, x0, 0

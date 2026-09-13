@@ -16,6 +16,15 @@ _CALLEE_SAVED = frozenset(reg(n).unit for n in ("rbx", "rbp", "r12", "r13", "r14
 _CALLER_SAVED = frozenset(reg(n).unit for n in
                           ("rax", "rcx", "rdx", "rsi", "rdi", "r8", "r9", "r10", "r11"))
 
+#: The registers the allocator may give out, the ones a call would destroy
+#: first: using one of those costs a leaf function nothing, while using a
+#: callee-saved one would cost it a save and a restore.  The stack pointer is
+#: not among them, and neither is the frame pointer, which is left free so that
+#: a frame and the unwinder that will walk it have somewhere to stand.
+_ALLOCATION_ORDER = tuple(reg(n).unit for n in (
+    "rax", "rcx", "rdx", "rsi", "rdi", "r8", "r9", "r10", "r11",
+    "rbx", "r12", "r13", "r14", "r15"))
+
 CC_PL4G_V0: Final[CallConvDesc] = CallConvDesc(
     name="pl4g.v0",
     int_arg_regs=(RDI, RSI, RDX, RCX, reg("r8"), reg("r9")),
@@ -23,6 +32,7 @@ CC_PL4G_V0: Final[CallConvDesc] = CallConvDesc(
     callee_saved=_CALLEE_SAVED,
     caller_saved=_CALLER_SAVED,
     stack_align=16,
+    allocation_order=_ALLOCATION_ORDER,
     red_zone=128,
 )
 
@@ -33,6 +43,7 @@ CC_SYSV: Final[CallConvDesc] = CallConvDesc(
     callee_saved=_CALLEE_SAVED,
     caller_saved=_CALLER_SAVED,
     stack_align=16,
+    allocation_order=_ALLOCATION_ORDER,
     red_zone=128,
 )
 

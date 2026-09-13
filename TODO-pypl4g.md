@@ -33,12 +33,15 @@ To Do List for the pypl4g compiler
     and which it writes, the reachability walk carries variables after the functions in the same pass, and an exported variable is
     a root of its own.  The pass is now `dropunreached`, since it no longer drops only functions.
 
-[ ] implement a register allocator.  Every value a function computes goes to the one register a result is returned in, which is
-    correct only while nothing else needs one at the same time; `_check_single_use` in each backend refuses anything more and
-    reports 8501.  That makes `a + b` impossible, so this blocks every operator entry in TODO-language.md.  The slot is prepared:
-    `VirtReg` exists, `MachineFunction.virtual_registers()` collects them, the encoders refuse a virtual register so nothing can
-    skip allocation, and `Assembler._assign_registers` is the one method to replace.  Linear scan with spilling to a frame slot.
-    This is also the first stack frame the compiler emits, which the unwinder below needs.
+[x] implement a register allocator.  Done: linear scan in `pypl4g/mc/regalloc.py`, with each table row saying what the instruction
+    does with each operand, the calling convention saying which registers may be given out, and a value hinted towards the register
+    a result is returned in so that the move into it disappears.  `_check_single_use` is gone from all three backends and the two
+    fixed-width ones no longer set registers aside for a store's address and value.
+
+[ ] spill to a stack frame when more values are wanted at once than there are registers.  The allocator reports such a function
+    (8501) rather than compiling it wrongly, which is honest but is a limit: fourteen values on x86-64, twenty-eight on AArch64,
+    twenty-six on RISC-V.  Spilling needs a frame, so it waits for the entry below that emits one, and the two should be written
+    together.  It also needs live ranges to be splittable, which linear scan makes easy and which the current one does not do.
 
 [ ] emit conditional branches.  `CondBrInst`, `BrInst`, `SwitchInst` and `UnreachableInst` all exist in the IR and none is lowered;
     there is no `jcc`, `b.cond` or `beq` row in any of the three opcode tables, the selector protocol has no `select_branch`, and

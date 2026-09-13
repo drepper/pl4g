@@ -68,13 +68,31 @@ class BinExpr(MCExpr):
 
 @dataclass(frozen=True, slots=True)
 class MCReg:
-    """A register operand."""
+    """A register operand.
+
+    A value occupies one register for as long as it is wanted, and an
+    instruction may name a narrower part of it -- a byte store reads the byte
+    view of the register the value was computed in.  Which view that is cannot
+    be known before the register is assigned, so the operand states the width it
+    wants and the allocator resolves it against the register it chose.
+    """
 
     reg: Reg
+    #: The width this operand names, where it is not the register's own.
+    bits: int | None = None
+
+    @property
+    def width(self) -> int:
+        """The width this operand names."""
+        return self.bits if self.bits is not None else self.reg.bits
 
     def render(self) -> str:
         """A readable form, for the debugging dump."""
-        return self.reg.name if isinstance(self.reg, PhysReg) else repr(self.reg)
+        if isinstance(self.reg, PhysReg):
+            return self.reg.name
+        if self.bits is not None:
+            return "".join((repr(self.reg), ":", str(self.bits)))
+        return repr(self.reg)
 
 
 @dataclass(frozen=True, slots=True)

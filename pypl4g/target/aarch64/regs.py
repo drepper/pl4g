@@ -84,13 +84,6 @@ W0: Final[PhysReg] = reg("w0")
 W8: Final[PhysReg] = reg("w8")
 W19: Final[PhysReg] = reg("w19")
 
-#: Held an address while a store is being made.  The procedure call standard
-#: leaves it to the caller to preserve, and nothing of the compiler's holds a
-#: value across the few instructions a store takes, so using it costs nothing.
-SCRATCH: Final[PhysReg] = reg("x9")
-#: Holds the value a store writes, where that value is not already in a register.
-VALUE_SCRATCH: Final[PhysReg] = reg("x10")
-
 #: Registers the caller must preserve across a call, by the standard procedure
 #: call standard.
 CALLEE_SAVED_NAMES: Final[tuple[str, ...]] = (

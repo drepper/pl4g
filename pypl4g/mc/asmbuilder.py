@@ -30,7 +30,8 @@ from .inst import MCInst
 from .machine import MachineBasicBlock, MachineFunction
 from .operand import MCImm, MCMem, MCOperand, MCReg, MCSymRef, RelocKind, SymExpr
 from .ops import Op
-from .reg import Reg
+from .reg import Reg, RegisterInfo, RegUnit
+from .regalloc import Assignment, allocate
 from .streamer import MCStreamer
 from .symbol import MCSection, MCSymbol, SymBinding, SymKind, SymVisibility
 
@@ -82,7 +83,7 @@ class RegisterAssignmentError(Exception):
     def __init__(self, name: str, count: int) -> None:
         super().__init__("".join((
             "function '", name, "' still has ", str(count),
-            " unassigned registers; no register allocator has run")))
+            " unassigned registers after allocation")))
         self.function_name = name
         self.count = count
 
@@ -92,10 +93,21 @@ class Assembler:
 
     def __init__(self, selector: InstructionSelector, streamer: MCStreamer,
                  function_alignment: int = 16, pad_byte: int = 0xCC,
-                 machine_passes: Sequence["MachinePass"] = ()) -> None:
+                 machine_passes: Sequence["MachinePass"] = (),
+                 registers: "RegisterInfo | None" = None,
+                 allocation_order: Sequence["RegUnit"] = ()) -> None:
         self._selector = selector
         self._streamer = streamer
         self._alignment = function_alignment
+        #: What the allocator needs: the register file, to turn a unit and a
+        #: width into the register that names them, and which units it may give
+        #: out.  Both come from the target, since neither is the builder's to
+        #: decide.
+        self._registers = registers
+        self._allocation_order = tuple(allocation_order)
+        #: What the allocator decided, for each function, in the order the
+        #: functions were built.  The debugging dump reads it; nothing else does.
+        self.assignments: list["Assignment"] = []
         #: What padding is filled with.  It must trap rather than fall through,
         #: so each architecture names a byte of its own: a breakpoint on one, a
         #: permanently undefined word on another.
@@ -194,10 +206,16 @@ class Assembler:
     def _assign_registers(self, function: MachineFunction) -> None:
         """Turn every virtual register into a physical one.
 
-        There is no register allocator yet, so this checks that instruction
-        selection produced none.  When the allocator arrives it replaces the body
-        of this method and nothing else changes.
+        The check afterwards is not belt and braces: the encoders refuse a
+        virtual register, and this says which function still has one rather than
+        leaving the encoder to fail somewhere further down with less to say.
         """
+        if function.virtual_registers():
+            if self._registers is None or not self._allocation_order:
+                raise RegisterAssignmentError(function.name,
+                                              len(function.virtual_registers()))
+            self.assignments.append(
+                allocate(function, self._registers, self._allocation_order))
         pending = function.virtual_registers()
         if pending:
             raise RegisterAssignmentError(function.name, len(pending))

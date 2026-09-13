@@ -13,7 +13,7 @@ them.
 
 from typing import Final
 
-from ...mc.desc import InstFlags, OperandKind, OperandSpec
+from ...mc.desc import InstFlags, OperandKind, OperandRole, OperandSpec
 from .desc import INSTRUCTION_SIZE, Field, FieldKind, RVInstDesc
 from .fixups import JAL, PCREL_HI20, PCREL_LO12_I, PCREL_PAIR_DISTANCE
 from .regs import GPR, RA
@@ -81,13 +81,19 @@ def _store_fields() -> tuple[Field, ...]:
     )
 
 
+#: A store names the value, the base register and the offset, and reads all of
+#: them: nothing it names is written, only the place they point at.
+_READS_ALL_THREE: Final[tuple[OperandRole, ...]] = (
+    OperandRole.USE, OperandRole.USE, OperandRole.USE)
+
+
 RISCV_INSTRS: Final[tuple[RVInstDesc, ...]] = (
     # li rd, imm12       is  addi rd, zero, imm12
     RVInstDesc("li", (_r(), _imm12()), template=0x00000013,
                fields=(_reg(0, _RD), _imm(1, _IMM12, 12)), est_size=INSTRUCTION_SIZE),
     # mv rd, rs          is  addi rd, rs, 0
     RVInstDesc("mv", (_r(), _r()), template=0x00000013,
-               fields=(_reg(0, _RD), _reg(1, _RS1)), est_size=INSTRUCTION_SIZE),
+               fields=(_reg(0, _RD), _reg(1, _RS1)), est_size=INSTRUCTION_SIZE, flags=InstFlags.MOVE),
     # addi rd, rs1, imm12
     RVInstDesc("addi", (_r(), _r(), _imm12()), template=0x00000013,
                fields=(_reg(0, _RD), _reg(1, _RS1), _imm(2, _IMM12, 12)),
@@ -167,16 +173,16 @@ RISCV_INSTRS: Final[tuple[RVInstDesc, ...]] = (
     # top, so each row names the two halves of one value.
     RVInstDesc("sb", (_r(), _r(), _imm12()), template=0x00000023,
                fields=_store_fields(), flags=InstFlags.MAY_STORE,
-               est_size=INSTRUCTION_SIZE),
+               est_size=INSTRUCTION_SIZE, roles=_READS_ALL_THREE),
     RVInstDesc("sh", (_r(), _r(), _imm12()), template=0x00001023,
                fields=_store_fields(), flags=InstFlags.MAY_STORE,
-               est_size=INSTRUCTION_SIZE),
+               est_size=INSTRUCTION_SIZE, roles=_READS_ALL_THREE),
     RVInstDesc("sw", (_r(), _r(), _imm12()), template=0x00002023,
                fields=_store_fields(), flags=InstFlags.MAY_STORE,
-               est_size=INSTRUCTION_SIZE),
+               est_size=INSTRUCTION_SIZE, roles=_READS_ALL_THREE),
     RVInstDesc("sd", (_r(), _r(), _imm12()), template=0x00003023,
                fields=_store_fields(), flags=InstFlags.MAY_STORE,
-               est_size=INSTRUCTION_SIZE),
+               est_size=INSTRUCTION_SIZE, roles=_READS_ALL_THREE),
     # jal ra, label      (the return address register is part of the template)
     RVInstDesc("jal", (_sym(),), template=0x000000EF,
                fields=(Field(FieldKind.RELOCATION, 0, 12, 20, reloc=JAL),),

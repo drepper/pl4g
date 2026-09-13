@@ -6,7 +6,7 @@ were checked against the GNU assembler, and a test keeps checking them.
 
 from typing import Final
 
-from ...mc.desc import InstFlags, OperandKind, OperandSpec
+from ...mc.desc import InstFlags, OperandKind, OperandRole, OperandSpec
 from .desc import A64InstDesc, Field, FieldKind, INSTRUCTION_SIZE
 from .fixups import ADD_LO12, ADR_PAGE21, BRANCH26
 from .regs import GPR, NZCV, X30
@@ -59,6 +59,15 @@ _RD = 0
 _RN = 5
 _RM = 16
 
+#: A store names the value, the base register and the offset, and reads all of
+#: them: nothing it names is written, only the place they point at.
+_READS_ALL_THREE: Final[tuple[OperandRole, ...]] = (
+    OperandRole.USE, OperandRole.USE, OperandRole.USE)
+
+#: A comparison writes only the flags, which it declares separately.
+_READS_BOTH: Final[tuple[OperandRole, ...]] = (OperandRole.USE, OperandRole.USE)
+
+
 AARCH64_INSTRS: Final[tuple[A64InstDesc, ...]] = (
     # movz Wd, #imm16                    sf=0 10 100101 hw=00
     A64InstDesc("movz", (_r(32), _imm(0xFFFF)), template=0x52800000,
@@ -73,11 +82,11 @@ AARCH64_INSTRS: Final[tuple[A64InstDesc, ...]] = (
     # mov Wd, Wm   is  orr Wd, WZR, Wm
     A64InstDesc("mov", (_r(32), _r(32)), template=0x2A0003E0,
                 fields=(_reg_field(0, _RD), _reg_field(1, _RM)),
-                flags=InstFlags.ZEXT32, est_size=INSTRUCTION_SIZE),
+                flags=InstFlags.MOVE | InstFlags.ZEXT32, est_size=INSTRUCTION_SIZE),
     # mov Xd, Xm   is  orr Xd, XZR, Xm
     A64InstDesc("mov", (_r(64), _r(64)), template=0xAA0003E0,
                 fields=(_reg_field(0, _RD), _reg_field(1, _RM)),
-                est_size=INSTRUCTION_SIZE),
+                est_size=INSTRUCTION_SIZE, flags=InstFlags.MOVE),
     # add Wd, Wn, Wm
     A64InstDesc("add", (_r(32), _r(32), _r(32)), template=0x0B000000,
                 fields=(_reg_field(0, _RD), _reg_field(1, _RN), _reg_field(2, _RM)),
@@ -169,19 +178,23 @@ AARCH64_INSTRS: Final[tuple[A64InstDesc, ...]] = (
     # strb Wt, [Xn, #imm12]
     A64InstDesc("strb", (_r(32), _r(64), _off(0)), template=0x39000000,
                 fields=(_reg_field(0, _RD), _reg_field(1, _RN), _offset_field(2, 0)),
-                flags=InstFlags.MAY_STORE, est_size=INSTRUCTION_SIZE),
+                flags=InstFlags.MAY_STORE, est_size=INSTRUCTION_SIZE,
+                roles=_READS_ALL_THREE),
     # strh Wt, [Xn, #imm12]
     A64InstDesc("strh", (_r(32), _r(64), _off(1)), template=0x79000000,
                 fields=(_reg_field(0, _RD), _reg_field(1, _RN), _offset_field(2, 1)),
-                flags=InstFlags.MAY_STORE, est_size=INSTRUCTION_SIZE),
+                flags=InstFlags.MAY_STORE, est_size=INSTRUCTION_SIZE,
+                roles=_READS_ALL_THREE),
     # str Wt, [Xn, #imm12]
     A64InstDesc("str", (_r(32), _r(64), _off(2)), template=0xB9000000,
                 fields=(_reg_field(0, _RD), _reg_field(1, _RN), _offset_field(2, 2)),
-                flags=InstFlags.MAY_STORE, est_size=INSTRUCTION_SIZE),
+                flags=InstFlags.MAY_STORE, est_size=INSTRUCTION_SIZE,
+                roles=_READS_ALL_THREE),
     # str Xt, [Xn, #imm12]
     A64InstDesc("str", (_r(64), _r(64), _off(3)), template=0xF9000000,
                 fields=(_reg_field(0, _RD), _reg_field(1, _RN), _offset_field(2, 3)),
-                flags=InstFlags.MAY_STORE, est_size=INSTRUCTION_SIZE),
+                flags=InstFlags.MAY_STORE, est_size=INSTRUCTION_SIZE,
+                roles=_READS_ALL_THREE),
     # bl label
     A64InstDesc("bl", (_sym(),), template=0x94000000,
                 fields=(Field(FieldKind.RELOCATION, 0, 0, 26, shift=2, signed=True,
@@ -204,9 +217,11 @@ AARCH64_INSTRS: Final[tuple[A64InstDesc, ...]] = (
     # cmp Wn, Wm   is  subs WZR, Wn, Wm
     A64InstDesc("cmp", (_r(32), _r(32)), template=0x6B00001F,
                 fields=(_reg_field(0, _RN), _reg_field(1, _RM)),
-                implicit_defs=(NZCV,), est_size=INSTRUCTION_SIZE),
+                implicit_defs=(NZCV,), est_size=INSTRUCTION_SIZE,
+                roles=_READS_BOTH),
     # cmp Xn, Xm   is  subs XZR, Xn, Xm
     A64InstDesc("cmp", (_r(64), _r(64)), template=0xEB00001F,
                 fields=(_reg_field(0, _RN), _reg_field(1, _RM)),
-                implicit_defs=(NZCV,), est_size=INSTRUCTION_SIZE),
+                implicit_defs=(NZCV,), est_size=INSTRUCTION_SIZE,
+                roles=_READS_BOTH),
 )

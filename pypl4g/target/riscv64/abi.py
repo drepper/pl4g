@@ -16,6 +16,16 @@ _CALLEE_SAVED = frozenset(reg(n).unit for n in CALLEE_SAVED_NAMES)
 _CALLER_SAVED = frozenset(reg(n).unit for n in CALLER_SAVED_NAMES)
 _ARG_REGS = tuple(reg("".join(("a", str(n)))) for n in range(8))
 
+#: The registers the allocator may give out, the ones a call would destroy
+#: first.  `ra` is left alone although a call destroys it: it holds the return
+#: address, which is what an unwinder follows.  `sp` and `s0`, the frame
+#: pointer, are left alone for the same reason, and `zero` is not a register
+#: that can hold anything.
+_ALLOCATION_ORDER = tuple(reg(n).unit for n in (
+    "t0", "t1", "t2", "t3", "t4", "t5", "t6",
+    "a0", "a1", "a2", "a3", "a4", "a5", "a6", "a7",
+    "s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9", "s10", "s11"))
+
 CC_PL4G_V0: Final[CallConvDesc] = CallConvDesc(
     name="pl4g.v0",
     int_arg_regs=_ARG_REGS,
@@ -25,6 +35,7 @@ CC_PL4G_V0: Final[CallConvDesc] = CallConvDesc(
     stack_align=16,
     # The standard defines no area below the stack pointer a leaf function may
     # use, as on AArch64 and unlike x86-64.
+    allocation_order=_ALLOCATION_ORDER,
     red_zone=0,
 )
 
@@ -35,6 +46,7 @@ CC_LP64: Final[CallConvDesc] = CallConvDesc(
     callee_saved=_CALLEE_SAVED,
     caller_saved=_CALLER_SAVED,
     stack_align=16,
+    allocation_order=_ALLOCATION_ORDER,
     red_zone=0,
 )
 
