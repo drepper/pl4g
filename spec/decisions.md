@@ -1147,6 +1147,51 @@ cannot come apart.  It colours a terminal and not a pipe, which is the conventio
 `--color` overrides either way.  Everything the highlighting needs may be missing on a machine that only wants to read a log, and
 none of it being there is not an error -- the source is shown plain, which is what a pipe gets anyway.
 
+## 2026-09-15T01:00+02:00 — implementation
+
+**Spilling, by rewriting and starting again, and the first stack frame**
+
+The allocator refused a function wanting more values at once than the target had registers -- fourteen on x86-64.  Honest, and a
+hard limit on any program with a real expression in it.
+
+*Spill the whole life, not part of it.*  A spilled value is in memory from the moment it is computed; what occupies a register is a
+fresh one per instruction, live for the single instruction that reads or writes it, so there is always somewhere to put it.
+Splitting a range -- in a register where the value is busy, in memory where it is not -- generates better code and is a great deal
+more machinery.  This is the version that is obviously right, and the loop it is written as is where the better version goes.
+
+*Rewrite and start again, rather than patch.*  A spill adds instructions, which moves every position after it and so changes every
+range.  Recomputing all of it is simpler than repairing it, and a function is small.  Each round spills at least one value and a
+value once spilled needs no register across its life, so the rounds run out; the cap is the number of registers.
+
+*The value given up is the one whose range reaches furthest*, since that is the one that would hold a register longest.  That is
+the heuristic linear scan was first described with, and it is still right for straight-line code.
+
+*The frame is made after allocation and only where a slot was taken.*  Only the allocator puts anything on the stack, so nothing
+else has an opinion, and a function that needed none has no frame and no instruction saying so.  The room is given back before
+every return rather than at one place, because there is no one place -- a function may leave from more than one, and control that
+left without giving it back would return to a caller whose stack had moved.
+
+The x86-64 red zone was considered for this and not used.  A leaf function there may write 128 bytes below the stack pointer with
+no prologue at all, which the recorded convention already says; it would have made the common case free on one architecture and
+changed nothing on the other two, and it stops being available the moment a function calls anything.  Emitting the frame everywhere
+is the same code on all three and stays right when calls arrive.
+
+*A register may say it must not be spilled.*  RISC-V builds an address with two instructions of which the second measures from the
+first, so they must stay adjacent -- and spilling the register held between them puts a load and a store between them.  That was a
+real miscompilation, found by running a program with forty live values and getting sixteen back instead of one.  The fix is two
+things: the address gets a register of its own rather than the destination's, so the long-lived value is not what is being held
+across the pair; and that register says it may not be spilled.  Using the destination was a deliberate economy from before there
+was an allocator, and it also made the loaded value live three instructions earlier than it needed to.  On AArch64 the two halves
+of the pair are independent and no such rule is needed.
+
+What other compilers do: LLVM's fast allocator spills whole values like this; its greedy allocator splits.  GCC's is a colouring
+allocator with its own spill heuristics.  The rewrite-and-retry loop is how LLVM's linear scan worked and how Cranelift's
+backtracking allocator still works, for the same reason -- a spill changes the problem, so solving the new problem beats fixing up
+the old answer.
+
+Verified by running programs with twenty, forty, eighty and a hundred and fifty values live at once on all three architectures,
+each returning the first value read, which can only be right if it came back from the frame unchanged.
+
 ---
 
 Open questions

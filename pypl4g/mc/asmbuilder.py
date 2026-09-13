@@ -27,6 +27,7 @@ from typing import Protocol, Sequence
 
 from ..source.location import INVALID_SPAN, Span
 from .inst import MCInst
+from .desc import InstFlags
 from .machine import MachineBasicBlock, MachineFunction
 from .operand import MCImm, MCMem, MCOperand, MCReg, MCSymRef, RelocKind, SymExpr
 from .ops import Condition, Op
@@ -68,6 +69,23 @@ class InstructionSelector(Protocol):
 
     def select_jump(self, target: MCSymRef, span: Span) -> Sequence[MCInst]:
         """Instructions that transfer control to *target*."""
+        ...
+
+    def select_spill(self, slot: int, source: Reg, span: Span) -> Sequence[MCInst]:
+        """Instructions that write *source* to the frame slot at *slot*."""
+        ...
+
+    def select_reload(self, destination: Reg, slot: int,
+                      span: Span) -> Sequence[MCInst]:
+        """Instructions that read the frame slot at *slot* into *destination*."""
+        ...
+
+    def select_frame(self, size: int, span: Span) -> Sequence[MCInst]:
+        """Instructions that make room for *size* bytes on the stack."""
+        ...
+
+    def select_unframe(self, size: int, span: Span) -> Sequence[MCInst]:
+        """Instructions that give that room back."""
         ...
 
     def select_branch(self, cond: Condition, lhs: MCOperand, rhs: MCOperand,
@@ -193,6 +211,7 @@ class Assembler:
         for machine_pass in self._machine_passes:
             machine_pass.run(function)
         self._assign_registers(function)
+        self._make_frame(function)
         self._streamer.emit_align(self._alignment, self._pad_byte)
         # What is not exported is kept in twice over: bound locally, so nothing
         # outside this image can name it, and marked hidden, which is the part
@@ -231,10 +250,35 @@ class Assembler:
                 raise RegisterAssignmentError(function.name,
                                               len(function.virtual_registers()))
             self.assignments.append(
-                allocate(function, self._registers, self._allocation_order))
+                allocate(function, self._registers, self._allocation_order,
+                         self._selector))
         pending = function.virtual_registers()
         if pending:
             raise RegisterAssignmentError(function.name, len(pending))
+
+    def _make_frame(self, function: MachineFunction) -> None:
+        """Put the stack the allocator asked for around the function.
+
+        Only the allocator puts anything on the stack, so this runs after it and
+        only where it took a slot: a function that needed none has no frame and
+        no instruction saying so.  The room is given back before every return
+        rather than at one place, because there is no one place -- a function
+        may leave from more than one, and control that left without giving it
+        back would return to a caller whose stack had moved.
+        """
+        size = function.frame.size
+        if size == 0:
+            return
+        entry = function.blocks[0]
+        entry.insts = [*self._selector.select_frame(size, INVALID_SPAN),
+                       *entry.insts]
+        for block in function.blocks:
+            out: list[MCInst] = []
+            for inst in block.insts:
+                if InstFlags.RETURN in inst.desc.flags:
+                    out.extend(self._selector.select_unframe(size, inst.span))
+                out.append(inst)
+            block.insts = out
 
     # -- operands --------------------------------------------------------------
 

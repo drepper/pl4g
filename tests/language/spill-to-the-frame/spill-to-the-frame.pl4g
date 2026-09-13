@@ -1,0 +1,207 @@
+※ pl4g-test: compile=ok opt=0,1
+※ pl4g-test: run=native,qemu exit=1
+※ pl4g-test: diag=none
+
+※ Thirty-two values are wanted at once, which is more registers than any of
+※ the three architectures has: fourteen on one, twenty-eight and twenty-six
+※ on the others.  What does not fit goes to the frame and is read back.
+※
+※ They are written back in the reverse of the order they were read, so the
+※ first is wanted across every other one; returning it is what says it came
+※ back from the frame unchanged.
+
+let g0: u8 = 1u8
+let g1: u8 = 2u8
+let g2: u8 = 3u8
+let g3: u8 = 4u8
+let g4: u8 = 5u8
+let g5: u8 = 6u8
+let g6: u8 = 7u8
+let g7: u8 = 8u8
+let g8: u8 = 9u8
+let g9: u8 = 1u8
+let g10: u8 = 2u8
+let g11: u8 = 3u8
+let g12: u8 = 4u8
+let g13: u8 = 5u8
+let g14: u8 = 6u8
+let g15: u8 = 7u8
+let g16: u8 = 8u8
+let g17: u8 = 9u8
+let g18: u8 = 1u8
+let g19: u8 = 2u8
+let g20: u8 = 3u8
+let g21: u8 = 4u8
+let g22: u8 = 5u8
+let g23: u8 = 6u8
+let g24: u8 = 7u8
+let g25: u8 = 8u8
+let g26: u8 = 9u8
+let g27: u8 = 1u8
+let g28: u8 = 2u8
+let g29: u8 = 3u8
+let g30: u8 = 4u8
+let g31: u8 = 5u8
+
+let w0: mut u8 = 0u8
+
+@[expect(4007)]
+let w1: mut u8 = 0u8
+
+@[expect(4007)]
+let w2: mut u8 = 0u8
+
+@[expect(4007)]
+let w3: mut u8 = 0u8
+
+@[expect(4007)]
+let w4: mut u8 = 0u8
+
+@[expect(4007)]
+let w5: mut u8 = 0u8
+
+@[expect(4007)]
+let w6: mut u8 = 0u8
+
+@[expect(4007)]
+let w7: mut u8 = 0u8
+
+@[expect(4007)]
+let w8: mut u8 = 0u8
+
+@[expect(4007)]
+let w9: mut u8 = 0u8
+
+@[expect(4007)]
+let w10: mut u8 = 0u8
+
+@[expect(4007)]
+let w11: mut u8 = 0u8
+
+@[expect(4007)]
+let w12: mut u8 = 0u8
+
+@[expect(4007)]
+let w13: mut u8 = 0u8
+
+@[expect(4007)]
+let w14: mut u8 = 0u8
+
+@[expect(4007)]
+let w15: mut u8 = 0u8
+
+@[expect(4007)]
+let w16: mut u8 = 0u8
+
+@[expect(4007)]
+let w17: mut u8 = 0u8
+
+@[expect(4007)]
+let w18: mut u8 = 0u8
+
+@[expect(4007)]
+let w19: mut u8 = 0u8
+
+@[expect(4007)]
+let w20: mut u8 = 0u8
+
+@[expect(4007)]
+let w21: mut u8 = 0u8
+
+@[expect(4007)]
+let w22: mut u8 = 0u8
+
+@[expect(4007)]
+let w23: mut u8 = 0u8
+
+@[expect(4007)]
+let w24: mut u8 = 0u8
+
+@[expect(4007)]
+let w25: mut u8 = 0u8
+
+@[expect(4007)]
+let w26: mut u8 = 0u8
+
+@[expect(4007)]
+let w27: mut u8 = 0u8
+
+@[expect(4007)]
+let w28: mut u8 = 0u8
+
+@[expect(4007)]
+let w29: mut u8 = 0u8
+
+@[expect(4007)]
+let w30: mut u8 = 0u8
+
+@[expect(4007)]
+let w31: mut u8 = 0u8
+
+@[startup]
+fn main() → u8:
+    let v0: u8 = g0
+    let v1: u8 = g1
+    let v2: u8 = g2
+    let v3: u8 = g3
+    let v4: u8 = g4
+    let v5: u8 = g5
+    let v6: u8 = g6
+    let v7: u8 = g7
+    let v8: u8 = g8
+    let v9: u8 = g9
+    let v10: u8 = g10
+    let v11: u8 = g11
+    let v12: u8 = g12
+    let v13: u8 = g13
+    let v14: u8 = g14
+    let v15: u8 = g15
+    let v16: u8 = g16
+    let v17: u8 = g17
+    let v18: u8 = g18
+    let v19: u8 = g19
+    let v20: u8 = g20
+    let v21: u8 = g21
+    let v22: u8 = g22
+    let v23: u8 = g23
+    let v24: u8 = g24
+    let v25: u8 = g25
+    let v26: u8 = g26
+    let v27: u8 = g27
+    let v28: u8 = g28
+    let v29: u8 = g29
+    let v30: u8 = g30
+    let v31: u8 = g31
+    w31 ← v31
+    w30 ← v30
+    w29 ← v29
+    w28 ← v28
+    w27 ← v27
+    w26 ← v26
+    w25 ← v25
+    w24 ← v24
+    w23 ← v23
+    w22 ← v22
+    w21 ← v21
+    w20 ← v20
+    w19 ← v19
+    w18 ← v18
+    w17 ← v17
+    w16 ← v16
+    w15 ← v15
+    w14 ← v14
+    w13 ← v13
+    w12 ← v12
+    w11 ← v11
+    w10 ← v10
+    w9 ← v9
+    w8 ← v8
+    w7 ← v7
+    w6 ← v6
+    w5 ← v5
+    w4 ← v4
+    w3 ← v3
+    w2 ← v2
+    w1 ← v1
+    w0 ← v0
+    w0

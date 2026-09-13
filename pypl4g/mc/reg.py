@@ -80,6 +80,11 @@ class VirtReg:
     cls: RegClass
     bits: int
     hint: PhysReg | None = None
+    #: Whether the allocator may put this in the frame instead of a register.
+    #: A register held across two instructions whose relocations refer to each
+    #: other may not be: spilling it would put instructions between them, and
+    #: the second measures from the first.
+    spillable: bool = True
 
     def __repr__(self) -> str:
         return "".join(("VirtReg(%v", str(self.ident), ")"))
@@ -129,10 +134,11 @@ class RegisterInfo:
         self.registers[name] = reg
         return reg
 
-    def new_virtual(self, cls: RegClass, bits: int,
-                    hint: PhysReg | None = None) -> VirtReg:
+    def new_virtual(self, cls: RegClass, bits: int, hint: PhysReg | None = None,
+                    spillable: bool = True) -> VirtReg:
         """Allocate a fresh virtual register."""
-        reg = VirtReg(ident=self._next_virtual, cls=cls, bits=bits, hint=hint)
+        reg = VirtReg(ident=self._next_virtual, cls=cls, bits=bits, hint=hint,
+                      spillable=spillable)
         self._next_virtual += 1
         return reg
 

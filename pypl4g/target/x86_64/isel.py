@@ -29,7 +29,7 @@ if TYPE_CHECKING:
     from ..callconv import CallConvDesc
 from . import ops as x86ops
 from .opcodes import X86_INSTRS
-from .regs import GPR, INFO as REGISTERS
+from .regs import GPR, INFO as REGISTERS, RSP
 
 #: The mnemonic that implements each architecture-neutral binary operation.
 _BINARY: Final[dict[str, str]] = {
@@ -260,6 +260,30 @@ class X86Selector(InstructionSelector):
                 and cond in (Condition.EQ, Condition.NE)):
             return self._inst("test", (lhs, lhs), span)
         return self._inst("cmp", (lhs, rhs), span)
+
+    # -- the stack -------------------------------------------------------------
+
+    def _slot(self, slot: int) -> MCMem:
+        """The place in the frame at *slot*, measured from the stack pointer."""
+        return MCMem(base=RSP, disp=slot, size_bits=64)
+
+    def select_spill(self, slot: int, source: Reg, span: Span) -> Sequence[MCInst]:
+        """Instructions that write *source* to the frame slot at *slot*."""
+        return (self._inst("mov", (self._slot(slot), MCReg(source, bits=64)), span),)
+
+    def select_reload(self, destination: Reg, slot: int,
+                      span: Span) -> Sequence[MCInst]:
+        """Instructions that read the frame slot at *slot* into *destination*."""
+        return (self._inst("mov", (MCReg(destination, bits=64), self._slot(slot)),
+                           span),)
+
+    def select_frame(self, size: int, span: Span) -> Sequence[MCInst]:
+        """Instructions that make room for *size* bytes on the stack."""
+        return (self._inst("sub", (MCReg(RSP), MCImm(size, 32)), span),)
+
+    def select_unframe(self, size: int, span: Span) -> Sequence[MCInst]:
+        """Instructions that give that room back."""
+        return (self._inst("add", (MCReg(RSP), MCImm(size, 32)), span),)
 
 
 # -- lowering the IR ------------------------------------------------------------

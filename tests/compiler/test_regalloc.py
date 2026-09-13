@@ -13,11 +13,14 @@ from pypl4g.mc.regalloc import (LinearScan, RegisterPressureError, allocate,
                                 defs_and_uses)
 from pypl4g.mc.reg import PhysReg, VirtReg
 from pypl4g.target.x86_64.abi import CC_PL4G_V0
+from pypl4g.target.x86_64.isel import X86Selector
 from pypl4g.target.x86_64.opcodes import X86_INSTRS
 from pypl4g.target.x86_64.regs import GPR, INFO, reg
 
 TABLE = InstrTable(X86_INSTRS)
 ORDER = CC_PL4G_V0.allocation_order
+#: What the allocator asks how to reach the frame.
+SELECTOR = X86Selector(TABLE)
 
 
 def virtual(bits: int = 32, hint: PhysReg | None = None) -> VirtReg:
@@ -41,7 +44,7 @@ def function(*instructions: MCInst) -> MachineFunction:
 
 def assigned(function_: MachineFunction) -> list[MCInst]:
     """Allocate and return the instructions as they came out."""
-    allocate(function_, INFO, ORDER)
+    allocate(function_, INFO, ORDER, SELECTOR)
     return function_.instructions()
 
 
@@ -133,7 +136,7 @@ def test_an_instruction_may_write_the_register_it_read() -> None:
     built = function(
         inst("mov", MCReg(value), MCImm(1, 32)),
         inst("mov", MCReg(target), MCReg(value)))
-    scan = LinearScan(INFO, ORDER)
+    scan = LinearScan(INFO, ORDER, SELECTOR)
     result = scan.run(built)
     assert result.units[value.ident] is target.unit
 
@@ -145,7 +148,7 @@ def test_a_value_hinted_where_it_is_wanted_needs_no_move() -> None:
     built = function(
         inst("mov", MCReg(value), MCImm(7, 32)),
         inst("mov", MCReg(target), MCReg(value)))
-    result = LinearScan(INFO, ORDER).run(built)
+    result = LinearScan(INFO, ORDER, SELECTOR).run(built)
     assert result.coalesced == 1
     assert [i.mnemonic for i in built.instructions()] == ["mov"]
     remaining = built.instructions()[0].operands[0]
@@ -161,7 +164,7 @@ def test_a_register_something_else_holds_is_not_given_out() -> None:
         inst("mov", MCReg(value), MCImm(1, 32)),
         inst("mov", MCReg(held), MCImm(2, 32)),
         inst("add", MCReg(value), MCReg(held)))
-    result = LinearScan(INFO, ORDER).run(built)
+    result = LinearScan(INFO, ORDER, SELECTOR).run(built)
     assert result.units[value.ident] is not held.unit
 
 
@@ -195,15 +198,47 @@ def test_a_register_inside_an_address_is_assigned_too() -> None:
 
 # -- what it refuses ------------------------------------------------------------
 
-def test_more_values_than_registers_is_reported_not_compiled_wrongly() -> None:
-    """It cannot spill yet, so it says so rather than getting it wrong."""
-    values = [virtual() for _ in range(len(ORDER) + 1)]
+def test_more_values_than_registers_go_to_the_frame() -> None:
+    """What used to be refused is now put on the stack and read back."""
+    values = [virtual() for _ in range(len(ORDER) + 4)]
     instructions = [inst("mov", MCReg(v), MCImm(1, 32)) for v in values]
     # Reading them all at the end is what keeps every one of them wanted.
     instructions += [inst("mov", MCMem(disp=8, size_bits=32), MCReg(v))
                      for v in reversed(values)]
-    with pytest.raises(RegisterPressureError, match="cannot spill"):
-        allocate(function(*instructions), INFO, ORDER)
+    built = function(*instructions)
+    result = allocate(built, INFO, ORDER, SELECTOR)
+    assert result.spilled, "nothing was spilled although there were too many"
+    assert built.frame.slots == len(result.spilled)
+    assert built.virtual_registers() == [], "something was left unassigned"
+
+
+def test_the_frame_is_as_large_as_the_slots_taken_and_aligned() -> None:
+    """A stack pointer that is not aligned is a fault on two of the three."""
+    from pypl4g.mc.machine import FrameInfo
+
+    frame = FrameInfo()
+    assert frame.size == 0, "a function that needed no stack made a frame"
+    first, second = frame.allocate(), frame.allocate()
+    assert (first, second) == (0, 8), "slots overlap or are not the width of one"
+    assert frame.size == 16
+    frame.allocate()
+    assert frame.size == 32, "the size was not rounded up to the alignment"
+
+
+def test_a_register_that_may_not_be_spilled_is_kept() -> None:
+    """Two instructions whose relocations refer to each other must stay next to
+    each other, so the register held between them cannot go to the frame."""
+    held = INFO.new_virtual(GPR, 64, spillable=False)
+    values = [virtual() for _ in range(len(ORDER) + 2)]
+    instructions = [inst("mov", MCReg(v), MCImm(1, 32)) for v in values]
+    instructions.append(inst("mov", MCReg(held), MCImm(1, 32)))
+    instructions.append(inst("mov", MCMem(base=held, size_bits=32), MCReg(values[0])))
+    instructions += [inst("mov", MCMem(disp=8, size_bits=32), MCReg(v))
+                     for v in reversed(values)]
+    built = function(*instructions)
+    result = allocate(built, INFO, ORDER, SELECTOR)
+    assert held.ident not in result.spilled, "the register that may not go went"
+    assert result.spilled, "nothing else went either"
 
 
 def test_nothing_is_left_unassigned() -> None:
@@ -211,7 +246,7 @@ def test_nothing_is_left_unassigned() -> None:
     built = function(
         inst("mov", MCReg(virtual()), MCImm(1, 32)),
         inst("mov", MCReg(virtual()), MCImm(2, 32)))
-    allocate(built, INFO, ORDER)
+    allocate(built, INFO, ORDER, SELECTOR)
     assert built.virtual_registers() == []
 
 
@@ -219,7 +254,7 @@ def test_only_a_move_of_a_register_to_itself_is_dropped() -> None:
     """A move between two registers is not an identity and has to stay."""
     left, right = reg("eax"), reg("ecx")
     built = function(inst("mov", MCReg(left), MCReg(right)))
-    assert LinearScan(INFO, ORDER).run(built).coalesced == 0
+    assert LinearScan(INFO, ORDER, SELECTOR).run(built).coalesced == 0
     assert len(built.instructions()) == 1
 
 
@@ -272,21 +307,31 @@ def test_the_value_read_first_survives_longest(triple: str, tmp_path) -> None:  
 
 
 @pytest.mark.parametrize("triple", compiler_targets())
-def test_running_out_of_registers_is_a_diagnostic(triple: str, tmp_path) -> None:  # noqa: ANN001
-    """Not a traceback: it is a limit of this compiler like any other."""
+def test_far_more_values_than_registers_still_runs(triple: str, tmp_path) -> None:  # noqa: ANN001
+    """Forty values at once is more than any of the three has registers for.
+
+    The first value read is the last written back and is what the program
+    returns, so it has to survive the whole function -- through the frame, since
+    it cannot have stayed in a register.
+    """
     names = [f"v{n}" for n in range(40)]
     lines = ["".join(("let g", n, ": u8 = 1u8")) for n in names]
-    lines += ["".join(("@[expect(4007)]\nlet w", n, ": mut u8 = 0u8")) for n in names]
+    # The one the program returns is read, so it is the one with no warning
+    # about nothing reading it; every other is written and never looked at.
+    lines += ["".join(("let w", n, ": mut u8 = 0u8") if n == names[0]
+                      else ("@[expect(4007)]\nlet w", n, ": mut u8 = 0u8"))
+              for n in names]
     lines += ["@[startup]", "fn main() \N{RIGHTWARDS ARROW} u8:"]
     lines += ["".join(("    let ", n, ": u8 = g", n)) for n in names]
     lines += ["".join(("    w", n, " \N{LEFTWARDS ARROW} ", n))
               for n in reversed(names)]
-    lines.append("    1u8")
+    lines.append("    wv0")
     source = tmp_path / "t.pl4g"
     source.write_text("\n".join(lines), encoding="utf-8")
-    proc = run_compiler(["-o", str(tmp_path / "out"),
-                         "".join(("--target=", triple)), str(source)])
-    assert proc.returncode != 0
-    assert "[PL4G-8501]" in proc.stderr, proc.stderr
-    assert "cannot spill" in proc.stderr, proc.stderr
-    assert "Traceback" not in proc.stderr
+    output = tmp_path / "out"
+    proc = run_compiler(["-o", str(output), "".join(("--target=", triple)),
+                         str(source)])
+    assert proc.returncode == 0, describe(proc)
+    ran = subprocess.run([*runner_for(triple), str(output)], capture_output=True,
+                         timeout=60)
+    assert ran.returncode == 1, describe(ran)

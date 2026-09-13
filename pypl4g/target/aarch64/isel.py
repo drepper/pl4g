@@ -20,7 +20,7 @@ from ...source.location import Span
 from ..branches import condition_used_once, labels_of, lower_branch
 from . import ops as a64ops
 from .opcodes import AARCH64_INSTRS
-from .regs import GPR, INFO
+from .regs import GPR, INFO, SP
 
 if TYPE_CHECKING:
     from ...ir.function import Function
@@ -289,6 +289,29 @@ class A64Selector(InstructionSelector):
                 return (self._inst(mnemonic, (lhs, target), span),)
         return (self._inst("cmp", (lhs, rhs), span),
                 self._inst(_CONDITIONAL[cond], (target,), span))
+
+    # -- the stack -------------------------------------------------------------
+
+    def select_spill(self, slot: int, source: Reg, span: Span) -> Sequence[MCInst]:
+        """Instructions that write *source* to the frame slot at *slot*."""
+        return (self._inst("str", (MCReg(source, bits=64), MCReg(SP),
+                                   MCImm(slot, 12, signed=False)), span),)
+
+    def select_reload(self, destination: Reg, slot: int,
+                      span: Span) -> Sequence[MCInst]:
+        """Instructions that read the frame slot at *slot* into *destination*."""
+        return (self._inst("ldr", (MCReg(destination, bits=64), MCReg(SP),
+                                   MCImm(slot, 12, signed=False)), span),)
+
+    def select_frame(self, size: int, span: Span) -> Sequence[MCInst]:
+        """Instructions that make room for *size* bytes on the stack."""
+        return (self._inst("sub", (MCReg(SP), MCReg(SP),
+                                   MCImm(size, 12, signed=False)), span),)
+
+    def select_unframe(self, size: int, span: Span) -> Sequence[MCInst]:
+        """Instructions that give that room back."""
+        return (self._inst("add", (MCReg(SP), MCReg(SP),
+                                   MCImm(size, 12, signed=False)), span),)
 
 
 def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",

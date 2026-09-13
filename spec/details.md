@@ -539,9 +539,23 @@ convention is about.  The order puts the registers a call would destroy first: u
 while using a callee-saved one would cost it a save and a restore.  The stack and frame pointers are left out, and so is the
 register holding a return address where there is one, because a frame and the unwinder that will walk it need somewhere to stand.
 
-The allocator does not spill.  A function wanting more values at once than the target has registers is reported rather than
-compiled wrongly, which is how every other thing this compiler cannot yet do behaves.  Spilling needs a stack frame, and the frame
-is worth designing once, with the unwinder that also needs one, rather than twice.
+Where there are not enough registers a value is spilled: given a slot in the function's frame, written there when it is computed
+and read back before each use.  The value is in memory for its whole life, and what occupies a register is a fresh one that lives
+for the single instruction reading or writing it.  Splitting a range so that a value is in a register where it is busy and in
+memory where it is not would generate better code and is a great deal more machinery; this is the version that is obviously right.
+
+Spilling is done by rewriting and starting again rather than by patching the assignment as it goes.  A spill adds instructions,
+which moves every position after it and so changes every range, and recomputing is simpler than repairing.  The value given up is
+the one whose range reaches furthest, since that is the one that would hold a register longest.
+
+Only the allocator puts anything on the stack, so the frame is made after it has run and only where it took a slot: a function that
+needed none has no frame and no instruction saying so.  The room is given back before every return rather than at one place,
+because there is no one place -- a function may leave from more than one.
+
+A register may say it must not be spilled, and one does: on RISC-V an address is built by two instructions of which the second
+measures from the first, so they have to stay next to each other and the register held between them cannot go to the frame.  It is
+given a register of its own rather than the destination's, which also shortens the life of the value being loaded; on AArch64 the
+two halves are independent and no such rule is needed.
 
 
 Expectations

@@ -24,7 +24,7 @@ from ...source.location import Span
 from ..branches import condition_used_once, labels_of, lower_branch
 from . import ops as rvops
 from .opcodes import IMM12_MAX, IMM12_MIN, RISCV_INSTRS
-from .regs import GPR, INFO, ZERO
+from .regs import GPR, INFO, SP, ZERO
 
 if TYPE_CHECKING:
     from ...mc.reg import PhysReg
@@ -136,10 +136,13 @@ class RVSelector(InstructionSelector):
     def _select_load(self, dst: Reg, src: MCMem, span: Span) -> Sequence[MCInst]:
         """Instructions that read memory into a register.
 
-        As on the other fixed-width architecture an address is built in two
-        steps, and the destination holds it in between.  The second step is
-        measured from the first rather than from itself, which is what the
-        encoding table records.
+        An address is built in two steps, and the second is measured from the
+        first rather than from itself -- so the two must stay next to each
+        other, and the register holding the address between them must be one
+        the allocator will not send to the frame.  Putting the address in the
+        destination would make that register the value's own, which is long
+        lived and exactly what does get spilled; a register of its own lives for
+        three instructions and is never a candidate.
         """
         width = src.size_bits if src.size_bits is not None else 64
         mnemonic = self._LOADS.get((width, src.signed))
@@ -151,10 +154,11 @@ class RVSelector(InstructionSelector):
             return (self._inst(mnemonic, (MCReg(dst), MCReg(base),
                                           MCImm(src.disp, 12)), span),)
         symbol = MCSymRef(src.disp_sym)
+        held = MCReg(INFO.new_virtual(GPR, 64, spillable=False))
         return (
-            self._inst("auipc.hi20", (MCReg(dst), symbol), span),
-            self._inst("addi.lo12", (MCReg(dst), MCReg(dst), symbol), span),
-            self._inst(mnemonic, (MCReg(dst), MCReg(dst), MCImm(src.disp, 12)), span),
+            self._inst("auipc.hi20", (held, symbol), span),
+            self._inst("addi.lo12", (held, held, symbol), span),
+            self._inst(mnemonic, (MCReg(dst), held, MCImm(src.disp, 12)), span),
         )
 
     def _accepting(self, mnemonic: str, operands: Sequence[MCOperand],
@@ -233,7 +237,7 @@ class RVSelector(InstructionSelector):
             carried = INFO.new_virtual(GPR, 64)
             held = self.select_move(carried, value, span)
             source = MCReg(carried)
-        place = MCReg(INFO.new_virtual(GPR, 64))
+        place = MCReg(INFO.new_virtual(GPR, 64, spillable=False))
         if address.disp_sym is None:
             base = MCReg(address.base) if address.base is not None else place
             return (*held, self._inst(mnemonic, (source, base,
@@ -292,6 +296,26 @@ class RVSelector(InstructionSelector):
             return MCReg(ZERO), ()
         carried = INFO.new_virtual(GPR, 64)
         return MCReg(carried), self.select_move(carried, operand, span)
+
+    # -- the stack -------------------------------------------------------------
+
+    def select_spill(self, slot: int, source: Reg, span: Span) -> Sequence[MCInst]:
+        """Instructions that write *source* to the frame slot at *slot*."""
+        return (self._inst("sd", (MCReg(source), MCReg(SP), MCImm(slot, 12)), span),)
+
+    def select_reload(self, destination: Reg, slot: int,
+                      span: Span) -> Sequence[MCInst]:
+        """Instructions that read the frame slot at *slot* into *destination*."""
+        return (self._inst("ld", (MCReg(destination), MCReg(SP), MCImm(slot, 12)),
+                           span),)
+
+    def select_frame(self, size: int, span: Span) -> Sequence[MCInst]:
+        """Instructions that make room for *size* bytes on the stack."""
+        return (self._inst("addi", (MCReg(SP), MCReg(SP), MCImm(-size, 12)), span),)
+
+    def select_unframe(self, size: int, span: Span) -> Sequence[MCInst]:
+        """Instructions that give that room back."""
+        return (self._inst("addi", (MCReg(SP), MCReg(SP), MCImm(size, 12)), span),)
 
 
 def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",

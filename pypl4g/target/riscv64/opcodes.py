@@ -249,7 +249,7 @@ RISCV_INSTRS: Final[tuple[RVInstDesc, ...]] = (
                implicit_defs=(RA,), flags=InstFlags.CALL, est_size=INSTRUCTION_SIZE),
     # ret                is  jalr zero, ra, 0
     RVInstDesc("ret", (), template=0x00008067, implicit_uses=(RA,),
-               flags=InstFlags.TERMINATOR, est_size=INSTRUCTION_SIZE),
+               flags=InstFlags.TERMINATOR | InstFlags.RETURN, est_size=INSTRUCTION_SIZE),
     # ecall
     RVInstDesc("ecall", (), template=0x00000073, est_size=INSTRUCTION_SIZE),
     # ebreak

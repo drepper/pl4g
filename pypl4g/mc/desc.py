@@ -119,6 +119,11 @@ class InstFlags(Flag):
     #: removes one whose two ends it put in the same register, which is what
     #: makes hinting a value towards where it is wanted worth doing.
     MOVE = auto()
+    #: Returns from the function.  What wants to know is whatever has to undo
+    #: something before control leaves -- the stack a frame took, to begin with
+    #: -- and it asks the row rather than the mnemonic, since a target may spell
+    #: it however it likes.
+    RETURN = auto()
 
 
 @dataclass(frozen=True, slots=True)

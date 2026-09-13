@@ -332,7 +332,7 @@ AARCH64_INSTRS: Final[tuple[A64InstDesc, ...]] = (
                 implicit_defs=(X30,), flags=InstFlags.CALL, est_size=INSTRUCTION_SIZE),
     # ret   (returns through the link register)
     A64InstDesc("ret", (), template=0xD65F03C0, implicit_uses=(X30,),
-                flags=InstFlags.TERMINATOR, est_size=INSTRUCTION_SIZE),
+                flags=InstFlags.TERMINATOR | InstFlags.RETURN, est_size=INSTRUCTION_SIZE),
     # svc #imm16
     A64InstDesc("svc", (_imm(0xFFFF),), template=0xD4000001,
                 fields=(Field(FieldKind.IMMEDIATE, 0, 5, 16),),

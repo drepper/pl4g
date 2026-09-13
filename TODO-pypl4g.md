@@ -38,10 +38,18 @@ To Do List for the pypl4g compiler
     a result is returned in so that the move into it disappears.  `_check_single_use` is gone from all three backends and the two
     fixed-width ones no longer set registers aside for a store's address and value.
 
-[ ] spill to a stack frame when more values are wanted at once than there are registers.  The allocator reports such a function
-    (8501) rather than compiling it wrongly, which is honest but is a limit: fourteen values on x86-64, twenty-eight on AArch64,
-    twenty-six on RISC-V.  Spilling needs a frame, so it waits for the entry below that emits one, and the two should be written
-    together.  It also needs live ranges to be splittable, which linear scan makes easy and which the current one does not do.
+[x] spill to a stack frame when more values are wanted at once than there are registers.  Done: a value that cannot have a register
+    gets a slot in the frame and is read back before each use, and the function is rewritten and allocated again rather than
+    patched.  The frame is made only where a slot was taken, and given back before every return.  A register may say it must not be
+    spilled, which RISC-V needs for the pair of instructions that build an address.
+
+[ ] split a live range instead of spilling a value for its whole life.  A spilled value is in memory everywhere, so every use
+    costs a load; splitting it would keep it in a register where it is busy.  Linear scan makes this easy and the loop that rewrites
+    and reallocates is where it would go.
+
+[ ] a frame larger than the immediate a stack adjustment can carry is reported rather than built in steps.  RISC-V reaches this
+    first, at about two hundred and fifty slots, and AArch64 at about five hundred; x86-64 does not.  The same question as
+    materializing a wide constant, and it wants the same answer.
 
 [x] emit conditional branches.  Done for `BrInst`, `CondBrInst` and `UnreachableInst`: a branch is selected together with the
     comparison that feeds it, since that is the shape all three architectures have, and the condition is inverted where that lets

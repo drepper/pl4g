@@ -28,12 +28,47 @@ class MachineBasicBlock:
         return inst
 
 
+@dataclass(slots=True)
+class FrameInfo:
+    """The stack a function uses for what it could not keep in registers.
+
+    A slot is the width of the widest register rather than of the value in it:
+    a frame of a few slots costs nothing to make larger, and one size means one
+    rule about alignment instead of one per width.
+    """
+
+    #: How wide one slot is, which is also what it is aligned to.
+    slot_size: int = 8
+    #: What the stack pointer must be a multiple of, which every architecture
+    #: has an opinion about and two of them enforce.
+    alignment: int = 16
+    slots: int = 0
+
+    def allocate(self) -> int:
+        """Take a slot and return its offset from the stack pointer."""
+        offset = self.slots * self.slot_size
+        self.slots += 1
+        return offset
+
+    @property
+    def size(self) -> int:
+        """How far the stack pointer moves, which is nothing where no slot was
+        taken: a function that needed no stack does not make a frame."""
+        raw = self.slots * self.slot_size
+        if raw == 0:
+            return 0
+        return (raw + self.alignment - 1) // self.alignment * self.alignment
+
+
 @dataclass(slots=True, eq=False)
 class MachineFunction:
     """One function, as machine instructions."""
 
     name: str
     blocks: list[MachineBasicBlock] = field(default_factory=list)
+    #: What the function keeps on the stack.  It is filled in by the register
+    #: allocator, which is the only thing that puts anything there.
+    frame: FrameInfo = field(default_factory=FrameInfo)
     #: Whether this function's symbol is visible outside the image.
     exported: bool = False
     #: Reserved growth slack to emit after the function, for in-place patching.

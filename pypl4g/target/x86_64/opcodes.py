@@ -158,6 +158,22 @@ X86_INSTRS: Final[tuple[X86InstDesc, ...]] = (
     X86InstDesc("not", (_rm(64),), opcode=0xF7, opsize=OpSize.REXW,
                 modrm=ModRMUse.EXT_RM, ext=2, rm_op=0, est_size=3,
                 roles=(OperandRole.DEF_USE,)),
+    # add r/m64, imm8 (sign extended)    REX.W 83 /0 ib
+    X86InstDesc("add", (_rm(64), _imm(8)), opcode=0x83, opsize=OpSize.REXW,
+                modrm=ModRMUse.EXT_RM, ext=0, rm_op=0, imm_op=1, imm_bits=8,
+                implicit_defs=(EFLAGS,), est_size=4, roles=_ACCUMULATE),
+    # add r/m64, imm32 (sign extended)   REX.W 81 /0 id
+    X86InstDesc("add", (_rm(64), _imm(32)), opcode=0x81, opsize=OpSize.REXW,
+                modrm=ModRMUse.EXT_RM, ext=0, rm_op=0, imm_op=1, imm_bits=32,
+                implicit_defs=(EFLAGS,), est_size=7, roles=_ACCUMULATE),
+    # sub r/m64, imm8 (sign extended)    REX.W 83 /5 ib
+    X86InstDesc("sub", (_rm(64), _imm(8)), opcode=0x83, opsize=OpSize.REXW,
+                modrm=ModRMUse.EXT_RM, ext=5, rm_op=0, imm_op=1, imm_bits=8,
+                implicit_defs=(EFLAGS,), est_size=4, roles=_ACCUMULATE),
+    # sub r/m64, imm32 (sign extended)   REX.W 81 /5 id
+    X86InstDesc("sub", (_rm(64), _imm(32)), opcode=0x81, opsize=OpSize.REXW,
+                modrm=ModRMUse.EXT_RM, ext=5, rm_op=0, imm_op=1, imm_bits=32,
+                implicit_defs=(EFLAGS,), est_size=7, roles=_ACCUMULATE),
     # cmp r/m32, r32                     39 /r
     X86InstDesc("cmp", (_rm(32), _r(32)), opcode=0x39, modrm=ModRMUse.REG_RM,
                 reg_op=1, rm_op=0, implicit_defs=(EFLAGS,), est_size=2,
@@ -233,7 +249,7 @@ X86_INSTRS: Final[tuple[X86InstDesc, ...]] = (
     X86InstDesc("call", (_rel(32),), opcode=0xE8, rel_op=0, rel_bits=32,
                 flags=InstFlags.CALL, est_size=5),
     # ret                                C3
-    X86InstDesc("ret", (), opcode=0xC3, flags=InstFlags.TERMINATOR, est_size=1),
+    X86InstDesc("ret", (), opcode=0xC3, flags=InstFlags.TERMINATOR | InstFlags.RETURN, est_size=1),
     # syscall                            0F 05
     X86InstDesc("syscall", (), opcode=0x05, map=OpMap.M0F,
                 implicit_defs=(RCX, R11, EFLAGS), est_size=2),
