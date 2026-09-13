@@ -131,6 +131,30 @@ AARCH64_INSTRS: Final[tuple[A64InstDesc, ...]] = (
     A64InstDesc("eor", (_r(64), _r(64), _r(64)), template=0xCA000000,
                 fields=(_reg_field(0, _RD), _reg_field(1, _RN), _reg_field(2, _RM)),
                 est_size=INSTRUCTION_SIZE),
+    # and Wd, Wn, Wm
+    A64InstDesc("and", (_r(32), _r(32), _r(32)), template=0x0A000000,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN), _reg_field(2, _RM)),
+                flags=InstFlags.ZEXT32, est_size=INSTRUCTION_SIZE),
+    # and Xd, Xn, Xm
+    A64InstDesc("and", (_r(64), _r(64), _r(64)), template=0x8A000000,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN), _reg_field(2, _RM)),
+                est_size=INSTRUCTION_SIZE),
+    # orr Wd, Wn, Wm
+    A64InstDesc("orr", (_r(32), _r(32), _r(32)), template=0x2A000000,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN), _reg_field(2, _RM)),
+                flags=InstFlags.ZEXT32, est_size=INSTRUCTION_SIZE),
+    # orr Xd, Xn, Xm
+    A64InstDesc("orr", (_r(64), _r(64), _r(64)), template=0xAA000000,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN), _reg_field(2, _RM)),
+                est_size=INSTRUCTION_SIZE),
+    # mvn Wd, Wm   is  orn Wd, WZR, Wm
+    A64InstDesc("mvn", (_r(32), _r(32)), template=0x2A2003E0,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RM)),
+                flags=InstFlags.ZEXT32, est_size=INSTRUCTION_SIZE),
+    # mvn Xd, Xm   is  orn Xd, XZR, Xm
+    A64InstDesc("mvn", (_r(64), _r(64)), template=0xAA2003E0,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RM)),
+                est_size=INSTRUCTION_SIZE),
     # adrp Xd, page-of-symbol
     A64InstDesc("adrp", (_r(64), _sym()), template=0x90000000,
                 fields=(_reg_field(0, _RD),

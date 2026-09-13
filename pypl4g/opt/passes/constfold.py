@@ -29,16 +29,27 @@ class ConstantFolding:
         """Fold what can be folded; report whether anything changed."""
         changed = False
         for func in module.functions.values():
-            replacements: dict[int, Value] = {}
-            for block in func.blocks:
-                for inst in block.insts:
-                    folded = self._fold(module, inst)
-                    if folded is not None:
-                        replacements[id(inst)] = folded
-            if replacements:
+            while self._sweep(module, func):
                 changed = True
-                self._apply(func, replacements)
         return changed
+
+    def _sweep(self, module: Module, func: object) -> bool:
+        """Fold once, and say whether anything folded.
+
+        Folding one operation turns the next one's operand into a constant, so
+        this runs until nothing more folds: an expression is a tree and one walk
+        collapses one level of it.
+        """
+        replacements: dict[int, Value] = {}
+        for block in getattr(func, "blocks"):
+            for inst in block.insts:
+                folded = self._fold(module, inst)
+                if folded is not None:
+                    replacements[id(inst)] = folded
+        if not replacements:
+            return False
+        self._apply(func, replacements)
+        return True
 
     def _fold(self, module: Module, inst: Instruction) -> Value | None:
         """Return the constant *inst* computes, if it computes one."""

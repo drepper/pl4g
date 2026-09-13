@@ -1,0 +1,7 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 3009 LANG_SYNTAX_EXPECTED_CLOSING_PAREN
+
+※ A group that is opened has to be closed.
+@[startup]
+fn main() → u8:
+    (1u8 & 2u8

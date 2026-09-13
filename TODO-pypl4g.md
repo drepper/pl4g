@@ -55,10 +55,9 @@ To Do List for the pypl4g compiler
     needs `setcc` on x86-64, `cset` on AArch64 and `slt`/`sltu` with a fixup-up for equality on RISC-V.  Needed by the comparison
     operators in TODO-language.md, and reported (8501) until then.
 
-[ ] parse expressions with precedence, and lower `BinaryInst` and `CmpInst`.  `_parse_expression` is a four-arm match consuming one
-    token and the syntax tree has no interior expression node, so there is nothing for an operator to be.  No backend matches
-    `BinaryInst`, so `BinOp` never reaches instruction selection; only constant folding ever looks at one.  A precedence-climbing
-    parser with a table, so that each operator entry is a row rather than a new level.
+[x] parse expressions with precedence, and lower `BinaryInst`.  Done: precedence climbing with a table, so an operator is a row and
+    not a new level of the grammar; `Binary` and `Unary` nodes in the syntax tree; `BinaryInst` and `UnaryInst` lowered on all
+    three targets, with an operand no table row can carry put in a register.  `CmpInst` as a value is the entry below.
 
 [ ] emit frame information and an unwinder.  Decided: a fault -- an arithmetic overflow to begin with -- aborts with a real
     multi-frame backtrace, so this is frame information plus an unwinder in the generated code rather than a bare trap.  Needs the

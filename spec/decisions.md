@@ -1004,6 +1004,49 @@ has no way to write a condition.  Every one of the ten orderings is compiled, ru
 round -- forty programs a target -- along with a branch backwards, which is the case a fixup that only looked forwards would get
 wrong.
 
+## 2026-09-14T19:00+02:00 — implementation
+
+**Expressions, by precedence climbing, with the bitwise operators as the first use**
+
+The expression grammar was a four-arm match that consumed one token, and the syntax tree had no node with a child.  Nothing in the
+language could be written that had a shape.
+
+*Precedence climbing rather than a function per level.*  One function reads a level given as a number, so adding an operator is a
+row in a table and not a new layer of the grammar.  The language list names four more families of operator; with a function per
+level each would add two or three functions, and the last one added would be reading operands through a dozen calls.  The numbers
+in the table are spaced by ten so a level can be inserted without renumbering.
+
+*The tree names an operator, the representation names an operation.*  Two enumerations with a mapping between them, which looks
+like duplication and is not: the front end is deliberately free of any knowledge of the representation -- it already carries a
+literal's type as the text of its suffix for the same reason -- and several spellings may come to mean one operation later.
+
+*The bitwise operators are the first use.*  They were chosen over arithmetic because arithmetic cannot be added yet: the language
+requires an overflow check on every arithmetic operation and the fault path that check needs is the unwinder, which is not written.
+Shipping `+` without the check would be shipping the wrong language.  Bitwise operations cannot overflow, so there is nothing
+deferred about them.
+
+*Both sides of an operator have one type, so either side may say what it is.*  A type hint is read off the syntax before anything
+is lowered and used as the context for both sides.  Without it `count & 3` would compile and `3 & count` would not, which is a
+difference with nothing behind it.  C avoids the question by promoting everything to `int`; this language refuses to widen
+anything, so the only other answer would have been to require a suffix on every literal in an expression.
+
+*A truth value is not a one-bit integer.*  `bool` has two values and no representation the language promises.  Go and Rust draw the
+same line; C, where `&` on two conditions is legal and usually a mistake, is the example not followed.
+
+*The relative binding is C's.*  `&` tighter than `^` tighter than `|`, which Rust, Go and Zig all kept, so a reader coming from any
+of them reads these the same way.  What is *not* inherited is C's famous defect of making them bind looser than comparison:
+comparison will bind looser than these when it arrives, so `a & b = c` will read the way it looks.
+
+Two things fell out of the work.  Constant folding ran one walk over a function and so collapsed one level of an expression tree;
+it now runs until nothing more folds, which nested expressions made visible immediately.  And a truth value used where a number was
+wanted reported twice, because the literal reported the mismatch and then handed back a truth value for whatever read it to report
+again; it now hands back the poison type, which is what everything else does.
+
+An operand no row of a table can carry is put in a register, and which rows can carry what is asked of the table rather than
+written down a second time.  x86-64 has a form of `and` that takes an immediate; AArch64's equivalent needs the bitmask encoding,
+which is not generated.  The selector tries the operands as they stand and materializes whatever was refused, so adding a row that
+carries an immediate is all it takes for one to be used.
+
 ---
 
 Open questions

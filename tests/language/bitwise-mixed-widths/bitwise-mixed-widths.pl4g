@@ -1,0 +1,7 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4206 LANG_TYPE_OPERAND_MISMATCH
+
+※ Nothing is widened to make two types meet, here as anywhere else.
+@[startup]
+fn main() → u8:
+    1u8 & 2u16

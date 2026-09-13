@@ -1,0 +1,9 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4205 LANG_TYPE_OPERAND_NOT_INTEGER
+
+※ A truth value is not a one-bit integer: `bool` has two values and no
+※ representation the language promises, so there is nothing for `&` to work on.
+@[startup]
+fn main() → u8:
+    let flag: bool = true
+    ~flag

@@ -1,0 +1,10 @@
+※ pl4g-test: compile=ok opt=0,1
+※ pl4g-test: run=native,qemu exit=5
+※ pl4g-test: diag=none
+
+※ `&` binds tighter than `^`, which binds tighter than `|`, as in C and every
+※ language that followed it.  Read as 1 | (6 ^ (3 & 2)), which is 5; read the
+※ other way round it would be 0.
+@[startup]
+fn main() → u8:
+    1u8 | 6u8 ^ 3u8 & 2u8

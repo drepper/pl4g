@@ -127,6 +127,20 @@ RISCV_INSTRS: Final[tuple[RVInstDesc, ...]] = (
     RVInstDesc("xor", (_r(), _r(), _r()), template=0x00004033,
                fields=(_reg(0, _RD), _reg(1, _RS1), _reg(2, _RS2)),
                est_size=INSTRUCTION_SIZE),
+    # and rd, rs1, rs2
+    RVInstDesc("and", (_r(), _r(), _r()), template=0x00007033,
+               fields=(Field(FieldKind.REGISTER, 0, 7), Field(FieldKind.REGISTER, 1, 15),
+                       Field(FieldKind.REGISTER, 2, 20)),
+               est_size=INSTRUCTION_SIZE),
+    # or rd, rs1, rs2
+    RVInstDesc("or", (_r(), _r(), _r()), template=0x00006033,
+               fields=(Field(FieldKind.REGISTER, 0, 7), Field(FieldKind.REGISTER, 1, 15),
+                       Field(FieldKind.REGISTER, 2, 20)),
+               est_size=INSTRUCTION_SIZE),
+    # not rd, rs   is  xori rd, rs, -1
+    RVInstDesc("not", (_r(), _r()), template=0xFFF04013,
+               fields=(Field(FieldKind.REGISTER, 0, 7), Field(FieldKind.REGISTER, 1, 15)),
+               est_size=INSTRUCTION_SIZE),
     # lui rd, imm20
     RVInstDesc("lui", (_r(), _imm20()), template=0x00000037,
                fields=(_reg(0, _RD),

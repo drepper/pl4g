@@ -1,0 +1,13 @@
+※ pl4g-test: compile=ok opt=0,1
+※ pl4g-test: run=native,qemu exit=105
+※ pl4g-test: diag=none
+
+※ The four bitwise operators, on values the compiler cannot fold away, so that
+※ each one is really generated and really run.
+let mask: u8 = 0b1100_0011u8
+
+let bits: u8 = 0b0101_0101u8
+
+@[startup]
+fn main() → u8:
+    (mask & bits) | (~mask ^ bits)

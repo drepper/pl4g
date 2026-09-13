@@ -4,7 +4,7 @@ To Do List for the PL4g language
 `[ ]` open, `[x]` done, `[?]` needs a decision before it can be started -- such an entry carries a
 `Question:` paragraph saying what is undecided and what the choices are.
 
-[ ] expressions can use `(` and `)` for grouping, like most other languages.  Needs the expression parser in TODO-pypl4g.md.
+[x] expressions can use `(` and `)` for grouping, like most other languages.  Done with the expression parser.
 
 [?] there is no way to call a function.  A function can be defined and is emitted, but nothing in the language names one in an
     expression, so every function other than the startup function, a constructor or a destructor is unreachable by construction.
@@ -144,9 +144,9 @@ To Do List for the PL4g language
 [x] Implement boolean values.  Only the values `true` and `false` are defined.  Assigning any other value is an error.  Done and
     tested in both directions; a constant `bool` goes in `.rodata` and a `mut` one beside the variables, like any other value.
 
-[ ] implement bitwise operations.  Use `&` for bitwise AND, `|` for bitwise OR, `^` for bitwise XOR, `~` for bitwise NOT.  Usable
-    only on integer values.  Needs the expression parser and the register allocator; no overflow can arise, so this is the
-    cheapest of the operator entries and a good first use of the parser.
+[x] implement bitwise operations.  Use `&` for bitwise AND, `|` for bitwise OR, `^` for bitwise XOR, `~` for bitwise NOT.  Usable
+    only on integer values.  Done, with C's relative binding, which Rust, Go and Zig kept: `&` tighter than `^` tighter than `|`.
+    A truth value is refused (4205) and two different integer types are refused (4206).
 
 [ ] implement shifting and rotating of integers.  Use `«` and `»` for shifting and `↺` and `↻` for rotation.  Needs the
     expression parser and the register allocator.  One thing to settle while writing it: what a shift by more than the width does,

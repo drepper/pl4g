@@ -44,6 +44,8 @@ SAMPLES: dict[str, str] = {
     "export-visibility": "several definitions, some exported",
     "digit-separators": "literals in every base",
     "boolean-values": "truth values in both sections",
+    "bitwise-operators": "an expression with four operators and two variables",
+    "bitwise-precedence": "an expression the folder collapses entirely",
 }
 
 #: How many times each sample is compiled.  The best is kept.

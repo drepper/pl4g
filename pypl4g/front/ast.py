@@ -5,7 +5,7 @@ report against the text the user wrote.
 """
 
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import Enum, StrEnum
 
 from ..source.location import Span
 
@@ -122,6 +122,43 @@ class NameRef(Expr):
     """A reference to something by name."""
 
     name: str
+
+
+class BinaryOp(StrEnum):
+    """An operator written between its two operands.
+
+    These are the operators as the *source* has them.  What each one means is
+    the semantic analysis's business; this says only what was written, which is
+    why the names are the ones the specification uses rather than the ones the
+    representation does.
+    """
+
+    BIT_AND = "&"
+    BIT_OR = "|"
+    BIT_XOR = "^"
+
+
+class UnaryOp(StrEnum):
+    """An operator written before its operand."""
+
+    BIT_NOT = "~"
+
+
+@dataclass(frozen=True, slots=True)
+class Binary(Expr):
+    """An operator applied to two operands."""
+
+    op: BinaryOp
+    left: Expr
+    right: Expr
+
+
+@dataclass(frozen=True, slots=True)
+class Unary(Expr):
+    """An operator applied to one operand."""
+
+    op: UnaryOp
+    operand: Expr
 
 
 # -- statements ----------------------------------------------------------------

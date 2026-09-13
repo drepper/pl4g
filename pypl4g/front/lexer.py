@@ -28,6 +28,10 @@ _SIMPLE: Final[dict[str, TokKind]] = {
     "=": TokKind.EQUALS,
     ARROW_GLYPH: TokKind.ARROW,
     ASSIGN_GLYPH: TokKind.ASSIGN,
+    "&": TokKind.AMPERSAND,
+    "|": TokKind.PIPE,
+    "^": TokKind.CARET,
+    "~": TokKind.TILDE,
 }
 
 _OPEN: Final[frozenset[TokKind]] = frozenset(

@@ -117,6 +117,31 @@ and `⁻1u8` is not, because no unsigned type has a negative value to hold.
 
 Compare C's `42U` and `42L`, Rust's `42u8`, and C#'s `42L`; the form here is Rust's, and the fallback is Odin's.
 
+### Expressions
+
+An expression may be enclosed in parentheses, which say how its operators group and mean nothing else.  Where there are none, each
+operator binds as tightly as the table below says: a tighter one takes its operands first.
+
+| Operator | Meaning | Binds |
+|---|---|---|
+| `~` | bitwise complement, written before its operand | tightest |
+| `&` | bitwise and | |
+| `^` | bitwise exclusive or | |
+| `|` | bitwise or | loosest |
+
+The bitwise operators are defined on integer values only, and both sides of one have the same type; the result has it too.  Nothing
+is widened to make two types meet, so `1u8 & 2u16` does not compile: a value of one width silently becoming a value of another is
+exactly the quiet reinterpretation this language refuses everywhere else.  A literal without a suffix takes the type of whatever it
+is written against, on either side, so `count & 3` and `3 & count` mean the same thing.
+
+A truth value is not a one-bit integer.  `bool` has two values and no representation the language promises, so there is nothing for
+a bitwise operator to work on; the logical operators are what applies to a truth value.  That is the rule of Go and Rust; C, where
+`&` on two conditions is legal and usually a mistake, is the example not followed.
+
+The relative binding of the three is the one C settled on and Rust, Go and Zig kept, so that a reader coming from any of them reads
+these the same way.  It is worth saying that C's choice of making them bind *looser* than comparison is a famous defect, which this
+language does not inherit: when comparison is added it will bind looser than these, so `a & b = c` will read as `(a & b) = c`.
+
 #### Comments
 
 A comment is introduced by `※` (U+203B REFERENCE MARK) and runs to the end of the line.  A comment introduced by `※※` is a

@@ -12,6 +12,7 @@ from ..diag import ids as D
 from ..diag.engine import DiagEngine, Expectation
 from ..front import ast
 from ..ir.builder import IRBuilder
+from ..ir.inst import BinOp, UnOp
 from ..ir.function import (FuncAttrs, Function, InlineHint, Linkage, SpecialKind)
 from ..ir.module import GlobalVar, Module
 from ..ir.types import BOOL, BUILTIN_TYPES, ERROR, IntType, Type, VOID
@@ -91,6 +92,21 @@ class _Global:
     expected_pairs: list[_Expected] = field(default_factory=list)
 
 
+#: What each operator of the source means in the representation.  The two are
+#: separate because the source names an operator and the representation names an
+#: operation: several spellings may come to mean one operation later, and the
+#: front end is deliberately free of any knowledge of the representation.
+_BINARY_OPS: Final[dict[ast.BinaryOp, BinOp]] = {
+    ast.BinaryOp.BIT_AND: BinOp.AND,
+    ast.BinaryOp.BIT_OR: BinOp.OR,
+    ast.BinaryOp.BIT_XOR: BinOp.XOR,
+}
+
+_UNARY_OPS: Final[dict[ast.UnaryOp, UnOp]] = {
+    ast.UnaryOp.BIT_NOT: UnOp.NOT,
+}
+
+
 class Checker:
     """Checks one program and lowers it into a module."""
 
@@ -108,6 +124,10 @@ class Checker:
         self._initializing: str | None = None
         #: The variable being assigned to, while one is being checked.
         self._assigning: str | None = None
+        #: The operator whose operands are being checked, if any.  It is what
+        #: lets a type that does not match say which operator it is about rather
+        #: than borrow the wording of a return.
+        self._operand_of: str | None = None
         #: Whether anything inside the function being checked absorbed an error.
         #: A construct that raises one cannot be compiled, so the definition it
         #: belongs to is discarded rather than half built.
@@ -895,9 +915,16 @@ class Checker:
             case ast.BoolLit():
                 if expected is not None and expected is not BOOL:
                     self._report_mismatch(expr.span, BOOL, expected)
+                    # The mistake is reported; carrying on with a truth value
+                    # would have whatever reads it report the same thing again.
+                    return UndefConst(ERROR)
                 return builder.bool_const(expr.value)
             case ast.NameRef():
                 return self._lower_name(builder, expr, expected)
+            case ast.Binary():
+                return self._lower_binary(builder, expr, expected)
+            case ast.Unary():
+                return self._lower_unary(builder, expr, expected)
             case ast.StringLit():
                 self._diags.emit(D.LANG_TYPE_RETURN_MISMATCH, expr.span, found="string",
                                  expected=expected.render() if expected is not None else "void")
@@ -905,6 +932,94 @@ class Checker:
             case _:
                 self._diags.internal("unknown expression kind in lowering")
                 return UndefConst(ERROR)
+
+    def _lower_binary(self, builder: IRBuilder, expr: ast.Binary,
+                      expected: Type | None) -> Value:
+        """Lower an operator written between two operands.
+
+        Both sides have the same type and the result has it too, so whichever
+        side says what that type is says it for the whole expression.  That is
+        what lets a literal without a suffix stand on either side of one that
+        has a type, which a rule that only looked leftwards would not allow.
+        """
+        context = expected if expected is not None else self._hint_of(expr)
+        outer, self._operand_of = self._operand_of, expr.op.value
+        try:
+            left = self._lower_expr(builder, expr.left, context)
+            ty = self._value_type_of(left)
+            if ty is not ERROR and not isinstance(ty, IntType):
+                self._diags.emit(D.LANG_TYPE_OPERAND_NOT_INTEGER, expr.left.span,
+                                 operator=expr.op.value, found=ty.render())
+                ty = ERROR
+            right = self._lower_expr(builder, expr.right,
+                                     ty if ty is not ERROR else context)
+        finally:
+            self._operand_of = outer
+        found = self._value_type_of(right)
+        if ty is ERROR or found is ERROR:
+            return UndefConst(ERROR)
+        if not isinstance(found, IntType):
+            self._diags.emit(D.LANG_TYPE_OPERAND_NOT_INTEGER, expr.right.span,
+                             operator=expr.op.value, found=found.render())
+            return UndefConst(ERROR)
+        if found is not ty:
+            self._diags.emit(D.LANG_TYPE_OPERAND_MISMATCH, expr.right.span,
+                             operator=expr.op.value, expected=ty.render(),
+                             found=found.render())
+            return UndefConst(ERROR)
+        return builder.binary(_BINARY_OPS[expr.op], left, right, expr.span)
+
+    def _lower_unary(self, builder: IRBuilder, expr: ast.Unary,
+                     expected: Type | None) -> Value:
+        """Lower an operator written before its operand."""
+        outer, self._operand_of = self._operand_of, expr.op.value
+        try:
+            operand = self._lower_expr(builder, expr.operand, expected)
+        finally:
+            self._operand_of = outer
+        ty = self._value_type_of(operand)
+        if ty is ERROR:
+            return UndefConst(ERROR)
+        if not isinstance(ty, IntType):
+            self._diags.emit(D.LANG_TYPE_OPERAND_NOT_INTEGER, expr.operand.span,
+                             operator=expr.op.value, found=ty.render())
+            return UndefConst(ERROR)
+        return builder.unary(_UNARY_OPS[expr.op], operand, expr.span)
+
+    def _hint_of(self, expr: ast.Expr) -> Type | None:
+        """The type an expression says it has, without lowering it.
+
+        Only what can be read off the syntax: a literal that names its type, a
+        name already bound, or either side of an operator.  It is a hint and not
+        an answer -- the answer comes from lowering -- but it is what lets both
+        `count & 1` and `1 & count` mean the same thing.
+        """
+        match expr:
+            case ast.IntLit() if expr.type_name is not None:
+                return BUILTIN_TYPES.get(expr.type_name)
+            case ast.BoolLit():
+                return BOOL
+            case ast.NameRef():
+                return self._type_of_name(expr.name)
+            case ast.Binary():
+                return self._hint_of(expr.left) or self._hint_of(expr.right)
+            case ast.Unary():
+                return self._hint_of(expr.operand)
+            case _:
+                return None
+
+    def _type_of_name(self, name: str) -> Type | None:
+        """The type a name has, without reporting one that is not bound.
+
+        Looking a name up for a hint must neither report it missing nor record
+        it as read: the lowering that follows does both, and doing them twice
+        would report twice and would call a name read that only a hint looked at.
+        """
+        local = self._find_local(name)
+        if local is not None:
+            return self._value_type_of(local.value)
+        found = self._module.globals.get(name)
+        return self._value_type_of(found) if found is not None else None
 
     def _literal_type(self, expr: ast.IntLit, expected: Type | None) -> IntType | None:
         """The type an integer literal has, from its suffix or from the context.
@@ -966,6 +1081,17 @@ class Checker:
         value reaches would add nothing.
         """
         if found is ERROR or expected is ERROR:
+            return
+        if self._operand_of is not None:
+            # Two different mistakes: an operand of a kind the operator has no
+            # meaning for, and two operands of one kind whose widths differ.
+            if not isinstance(found, IntType):
+                self._diags.emit(D.LANG_TYPE_OPERAND_NOT_INTEGER, span,
+                                 operator=self._operand_of, found=found.render())
+            else:
+                self._diags.emit(D.LANG_TYPE_OPERAND_MISMATCH, span,
+                                 operator=self._operand_of,
+                                 expected=expected.render(), found=found.render())
             return
         if self._assigning is not None:
             self._diags.emit(D.LANG_TYPE_ASSIGNMENT_MISMATCH, span,

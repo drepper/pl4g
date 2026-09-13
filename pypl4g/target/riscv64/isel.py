@@ -17,6 +17,7 @@ from ...mc.desc import InstrTable, SelectionError
 from ...mc.inst import MCInst
 from ...mc.operand import MCImm, MCMem, MCOperand, MCReg, MCSymRef
 from ...mc.ops import Condition, Op
+from ...ir.inst import BinOp, UnOp
 from ...mc.reg import Reg, VirtReg
 from ...mc.operand import SymExpr
 from ...source.location import Span
@@ -38,6 +39,14 @@ _BINARY: Final[dict[str, str]] = {
     ops.PLUS.name: "add",
     ops.MINUS.name: "sub",
     ops.XOR.name: "xor",
+    ops.AND.name: "and",
+    ops.OR.name: "or",
+}
+
+#: Operations that take one source.  The complement has no instruction of its
+#: own here; it is an exclusive-or with every bit set, which the table names.
+_UNARY: Final[dict[str, str]] = {
+    ops.NOT.name: "not",
 }
 
 #: Operations that are one instruction with no operands.
@@ -60,6 +69,18 @@ _CONDITIONAL: Final[dict[Condition, str]] = {
 #: What a branch compares against where its condition is a value rather than a
 #: comparison.  The width is the one this target writes a small immediate in.
 ZERO_IMMEDIATE: Final[MCImm] = MCImm(0, 12)
+
+
+#: What each operation of the representation is called in the assembler.
+_OPERATIONS: Final[dict[BinOp, "Op"]] = {
+    BinOp.ADD: ops.PLUS, BinOp.SUB: ops.MINUS, BinOp.MUL: ops.TIMES,
+    BinOp.AND: ops.AND, BinOp.OR: ops.OR, BinOp.XOR: ops.XOR,
+}
+
+#: The same for the operations that take one operand.
+_UNARY_OPERATIONS: Final[dict[UnOp, "Op"]] = {
+    UnOp.NOT: ops.NOT, UnOp.NEG: ops.NEG,
+}
 
 
 class UnsupportedOperation(Exception):
@@ -136,6 +157,32 @@ class RVSelector(InstructionSelector):
             self._inst(mnemonic, (MCReg(dst), MCReg(dst), MCImm(src.disp, 12)), span),
         )
 
+    def _accepting(self, mnemonic: str, operands: Sequence[MCOperand],
+                   span: Span) -> tuple[Sequence[MCInst], Sequence[MCOperand]]:
+        """The operands as a row of *mnemonic* will take them.
+
+        An immediate is used where the table has a form that carries one, since
+        that is a whole instruction saved, and put in a register where it has
+        not.  Asking the table rather than deciding here is what keeps the two
+        in step: adding a row that carries an immediate is then all it takes for
+        one to be used.
+        """
+        try:
+            self.table.select(mnemonic, operands)
+            return (), operands
+        except SelectionError:
+            pass
+        before: list[MCInst] = []
+        rewritten: list[MCOperand] = []
+        for operand in operands:
+            if not isinstance(operand, MCImm):
+                rewritten.append(operand)
+                continue
+            carried = INFO.new_virtual(GPR, 64)
+            before.extend(self.select_move(carried, operand, span))
+            rewritten.append(MCReg(carried))
+        return before, rewritten
+
     def select_op(self, op: Op, dst: Reg | None, sources: Sequence[MCOperand],
                   span: Span) -> Sequence[MCInst]:
         """Instructions that compute *op* over *sources* into *dst*."""
@@ -151,7 +198,15 @@ class RVSelector(InstructionSelector):
             if dst is None or len(sources) != 2:
                 raise UnsupportedOperation("".join((
                     "'", op.name, "' needs a destination and two sources")), span)
-            return (self._inst(mnemonic, (MCReg(dst), *sources), span),)
+            before, ready = self._accepting(mnemonic, (MCReg(dst), *sources), span)
+            return (*before, self._inst(mnemonic, ready, span))
+        mnemonic = _UNARY.get(op.name)
+        if mnemonic is not None:
+            if dst is None or len(sources) != 1:
+                raise UnsupportedOperation("".join((
+                    "'", op.name, "' needs a destination and one source")), span)
+            before, ready = self._accepting(mnemonic, (MCReg(dst), sources[0]), span)
+            return (*before, self._inst(mnemonic, ready, span))
         raise UnsupportedOperation("".join((
             "no RISC-V selection rule for '", op.name, "'")), span)
 
@@ -242,8 +297,9 @@ class RVSelector(InstructionSelector):
 def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
                    registers: "RegisterInfo") -> None:
     """Build the machine form of one IR function."""
-    from ...ir.inst import (BrInst, CmpInst, CondBrInst, LoadInst, MemStartInst,
-                            RetInst, StoreInst, UnreachableInst)
+    from ...ir.inst import (BinaryInst, BrInst, CmpInst, CondBrInst, LoadInst,
+                            MemStartInst, RetInst, StoreInst, UnaryInst,
+                            UnreachableInst)
     from ...ir.mangle import symbol_name
     from ...ir.module import GlobalVar
     from ...ir.types import IntType
@@ -355,6 +411,33 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
                         asm.loadreg(result, MCReg(_value_of(value, held, span)),
                                     inst.span)
                     asm.ret(inst.span)
+                case BinaryInst():
+                    operation = _OPERATIONS.get(inst.op)
+                    if operation is None:
+                        raise UnsupportedOperation("".join((
+                            "the operation '", inst.op.value, "'")), span)
+                    destination = _new_value(
+                        inst.ty, registers,
+                        hint=(_result_register(inst.ty, cconv, registers)
+                              if inst is returned else None))
+                    held[id(inst)] = destination
+                    asm.op(operation, destination,
+                           operands.value(inst.operands[0], inst.span),
+                           operands.value(inst.operands[1], inst.span),
+                           span=inst.span)
+                case UnaryInst():
+                    unary = _UNARY_OPERATIONS.get(inst.op)
+                    if unary is None:
+                        raise UnsupportedOperation("".join((
+                            "the operation '", inst.op.value, "'")), span)
+                    destination = _new_value(
+                        inst.ty, registers,
+                        hint=(_result_register(inst.ty, cconv, registers)
+                              if inst is returned else None))
+                    held[id(inst)] = destination
+                    asm.op(unary, destination,
+                           operands.in_register(inst.operands[0], inst.span),
+                           span=inst.span)
                 case CmpInst():
                     # A comparison is folded into the branch that reads it; one
                     # read anywhere else would have to be computed into a

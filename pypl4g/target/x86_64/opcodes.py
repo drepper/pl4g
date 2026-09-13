@@ -134,6 +134,30 @@ X86_INSTRS: Final[tuple[X86InstDesc, ...]] = (
     # lea r64, m                         REX.W 8D /r
     X86InstDesc("lea", (_r(64), _mem()), opcode=0x8D, opsize=OpSize.REXW,
                 modrm=ModRMUse.REG_RM, reg_op=0, rm_op=1, est_size=7),
+    # and r/m32, r32                     21 /r
+    X86InstDesc("and", (_rm(32), _r(32)), opcode=0x21, modrm=ModRMUse.REG_RM,
+                reg_op=1, rm_op=0, implicit_defs=(EFLAGS,), flags=InstFlags.ZEXT32,
+                est_size=2, roles=_ACCUMULATE),
+    # and r/m64, r64                     REX.W 21 /r
+    X86InstDesc("and", (_rm(64), _r(64)), opcode=0x21, opsize=OpSize.REXW,
+                modrm=ModRMUse.REG_RM, reg_op=1, rm_op=0, implicit_defs=(EFLAGS,),
+                est_size=3, roles=_ACCUMULATE),
+    # or r/m32, r32                      09 /r
+    X86InstDesc("or", (_rm(32), _r(32)), opcode=0x09, modrm=ModRMUse.REG_RM,
+                reg_op=1, rm_op=0, implicit_defs=(EFLAGS,), flags=InstFlags.ZEXT32,
+                est_size=2, roles=_ACCUMULATE),
+    # or r/m64, r64                      REX.W 09 /r
+    X86InstDesc("or", (_rm(64), _r(64)), opcode=0x09, opsize=OpSize.REXW,
+                modrm=ModRMUse.REG_RM, reg_op=1, rm_op=0, implicit_defs=(EFLAGS,),
+                est_size=3, roles=_ACCUMULATE),
+    # not r/m32                          F7 /2
+    X86InstDesc("not", (_rm(32),), opcode=0xF7, modrm=ModRMUse.EXT_RM, ext=2,
+                rm_op=0, flags=InstFlags.ZEXT32, est_size=2,
+                roles=(OperandRole.DEF_USE,)),
+    # not r/m64                          REX.W F7 /2
+    X86InstDesc("not", (_rm(64),), opcode=0xF7, opsize=OpSize.REXW,
+                modrm=ModRMUse.EXT_RM, ext=2, rm_op=0, est_size=3,
+                roles=(OperandRole.DEF_USE,)),
     # cmp r/m32, r32                     39 /r
     X86InstDesc("cmp", (_rm(32), _r(32)), opcode=0x39, modrm=ModRMUse.REG_RM,
                 reg_op=1, rm_op=0, implicit_defs=(EFLAGS,), est_size=2,

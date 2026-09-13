@@ -5,7 +5,7 @@ the parser produces one syntax tree per file and leaves every question of
 meaning to the semantic analysis.
 """
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from typing import Final, Sequence
 
 from ..diag import ids as D
@@ -17,6 +17,33 @@ from .token import COMMENT_GLYPH, TokKind, Token
 #: Tokens at which error recovery stops, because a new definition can begin there.
 _RECOVERY: Final[frozenset[TokKind]] = frozenset(
     (TokKind.KW_FN, TokKind.KW_LET, TokKind.KW_TYPE, TokKind.AT_LBRACKET, TokKind.EOF))
+
+
+@dataclass(frozen=True, slots=True)
+class _Operator:
+    """One row of the precedence table."""
+
+    op: ast.BinaryOp
+    #: How tightly it binds.  A larger number binds tighter, and the numbers are
+    #: spaced so that a level can be added between two without renumbering.
+    precedence: int
+    #: Whether `a op b op c` means `a op (b op c)` rather than `(a op b) op c`.
+    right_associative: bool = False
+
+
+#: What may stand between two operands, and how tightly each binds.  The order
+#: is the one C settled on and Rust, Go and Zig kept: bitwise "and" binds
+#: tighter than "exclusive or", which binds tighter than "or".
+_BINARY_OPERATORS: Final[dict[TokKind, _Operator]] = {
+    TokKind.PIPE: _Operator(ast.BinaryOp.BIT_OR, 10),
+    TokKind.CARET: _Operator(ast.BinaryOp.BIT_XOR, 20),
+    TokKind.AMPERSAND: _Operator(ast.BinaryOp.BIT_AND, 30),
+}
+
+#: What may stand before an operand.  These bind tighter than anything above.
+_UNARY_OPERATORS: Final[dict[TokKind, ast.UnaryOp]] = {
+    TokKind.TILDE: ast.UnaryOp.BIT_NOT,
+}
 
 
 class _Bail(Exception):
@@ -353,13 +380,46 @@ class Parser:
         return ast.AssignStmt(span=name_token.span.to(value.span), name=name_token.text,
                               name_span=name_token.span, value=value)
 
-    def _parse_expression(self) -> ast.Expr:
-        """Parse an expression.
+    def _parse_expression(self, minimum: int = 0) -> ast.Expr:
+        """Parse an expression whose operators bind at least as tightly as *minimum*.
 
-        The expression grammar grows with the language; for now it is a literal
-        or a name.
+        Precedence climbing: one function for every level, rather than one
+        function per level.  Adding an operator is a row in the table above and
+        nothing else, which is what keeps the grammar from growing a new layer
+        each time the language gains a symbol.
         """
+        left = self._parse_unary()
+        while True:
+            operator = _BINARY_OPERATORS.get(self._current.kind)
+            if operator is None or operator.precedence < minimum:
+                return left
+            self._advance()
+            # A left-associative operator will not take another of its own level
+            # on the right, so the next level up is where its right side starts.
+            right = self._parse_expression(
+                operator.precedence + (0 if operator.right_associative else 1))
+            left = ast.Binary(span=left.span.to(right.span), op=operator.op,
+                              left=left, right=right)
+
+    def _parse_unary(self) -> ast.Expr:
+        """Parse an operand, with any operators written before it."""
+        operator = _UNARY_OPERATORS.get(self._current.kind)
+        if operator is None:
+            return self._parse_primary()
         token = self._current
+        self._advance()
+        operand = self._parse_unary()
+        return ast.Unary(span=token.span.to(operand.span), op=operator,
+                         operand=operand)
+
+    def _parse_primary(self) -> ast.Expr:
+        """Parse an expression with nothing binding it to what is around it."""
+        token = self._current
+        if token.kind is TokKind.LPAREN:
+            self._advance()
+            inner = self._parse_expression()
+            self._expect(TokKind.RPAREN, D.LANG_SYNTAX_EXPECTED_CLOSING_PAREN)
+            return inner
         match token.kind:
             case TokKind.INT:
                 self._advance()

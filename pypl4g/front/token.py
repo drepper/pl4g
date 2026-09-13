@@ -66,6 +66,11 @@ class TokKind(StrEnum):
     ARROW = "'\N{RIGHTWARDS ARROW}'"
     ASSIGN = "'\N{LEFTWARDS ARROW}'"
 
+    AMPERSAND = "'&'"
+    PIPE = "'|'"
+    CARET = "'^'"
+    TILDE = "'~'"
+
     DOC_COMMENT = "documentation comment"
     NEWLINE = "end of line"
     INDENT = "indentation"

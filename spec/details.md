@@ -140,6 +140,21 @@ position, so a module always prints the same text; printing, reading and printin
 asserted for every stored example.  The form is a testing facility rather than a serialization format: a persistent form, if one
 is ever wanted for the pre-digested source files mentioned above, should be a packed binary one instead.
 
+Expressions are parsed by precedence climbing: one function for all the levels rather than one function per level.  Adding an
+operator is a row in a table -- the token, what it means, how tightly it binds, which way it associates -- and nothing else, which
+is what keeps the grammar from growing a layer every time the language gains a symbol.  The numbers in the table are spaced so that
+a level can be put between two without renumbering.
+
+The syntax tree names an *operator* and the representation names an *operation*, and they are separate enumerations with a mapping
+between them in the semantic analysis.  That is not duplication for its own sake: the front end is deliberately free of any
+knowledge of the representation -- a literal's type is carried as the text of its suffix for the same reason -- and several
+spellings may come to mean one operation later.
+
+Both sides of an operator have one type, so whichever side says what that type is says it for the whole expression.  A hint is read
+off the syntax first -- a literal that names its type, a name already bound, either side of an operator -- and used as the context
+both sides are checked against.  Without it a rule that only looked leftwards would accept `count & 3` and refuse `3 & count`,
+which would be a difference with nothing behind it.
+
 The Symbolic Assembler
 ----------------------
 
@@ -207,6 +222,11 @@ in units of four bytes, and in one case is split across two runs of bits.  A jum
 runs of bits of its word, with the sign bit at the top and the rest out of order.  A fixup kind therefore says how its value is computed --
 absolutely, from the end of the field, or from the start of it -- and each target says how its own kinds are stored.  Kinds are
 values rather than members of one enumeration, for the same reason operations are: a target registers the ones it needs.
+
+An operand a table row cannot carry is put in a register, and which operands a row can carry is asked of the table rather than
+written down twice.  x86-64 has a form of `and` that takes an immediate and AArch64's equivalent needs the bitmask encoding, which
+is not generated; the selector tries the operands as they are, and materializes what was refused.  Adding a row that carries an
+immediate is then all it takes for one to be used.
 
 A branch is selected together with the comparison that feeds it, in one call, because that is the shape all three architectures
 have: one puts the comparison inside the branch, and the other two set flags in the instruction immediately before it.  Handing a

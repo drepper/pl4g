@@ -777,6 +777,21 @@
       "option": null
     },
     {
+      "number": 3009,
+      "name": "LANG_SYNTAX_EXPECTED_CLOSING_PAREN",
+      "severity": "error",
+      "message": "expected ')' to close the group",
+      "cause": "Parentheses in an expression say which operator applies to what, so one that is opened has to be closed.  Check for a missing operand or an operator written where an operand was wanted.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions",
+        "requirement": "An expression may be enclosed in parentheses, which say how its operators group and mean nothing else."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 3201,
       "name": "LANG_ATTR_UNKNOWN",
       "severity": "error",
@@ -1212,6 +1227,65 @@
         "document": "spec/spec.md",
         "section": "The Language / File Structure / Assignment",
         "requirement": "the code behaves, when executed, exactly as the code describes it. No undefined behavior, no surprising interpretation of inputs."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4205,
+      "name": "LANG_TYPE_OPERAND_NOT_INTEGER",
+      "severity": "error",
+      "message": "'{operator}' is defined on integers, not on '{found}'",
+      "args": [
+        {
+          "name": "operator",
+          "type": "string",
+          "description": "the operator as written"
+        },
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type of the operand"
+        }
+      ],
+      "cause": "The bitwise operators work on the bits of an integer, and nothing else has bits to work on.  A truth value is not a one-bit integer here: `bool` has two values and no representation the language promises, so `&` on one has nothing to mean.  Use the logical operators for truth values.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Bitwise Operators",
+        "requirement": "The bitwise operators are defined on integer values only."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4206,
+      "name": "LANG_TYPE_OPERAND_MISMATCH",
+      "severity": "error",
+      "message": "the operands of '{operator}' are of different types, '{expected}' and '{found}'",
+      "args": [
+        {
+          "name": "operator",
+          "type": "string",
+          "description": "the operator as written"
+        },
+        {
+          "name": "expected",
+          "type": "string",
+          "description": "the type of the left operand"
+        },
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type of the right operand"
+        }
+      ],
+      "cause": "An operator applies to two values of one type and gives a value of that type.  Nothing is widened to make two types meet: a value of one width becoming a value of another is exactly the kind of quiet reinterpretation this language does not admit.  Give the narrower operand the wider type outright.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions",
+        "requirement": "Both sides of an operator have the same type, and the result has it too."
       },
       "since": "0.1",
       "default_enabled": true,
