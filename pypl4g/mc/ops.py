@@ -7,6 +7,7 @@ an encoding.
 """
 
 from dataclasses import dataclass
+from enum import Enum
 from typing import Final
 
 
@@ -24,6 +25,62 @@ class Op:
 
     def __repr__(self) -> str:
         return "".join(("Op(", self.name, ")"))
+
+
+class Condition(Enum):
+    """What a conditional branch tests.
+
+    Signed and unsigned orderings are different conditions rather than one
+    condition read against a type, because the instruction that tests them is a
+    different instruction on every architecture.  Equality is the same either
+    way and is listed once.
+    """
+
+    EQ = "eq"
+    NE = "ne"
+    SLT = "slt"
+    SLE = "sle"
+    SGT = "sgt"
+    SGE = "sge"
+    ULT = "ult"
+    ULE = "ule"
+    UGT = "ugt"
+    UGE = "uge"
+
+    def inverted(self) -> "Condition":
+        """The condition that is true exactly when this one is not.
+
+        Inverting is what lets a branch be turned round so that the block that
+        follows it in the image is the one it falls into, which costs one jump
+        less than branching over one.
+        """
+        return _INVERSE[self]
+
+    def swapped(self) -> "Condition":
+        """The condition that holds when the two operands are exchanged.
+
+        An architecture whose branch has no form for one ordering has the other:
+        there is no "branch if less or equal" on RISC-V, and swapping the
+        operands of "branch if greater or equal" is that instruction.
+        """
+        return _SWAPPED[self]
+
+
+_INVERSE: Final[dict[Condition, Condition]] = {
+    Condition.EQ: Condition.NE, Condition.NE: Condition.EQ,
+    Condition.SLT: Condition.SGE, Condition.SGE: Condition.SLT,
+    Condition.SLE: Condition.SGT, Condition.SGT: Condition.SLE,
+    Condition.ULT: Condition.UGE, Condition.UGE: Condition.ULT,
+    Condition.ULE: Condition.UGT, Condition.UGT: Condition.ULE,
+}
+
+_SWAPPED: Final[dict[Condition, Condition]] = {
+    Condition.EQ: Condition.EQ, Condition.NE: Condition.NE,
+    Condition.SLT: Condition.SGT, Condition.SGT: Condition.SLT,
+    Condition.SLE: Condition.SGE, Condition.SGE: Condition.SLE,
+    Condition.ULT: Condition.UGT, Condition.UGT: Condition.ULT,
+    Condition.ULE: Condition.UGE, Condition.UGE: Condition.ULE,
+}
 
 
 _REGISTRY: dict[str, Op] = {}

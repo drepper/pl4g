@@ -15,7 +15,7 @@ from typing import Final
 
 from ...mc.desc import InstFlags, OperandKind, OperandRole, OperandSpec
 from .desc import INSTRUCTION_SIZE, Field, FieldKind, RVInstDesc
-from .fixups import JAL, PCREL_HI20, PCREL_LO12_I, PCREL_PAIR_DISTANCE
+from .fixups import BRANCH, JAL, PCREL_HI20, PCREL_LO12_I, PCREL_PAIR_DISTANCE
 from .regs import GPR, RA
 
 #: The word the architecture leaves undefined, which is what padding is filled
@@ -84,6 +84,11 @@ def _store_fields() -> tuple[Field, ...]:
 #: A store names the value, the base register and the offset, and reads all of
 #: them: nothing it names is written, only the place they point at.
 _READS_ALL_THREE: Final[tuple[OperandRole, ...]] = (
+    OperandRole.USE, OperandRole.USE, OperandRole.USE)
+
+#: A branch compares two registers and names a place to go; it writes none
+#: of them, having no condition codes to write.
+_READS_BOTH_AND_TARGET: Final[tuple[OperandRole, ...]] = (
     OperandRole.USE, OperandRole.USE, OperandRole.USE)
 
 
@@ -183,6 +188,47 @@ RISCV_INSTRS: Final[tuple[RVInstDesc, ...]] = (
     RVInstDesc("sd", (_r(), _r(), _imm12()), template=0x00003023,
                fields=_store_fields(), flags=InstFlags.MAY_STORE,
                est_size=INSTRUCTION_SIZE, roles=_READS_ALL_THREE),
+    # j label            is  jal zero, label
+    RVInstDesc("j", (_sym(),), template=0x0000006F,
+               fields=(Field(FieldKind.RELOCATION, 0, 12, 20, reloc=JAL),),
+               flags=InstFlags.TERMINATOR | InstFlags.BARRIER,
+               est_size=INSTRUCTION_SIZE),
+    # beq rs1, rs2, label
+    RVInstDesc("beq", (_r(), _r(), _sym()), template=0x00000063,
+               fields=(Field(FieldKind.REGISTER, 0, 15), Field(FieldKind.REGISTER, 1, 20),
+                       Field(FieldKind.RELOCATION, 2, 0, 32, reloc=BRANCH)),
+               flags=InstFlags.TERMINATOR, est_size=INSTRUCTION_SIZE,
+               roles=_READS_BOTH_AND_TARGET),
+    # bne rs1, rs2, label
+    RVInstDesc("bne", (_r(), _r(), _sym()), template=0x00001063,
+               fields=(Field(FieldKind.REGISTER, 0, 15), Field(FieldKind.REGISTER, 1, 20),
+                       Field(FieldKind.RELOCATION, 2, 0, 32, reloc=BRANCH)),
+               flags=InstFlags.TERMINATOR, est_size=INSTRUCTION_SIZE,
+               roles=_READS_BOTH_AND_TARGET),
+    # blt rs1, rs2, label
+    RVInstDesc("blt", (_r(), _r(), _sym()), template=0x00004063,
+               fields=(Field(FieldKind.REGISTER, 0, 15), Field(FieldKind.REGISTER, 1, 20),
+                       Field(FieldKind.RELOCATION, 2, 0, 32, reloc=BRANCH)),
+               flags=InstFlags.TERMINATOR, est_size=INSTRUCTION_SIZE,
+               roles=_READS_BOTH_AND_TARGET),
+    # bge rs1, rs2, label
+    RVInstDesc("bge", (_r(), _r(), _sym()), template=0x00005063,
+               fields=(Field(FieldKind.REGISTER, 0, 15), Field(FieldKind.REGISTER, 1, 20),
+                       Field(FieldKind.RELOCATION, 2, 0, 32, reloc=BRANCH)),
+               flags=InstFlags.TERMINATOR, est_size=INSTRUCTION_SIZE,
+               roles=_READS_BOTH_AND_TARGET),
+    # bltu rs1, rs2, label
+    RVInstDesc("bltu", (_r(), _r(), _sym()), template=0x00006063,
+               fields=(Field(FieldKind.REGISTER, 0, 15), Field(FieldKind.REGISTER, 1, 20),
+                       Field(FieldKind.RELOCATION, 2, 0, 32, reloc=BRANCH)),
+               flags=InstFlags.TERMINATOR, est_size=INSTRUCTION_SIZE,
+               roles=_READS_BOTH_AND_TARGET),
+    # bgeu rs1, rs2, label
+    RVInstDesc("bgeu", (_r(), _r(), _sym()), template=0x00007063,
+               fields=(Field(FieldKind.REGISTER, 0, 15), Field(FieldKind.REGISTER, 1, 20),
+                       Field(FieldKind.RELOCATION, 2, 0, 32, reloc=BRANCH)),
+               flags=InstFlags.TERMINATOR, est_size=INSTRUCTION_SIZE,
+               roles=_READS_BOTH_AND_TARGET),
     # jal ra, label      (the return address register is part of the template)
     RVInstDesc("jal", (_sym(),), template=0x000000EF,
                fields=(Field(FieldKind.RELOCATION, 0, 12, 20, reloc=JAL),),

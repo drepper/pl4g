@@ -208,6 +208,18 @@ runs of bits of its word, with the sign bit at the top and the rest out of order
 absolutely, from the end of the field, or from the start of it -- and each target says how its own kinds are stored.  Kinds are
 values rather than members of one enumeration, for the same reason operations are: a target registers the ones it needs.
 
+A branch is selected together with the comparison that feeds it, in one call, because that is the shape all three architectures
+have: one puts the comparison inside the branch, and the other two set flags in the instruction immediately before it.  Handing a
+selector the two separately would mean it had to remember the first to encode the second, and on the architecture with no condition
+codes there would be nothing to remember.  A condition arriving as a value rather than as a comparison -- a variable holding a
+truth value, one day the result of a call -- is branched on by testing it against zero, which two of the three have an instruction
+for that needs no flags at all.
+
+Which way round a branch is written is decided where the order of the blocks is known, and not by a backend.  A two-way branch is a
+conditional branch and a jump; the jump is not needed when the block it would go to is the next one in the image, so the condition
+is inverted when that is what makes it so.  For a branch whose two blocks both follow it -- which is every branch a conditional
+expression produces -- that costs one instruction rather than two.
+
 Instruction selection produces a machine-level function -- basic blocks holding instructions, with virtual registers allowed --
 rather than a finished stream of bytes.  That is where the register allocator, the peephole passes and the scheduler run.  A
 peephole rewrite states the condition under which it is valid and checks it: replacing a register-clearing move by an exclusive-or

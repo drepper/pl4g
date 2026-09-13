@@ -42,6 +42,9 @@ def _mem() -> OperandSpec:
 #: the first source: the value it held is still wanted when the instruction runs.
 _ACCUMULATE: Final[tuple[OperandRole, ...]] = (OperandRole.DEF_USE, OperandRole.USE)
 
+#: A comparison writes only the flags, which it declares separately.
+_READS_BOTH: Final[tuple[OperandRole, ...]] = (OperandRole.USE, OperandRole.USE)
+
 
 X86_INSTRS: Final[tuple[X86InstDesc, ...]] = (
     # mov r32, imm32                     B8+rd id
@@ -131,6 +134,77 @@ X86_INSTRS: Final[tuple[X86InstDesc, ...]] = (
     # lea r64, m                         REX.W 8D /r
     X86InstDesc("lea", (_r(64), _mem()), opcode=0x8D, opsize=OpSize.REXW,
                 modrm=ModRMUse.REG_RM, reg_op=0, rm_op=1, est_size=7),
+    # cmp r/m32, r32                     39 /r
+    X86InstDesc("cmp", (_rm(32), _r(32)), opcode=0x39, modrm=ModRMUse.REG_RM,
+                reg_op=1, rm_op=0, implicit_defs=(EFLAGS,), est_size=2,
+                roles=_READS_BOTH),
+    # cmp r/m64, r64                     REX.W 39 /r
+    X86InstDesc("cmp", (_rm(64), _r(64)), opcode=0x39, opsize=OpSize.REXW,
+                modrm=ModRMUse.REG_RM, reg_op=1, rm_op=0, implicit_defs=(EFLAGS,),
+                est_size=3, roles=_READS_BOTH),
+    # cmp r/m8, imm8                     80 /7 ib
+    X86InstDesc("cmp", (_rm(8), _imm(8)), opcode=0x80, modrm=ModRMUse.EXT_RM, ext=7,
+                rm_op=0, imm_op=1, imm_bits=8, implicit_defs=(EFLAGS,), est_size=3,
+                roles=_READS_BOTH),
+    # cmp r/m32, imm32                   81 /7 id
+    X86InstDesc("cmp", (_rm(32), _imm(32)), opcode=0x81, modrm=ModRMUse.EXT_RM, ext=7,
+                rm_op=0, imm_op=1, imm_bits=32, implicit_defs=(EFLAGS,), est_size=6,
+                roles=_READS_BOTH),
+    # cmp r/m64, imm32 (sign extended)   REX.W 81 /7 id
+    X86InstDesc("cmp", (_rm(64), _imm(32)), opcode=0x81, opsize=OpSize.REXW,
+                modrm=ModRMUse.EXT_RM, ext=7, rm_op=0, imm_op=1, imm_bits=32,
+                implicit_defs=(EFLAGS,), est_size=7, roles=_READS_BOTH),
+    # test r/m32, r32                    85 /r
+    X86InstDesc("test", (_rm(32), _r(32)), opcode=0x85, modrm=ModRMUse.REG_RM,
+                reg_op=1, rm_op=0, implicit_defs=(EFLAGS,), est_size=2,
+                roles=_READS_BOTH),
+    # test r/m64, r64                    REX.W 85 /r
+    X86InstDesc("test", (_rm(64), _r(64)), opcode=0x85, opsize=OpSize.REXW,
+                modrm=ModRMUse.REG_RM, reg_op=1, rm_op=0, implicit_defs=(EFLAGS,),
+                est_size=3, roles=_READS_BOTH),
+    # jmp rel32                          E9 cd
+    X86InstDesc("jmp", (_rel(32),), opcode=0xE9, rel_op=0, rel_bits=32,
+                flags=InstFlags.TERMINATOR | InstFlags.BARRIER, est_size=5),
+    # je rel32                           0F 84 cd
+    X86InstDesc("je", (_rel(32),), opcode=0x84, map=OpMap.M0F,
+                rel_op=0, rel_bits=32, implicit_uses=(EFLAGS,),
+                flags=InstFlags.TERMINATOR, est_size=6),
+    # jne rel32                          0F 85 cd
+    X86InstDesc("jne", (_rel(32),), opcode=0x85, map=OpMap.M0F,
+                rel_op=0, rel_bits=32, implicit_uses=(EFLAGS,),
+                flags=InstFlags.TERMINATOR, est_size=6),
+    # jl rel32                           0F 8C cd
+    X86InstDesc("jl", (_rel(32),), opcode=0x8C, map=OpMap.M0F,
+                rel_op=0, rel_bits=32, implicit_uses=(EFLAGS,),
+                flags=InstFlags.TERMINATOR, est_size=6),
+    # jle rel32                          0F 8E cd
+    X86InstDesc("jle", (_rel(32),), opcode=0x8E, map=OpMap.M0F,
+                rel_op=0, rel_bits=32, implicit_uses=(EFLAGS,),
+                flags=InstFlags.TERMINATOR, est_size=6),
+    # jg rel32                           0F 8F cd
+    X86InstDesc("jg", (_rel(32),), opcode=0x8F, map=OpMap.M0F,
+                rel_op=0, rel_bits=32, implicit_uses=(EFLAGS,),
+                flags=InstFlags.TERMINATOR, est_size=6),
+    # jge rel32                          0F 8D cd
+    X86InstDesc("jge", (_rel(32),), opcode=0x8D, map=OpMap.M0F,
+                rel_op=0, rel_bits=32, implicit_uses=(EFLAGS,),
+                flags=InstFlags.TERMINATOR, est_size=6),
+    # jb rel32                           0F 82 cd
+    X86InstDesc("jb", (_rel(32),), opcode=0x82, map=OpMap.M0F,
+                rel_op=0, rel_bits=32, implicit_uses=(EFLAGS,),
+                flags=InstFlags.TERMINATOR, est_size=6),
+    # jbe rel32                          0F 86 cd
+    X86InstDesc("jbe", (_rel(32),), opcode=0x86, map=OpMap.M0F,
+                rel_op=0, rel_bits=32, implicit_uses=(EFLAGS,),
+                flags=InstFlags.TERMINATOR, est_size=6),
+    # ja rel32                           0F 87 cd
+    X86InstDesc("ja", (_rel(32),), opcode=0x87, map=OpMap.M0F,
+                rel_op=0, rel_bits=32, implicit_uses=(EFLAGS,),
+                flags=InstFlags.TERMINATOR, est_size=6),
+    # jae rel32                          0F 83 cd
+    X86InstDesc("jae", (_rel(32),), opcode=0x83, map=OpMap.M0F,
+                rel_op=0, rel_bits=32, implicit_uses=(EFLAGS,),
+                flags=InstFlags.TERMINATOR, est_size=6),
     # call rel32                         E8 cd
     X86InstDesc("call", (_rel(32),), opcode=0xE8, rel_op=0, rel_bits=32,
                 flags=InstFlags.CALL, est_size=5),

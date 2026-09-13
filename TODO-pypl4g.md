@@ -43,11 +43,17 @@ To Do List for the pypl4g compiler
     twenty-six on RISC-V.  Spilling needs a frame, so it waits for the entry below that emits one, and the two should be written
     together.  It also needs live ranges to be splittable, which linear scan makes easy and which the current one does not do.
 
-[ ] emit conditional branches.  `CondBrInst`, `BrInst`, `SwitchInst` and `UnreachableInst` all exist in the IR and none is lowered;
-    there is no `jcc`, `b.cond` or `beq` row in any of the three opcode tables, the selector protocol has no `select_branch`, and
-    `MachineBasicBlock.successors` is never populated.  Needs per target: `jcc rel32`; `b.cond` with `adds`/`subs` and a new fixup;
-    `beq`/`bne`/`blt`/`bltu` with the B-type split immediate plus `slt`/`sltu`, RISC-V having no condition codes at all.  Blocks
-    short-circuit operators, saturated operations, overflow traps and all control flow.
+[x] emit conditional branches.  Done for `BrInst`, `CondBrInst` and `UnreachableInst`: a branch is selected together with the
+    comparison that feeds it, since that is the shape all three architectures have, and the condition is inverted where that lets
+    the branch fall through instead of jumping.  Every ordering is compiled and run on all three targets.
+
+[ ] lower `SwitchInst`.  It exists in the representation and nothing generates one, since the language has no construct that would.
+    A chain of comparisons is correct and is what a first version should do; a jump table wants the relocation work that
+    position-independent code needs anyway.
+
+[ ] produce a truth value in a register.  A comparison feeding one branch is folded into it; one whose result is wanted as a value
+    needs `setcc` on x86-64, `cset` on AArch64 and `slt`/`sltu` with a fixup-up for equality on RISC-V.  Needed by the comparison
+    operators in TODO-language.md, and reported (8501) until then.
 
 [ ] parse expressions with precedence, and lower `BinaryInst` and `CmpInst`.  `_parse_expression` is a four-arm match consuming one
     token and the syntax tree has no interior expression node, so there is nothing for an operator to be.  No backend matches

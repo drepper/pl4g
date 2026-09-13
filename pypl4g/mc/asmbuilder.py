@@ -29,7 +29,7 @@ from ..source.location import INVALID_SPAN, Span
 from .inst import MCInst
 from .machine import MachineBasicBlock, MachineFunction
 from .operand import MCImm, MCMem, MCOperand, MCReg, MCSymRef, RelocKind, SymExpr
-from .ops import Op
+from .ops import Condition, Op
 from .reg import Reg, RegisterInfo, RegUnit
 from .regalloc import Assignment, allocate
 from .streamer import MCStreamer
@@ -64,6 +64,22 @@ class InstructionSelector(Protocol):
 
     def select_return(self, span: Span) -> Sequence[MCInst]:
         """Instructions that return from the current function."""
+        ...
+
+    def select_jump(self, target: MCSymRef, span: Span) -> Sequence[MCInst]:
+        """Instructions that transfer control to *target*."""
+        ...
+
+    def select_branch(self, cond: Condition, lhs: MCOperand, rhs: MCOperand,
+                      target: MCSymRef, span: Span) -> Sequence[MCInst]:
+        """Instructions that go to *target* when *lhs* and *rhs* stand in *cond*.
+
+        The comparison and the branch are one call because on one architecture
+        they are one instruction, and on the two where they are not, which
+        instruction does the comparing depends on what is being compared.  A
+        selector that were handed them separately would have to remember the
+        first to encode the second.
+        """
         ...
 
 
@@ -268,6 +284,35 @@ class Assembler:
         """Call *target*, named either directly or by symbol name."""
         operand = self.symref(target) if isinstance(target, str) else target
         self._emit(self._selector.select_call(operand, span))
+
+    def jump(self, target: str, span: Span = INVALID_SPAN) -> None:
+        """Transfer control to the block called *target*."""
+        assert self._block is not None
+        self._block.successors.append(target)
+        self._emit(self._selector.select_jump(self._symref(target), span))
+
+    def branch(self, cond: Condition, lhs: MCOperand, rhs: MCOperand, target: str,
+               span: Span = INVALID_SPAN) -> None:
+        """Go to the block called *target* when *lhs* and *rhs* stand in *cond*."""
+        assert self._block is not None
+        self._block.successors.append(target)
+        self._emit(self._selector.select_branch(cond, lhs, rhs,
+                                                self._symref(target), span))
+
+    def falls_through(self, target: str) -> None:
+        """Record an edge control takes by simply going on to the next block.
+
+        Nothing is emitted: that is the point.  The edge is recorded anyway,
+        because what makes a block's label a symbol is that something names it,
+        and a later pass reading the control-flow graph needs the edge whether
+        or not an instruction stands for it.
+        """
+        assert self._block is not None
+        self._block.successors.append(target)
+
+    def _symref(self, label: str) -> MCSymRef:
+        """A reference to the block called *label*."""
+        return MCSymRef(SymExpr(self._streamer.symbol(label)), RelocKind.PCREL)
 
     def ret(self, span: Span = INVALID_SPAN) -> None:
         """Return from the current function."""

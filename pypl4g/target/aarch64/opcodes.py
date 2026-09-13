@@ -8,7 +8,7 @@ from typing import Final
 
 from ...mc.desc import InstFlags, OperandKind, OperandRole, OperandSpec
 from .desc import A64InstDesc, Field, FieldKind, INSTRUCTION_SIZE
-from .fixups import ADD_LO12, ADR_PAGE21, BRANCH26
+from .fixups import ADD_LO12, ADR_PAGE21, BRANCH19, BRANCH26
 from .regs import GPR, NZCV, X30
 
 #: The word the architecture reserves as permanently undefined.  It is what
@@ -195,6 +195,112 @@ AARCH64_INSTRS: Final[tuple[A64InstDesc, ...]] = (
                 fields=(_reg_field(0, _RD), _reg_field(1, _RN), _offset_field(2, 3)),
                 flags=InstFlags.MAY_STORE, est_size=INSTRUCTION_SIZE,
                 roles=_READS_ALL_THREE),
+    # b label
+    A64InstDesc("b", (_sym(),), template=0x14000000,
+                fields=(Field(FieldKind.RELOCATION, 0, 0, 26, shift=2, signed=True,
+                              reloc=BRANCH26),),
+                flags=InstFlags.TERMINATOR | InstFlags.BARRIER,
+                est_size=INSTRUCTION_SIZE),
+    # b.eq label
+    A64InstDesc("b.eq", (_sym(),), template=0x54000000,
+                fields=(Field(FieldKind.RELOCATION, 0, 5, 19, shift=2, signed=True,
+                              reloc=BRANCH19),),
+                implicit_uses=(NZCV,), flags=InstFlags.TERMINATOR,
+                est_size=INSTRUCTION_SIZE),
+    # b.ne label
+    A64InstDesc("b.ne", (_sym(),), template=0x54000001,
+                fields=(Field(FieldKind.RELOCATION, 0, 5, 19, shift=2, signed=True,
+                              reloc=BRANCH19),),
+                implicit_uses=(NZCV,), flags=InstFlags.TERMINATOR,
+                est_size=INSTRUCTION_SIZE),
+    # b.hs label
+    A64InstDesc("b.hs", (_sym(),), template=0x54000002,
+                fields=(Field(FieldKind.RELOCATION, 0, 5, 19, shift=2, signed=True,
+                              reloc=BRANCH19),),
+                implicit_uses=(NZCV,), flags=InstFlags.TERMINATOR,
+                est_size=INSTRUCTION_SIZE),
+    # b.lo label
+    A64InstDesc("b.lo", (_sym(),), template=0x54000003,
+                fields=(Field(FieldKind.RELOCATION, 0, 5, 19, shift=2, signed=True,
+                              reloc=BRANCH19),),
+                implicit_uses=(NZCV,), flags=InstFlags.TERMINATOR,
+                est_size=INSTRUCTION_SIZE),
+    # b.hi label
+    A64InstDesc("b.hi", (_sym(),), template=0x54000008,
+                fields=(Field(FieldKind.RELOCATION, 0, 5, 19, shift=2, signed=True,
+                              reloc=BRANCH19),),
+                implicit_uses=(NZCV,), flags=InstFlags.TERMINATOR,
+                est_size=INSTRUCTION_SIZE),
+    # b.ls label
+    A64InstDesc("b.ls", (_sym(),), template=0x54000009,
+                fields=(Field(FieldKind.RELOCATION, 0, 5, 19, shift=2, signed=True,
+                              reloc=BRANCH19),),
+                implicit_uses=(NZCV,), flags=InstFlags.TERMINATOR,
+                est_size=INSTRUCTION_SIZE),
+    # b.ge label
+    A64InstDesc("b.ge", (_sym(),), template=0x5400000A,
+                fields=(Field(FieldKind.RELOCATION, 0, 5, 19, shift=2, signed=True,
+                              reloc=BRANCH19),),
+                implicit_uses=(NZCV,), flags=InstFlags.TERMINATOR,
+                est_size=INSTRUCTION_SIZE),
+    # b.lt label
+    A64InstDesc("b.lt", (_sym(),), template=0x5400000B,
+                fields=(Field(FieldKind.RELOCATION, 0, 5, 19, shift=2, signed=True,
+                              reloc=BRANCH19),),
+                implicit_uses=(NZCV,), flags=InstFlags.TERMINATOR,
+                est_size=INSTRUCTION_SIZE),
+    # b.gt label
+    A64InstDesc("b.gt", (_sym(),), template=0x5400000C,
+                fields=(Field(FieldKind.RELOCATION, 0, 5, 19, shift=2, signed=True,
+                              reloc=BRANCH19),),
+                implicit_uses=(NZCV,), flags=InstFlags.TERMINATOR,
+                est_size=INSTRUCTION_SIZE),
+    # b.le label
+    A64InstDesc("b.le", (_sym(),), template=0x5400000D,
+                fields=(Field(FieldKind.RELOCATION, 0, 5, 19, shift=2, signed=True,
+                              reloc=BRANCH19),),
+                implicit_uses=(NZCV,), flags=InstFlags.TERMINATOR,
+                est_size=INSTRUCTION_SIZE),
+    # cbnz Wt, label
+    A64InstDesc("cbnz", (_r(32), _sym()), template=0x35000000,
+                fields=(_reg_field(0, _RD),
+                        Field(FieldKind.RELOCATION, 1, 5, 19, shift=2, signed=True,
+                              reloc=BRANCH19)),
+                flags=InstFlags.TERMINATOR, est_size=INSTRUCTION_SIZE,
+                roles=_READS_BOTH),
+    # cbnz Xt, label
+    A64InstDesc("cbnz", (_r(64), _sym()), template=0xB5000000,
+                fields=(_reg_field(0, _RD),
+                        Field(FieldKind.RELOCATION, 1, 5, 19, shift=2, signed=True,
+                              reloc=BRANCH19)),
+                flags=InstFlags.TERMINATOR, est_size=INSTRUCTION_SIZE,
+                roles=_READS_BOTH),
+    # cbz Wt, label
+    A64InstDesc("cbz", (_r(32), _sym()), template=0x34000000,
+                fields=(_reg_field(0, _RD),
+                        Field(FieldKind.RELOCATION, 1, 5, 19, shift=2, signed=True,
+                              reloc=BRANCH19)),
+                flags=InstFlags.TERMINATOR, est_size=INSTRUCTION_SIZE,
+                roles=_READS_BOTH),
+    # cbz Xt, label
+    A64InstDesc("cbz", (_r(64), _sym()), template=0xB4000000,
+                fields=(_reg_field(0, _RD),
+                        Field(FieldKind.RELOCATION, 1, 5, 19, shift=2, signed=True,
+                              reloc=BRANCH19)),
+                flags=InstFlags.TERMINATOR, est_size=INSTRUCTION_SIZE,
+                roles=_READS_BOTH),
+    # cmp Wn, #imm12   is  subs WZR, Wn, #imm12
+    A64InstDesc("cmp", (_r(32), _imm(0xFFF)), template=0x7100001F,
+                fields=(_reg_field(0, _RN),
+                        Field(FieldKind.IMMEDIATE, 1, 10, 12)),
+                implicit_defs=(NZCV,), est_size=INSTRUCTION_SIZE,
+                roles=_READS_BOTH),
+    # cmp Xn, #imm12   is  subs XZR, Xn, #imm12
+    A64InstDesc("cmp", (_r(64), _imm(0xFFF)), template=0xF100001F,
+                fields=(_reg_field(0, _RN),
+                        Field(FieldKind.IMMEDIATE, 1, 10, 12)),
+                implicit_defs=(NZCV,), est_size=INSTRUCTION_SIZE,
+                roles=_READS_BOTH),
     # bl label
     A64InstDesc("bl", (_sym(),), template=0x94000000,
                 fields=(Field(FieldKind.RELOCATION, 0, 0, 26, shift=2, signed=True,

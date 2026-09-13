@@ -13,10 +13,11 @@ from ...mc.asmbuilder import InstructionSelector
 from ...mc.desc import InstrTable, SelectionError
 from ...mc.inst import MCInst
 from ...mc.operand import MCImm, MCMem, MCOperand, MCReg, MCSymRef
-from ...mc.ops import Op
+from ...mc.ops import Condition, Op
 from ...mc.reg import Reg, VirtReg
 from ...mc.operand import SymExpr
 from ...source.location import Span
+from ..branches import condition_used_once, labels_of, lower_branch
 
 if TYPE_CHECKING:
     from ...mc.reg import PhysReg
@@ -36,11 +37,26 @@ _BINARY: Final[dict[str, str]] = {
     ops.XOR.name: "xor",
 }
 
+#: The jump that follows a comparison, for each condition.  Naming a condition
+#: is naming an instruction here, since the condition is part of the opcode.
+_CONDITIONAL: Final[dict[Condition, str]] = {
+    Condition.EQ: "je", Condition.NE: "jne",
+    Condition.SLT: "jl", Condition.SLE: "jle",
+    Condition.SGT: "jg", Condition.SGE: "jge",
+    Condition.ULT: "jb", Condition.ULE: "jbe",
+    Condition.UGT: "ja", Condition.UGE: "jae",
+}
+
 #: Operations that map to a single instruction with no operands.
 _NULLARY: Final[dict[str, str]] = {
     x86ops.SYSCALL.name: "syscall",
     ops.TRAP.name: "ud2",
 }
+
+
+#: What a branch compares against where its condition is a value rather than a
+#: comparison.  The width is the one this target writes a small immediate in.
+ZERO_IMMEDIATE: Final[MCImm] = MCImm(0, 32, signed=False)
 
 
 class UnsupportedOperation(Exception):
@@ -143,6 +159,36 @@ class X86Selector(InstructionSelector):
         """Instructions that return from the current function."""
         return (self._inst("ret", (), span),)
 
+    def select_jump(self, target: MCSymRef, span: Span) -> Sequence[MCInst]:
+        """Instructions that transfer control to *target*."""
+        return (self._inst("jmp", (target,), span),)
+
+    def select_branch(self, cond: Condition, lhs: MCOperand, rhs: MCOperand,
+                      target: MCSymRef, span: Span) -> Sequence[MCInst]:
+        """Instructions that go to *target* when *lhs* and *rhs* stand in *cond*.
+
+        The comparison writes the flags and the jump reads them, which the rows
+        declare, so nothing here has to keep the two together by hand.
+        """
+        if isinstance(lhs, MCImm) and not isinstance(rhs, MCImm):
+            # The comparison takes its immediate second, so the operands are
+            # exchanged and the condition with them.
+            lhs, rhs, cond = rhs, lhs, cond.swapped()
+        compare = self._select_compare(lhs, rhs, cond, span)
+        return (compare, self._inst(_CONDITIONAL[cond], (target,), span))
+
+    def _select_compare(self, lhs: MCOperand, rhs: MCOperand, cond: Condition,
+                        span: Span) -> MCInst:
+        """The instruction that sets the flags for a comparison.
+
+        Testing a register against itself sets the same flags as comparing it
+        with zero and is a byte shorter, so it is what a test for zero uses.
+        """
+        if (isinstance(rhs, MCImm) and rhs.value == 0 and isinstance(lhs, MCReg)
+                and cond in (Condition.EQ, Condition.NE)):
+            return self._inst("test", (lhs, lhs), span)
+        return self._inst("cmp", (lhs, rhs), span)
+
 
 # -- lowering the IR ------------------------------------------------------------
 
@@ -153,7 +199,8 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
     The bootstrap compiler generates code for as much of the language as its own
     source needs.  A construct with no rule here is reported, not ignored.
     """
-    from ...ir.inst import LoadInst, MemStartInst, RetInst, StoreInst
+    from ...ir.inst import (BrInst, CmpInst, CondBrInst, LoadInst, MemStartInst,
+                            RetInst, StoreInst, UnreachableInst)
     from ...ir.mangle import symbol_name
     from ...ir.module import GlobalVar
     from ...ir.types import IntType
@@ -166,7 +213,43 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
     #: of its own and the allocator decides which; nothing here knows or cares.
     held: dict[int, VirtReg] = {}
     returned = _returned_value(func)
-    for block in func.blocks:
+    symbol = symbol_name(func)
+    labels = labels_of(symbol, func)
+
+    class _Operands:
+        """How this backend answers for a value of the representation."""
+
+        def value(self, value: object, span: Span) -> MCOperand:
+            """The operand for *value*, a constant being an immediate."""
+            if isinstance(value, IntConst):
+                return MCImm(value.value,
+                             _immediate_width(value.value, _is_signed(value.ty)),
+                             signed=_is_signed(value.ty))
+            return self.in_register(value, span)
+
+        def in_register(self, value: object, span: Span) -> MCOperand:
+            """The operand for *value*, put in a register if it is not in one."""
+            if isinstance(value, IntConst):
+                # Every comparison here wants a register on its left, and two
+                # constants compared with each other is what a program that has
+                # not been folded looks like.
+                ty = value.ty
+                carried = _new_value(ty, registers)
+                asm.loadreg(carried, MCImm(value.value, max(32, ty.bits) if isinstance(ty, IntType) else 32,
+                                           signed=_is_signed(ty)), span)
+                return MCReg(carried)
+            found = held.get(id(value))
+            if found is None:
+                raise UnsupportedOperation(
+                    "a value this backend did not compute",
+                    span if span.is_valid else None)
+            return MCReg(found)
+
+    operands = _Operands()
+
+    for index, block in enumerate(func.blocks):
+        if index > 0:
+            asm.block(labels[index])
         for inst in block.insts:
             span = inst.span if inst.span.is_valid else None
             match inst:
@@ -228,6 +311,18 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
                         asm.loadreg(result, MCReg(_value_of(value, held, span)),
                                     inst.span)
                     asm.ret(inst.span)
+                case CmpInst():
+                    # A comparison is folded into the branch that reads it; one
+                    # read anywhere else would have to be computed into a
+                    # register, which is not generated yet.
+                    if not condition_used_once(func, inst):
+                        raise UnsupportedOperation(
+                            "a comparison whose result is wanted as a value", span)
+                case UnreachableInst():
+                    asm.op(ops.TRAP, None, span=inst.span)
+                case BrInst() | CondBrInst():
+                    lower_branch(asm, func, labels, index, inst, operands,
+                                 ZERO_IMMEDIATE)
                 case _:
                     raise UnsupportedOperation("".join((
                         "the instruction '", inst.opcode, "'")), span)

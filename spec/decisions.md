@@ -966,6 +966,44 @@ A consequence worth recording: the two fixed-width backends had each set aside t
 needs, because with no allocator there was nowhere else to put them.  Those are ordinary values now, which is why the generated
 code for a store uses whatever is free rather than always the same two registers.
 
+## 2026-09-14T17:00+02:00 — implementation
+
+**A branch is selected together with its comparison, and turned round to fall through**
+
+The representation has had branches and block parameters since the first version and no backend lowered one; there was not a
+conditional branch in any of the three instruction tables.  That blocked short-circuit operators, saturated operations, overflow
+traps and every form of control flow.
+
+*The comparison and the branch are one call.*  That is the shape the hardware has.  RISC-V puts the comparison inside the branch
+and has no condition codes at all; x86-64 and AArch64 set flags in the instruction before.  A selector handed the two separately
+would have to remember the first in order to encode the second, and on RISC-V there would be nothing to remember -- so the call
+that asks for a branch hands over both things being compared.  A condition that is a value rather than a comparison is branched on
+by testing it against zero, which two of the three do in one instruction that needs no flags.
+
+*Which way round is decided once, where the block order is known.*  A two-way branch is a conditional branch plus a jump, and the
+jump is unnecessary when its target is the next block.  Inverting the condition is what makes that the case, so a branch with both
+of its blocks after it costs one instruction instead of two.  That is the common shape and it belongs in the shared lowering, not
+in three backends.
+
+*Four of the ten orderings are missing on RISC-V.*  There is no "branch if less or equal": it is "branch if greater or equal" with
+the operands the other way round.  So a condition knows how to be swapped as well as inverted, and the backend that needs it asks.
+Both operations are involutions and both are tested as such, since a branch turned round wrongly is a program that quietly does the
+opposite.
+
+*A comparison feeding exactly one branch is folded into it.*  One whose result is wanted anywhere else would have to be computed
+into a register -- `setcc`, `cset`, `slt` -- which is what producing a truth value means and is the business of the comparison
+operators the language list still asks for.  Until then it is reported rather than got wrong.
+
+What other languages do about the last point: LLVM keeps comparison and branch as separate instructions and relies on the backend
+to fuse them, which needs a pattern matcher; Cranelift has `brif` taking the comparison directly, which is this arrangement.  For a
+compiler whose stated priority is to be fast, having the shape be right at selection rather than recovered by matching is the
+cheaper of the two.
+
+The tests build the representation directly and take it through code generation and the image writer, because the language still
+has no way to write a condition.  Every one of the ten orderings is compiled, run and checked on all three architectures, both ways
+round -- forty programs a target -- along with a branch backwards, which is the case a fixup that only looked forwards would get
+wrong.
+
 ---
 
 Open questions
