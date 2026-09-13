@@ -16,8 +16,13 @@ from ..ir.inst import BinOp, Instruction, UnOp
 from ..ir.function import (FuncAttrs, Function, InlineHint, Linkage, SpecialKind)
 from ..ir.module import GlobalVar, Module
 from ..ir.types import BOOL, BUILTIN_TYPES, ERROR, IntType, Type, VOID
+from .modules import (ImportCycle, LoadedModule, ModuleNotFound, ModuleRegistry,
+                      base_name)
 from ..ir.value import UndefConst, Value
+from pathlib import Path
+
 from ..source.location import INVALID_SPAN, Span
+from ..source.manager import SourceManager
 from .attributes import (AttrSpec, AttrTarget, BoundAttr, SPECIAL_OF_TEST_KIND,
                          TARGET_NAMES, lookup)
 
@@ -92,6 +97,16 @@ class _Global:
     expected_pairs: list[_Expected] = field(default_factory=list)
 
 
+def found_name(prefix: str, base: str) -> str:
+    """The name a module goes by when reached through *prefix*."""
+    return ".".join((prefix, base)) if prefix else base
+
+
+def _is_exported(what: object) -> bool:
+    """Whether a top-level definition is one an importing file may name."""
+    return getattr(what, "linkage", None) is Linkage.EXPORTED
+
+
 #: What each operator of the source means in the representation.  The two are
 #: separate because the source names an operator and the representation names an
 #: operation: several spellings may come to mean one operation later, and the
@@ -110,10 +125,33 @@ _UNARY_OPS: Final[dict[ast.UnaryOp, UnOp]] = {
 class Checker:
     """Checks one program and lowers it into a module."""
 
-    def __init__(self, module: Module, diags: DiagEngine) -> None:
+    def __init__(self, module: Module, diags: DiagEngine,
+                 registry: "ModuleRegistry | None" = None,
+                 path: "Path | None" = None, prefix: str = "",
+                 sources: "SourceManager | None" = None,
+                 top_level: "list[_Global] | None" = None) -> None:
         self._module = module
         self._diags = diags
         self._defined: dict[str, tuple[Span, str]] = {}
+        #: What this file's top-level names stand for.  It is the file's own,
+        #: not the compilation's: two files may each define a `counter`, and
+        #: neither can see the other's unless it imports it.
+        self._top: dict[str, object] = {}
+        #: The definitions this file owns, which carry its module's name once
+        #: that name is settled.
+        self._owned: list[object] = []
+        #: Where this file is, which is what an import written in it is relative
+        #: to, and what tells its definitions from another file's.
+        self._path: Path = path if path is not None else Path("")
+        #: Where modules are found and what has been read, shared by every file
+        #: of one compilation.
+        self._registry: ModuleRegistry = (registry if registry is not None
+                                          else ModuleRegistry())
+        #: The name of the module this file is, which goes in front of the name
+        #: of anything it imports.
+        self._prefix: str = prefix
+        #: Where the text of a module read from here comes from.
+        self._sources: SourceManager = sources if sources is not None else SourceManager()
         #: Where each definition's name is written, for pointing at it in a note.
         self._name_spans: dict[str, Span] = {}
         #: The names bound inside the function being checked, innermost last.
@@ -134,14 +172,25 @@ class Checker:
         self._discard_function: bool = False
         #: What each top-level definition says it raises, and where it says so.
         self._expected_pairs: dict[str, list[_Expected]] = {}
-        #: Every variable defined at the top level, in the order it was written,
-        #: so that what nothing reads can be reported once the program is whole.
-        self._top_level: list[_Global] = []
+        #: Every variable defined at the top level of any file, in the order it
+        #: was written, so that what nothing reads can be reported once every
+        #: file has been read.  It is shared with the checkers of the modules
+        #: this one imports, since the question is about the whole program.
+        self._top_level: list[_Global] = (top_level if top_level is not None
+                                          else [])
 
     # -- entry point -----------------------------------------------------------
 
-    def run(self, units: Sequence[ast.SourceUnit]) -> Module:
-        """Check every unit and lower it into the module."""
+    def run(self, units: Sequence[ast.SourceUnit],
+            whole_program: bool = True) -> Module:
+        """Check every unit and lower it into the module.
+
+        A module read on the way is checked by a checker of its own, which does
+        not ask the questions that are about the whole program: whether there is
+        a startup function and whether anything reads a variable cannot be
+        answered until every file has been read, and a module read first would
+        answer both wrongly.
+        """
         collected: list[_Collected] = []
         for unit in units:
             self._module.source_paths.append(unit.path)
@@ -153,14 +202,28 @@ class Checker:
                             collected.append(gathered)
                     case ast.VarDef():
                         self._collect_global(item)
+                    case ast.ModuleImport():
+                        self._collect_import(item)
                     case _:
                         self._diags.internal("unknown kind of top-level definition")
         for entry in collected:
             self._lower_function(entry)
-        self._check_program()
+        if whole_program:
+            self._check_program()
         return self._module
 
     # -- variables -------------------------------------------------------------
+
+    def _key(self, name: str) -> str:
+        """What a definition of this file is filed under.
+
+        Two files may each define a name, and the module holds both, so the key
+        says which file it came from.  The name itself stays what the source
+        wrote; only what it is filed under differs.
+        """
+        if not self._path.name:
+            return name
+        return "".join((str(self._path), "\0", name))
 
     def _declare(self, name: str, span: Span, path: str = "") -> bool:
         """Record a top-level name, reporting one that is already taken."""
@@ -204,7 +267,10 @@ class Checker:
         var = self._module.add_global(GlobalVar(
             name=node.name, value_type=ty,
             ptr_type=self._module.types.ptr_type(ty, mutable=node.mutable),
-            initializer=initializer, linkage=linkage, span=node.span))
+            initializer=initializer, linkage=linkage, span=node.span),
+            key=self._key(node.name))
+        self._top[node.name] = var
+        self._owned.append(var)
         # The expectation stays alive rather than being settled here: whether
         # anything reads this variable is not known until every function has
         # been checked, so an `@[expect]` written on the definition -- where a
@@ -212,6 +278,100 @@ class Checker:
         self._top_level.append(_Global(var=var, span=node.name_span,
                                        expectation=expectation,
                                        expected_pairs=list(pairs)))
+
+    # -- modules ---------------------------------------------------------------
+
+    def _collect_import(self, node: ast.ModuleImport) -> None:
+        """Bring a module into this file under the name it was given here.
+
+        The file is found, read and checked now rather than later: what it holds
+        has to be known before anything in this file that names it is checked,
+        and reading it is the only way to know.
+        """
+        if not self._declare(node.name, node.name_span):
+            return
+        try:
+            path = self._registry.resolve(node.source, self._path)
+        except ModuleNotFound as exc:
+            self._diags.emit(D.LANG_IMPORT_NOT_FOUND, node.source_span,
+                             name=exc.name,
+                             looked=str(len(exc.looked)))
+            return
+        ring = self._registry.cycle_through(path)
+        if ring is not None:
+            self._diags.emit(D.LANG_IMPORT_CYCLE, node.source_span,
+                             name=node.source,
+                             chain=" -> ".join(p.name for p in ring))
+            return
+        found = self._registry.known(path)
+        if found is None:
+            found = self._read_module(path, node)
+            if found is None:
+                return
+        # Every route to a module is a name it could go by; which one it ends up
+        # with is settled once every route is known.
+        found.add_candidate(self._prefix, base_name(path))
+        self._top[node.name] = found
+
+    def _read_module(self, path: Path, node: ast.ModuleImport) -> "LoadedModule | None":
+        """Read and check the file at *path*, returning what it holds."""
+        try:
+            loaded = self._registry.begin(path)
+        except ImportCycle as exc:
+            self._diags.emit(D.LANG_IMPORT_CYCLE, node.source_span,
+                             name=node.source,
+                             chain=" -> ".join(p.name for p in exc.chain))
+            return None
+        try:
+            unit = self._read_unit(path, node)
+            if unit is None:
+                return None
+            prefix = found_name(self._prefix, base_name(path))
+            inner = Checker(self._module, self._diags, self._registry, path, prefix,
+                            self._sources, self._top_level)
+            inner.run([unit], whole_program=False)
+            loaded.exports = {name: what for name, what in inner._top.items()
+                              if _is_exported(what)}
+            loaded.owned = inner._owned
+        finally:
+            self._registry.finish(path)
+        return loaded
+
+    def _read_unit(self, path: Path, node: ast.ModuleImport) -> "ast.SourceUnit | None":
+        """Read and parse one module file."""
+        from ..front.lexer import tokenize
+        from ..front.parser import parse
+
+        try:
+            source = self._sources.read(path)
+        except Exception as exc:  # noqa: BLE001 - reported, not handled
+            self._diags.emit(D.LANG_IMPORT_UNREADABLE, node.source_span,
+                             name=node.source, reason=str(exc))
+            return None
+        return parse(tokenize(source, self._diags), path.as_posix(), self._diags)
+
+    def _lower_member(self, builder: IRBuilder, expr: ast.Member,
+                      expected: Type | None) -> Value:
+        """Lower something named through the module it belongs to."""
+        base = expr.base
+        if not isinstance(base, ast.NameRef):
+            self._diags.emit(D.LANG_IMPORT_NOT_A_MODULE, expr.span,
+                             name="an expression")
+            return UndefConst(ERROR)
+        held = self._top.get(base.name)
+        if not isinstance(held, LoadedModule):
+            self._diags.emit(D.LANG_IMPORT_NOT_A_MODULE, base.span, name=base.name)
+            return UndefConst(ERROR)
+        found = held.exports.get(expr.name)
+        if found is None:
+            self._diags.emit(D.LANG_IMPORT_NOT_EXPORTED, expr.name_span,
+                             name=expr.name, module=base.name)
+            return UndefConst(ERROR)
+        if isinstance(found, GlobalVar):
+            return builder.load(found, expr.span)
+        self._diags.emit(D.IMPL_UNIMPLEMENTED_FEATURE, expr.span,
+                         feature="naming a function of another module")
+        return UndefConst(ERROR)
 
     def _variable_type(self, node: ast.VarDef) -> Type | None:
         """The type of a variable: the one declared, or the one its value has."""
@@ -418,9 +578,12 @@ class Checker:
         if found is not None:
             found.read = True
             return found.value
-        found_global = self._module.globals.get(ref.name)
-        if found_global is not None:
+        found_global = self._top.get(ref.name)
+        if isinstance(found_global, GlobalVar):
             return found_global
+        if isinstance(found_global, LoadedModule):
+            self._diags.emit(D.LANG_IMPORT_MODULE_AS_VALUE, ref.span, name=ref.name)
+            return None
         self._diags.emit(D.LANG_FILESTRUCT_UNDEFINED_NAME, ref.span, name=ref.name)
         return None
 
@@ -446,7 +609,9 @@ class Checker:
                             attrs=func_attrs, linkage=linkage,
                             cconv="sysv" if func_attrs.abi is not None else "pl4g.v0",
                             span=node.span, source_path=path)
-            self._module.add_function(func)
+            self._module.add_function(func, key=self._key(node.name))
+            self._top[node.name] = func
+            self._owned.append(func)
             self._register_special(func, node)
         finally:
             if expectation is not None:
@@ -704,7 +869,8 @@ class Checker:
 
     def _discard(self, func: Function) -> None:
         """Take a function out of the module, and out of every cache of it."""
-        self._module.functions.pop(func.name, None)
+        self._module.functions.pop(self._key(func.name), None)
+        self._top.pop(func.name, None)
         if self._module.startup is func:
             self._module.startup = None
         for cache in (self._module.ctors, self._module.dtors, self._module.tests):
@@ -871,7 +1037,9 @@ class Checker:
             local.value_span = node.span
             local.read = wants_value
             return value
-        target = self._module.globals.get(node.name)
+        target = self._top.get(node.name)
+        if not isinstance(target, GlobalVar):
+            target = None
         if target is None:
             self._diags.emit(D.LANG_FILESTRUCT_UNDEFINED_NAME, node.name_span,
                              name=node.name)
@@ -942,6 +1110,8 @@ class Checker:
                 return self._lower_binary(builder, expr, expected)
             case ast.Unary():
                 return self._lower_unary(builder, expr, expected)
+            case ast.Member():
+                return self._lower_member(builder, expr, expected)
             case ast.StringLit():
                 self._diags.emit(D.LANG_TYPE_RETURN_MISMATCH, expr.span, found="string",
                                  expected=expected.render() if expected is not None else "void")
@@ -1035,8 +1205,9 @@ class Checker:
         local = self._find_local(name)
         if local is not None:
             return self._value_type_of(local.value)
-        found = self._module.globals.get(name)
-        return self._value_type_of(found) if found is not None else None
+        found = self._top.get(name)
+        return (self._value_type_of(found) if isinstance(found, GlobalVar)
+                else None)
 
     def _literal_type(self, expr: ast.IntLit, expected: Type | None) -> IntType | None:
         """The type an integer literal has, from its suffix or from the context.
@@ -1190,6 +1361,17 @@ class Checker:
 
 
 
-def check(module: Module, units: Sequence[ast.SourceUnit], diags: DiagEngine) -> Module:
-    """Check *units* and lower them into *module*."""
-    return Checker(module, diags).run(units)
+def check(module: Module, units: Sequence[ast.SourceUnit], diags: DiagEngine,
+          registry: ModuleRegistry | None = None,
+          sources: SourceManager | None = None) -> Module:
+    """Check *units* and lower them into *module*.
+
+    The units are the files named on the command line, which share one
+    namespace and are the program's own module; anything they import is read
+    from here, and every module's name is settled once all of them are read.
+    """
+    found = registry if registry is not None else ModuleRegistry()
+    path = Path(units[0].path) if units else None
+    result = Checker(module, diags, found, path, "", sources).run(units)
+    found.settle_names()
+    return result

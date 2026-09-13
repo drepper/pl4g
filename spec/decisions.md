@@ -1224,6 +1224,54 @@ frequencies, which come from the loop structure.  Its fast allocator does what t
 That the two sit side by side in one compiler is the evidence that the second is not worth having until the information the first
 needs exists.
 
+## 2026-09-15T06:00+02:00 — language and implementation
+
+**Modules: read while compiling, read once, and named by the shortest way of reaching them**
+
+A module is a source file, brought in by `let name := import("somename")` and named through afterwards as `name.thing`.  Several
+decisions are worth stating.
+
+*A module is not a value.*  It is read while the program is being compiled, and nothing of it survives into the program but the
+definitions it holds, so there is nothing to give a type to, nothing to change, and nothing to compute with.  The syntax is a
+definition because binding a name is what it does, but the node is its own rather than a variable whose value happens to be a
+module -- writing it as a variable would have meant explaining ever afterwards why that one variable cannot be used as one.  It
+cannot stand inside a function for the same reason: what it holds belongs to the program, not to one call.
+
+*The top-level namespace is a file's, not the compilation's.*  This was the largest change underneath, and it is what makes
+modules mean anything: two files may each define a `counter`, and neither sees the other's.  The representation holds both, so
+what a definition is filed under says which file it came from while the name stays what the source wrote.  Nothing outside the
+semantic analysis had to learn about that, because everything else walks the definitions rather than looking one up by name.
+
+*A module's name is settled after all the reading, not during it.*  Neither question can be answered earlier.  The shortest of a
+module's names is not known until the last route to it is found, and whether two modules share a base name is not known until both
+have been read.  So loading records every name a module could go by and a pass at the end chooses: the shortest, and the one
+sorting first where two are the same length, because a program should not be made to carry the longest way of reaching something.
+
+*Two files of one name both get a hash.*  Not the first, not the second: neither has a better claim to the name, and giving it to
+whichever was read first would make the symbols in a binary depend on the order the imports were written in.  The hash is of the
+path and not the contents, because two files with the same contents are still two modules and a file that changes is still the
+same module.
+
+*A ring is an error rather than something to resolve.*  A module is read while the file importing it is being read, so a ring has
+no beginning -- neither module can be finished before the other.  The message names the ring, since the first question anyone asks
+of a cycle is which files are in it.  Python resolves this with partially-initialized modules and Go forbids it outright; forbidden
+is the answer here, because the alternative is a module that can see half of another depending on where the reading got to.
+
+*Where to look, and in what order.*  The directory of the importing file first, which is what makes a directory of sources work
+with nothing configured; then what the build says; then what the installation provides -- and the last only for a name with no
+slash, since a name with a slash is a path and a path is not something to go looking for somewhere the program knows nothing
+about.  Compare Go, where the build system resolves an import path and the file's own directory means nothing, and C, where the
+including file's directory is first for `"..."` and not for `<...>`.  This is C's arrangement for a language that has only one
+kind of name.
+
+One thing the work uncovered rather than decided: the whole-program questions -- whether there is a startup function, whether
+anything reads a variable -- were being asked by whichever checker finished first.  A module read before the main file answered
+both wrongly.  They are asked once now, by the outermost checker, over every file.
+
+Left as it was: `@[export]` still means both "visible to a file that imports this" and "visible outside the program", so a module's
+exported definition is a root of the reachability pass and is kept whether or not anything imports it.  For a library module that
+keeps more than it needs.  Whether the two should be separate attributes is a language question and is on the list.
+
 ---
 
 Open questions

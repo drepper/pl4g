@@ -29,6 +29,8 @@ from ..mc.dump import dump_sections
 from ..mc.streamer import MCStreamer
 from ..opt.pass_ import build_manager
 from ..sema.check import check
+from ..sema.modules import (ModuleRegistry, SearchPath,
+                            system_modules)
 from ..source.manager import (SourceDecodeError, SourceManager, SourceReadError)
 from ..target.registry import (canonical_triples, known_triples,
                                lookup as lookup_target)
@@ -120,7 +122,9 @@ class Driver:
         start = perf_counter()
         name = self.options.inputs[0].name if self.options.inputs else "<none>"
         module = Module(name=name, triple=self.options.triple)
-        check(module, units, self.diags)
+        registry = ModuleRegistry(search=SearchPath(
+            given=list(self.options.module_path), system=system_modules()))
+        check(module, units, self.diags, registry, self.sources)
         self._timed("semantic analysis", start)
         if self.diags.failed:
             return module

@@ -34,7 +34,7 @@ module.exports = grammar({
     // -- items -------------------------------------------------------------
 
     _item: $ => seq(
-      choice($.function_definition, $.variable_definition),
+      choice($.function_definition, $.variable_definition, $.module_import),
       repeat($._newline),
     ),
 
@@ -68,6 +68,17 @@ module.exports = grammar({
       optional(field('type', $.type)),
       '=',
       field('value', $._expression),
+    ),
+
+    // A module is brought in by what looks like a definition, because that is
+    // what it is: a name bound to something.  Nothing about it may be
+    // qualified, so there is no place here for `mut` or for a type.
+    module_import: $ => seq(
+      repeat($.attribute_list),
+      'let',
+      field('name', $.identifier),
+      ':', '=',
+      'import', '(', field('source', $.string_literal), ')',
     ),
 
     mutable: _ => 'mut',
@@ -147,6 +158,7 @@ module.exports = grammar({
     _expression: $ => choice(
       $.binary_expression,
       $.unary_expression,
+      $.member_expression,
       $.parenthesized_expression,
       $.integer_literal,
       $.string_literal,
@@ -161,6 +173,12 @@ module.exports = grammar({
     ),
 
     unary_expression: $ => prec(4, seq(field('operator', '~'), $._expression)),
+
+    // Something named through the module it belongs to, which binds tighter
+    // than any operator: `a.b & c` is `(a.b) & c`.
+    member_expression: $ => prec(5, seq(
+      field('base', $._expression), '.', field('name', $.identifier),
+    )),
 
     parenthesized_expression: $ => seq('(', $._expression, ')'),
 

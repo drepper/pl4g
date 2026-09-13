@@ -61,6 +61,10 @@ class Options:
     time_report: bool = False
     diag_format: DiagFormat = DiagFormat.TEXT
     decision_log: Path | None = None
+    #: Where to look for modules, in the order to look, as the command line
+    #: gave them.  An entry that is not absolute is relative to the importing
+    #: file first and to where the compiler was run second.
+    module_path: list[Path] = field(default_factory=list)
     incremental: bool = False
     show_help: bool = False
     show_help_json: bool = False

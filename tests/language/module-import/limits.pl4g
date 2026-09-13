@@ -1,0 +1,12 @@
+※ pl4g-test: module
+※※ The bounds the program beside this one is written against.
+※
+※ This is not a test of its own -- it has no startup function -- but a module
+※ the test beside it imports.  What it does not export is its own.
+@[export]
+let ceiling: u8 = 0b1100_0011u8
+
+@[export]
+let floor: u8 = 0b0101_0101u8
+
+let private: u8 = 9u8

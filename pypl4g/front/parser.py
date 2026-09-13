@@ -153,7 +153,7 @@ class Parser:
         raise _Bail()
 
     def _parse_variable(self, attrs: tuple[ast.Attribute, ...] = (),
-                        doc: str | None = None) -> ast.VarDef:
+                        doc: str | None = None) -> "ast.VarDef | ast.ModuleImport":
         """Parse ``let NAME ':' ['mut'] [TYPE] '=' VALUE``.
 
         The colon is always there; what varies is what follows it.  Written with
@@ -175,10 +175,32 @@ class Parser:
             self._diags.emit(D.LANG_VARDEF_MISSING_INITIALIZER, name_token.span,
                              name=name_token.text)
             raise _Bail()
+        if self._check(TokKind.KW_IMPORT):
+            return self._parse_import(start, name_token, mutable, declared, doc)
         value = self._parse_expression()
         return ast.VarDef(span=start.to(value.span), name=name_token.text,
                           name_span=name_token.span, type=declared, value=value,
                           mutable=mutable, doc=doc, attrs=attrs)
+
+    def _parse_import(self, start: Span, name_token: Token, mutable: bool,
+                      declared: "ast.TypeRef | None",
+                      doc: str | None) -> ast.ModuleImport:
+        """Parse the rest of ``let NAME ':=' import(STRING)``.
+
+        A module is not a value, so nothing about it may be qualified: there is
+        nothing to change and nothing to give a type to.
+        """
+        self._advance()
+        if mutable or declared is not None:
+            self._diags.emit(D.LANG_IMPORT_QUALIFIED, name_token.span,
+                             name=name_token.text)
+        self._expect(TokKind.LPAREN)
+        source = self._expect(TokKind.STRING, D.LANG_IMPORT_EXPECTED_NAME)
+        end = self._expect(TokKind.RPAREN, D.LANG_SYNTAX_EXPECTED_CLOSING_PAREN)
+        assert source.str_value is not None
+        return ast.ModuleImport(span=start.to(end.span), name=name_token.text,
+                                name_span=name_token.span, source=source.str_value,
+                                source_span=source.span, doc=doc)
 
     def _parse_doc_comments(self) -> str | None:
         """Collect the documentation comments preceding a definition."""
@@ -350,7 +372,15 @@ class Parser:
     def _parse_bare_statement(self) -> ast.Stmt:
         """Parse one statement."""
         if self._check(TokKind.KW_LET):
-            return self._parse_variable()
+            found = self._parse_variable()
+            if isinstance(found, ast.ModuleImport):
+                # A module is read while the program is compiled and what it
+                # holds is the program's, not one function's, so there is
+                # nowhere inside a body for one to belong to.
+                self._diags.emit(D.LANG_IMPORT_INSIDE_FUNCTION, found.span,
+                                 name=found.name)
+                raise _Bail()
+            return found
         if self._check(TokKind.IDENT) and self._peek().kind in (TokKind.ASSIGN,
                                                                TokKind.EQUALS):
             return self._parse_assignment()
@@ -413,6 +443,16 @@ class Parser:
                          operand=operand)
 
     def _parse_primary(self) -> ast.Expr:
+        """Parse an operand, with whatever is written after it."""
+        found = self._parse_atom()
+        while self._check(TokKind.DOT):
+            self._advance()
+            name = self._expect(TokKind.IDENT, D.LANG_SYNTAX_EXPECTED_MEMBER)
+            found = ast.Member(span=found.span.to(name.span), base=found,
+                               name=name.text, name_span=name.span)
+        return found
+
+    def _parse_atom(self) -> ast.Expr:
         """Parse an expression with nothing binding it to what is around it."""
         token = self._current
         if token.kind is TokKind.LPAREN:

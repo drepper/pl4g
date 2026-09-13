@@ -145,6 +145,15 @@ class UnaryOp(StrEnum):
 
 
 @dataclass(frozen=True, slots=True)
+class Member(Expr):
+    """Something named through the thing it belongs to: `modname.NAME`."""
+
+    base: Expr
+    name: str
+    name_span: Span
+
+
+@dataclass(frozen=True, slots=True)
 class Binary(Expr):
     """An operator applied to two operands."""
 
@@ -218,6 +227,25 @@ class AssignStmt(Stmt):
 
 
 @dataclass(frozen=True, slots=True)
+class ModuleImport(Node):
+    """A module brought into a file, and the name it is known by there.
+
+    Written as a definition -- `let name := import("somename")` -- because that
+    is what it is: a name bound to something.  It is a node of its own rather
+    than a variable whose value happens to be a module, because a module is not
+    a value: nothing can be computed from it and nothing of it survives into the
+    program but the definitions it holds.
+    """
+
+    name: str
+    name_span: Span
+    #: The name as the source wrote it, before anything is looked for.
+    source: str
+    source_span: Span
+    doc: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class Block(Node):
     """A sequence of statements in one of the two notations."""
 
@@ -248,7 +276,7 @@ class FuncDef(Node):
     doc: str | None = None
 
 
-type Definition = FuncDef | VarDef
+type Definition = FuncDef | VarDef | ModuleImport
 
 
 @dataclass(frozen=True, slots=True)

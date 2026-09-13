@@ -53,10 +53,13 @@ class DropUnreached:
         functions = {name: func for name, func in module.functions.items()
                      if id(func) in reachable}
         changed = len(functions) != len(module.functions)
-        for name, func in module.functions.items():
-            if name not in functions:
+        for key, func in module.functions.items():
+            if key not in functions:
+                # The name the source wrote, not what the module files it
+                # under: the key tells two files' definitions apart and is
+                # nothing a reader of the log should have to know about.
                 module.decisions.record(
-                    DecisionKind.DROP_FUNCTION, name,
+                    DecisionKind.DROP_FUNCTION, func.name,
                     "nothing the program can run reaches it, and it is not "
                     "exported, so nothing outside can reach it either",
                     func.span)
@@ -67,10 +70,10 @@ class DropUnreached:
                      if id(var) in named or var.linkage is Linkage.EXPORTED}
         if len(variables) != len(module.globals):
             changed = True
-            for name, var in module.globals.items():
-                if name not in variables:
+            for key, var in module.globals.items():
+                if key not in variables:
                     module.decisions.record(
-                        DecisionKind.DROP_VARIABLE, name,
+                        DecisionKind.DROP_VARIABLE, var.name,
                         "no function that is itself reached names it, and it is "
                         "not exported",
                         var.span)

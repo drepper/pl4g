@@ -84,3 +84,30 @@ fn one() → u8 { 1u8 }
     return_type: (type (identifier))
     body: (explicit_block
       (expression_statement (integer_literal)))))
+
+================================================================================
+A module, and something named through it
+================================================================================
+
+let limits := import("lib/limits")
+
+@[startup]
+fn main() → u8:
+    limits.ceiling & 3u8
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (module_import
+    name: (identifier)
+    source: (string_literal))
+  (function_definition
+    (attribute_list (attribute name: (identifier)))
+    name: (identifier)
+    parameters: (parameter_list)
+    return_type: (type (identifier))
+    body: (layout_block
+      (expression_statement
+        (binary_expression
+          (member_expression base: (identifier) name: (identifier))
+          (integer_literal))))))

@@ -75,14 +75,19 @@ class Module:
     _int_consts: dict[tuple[int, bool, int], IntConst] = field(default_factory=dict)
     _bool_consts: dict[bool, BoolConst] = field(default_factory=dict)
 
-    def add_function(self, func: Function) -> Function:
-        """Register *func* in this module."""
-        self.functions[func.name] = func
+    def add_function(self, func: Function, key: str | None = None) -> Function:
+        """Register *func* in this module.
+
+        The key is the name unless something says otherwise.  Two modules may
+        each hold a function of one name, so what brought them in gives a key
+        that tells them apart; the name itself stays what the source wrote.
+        """
+        self.functions[key if key is not None else func.name] = func
         return func
 
-    def add_global(self, var: GlobalVar) -> GlobalVar:
-        """Register *var* in this module."""
-        self.globals[var.name] = var
+    def add_global(self, var: GlobalVar, key: str | None = None) -> GlobalVar:
+        """Register *var* in this module, by the same rule as a function."""
+        self.globals[key if key is not None else var.name] = var
         return var
 
     def int_const(self, ty: IntType, value: int) -> IntConst:

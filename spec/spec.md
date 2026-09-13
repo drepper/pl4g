@@ -117,6 +117,43 @@ and `⁻1u8` is not, because no unsigned type has a negative value to hold.
 
 Compare C's `42U` and `42L`, Rust's `42u8`, and C#'s `42L`; the form here is Rust's, and the fallback is Odin's.
 
+#### Modules
+
+A file brings another in with a definition:
+
+```
+let limits := import("lib/limits")
+```
+
+The name on the left is what the module is called here; the string is the name of the module.  What the module exports is named
+through it: `limits.ceiling`.  Nothing else of it can be named -- what a module does not export is its own, and two modules may
+each define a name without either seeing the other's.
+
+A module is read while the program is compiled, and nothing of it reaches the program but the definitions it holds.  It is
+therefore not a value: it cannot be given a type, cannot be changed, cannot be computed with, and cannot be brought in inside a
+function, where what it holds would belong to one call rather than to the program.
+
+**Where a module is looked for.**  A name beginning with `/` names a file outright and only that place is looked at.  Otherwise the
+directory of the file doing the importing comes first, then the directories a build gives the compiler, then the ones the
+installation provides -- and the last of those only where the name has no `/` in it, since a name with a `/` is a path and a path
+is not something to go looking for somewhere the program knows nothing about.  The extension `.pl4g` is added where the name does
+not already end in it.
+
+**A module is read once.**  A file reached from two places is one module: its definitions are in the program once, not once per
+route to them.  A ring of imports is an error, because a module is read while the file importing it is being read and a ring has no
+beginning.
+
+**What a module is called.**  In the program a module's name is the name of its file without the extension, with the name of
+whatever imported it in front, so a module reached through another is `outer.inner`.  A module reached more than one way has more
+than one such name and the shortest is the one used -- the one sorting first where two are the same length -- since a program
+should not be made to carry the longest way of reaching something.  Two different files with the same name would come to one name,
+so both get a few characters of the hash of their path to tell them apart.
+
+Compare Python, where a module is an object and importing one runs it; Go, where an import path is resolved by the build system and
+the name is the last element; and C, where `#include` is text and there are no modules at all.  This is closest to Go's in what it
+means and to neither in how it is found: the file doing the importing decides first, which is what makes a directory of sources
+work with nothing configured.
+
 ### Expressions
 
 An expression may be enclosed in parentheses, which say how its operators group and mean nothing else.  Where there are none, each

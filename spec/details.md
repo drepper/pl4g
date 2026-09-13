@@ -155,6 +155,25 @@ off the syntax first -- a literal that names its type, a name already bound, eit
 both sides are checked against.  Without it a rule that only looked leftwards would accept `count & 3` and refuse `3 & count`,
 which would be a difference with nothing behind it.
 
+Modules
+-------
+
+A module is found, read and checked while the file importing it is being checked, by a checker of its own sharing the module being
+built.  That is what makes the top-level namespace a file's rather than the compilation's: two files may each define a `counter`,
+and the representation holds both, so what a definition is filed under says which file it came from while the name stays what the
+source wrote.
+
+A module's name is settled after all the reading rather than during it, because neither question can be answered earlier.  The
+shortest of a module's names is not known until the last route to it has been found, and whether two modules share a base name is
+not known until both have been read.  So the loading records every name a module could go by, and a pass at the end chooses.
+
+The whole-program questions -- whether there is a startup function, and whether anything reads a variable -- are asked once, by the
+outermost checker.  A module read first would answer both wrongly: the startup function is in a file not read yet, and a variable
+it exports is read by one.
+
+`--module-path` gives the directories a build wants searched, colon-separated.  A relative entry is tried against the importing
+file's directory first and against where the compiler was run second.
+
 The Symbolic Assembler
 ----------------------
 

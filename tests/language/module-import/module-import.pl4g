@@ -1,0 +1,11 @@
+※ pl4g-test: compile=ok opt=0,1
+※ pl4g-test: run=native,qemu exit=65
+※ pl4g-test: diag=none
+
+※ A module is found beside the file importing it, read while this one is being
+※ compiled, and what it exports is named through the name it was bound to here.
+let limits := import("limits")
+
+@[startup]
+fn main() → u8:
+    limits.ceiling & limits.floor

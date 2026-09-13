@@ -98,6 +98,14 @@
     },
     {
       "short": null,
+      "long": "--module-path",
+      "arg": "separate_or_joined",
+      "metavar": "DIRS",
+      "since": "0.1",
+      "help": "colon-separated directories to look for modules in, after the directory of the importing file and before the system ones"
+    },
+    {
+      "short": null,
       "long": "--decision-log",
       "arg": "separate_or_joined",
       "metavar": "FILE",

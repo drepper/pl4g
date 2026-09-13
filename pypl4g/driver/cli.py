@@ -7,6 +7,8 @@ rather than onto text of some library's choosing.
 
 from enum import Enum
 from pathlib import Path
+
+from ..sema.modules import parse_search_path
 from typing import Sequence, TypeVar
 
 from ..diag import ids as D
@@ -100,6 +102,15 @@ class CommandLine:
             return index
         if word.startswith("--target="):
             self._options.triple = word[len("--target="):]
+            return index
+        if word.startswith("--module-path="):
+            self._options.module_path.extend(
+                parse_search_path(word[len("--module-path="):]))
+            return index
+        if word == "--module-path":
+            value, index = self._value_of(word, argv, index)
+            if value is not None:
+                self._options.module_path.extend(parse_search_path(value))
             return index
         if word.startswith("--decision-log="):
             self._options.decision_log = Path(word[len("--decision-log="):])

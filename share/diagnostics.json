@@ -792,6 +792,80 @@
       "option": null
     },
     {
+      "number": 3010,
+      "name": "LANG_SYNTAX_EXPECTED_MEMBER",
+      "severity": "error",
+      "message": "expected the name of something after '.'",
+      "cause": "A dot names something through the thing it belongs to, so a name has to follow it.  Nothing else may.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions",
+        "requirement": "A module is brought into a file with `let NAME := import(\"somename\")`, and what it holds is named through it as `NAME.thing`."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 3011,
+      "name": "LANG_IMPORT_EXPECTED_NAME",
+      "severity": "error",
+      "message": "expected the name of a module, written as a string",
+      "cause": "What `import` is given is the name of a module, written in quotes.  It is not an expression and is not computed: the module is found and read while the program is being compiled, so the name has to be there to read.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Modules",
+        "requirement": "A module is brought into a file with `let NAME := import(\"somename\")`, and what it holds is named through it as `NAME.thing`."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 3012,
+      "name": "LANG_IMPORT_QUALIFIED",
+      "severity": "error",
+      "message": "'{name}' names a module, which cannot be given a type or made mutable",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the name the module is bound to"
+        }
+      ],
+      "cause": "A module is not a value.  Nothing can be computed from one, nothing of it survives into the program but the definitions it holds, and there is accordingly nothing to give a type to and nothing to change.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Modules",
+        "requirement": "A module is brought into a file with `let NAME := import(\"somename\")`, and what it holds is named through it as `NAME.thing`."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 3013,
+      "name": "LANG_IMPORT_INSIDE_FUNCTION",
+      "severity": "error",
+      "message": "'{name}' imports a module inside a function, where a module cannot go",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the name the module was to be bound to"
+        }
+      ],
+      "cause": "A module is read while the program is being compiled and what it holds belongs to the program, not to one function that happens to run.  An import therefore stands at the top level of a file, where the things it brings in are things the file has.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Modules",
+        "requirement": "A module is brought into a file with `let NAME := import(\"somename\")`, at the top level of that file."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 3201,
       "name": "LANG_ATTR_UNKNOWN",
       "severity": "error",
@@ -1119,6 +1193,158 @@
       "since": "0.1",
       "default_enabled": true,
       "option": "unread-variable"
+    },
+    {
+      "number": 4100,
+      "name": "LANG_IMPORT_NOT_FOUND",
+      "severity": "error",
+      "message": "no module called '{name}' was found in any of the {looked} places looked",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the name as the source wrote it"
+        },
+        {
+          "name": "looked",
+          "type": "string",
+          "description": "how many places were tried"
+        }
+      ],
+      "cause": "A module is found by looking in the directory of the file importing it, then in the directories given on the command line, then in the ones the installation provides -- and the last of those only where the name has no slash in it, since a name with a slash is a path.  The extension is added where the name does not already have it.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Modules",
+        "requirement": "A module is brought into a file with `let NAME := import(\"somename\")`, and what it holds is named through it as `NAME.thing`.  Only what the module exports can be named."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4101,
+      "name": "LANG_IMPORT_UNREADABLE",
+      "severity": "error",
+      "message": "the module '{name}' was found but could not be read: {reason}",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the name as the source wrote it"
+        },
+        {
+          "name": "reason",
+          "type": "string",
+          "description": "what the system said"
+        }
+      ],
+      "cause": "The file exists and something about reading it failed -- permission, or text that is not valid UTF-8.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Modules",
+        "requirement": "A module is brought into a file with `let NAME := import(\"somename\")`, and what it holds is named through it as `NAME.thing`.  Only what the module exports can be named."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4102,
+      "name": "LANG_IMPORT_CYCLE",
+      "severity": "error",
+      "message": "importing '{name}' would close a ring: {chain}",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the name as the source wrote it"
+        },
+        {
+          "name": "chain",
+          "type": "string",
+          "description": "the ring, from where it closes back to itself"
+        }
+      ],
+      "cause": "A module is read while the file importing it is being read, so a ring of imports has no beginning: neither module can be finished before the other.  Move what both need into a third module that neither imports back.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Modules",
+        "requirement": "A module is brought into a file with `let NAME := import(\"somename\")`, and what it holds is named through it as `NAME.thing`.  Only what the module exports can be named."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4103,
+      "name": "LANG_IMPORT_NOT_A_MODULE",
+      "severity": "error",
+      "message": "'{name}' is not a module, so nothing can be named through it",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "what stood before the dot"
+        }
+      ],
+      "cause": "A dot names something through the module it belongs to, and only a name bound by an import is a module.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Modules",
+        "requirement": "A module is brought into a file with `let NAME := import(\"somename\")`, and what it holds is named through it as `NAME.thing`.  Only what the module exports can be named."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4104,
+      "name": "LANG_IMPORT_NOT_EXPORTED",
+      "severity": "error",
+      "message": "'{module}' has nothing called '{name}' that it exports",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the name after the dot"
+        },
+        {
+          "name": "module",
+          "type": "string",
+          "description": "the name the module is known by here"
+        }
+      ],
+      "cause": "Only what a module exports can be named from outside it; everything else is the module's own.  Either the name is spelled differently there, or the definition needs `@[export]`.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Modules",
+        "requirement": "A module is brought into a file with `let NAME := import(\"somename\")`, and what it holds is named through it as `NAME.thing`.  Only what the module exports can be named."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4105,
+      "name": "LANG_IMPORT_MODULE_AS_VALUE",
+      "severity": "error",
+      "message": "'{name}' is a module, which is not a value",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the name the module is known by here"
+        }
+      ],
+      "cause": "A module is read while the program is compiled and nothing of it survives into the program but the definitions it holds.  There is nothing to compute with; name something through it instead.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Modules",
+        "requirement": "A module is brought into a file with `let NAME := import(\"somename\")`, and what it holds is named through it as `NAME.thing`.  Only what the module exports can be named."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
     },
     {
       "number": 4201,

@@ -42,3 +42,10 @@
 ["→" "->"] @punctuation.delimiter
 ["(" ")" "{" "}" "@[" "]"] @punctuation.bracket
 ["," ":" ";" "="] @punctuation.delimiter
+
+; -- modules ------------------------------------------------------------------
+
+(module_import name: (identifier) @module)
+(member_expression base: (identifier) @module)
+(member_expression name: (identifier) @variable)
+["import"] @keyword.import

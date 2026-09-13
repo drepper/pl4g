@@ -79,27 +79,10 @@ To Do List for the pypl4g compiler
     not mapped, so a backtrace carrying names needs either a table that is loaded or addresses only.  The message goes out through
     a raw system call, which is also what the pre-`io_uring` error path in TODO-language.md needs.
 
-[ ] implement module system.  A module is loaded at compile-time.  The syntax is `let modname := import("somename")` where `modname`
-    is the name the module is known as in the compilation unit and `somename` is the name of the module.  There will be built-in
-    modules in future, at some point.  For now modules are PL4G source files which are loaded.  They are searched for by a path
-    and depending on whether the `somename` string (implement strings) contains a `/`.
-    - modules which names staring with `/` are naming absolute files and only the addressed location is searched
-    - the directory of the file is searched with the file name appended (even if the name contains a `/` somewhere)
-    - a path defined by build rules (for now just a command line parameter) is searched, one of the colon-separated directory
-      names at a time.  Absolute path names are used as is, others are searched relative to the files source or the current
-      working directory, in that order
-    - if still not found, look in system directories which are used by the installation.  This does not happen if the name
-      contains a slash.
-    The file name has the extension `.pl4g` appended if it does not already have it.
-    Once a file is located the file name is remembered.  Before any future import is about to look for a file, a check is
-    performed to see whether it is already known and if yes, the loaded data is shared.
-    Symbols in a module are known within the source as `modname.NAME` where `NAME` is the name of the exported object in the imported
-    file and `modname` is the variable from the assignment.  When generating a symbol name for the ELF symbol name the name of the
-    importing module is prepended to the name of the imported module and then the object name is appended.  A module's name can
-    consist of multiple concatenated module names.  The modules name is the basename part of the file name, without the `.pl4g`
-    extension.  In case of a conflict with another module with the same basename append the hash sum of the respective full path.
-    In case a module is imported more than once only one instance is used and the name which is used is the shortest and in case
-    of a tie in length, the one sorting first.
+[x] implement module system.  Done: `let name := import("somename")`, found in the importing file's directory, then the
+    directories `--module-path` gives, then the installation's; read once however many routes reach it; named by the shortest of
+    those routes, with the hash of the path where two files share a base name; a ring refused.  The top-level namespace is a
+    file's rather than the compilation's, which is what makes two modules able to define one name.
 
 [?] patching a binary while it is in use.  spec/details.md asks for hooks into the system that controls binary creation so that a
     binary can be changed while it is being used.  Linux refuses to write to a running executable's file, so this needs a concrete

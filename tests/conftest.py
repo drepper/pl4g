@@ -103,6 +103,10 @@ class Expectations:
     #: that is off by default, for instance.
     extra_args: list[str] = field(default_factory=list)
     xfail: str | None = None
+    #: Whether the file is a module another test imports rather than a test of
+    #: its own.  One has no startup function, so compiling it alone would fail
+    #: for a reason that says nothing about the compiler.
+    is_module: bool = False
 
 
 def parse_directives(text: str) -> Expectations:
@@ -113,6 +117,9 @@ def parse_directives(text: str) -> Expectations:
         if not stripped.startswith(DIRECTIVE):
             continue
         body = stripped[len(DIRECTIVE):].strip()
+        if body == "module":
+            result.is_module = True
+            continue
         if body.startswith("args "):
             result.extra_args.extend(body[len("args "):].split())
             continue
@@ -243,9 +250,12 @@ class PL4GItem(pytest.Item):
 
 def pytest_collect_file(parent: pytest.Collector, file_path: Path):  # noqa: ANN201
     """Collect every ``.pl4g`` file under ``tests/language`` as a test."""
-    if file_path.suffix == ".pl4g" and "language" in file_path.parts:
-        return PL4GFile.from_parent(parent, path=file_path)
-    return None
+    if file_path.suffix != ".pl4g" or "language" not in file_path.parts:
+        return None
+    # A module belongs to the test that imports it and is not one itself.
+    if parse_directives(file_path.read_text(encoding="utf-8")).is_module:
+        return None
+    return PL4GFile.from_parent(parent, path=file_path)
 
 
 @pytest.fixture(scope="session")

@@ -51,6 +51,7 @@ class TokKind(StrEnum):
     KW_TYPE = "'type'"
     KW_TRUE = "'true'"
     KW_FALSE = "'false'"
+    KW_IMPORT = "'import'"
 
     AT_LBRACKET = "'@['"
     LPAREN = "'('"
@@ -66,6 +67,7 @@ class TokKind(StrEnum):
     ARROW = "'\N{RIGHTWARDS ARROW}'"
     ASSIGN = "'\N{LEFTWARDS ARROW}'"
 
+    DOT = "'.'"
     AMPERSAND = "'&'"
     PIPE = "'|'"
     CARET = "'^'"
@@ -93,6 +95,7 @@ KEYWORDS: Final[dict[str, TokKind]] = {
     "type": TokKind.KW_TYPE,
     "true": TokKind.KW_TRUE,
     "false": TokKind.KW_FALSE,
+    "import": TokKind.KW_IMPORT,
 }
 
 
