@@ -11,7 +11,8 @@
     "bitwise-operators": "an expression with four operators and two variables",
     "bitwise-precedence": "an expression the folder collapses entirely",
     "spill-to-the-frame": "thirty-two at once, which no target can hold",
-    "boolean-in-memory": "a truth value, which is one byte"
+    "boolean-in-memory": "a truth value, which is one byte",
+    "comparison-operators": "all six comparisons, none of them folded"
   },
   "commits": [
     {
@@ -69,6 +70,10 @@
     {
       "hash": "ed1c028",
       "subject": "✨ A truth value in a register, on all three architectures"
+    },
+    {
+      "hash": "1269bd5",
+      "subject": "✨ The comparisons: `=` `≠` `<` `>` `≤` `≥`"
     }
   ],
   "times": {
@@ -666,6 +671,60 @@
       "boolean-in-memory": [
         1.426,
         74.02295601787046
+      ]
+    },
+    "1269bd5": {
+      "exit0": [
+        1.131,
+        77.94057700084522
+      ],
+      "global-variable": [
+        1.252,
+        76.55446697026491
+      ],
+      "assign-widths": [
+        1.6660000000000001,
+        76.99549198150635
+      ],
+      "many-values-at-once": [
+        1.9389999999999998,
+        76.18562201969326
+      ],
+      "unreached-function": [
+        1.523,
+        76.13574696006253
+      ],
+      "export-visibility": [
+        1.583,
+        76.755610993132
+      ],
+      "digit-separators": [
+        1.654,
+        74.87644901266322
+      ],
+      "boolean-values": [
+        1.411,
+        76.1248700437136
+      ],
+      "bitwise-operators": [
+        1.585,
+        75.37863502511755
+      ],
+      "bitwise-precedence": [
+        1.4339999999999997,
+        77.35299196792766
+      ],
+      "spill-to-the-frame": [
+        6.653999999999999,
+        84.5281970105134
+      ],
+      "boolean-in-memory": [
+        1.534,
+        76.8137089908123
+      ],
+      "comparison-operators": [
+        2.404,
+        77.93193403631449
       ]
     }
   }

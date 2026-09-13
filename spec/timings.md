@@ -38,6 +38,7 @@ the parser does, and they are the floor everything else is measured against.
 | `d0c8cf5` | 1.05 | 1.60 | 1.43 |
 | `73ce857` | 1.01 | 1.69 | 1.44 |
 | `ed1c028` | 1.06 | 1.64 | 1.45 |
+| `1269bd5` | 1.13 | 1.65 | 1.41 |
 
 ### Variables and memory
 
@@ -60,6 +61,7 @@ backend do.
 | `d0c8cf5` | 1.13 | 1.59 |  |
 | `73ce857` | 1.19 | 1.65 |  |
 | `ed1c028` | 1.22 | 1.73 | 1.43 |
+| `1269bd5` | 1.25 | 1.67 | 1.53 |
 
 ### Register pressure
 
@@ -82,6 +84,7 @@ and they are the only ones that reach the frame.
 | `d0c8cf5` | 1.87 | 6.33 |
 | `73ce857` | 1.89 | 6.48 |
 | `ed1c028` | 1.94 | 6.32 |
+| `1269bd5` | 1.94 | 6.65 |
 
 ### What is left out
 
@@ -104,28 +107,30 @@ decision log does.
 | `d0c8cf5` | 1.41 | 1.46 |
 | `73ce857` | 1.50 | 1.57 |
 | `ed1c028` | 1.49 | 1.59 |
+| `1269bd5` | 1.52 | 1.58 |
 
 ### Expressions
 
 Operators, and the folding of them.  These move when the expression parser, the semantic analysis or the
 optimizer does.
 
-| commit | bitwise-operators | bitwise-precedence |
-|---|---|---|
-| `eee64a3` |  |  |
-| `af657ad` |  |  |
-| `2f564cb` | 1.47 | 1.22 |
-| `37dbb28` | 1.55 | 1.22 |
-| `1c4ae78` | 1.56 | 1.42 |
-| `f391839` | 1.57 | 1.40 |
-| `04c20c9` | 1.58 | 1.39 |
-| `3020cf6` | 1.44 | 1.28 |
-| `9bcaf84` | 1.46 | 1.28 |
-| `40c35bb` | 1.51 | 1.31 |
-| `9437d8a` | 1.54 | 1.45 |
-| `d0c8cf5` | 1.55 | 1.36 |
-| `73ce857` | 1.58 | 1.39 |
-| `ed1c028` | 1.65 | 1.45 |
+| commit | bitwise-operators | bitwise-precedence | comparison-operators |
+|---|---|---|---|
+| `eee64a3` |  |  |  |
+| `af657ad` |  |  |  |
+| `2f564cb` | 1.47 | 1.22 |  |
+| `37dbb28` | 1.55 | 1.22 |  |
+| `1c4ae78` | 1.56 | 1.42 |  |
+| `f391839` | 1.57 | 1.40 |  |
+| `04c20c9` | 1.58 | 1.39 |  |
+| `3020cf6` | 1.44 | 1.28 |  |
+| `9bcaf84` | 1.46 | 1.28 |  |
+| `40c35bb` | 1.51 | 1.31 |  |
+| `9437d8a` | 1.54 | 1.45 |  |
+| `d0c8cf5` | 1.55 | 1.36 |  |
+| `73ce857` | 1.58 | 1.39 |  |
+| `ed1c028` | 1.65 | 1.45 |  |
+| `1269bd5` | 1.58 | 1.43 | 2.40 |
 
 Process
 -------
@@ -152,6 +157,7 @@ worth showing here, and every figure is in the JSON beside this file.
 | `d0c8cf5` | 73 | 81 |
 | `73ce857` | 73 | 81 |
 | `ed1c028` | 74 | 80 |
+| `1269bd5` | 75 | 85 |
 
 What each row is:
 
@@ -169,6 +175,7 @@ What each row is:
 - `d0c8cf5` -- ✨ `export` and `visible` are two attributes, because they were two questions
 - `73ce857` -- ✨ One meaning, one spelling: attributes are written one way
 - `ed1c028` -- ✨ A truth value in a register, on all three architectures
+- `1269bd5` -- ✨ The comparisons: `=` `≠` `<` `>` `≤` `≥`
 
 What each program exercises:
 
@@ -184,3 +191,4 @@ What each program exercises:
 - `export-visibility` -- several definitions, some exported
 - `bitwise-operators` -- four operators over two variables
 - `bitwise-precedence` -- an expression the folder collapses entirely
+- `comparison-operators` -- all six comparisons, none of them folded
