@@ -197,9 +197,5 @@ To Do List for the PL4g language
 Runtime
 -------
 
-[?] Create a data type for input streams and one for output streams.  The former is used for standard input, the latter for
-    standard output/error.  For now a simple
-    Question: this entry ends mid-sentence -- "For now a simple" -- so what it asks for is not yet written down.  What was the rest?
-    It also needs the product type, since a stream is at least a descriptor and a buffer, and it needs the decision about the
-    error path above, since a stream is where a failed write would be reported and the first stream has to exist before there is
-    anywhere to report that it could not be made.
+[?] Create a data type for for an output streams which is used for
+    standard output/error.  For now a simple representation with a file descriptor and `write` functions is sufficient.
