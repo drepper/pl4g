@@ -50,6 +50,7 @@ the parser does, and they are the floor everything else is measured against.
 | `0990c74` | 1.05 | 1.69 | 1.56 | 1.37 |
 | `05d8da1` | 0.94 | 1.58 | 1.45 | 1.23 |
 | `03887ff` | 1.15 | 1.91 | 1.76 | 1.57 |
+| `87c066b` | 1.25 | 2.04 | 1.81 | 1.51 |
 
 ### Variables and memory
 
@@ -84,6 +85,7 @@ backend do.
 | `0990c74` | 1.20 | 1.59 | 1.39 |
 | `05d8da1` | 1.05 | 1.46 | 1.29 |
 | `03887ff` | 1.36 | 1.81 | 1.60 |
+| `87c066b` | 1.54 | 2.02 | 1.59 |
 
 ### Register pressure
 
@@ -118,6 +120,7 @@ and they are the only ones that reach the frame.
 | `0990c74` | 1.81 | 5.97 |
 | `05d8da1` | 1.70 | 5.88 |
 | `03887ff` | 2.04 | 7.24 |
+| `87c066b` | 2.10 | 7.18 |
 
 ### What is left out
 
@@ -152,6 +155,7 @@ decision log does.
 | `0990c74` | 1.44 | 1.48 |
 | `05d8da1` | 1.31 | 1.49 |
 | `03887ff` | 1.54 | 1.62 |
+| `87c066b` | 1.72 | 1.68 |
 
 ### Expressions
 
@@ -186,6 +190,7 @@ optimizer does.
 | `0990c74` | 1.56 | 1.36 | 2.17 | 2.31 | 2.09 | 1.52 | 1.79 | 2.25 | 2.09 |  |  |
 | `05d8da1` | 1.45 | 1.22 | 2.06 | 2.13 | 2.01 | 1.42 | 1.70 | 2.16 | 1.86 | 2.00 |  |
 | `03887ff` | 1.78 | 1.57 | 2.49 | 2.59 | 2.41 | 1.67 | 2.01 | 2.55 | 2.17 | 2.34 | 5.54 |
+| `87c066b` | 1.78 | 1.56 | 2.63 | 2.76 | 2.46 | 1.80 | 2.08 | 2.59 | 2.21 | 2.29 | 6.22 |
 
 Process
 -------
@@ -224,6 +229,7 @@ worth showing here, and every figure is in the JSON beside this file.
 | `0990c74` | 65 | 71 |
 | `05d8da1` | 65 | 73 |
 | `03887ff` | 75 | 90 |
+| `87c066b` | 77 | 90 |
 
 What each row is:
 
@@ -253,6 +259,7 @@ What each row is:
 - `0990c74` -- ✨ Division and what is left over: `÷` and `%`
 - `05d8da1` -- ✨ Moving bits sideways: « » ↺ ↻, and an overflow seen while compiling
 - `03887ff` -- 📝 Time the floating-point sample too
+- `87c066b` -- ✨ A floating-point answer that is not a number stops the program
 
 What each program exercises:
 

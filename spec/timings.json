@@ -127,6 +127,10 @@
     {
       "hash": "03887ff",
       "subject": "📝 Time the floating-point sample too"
+    },
+    {
+      "hash": "87c066b",
+      "subject": "✨ A floating-point answer that is not a number stops the program"
     }
   ],
   "times": {
@@ -1576,6 +1580,96 @@
       "float-arithmetic": [
         5.54,
         82.22410699818283
+      ]
+    },
+    "87c066b": {
+      "exit0": [
+        1.254,
+        82.97932799905539
+      ],
+      "global-variable": [
+        1.538,
+        84.91619699634612
+      ],
+      "assign-widths": [
+        2.0210000000000004,
+        90.36448202095926
+      ],
+      "many-values-at-once": [
+        2.101,
+        81.72117098001763
+      ],
+      "unreached-function": [
+        1.7240000000000002,
+        81.8797399988398
+      ],
+      "export-visibility": [
+        1.675,
+        77.14745600242168
+      ],
+      "digit-separators": [
+        1.81,
+        81.07971400022507
+      ],
+      "boolean-values": [
+        1.509,
+        78.98244302487001
+      ],
+      "bitwise-operators": [
+        1.781,
+        78.37536698207259
+      ],
+      "bitwise-precedence": [
+        1.562,
+        81.56509604305029
+      ],
+      "spill-to-the-frame": [
+        7.183999999999999,
+        83.71293405070901
+      ],
+      "boolean-in-memory": [
+        1.5910000000000002,
+        78.38891702704132
+      ],
+      "comparison-operators": [
+        2.631,
+        84.32156103663146
+      ],
+      "logic-operators": [
+        2.7619999999999996,
+        82.16870605247095
+      ],
+      "logic-short-circuit": [
+        2.455,
+        81.63867599796504
+      ],
+      "saturating-precedence": [
+        1.804,
+        79.5234470278956
+      ],
+      "arithmetic-operators": [
+        2.08,
+        79.96723696123809
+      ],
+      "semicolon-separates-statements": [
+        2.035,
+        81.21391700115055
+      ],
+      "call-nested": [
+        2.587,
+        81.50148997083306
+      ],
+      "arithmetic-division": [
+        2.206,
+        82.31423498364165
+      ],
+      "shift-operators": [
+        2.295,
+        78.31430499209091
+      ],
+      "float-arithmetic": [
+        6.2219999999999995,
+        85.66973294364288
       ]
     }
   }
