@@ -59,6 +59,7 @@ the parser does, and they are the floor everything else is measured against.
 | `d0caa00` | 1.14 | 1.90 | 1.98 | 1.46 |
 | `df0bfc5` | 1.14 | 1.88 | 1.89 | 1.47 |
 | `af86f5d` | 1.08 | 1.86 | 1.69 | 1.42 |
+| `7de9bb1` | 1.10 | 1.90 | 1.76 | 1.47 |
 
 ### Variables and memory
 
@@ -102,6 +103,7 @@ backend do.
 | `d0caa00` | 1.34 | 1.82 | 1.53 |
 | `df0bfc5` | 1.27 | 1.76 | 1.58 |
 | `af86f5d` | 1.26 | 1.77 | 1.54 |
+| `7de9bb1` | 1.25 | 1.78 | 1.52 |
 
 ### Register pressure
 
@@ -145,6 +147,7 @@ and they are the only ones that reach the frame.
 | `d0caa00` | 2.04 | 7.19 |
 | `df0bfc5` | 2.03 | 7.19 |
 | `af86f5d` | 2.04 | 7.21 |
+| `7de9bb1` | 2.03 | 7.43 |
 
 ### What is left out
 
@@ -188,6 +191,7 @@ decision log does.
 | `d0caa00` | 1.58 | 1.63 |
 | `df0bfc5` | 1.54 | 1.68 |
 | `af86f5d` | 1.60 | 1.65 |
+| `7de9bb1` | 1.56 | 1.69 |
 
 ### Expressions
 
@@ -231,6 +235,7 @@ optimizer does.
 | `d0caa00` | 1.87 | 1.51 | 2.45 | 2.62 | 2.44 | 1.83 | 2.04 | 2.60 | 2.31 | 2.35 | 6.36 | 9.62 | 3.79 | 10.51 | 4.23 |  |
 | `df0bfc5` | 1.85 | 1.47 | 2.58 | 2.55 | 2.40 | 1.88 | 2.00 | 2.62 | 2.31 | 2.35 | 6.41 | 9.60 | 3.70 | 10.00 | 4.16 |  |
 | `af86f5d` | 1.74 | 1.48 | 2.49 | 2.58 | 2.37 | 1.70 | 2.04 | 2.58 | 2.27 | 2.32 | 6.39 | 9.64 | 3.73 | 10.09 | 4.15 | 3.15 |
+| `7de9bb1` | 1.76 | 1.49 | 2.64 | 2.71 | 2.46 | 1.68 | 1.95 | 2.74 | 2.35 | 2.38 | 6.49 | 9.71 | 3.80 | 10.21 | 4.38 | 3.25 |
 
 ### Types
 
@@ -273,6 +278,7 @@ Definitions the program writes.  These move when the parser, the name resolution
 | `d0caa00` | 1.60 | 3.76 |  |
 | `df0bfc5` | 1.38 | 3.72 | 3.75 |
 | `af86f5d` | 1.36 | 3.70 | 3.77 |
+| `7de9bb1` | 1.39 | 3.84 | 3.87 |
 
 Process
 -------
@@ -320,6 +326,7 @@ worth showing here, and every figure is in the JSON beside this file.
 | `d0caa00` | 80 | 96 |
 | `df0bfc5` | 81 | 90 |
 | `af86f5d` | 79 | 90 |
+| `7de9bb1` | 82 | 95 |
 
 What each row is:
 
@@ -358,6 +365,7 @@ What each row is:
 - `d0caa00` -- 📝 Time the enumerations too
 - `df0bfc5` -- 📝 Time a flag enumeration too
 - `af86f5d` -- 📝 Time an if too
+- `7de9bb1` -- 📝 Time the collections too
 
 What each program exercises:
 
@@ -391,3 +399,4 @@ What each program exercises:
 - `type-definitions` -- eight definitions in all three notations
 - `enum-values` -- two enumerations, and three matches over them
 - `enum-flag` -- a flag enumeration, its operators and three matches
+- `collection-syntax` -- sets and dictionaries, their types and lookups
