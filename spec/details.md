@@ -122,6 +122,19 @@ tests, which the testing machinery will call once there is any; and whatever the
 from somewhere this compilation cannot see.  From a root it follows what each instruction says it names -- today only the callee of
 a call, and tomorrow whatever new shape can hold a function.
 
+Variables follow the functions.  A variable at the top level is reached when a function that is itself reached names it, so dropping
+a function can be exactly what leaves a variable unreachable; the two are therefore settled in one pass and in that order, rather
+than by two that would have to be run until they agreed.  A variable the program exports is a root of its own, for the reason an
+exported function is.  Being written counts as naming it even where nothing reads what was written -- a write is an effect that
+outlives the function -- so a variable the program only writes is reported rather than quietly deleted, which is the next paragraph.
+
+Whether anything reads a variable at the top level is a question about the whole program, since any function may name one.  It is
+asked once every function has been checked, and it is asked of the same hook the reachability walk uses: each instruction says
+which places it reads and which it writes, so neither the analysis nor the pass matches on instruction shapes, and a shape that can
+name a variable in some new way says so in one place.  What the definition said it raises has to stay in force until then; the
+expectation is therefore carried on the variable rather than settled where the definition was read, which is what a local already
+does for the same reason.
+
 There is a canonical textual form, written by `--emit=ir` and read back by the compiler's own reader.  Values are numbered by
 position, so a module always prints the same text; printing, reading and printing again is a fixed point, and that property is
 asserted for every stored example.  The form is a testing facility rather than a serialization format: a persistent form, if one

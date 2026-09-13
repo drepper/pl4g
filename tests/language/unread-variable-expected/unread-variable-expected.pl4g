@@ -1,0 +1,14 @@
+※ pl4g-test: compile=ok opt=0,1
+※ pl4g-test: run=native,qemu exit=3
+※ pl4g-test: diag=none
+
+※ The same program saying it means it.  The attribute stands on the definition,
+※ where a reader would write it, although the diagnostic is only discovered once
+※ every function has been checked.
+@[expect(4007)]
+let counter: mut u8 = 1u8
+
+@[startup]
+fn main() → u8:
+    counter ← 7u8
+    3u8

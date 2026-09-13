@@ -75,6 +75,22 @@ class _Local:
     expected_pairs: list[_Expected] = field(default_factory=list)
 
 
+@dataclass(slots=True)
+class _Global:
+    """A variable defined at the top level, and what it says it raises.
+
+    Whether anything reads one is a question about the whole program, since a
+    variable there can be named from any function; it is therefore answered
+    once every function has been checked, and what the definition said it raises
+    has to survive until then.
+    """
+
+    var: GlobalVar
+    span: Span
+    expectation: Expectation | None = None
+    expected_pairs: list[_Expected] = field(default_factory=list)
+
+
 class Checker:
     """Checks one program and lowers it into a module."""
 
@@ -98,6 +114,9 @@ class Checker:
         self._discard_function: bool = False
         #: What each top-level definition says it raises, and where it says so.
         self._expected_pairs: dict[str, list[_Expected]] = {}
+        #: Every variable defined at the top level, in the order it was written,
+        #: so that what nothing reads can be reported once the program is whole.
+        self._top_level: list[_Global] = []
 
     # -- entry point -----------------------------------------------------------
 
@@ -154,17 +173,25 @@ class Checker:
             initializer = self._constant_value(node, ty) if ty is not None else None
         finally:
             self._end_expecting(expectation)
-            discard = self._settle_expecting(expectation, pairs)
-        if discard:
+        if expectation is not None and expectation.saw_error:
             # A variable whose definition could not be made sense of has no
-            # value to put in the image, so it is not put there.
+            # value to put in the image, so it is not put there.  What it said
+            # it raises is settled now, since there will be no later chance.
+            self._settle_expecting(expectation, pairs)
             return
         if ty is None:
             ty = ERROR
-        self._module.add_global(GlobalVar(
+        var = self._module.add_global(GlobalVar(
             name=node.name, value_type=ty,
             ptr_type=self._module.types.ptr_type(ty, mutable=node.mutable),
             initializer=initializer, linkage=linkage, span=node.span))
+        # The expectation stays alive rather than being settled here: whether
+        # anything reads this variable is not known until every function has
+        # been checked, so an `@[expect]` written on the definition -- where a
+        # reader would write it -- has to still be in force then.
+        self._top_level.append(_Global(var=var, span=node.name_span,
+                                       expectation=expectation,
+                                       expected_pairs=list(pairs)))
 
     def _variable_type(self, node: ast.VarDef) -> Type | None:
         """The type of a variable: the one declared, or the one its value has."""
@@ -935,6 +962,64 @@ class Checker:
         """Check the properties the whole program must have."""
         if self._module.startup is None:
             self._diags.emit(D.LANG_FUNCDEF_SPECIAL_NO_STARTUP)
+        self._report_unread_variables()
+
+    def _report_unread_variables(self) -> None:
+        """Report a variable at the top level that is written and never read.
+
+        This is the rule that catches an unread value inside a function, asked
+        of a variable the whole program can name -- which is why it is asked
+        here, where every function has been checked and the answer cannot change
+        any more.
+        """
+        reads, writes = self._variable_uses()
+        for entry in self._top_level:
+            var = entry.var
+            if var.linkage is Linkage.EXPORTED:
+                # Something outside this compilation may read it, so nothing
+                # here can say that nothing does.
+                self._settle_global(entry)
+                continue
+            count = writes.get(id(var), 0)
+            if count and id(var) not in reads and var.value_type is not ERROR:
+                if entry.expectation is not None:
+                    self._diags.resume(entry.expectation)
+                try:
+                    self._diags.emit(D.LANG_VARDEF_TOPLEVEL_UNREAD, entry.span,
+                                     name=var.name)
+                finally:
+                    self._end_expecting(entry.expectation)
+            self._settle_global(entry)
+
+    def _settle_global(self, entry: _Global) -> None:
+        """Report what a variable's definition asserted and nothing raised.
+
+        Unlike a function or a local, there is nothing left to discard by now:
+        the variable is already in the module, and an error absorbed while its
+        definition was read kept it out at that point.
+        """
+        self._settle_expecting(entry.expectation, entry.expected_pairs)
+        entry.expectation = None
+
+    def _variable_uses(self) -> tuple[set[int], dict[int, int]]:
+        """Which variables the program reads, and how often it writes each.
+
+        Each instruction says which places it names, so this does not have to
+        know the shapes; a shape that can name a variable in some new way says
+        so there and this keeps working.
+        """
+        reads: set[int] = set()
+        writes: dict[int, int] = {}
+        for func in self._module.functions.values():
+            for block in func.blocks:
+                for inst in block.insts:
+                    for place in inst.reads():
+                        if isinstance(place, GlobalVar):
+                            reads.add(id(place))
+                    for place in inst.writes():
+                        if isinstance(place, GlobalVar):
+                            writes[id(place)] = writes.get(id(place), 0) + 1
+        return reads, writes
 
 
 

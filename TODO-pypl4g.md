@@ -22,9 +22,9 @@ To Do List for the pypl4g compiler
     is computed forwards from roots -- the startup function, the constructors, the destructors, the tests and everything exported --
     following what each instruction says it names, and runs at every optimization level.
 
-[ ] a variable at the top level that nothing reaches should be dropped as well.  Dropping a function can leave the only reader of
-    a variable gone, and the variable then stays in the image.  The same reachability walk answers it; what it needs first is for a
-    function to record the variables it names, the way it records the functions it calls.
+[x] a variable at the top level that nothing reaches should be dropped as well.  Done: each instruction says which places it reads
+    and which it writes, the reachability walk carries variables after the functions in the same pass, and an exported variable is
+    a root of its own.  The pass is now `dropunreached`, since it no longer drops only functions.
 
 [ ] implement module system.  A module is loaded at compile-time.  The syntax is `let modname := import("somename")` where `modname`
     is the name the module is known as in the compilation unit and `somename` is the name of the module.  There will be built-in
@@ -53,9 +53,9 @@ To Do List for the pypl4g compiler
     mechanism -- writing to the process's memory, a `memfd`-backed scheme, or a supervisor built into the generated runtime -- and
     none has been chosen.
 
-[ ] report a value written to a variable at the top level that nothing reads.  The rule that catches one inside a function should
-    apply, but whether anything reads a variable at the top level is a question for a pass over the whole program rather than for
-    the scope that defines it.
+[x] report a value written to a variable at the top level that nothing reads.  Done: diagnostic 4007, controllable as
+    `unread-variable`, answered in the whole-program phase once every function has been checked.  What the definition says it
+    raises is carried on the variable so that `@[expect(4007)]` still stands where a reader would write it.
 
 [ ] materialize a constant wider than one instruction can carry.  It needs a sequence -- two move-wide instructions on one
     architecture, an upper-immediate load and an add on another -- and none is generated, so such a constant is reported instead.

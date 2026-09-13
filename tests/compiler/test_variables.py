@@ -405,3 +405,75 @@ def test_mut_before_the_name_is_no_longer_the_syntax(compile_source) -> None:  #
         "@[startup]\nfn main() \N{RIGHTWARDS ARROW} u8:\n"
         "    let mut v: u8 = 1u8\n    v\n")
     assert proc.returncode != 0
+
+
+# -- a variable the whole program never reads -----------------------------------
+
+WRITTEN_ONLY = """let counter: mut u8 = 1u8
+
+@[startup]
+fn main() \N{RIGHTWARDS ARROW} u8:
+    counter \N{LEFTWARDS ARROW} 7u8
+    3u8
+"""
+
+
+def test_a_variable_the_program_only_writes_is_reported(compile_source) -> None:  # noqa: ANN001
+    """The rule that catches an unread value in a function, asked of the program."""
+    proc, _ = compile_source(WRITTEN_ONLY)
+    assert proc.returncode == 0, describe(proc)
+    assert "[PL4G-4007]" in proc.stderr, proc.stderr
+    assert "never reads it" in proc.stderr
+
+
+def test_reading_it_anywhere_is_enough(compile_source) -> None:  # noqa: ANN001
+    """A variable at the top level can be named from any function, so one read
+    from anywhere answers the question for the whole program."""
+    proc, _ = compile_source(
+        "let counter: mut u8 = 1u8\n\n"
+        "@[export]\nfn peek() \N{RIGHTWARDS ARROW} u8:\n    counter\n\n"
+        "@[startup]\nfn main() \N{RIGHTWARDS ARROW} u8:\n"
+        "    counter \N{LEFTWARDS ARROW} 7u8\n    3u8\n")
+    assert proc.returncode == 0, describe(proc)
+    assert "[PL4G-4007]" not in proc.stderr, proc.stderr
+
+
+def test_an_exported_variable_is_never_reported(compile_source) -> None:  # noqa: ANN001
+    """Something outside this compilation may read it, so nothing here can say
+    that nothing does."""
+    proc, _ = compile_source(
+        "@[export]\nlet counter: mut u8 = 1u8\n\n"
+        "@[startup]\nfn main() \N{RIGHTWARDS ARROW} u8:\n"
+        "    counter \N{LEFTWARDS ARROW} 7u8\n    3u8\n")
+    assert proc.returncode == 0, describe(proc)
+    assert "[PL4G-4007]" not in proc.stderr, proc.stderr
+
+
+def test_a_variable_nothing_writes_either_is_not_reported(compile_source) -> None:  # noqa: ANN001
+    """It is dropped rather than reported: there is no write to call pointless."""
+    proc, output = compile_source(
+        "let unused: u8 = 1u8\n\n"
+        "@[startup]\nfn main() \N{RIGHTWARDS ARROW} u8:\n    3u8\n", "--emit=ir")
+    assert proc.returncode == 0, describe(proc)
+    assert "[PL4G-4007]" not in proc.stderr, proc.stderr
+    assert "@unused" not in output.read_text(encoding="utf-8")
+
+
+def test_the_definition_may_say_it_expects_it(compile_source) -> None:  # noqa: ANN001
+    """The attribute stands where a reader would write it, on the definition,
+    although the diagnostic is only discovered once the program is whole."""
+    proc, _ = compile_source("".join(("@[expect(4007)]\n", WRITTEN_ONLY)))
+    assert proc.returncode == 0, describe(proc)
+    assert "[PL4G-4007]" not in proc.stderr, proc.stderr
+    assert "[PL4G-3206]" not in proc.stderr, "the assertion was called stale"
+
+
+def test_an_assertion_nothing_meets_is_still_reported(compile_source) -> None:  # noqa: ANN001
+    """Carrying the expectation that far must not make it impossible to fail."""
+    proc, _ = compile_source(
+        "@[expect(4007)]\nlet counter: mut u8 = 1u8\n\n"
+        "@[startup]\nfn main() \N{RIGHTWARDS ARROW} u8:\n"
+        "    counter \N{LEFTWARDS ARROW} 7u8\n")
+    assert proc.returncode != 0
+    assert "[PL4G-3206]" in proc.stderr, proc.stderr
+

@@ -2,15 +2,23 @@
 ※ pl4g-test: run=native,qemu exit=200
 ※ pl4g-test: diag=none
 
-※ A variable of every width is written and read back, so that each store the
-※ backends know is exercised on every architecture.
+※ A variable of every width is written, so that each store the backends know is
+※ exercised on every architecture.
 ※
 ※ The values stay within what one instruction can carry on every target: the
 ※ tightest is the twelve-bit signed immediate of one of them, so a larger
 ※ constant would need a sequence this compiler does not generate yet.
+※ Only the first is read back; the point here is the store, so the other three
+※ raise the warning about a variable nothing reads, on purpose.
 let byte_value: mut u8 = 0u8
+
+@[expect(4007)]
 let half_value: mut u16 = 0u16
+
+@[expect(4007)]
 let word_value: mut u32 = 0u32
+
+@[expect(4007)]
 let wide_value: mut u64 = 0u64
 
 @[startup]

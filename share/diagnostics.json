@@ -1069,6 +1069,28 @@
       "option": "unused-value"
     },
     {
+      "number": 4007,
+      "name": "LANG_VARDEF_TOPLEVEL_UNREAD",
+      "severity": "warning",
+      "message": "the program writes '{name}' and never reads it",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the variable at the top level"
+        }
+      ],
+      "cause": "The program writes this variable and never reads it back, so what is written cannot affect what the program does.  This is the rule that catches an unread value inside a function, asked of a variable at the top level; because a variable there can be named from anywhere in the program, it is a question about the whole program rather than about the scope that defines it, and it is answered once every function has been checked.  Either something was meant to read it and reads the wrong thing, or the variable and the writes to it can go.  A variable the program exports is never reported, since something outside may read it.  Where it is deliberate -- a program written to exercise the compiler, say -- say so with `@[expect(4007)]` on the definition.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Variable Definition",
+        "requirement": "A variable is defined with `let NAME: TYPE = VALUE`.  The type may be left out, in which case it is the type of the value.  There is no definition without a value."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": "unread-variable"
+    },
+    {
       "number": 4201,
       "name": "LANG_TYPE_UNKNOWN",
       "severity": "error",

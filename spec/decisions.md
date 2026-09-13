@@ -812,6 +812,44 @@ functions by the same forward reachability, and is able to be more aggressive pr
 Left for later, and on the list: a variable nothing reads is not dropped, even when the only thing that read it was a function that
 has just been dropped.
 
+## 2026-09-14T10:30+02:00 — implementation
+
+**A variable follows the functions: dropped when nothing names it, reported when only writes name it**
+
+Two entries, one question — which functions read and which write each variable at the top level — so they are answered together.
+
+*Dropping.* A variable is reached when a function that is itself reached names it.  Dropping a function can therefore be exactly
+what leaves a variable unreachable, which is why both are settled in one pass and in that order; two passes would have to be run
+until they agreed, and the order they agreed in would be the whole of the answer.  An exported variable is a root of its own, for
+the reason an exported function is: something outside this compilation may name it.  A function whose body is elsewhere could name
+anything, so one of those keeps every variable — a guard rather than a mechanism, since none exists yet.
+
+*Reporting.* A write that nothing ever reads back cannot affect what the program does, which is the rule that already catches an
+unread value inside a function (4006), asked of a variable the whole program can name.  The difference is where it can be asked.
+Inside a function the question is settled when the name goes out of reach; at the top level any function may name the variable, so
+it is settled only once every function has been checked — in the whole-program phase that already existed for reporting a missing
+startup function.  Diagnostic 4007, controllable as `unread-variable`.
+
+Being written counts as naming a variable, so the two rules do not overlap: a variable the program only writes is kept and
+reported, and one nothing names at all is dropped without a word.  Reporting the second would be reporting that something the
+program cannot observe is not observed.
+
+The part that needed care is the expectation.  The diagnostic engine keeps a *dynamic* stack, so whether `@[expect(4007)]`
+suppresses anything depends on whether that expectation is in force at the moment of emission, not on where in the source the
+diagnostic points.  The definition's expectation was being settled and discarded where the definition was read, which would have
+made the attribute useless here and, worse, reported it as a stale assertion.  It is now carried on the variable and resumed around
+the late emission — exactly what a local already does, and for exactly the same reason.  Both directions are tested: the attribute
+must suppress the warning, and an assertion nothing meets must still be reported.
+
+What other languages do.  C and C++ leave both to the optimizer and the linker and warn about neither at file scope; a `static`
+nothing reads is at most a `-Wunused-variable` from some compilers.  Rust warns about an unused `static` and relies on the back end
+to remove it.  Go refuses an unused *local* outright but says nothing about a package-level variable, since another file of the
+package may use it — the reason PL4G can be stricter is the reason it can drop functions: compilation covers the whole program.
+
+Deliberately not done: a variable nothing writes and nothing reads that is nevertheless kept because it is exported, and a variable
+whose only writes come from a function that is later dropped.  The second is handled, since the analysis runs before the pass and
+the pass then removes both; the first is correct as it stands.
+
 ---
 
 Open questions

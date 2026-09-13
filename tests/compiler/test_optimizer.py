@@ -11,7 +11,7 @@ from pypl4g.ir.types import U8, VOID
 from pypl4g.ir.verify import verify
 from pypl4g.opt.pass_ import pipeline_for
 from pypl4g.opt.passes.dce import DeadCodeElimination
-from pypl4g.opt.passes.dropunused import DropUnusedFunctions
+from pypl4g.opt.passes.dropunreached import DropUnreached
 
 
 def _startup(module: Module) -> Function:
@@ -171,7 +171,7 @@ def test_a_function_no_root_reaches_is_dropped() -> None:
     block = func.entry
     assert block is not None
     block.append(RetInst(module.int_const(U8, 0)))
-    assert DropUnusedFunctions().run(module)
+    assert DropUnreached().run(module)
     assert list(module.functions) == ["main"]
     verify(module)
 
@@ -190,7 +190,7 @@ def test_what_a_kept_function_calls_is_kept() -> None:
     assert entry is not None
     entry.append(CallInst(outer, (), U8))
     entry.append(RetInst(module.int_const(U8, 0)))
-    assert not DropUnusedFunctions().run(module)
+    assert not DropUnreached().run(module)
     assert set(module.functions) == {"inner", "outer", "main"}
 
 
@@ -207,7 +207,7 @@ def test_being_called_only_from_something_unreachable_is_not_being_called() -> N
     entry = func.entry
     assert entry is not None
     entry.append(RetInst(module.int_const(U8, 0)))
-    assert DropUnusedFunctions().run(module)
+    assert DropUnreached().run(module)
     assert list(module.functions) == ["main"]
 
 
@@ -219,7 +219,7 @@ def test_what_the_program_exports_is_a_root() -> None:
     entry = func.entry
     assert entry is not None
     entry.append(RetInst(module.int_const(U8, 0)))
-    assert not DropUnusedFunctions().run(module)
+    assert not DropUnreached().run(module)
     assert set(module.functions) == {"shared", "main"}
 
 
@@ -248,7 +248,7 @@ def test_a_function_the_program_takes_part_through_is_a_root(
     entry = start.entry
     assert entry is not None
     entry.append(RetInst(module.int_const(U8, 0)))
-    assert not DropUnusedFunctions().run(module)
+    assert not DropUnreached().run(module)
     assert set(module.functions) == {"side", "main"}
 
 
@@ -261,7 +261,7 @@ def test_a_declaration_nothing_calls_goes_too() -> None:
     entry = func.entry
     assert entry is not None
     entry.append(RetInst(module.int_const(U8, 0)))
-    assert DropUnusedFunctions().run(module)
+    assert DropUnreached().run(module)
     assert list(module.functions) == ["main"]
 
 
@@ -289,3 +289,113 @@ def test_an_unreachable_function_is_gone_at_every_level(compile_source,  # noqa:
     text = output.read_text(encoding="utf-8")
     assert "@unreached" not in text, text
     assert "@prepare" in text and "@main" in text, text
+
+
+# -- variables nothing can reach -----------------------------------------------
+
+def _global(module: Module, name: str, *, exported: bool = False) -> GlobalVar:
+    """A variable holding a constant, added to *module*."""
+    var = GlobalVar(name, U8, module.types.ptr_type(U8, mutable=True),
+                    module.int_const(U8, 1),
+                    linkage=Linkage.EXPORTED if exported else Linkage.INTERNAL)
+    module.add_global(var)
+    return var
+
+
+def test_a_variable_nothing_names_is_dropped() -> None:
+    """Nothing can read it and nothing can write it, so it holds nothing."""
+    module = Module("t")
+    _global(module, "orphan")
+    func = _startup(module)
+    block = func.entry
+    assert block is not None
+    block.append(RetInst(module.int_const(U8, 0)))
+    assert DropUnreached().run(module)
+    assert list(module.globals) == []
+
+
+def test_a_variable_a_reached_function_reads_is_kept() -> None:
+    """Naming it from a function a root reaches is what keeps it."""
+    module = Module("t")
+    var = _global(module, "g")
+    func = _startup(module)
+    block = func.entry
+    assert block is not None
+    token = block.append(MemStartInst())
+    value = block.append(LoadInst(U8, (token, var)))
+    block.append(RetInst(value))
+    assert not DropUnreached().run(module)
+    assert list(module.globals) == ["g"]
+
+
+def test_a_variable_only_a_dropped_function_named_goes_too() -> None:
+    """Dropping a function is what can make a variable unreachable.
+
+    Both are settled in one pass and in that order, rather than by two that
+    would have to be run until they agreed.
+    """
+    module = Module("t")
+    var = _global(module, "g")
+    orphan = Function("orphan", module.types.func_type((), U8))
+    block = orphan.add_block()
+    token = block.append(MemStartInst())
+    block.append(RetInst(block.append(LoadInst(U8, (token, var)))))
+    module.add_function(orphan)
+    func = _startup(module)
+    entry = func.entry
+    assert entry is not None
+    entry.append(RetInst(module.int_const(U8, 0)))
+    assert DropUnreached().run(module)
+    assert list(module.functions) == ["main"]
+    assert list(module.globals) == []
+
+
+def test_a_variable_that_is_only_written_is_kept() -> None:
+    """A write outlives the function, so it is not the pass's call to remove it.
+
+    Whether anyone should have written it is reported instead.
+    """
+    module = Module("t")
+    var = _global(module, "g")
+    func = _startup(module)
+    block = func.entry
+    assert block is not None
+    token = block.append(MemStartInst())
+    block.append(StoreInst(token, var, module.int_const(U8, 7)))
+    block.append(RetInst(module.int_const(U8, 0)))
+    assert not DropUnreached().run(module)
+    assert list(module.globals) == ["g"]
+
+
+def test_an_exported_variable_is_a_root() -> None:
+    """Something outside this compilation may name it, as for a function."""
+    module = Module("t")
+    _global(module, "shared", exported=True)
+    func = _startup(module)
+    block = func.entry
+    assert block is not None
+    block.append(RetInst(module.int_const(U8, 0)))
+    assert not DropUnreached().run(module)
+    assert list(module.globals) == ["shared"]
+
+
+UNREACHED_VAR = """let used: u8 = 7u8
+let only_by_dropped: u8 = 9u8
+
+fn unreached() \N{RIGHTWARDS ARROW} u8:
+    only_by_dropped
+
+@[startup]
+fn main() \N{RIGHTWARDS ARROW} u8:
+    used
+"""
+
+
+def test_the_whole_chain_goes_through_the_compiler(compile_source) -> None:  # noqa: ANN001
+    """The function and the variable only it named are both left out."""
+    proc, output = compile_source(UNREACHED_VAR, "--emit=ir")
+    assert proc.returncode == 0, describe(proc)
+    text = output.read_text(encoding="utf-8")
+    assert "@used" in text, text
+    assert "@only_by_dropped" not in text and "@unreached" not in text, text
+

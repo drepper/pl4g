@@ -1,4 +1,4 @@
-"""Dropping the functions nothing can reach.
+"""Dropping what nothing in the program can reach.
 
 Compilation always covers the whole program -- there is no equivalent of an
 object file -- so what nothing in the program reaches is what nothing can ever
@@ -20,26 +20,43 @@ From there it follows what each instruction says it names.  A call names its
 callee; nothing else names a function yet, and when something does -- a pointer
 to one, a table of them -- it says so on the instruction and this pass needs no
 change.
+
+Variables follow the functions.  A variable is reached when a function that is
+itself reached names it, so dropping a function can be what makes a variable
+unreachable -- which is why the two are answered here together and in that
+order rather than by two passes that would have to be run until they agreed.
+A variable the program exports is a root of its own, for the reason an exported
+function is: something outside this compilation may name it.
 """
 
+from collections.abc import Iterable
+
 from ...ir.function import Function, Linkage
-from ...ir.module import Module
+from ...ir.module import GlobalVar, Module
 
 
-class DropUnusedFunctions:
-    """Removes functions no root reaches."""
+class DropUnreached:
+    """Removes the functions and variables no root reaches."""
 
-    name = "dropunused"
+    name = "dropunreached"
 
     def run(self, module: Module) -> bool:
         """Drop what nothing reaches; report whether anything changed."""
         reachable = self._reachable(module)
-        kept = {name: func for name, func in module.functions.items()
-                if id(func) in reachable}
-        if len(kept) == len(module.functions):
-            return False
-        module.functions = kept
-        return True
+        functions = {name: func for name, func in module.functions.items()
+                     if id(func) in reachable}
+        changed = len(functions) != len(module.functions)
+        module.functions = functions
+
+        named = self._variables_named_by(module, functions.values())
+        variables = {name: var for name, var in module.globals.items()
+                     if id(var) in named or var.linkage is Linkage.EXPORTED}
+        if len(variables) != len(module.globals):
+            changed = True
+            module.globals = variables
+        return changed
+
+    # -- functions -------------------------------------------------------------
 
     def _roots(self, module: Module) -> list[Function]:
         """The functions that are reachable whatever the program does.
@@ -79,3 +96,29 @@ class DropUnusedFunctions:
                 found.extend(named for named in inst.references()
                              if isinstance(named, Function))
         return found
+
+    # -- variables -------------------------------------------------------------
+
+    def _variables_named_by(self, module: Module,
+                            functions: Iterable[Function]) -> set[int]:
+        """The identities of the variables *functions* name.
+
+        Being written counts as being named even where nothing reads what was
+        written.  A write is an effect that outlives the function, and whether
+        anyone should have written it is a question for the semantic analysis to
+        report, not one to settle by quietly deleting the variable.
+
+        A function whose body is elsewhere may name anything, so one of those
+        keeps every variable.  None exists yet, which is why this is a guard
+        rather than a mechanism.
+        """
+        named: set[int] = set()
+        for func in functions:
+            if func.is_declaration:
+                return {id(var) for var in module.globals.values()}
+            for block in func.blocks:
+                for inst in block.insts:
+                    for place in (*inst.reads(), *inst.writes()):
+                        if isinstance(place, GlobalVar):
+                            named.add(id(place))
+        return named

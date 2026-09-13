@@ -107,6 +107,20 @@ class Instruction(Value):
         """
         return ()
 
+    def reads(self) -> Sequence[Value]:
+        """The places this instruction reads from.
+
+        A place is whatever a pointer names -- today only a variable at the top
+        level, since nothing else has an address.  Together with ``writes`` this
+        is what lets a pass over the whole program ask which variables are read
+        and which are only ever written, without matching on instruction classes.
+        """
+        return ()
+
+    def writes(self) -> Sequence[Value]:
+        """The places this instruction writes to."""
+        return ()
+
 
 class BinaryInst(Instruction):
     """An arithmetic or bitwise operation on two values of the same type."""
@@ -250,6 +264,10 @@ class LoadInst(Instruction):
 
     __slots__ = ()
 
+    def reads(self) -> Sequence[Value]:
+        """The place the address operand names."""
+        return (self.operands[1],)
+
     @property
     def opcode(self) -> str:
         """The mnemonic used in the textual form."""
@@ -275,6 +293,10 @@ class StoreInst(Instruction):
     def has_effects(self) -> bool:
         """A write is visible after the function that made it has returned."""
         return True
+
+    def writes(self) -> Sequence[Value]:
+        """The place the address operand names."""
+        return (self.operands[1],)
 
     @property
     def opcode(self) -> str:

@@ -398,6 +398,13 @@ a ← 4u8
 Where that is deliberate -- a program written to exercise the compiler, say -- the program says so with `@[expect(4006)]` rather
 than being written around the warning.
 
+The same holds for a variable at the top level, with one difference: any function may name one, so whether anything reads it is a
+question about the whole program and is answered once every function has been checked rather than where the variable goes out of
+reach.  A variable the program writes and never reads is reported; one the program exports never is, since something outside may
+read it.  The attribute that says the report is meant still stands on the definition, where a reader would write it.
+
+A variable nothing names at all is not reported but simply left out of the program, along with anything else nothing can reach.
+
 Considered for the notation: `x: u8 = 3u8` with `x := 3u8` as the short form, after Go and Odin, which is terse but leaves a
 statement beginning with an identifier ambiguous until the parser has looked past the name.  A keyword lets a parser commit on the
 first token of a definition, which is what keeps the grammar context-free and the compilation parallelizable -- the same reason

@@ -60,22 +60,22 @@ def pipeline_for(level: int) -> Sequence[str]:
     # would put bytes in the image that no program can run.  It goes last,
     # since a pass before it can be what makes something unreachable.
     if level <= 0:
-        return ("dropunused",)
+        return ("dropunreached",)
     # Dead code is swept before that, since both of the others leave some.
-    return ("constfold", "simplifycfg", "dce", "dropunused")
+    return ("constfold", "simplifycfg", "dce", "dropunreached")
 
 
 def build_manager(level: int) -> PassManager:
     """Build the pass manager for optimization level *level*."""
     from .passes.constfold import ConstantFolding
     from .passes.dce import DeadCodeElimination
-    from .passes.dropunused import DropUnusedFunctions
+    from .passes.dropunreached import DropUnreached
     from .passes.simplifycfg import SimplifyCFG
 
     available: dict[str, Pass] = {
         "constfold": ConstantFolding(),
         "dce": DeadCodeElimination(),
-        "dropunused": DropUnusedFunctions(),
+        "dropunreached": DropUnreached(),
         "simplifycfg": SimplifyCFG(),
     }
     manager = PassManager()

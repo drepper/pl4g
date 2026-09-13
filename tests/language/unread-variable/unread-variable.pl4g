@@ -1,0 +1,13 @@
+※ pl4g-test: compile=ok opt=0,1
+※ pl4g-test: run=native,qemu exit=3
+※ pl4g-test: expect-diag 4007 LANG_VARDEF_TOPLEVEL_UNREAD
+
+※ The rule that catches an unread value inside a function, asked of a variable
+※ the whole program can name.  Nothing reads what is written here, so writing it
+※ cannot affect what the program does.
+let counter: mut u8 = 1u8
+
+@[startup]
+fn main() → u8:
+    counter ← 7u8
+    3u8
