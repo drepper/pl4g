@@ -15,6 +15,7 @@ from ...mc.regalloc import RegisterPressureError
 from ...mc.streamer import MCStreamer
 from ...ir.layout import DataLayout
 from ..faults import Messages
+from ..pool import Constants
 from ..globals import emit_globals
 from ..target import ImageDefaults
 from .abi import CC_PL4G_V0, lookup as lookup_cconv
@@ -22,7 +23,7 @@ from .encoder import EncodingError, encode
 from .fixups import apply_fixup
 from .isel import A64Selector, UnsupportedOperation, lower_function
 from .opcodes import AARCH64_INSTRS, PAD_BYTE
-from .regs import INFO
+from .regs import GPR, INFO, VEC
 from .startup import ENTRY_SYMBOL, emit_abort, emit_start
 
 #: EM_AARCH64.  The page size is the largest a kernel may be configured with, so
@@ -66,7 +67,7 @@ class AArch64Target:
         return Assembler(self.selector(streamer), streamer,
                          function_alignment=IMAGE_DEFAULTS.function_alignment,
                          pad_byte=PAD_BYTE, registers=self.registers,
-                         allocation_order=CC_PL4G_V0.allocation_order,
+                         allocation_order=CC_PL4G_V0.orders(GPR.name, VEC.name),
                          callee_saved=CC_PL4G_V0.callee_saved)
 
     def generate(self, module: Module, asm: Assembler, diags: DiagEngine,
@@ -74,6 +75,7 @@ class AArch64Target:
         """Generate the whole image for *module*."""
         del opt_level
         messages = Messages()
+        constants = Constants()
         emit_globals(asm, module, DataLayout(pointer_size=self.pointer_bits // 8))
         asm.section(".text", executable=True,
                     alignment=IMAGE_DEFAULTS.text_alignment)
@@ -82,7 +84,7 @@ class AArch64Target:
                 continue
             try:
                 lower_function(asm, func, lookup_cconv(func.cconv), self.registers,
-                               messages, sources)
+                               messages, sources, constants)
             except UnsupportedOperation as exc:
                 diags.emit(D.IMPL_BACKEND_UNSUPPORTED,
                            exc.span if exc.span is not None else func.span,
@@ -106,6 +108,7 @@ class AArch64Target:
             emit_abort(asm, lookup_cconv(module.startup.cconv))
         emit_start(asm, module, lookup_cconv(module.startup.cconv))
         messages.emit(asm)
+        constants.emit(asm)
 
     @property
     def entry_symbol(self) -> str:

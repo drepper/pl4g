@@ -1807,6 +1807,33 @@
       "option": null
     },
     {
+      "number": 4217,
+      "name": "LANG_TYPE_EXACT_FLOAT_COMPARISON",
+      "severity": "warning",
+      "message": "'{operator}' on '{type}' asks whether two values are the one value",
+      "args": [
+        {
+          "name": "operator",
+          "type": "string",
+          "description": "the comparison as written"
+        },
+        {
+          "name": "type",
+          "type": "string",
+          "description": "the type of the operands"
+        }
+      ],
+      "cause": "A floating-point value is an approximation of the number it stands for, and two approximations arrived at by different routes are rarely the same approximation even where the numbers are the same.  So asking whether two of them are equal is nearly always asking the wrong question, and the answer is nearly always no.  The approximate comparisons `≅` and `≇` ask whether the two are within the tolerance of each other, which is the question that was usually meant.  Where the exact question is the one meant -- comparing a value against one it was assigned from, or against a number that every format holds exactly -- `@[ignore(4217)]` says so.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Floating-point numbers",
+        "requirement": "An exact comparison of floating-point values is diagnosed."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": "exact-float-comparison"
+    },
+    {
       "number": 4401,
       "name": "LANG_FUNCDEF_SPECIAL_NO_STARTUP",
       "severity": "error",

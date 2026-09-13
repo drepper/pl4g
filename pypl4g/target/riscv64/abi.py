@@ -26,10 +26,21 @@ _ALLOCATION_ORDER = tuple(reg(n).unit for n in (
     "a0", "a1", "a2", "a3", "a4", "a5", "a6", "a7",
     "s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9", "s10", "s11"))
 
+#: The floating-point registers.  f10 to f17 carry arguments and f10 carries the
+#: answer, which is what the convention's own names fa0 to fa7 mean; f8, f9 and
+#: f18 upward are ones a function hands back as it found them, so they come last.
+_FLOAT_ARGS = tuple(reg("".join(("f", str(n)))) for n in range(10, 18))
+_FLOAT_ORDER = tuple(reg("".join(("f", str(n)))).unit
+                     for n in (*range(10, 18), *range(0, 8), *range(28, 32),
+                               8, 9, *range(18, 28)))
+
 CC_PL4G_V0: Final[CallConvDesc] = CallConvDesc(
     name="pl4g.v0",
     int_arg_regs=_ARG_REGS,
     int_ret_regs=(reg("a0"), reg("a1")),
+    float_arg_regs=_FLOAT_ARGS,
+    float_ret_regs=(reg("f10"),),
+    float_allocation_order=_FLOAT_ORDER,
     callee_saved=_CALLEE_SAVED,
     caller_saved=_CALLER_SAVED,
     stack_align=16,
@@ -43,6 +54,9 @@ CC_LP64: Final[CallConvDesc] = CallConvDesc(
     name="lp64",
     int_arg_regs=_ARG_REGS,
     int_ret_regs=(reg("a0"), reg("a1")),
+    float_arg_regs=_FLOAT_ARGS,
+    float_ret_regs=(reg("f10"),),
+    float_allocation_order=_FLOAT_ORDER,
     callee_saved=_CALLEE_SAVED,
     caller_saved=_CALLER_SAVED,
     stack_align=16,

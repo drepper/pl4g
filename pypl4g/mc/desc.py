@@ -57,6 +57,12 @@ class OperandSpec:
     #: A slot that is always one particular register, such as the zero register
     #: or the register a shift count must be held in.
     fixed: PhysReg | None = None
+    #: The width of the place, where a slot takes either a register or a place
+    #: in memory and the two are named at different widths.  The scalar
+    #: floating-point instructions are what want it: the register is named as
+    #: the whole of a vector register whichever format it holds, and the place
+    #: holds exactly the format the mnemonic names.
+    mem_bits: int | None = None
     #: The largest value an immediate slot accepts, where the encoding can hold
     #: less than its width suggests.
     imm_max: int | None = None
@@ -82,8 +88,9 @@ class OperandSpec:
                 # too, they must agree: several instructions differ only in how
                 # much of memory they read, and the order of the rows is not
                 # what should decide between them.
-                if self.bits is not None and operand.size_bits is not None:
-                    return operand.size_bits == self.bits
+                wanted = self.mem_bits if self.mem_bits is not None else self.bits
+                if wanted is not None and operand.size_bits is not None:
+                    return operand.size_bits == wanted
                 return True
             case MCImm():
                 if OperandKind.IMM not in self.kinds:

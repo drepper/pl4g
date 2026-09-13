@@ -43,14 +43,20 @@ def _x() -> OperandSpec:
     return OperandSpec(OperandKind.REG, rclass=VEC, bits=128)
 
 
-def _xm() -> OperandSpec:
-    """A vector register or a place in memory."""
-    return OperandSpec(OperandKind.REG | OperandKind.MEM, rclass=VEC, bits=128)
+def _xm(bits: int = 64) -> OperandSpec:
+    """A vector register, or a place in memory holding *bits* of it.
+
+    The register is named as the whole of one whichever format it holds, since
+    that is the value's own register; the place holds exactly the format the
+    mnemonic names, and nothing beside it is part of the value.
+    """
+    return OperandSpec(OperandKind.REG | OperandKind.MEM, rclass=VEC, bits=128,
+                       mem_bits=bits)
 
 
-def _mem() -> OperandSpec:
-    """A memory operand of any width."""
-    return OperandSpec(OperandKind.MEM)
+def _mem(bits: int | None = None) -> OperandSpec:
+    """A memory operand, of any width or of the one named."""
+    return OperandSpec(OperandKind.MEM, bits=bits)
 
 
 #: This architecture's arithmetic takes two operands, so the destination is also
@@ -403,7 +409,7 @@ X86_INSTRS: Final[tuple[X86InstDesc, ...]] = (
     # the x86-64 ABI: a binary that uses them requires nothing a binary that
     # does not would not already have.  Each names the width in its own opcode
     # through the prefix byte, so the register operand is the same either way.
-    X86InstDesc("movss", (_x(), _xm()), opcode=0x10, map=OpMap.M0F,
+    X86InstDesc("movss", (_x(), _xm(32)), opcode=0x10, map=OpMap.M0F,
                 mandatory_prefix=0xF3, modrm=ModRMUse.REG_RM,
                 reg_op=0, rm_op=1, est_size=4,
                 roles=(OperandRole.DEF, OperandRole.USE)),
@@ -411,7 +417,7 @@ X86_INSTRS: Final[tuple[X86InstDesc, ...]] = (
                 mandatory_prefix=0xF2, modrm=ModRMUse.REG_RM,
                 reg_op=0, rm_op=1, est_size=4,
                 roles=(OperandRole.DEF, OperandRole.USE)),
-    X86InstDesc("addss", (_x(), _xm()), opcode=0x58, map=OpMap.M0F,
+    X86InstDesc("addss", (_x(), _xm(32)), opcode=0x58, map=OpMap.M0F,
                 mandatory_prefix=0xF3, modrm=ModRMUse.REG_RM,
                 reg_op=0, rm_op=1, est_size=4,
                 roles=_ACCUMULATE),
@@ -419,7 +425,7 @@ X86_INSTRS: Final[tuple[X86InstDesc, ...]] = (
                 mandatory_prefix=0xF2, modrm=ModRMUse.REG_RM,
                 reg_op=0, rm_op=1, est_size=4,
                 roles=_ACCUMULATE),
-    X86InstDesc("subss", (_x(), _xm()), opcode=0x5C, map=OpMap.M0F,
+    X86InstDesc("subss", (_x(), _xm(32)), opcode=0x5C, map=OpMap.M0F,
                 mandatory_prefix=0xF3, modrm=ModRMUse.REG_RM,
                 reg_op=0, rm_op=1, est_size=4,
                 roles=_ACCUMULATE),
@@ -427,7 +433,7 @@ X86_INSTRS: Final[tuple[X86InstDesc, ...]] = (
                 mandatory_prefix=0xF2, modrm=ModRMUse.REG_RM,
                 reg_op=0, rm_op=1, est_size=4,
                 roles=_ACCUMULATE),
-    X86InstDesc("mulss", (_x(), _xm()), opcode=0x59, map=OpMap.M0F,
+    X86InstDesc("mulss", (_x(), _xm(32)), opcode=0x59, map=OpMap.M0F,
                 mandatory_prefix=0xF3, modrm=ModRMUse.REG_RM,
                 reg_op=0, rm_op=1, est_size=4,
                 roles=_ACCUMULATE),
@@ -435,7 +441,7 @@ X86_INSTRS: Final[tuple[X86InstDesc, ...]] = (
                 mandatory_prefix=0xF2, modrm=ModRMUse.REG_RM,
                 reg_op=0, rm_op=1, est_size=4,
                 roles=_ACCUMULATE),
-    X86InstDesc("divss", (_x(), _xm()), opcode=0x5E, map=OpMap.M0F,
+    X86InstDesc("divss", (_x(), _xm(32)), opcode=0x5E, map=OpMap.M0F,
                 mandatory_prefix=0xF3, modrm=ModRMUse.REG_RM,
                 reg_op=0, rm_op=1, est_size=4,
                 roles=_ACCUMULATE),
@@ -444,24 +450,34 @@ X86_INSTRS: Final[tuple[X86InstDesc, ...]] = (
                 reg_op=0, rm_op=1, est_size=4,
                 roles=_ACCUMULATE),
     # movss m, x                           F3 0F 11 /r
-    X86InstDesc("movss", (_mem(), _x()), opcode=0x11, map=OpMap.M0F,
+    X86InstDesc("movss", (_mem(32), _x()), opcode=0x11, map=OpMap.M0F,
                 mandatory_prefix=0xF3, modrm=ModRMUse.REG_RM,
                 reg_op=1, rm_op=0, est_size=4,
                 flags=InstFlags.MAY_STORE,
                 roles=(OperandRole.USE, OperandRole.USE)),
     # movsd m, x                           F2 0F 11 /r
-    X86InstDesc("movsd", (_mem(), _x()), opcode=0x11, map=OpMap.M0F,
+    X86InstDesc("movsd", (_mem(64), _x()), opcode=0x11, map=OpMap.M0F,
                 mandatory_prefix=0xF2, modrm=ModRMUse.REG_RM,
                 reg_op=1, rm_op=0, est_size=4,
                 flags=InstFlags.MAY_STORE,
                 roles=(OperandRole.USE, OperandRole.USE)),
-    X86InstDesc("ucomiss", (_x(), _xm()), opcode=0x2E, map=OpMap.M0F,
+    X86InstDesc("ucomiss", (_x(), _xm(32)), opcode=0x2E, map=OpMap.M0F,
                 modrm=ModRMUse.REG_RM, reg_op=0, rm_op=1,
                 implicit_defs=(EFLAGS,), est_size=4, roles=_READS_BOTH),
     X86InstDesc("ucomisd", (_x(), _xm()), opcode=0x2E, map=OpMap.M0F,
                 mandatory_prefix=0x66,
                 modrm=ModRMUse.REG_RM, reg_op=0, rm_op=1,
                 implicit_defs=(EFLAGS,), est_size=4, roles=_READS_BOTH),
+    # setp r/m8                         0F 9A /0   (the parity flag, which a
+    # floating-point comparison sets where the two are not ordered at all)
+    X86InstDesc("setp", (_rm(8),), opcode=0x9A, map=OpMap.M0F,
+                modrm=ModRMUse.EXT_RM, ext=0, rm_op=0,
+                implicit_uses=(EFLAGS,), est_size=3),
+    # setnp r/m8                         0F 9B /0   (the parity flag, which a
+    # floating-point comparison sets where the two are not ordered at all)
+    X86InstDesc("setnp", (_rm(8),), opcode=0x9B, map=OpMap.M0F,
+                modrm=ModRMUse.EXT_RM, ext=0, rm_op=0,
+                implicit_uses=(EFLAGS,), est_size=3),
     # jmp rel32                          E9 cd
     X86InstDesc("jmp", (_rel(32),), opcode=0xE9, rel_op=0, rel_bits=32,
                 flags=InstFlags.TERMINATOR | InstFlags.BARRIER, est_size=5),

@@ -1,0 +1,24 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4205 LANG_TYPE_OPERAND_NOT_INTEGER
+※ pl4g-test: expect-diag 4206 LANG_TYPE_OPERAND_MISMATCH
+
+※ A floating-point type says the value is a number, not the bits it is kept
+※ in, so the operators that are questions about bits are not defined on one:
+※ the bitwise operators, the shifts and the rotations.  Neither are the
+※ saturating operators, whose answer is the nearest end of a range of whole
+※ numbers, nor `%`, which is what is left of a division that stopped at one.
+
+let a: f64 = 1.5f64
+let b: f64 = 0.5f64
+
+@[startup]
+fn main() → u8:
+    @[ignore(5005)]
+    a & b
+    @[ignore(5005)]
+    a % b
+    @[ignore(5005)]
+    a ⊞ b
+    @[ignore(5005)]
+    a « 2u8
+    0u8

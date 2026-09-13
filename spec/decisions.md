@@ -1770,6 +1770,52 @@ convention calls caller-saved.  The second is the one that matters, a value held
 the machinery is already there, the call having only to declare those registers as ones it writes, which is how the flags
 register is already handled.
 
+## 2026-09-14T14:00+02:00 — language and compiler
+
+**Floating point is the hardware's, four operators are defined on it, and an exact comparison is diagnosed**
+
+Decided on the user's direction that the hardware's floating-point instructions are assumed on all three targets and that the
+requirement is recorded in the binary.  What that comes to per target: on RISC-V the header's flag word now says the
+double-precision convention (`EF_RISCV_FLOAT_ABI_DOUBLE`) instead of soft-float, which is what a loader and a linker read to
+refuse a program built for one convention against a library built for the other; on x86-64 and on AArch64 there is nothing to
+record, SSE2 and the scalar floating-point instructions being in the base of both ABIs, so that saying so in the specification is
+the whole of it.  The flag says DOUBLE whether or not a particular program uses floating point, because what it states is the
+convention its functions follow and they follow that one either way.
+
+Considered and rejected: a soft-float path, as GCC and LLVM both keep for targets without the hardware, and as the RISC-V flag
+word has a value for.  It would double every rule here and would make the same program a hundred times slower on one machine than
+on another without saying so, which is the surprise this language exists to avoid.  A program that needs a machine without a
+floating-point unit is a program that should not use the type.
+
+**Four operators are defined on a floating-point value: `+`, `-`, `×` and `÷`.**  The bitwise operators, the shifts, the
+rotations, the saturating operators and `%` are refused (4205), each for a reason the type states: a floating-point type says the
+value is a number and not the bits it is kept in, so a question about bits has nothing to ask; saturating is the nearest end of a
+range of whole numbers; and `%` is what is left of a division that stopped at a whole number.
+
+This is narrower than C, where `%` is refused but `fmod` is a call away and the bitwise operators are refused only because the
+operand is not an integer; it is the rule of Go, Rust, Zig and Odin, all of which refuse the same set.  APL and BQN go the other
+way and apply nearly everything to nearly everything, which suits an array language whose values are numbers first.
+
+`÷` on floating point lowers to a third instruction, `FDIV`, and neither of the two an integer has: the answer is not truncated
+towards anything and there is no pair of operands it has no answer for.
+
+**`=` and `≠` on a floating-point value warn (4217), controllable as `exact-float-comparison`.**  Two floating-point values
+arrived at by different routes are rarely the one value even where the numbers they stand for are equal, so the exact question is
+nearly always the wrong one.  It is a warning rather than an error because it is sometimes right -- a value compared against one
+it was assigned from, or against a number every format holds exactly -- and `@[ignore(4217)]` is how a program says it meant it.
+
+Considered: leaving it silent, which is what every one of C, C++, Go, Rust, Zig and Odin does, with the warning available only
+from a lint tool nobody turns on (`clang-tidy`'s `clang-diagnostic-float-equal`, `gcc -Wfloat-equal`, `staticcheck`); and making
+it an error, which no language does and which would be wrong for the cases above.  Turning it on by default follows from what the
+diagnostic catalog is for here: a numbered rule is how this language states a rule the reader may not know, and a generator that
+emitted an exact comparison has almost certainly emitted the wrong one.
+
+**How a floating-point answer is checked in a test.**  Nothing can turn a floating-point value into a number a program hands
+back, so the language tests assert with the only means the language has: `stop_unless(ok)` computes `ok or (one ÷ zero = one)`,
+and `or` does not compute its right side unless the left one leaves the answer open.  A wrong answer therefore divides by zero and
+the program stops; the test runs to the end exactly when every answer was right.  It is worth writing down because it is the
+shape every test of a value that cannot be handed back will use until there are conversions.
+
 ---
 
 ---

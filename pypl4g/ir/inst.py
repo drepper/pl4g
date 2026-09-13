@@ -37,6 +37,11 @@ class BinOp(Enum):
     #: than going past it.  They are operations of their own and not a flag on
     #: the three above, because what a backend emits for one has the comparison
     #: and the bound in it and looks nothing like an addition.
+    #: Dividing two floating-point numbers.  It is not `SDIV` or `UDIV`: those
+    #: two are one question asked of a signed and an unsigned number, and a
+    #: floating-point number is neither.
+    FDIV = "fdiv"
+
     SAT_ADD = "sat.add"
     SAT_SUB = "sat.sub"
     SAT_MUL = "sat.mul"

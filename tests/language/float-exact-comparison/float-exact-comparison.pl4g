@@ -1,0 +1,19 @@
+※ pl4g-test: compile=ok run=native,qemu exit=0
+※ pl4g-test: expect-diag 4217 LANG_TYPE_EXACT_FLOAT_COMPARISON
+
+※ Two floating-point values arrived at by different routes are rarely the one
+※ value even where the numbers they stand for are equal, so asking whether
+※ they are equal is warned about.  It is a warning and not an error because
+※ the question is sometimes the right one -- and `@[ignore(4217)]` is how a
+※ program that means it says so, which the test beside this one does.
+
+let a: mut f64 = 1.5f64
+let b: mut f64 = 1.5f64
+
+@[visible]
+let same: mut bool = false
+
+@[startup]
+fn main() → u8:
+    same ← a = b
+    0u8

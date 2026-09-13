@@ -21,9 +21,11 @@ from ...ir.inst import BinOp, UnOp
 from ...mc.reg import Reg, VirtReg
 from ...mc.operand import SymExpr
 from ...source.location import Span
-from ..branches import (UnsupportedBranch, folded_into_branch, labels_of,
+from ..branches import (CONDITIONS, UnsupportedBranch, folded_into_branch,
+                        labels_of,
                         lower_branch, lower_comparison)
 from ..faults import Messages, describe
+from ..pool import Constants
 from ..narrow import normalize
 from ..saturate import (DIVISION, NAMES, SATURATING, TRAPPING, Unsupported,
                         SHIFTS, lower_division, lower_saturating,
@@ -31,7 +33,7 @@ from ..saturate import (DIVISION, NAMES, SATURATING, TRAPPING, Unsupported,
 from . import ops as rvops
 from .startup import ABORT_SYMBOL
 from .opcodes import IMM12_MAX, IMM12_MIN, RISCV_INSTRS
-from .regs import GPR, INFO, RA, SP, ZERO
+from .regs import FPR, GPR, INFO, RA, SP, ZERO
 
 if TYPE_CHECKING:
     from ...mc.reg import PhysReg
@@ -80,6 +82,14 @@ _CONDITIONAL: Final[dict[Condition, str]] = {
 ZERO_IMMEDIATE: Final[MCImm] = MCImm(0, 12)
 
 
+#: The four a floating-point value answers to.  There are no bitwise operations
+#: on one and no saturating ones: what those mean is a question about bits, and
+#: a floating-point type says the value is a number and not its bits.
+_FLOAT_OPERATIONS: Final[dict[BinOp, "Op"]] = {
+    BinOp.ADD: ops.PLUS, BinOp.SUB: ops.MINUS, BinOp.MUL: ops.TIMES,
+    BinOp.FDIV: ops.DIVIDE,
+}
+
 #: What each operation of the representation is called in the assembler.
 _OPERATIONS: Final[dict[BinOp, "Op"]] = {
     BinOp.ADD: ops.PLUS, BinOp.SUB: ops.MINUS, BinOp.MUL: ops.TIMES,
@@ -124,8 +134,17 @@ class RVSelector(InstructionSelector):
         (64, False): "ld", (64, True): "ld",
     }
 
+    def _is_float(self, reg: Reg) -> bool:
+        """Whether *reg* is one of the registers a floating-point value lives in."""
+        return reg.cls is FPR
+
     def select_move(self, dst: Reg, src: MCOperand, span: Span) -> Sequence[MCInst]:
         """Instructions that place *src* into *dst*."""
+        if self._is_float(dst):
+            return self._select_float_move(dst, src, span)
+        if isinstance(src, MCReg) and self._is_float(src.reg):
+            raise UnsupportedOperation(
+                "moving a floating-point value into an ordinary register", span)
         if isinstance(src, MCMem):
             return self._select_load(dst, src, span)
         if isinstance(src, MCReg) and src.reg is dst:
@@ -135,6 +154,45 @@ class RVSelector(InstructionSelector):
         if isinstance(src, MCImm):
             return self._materialize(dst, src.value, span)
         raise UnsupportedOperation("moving from this kind of operand", span)
+
+    #: Which load and which store carry a floating-point value of each width.
+    _FLOAT_LOADS: Final[dict[int, str]] = {32: "flw", 64: "fld"}
+    _FLOAT_STORES: Final[dict[int, str]] = {32: "fsw", 64: "fsd"}
+
+    def _select_float_move(self, dst: Reg, src: MCOperand,
+                           span: Span) -> Sequence[MCInst]:
+        """Instructions that put a floating-point value into *dst*.
+
+        There is no move between two floating-point registers here: what stands
+        for one is the instruction that copies a value and takes its sign from
+        the same value, which is the value unchanged, not-a-number included.
+        """
+        if isinstance(src, MCMem):
+            width = src.size_bits if src.size_bits is not None else 64
+            mnemonic = self._FLOAT_LOADS.get(width)
+            if mnemonic is None:
+                raise UnsupportedOperation("".join((
+                    "reading ", str(width), " bits of floating point")), span)
+            offset = MCImm(src.disp, 12)
+            if src.disp_sym is None:
+                if src.base is None:
+                    raise UnsupportedOperation(
+                        "a floating-point read of nowhere", span)
+                return (self._inst(mnemonic, (MCReg(dst), MCReg(src.base),
+                                              offset), span),)
+            symbol = MCSymRef(src.disp_sym)
+            held = MCReg(INFO.new_virtual(GPR, 64, spillable=False))
+            return (
+                self._inst("auipc.hi20", (held, symbol), span),
+                self._inst("addi.lo12", (held, held, symbol), span),
+                self._inst(mnemonic, (MCReg(dst), held, offset), span),
+            )
+        if isinstance(src, MCReg):
+            if src.reg is dst:
+                return ()
+            return (self._inst("fsgnj.d", (MCReg(dst), src, src), span),)
+        raise UnsupportedOperation(
+            "putting that kind of operand in a floating-point register", span)
 
     def _materialize(self, dst: Reg, value: int, span: Span) -> Sequence[MCInst]:
         """Instructions that build the constant *value*.
@@ -279,6 +337,8 @@ class RVSelector(InstructionSelector):
         places it and no register has to be set aside that nothing else may use.
         """
         width = address.size_bits if address.size_bits is not None else 64
+        if isinstance(value, MCReg) and self._is_float(value.reg):
+            return self._select_float_store(address, value, width, span)
         mnemonic = self._STORES.get(width)
         if mnemonic is None:
             raise UnsupportedOperation("".join((
@@ -302,6 +362,27 @@ class RVSelector(InstructionSelector):
             self._inst("addi.lo12", (place, place, symbol), span),
             self._inst(mnemonic, (source, place, MCImm(address.disp, 12)),
                        span),
+        )
+
+    def _select_float_store(self, address: MCMem, value: MCReg, width: int,
+                            span: Span) -> Sequence[MCInst]:
+        """Instructions that write a floating-point register to memory."""
+        mnemonic = self._FLOAT_STORES.get(width)
+        if mnemonic is None:
+            raise UnsupportedOperation("".join((
+                "writing ", str(width), " bits of floating point")), span)
+        offset = MCImm(address.disp, 12)
+        if address.disp_sym is None:
+            if address.base is None:
+                raise UnsupportedOperation("a floating-point write to nowhere", span)
+            return (self._inst(mnemonic, (value, MCReg(address.base), offset),
+                               span),)
+        place = MCReg(INFO.new_virtual(GPR, 64, spillable=False))
+        symbol = MCSymRef(address.disp_sym)
+        return (
+            self._inst("auipc.hi20", (place, symbol), span),
+            self._inst("addi.lo12", (place, place, symbol), span),
+            self._inst(mnemonic, (value, place, offset), span),
         )
 
     def select_call(self, target: MCOperand, span: Span) -> Sequence[MCInst]:
@@ -450,6 +531,50 @@ class RVSelector(InstructionSelector):
         ops.SHIFT_RIGHT_SIGNED.name: "sra",
     }
 
+    #: What each operation is called for each width of floating-point value.
+    _FLOAT_BINARY: Final[dict[tuple[str, int], str]] = {
+        (ops.PLUS.name, 32): "fadd.s", (ops.PLUS.name, 64): "fadd.d",
+        (ops.MINUS.name, 32): "fsub.s", (ops.MINUS.name, 64): "fsub.d",
+        (ops.TIMES.name, 32): "fmul.s", (ops.TIMES.name, 64): "fmul.d",
+        (ops.DIVIDE.name, 32): "fdiv.s", (ops.DIVIDE.name, 64): "fdiv.d",
+    }
+
+    def select_float_op(self, op: Op, dst: Reg, left: MCOperand, right: MCOperand,
+                        bits: int, span: Span) -> Sequence[MCInst]:
+        """Instructions that compute *op* over two floating-point values."""
+        mnemonic = self._FLOAT_BINARY.get((op.name, bits))
+        if mnemonic is None:
+            raise UnsupportedOperation("".join((
+                "'", op.name, "' on a floating-point value")), span)
+        return (self._inst(mnemonic, (MCReg(dst), left, right), span),)
+
+    def select_float_compare(self, cond: Condition, dst: Reg, lhs: MCOperand,
+                             rhs: MCOperand, bits: int,
+                             span: Span) -> Sequence[MCInst]:
+        """Instructions that put whether two floating-point values stand in
+        *cond* into *dst*.
+
+        There are no flags here and no need for any: the three comparisons write
+        one or zero into an ordinary register, which is what a truth value is.
+        The three that are not there are the same three with the operands
+        exchanged, and inequality is equality turned round.
+        """
+        suffix = ".s" if bits == 32 else ".d"
+        exchanged = cond in (Condition.SGT, Condition.UGT,
+                             Condition.SGE, Condition.UGE)
+        first, second = (rhs, lhs) if exchanged else (lhs, rhs)
+        asking = {Condition.EQ: "feq", Condition.NE: "feq",
+                  Condition.SLT: "flt", Condition.ULT: "flt",
+                  Condition.SGT: "flt", Condition.UGT: "flt",
+                  Condition.SLE: "fle", Condition.ULE: "fle",
+                  Condition.SGE: "fle", Condition.UGE: "fle"}[cond]
+        built = [self._inst("".join((asking, suffix)),
+                            (MCReg(dst), first, second), span)]
+        if cond is Condition.NE:
+            built.append(self._inst("xori", (MCReg(dst), MCReg(dst),
+                                             MCImm(1, 12)), span))
+        return tuple(built)
+
     def select_shift(self, op: Op, dst: Reg, value: MCOperand, amount: MCOperand,
                      bits: int, span: Span) -> Sequence[MCInst]:
         """Instructions that move the bits of *value* by *amount* into *dst*."""
@@ -494,13 +619,16 @@ class RVSelector(InstructionSelector):
 
     def select_spill(self, slot: int, source: Reg, span: Span) -> Sequence[MCInst]:
         """Instructions that write *source* to the frame slot at *slot*."""
-        return (self._inst("sd", (MCReg(source), MCReg(SP), MCImm(slot, 12)), span),)
+        mnemonic = "fsd" if self._is_float(source) else "sd"
+        return (self._inst(mnemonic, (MCReg(source), MCReg(SP), MCImm(slot, 12)),
+                           span),)
 
     def select_reload(self, destination: Reg, slot: int,
                       span: Span) -> Sequence[MCInst]:
         """Instructions that read the frame slot at *slot* into *destination*."""
-        return (self._inst("ld", (MCReg(destination), MCReg(SP), MCImm(slot, 12)),
-                           span),)
+        mnemonic = "fld" if self._is_float(destination) else "ld"
+        return (self._inst(mnemonic, (MCReg(destination), MCReg(SP),
+                                      MCImm(slot, 12)), span),)
 
     def select_frame(self, size: int, span: Span) -> Sequence[MCInst]:
         """Instructions that make room for *size* bytes on the stack."""
@@ -513,7 +641,8 @@ class RVSelector(InstructionSelector):
 
 def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
                    registers: "RegisterInfo", messages: "Messages | None" = None,
-                   sources: "SourceManager | None" = None) -> None:
+                   sources: "SourceManager | None" = None,
+                   constants: "Constants | None" = None) -> None:
     """Build the machine form of one IR function."""
     from ...ir.inst import (BinaryInst, BrInst, CallInst, CmpInst, CondBrInst,
                             LoadInst, MemStartInst, RetInst, StoreInst,
@@ -521,7 +650,9 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
     from ...ir.function import Function as _Function
     from ...ir.mangle import symbol_name
     from ...ir.module import GlobalVar
-    from ...ir.types import BoolType, IntType, VOID
+    from ...ir.types import BoolType, FloatType, IntType, VOID
+    from ...ir.value import FloatConst
+    from ...ir.layout import DataLayout, encode_float
     from ..globals import symbol_of
 
     asm.begin_function(symbol_name(func),
@@ -538,6 +669,10 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
 
         def value(self, value: object, span: Span) -> MCOperand:
             """The operand for *value*, a constant being an immediate."""
+            if isinstance(value, FloatConst):
+                # No instruction on any of these carries a floating-point
+                # number, so one goes in the image and is read from there.
+                return MCReg(self.floating(value, span))
             constant = _number_of(value)
             if constant is not None:
                 number, ty = constant
@@ -547,6 +682,8 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
 
         def in_register(self, value: object, span: Span) -> MCOperand:
             """The operand for *value*, put in a register if it is not in one."""
+            if isinstance(value, FloatConst):
+                return MCReg(self.floating(value, span))
             constant = _number_of(value)
             if constant is not None:
                 # Every comparison here wants a register on its left, and two
@@ -576,6 +713,20 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
                 raise UnsupportedOperation("a value this backend did not compute",
                                            None)
             return found
+
+        def floating(self, value: "FloatConst", span: Span) -> VirtReg:
+            """A register holding the floating-point constant *value*."""
+            if constants is None:
+                raise UnsupportedOperation(
+                    "a floating-point constant, with nowhere to put it", None)
+            bits = _width_of(value.ty)
+            symbol = constants.symbol(
+                encode_float(value.value, value.ty,
+                             DataLayout(pointer_size=8)), bits // 8)
+            held = _new_value(value.ty, registers)
+            asm.loadreg(held, asm.mem(disp_sym=SymExpr(asm.streamer.symbol(symbol)),
+                                      rip_relative=True, size_bits=bits), span)
+            return held
 
         def scratch(self) -> VirtReg:
             """A register of the full width, for a value with no name of its own."""
@@ -679,6 +830,15 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
                 case RetInst():
                     value = inst.operands[0]
                     ty = value.ty
+                    if isinstance(ty, FloatType):
+                        # A floating-point value goes back in a register of its
+                        # own kind, and a constant one is read out of the image
+                        # first, which is what the operand helper does.
+                        asm.loadreg(_result_register(ty, cconv, registers),
+                                    operands.in_register(value, inst.span),
+                                    inst.span)
+                        asm.ret(inst.span)
+                        continue
                     if not isinstance(ty, (IntType, BoolType)):
                         raise UnsupportedOperation("".join((
                             "returning a value of type '", ty.render(), "'")), span)
@@ -691,6 +851,20 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
                         asm.loadreg(result, MCReg(_value_of(value, held, span)),
                                     inst.span)
                     asm.ret(inst.span)
+                case BinaryInst() if isinstance(inst.ty, FloatType):
+                    operation = _FLOAT_OPERATIONS.get(inst.op)
+                    if operation is None:
+                        raise UnsupportedOperation("".join((
+                            "'", inst.op.value, "' on a floating-point value")), span)
+                    destination = _new_value(
+                        inst.ty, registers,
+                        hint=(_result_register(inst.ty, cconv, registers)
+                              if inst is returned else None))
+                    held[id(inst)] = destination
+                    asm.float_op(operation, destination,
+                                 operands.in_register(inst.operands[0], inst.span),
+                                 operands.in_register(inst.operands[1], inst.span),
+                                 inst.ty.bits, inst.span)
                 case BinaryInst() if inst.op in TRAPPING:
                     destination = _new_value(
                         inst.ty, registers,
@@ -793,6 +967,20 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
                     # The complement of a narrow unsigned value sets the bits
                     # above it, where the value it stands for has zeroes there.
                     normalize(asm, inst.ty, destination, 64, inst.span)
+                case CmpInst() if isinstance(inst.operands[0].ty, FloatType):
+                    # A floating-point comparison is never folded into a branch:
+                    # what a branch would read is the flags, and the answer a
+                    # not-a-number gives needs more than one reading of them.
+                    destination = _new_value(
+                        inst.ty, registers,
+                        hint=(_result_register(inst.ty, cconv, registers)
+                              if inst is returned else None))
+                    held[id(inst)] = destination
+                    asm.float_compare(
+                        CONDITIONS[inst.pred], destination,
+                        operands.in_register(inst.operands[0], inst.span),
+                        operands.in_register(inst.operands[1], inst.span),
+                        inst.operands[0].ty.bits, inst.span)
                 case CmpInst():
                     # A comparison read exactly once is folded into the branch
                     # that reads it and nothing is emitted here; read any other
@@ -860,6 +1048,14 @@ def _argument_register(cconv: "CallConvDesc", index: int, ty: "Type",
     The caller writes this view and the callee reads it, and both take the width
     from the type, which is what makes them agree.
     """
+    from ...ir.types import FloatType
+
+    if isinstance(ty, FloatType):
+        # The whole register, not a view of it at the width of the value: what
+        # an instruction names is a view, and the value's own register is the
+        # whole of it, so this is the same register the callee computes into.
+        return registers.view(cconv.float_arg_regs[index].unit,
+                              _FLOAT_REGISTER_BITS)
     return registers.view(cconv.int_arg_regs[index].unit, 64)
 
 
@@ -871,8 +1067,18 @@ def _result_register(ty: "Type", cconv: "CallConvDesc",
     whole register; the instruction that produced it is what decided whether the
     bits above it are copies of its sign or zeroes.
     """
-    del ty, registers
+    from ...ir.types import FloatType
+
+    if isinstance(ty, FloatType):
+        return cconv.float_ret_regs[0]
+    del registers
     return cconv.int_ret_regs[0]
+
+
+#: How wide a floating-point register is declared to be.  What an instruction
+#: names is a view of it at the width of the value, so the whole is what the
+#: value's own register is.
+_FLOAT_REGISTER_BITS: Final[int] = 64
 
 
 def _new_value(ty: "Type", registers: "RegisterInfo",
@@ -885,7 +1091,11 @@ def _new_value(ty: "Type", registers: "RegisterInfo",
     The hint says where the value is wanted anyway.  Taking it turns the move
     that would put it there into a move of a register to itself, which then goes.
     """
-    del ty
+    from ...ir.types import FloatType
+
+    if isinstance(ty, FloatType):
+        return registers.new_virtual(FPR, _FLOAT_REGISTER_BITS,
+                                     hint=hint)
     return registers.new_virtual(GPR, 64, hint=hint)
 
 
@@ -918,9 +1128,9 @@ def _width_of(ty: "Type") -> int:
     A truth value is a byte, which is what the layout says it is.  Reading or
     writing one any wider would touch whatever is laid out beside it.
     """
-    from ...ir.types import BoolType, IntType
+    from ...ir.types import BoolType, FloatType, IntType
 
-    if isinstance(ty, IntType):
+    if isinstance(ty, (IntType, FloatType)):
         return ty.bits
     return 8 if isinstance(ty, BoolType) else 64
 

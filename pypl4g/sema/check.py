@@ -158,6 +158,11 @@ _ORDERINGS: Final[frozenset[ast.BinaryOp]] = frozenset((
     ast.BinaryOp.LESS, ast.BinaryOp.GREATER,
     ast.BinaryOp.LESS_EQUAL, ast.BinaryOp.GREATER_EQUAL))
 
+#: The two comparisons that ask whether two values are the one value.  On a
+#: floating-point value that is a question worth warning about.
+_EXACT_ON_FLOATS: Final[frozenset[ast.BinaryOp]] = frozenset((
+    ast.BinaryOp.EQUAL, ast.BinaryOp.NOT_EQUAL))
+
 _BINARY_OPS: Final[dict[ast.BinaryOp, BinOp]] = {
     ast.BinaryOp.BIT_AND: BinOp.AND,
     ast.BinaryOp.BIT_OR: BinOp.OR,
@@ -169,6 +174,16 @@ _BINARY_OPS: Final[dict[ast.BinaryOp, BinOp]] = {
     ast.BinaryOp.SAT_SUB: BinOp.SAT_SUB,
     ast.BinaryOp.SAT_MUL: BinOp.SAT_MUL,
 }
+
+#: The operators that ask a question about a number rather than about a pattern
+#: of bits, and so are defined on a floating-point value as well as on an
+#: integer.  Everything left out is left out on purpose: the bitwise operators
+#: and the shifts are questions about bits, which a floating-point type says the
+#: value is not; the saturating ones are the ends of a range of whole numbers;
+#: and what is left of a division has no one meaning for a value that is not.
+_ON_FLOATS: Final[frozenset[ast.BinaryOp]] = frozenset((
+    ast.BinaryOp.ADD, ast.BinaryOp.SUBTRACT, ast.BinaryOp.MULTIPLY,
+    ast.BinaryOp.DIVIDE))
 
 _UNARY_OPS: Final[dict[ast.UnaryOp, UnOp]] = {
     ast.UnaryOp.BIT_NOT: UnOp.NOT,
@@ -1306,12 +1321,22 @@ class Checker:
                              operator=expr.op.value, expected=ty.render(),
                              found=found.render())
             return UndefConst(ERROR)
+        if isinstance(ty, FloatType) and expr.op in _EXACT_ON_FLOATS:
+            # Two floating-point values computed different ways are rarely the
+            # one value, so asking whether they are is nearly always the wrong
+            # question -- but not always, which is why this is a warning and why
+            # the approximate comparisons are written differently rather than
+            # this one quietly becoming approximate.
+            self._diags.emit(D.LANG_TYPE_EXACT_FLOAT_COMPARISON, expr.span,
+                             operator=expr.op.value, type=ty.render())
         signed, unsigned = _COMPARISONS[expr.op]
         # A truth value is one or zero, so where it is ordered at all it is
-        # ordered as an unsigned number; nothing else here is.
-        return builder.compare(
-            signed if isinstance(ty, IntType) and ty.signed else unsigned,
-            left, right, expr.span)
+        # ordered as an unsigned number; a floating-point value is ordered the
+        # way a signed number is, and nothing else here is ordered at all.
+        signed_reading = isinstance(ty, FloatType) or (isinstance(ty, IntType)
+                                                       and ty.signed)
+        return builder.compare(signed if signed_reading else unsigned,
+                               left, right, expr.span)
 
     def _lower_logic(self, builder: IRBuilder, expr: ast.Binary,
                      expected: Type | None) -> Value:
@@ -1429,7 +1454,7 @@ class Checker:
         """
         if ty is ERROR:
             return ERROR
-        if isinstance(ty, IntType):
+        if isinstance(ty, (IntType, FloatType)):
             return ty
         if ty is BOOL and op not in _ORDERINGS:
             return ty
@@ -1455,7 +1480,7 @@ class Checker:
         try:
             left = self._lower_expr(builder, expr.left, context)
             ty = self._value_type_of(left)
-            if ty is not ERROR and not isinstance(ty, IntType):
+            if ty is not ERROR and not self._operand_type_stands(expr.op, ty):
                 self._diags.emit(D.LANG_TYPE_OPERAND_NOT_INTEGER, expr.left.span,
                                  operator=expr.op.value, found=ty.render())
                 ty = ERROR
@@ -1466,7 +1491,7 @@ class Checker:
         found = self._value_type_of(right)
         if ty is ERROR or found is ERROR:
             return UndefConst(ERROR)
-        if not isinstance(found, IntType):
+        if not self._operand_type_stands(expr.op, found):
             self._diags.emit(D.LANG_TYPE_OPERAND_NOT_INTEGER, expr.right.span,
                              operator=expr.op.value, found=found.render())
             return UndefConst(ERROR)
@@ -1489,6 +1514,11 @@ class Checker:
             return builder.binary(_SHIFTS[expr.op][0 if signed else 1],
                                   left, right, expr.span)
         if expr.op in (ast.BinaryOp.DIVIDE, ast.BinaryOp.REMAINDER):
+            if isinstance(ty, FloatType):
+                # A third question again, and not either of the two below: the
+                # answer is not truncated towards anything, and there is no pair
+                # of operands it has no answer for.
+                return builder.binary(BinOp.FDIV, left, right, expr.span)
             # One operator, two instructions: dividing signed numbers and
             # dividing unsigned ones are different questions, and the type of
             # what is divided is what says which was asked.
@@ -1507,6 +1537,12 @@ class Checker:
         ast.BinaryOp.SUBTRACT: lambda a, b: a - b,
         ast.BinaryOp.MULTIPLY: lambda a, b: a * b,
     }
+
+    def _operand_type_stands(self, op: ast.BinaryOp, ty: Type) -> bool:
+        """Whether a value of *ty* may stand on one side of *op*."""
+        if isinstance(ty, IntType):
+            return True
+        return isinstance(ty, FloatType) and op in _ON_FLOATS
 
     def _answer_is_already_known(self, expr: ast.Binary, ty: Type, left: Value,
                                  right: Value) -> bool:

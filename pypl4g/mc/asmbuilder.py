@@ -31,6 +31,8 @@ from .desc import InstFlags
 from .machine import MachineBasicBlock, MachineFunction
 from .operand import MCImm, MCMem, MCOperand, MCReg, MCSymRef, RelocKind, SymExpr
 from .ops import Condition, Op
+from collections.abc import Mapping
+
 from .reg import PhysReg, Reg, RegisterInfo, RegUnit
 from .regalloc import Assignment, allocate, registers_of
 from .streamer import MCStreamer
@@ -119,6 +121,18 @@ class InstructionSelector(Protocol):
         the value there already, and one with narrow views has an instruction
         for it or, for the unsigned case, a move that clears the rest.
         """
+        ...
+
+    def select_float_op(self, op: Op, dst: Reg, left: MCOperand, right: MCOperand,
+                        bits: int, span: Span) -> Sequence[MCInst]:
+        """Instructions that compute *op* over two floating-point values."""
+        ...
+
+    def select_float_compare(self, cond: Condition, dst: Reg, lhs: MCOperand,
+                             rhs: MCOperand, bits: int,
+                             span: Span) -> Sequence[MCInst]:
+        """Instructions that put whether two floating-point values stand in
+        *cond* into *dst*, as one or zero."""
         ...
 
     def select_shift(self, op: Op, dst: Reg, value: MCOperand, amount: MCOperand,
@@ -212,7 +226,7 @@ class Assembler:
                  function_alignment: int = 16, pad_byte: int = 0xCC,
                  machine_passes: Sequence["MachinePass"] = (),
                  registers: "RegisterInfo | None" = None,
-                 allocation_order: Sequence["RegUnit"] = (),
+                 allocation_order: "Sequence[RegUnit] | Mapping[str, Sequence[RegUnit]]" = (),
                  callee_saved: "frozenset[RegUnit] | None" = None) -> None:
         self._selector = selector
         self._streamer = streamer
@@ -222,7 +236,12 @@ class Assembler:
         #: out.  Both come from the target, since neither is the builder's to
         #: decide.
         self._registers = registers
-        self._allocation_order = tuple(allocation_order)
+        #: What the allocator may give out.  Either the units of the one class
+        #: a target has values in, or a mapping from the name of a class to its
+        #: units where a target has more than one.
+        self._allocation_order: "tuple[RegUnit, ...] | dict[str, tuple[RegUnit, ...]]" = (
+            {name: tuple(units) for name, units in allocation_order.items()}
+            if isinstance(allocation_order, Mapping) else tuple(allocation_order))
         #: The units a function must hand back as it found them.  The
         #: convention says which, since that is what a convention is about.
         self._callee_saved = frozenset(callee_saved or ())
@@ -429,7 +448,16 @@ class Assembler:
                 for register in (*inst.desc.implicit_defs, *inst.desc.implicit_uses):
                     if isinstance(register, PhysReg):
                         used.add(register.unit)
-        order = {unit: index for index, unit in enumerate(self._allocation_order)}
+        # Kept in the order the convention prefers them, so that a function
+        # saving two of them saves them in a settled order rather than in
+        # whatever order a set came out in.
+        preferred: list[RegUnit] = []
+        if isinstance(self._allocation_order, dict):
+            for units in self._allocation_order.values():
+                preferred.extend(units)
+        else:
+            preferred.extend(self._allocation_order)
+        order = {unit: index for index, unit in enumerate(preferred)}
         wanted = sorted(used & self._callee_saved,
                         key=lambda unit: order.get(unit, len(order)))
         return [self._registers.view(unit, 64) for unit in wanted]
@@ -515,6 +543,17 @@ class Assembler:
               span: Span = INVALID_SPAN) -> None:
         """Put a *bits*-wide value into the whole of *dst*."""
         self._emit(self._selector.select_widen(dst, src, bits, signed, span))
+
+    def float_op(self, op: Op, dst: Reg, left: MCOperand, right: MCOperand,
+                 bits: int, span: Span = INVALID_SPAN) -> None:
+        """Compute *op* over two floating-point values into *dst*."""
+        self._emit(self._selector.select_float_op(op, dst, left, right, bits, span))
+
+    def float_compare(self, cond: Condition, dst: Reg, lhs: MCOperand,
+                      rhs: MCOperand, bits: int, span: Span = INVALID_SPAN) -> None:
+        """Put whether two floating-point values stand in *cond* into *dst*."""
+        self._emit(self._selector.select_float_compare(cond, dst, lhs, rhs, bits,
+                                                       span))
 
     def shift(self, op: Op, dst: Reg, value: MCOperand, amount: MCOperand,
               bits: int, span: Span = INVALID_SPAN) -> None:

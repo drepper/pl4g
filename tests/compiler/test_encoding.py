@@ -192,6 +192,8 @@ SAMPLES = [
      MCReg(reg("xmm0"))),
     ("movsd QWORD PTR [rbx],xmm0", "movsd", MCMem(base=reg("rbx")),
      MCReg(reg("xmm0"))),
+    ("setp al", "setp", MCReg(reg("al"))),
+    ("setnp al", "setnp", MCReg(reg("al"))),
     ("jmp", "jmp", MCSymRef(SymExpr(MCSymbol("there")))),
     ("je", "je", MCSymRef(SymExpr(MCSymbol("there")))),
     ("jne", "jne", MCSymRef(SymExpr(MCSymbol("there")))),

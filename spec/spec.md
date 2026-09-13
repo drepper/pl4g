@@ -127,6 +127,24 @@ and `⁻1u8` is not, because no unsigned type has a negative value to hold.
 
 Compare C's `42U` and `42L`, Rust's `42u8`, and C#'s `42L`; the form here is Rust's, and the fallback is Odin's.
 
+#### Floating-Point Literals
+
+A floating-point literal is written in one of the two forms C has: a decimal one, with a point or an exponent or both -- `3.5f64`,
+`1e10f64`, `6.02e23f64` -- and a hexadecimal one, with an `0x` prefix and a `p` exponent that counts powers of two -- `0x1.8p3f64`
+is twelve.  Underscores may separate digits in either, as in an integer literal.
+
+The hexadecimal form exists because it is exact by construction: every digit of it is a digit of the value that is stored, so a
+number written that way is the number the program gets and no rounding happens in between.  That is why C has it and why it is
+here.
+
+The type is named by a suffix, as an integer literal names its own: `f32` or `f64`.  Digits with a floating-point suffix and no
+point are a floating-point literal too, so `3f64` is the number three, written without a point that would say nothing.
+
+A point is part of a literal only when a digit follows it.  That is what keeps `1.x` able to mean a member of something once there
+are values that have members, rather than a literal followed by a name.
+
+A literal is made negative by the same leading `⁻` an integer literal uses: `⁻2.5f32`.
+
 #### Modules
 
 A file brings another in with a definition:
@@ -372,6 +390,39 @@ well and is the only language that does it; C and Go give it the meaning above a
 
 Splitting equality from ordering, as C does, would decide only what `a < b = c` means, and that expression has no meaning here.
 One level for all six is what Go and Rust do.
+
+#### Floating-point numbers
+
+`f32` and `f64` hold binary floating-point numbers, as IEEE 754 defines them, and the hardware's own floating-point instructions
+are what operate on them.  A binary this compiler writes therefore requires a target that has them.  On x86-64 and on AArch64 that
+requirement is already the base of the ABI and so nothing has to be recorded; on RISC-V it is the header's flag word, which says
+the double-precision convention.  A soft-float target is not supported, and the language does not describe one: the point of a
+type that says what a value is would be lost if the same program were fast on one machine and a hundred times slower on another
+without saying so.
+
+**Four operators are defined on a floating-point value**: `+`, `-`, `×` and `÷`.  Everything else is not, and is refused rather
+than given a meaning:
+
+| Refused | Because |
+|---|---|
+| `&` `\|` `^` `~` | these are questions about bits, and a floating-point type says the value is a number and not the bits it is kept in |
+| `«` `»` `↺` `↻` | the same, and there is no sense in which a floating-point value has a bit to move sideways |
+| `⊞` `⊟` `⊠` | saturating means the nearest end of a range of whole numbers, which a floating-point type has no notion of |
+| `%` | what is left of a division that stopped at a whole number, which is not the division this type does |
+
+`÷` on floating point is a third operation and neither of the two that integers have: it truncates towards nothing and there is no
+pair of operands it has no answer for.
+
+**All six comparisons are defined**, and `=` and `≠` on floating point are diagnosed (4217).  Two floating-point values arrived at
+by different routes are rarely the one value even where the numbers they stand for are equal, so asking whether they are is nearly
+always the wrong question.  It is a warning and not an error because the question is sometimes the right one -- a value compared
+against one it was assigned from, or against a number every format holds exactly -- and `@[ignore(4217)]` is how a program says it
+meant it.  The question usually meant is the approximate one, which is written with its own operators.
+
+Compare: C, Go, Rust, Zig and Odin all let `==` on a floating-point value stand without a word; a warning for it is something
+several lint tools offer and no compiler turns on.  This language turns it on because a diagnostic that names the number of the
+rule is the language's way of stating a rule the reader may not know, and because a generator that emits an exact comparison has
+almost certainly emitted the wrong one.
 
 #### Logical operators
 

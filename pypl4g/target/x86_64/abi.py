@@ -21,6 +21,12 @@ _CALLER_SAVED = frozenset(reg(n).unit for n in
 #: callee-saved one would cost it a save and a restore.  The stack pointer is
 #: not among them, and neither is the frame pointer, which is left free so that
 #: a frame and the unwinder that will walk it have somewhere to stand.
+#: The vector registers, which is where a floating-point value lives.  Every one
+#: of them is destroyed by a call on this architecture, so the order is simply
+#: the order they are numbered in.
+_FLOAT_ORDER = tuple(reg("".join(("xmm", str(n)))).unit for n in range(16))
+_FLOAT_ARGS = tuple(reg("".join(("xmm", str(n)))) for n in range(8))
+
 _ALLOCATION_ORDER = tuple(reg(n).unit for n in (
     "rax", "rcx", "rdx", "rsi", "rdi", "r8", "r9", "r10", "r11",
     "rbx", "r12", "r13", "r14", "r15"))
@@ -29,6 +35,9 @@ CC_PL4G_V0: Final[CallConvDesc] = CallConvDesc(
     name="pl4g.v0",
     int_arg_regs=(RDI, RSI, RDX, RCX, reg("r8"), reg("r9")),
     int_ret_regs=(RAX, RDX),
+    float_arg_regs=_FLOAT_ARGS,
+    float_ret_regs=(reg("xmm0"),),
+    float_allocation_order=_FLOAT_ORDER,
     callee_saved=_CALLEE_SAVED,
     caller_saved=_CALLER_SAVED,
     stack_align=16,
@@ -40,6 +49,9 @@ CC_SYSV: Final[CallConvDesc] = CallConvDesc(
     name="sysv",
     int_arg_regs=(RDI, RSI, RDX, RCX, reg("r8"), reg("r9")),
     int_ret_regs=(RAX, RDX),
+    float_arg_regs=_FLOAT_ARGS,
+    float_ret_regs=(reg("xmm0"),),
+    float_allocation_order=_FLOAT_ORDER,
     callee_saved=_CALLEE_SAVED,
     caller_saved=_CALLER_SAVED,
     stack_align=16,

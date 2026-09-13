@@ -22,10 +22,20 @@ _ARG_REGS = tuple(reg("".join(("x", str(n)))) for n in range(8))
 _ALLOCATION_ORDER = tuple(reg("".join(("x", str(n)))).unit
                           for n in (*range(18), *range(19, 29)))
 
+#: The floating-point registers.  The first eight carry arguments and the first
+#: carries the answer; the eight after them are ones a function hands back as it
+#: found them, so they come last in the order.
+_FLOAT_ARGS = tuple(reg("".join(("d", str(n)))) for n in range(8))
+_FLOAT_ORDER = tuple(reg("".join(("d", str(n)))).unit
+                     for n in (*range(0, 8), *range(16, 32), *range(8, 16)))
+
 CC_PL4G_V0: Final[CallConvDesc] = CallConvDesc(
     name="pl4g.v0",
     int_arg_regs=_ARG_REGS,
     int_ret_regs=(reg("x0"), reg("x1")),
+    float_arg_regs=_FLOAT_ARGS,
+    float_ret_regs=(reg("d0"),),
+    float_allocation_order=_FLOAT_ORDER,
     callee_saved=_CALLEE_SAVED,
     caller_saved=_CALLER_SAVED,
     stack_align=16,
@@ -39,6 +49,9 @@ CC_AAPCS64: Final[CallConvDesc] = CallConvDesc(
     name="aapcs64",
     int_arg_regs=_ARG_REGS,
     int_ret_regs=(reg("x0"), reg("x1")),
+    float_arg_regs=_FLOAT_ARGS,
+    float_ret_regs=(reg("d0"),),
+    float_allocation_order=_FLOAT_ORDER,
     callee_saved=_CALLEE_SAVED,
     caller_saved=_CALLER_SAVED,
     stack_align=16,

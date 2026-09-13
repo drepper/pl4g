@@ -15,6 +15,7 @@ from ...mc.regalloc import RegisterPressureError
 from ...mc.streamer import MCStreamer
 from ...ir.layout import DataLayout
 from ..faults import Messages
+from ..pool import Constants
 from ..globals import emit_globals
 from ..target import ImageDefaults
 from .abi import CC_PL4G_V0, lookup as lookup_cconv
@@ -22,16 +23,19 @@ from .encoder import EncodingError, encode
 from .fixups import apply_fixup
 from .isel import RVSelector, UnsupportedOperation, lower_function
 from .opcodes import PAD_BYTE, RISCV_INSTRS
-from .regs import INFO
+from .regs import FPR, GPR, INFO
 from .startup import ENTRY_SYMBOL, emit_abort, emit_start
 
 #: What the header's flag word says on this architecture.  The low bit says the
 #: code uses the compressed encoding, the two above it say which floating-point
-#: convention its functions follow, and the rest are reserved.  Zero is not
-#: "unset": it says the base integer set and the soft-float convention, which is
-#: exactly what is emitted.  Emitting floating point will mean choosing between
-#: SINGLE and DOUBLE here, and a program that links against one convention with
-#: the other is what the field exists to prevent.
+#: convention its functions follow, and the rest are reserved.  DOUBLE is what
+#: is emitted: a floating-point value is passed and returned in a
+#: floating-point register of the hardware, which is what the requirement to
+#: assume the hardware's floating point comes to on this architecture, and a
+#: program that links against one convention with the other is what the field
+#: exists to prevent.  It says DOUBLE whether or not a particular program uses
+#: floating point, because what the field states is the convention the
+#: functions follow and they follow that one either way.
 FLOAT_ABI_SOFT: Final[int] = 0x0
 FLOAT_ABI_SINGLE: Final[int] = 0x2
 FLOAT_ABI_DOUBLE: Final[int] = 0x4
@@ -40,7 +44,7 @@ COMPRESSED: Final[int] = 0x1
 #: EM_RISCV.
 IMAGE_DEFAULTS: Final[ImageDefaults] = ImageDefaults(
     machine=243, base_vaddr=0x400000, page_size=0x1000, text_alignment=16,
-    function_alignment=16, header_flags=FLOAT_ABI_SOFT)
+    function_alignment=16, header_flags=FLOAT_ABI_DOUBLE)
 
 
 class RISCV64Target:
@@ -76,7 +80,7 @@ class RISCV64Target:
         return Assembler(self.selector(streamer), streamer,
                          function_alignment=IMAGE_DEFAULTS.function_alignment,
                          pad_byte=PAD_BYTE, registers=self.registers,
-                         allocation_order=CC_PL4G_V0.allocation_order,
+                         allocation_order=CC_PL4G_V0.orders(GPR.name, FPR.name),
                          callee_saved=CC_PL4G_V0.callee_saved)
 
     def generate(self, module: Module, asm: Assembler, diags: DiagEngine,
@@ -84,6 +88,7 @@ class RISCV64Target:
         """Generate the whole image for *module*."""
         del opt_level
         messages = Messages()
+        constants = Constants()
         emit_globals(asm, module, DataLayout(pointer_size=self.pointer_bits // 8))
         asm.section(".text", executable=True,
                     alignment=IMAGE_DEFAULTS.text_alignment)
@@ -92,7 +97,7 @@ class RISCV64Target:
                 continue
             try:
                 lower_function(asm, func, lookup_cconv(func.cconv), self.registers,
-                               messages, sources)
+                               messages, sources, constants)
             except UnsupportedOperation as exc:
                 diags.emit(D.IMPL_BACKEND_UNSUPPORTED,
                            exc.span if exc.span is not None else func.span,
@@ -116,6 +121,7 @@ class RISCV64Target:
             emit_abort(asm, lookup_cconv(module.startup.cconv))
         emit_start(asm, module, lookup_cconv(module.startup.cconv))
         messages.emit(asm)
+        constants.emit(asm)
 
     @property
     def entry_symbol(self) -> str:
