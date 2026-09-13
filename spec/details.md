@@ -245,6 +245,26 @@ rather than a finished stream of bytes.  That is where the register allocator, t
 peephole rewrite states the condition under which it is valid and checks it: replacing a register-clearing move by an exclusive-or
 is three bytes shorter but writes the flags, so the rewrite fires only where a liveness scan has shown the flags to be dead.
 
+The Decision Log
+----------------
+
+A diagnostic says something is wrong.  A *decision* says the compiler chose something the program did not state -- above all, what
+it left out.  The two are kept apart deliberately: nothing is wrong when a function nothing can reach is dropped, and putting
+"this function is not in your binary" among the warnings would make it either noise or something missed.  A language meant to be
+generated will have plenty of them, since a generator emitting from a template routinely produces more than one instantiation uses.
+
+`--decision-log=FILE` writes them as JSON beside the binary.  Each entry has a `kind`, which is the stable part that something
+reading the log matches on; a `subject`, named as the program names it; a `reason` in prose, which is for a person and may be
+reworded; and, where the subject is written in a source file, a `where` giving the file, line and column -- being told that a
+function went without being told which one would leave the reader to find it.
+
+What is recorded today is what the reachability pass leaves out: `drop-function` and `drop-variable`.  Recording happens whether or
+not the log was asked for, because a decision recorded only when someone is watching is one a test cannot check.
+
+The log travels on the module, since every stage has the module and any of them may decide something.  It is not the design log in
+[decisions.md](decisions.md), which records what was decided about the *language* and is written by hand; this one is about one
+program and is written by the compiler.
+
 Timing
 ------
 

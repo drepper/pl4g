@@ -15,18 +15,18 @@ Work
 The sum of the compiler's own stages, which is what a change to the
 compiler moves.
 
-| program | eee64a3 | af657ad | 2f564cb | 37dbb28 |
-|---|---|---|---|---|
-| exit0 | 0.90 | 0.89 | 0.88 | 0.89 |
-| global-variable | 1.05 | 1.10 | 1.04 | 1.05 |
-| assign-widths | 1.50 | 1.49 | 1.50 | 1.64 |
-| many-values-at-once | 1.73 | 1.74 | 1.87 | 1.90 |
-| unreached-function | 1.33 | 1.31 | 1.33 | 1.44 |
-| export-visibility | 1.28 | 1.27 | 1.30 | 1.47 |
-| digit-separators | 1.46 | 1.47 | 1.49 | 1.63 |
-| boolean-values | 1.25 | 1.24 | 1.23 | 1.27 |
-| bitwise-operators |  |  | 1.47 | 1.55 |
-| bitwise-precedence |  |  | 1.22 | 1.22 |
+| program | eee64a3 | af657ad | 2f564cb | 37dbb28 | 1c4ae78 |
+|---|---|---|---|---|---|
+| exit0 | 0.90 | 0.89 | 0.88 | 0.89 | 1.06 |
+| global-variable | 1.05 | 1.10 | 1.04 | 1.05 | 1.22 |
+| assign-widths | 1.50 | 1.49 | 1.50 | 1.64 | 1.63 |
+| many-values-at-once | 1.73 | 1.74 | 1.87 | 1.90 | 1.90 |
+| unreached-function | 1.33 | 1.31 | 1.33 | 1.44 | 1.46 |
+| export-visibility | 1.28 | 1.27 | 1.30 | 1.47 | 1.42 |
+| digit-separators | 1.46 | 1.47 | 1.49 | 1.63 | 1.64 |
+| boolean-values | 1.25 | 1.24 | 1.23 | 1.27 | 1.39 |
+| bitwise-operators |  |  | 1.47 | 1.55 | 1.56 |
+| bitwise-precedence |  |  | 1.22 | 1.22 | 1.42 |
 
 Process
 -------
@@ -36,18 +36,18 @@ for.  For the bootstrap compiler this is mostly starting the interpreter and
 importing the package, so it says little about code generation and a good deal
 about how much of the compiler an ordinary compilation has to import.
 
-| program | eee64a3 | af657ad | 2f564cb | 37dbb28 |
-|---|---|---|---|---|
-| exit0 | 69 | 69 | 67 | 68 |
-| global-variable | 68 | 69 | 69 | 66 |
-| assign-widths | 69 | 69 | 70 | 67 |
-| many-values-at-once | 69 | 70 | 69 | 69 |
-| unreached-function | 71 | 69 | 68 | 66 |
-| export-visibility | 68 | 65 | 69 | 69 |
-| digit-separators | 68 | 66 | 68 | 68 |
-| boolean-values | 68 | 67 | 72 | 69 |
-| bitwise-operators |  |  | 72 | 68 |
-| bitwise-precedence |  |  | 68 | 67 |
+| program | eee64a3 | af657ad | 2f564cb | 37dbb28 | 1c4ae78 |
+|---|---|---|---|---|---|
+| exit0 | 69 | 69 | 67 | 68 | 71 |
+| global-variable | 68 | 69 | 69 | 66 | 71 |
+| assign-widths | 69 | 69 | 70 | 67 | 71 |
+| many-values-at-once | 69 | 70 | 69 | 69 | 68 |
+| unreached-function | 71 | 69 | 68 | 66 | 71 |
+| export-visibility | 68 | 65 | 69 | 69 | 70 |
+| digit-separators | 68 | 66 | 68 | 68 | 68 |
+| boolean-values | 68 | 67 | 72 | 69 | 67 |
+| bitwise-operators |  |  | 72 | 68 | 70 |
+| bitwise-precedence |  |  | 68 | 67 | 70 |
 
 What each column is:
 
@@ -55,6 +55,7 @@ What each column is:
 - `af657ad` -- ✨ Conditional branches, selected with their comparison and turned round
 - `2f564cb` -- ✨ Expressions, by precedence climbing, with the bitwise operators
 - `37dbb28` -- 🐛 A diagnostic number no block covers is refused, not mis-grouped
+- `1c4ae78` -- ✨ What the compiler leaves out is recorded in the decision log
 
 What each sample exercises:
 

@@ -399,3 +399,44 @@ def test_the_whole_chain_goes_through_the_compiler(compile_source) -> None:  # n
     assert "@used" in text, text
     assert "@only_by_dropped" not in text and "@unreached" not in text, text
 
+
+# -- what was decided -----------------------------------------------------------
+
+def test_dropping_something_is_recorded_as_a_decision() -> None:
+    """The pass says what it left out, whether or not anyone asked for the log.
+
+    A decision recorded only when someone is watching is one a test cannot check.
+    """
+    from pypl4g.ir.decisions import DecisionKind
+
+    module = Module("t")
+    _helper(module, "orphan")
+    _global(module, "unused")
+    func = _startup(module)
+    block = func.entry
+    assert block is not None
+    block.append(RetInst(module.int_const(U8, 0)))
+    assert DropUnreached().run(module)
+    dropped = module.decisions
+    assert [d.subject for d in dropped.of_kind(DecisionKind.DROP_FUNCTION)] == ["orphan"]
+    assert [d.subject for d in dropped.of_kind(DecisionKind.DROP_VARIABLE)] == ["unused"]
+    assert all(d.reason for d in dropped.entries), "a decision with no reason"
+
+
+def test_nothing_kept_is_recorded_as_dropped() -> None:
+    """A log that said things went that did not would be worse than none."""
+    from pypl4g.ir.decisions import DecisionKind
+
+    module = Module("t")
+    var = _global(module, "g", exported=True)
+    _helper(module, "shared", exported=True)
+    func = _startup(module)
+    block = func.entry
+    assert block is not None
+    token = block.append(MemStartInst())
+    block.append(StoreInst(token, var, module.int_const(U8, 1)))
+    block.append(RetInst(module.int_const(U8, 0)))
+    assert not DropUnreached().run(module)
+    assert module.decisions.entries == []
+    assert module.decisions.of_kind(DecisionKind.DROP_FUNCTION) == []
+

@@ -1065,6 +1065,36 @@ catalog, so a block added to one and not the other would have left the document 
 Both are the same rule -- a fact stated twice is a fact that can disagree with itself -- and the answer in both cases is to check
 rather than to remember.
 
+## 2026-09-14T21:30+02:00 — implementation
+
+**What the compiler leaves out is recorded in the decision log, which until now recorded nothing**
+
+`--decision-log` has existed since the first version, is documented as an option, and wrote `"decisions": []` every time; its own
+docstring said the compiler made no recorded decisions yet.  Meanwhile two passes had been added that silently leave things out of
+the binary.  A reader asking "I wrote that function, where is it?" had nowhere to look.
+
+A decision is not a diagnostic, and the two are kept apart on purpose.  Nothing is *wrong* when a function nothing can reach is
+dropped, so reporting it as a warning would be reporting a mistake that was not made.  A language meant to be generated will have
+these by the dozen -- a generator emitting from a template routinely produces more than any one instantiation uses -- so as
+warnings they would be noise, and as noise they would be turned off, and then the one that mattered would be missed too.
+
+Each entry has a `kind` that is stable and a `reason` that is not.  Something reading the log asks which functions were dropped by
+matching `drop-function`, never by matching prose; the prose is for a person and can be reworded without breaking anything.  Where
+the subject is written in a file the entry says which file and line, since being told that a function went without being told which
+one leaves the reader to find it.
+
+Recording happens whether or not the log was asked for.  The alternative -- record only when `--decision-log` is given -- saves a
+list append per dropped definition and makes the recording untestable, because a test would have to run the compiler as a process
+to see anything.
+
+The log travels on the module, since every stage has the module and any stage may decide something.  Instruction selection choosing
+the shortest encoding, the allocator choosing a register, a later pass choosing to inline: all of them have the module, and none of
+them needs a new channel.
+
+What other compilers do: GCC's `-fopt-info` and Clang's `-Rpass` report optimizations as *remarks*, which is the arrangement being
+avoided here -- they are diagnostics, they are off by default, and they are prose.  Clang's `-fsave-optimization-record` writes
+structured YAML, which is this idea; the difference is that it is a special mode rather than the way the compiler says what it did.
+
 ---
 
 Open questions

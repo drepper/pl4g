@@ -27,6 +27,10 @@
     {
       "hash": "37dbb28",
       "subject": "🐛 A diagnostic number no block covers is refused, not mis-grouped"
+    },
+    {
+      "hash": "1c4ae78",
+      "subject": "✨ What the compiler leaves out is recorded in the decision log"
     }
   ],
   "times": {
@@ -180,6 +184,48 @@
       "bitwise-precedence": [
         1.218,
         67.48710499959998
+      ]
+    },
+    "1c4ae78": {
+      "exit0": [
+        1.056,
+        71.29099100711755
+      ],
+      "global-variable": [
+        1.2209999999999999,
+        70.67151798401028
+      ],
+      "assign-widths": [
+        1.6270000000000002,
+        70.72455700836144
+      ],
+      "many-values-at-once": [
+        1.896,
+        68.38213797891513
+      ],
+      "unreached-function": [
+        1.458,
+        70.6629840133246
+      ],
+      "export-visibility": [
+        1.418,
+        69.54459901317023
+      ],
+      "digit-separators": [
+        1.6400000000000001,
+        68.0423460144084
+      ],
+      "boolean-values": [
+        1.385,
+        66.63975300034508
+      ],
+      "bitwise-operators": [
+        1.56,
+        70.49230698612519
+      ],
+      "bitwise-precedence": [
+        1.417,
+        70.49162601470016
       ]
     }
   }

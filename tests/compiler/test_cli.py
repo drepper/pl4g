@@ -144,7 +144,7 @@ def test_emit_modes_write_to_the_output_file(source: Path, tmp_path: Path) -> No
 
 
 def test_decision_log_is_written(source: Path, tmp_path: Path) -> None:
-    """The log is empty for now, but its format is fixed before it has content."""
+    """A program that gave the compiler nothing to decide has an empty log."""
     log = tmp_path / "decisions.json"
     proc = run_compiler(["-o", str(tmp_path / "out"),
                          "".join(("--decision-log=", str(log))), str(source)])
@@ -152,6 +152,68 @@ def test_decision_log_is_written(source: Path, tmp_path: Path) -> None:
     document = json.loads(log.read_text(encoding="utf-8"))
     assert document["format_version"] == 1
     assert document["decisions"] == []
+
+
+DROPPED = """let used: u8 = 7u8
+let only_by_dropped: u8 = 9u8
+
+fn unreached() \N{RIGHTWARDS ARROW} u8:
+    only_by_dropped
+
+@[startup]
+fn main() \N{RIGHTWARDS ARROW} u8:
+    used
+"""
+
+
+def test_what_is_left_out_of_the_binary_is_logged(tmp_path: Path) -> None:
+    """Leaving something out is a decision, and a reader is entitled to ask.
+
+    "I wrote that function, where is it?" has an answer; this is where it is
+    kept.  It is not a warning: nothing is wrong, and a program that is meant to
+    be generated will have plenty of these.
+    """
+    source = tmp_path / "t.pl4g"
+    source.write_text(DROPPED, encoding="utf-8")
+    log = tmp_path / "decisions.json"
+    proc = run_compiler(["-o", str(tmp_path / "out"),
+                         "".join(("--decision-log=", str(log))), str(source)])
+    assert proc.returncode == ExitCode.SUCCESS, proc.stderr
+    decisions = json.loads(log.read_text(encoding="utf-8"))["decisions"]
+    by_kind = {(d["kind"], d["subject"]): d for d in decisions}
+    assert ("drop-function", "unreached") in by_kind
+    assert ("drop-variable", "only_by_dropped") in by_kind
+    assert ("drop-variable", "used") not in by_kind, "a variable in use was logged"
+
+
+def test_a_logged_decision_points_at_what_it_is_about(tmp_path: Path) -> None:
+    """Being told a function went without being told which line it was on would
+    leave the reader to find it."""
+    source = tmp_path / "t.pl4g"
+    source.write_text(DROPPED, encoding="utf-8")
+    log = tmp_path / "decisions.json"
+    run_compiler(["-o", str(tmp_path / "out"),
+                  "".join(("--decision-log=", str(log))), str(source)])
+    decisions = json.loads(log.read_text(encoding="utf-8"))["decisions"]
+    dropped = next(d for d in decisions if d["subject"] == "unreached")
+    assert dropped["where"]["file"] == source.as_posix()
+    assert dropped["where"]["line"] == 4, dropped
+    assert dropped["reason"], "a decision with no reason says only half of it"
+
+
+def test_nothing_exported_is_ever_logged_as_dropped(tmp_path: Path) -> None:
+    """What the program exports is reachable from outside, so it is kept."""
+    source = tmp_path / "t.pl4g"
+    source.write_text("".join((
+        "@[export]\nlet shared: u8 = 1u8\n\n",
+        "@[export]\nfn reachable() \N{RIGHTWARDS ARROW} u8:\n    1u8\n\n",
+        "@[startup]\nfn main() \N{RIGHTWARDS ARROW} u8:\n    1u8\n")),
+        encoding="utf-8")
+    log = tmp_path / "decisions.json"
+    proc = run_compiler(["-o", str(tmp_path / "out"),
+                         "".join(("--decision-log=", str(log))), str(source)])
+    assert proc.returncode == ExitCode.SUCCESS, proc.stderr
+    assert json.loads(log.read_text(encoding="utf-8"))["decisions"] == []
 
 
 def test_time_report(source: Path, tmp_path: Path) -> None:

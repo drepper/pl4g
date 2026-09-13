@@ -20,6 +20,7 @@ from ..diag.render import JSONRenderer, TextRenderer
 from ..front import ast
 from ..front.lexer import tokenize
 from ..front.parser import parse
+from ..ir.decisions import Decision
 from ..ir.module import Module
 from ..ir.printer import render_module
 from ..ir.verify import verify
@@ -53,6 +54,10 @@ class Driver:
     sources: SourceManager
     stderr: TextIO
     timings: list[Timing] = field(default_factory=list)
+    #: What the compiler decided about the program, gathered from the module
+    #: once it has one, so that a compilation that failed earlier still writes a
+    #: log rather than none.
+    decisions: list[Decision] = field(default_factory=list)
 
     def _timed(self, name: str, start: float) -> None:
         """Record that a stage finished."""
@@ -123,6 +128,7 @@ class Driver:
         start = perf_counter()
         manager = build_manager(self.options.opt_level)
         manager.run(module)
+        self.decisions.extend(module.decisions.entries)
         for timing in manager.timings:
             self.timings.append(Timing("".join(("pass ", timing.name)), timing.seconds))
         self._timed("optimization", start)
@@ -209,9 +215,12 @@ class Driver:
     def write_decision_log(self) -> None:
         """Write the log of the decisions the compiler made.
 
-        The compiler makes no recorded decisions yet, so the log is empty; it is
-        written all the same, so that the format is fixed before there is
-        anything to put in it.
+        A decision is something the compiler chose that the program did not
+        state -- what it left out, above all.  It is not a diagnostic: nothing
+        is wrong, and burying "this function is not in your binary" among the
+        warnings would either be noise or be missed.  It is written as JSON so
+        that a build can keep it beside the binary and something can ask it a
+        question later.
         """
         if self.options.decision_log is None:
             return
@@ -219,10 +228,29 @@ class Driver:
             "format_version": 1,
             "compiler": "".join(("pypl4g ", VERSION)),
             "inputs": [p.as_posix() for p in self.options.inputs],
-            "decisions": [],
+            "decisions": [self._rendered_decision(d) for d in self.decisions],
         }
         self.options.decision_log.write_text(
             json.dumps(document, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+    def _rendered_decision(self, decision: Decision) -> dict[str, object]:
+        """One decision, as the log records it.
+
+        The kind is the stable part, so that a reader can ask which functions
+        were dropped without matching on prose; the reason is there for a person
+        and may be reworded.
+        """
+        entry: dict[str, object] = {
+            "kind": decision.kind.value,
+            "subject": decision.subject,
+            "reason": decision.reason,
+        }
+        position = (self.sources.position(decision.span.start)
+                    if decision.span.is_valid else None)
+        if position is not None:
+            entry["where"] = {"file": position.path, "line": position.line,
+                              "column": position.column}
+        return entry
 
     def report_timings(self) -> None:
         """Print how long each stage took."""

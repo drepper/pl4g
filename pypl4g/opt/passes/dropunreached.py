@@ -31,6 +31,7 @@ function is: something outside this compilation may name it.
 
 from collections.abc import Iterable
 
+from ...ir.decisions import DecisionKind
 from ...ir.function import Function, Linkage
 from ...ir.module import GlobalVar, Module
 
@@ -41,11 +42,24 @@ class DropUnreached:
     name = "dropunreached"
 
     def run(self, module: Module) -> bool:
-        """Drop what nothing reaches; report whether anything changed."""
+        """Drop what nothing reaches; report whether anything changed.
+
+        Each thing dropped is recorded.  Leaving something out of a binary is a
+        decision about the program, and one a reader is entitled to ask about:
+        "I wrote that function, where is it?" has an answer, and this is where
+        the answer is kept.
+        """
         reachable = self._reachable(module)
         functions = {name: func for name, func in module.functions.items()
                      if id(func) in reachable}
         changed = len(functions) != len(module.functions)
+        for name, func in module.functions.items():
+            if name not in functions:
+                module.decisions.record(
+                    DecisionKind.DROP_FUNCTION, name,
+                    "nothing the program can run reaches it, and it is not "
+                    "exported, so nothing outside can reach it either",
+                    func.span)
         module.functions = functions
 
         named = self._variables_named_by(module, functions.values())
@@ -53,6 +67,13 @@ class DropUnreached:
                      if id(var) in named or var.linkage is Linkage.EXPORTED}
         if len(variables) != len(module.globals):
             changed = True
+            for name, var in module.globals.items():
+                if name not in variables:
+                    module.decisions.record(
+                        DecisionKind.DROP_VARIABLE, name,
+                        "no function that is itself reached names it, and it is "
+                        "not exported",
+                        var.span)
             module.globals = variables
         return changed
 

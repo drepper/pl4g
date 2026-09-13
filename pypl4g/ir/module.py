@@ -3,6 +3,7 @@
 from dataclasses import dataclass, field
 
 from ..source.location import INVALID_SPAN, Span
+from .decisions import DecisionLog
 from .function import Function, Linkage
 from .types import BoolType, IntType, MEM, PtrType, Type, TypeContext
 from .value import BoolConst, IntConst, Value
@@ -67,6 +68,10 @@ class Module:
     dtors: list[Function] = field(default_factory=list)
     tests: list[Function] = field(default_factory=list)
     source_paths: list[str] = field(default_factory=list)
+    #: What the compiler decided about this program, as opposed to what it
+    #: reported.  It travels with the module because every stage has the module
+    #: and any of them may decide something.
+    decisions: DecisionLog = field(default_factory=DecisionLog)
     _int_consts: dict[tuple[int, bool, int], IntConst] = field(default_factory=dict)
     _bool_consts: dict[bool, BoolConst] = field(default_factory=dict)
 
