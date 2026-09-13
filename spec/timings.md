@@ -39,6 +39,7 @@ the parser does, and they are the floor everything else is measured against.
 | `73ce857` | 1.01 | 1.69 | 1.44 |
 | `ed1c028` | 1.06 | 1.64 | 1.45 |
 | `1269bd5` | 1.13 | 1.65 | 1.41 |
+| `db0b436` | 1.13 | 1.65 | 1.40 |
 
 ### Variables and memory
 
@@ -62,6 +63,7 @@ backend do.
 | `73ce857` | 1.19 | 1.65 |  |
 | `ed1c028` | 1.22 | 1.73 | 1.43 |
 | `1269bd5` | 1.25 | 1.67 | 1.53 |
+| `db0b436` | 1.28 | 1.74 | 1.54 |
 
 ### Register pressure
 
@@ -85,6 +87,7 @@ and they are the only ones that reach the frame.
 | `73ce857` | 1.89 | 6.48 |
 | `ed1c028` | 1.94 | 6.32 |
 | `1269bd5` | 1.94 | 6.65 |
+| `db0b436` | 1.97 | 6.68 |
 
 ### What is left out
 
@@ -108,6 +111,7 @@ decision log does.
 | `73ce857` | 1.50 | 1.57 |
 | `ed1c028` | 1.49 | 1.59 |
 | `1269bd5` | 1.52 | 1.58 |
+| `db0b436` | 1.56 | 1.73 |
 
 ### Expressions
 
@@ -131,6 +135,7 @@ optimizer does.
 | `73ce857` | 1.58 | 1.39 |  |
 | `ed1c028` | 1.65 | 1.45 |  |
 | `1269bd5` | 1.58 | 1.43 | 2.40 |
+| `db0b436` | 1.66 | 1.42 | 2.36 |
 
 Process
 -------
@@ -158,6 +163,7 @@ worth showing here, and every figure is in the JSON beside this file.
 | `73ce857` | 73 | 81 |
 | `ed1c028` | 74 | 80 |
 | `1269bd5` | 75 | 85 |
+| `db0b436` | 76 | 82 |
 
 What each row is:
 
@@ -176,6 +182,7 @@ What each row is:
 - `73ce857` -- ✨ One meaning, one spelling: attributes are written one way
 - `ed1c028` -- ✨ A truth value in a register, on all three architectures
 - `1269bd5` -- ✨ The comparisons: `=` `≠` `<` `>` `≤` `≥`
+- `db0b436` -- ✨ A statement's value must be used, and ≠ keeps its glyph
 
 What each program exercises:
 

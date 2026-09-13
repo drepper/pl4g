@@ -74,6 +74,10 @@
     {
       "hash": "1269bd5",
       "subject": "✨ The comparisons: `=` `≠` `<` `>` `≤` `≥`"
+    },
+    {
+      "hash": "db0b436",
+      "subject": "✨ A statement's value must be used, and ≠ keeps its glyph"
     }
   ],
   "times": {
@@ -725,6 +729,60 @@
       "comparison-operators": [
         2.404,
         77.93193403631449
+      ]
+    },
+    "db0b436": {
+      "exit0": [
+        1.1320000000000001,
+        80.52694797515869
+      ],
+      "global-variable": [
+        1.283,
+        80.46741003636271
+      ],
+      "assign-widths": [
+        1.744,
+        79.48078098706901
+      ],
+      "many-values-at-once": [
+        1.965,
+        76.87761803390458
+      ],
+      "unreached-function": [
+        1.5599999999999998,
+        78.72004597447813
+      ],
+      "export-visibility": [
+        1.731,
+        81.79649204248562
+      ],
+      "digit-separators": [
+        1.646,
+        75.70444903103635
+      ],
+      "boolean-values": [
+        1.4,
+        79.16924101300538
+      ],
+      "bitwise-operators": [
+        1.662,
+        79.40796099137515
+      ],
+      "bitwise-precedence": [
+        1.418,
+        80.00704395817593
+      ],
+      "spill-to-the-frame": [
+        6.676000000000001,
+        82.00901304371655
+      ],
+      "boolean-in-memory": [
+        1.538,
+        79.32647899724543
+      ],
+      "comparison-operators": [
+        2.359,
+        78.09626398375258
       ]
     }
   }
