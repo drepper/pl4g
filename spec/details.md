@@ -316,15 +316,20 @@ Timing
 ------
 
 The compiler must be fast, so how long it takes is measured rather than assumed.  `bin/pl4g-timing` compiles a set of sample
-programs drawn from the language tests and appends a column to [the timing tables](timings.md), one column per commit and one row
-per sample.  Both axes grow: a sample is added when a feature lands that could plausibly cost time and is never removed, so a
-column recorded earlier stays meaningful, and a sample that did not exist yet simply has no figure.
+programs drawn from the language tests and appends a row to [the timing tables](timings.md), one row per commit and one column per
+program.  That way round because the commits go on for ever and the programs do not: a column for every commit would be unreadable
+within a month.  A sample is added when a feature lands that could plausibly cost time and is never removed, so a row recorded
+earlier stays meaningful, and a sample that did not exist yet simply has no figure.
 
-Two numbers are kept.  *Work* is the sum of the compiler's own stages, which is what a change to the compiler moves.  *Process* is
-the whole run, which is what someone waiting for the compiler waits for; for the bootstrap compiler it is dominated by starting the
-interpreter and importing the package, so it says little about code generation and a good deal about how much of the compiler an
-ordinary compilation has to import.  The best of five runs is recorded rather than the mean, because the best is the one least
-disturbed by whatever else the machine was doing.
+The programs are split into groups, each its own table, so that no one table is wide.  They are grouped by *what would move them*
+rather than by what they look like, because a group is useful exactly when a change to one part of the compiler moves its numbers
+together: the smallest programs, variables and memory, register pressure, what is left out, and expressions.
+
+Two numbers are kept.  *Work* is the sum of the compiler's own stages, which is what a change to the compiler moves, and is what
+the group tables show.  *Process* is the whole run, which is what someone waiting for the compiler waits for; for the bootstrap
+compiler it is dominated by starting the interpreter and importing the package, so what one sample costs and what the next costs is
+noise, and only the range across all of them is tabulated.  Every figure is kept in the JSON beside the document.  The best of five
+runs is recorded rather than the mean, because the best is the one least disturbed by whatever else the machine was doing.
 
 The figures are from one machine and are worth comparing with each other and with nobody else's.
 

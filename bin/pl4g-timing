@@ -22,7 +22,9 @@ import argparse
 import json
 import subprocess
 import sys
+import textwrap
 import time
+from dataclasses import dataclass
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -32,21 +34,56 @@ ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "spec" / "timings.json"
 TABLE = ROOT / "spec" / "timings.md"
 
-#: The programs that are measured, and why each is here.  A sample is added
-#: when a feature lands that could plausibly cost time, and never removed, so
-#: that the column for an old commit stays meaningful.
-SAMPLES: dict[str, str] = {
-    "exit0": "the smallest conforming program",
-    "global-variable": "one variable, read once",
-    "assign-widths": "a store of every width",
-    "many-values-at-once": "four values live at once, which the allocator places",
-    "unreached-function": "a function and a variable that are dropped",
-    "export-visibility": "several definitions, some exported",
-    "digit-separators": "literals in every base",
-    "boolean-values": "truth values in both sections",
-    "bitwise-operators": "an expression with four operators and two variables",
-    "bitwise-precedence": "an expression the folder collapses entirely",
-}
+@dataclass(frozen=True, slots=True)
+class Group:
+    """A few programs that move together, and what makes them a group.
+
+    The tables have a commit per row and a program per column, because the
+    commits go on for ever and the programs do not: a column for every commit
+    would be unreadable within a month.  Programs are grouped so that no one
+    table is wide, and grouped by *what would move them* rather than by what
+    they look like -- a group is useful exactly when a change to one part of
+    the compiler moves its numbers together.
+    """
+
+    title: str
+    note: str
+    samples: dict[str, str]
+
+
+#: The programs that are measured, why each is here, and what they say together.
+#: A sample is added when a feature lands that could plausibly cost time, and
+#: never removed, so that an older row stays meaningful.
+GROUPS: tuple[Group, ...] = (
+    Group("The smallest programs",
+          "What a compilation costs when there is next to nothing to compile.  "
+          "These move when the driver, the lexer or the parser does, and they "
+          "are the floor everything else is measured against.",
+          {"exit0": "the smallest conforming program",
+           "digit-separators": "literals in every base",
+           "boolean-values": "truth values in both sections"}),
+    Group("Variables and memory",
+          "Reading and writing variables, including one of every width.  These "
+          "move when the loads and stores of a backend do.",
+          {"global-variable": "one variable, read once",
+           "assign-widths": "a store of every width"}),
+    Group("Register pressure",
+          "More values wanted at once than a backend can hold in registers.  "
+          "These move when the register allocator does, and they are the only "
+          "ones that reach the frame.",
+          {"many-values-at-once": "four values live at once",
+           "spill-to-the-frame": "thirty-two at once, which no target can hold"}),
+    Group("What is left out",
+          "Definitions the compiler drops and definitions it keeps.  These move "
+          "when the reachability pass or the decision log does.",
+          {"unreached-function": "a function and a variable that are dropped",
+           "export-visibility": "several definitions, some exported"}),
+    Group("Expressions",
+          "Operators, and the folding of them.  These move when the expression "
+          "parser, the semantic analysis or the optimizer does.",
+          {"bitwise-operators": "four operators over two variables",
+           "bitwise-precedence": "an expression the folder collapses entirely"}),
+)
 
 #: How many times each sample is compiled.  The best is kept.
 RUNS = 5
@@ -120,20 +157,48 @@ def load() -> dict[str, object]:
     return json.loads(DATA.read_text(encoding="utf-8"))
 
 
-def _table(title: str, note: str, samples: dict[str, str], heads: list[str],
-           times: dict[str, dict[str, list[float]]], column: int,
-           digits: int) -> list[str]:
-    """One table: a row per sample, a column per commit."""
-    lines = [title, "-" * len(title), "", note, "",
-             "".join(("| program | ", " | ".join(heads), " |")),
-             "".join(("|---|", "---|" * len(heads)))]
-    for name in samples:
-        row = [name]
-        for head in heads:
-            found = times.get(head, {}).get(name)
-            row.append(format(found[column], "".join((".", str(digits), "f")))
-                       if found is not None else "")
+def _cell(times: dict[str, dict[str, list[float]]], head: str, name: str,
+          column: int, digits: int) -> str:
+    """One figure, or nothing where the sample did not exist at that commit."""
+    found = times.get(head, {}).get(name)
+    if found is None:
+        return ""
+    return format(found[column], "".join((".", str(digits), "f")))
+
+
+def _group_table(group: Group, heads: list[str],
+                 times: dict[str, dict[str, list[float]]]) -> list[str]:
+    """One group's table: a commit per row, a program per column."""
+    names = [n for n in group.samples if any(n in times.get(h, {}) for h in heads)]
+    if not names:
+        return []
+    lines = ["".join(("### ", group.title)), "",
+             *textwrap.wrap(group.note, width=110), "",
+             "".join(("| commit | ", " | ".join(names), " |")),
+             "".join(("|---|", "---|" * len(names)))]
+    for head in heads:
+        row = ["".join(("`", head, "`"))]
+        row.extend(_cell(times, head, name, 0, 2) for name in names)
         lines.append("".join(("| ", " | ".join(row), " |")))
+    lines.append("")
+    return lines
+
+
+def _process_table(heads: list[str], samples: dict[str, str],
+                   times: dict[str, dict[str, list[float]]]) -> list[str]:
+    """The whole run, as one table rather than one per group.
+
+    It is dominated by starting the interpreter and importing the package, so
+    the differences between one sample and the next are noise and only the range
+    is worth showing.  Every figure is in the JSON beside this file.
+    """
+    lines = ["| commit | fastest | slowest |", "|---|---|---|"]
+    for head in heads:
+        found = [v[1] for n, v in times.get(head, {}).items() if n in samples]
+        if not found:
+            continue
+        lines.append("".join(("| `", head, "` | ", format(min(found), ".0f"),
+                              " | ", format(max(found), ".0f"), " |")))
     lines.append("")
     return lines
 
@@ -144,38 +209,54 @@ def render(data: dict[str, object]) -> str:
     times: dict[str, dict[str, list[float]]] = data["times"]  # type: ignore[assignment]
     samples: dict[str, str] = data["samples"]  # type: ignore[assignment]
     heads = [c["hash"] for c in commits]  # type: ignore[index]
+    grouped = {n for g in GROUPS for n in g.samples}
+    leftover = Group("Ungrouped",
+                     "Measured before the groups above were drawn, and kept "
+                     "because a figure once taken is not thrown away.",
+                     {n: samples.get(n, "") for n in samples if n not in grouped})
     lines = [
         "Compiler Timings",
         "================",
         "",
         "How long the compiler takes on each sample program, in milliseconds, the",
-        "best of five runs.  One column per commit, added by `bin/pl4g-timing`; a",
-        "blank means the sample did not exist yet at that commit.  Measured on one",
-        "machine, so the numbers are worth comparing with each other and with",
-        "nobody else's.",
+        "best of five runs.  One row per commit and one column per program: the",
+        "commits go on for ever and the programs do not, so the tables grow down",
+        "rather than across, and the programs are split into groups by what would",
+        "move them.  A blank means the sample did not exist yet at that commit.",
         "",
-        "A hash ending in `+` was measured with changes not yet committed.",
+        "Measured on one machine, so the numbers are worth comparing with each",
+        "other and with nobody else's.  A hash ending in `+` was measured with",
+        "changes not yet committed.  Written by `bin/pl4g-timing`.",
+        "",
+        "Work",
+        "----",
+        "",
+        "The sum of the compiler's own stages, which is what a change to the",
+        "compiler moves.",
         "",
     ]
-    lines += _table(
-        "Work", "The sum of the compiler's own stages, which is what a change to the\n"
-        "compiler moves.", samples, heads, times, 0, 2)
-    lines += _table(
-        "Process", "The whole run, which is what someone waiting for the compiler waits\n"
-        "for.  For the bootstrap compiler this is mostly starting the interpreter and\n"
-        "importing the package, so it says little about code generation and a good deal\n"
-        "about how much of the compiler an ordinary compilation has to import.",
-        samples, heads, times, 1, 0)
-    lines.append("What each column is:")
+    for group in (*GROUPS, leftover):
+        lines += _group_table(group, heads, times)
+    lines += ["Process", "-------", "",
+              "The whole run, which is what someone waiting for the compiler waits",
+              "for.  For the bootstrap compiler this is mostly starting the",
+              "interpreter and importing the package, so what one sample costs and",
+              "what the next costs is noise; only the range across all of them is",
+              "worth showing here, and every figure is in the JSON beside this file.",
+              ""]
+    lines += _process_table(heads, samples, times)
+    lines.append("What each row is:")
     lines.append("")
     for entry in commits:
         lines.append("".join(("- `", entry["hash"], "` -- ",  # type: ignore[index]
                               entry["subject"])))  # type: ignore[index]
     lines.append("")
-    lines.append("What each sample exercises:")
+    lines.append("What each program exercises:")
     lines.append("")
-    for name, why in samples.items():
-        lines.append("".join(("- `", name, "` -- ", why)))
+    for group in (*GROUPS, leftover):
+        for name, why in group.samples.items():
+            if name in samples:
+                lines.append("".join(("- `", name, "` -- ", why)))
     return "\n".join(lines) + "\n"
 
 
@@ -190,8 +271,9 @@ def main() -> int:
 
     data = load()
     samples: dict[str, str] = data["samples"]  # type: ignore[assignment]
-    for name, why in SAMPLES.items():
-        samples.setdefault(name, why)
+    for group in GROUPS:
+        for name, why in group.samples.items():
+            samples.setdefault(name, why)
 
     head = commit()
     measured: dict[str, list[float]] = {}
