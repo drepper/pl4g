@@ -61,6 +61,7 @@ the parser does, and they are the floor everything else is measured against.
 | `af86f5d` | 1.08 | 1.86 | 1.69 | 1.42 |
 | `7de9bb1` | 1.10 | 1.90 | 1.76 | 1.47 |
 | `08bdd97` | 1.07 | 1.92 | 1.71 | 1.43 |
+| `3ef3db4` | 1.29 | 1.88 | 1.76 | 1.45 |
 
 ### Variables and memory
 
@@ -106,6 +107,7 @@ backend do.
 | `af86f5d` | 1.26 | 1.77 | 1.54 |
 | `7de9bb1` | 1.25 | 1.78 | 1.52 |
 | `08bdd97` | 1.23 | 1.76 | 1.54 |
+| `3ef3db4` | 1.34 | 2.01 | 1.56 |
 
 ### Register pressure
 
@@ -151,6 +153,7 @@ and they are the only ones that reach the frame.
 | `af86f5d` | 2.04 | 7.21 |
 | `7de9bb1` | 2.03 | 7.43 |
 | `08bdd97` | 2.03 | 7.26 |
+| `3ef3db4` | 2.26 | 7.37 |
 
 ### What is left out
 
@@ -196,6 +199,7 @@ decision log does.
 | `af86f5d` | 1.60 | 1.65 |
 | `7de9bb1` | 1.56 | 1.69 |
 | `08bdd97` | 1.57 | 1.67 |
+| `3ef3db4` | 1.72 | 1.74 |
 
 ### Expressions
 
@@ -241,6 +245,7 @@ optimizer does.
 | `af86f5d` | 1.74 | 1.48 | 2.49 | 2.58 | 2.37 | 1.70 | 2.04 | 2.58 | 2.27 | 2.32 | 6.39 | 9.64 | 3.73 | 10.09 | 4.15 | 3.15 |
 | `7de9bb1` | 1.76 | 1.49 | 2.64 | 2.71 | 2.46 | 1.68 | 1.95 | 2.74 | 2.35 | 2.38 | 6.49 | 9.71 | 3.80 | 10.21 | 4.38 | 3.25 |
 | `08bdd97` | 1.74 | 1.47 | 2.59 | 2.73 | 2.54 | 1.70 | 1.95 | 2.75 | 2.45 | 2.40 | 6.65 | 9.82 | 3.84 | 10.23 | 4.38 | 3.28 |
+| `3ef3db4` | 1.72 | 1.49 | 2.61 | 2.77 | 2.61 | 1.74 | 1.97 | 2.75 | 2.39 | 2.42 | 6.53 | 9.64 | 3.88 | 10.14 | 4.31 | 3.28 |
 
 ### Types
 
@@ -285,6 +290,7 @@ Definitions the program writes.  These move when the parser, the name resolution
 | `af86f5d` | 1.36 | 3.70 | 3.77 |
 | `7de9bb1` | 1.39 | 3.84 | 3.87 |
 | `08bdd97` | 1.38 | 3.88 | 4.03 |
+| `3ef3db4` | 1.41 | 3.85 | 3.92 |
 
 Process
 -------
@@ -334,6 +340,7 @@ worth showing here, and every figure is in the JSON beside this file.
 | `af86f5d` | 79 | 90 |
 | `7de9bb1` | 82 | 95 |
 | `08bdd97` | 82 | 94 |
+| `3ef3db4` | 82 | 93 |
 
 What each row is:
 
@@ -374,6 +381,7 @@ What each row is:
 - `af86f5d` -- 📝 Time an if too
 - `7de9bb1` -- 📝 Time the collections too
 - `08bdd97` -- 📝 The collections are not a timing sample yet
+- `3ef3db4` -- 📝 Timings for the collections front end
 
 What each program exercises:
 
