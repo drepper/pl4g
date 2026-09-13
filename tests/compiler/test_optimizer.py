@@ -156,7 +156,7 @@ def test_the_sweep_runs_where_anything_is_optimized(level: int) -> None:
 def _helper(module: Module, name: str, *, exported: bool = False) -> Function:
     """A function returning a constant, added to *module*."""
     func = Function(name, module.types.func_type((), U8),
-                    linkage=Linkage.EXPORTED if exported else Linkage.INTERNAL)
+                    linkage=Linkage.VISIBLE if exported else Linkage.INTERNAL)
     block = func.add_block()
     block.append(RetInst(module.int_const(U8, 1)))
     module.add_function(func)
@@ -211,8 +211,12 @@ def test_being_called_only_from_something_unreachable_is_not_being_called() -> N
     assert list(module.functions) == ["main"]
 
 
-def test_what_the_program_exports_is_a_root() -> None:
-    """It is callable from outside, so nothing here can know it is unreachable."""
+def test_what_the_image_offers_is_a_root() -> None:
+    """It is callable from outside, so nothing here can know it is unreachable.
+
+    Being exported from a module is a different thing and is not a root: within
+    one program, what a module offers and nothing imports is unreachable.
+    """
     module = Module("t")
     _helper(module, "shared", exported=True)
     func = _startup(module)
@@ -297,7 +301,7 @@ def _global(module: Module, name: str, *, exported: bool = False) -> GlobalVar:
     """A variable holding a constant, added to *module*."""
     var = GlobalVar(name, U8, module.types.ptr_type(U8, mutable=True),
                     module.int_const(U8, 1),
-                    linkage=Linkage.EXPORTED if exported else Linkage.INTERNAL)
+                    linkage=Linkage.VISIBLE if exported else Linkage.INTERNAL)
     module.add_global(var)
     return var
 
@@ -367,7 +371,7 @@ def test_a_variable_that_is_only_written_is_kept() -> None:
     assert list(module.globals) == ["g"]
 
 
-def test_an_exported_variable_is_a_root() -> None:
+def test_a_variable_the_image_offers_is_a_root() -> None:
     """Something outside this compilation may name it, as for a function."""
     module = Module("t")
     _global(module, "shared", exported=True)

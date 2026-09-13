@@ -1272,6 +1272,39 @@ Left as it was: `@[export]` still means both "visible to a file that imports thi
 exported definition is a root of the reachability pass and is kept whether or not anything imports it.  For a library module that
 keeps more than it needs.  Whether the two should be separate attributes is a language question and is on the list.
 
+## 2026-09-15T08:00+02:00 — language
+
+**`export` and `visible` are two attributes, because they were always two questions**
+
+Decided on the user's direction, answering the question the module system left open.  `export` says what a file importing this
+module may name; `visible` says whether the finished image offers the symbol.  Neither implies the other and either may be said
+alone.
+
+They were one attribute because until modules existed there was only one way out of a program, so one word covered it.  Modules
+made the second way, and the two then pulled against each other: a definition a module lends is reachable from outside the
+compilation, so it has to be a root of the reachability pass, so it cannot be left out of the image -- and a library module
+therefore carried everything it defined whether the program used it or not.  Splitting them removes that entirely: a definition a
+module lends and nothing imports is a definition nothing reaches, and it goes.  That is visible in the test that used to keep an
+unused exported function and now does not.
+
+The linkage in the representation was renamed with the meaning it now has: `internal`, `visible`, `imported`.  Calling it
+`exported` while `export` meant something else would have been a word doing two jobs in the one place where the difference is
+about to matter most.  What a module lends is a flag of its own on the definition, since it is a fact about the definition and not
+about the image.
+
+Either attribute applies to a function and to a variable alike, and they are not in a group: saying both is saying both.
+
+What other languages do.  Rust draws this same line -- `pub` for what a module lends, and something else again for what a binary
+offers.  Go has one rule for the first, the initial capital, and leaves the second to the linker, which is why a Go program cannot
+say it wants a symbol in its own binary's table.  C has `static` for neither and nothing at all for the difference between the
+other two, which is how a name never meant for an interface becomes one.  The arrangement here is Rust's, said as two attributes
+rather than as a keyword and an attribute.
+
+One thing worth noticing rather than deciding: in the file named on the command line, `export` now does nothing observable --
+nothing imports the main file.  It is not an error, because the main file is a module like any other and may be imported by
+something later; but a warning for an attribute that cannot have an effect where it stands may be worth having, and that is a
+question for the list rather than for here.
+
 ---
 
 Open questions

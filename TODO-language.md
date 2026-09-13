@@ -200,10 +200,10 @@ Runtime
 [?] Create a data type for for an output streams which is used for
     standard output/error.  For now a simple representation with a file descriptor and `write` functions is sufficient.
 
-[?] decide whether `@[export]` should mean one thing or two.  It now means both "a file importing this may name it" and "visible
-    outside the program", so a module's exported definition is a root of the reachability pass and is kept whether or not anything
-    imports it -- a library module keeps everything.
-    Question: should there be two attributes?  Rust draws the line with `pub` for the first and `#[no_mangle]`/`extern` for the
-    second; Go has one rule, the initial capital, and leaves the second to the linker; C has `static` for neither-visible and
-    nothing for the difference between the other two.  Two attributes is more to write and says what is meant; one is what is
-    there and costs a library its dead code.
+[x] decide whether `@[export]` should mean one thing or two.  Two: `export` says what a file importing this module may name,
+    `visible` says whether the finished image offers the symbol, and neither implies the other.  A definition a module lends and
+    nothing imports is now dropped, which is what the one attribute made impossible.
+
+[ ] consider warning where an attribute cannot have an effect where it stands.  `@[export]` in the file named on the command line
+    is the case that prompted it: nothing imports that file, so the attribute says nothing.  It is not an error -- the file is a
+    module like any other and may be imported later -- but it is the sort of thing a reader would want told.

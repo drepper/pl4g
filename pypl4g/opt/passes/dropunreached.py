@@ -13,8 +13,10 @@ outside it:
 * the startup function, and the constructors and destructors, which the entry
   point the compiler writes calls itself;
 * the tests, which the testing machinery will call when there is any;
-* whatever the program exports, which is by definition callable from outside
-  and so cannot be known to be unreachable here.
+* whatever the image offers to the outside, which by definition may be called
+  from somewhere this compilation cannot see.  Being exported from a module is
+  not enough: within one program, a definition a module offers and nothing
+  imports is a definition nothing reaches.
 
 From there it follows what each instruction says it names.  A call names its
 callee; nothing else names a function yet, and when something does -- a pointer
@@ -25,8 +27,8 @@ Variables follow the functions.  A variable is reached when a function that is
 itself reached names it, so dropping a function can be what makes a variable
 unreachable -- which is why the two are answered here together and in that
 order rather than by two passes that would have to be run until they agreed.
-A variable the program exports is a root of its own, for the reason an exported
-function is: something outside this compilation may name it.
+A variable the image offers to the outside is a root of its own, for the reason
+such a function is: something this compilation cannot see may name it.
 """
 
 from collections.abc import Iterable
@@ -67,7 +69,7 @@ class DropUnreached:
 
         named = self._variables_named_by(module, functions.values())
         variables = {name: var for name, var in module.globals.items()
-                     if id(var) in named or var.linkage is Linkage.EXPORTED}
+                     if id(var) in named or var.linkage is Linkage.VISIBLE}
         if len(variables) != len(module.globals):
             changed = True
             for key, var in module.globals.items():
@@ -97,7 +99,7 @@ class DropUnreached:
         roots.extend(module.dtors)
         roots.extend(module.tests)
         roots.extend(func for func in module.functions.values()
-                     if func.linkage is Linkage.EXPORTED)
+                     if func.linkage is Linkage.VISIBLE)
         return roots
 
     def _reachable(self, module: Module) -> set[int]:

@@ -290,34 +290,48 @@ Each attribute declares the kinds of object it accepts and the parameters it tak
 the names and the kinds of the arguments.  An attribute name the compiler does not know is an error, never an ignored annotation:
 a misspelling must not be able to silently drop a property the program depends on.
 
-##### Exporting
+##### Exporting and Being Visible
 
-**Nothing a program defines is visible outside it.**  A function or a variable is reachable only from the program that defines it,
-including when that program is used as a module, unless it says otherwise:
+**Nothing a program defines is let out of it.**  There are two ways out and they are different questions, so there are two
+attributes and neither implies the other:
 
 ```
 @[export]
-let shared: u8 = 7u8        ※ reachable from outside
+let lent: u8 = 7u8          ※ a file importing this module may name it
 
-let private: u8 = 8u8       ※ not
+@[visible]
+let offered: u8 = 8u8       ※ the finished image offers the symbol
 
 @[export]
-fn reachable() → u8:
-    1u8
+@[visible]
+let both: u8 = 9u8          ※ both, said separately
+
+let private: u8 = 10u8      ※ neither
 ```
 
-The attribute applies to a function and to a variable alike, and nothing else changes what is visible.
+`export` is about the language: it decides what a file importing this module may name, and nothing else of the module can be
+named.  `visible` is about the image: it decides whether the symbol table of the finished binary offers the definition to something
+linked or loaded beside it.  Either attribute applies to a function and to a variable alike.
 
-The default is the one worth having by default.  What a program exports is its interface, and an interface is worth stating; what
-it does not export it can change freely, and nothing outside can have come to depend on.  C has the opposite default, with `static`
-as the exception, which is why a name that was never meant to be part of an interface so often becomes one by accident.  Compare
-Rust, Go and Java, which all keep things in by default and have a way to say otherwise, and C++20 modules, which were added to give
-C++ the same.
+They are separate because a definition may be wanted outside the program without being part of what its module lets in -- an entry
+point a loader calls, say -- and a module may lend something to the files that import it that no binary need ever name.  Keeping
+them as one attribute means a module cannot lend anything without also offering it, and a definition it lends is then reachable
+from outside and cannot be left out of the image, so a library module carries everything it defines whether the program uses it or
+not.
 
-This decides two things about a name in the generated program: how widely its symbol is bound, and how far it is visible.  Those
-are different questions -- the binding says whether the name is one among many in this program or one the whole program shares, and
-the visibility is the part that still says so if something later makes the symbol global.  What is exported is bound globally and
-left visible; what is not is bound locally *and* marked hidden.
+That is what separating them buys, and it is visible in the program: a definition a module lends and nothing imports is a
+definition nothing reaches, and it is not in the image.
+
+The default is the one worth having by default.  What a module lends is its interface, and an interface is worth stating; what it
+does not lend it can change freely.  C has the opposite default, with `static` as the exception, which is why a name never meant to
+be part of an interface so often becomes one by accident.  Compare Rust, which draws this same line -- `pub` for what a module
+lends and a separate attribute for what a binary offers -- with Go, which has one rule for the first and leaves the second to the
+linker.
+
+`visible` decides two further things about a name in the generated program: how widely its symbol is bound, and how far it is
+visible.  Those are different questions too -- the binding says whether the name is one among many in this program or one the whole
+program shares, and the visibility is the part that still says so if something later makes the symbol global.  What is visible is
+bound globally and left visible; what is not is bound locally *and* marked hidden.
 
 ##### Quieting a Diagnostic
 

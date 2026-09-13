@@ -18,12 +18,14 @@ class GlobalVar(Value):
     name.
     """
 
-    __slots__ = ("name", "value_type", "linkage", "initializer", "span", "module")
+    __slots__ = ("name", "value_type", "linkage", "initializer", "span", "module",
+                 "exported")
 
     def __init__(self, name: str, value_type: Type, ptr_type: Type,
                  initializer: Value | None = None,
                  linkage: Linkage = Linkage.INTERNAL,
-                 span: Span = INVALID_SPAN, module: str = "") -> None:
+                 span: Span = INVALID_SPAN, module: str = "",
+                 exported: bool = False) -> None:
         super().__init__(ptr_type, name)
         self.name = name
         #: The type of what the variable holds, not of the variable itself.
@@ -33,6 +35,9 @@ class GlobalVar(Value):
         self.initializer = initializer
         self.span = span
         self.module = module
+        #: Whether a file importing this module may name it, which is a
+        #: different question from whether the image offers the symbol.
+        self.exported = exported
 
     @property
     def mutable(self) -> bool:

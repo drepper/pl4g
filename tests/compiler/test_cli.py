@@ -204,12 +204,16 @@ def test_a_logged_decision_points_at_what_it_is_about(tmp_path: Path) -> None:
     assert dropped["reason"], "a decision with no reason says only half of it"
 
 
-def test_nothing_exported_is_ever_logged_as_dropped(tmp_path: Path) -> None:
-    """What the program exports is reachable from outside, so it is kept."""
+def test_nothing_the_image_offers_is_ever_logged_as_dropped(tmp_path: Path) -> None:
+    """What the image offers is reachable from outside, so it is kept.
+
+    `@[export]` alone would not do: that says a file importing this module may
+    name it, and nothing here imports it.
+    """
     source = tmp_path / "t.pl4g"
     source.write_text("".join((
-        "@[export]\nlet shared: u8 = 1u8\n\n",
-        "@[export]\nfn reachable() \N{RIGHTWARDS ARROW} u8:\n    1u8\n\n",
+        "@[visible]\nlet shared: u8 = 1u8\n\n",
+        "@[visible]\nfn reachable() \N{RIGHTWARDS ARROW} u8:\n    1u8\n\n",
         "@[startup]\nfn main() \N{RIGHTWARDS ARROW} u8:\n    1u8\n")),
         encoding="utf-8")
     log = tmp_path / "decisions.json"

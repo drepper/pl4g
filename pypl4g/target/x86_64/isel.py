@@ -305,7 +305,7 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
     from ..globals import symbol_of
 
     asm.begin_function(symbol_name(func),
-                       exported=func.linkage.value == "exported")
+                       exported=func.linkage.value == "visible")
     #: Where each value the function computes is held.  A value gets a register
     #: of its own and the allocator decides which; nothing here knows or cares.
     held: dict[int, VirtReg] = {}

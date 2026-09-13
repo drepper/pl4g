@@ -104,7 +104,7 @@ def found_name(prefix: str, base: str) -> str:
 
 def _is_exported(what: object) -> bool:
     """Whether a top-level definition is one an importing file may name."""
-    return getattr(what, "linkage", None) is Linkage.EXPORTED
+    return bool(getattr(what, "exported", False))
 
 
 #: What each operator of the source means in the representation.  The two are
@@ -267,7 +267,8 @@ class Checker:
         var = self._module.add_global(GlobalVar(
             name=node.name, value_type=ty,
             ptr_type=self._module.types.ptr_type(ty, mutable=node.mutable),
-            initializer=initializer, linkage=linkage, span=node.span),
+            initializer=initializer, linkage=linkage, span=node.span,
+            exported=self._is_export(attrs)),
             key=self._key(node.name))
         self._top[node.name] = var
         self._owned.append(var)
@@ -607,6 +608,7 @@ class Checker:
             func = Function(name=node.name,
                             ty=self._module.types.func_type(params, ret),
                             attrs=func_attrs, linkage=linkage,
+                            exported=self._is_export(attrs),
                             cconv="sysv" if func_attrs.abi is not None else "pl4g.v0",
                             span=node.span, source_path=path)
             self._module.add_function(func, key=self._key(node.name))
@@ -782,14 +784,21 @@ class Checker:
         return actual
 
     def _linkage_of(self, bound: Sequence[BoundAttr]) -> Linkage:
-        """How widely a definition is visible.
+        """Whether the image offers this definition's symbol.
 
-        Nothing is visible outside the program unless it says so, which is why
-        the default is the one that keeps it in.
+        Nothing is offered unless it says so, which is why the default is the
+        one that keeps it in.  Whether a file importing this module may name it
+        is a different question with a different attribute; a definition may be
+        offered to the outside without its module letting it in, and a module
+        may let something in that no binary ever names.
         """
-        if any(attr.name == "export" for attr in bound):
-            return Linkage.EXPORTED
+        if any(attr.name == "visible" for attr in bound):
+            return Linkage.VISIBLE
         return Linkage.INTERNAL
+
+    def _is_export(self, bound: Sequence[BoundAttr]) -> bool:
+        """Whether a file importing this module may name the definition."""
+        return any(attr.name == "export" for attr in bound)
 
     def _function_attrs(self, bound: Sequence[BoundAttr]) -> tuple[FuncAttrs, Linkage]:
         """Turn checked attributes into the form the IR carries."""
@@ -1313,9 +1322,10 @@ class Checker:
         reads, writes = self._variable_uses()
         for entry in self._top_level:
             var = entry.var
-            if var.linkage is Linkage.EXPORTED:
-                # Something outside this compilation may read it, so nothing
-                # here can say that nothing does.
+            if var.linkage is Linkage.VISIBLE or var.exported:
+                # Something this compilation cannot see may read it -- through
+                # the image's symbol table, or by importing the module -- so
+                # nothing here can say that nothing does.
                 self._settle_global(entry)
                 continue
             count = writes.get(id(var), 0)

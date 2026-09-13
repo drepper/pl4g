@@ -110,7 +110,7 @@ def test_a_relative_entry_is_tried_against_the_file_then_the_directory() -> None
 
 # -- read once ------------------------------------------------------------------
 
-SHARED = "@[export]\nlet value: u8 = 7u8\n"
+SHARED = "@[export]\n@[visible]\nlet value: u8 = 7u8\n"
 MIDDLE = 'let s := import("shared")\n\n@[export]\nlet echo: u8 = 1u8\n'
 
 
@@ -144,13 +144,13 @@ def test_the_shortest_of_a_module_s_names_is_the_one_used(tmp_path: Path) -> Non
 def test_two_files_of_one_name_are_told_apart(tmp_path: Path) -> None:
     """Both get the hash of their path, since neither has a better claim to the
     name they share."""
-    write(tmp_path, "one/util.pl4g", "@[export]\nlet v: u8 = 1u8\n")
-    write(tmp_path, "two/util.pl4g", "@[export]\nlet v: u8 = 2u8\n")
+    write(tmp_path, "one/util.pl4g", "@[export]\n@[visible]\nlet v: u8 = 1u8\n")
+    write(tmp_path, "two/util.pl4g", "@[export]\n@[visible]\nlet v: u8 = 2u8\n")
     proc, output = build(tmp_path, "".join((
         'let a := import("one/util")\nlet b := import("two/util")\n\n',
-        "@[startup]\nfn main() ", ARROW, " u8:\n    b.v\n")))
+        "@[startup]\nfn main() ", ARROW, " u8:\n    a.v | b.v\n")))
     assert proc.returncode == 0, describe(proc)
-    assert ran(output) == 2
+    assert ran(output) == 3
     parsed = elfcheck.parse(output.read_bytes())
     named = sorted(s.name for s in parsed.symbols if s.name.endswith(".v"))
     assert len(named) == 2 and named[0] != named[1], named

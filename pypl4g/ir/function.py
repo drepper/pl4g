@@ -11,10 +11,18 @@ from .value import BlockParam
 
 
 class Linkage(Enum):
-    """How visible a definition is outside the program being compiled."""
+    """Whether the image offers a definition to anything outside the program.
+
+    This is one of the two questions a definition answers about who may name it,
+    and the narrower one: it is about the symbol table of the finished binary.
+    The other -- whether a file importing this module may name it -- is
+    ``exported`` below, and the two are independent.  A definition may be
+    offered to the outside without being part of what its module lets in, and a
+    module may let something in that no binary ever names.
+    """
 
     INTERNAL = "internal"
-    EXPORTED = "exported"
+    VISIBLE = "visible"
     IMPORTED = "imported"
 
 
@@ -106,8 +114,10 @@ class Function:
     span: Span = INVALID_SPAN
     source_path: str = ""
     #: The module the function belongs to, which prefixes its symbol name.
-    #: Modules are not specified yet, so this is empty for now.
     module: str = ""
+    #: Whether a file importing this module may name it.  Not the same question
+    #: as the linkage: this one is about the language, that one about the image.
+    exported: bool = False
 
     @property
     def is_declaration(self) -> bool:

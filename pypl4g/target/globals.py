@@ -19,6 +19,7 @@ targets -- how an address is computed and how a value of a given width is loaded
 from collections.abc import Sequence
 
 from ..ir.layout import DataLayout, align_of, encode_scalar, size_of
+from ..ir.function import Linkage
 from ..ir.module import GlobalVar, Module
 from ..ir.value import BoolConst, IntConst
 from ..mc.asmbuilder import Assembler
@@ -52,11 +53,11 @@ def _emit_group(asm: Assembler, variables: Sequence[GlobalVar], name: str,
     asm.section(name, writable=writable, alignment=alignment)
     for var in variables:
         asm.align(align_of(var.value_type, layout))
-        exported = var.linkage.value == "exported"
+        visible = var.linkage is Linkage.VISIBLE
         symbol = asm.label(symbol_of(var),
-                           binding=SymBinding.GLOBAL if exported else SymBinding.LOCAL,
+                           binding=SymBinding.GLOBAL if visible else SymBinding.LOCAL,
                            kind=SymKind.OBJECT,
-                           visibility=(SymVisibility.DEFAULT if exported
+                           visibility=(SymVisibility.DEFAULT if visible
                                        else SymVisibility.HIDDEN))
         asm.bytes(initial_bytes(var, layout))
         asm.end_label(symbol)

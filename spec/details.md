@@ -118,14 +118,15 @@ program reaches is what nothing can ever reach: such a function is not merely un
 waits for an optimization level to be asked for.  Reachability is computed forwards from roots rather than by asking of each
 function whether it has a caller, since a caller that is itself unreachable is no caller.  The roots are the ways into the program
 from outside it: the startup function and the constructors and destructors, which the entry point the compiler writes calls; the
-tests, which the testing machinery will call once there is any; and whatever the program exports, which by definition can be called
-from somewhere this compilation cannot see.  From a root it follows what each instruction says it names -- today only the callee of
+tests, which the testing machinery will call once there is any; and whatever the image offers to the outside, which by definition
+can be called from somewhere this compilation cannot see.  Being exported from a module is not enough: within one program, what a
+module lends and nothing imports is something nothing reaches.  From a root it follows what each instruction says it names -- today only the callee of
 a call, and tomorrow whatever new shape can hold a function.
 
 Variables follow the functions.  A variable at the top level is reached when a function that is itself reached names it, so dropping
 a function can be exactly what leaves a variable unreachable; the two are therefore settled in one pass and in that order, rather
-than by two that would have to be run until they agreed.  A variable the program exports is a root of its own, for the reason an
-exported function is.  Being written counts as naming it even where nothing reads what was written -- a write is an effect that
+than by two that would have to be run until they agreed.  A variable the image offers is a root of its own, for the reason such a
+function is.  Being written counts as naming it even where nothing reads what was written -- a write is an effect that
 outlives the function -- so a variable the program only writes is reported rather than quietly deleted, which is the next paragraph.
 
 Whether anything reads a variable at the top level is a question about the whole program, since any function may name one.  It is
@@ -367,8 +368,9 @@ a kernel for that architecture may be configured with, so that one image loads w
 x86-64 and RISC-V, and 64 KiB on AArch64.  Padding is filled with a byte that traps rather than falls through, which is also
 target-specific: a breakpoint on x86-64, and on both fixed-width architectures a zero word, which neither of them leaves defined.
 
-A symbol carries a binding and a visibility, and what a program exports decides both.  What is exported is bound globally and left
-visible; what is not is bound locally and marked hidden.  Within a single linked image the binding alone would do, since a local
+A symbol carries a binding and a visibility, and what a program marks visible decides both.  What is marked visible is bound globally and
+left visible; what is not is bound locally and marked hidden.  Being exported from a module is a different question and does not
+reach the symbol table at all.  Within a single linked image the binding alone would do, since a local
 symbol cannot be named from outside it -- the visibility is what still says so if the symbol is ever made global by something
 later, and it is what a relocatable or shared object would need.  The entry point is the compiler's own rather than something the
 program declared, and stays visible: every tool that inspects a binary expects to find it.
