@@ -17,7 +17,8 @@
     "logic-short-circuit": "three short circuits, which is six blocks",
     "saturating-precedence": "a sum and a product that saturate",
     "arithmetic-operators": "a sum and a product that check and can fault",
-    "semicolon-separates-statements": "two statements on one line"
+    "semicolon-separates-statements": "two statements on one line",
+    "call-nested": "four calls, two of them nested"
   },
   "commits": [
     {
@@ -107,6 +108,10 @@
     {
       "hash": "f7ba2fc",
       "subject": "✅ A call that answers with nothing has nothing to use"
+    },
+    {
+      "hash": "3e9eb27",
+      "subject": "✨ Function calls, with positional arguments"
     }
   ],
   "times": {
@@ -1220,6 +1225,84 @@
       "semicolon-separates-statements": [
         1.683,
         78.12466501491144
+      ]
+    },
+    "3e9eb27": {
+      "exit0": [
+        1.201,
+        74.31982597336173
+      ],
+      "global-variable": [
+        1.18,
+        65.36615296499804
+      ],
+      "assign-widths": [
+        1.579,
+        65.55613997625187
+      ],
+      "many-values-at-once": [
+        1.7610000000000001,
+        64.6103560575284
+      ],
+      "unreached-function": [
+        1.4009999999999998,
+        64.0970430104062
+      ],
+      "export-visibility": [
+        1.4569999999999999,
+        66.1385270068422
+      ],
+      "digit-separators": [
+        1.5639999999999998,
+        68.64281703019515
+      ],
+      "boolean-values": [
+        1.351,
+        69.39641304779798
+      ],
+      "bitwise-operators": [
+        1.545,
+        67.48930102912709
+      ],
+      "bitwise-precedence": [
+        1.336,
+        66.30581902572885
+      ],
+      "spill-to-the-frame": [
+        5.991,
+        75.4190010484308
+      ],
+      "boolean-in-memory": [
+        1.3679999999999999,
+        67.43360700784251
+      ],
+      "comparison-operators": [
+        2.157,
+        67.8100130171515
+      ],
+      "logic-operators": [
+        2.2689999999999997,
+        72.55627098493278
+      ],
+      "logic-short-circuit": [
+        2.092,
+        68.84986895602196
+      ],
+      "saturating-precedence": [
+        1.545,
+        66.23893801588565
+      ],
+      "arithmetic-operators": [
+        1.8079999999999998,
+        69.5469889906235
+      ],
+      "semicolon-separates-statements": [
+        1.701,
+        68.34148400230333
+      ],
+      "call-nested": [
+        2.231,
+        68.22730199201033
       ]
     }
   }
