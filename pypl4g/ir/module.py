@@ -5,9 +5,9 @@ from dataclasses import dataclass, field
 from ..source.location import INVALID_SPAN, Span
 from .decisions import DecisionLog
 from .function import Function, Linkage
-from .types import (BoolType, FloatType, IntType, MEM, PtrType, Type,
+from .types import (BoolType, FloatType, IntType, MEM, PtrType, ResultType, Type,
                     TypeContext)
-from .value import BoolConst, FloatConst, IntConst, Value
+from .value import BoolConst, Const, FloatConst, IntConst, ResultConst, Value
 
 
 class GlobalVar(Value):
@@ -81,6 +81,8 @@ class Module:
     _int_consts: dict[tuple[int, bool, int], IntConst] = field(default_factory=dict)
     _float_consts: dict[tuple[int, bytes], FloatConst] = field(default_factory=dict)
     _bool_consts: dict[bool, BoolConst] = field(default_factory=dict)
+    _result_consts: dict[tuple[int, int, bool], ResultConst] = field(
+        default_factory=dict)
 
     def add_function(self, func: Function, key: str | None = None) -> Function:
         """Register *func* in this module.
@@ -119,6 +121,20 @@ class Module:
         if found is None:
             found = FloatConst(ty, value)
             self._float_consts[key] = found
+        return found
+
+    def result_const(self, ty: ResultType, answer: Const,
+                     failed: bool = False) -> ResultConst:
+        """Return the interned result constant with this answer.
+
+        Interned by the answer's identity, which is enough because every
+        constant that can be an answer is itself interned.
+        """
+        key = (id(ty), id(answer), failed)
+        found = self._result_consts.get(key)
+        if found is None:
+            found = ResultConst(ty, answer, failed)
+            self._result_consts[key] = found
         return found
 
     def bool_const(self, ty: BoolType, value: bool) -> BoolConst:

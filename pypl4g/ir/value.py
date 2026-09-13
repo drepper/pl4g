@@ -7,7 +7,7 @@ constants of the same type are two references, and treating them as equal would
 break every use list.
 """
 
-from .types import BoolType, FloatType, IntType, Type
+from .types import BoolType, FloatType, IntType, ResultType, Type
 
 
 class Value:
@@ -64,6 +64,23 @@ class BoolConst(Const):
     def __init__(self, ty: BoolType, value: bool) -> None:
         super().__init__(ty)
         self.value = value
+
+
+class ResultConst(Const):
+    """A result whose answer, or whose absence of one, is known while compiling.
+
+    Both halves are here for the same reason the instruction that makes one
+    carries both: a result is an answer beside a truth value saying whether
+    there is one, and an error that carries nothing still leaves the answer half
+    a value -- one nothing may read.
+    """
+
+    __slots__ = ("answer", "failed")
+
+    def __init__(self, ty: "ResultType", answer: Const, failed: bool) -> None:
+        super().__init__(ty)
+        self.answer = answer
+        self.failed = failed
 
 
 class UndefConst(Const):

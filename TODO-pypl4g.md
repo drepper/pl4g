@@ -88,6 +88,11 @@ To Do List for the pypl4g compiler
     and nothing can say so.  That is the only way to see the upper half of a product on x86-64, and until then a saturating
     multiplication of the widest type is refused on every target rather than on the one that cannot do it.
 
+[ ] let the textual IR be read back for everything it can be written for.  The reader lags the printer: it does not know
+    floating-point types or constants, calls, casts, the result type or the three instructions that make and read one.  Nothing
+    depends on it today -- the golden round-trip test names the cases it covers -- and what it costs is that a dump of a program
+    using any of those cannot be fed back in.  Worth closing in one piece rather than a shape at a time.
+
 [ ] lower `SwitchInst`.  It exists in the representation and nothing generates one, since the language has no construct that
     would -- asking which variant a sum holds will be the first, once there is a way to ask.  A chain of comparisons is correct
     and is what a first version should do; a jump table wants the relocation work that position-independent code needs anyway.
@@ -97,7 +102,9 @@ To Do List for the pypl4g compiler
     to reach it by, and a convention for passing one to a function and answering with one -- which on all three targets means
     small aggregates in registers and large ones behind a pointer.  Nothing in the language writes such a value yet, so this waits
     on the two questions in TODO-language.md rather than the other way round.  The layout is already computed, in
-    `pypl4g/ir/layout.py`, including where each field starts.
+    `pypl4g/ir/layout.py`, including where each field starts, and the result type shows the shape the answer takes: two registers
+    inside a function and in the convention, two accesses of one place in memory, and a side map from a value to its second half
+    so that the allocator sees ordinary values and nothing aggregate.
 
 [x] produce a truth value in a register.  Done: `setcc` and a widening move on x86-64, `cset` on AArch64, and `slt`/`sltu` with
     the operands exchanged or the answer inverted on RISC-V, equality there being a subtraction and then a question about the

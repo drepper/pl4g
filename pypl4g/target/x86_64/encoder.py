@@ -14,7 +14,8 @@ from typing import Final, Sequence
 from .desc import EncKind, ModRMUse, OpMap, OpSize, X86InstDesc
 from ...mc.fixup import MCFixup, PCREL8, PCREL32
 from ...mc.inst import MCInst
-from ...mc.operand import MCImm, MCMem, MCOperand, MCReg, MCSymRef
+from ...mc.operand import (BinExpr, ConstExpr, MCImm, MCMem, MCOperand, MCReg,
+                           MCSymRef)
 from ...mc.reg import PhysReg, Reg, VirtReg
 from ...source.location import INVALID_SPAN, Span
 from .regs import (GPR_EXTENDED_FIRST, HIGH_BYTE_REGS, REX_REQUIRED_BYTE_REGS,
@@ -127,8 +128,13 @@ def _emit_memory(out: bytearray, fixups: list[MCFixup], mem: MCMem, reg_field: i
     if mem.rip_relative:
         _emit_modrm(out, 0, reg_field, _RBP_ENC)
         if mem.disp_sym is not None:
+            # A displacement beside a symbol is part of what the fixup aims at:
+            # the whole of the address goes in the one field, so there is
+            # nowhere else for it to be added.
+            target = mem.disp_sym if mem.disp == 0 else BinExpr(
+                "+", mem.disp_sym, ConstExpr(mem.disp))
             fixups.append(MCFixup(offset=len(out), kind=PCREL32,
-                                  target=mem.disp_sym, trailing=trailing,
+                                  target=target, trailing=trailing,
                                   span=span if span is not None else INVALID_SPAN))
             out += b"\x00\x00\x00\x00"
         else:

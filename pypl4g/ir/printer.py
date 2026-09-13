@@ -14,7 +14,8 @@ from .inst import (BinaryInst, BlockTarget, BrInst, CastInst, CmpInst, CondBrIns
                    SwitchInst, Terminator, UnaryInst, UnreachableInst)
 from .module import Module
 from .types import VOID
-from .value import BoolConst, FloatConst, IntConst, UndefConst, Value
+from .value import (BoolConst, FloatConst, IntConst, ResultConst,
+                    UndefConst, Value)
 
 #: Bumped whenever the textual form changes, so that a stale golden file is
 #: rejected loudly instead of being misread.
@@ -60,6 +61,13 @@ def render_operand(value: Value, numbers: Numbering) -> str:
         return repr(value.value)
     if isinstance(value, UndefConst):
         return "undef"
+    if isinstance(value, ResultConst):
+        # The mark is the one the source writes the type with: `7?` reads as
+        # "seven, and there is an answer", and `?` alone as "there is none" --
+        # where there is none the answer half is a value nothing may read.
+        if value.failed:
+            return "?"
+        return "".join((render_operand(value.answer, numbers), "?"))
     return numbers.name_of(value)
 
 
@@ -154,6 +162,23 @@ def render_function(func: Function, out: list[str]) -> None:
     out.append("}")
 
 
+def _rendered_constant(value: object) -> str:
+    """Render a constant that stands outside any function."""
+    from .value import (BoolConst as _BoolConst, FloatConst as _FloatConst,
+                        IntConst as _IntConst, ResultConst as _ResultConst)
+
+    if isinstance(value, _IntConst):
+        return str(value.value)
+    if isinstance(value, _BoolConst):
+        return "true" if value.value else "false"
+    if isinstance(value, _FloatConst):
+        return repr(value.value)
+    if isinstance(value, _ResultConst):
+        return "?" if value.failed else "".join((
+            _rendered_constant(value.answer), "?"))
+    return "undef"
+
+
 def render_global(var: object, out: list[str]) -> None:
     """Append the textual form of one global variable to *out*.
 
@@ -162,19 +187,9 @@ def render_global(var: object, out: list[str]) -> None:
     which is what it said before there was anywhere for a `bool` to be read.
     """
     from .module import GlobalVar
-    from .value import (BoolConst as _BoolConst, FloatConst as _FloatConst,
-                        IntConst as _IntConst)
 
     assert isinstance(var, GlobalVar)
-    initializer = var.initializer
-    if isinstance(initializer, _IntConst):
-        text = str(initializer.value)
-    elif isinstance(initializer, _BoolConst):
-        text = "true" if initializer.value else "false"
-    elif isinstance(initializer, _FloatConst):
-        text = repr(initializer.value)
-    else:
-        text = "undef"
+    text = _rendered_constant(var.initializer)
     out.append("".join(("let @", var.name, ": ", "mut " if var.mutable else "",
                         var.value_type.render(), " ", var.linkage.value, " = ", text)))
 

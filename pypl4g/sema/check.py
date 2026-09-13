@@ -21,7 +21,7 @@ from ..ir.types import (BOOL, BUILTIN_TYPES, ERROR, F64, FloatType, IntType,
                         ProductType, ResultType, SumType, Type, VOID)
 from .modules import (ImportCycle, LoadedModule, ModuleNotFound, ModuleRegistry,
                       base_name)
-from ..ir.value import FloatConst, IntConst, UndefConst, Value
+from ..ir.value import Const, FloatConst, IntConst, UndefConst, Value
 from pathlib import Path
 
 from ..source.location import INVALID_SPAN, Span
@@ -606,14 +606,15 @@ class Checker:
             # was given would be a second message about the same mistake.
             return None
         if isinstance(ty, ResultType):
-            # A variable at the top level is a place in memory, and what a
-            # result looks like in memory is not settled: it is two things, and
-            # where the second goes is a layout question the compiler has not
-            # answered.  A local is a value and needs no answer, which is why
-            # one of those works today and this does not.
-            self._diags.emit(D.IMPL_UNIMPLEMENTED_FEATURE, node.span,
-                             feature="a variable at the top level holding a result")
-            return None
+            # The only constant of a result type a program can write is the
+            # successful one, since a value of the answer type written where a
+            # result is wanted *is* the successful result and there is no other
+            # way to write one.  So the initializer is checked against the
+            # answer type and wrapped.
+            answer = self._constant_value(node, ty.ok)
+            if answer is None or not isinstance(answer, Const):
+                return None
+            return self._module.result_const(ty, answer)
         match node.value:
             case ast.IntLit():
                 if not isinstance(ty, IntType):
@@ -1429,7 +1430,7 @@ class Checker:
         """Lower the value of an assignment, checking it against the variable."""
         self._assigning = node.name
         try:
-            value = self._lower_expr(builder, node.value, expected)
+            value = self._lower_into(builder, node.value, expected, node.span)
         finally:
             self._assigning = None
         return self._as_declared(value, expected)
@@ -2071,6 +2072,14 @@ class Checker:
                 return BOOL
             case ast.Unary() if expr.op is ast.UnaryOp.LOGIC_NOT:
                 return BOOL
+            case ast.Binary() if expr.op is ast.BinaryOp.OR_ELSE:
+                # What `??` answers with is the answer inside the result, which
+                # is the left side's type with the mark taken off.
+                found = self._hint_of(expr.left)
+                return found.ok if isinstance(found, ResultType) else found
+            case ast.Try():
+                found = self._hint_of(expr.operand)
+                return found.ok if isinstance(found, ResultType) else found
             case ast.Binary():
                 return self._hint_of(expr.left) or self._hint_of(expr.right)
             case ast.Unary():

@@ -19,10 +19,11 @@ targets -- how an address is computed and how a value of a given width is loaded
 from collections.abc import Sequence
 
 from ..ir.layout import (DataLayout, align_of, encode_float, encode_scalar,
-                         size_of)
+                         size_of, tag_offset_of)
 from ..ir.function import Linkage
 from ..ir.module import GlobalVar, Module
-from ..ir.value import BoolConst, FloatConst, IntConst
+from ..ir.types import ResultType, Type
+from ..ir.value import BoolConst, FloatConst, IntConst, ResultConst
 from ..mc.asmbuilder import Assembler
 from ..mc.symbol import SymBinding, SymKind, SymVisibility
 
@@ -83,13 +84,26 @@ def initial_bytes(var: GlobalVar, layout: DataLayout) -> bytes:
     upper bits dropped: a program that began with a value other than the one it
     named would not be behaving as it reads.
     """
-    initializer = var.initializer
+    return _encoded(var.initializer, var.value_type, layout)
+
+
+def _encoded(initializer: object, ty: Type, layout: DataLayout) -> bytes:
+    """The bytes a constant occupies, laid out as its type says."""
     match initializer:
         case IntConst():
-            return encode_scalar(initializer.value, var.value_type, layout)
+            return encode_scalar(initializer.value, ty, layout)
         case BoolConst():
-            return encode_scalar(1 if initializer.value else 0, var.value_type, layout)
+            return encode_scalar(1 if initializer.value else 0, ty, layout)
         case FloatConst():
-            return encode_float(initializer.value, var.value_type, layout)
+            return encode_float(initializer.value, ty, layout)
+        case ResultConst() if isinstance(ty, ResultType):
+            # The answer where an answer goes, the truth value where the layout
+            # says, and whatever is between and after them left as zeroes --
+            # padding a program cannot read and so cannot tell from anything.
+            out = bytearray(size_of(ty, layout))
+            answer = _encoded(initializer.answer, ty.ok, layout)
+            out[:len(answer)] = answer
+            out[tag_offset_of(ty, layout)] = 1 if initializer.failed else 0
+            return bytes(out)
         case _:
-            return bytes(size_of(var.value_type, layout))
+            return bytes(size_of(ty, layout))

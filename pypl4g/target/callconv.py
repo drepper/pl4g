@@ -8,7 +8,9 @@ for one function has somewhere to put the result.
 """
 
 from dataclasses import dataclass, field
+from typing import Sequence
 
+from ..ir.types import FloatType, ResultType, Type
 from ..mc.reg import PhysReg, RegUnit
 
 
@@ -49,3 +51,48 @@ class CallConvDesc:
         if self.float_allocation_order:
             found[floats] = self.float_allocation_order
         return found
+
+
+class TooManyArguments(Exception):
+    """More arguments than a convention passes in registers.
+
+    Nothing yet puts one on the stack, so this is the limit of what can be
+    called rather than the point where a second route begins.
+    """
+
+
+def argument_places(cconv: CallConvDesc,
+                    types: Sequence[Type]) -> list[tuple[PhysReg, PhysReg | None]]:
+    """Which register each argument is passed in, in order.
+
+    A register is taken from the list its *kind* comes out of, so a
+    floating-point argument does not use up an integer register and the other
+    way round -- which is what every one of these conventions says and what
+    counting by position alone would get wrong the moment the two are mixed.
+
+    A result takes two: one for the answer, of whichever kind the answer wants,
+    and one ordinary register for the truth value beside it.  That is what the
+    ABIs already do with a two-word aggregate.
+    """
+    found: list[tuple[PhysReg, PhysReg | None]] = []
+    integers = 0
+    floats = 0
+
+    def _integer() -> PhysReg:
+        nonlocal integers
+        if integers >= len(cconv.int_arg_regs):
+            raise TooManyArguments()
+        integers += 1
+        return cconv.int_arg_regs[integers - 1]
+
+    for ty in types:
+        answer = ty.ok if isinstance(ty, ResultType) else ty
+        if isinstance(answer, FloatType):
+            if floats >= len(cconv.float_arg_regs):
+                raise TooManyArguments()
+            first = cconv.float_arg_regs[floats]
+            floats += 1
+        else:
+            first = _integer()
+        found.append((first, _integer() if isinstance(ty, ResultType) else None))
+    return found

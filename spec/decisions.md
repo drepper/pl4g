@@ -1986,6 +1986,40 @@ three, so all three are questions in the to-do list with proposals rather than d
 answers with one compiles as far as the code generator, which says it cannot generate for it (8501) rather than putting a value
 in a register it does not fit in.
 
+## 2026-09-14T23:00+02:00 — compiler
+
+**A result is a value like any other: in a variable, in a parameter, and in the image**
+
+The two things the result type still could not do are done.  A variable at the top level may hold one, and a function may take one
+and answer with one.  Nothing about the language changed; what changed is that the compiler now knows where the two halves of a
+result go in each of the two places a value can be.
+
+**In memory**: the answer where an answer goes and one byte beside it saying whether there is one, rounded up to the answer's
+alignment.  The layout was already computed -- it was written when the product and the sum types got theirs -- so what was left
+was the reading and the writing, which are two accesses of one place rather than one.  On x86-64 that turned up a real defect: a
+symbolic rip-relative memory operand dropped its displacement, the fixup aiming at the symbol and nothing adding the offset.  The
+whole of such an address goes in one field, so there is nowhere else for a displacement to be, and it now joins the expression the
+fixup aims at.
+
+**In registers**: two, which is what the type already used inside a function.  Passing one needed the argument mapping to stop
+counting by position: a register is taken from the list its *kind* comes out of, so a floating-point argument does not use up an
+integer register, and a result takes one of the answer's kind plus one ordinary one for the truth value beside it.  Counting by
+position was already wrong the moment a floating-point argument stood beside an integer one -- the hint for it named an integer
+register -- and this is the fix for both.  The counting is written once, in `target/callconv.py`, and the three backends only turn
+a place into the view of it their instructions name.
+
+**The only constant of a result type a program can write is the successful one.**  That follows from the rule already decided --
+a value of the answer type written where a result is wanted *is* the successful result -- and needs no new syntax.  So
+`let kept: mut u8? = 1u8` initializes a variable, and `ResultConst` is what carries it to the image.
+
+**One thing came out of the front end**: the hint that gives an untyped literal a type looked through `??` and `?` and offered the
+*result* type rather than the answer type, so `(q ?? 0u8) + n` reported the two operands as differing.  A hint is what a value
+would be, and what those two operators answer with is the answer.
+
+**What is still open, and why.**  `TYPE1?TYPE2`, a result whose error carries a value, is refused (9902) as it was.  It is not a
+question about the result type any more: the sum type now exists, so what is missing is a way to *write* a value of one, which is
+an open question of its own.  Until something can construct an error, such a type is one no program could put anything in.
+
 ---
 
 ---

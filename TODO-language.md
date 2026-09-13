@@ -270,15 +270,18 @@ To Do List for the PL4g language
     wanted is the successful one, which is Zig's arrangement and C++'s and the only way to write one, there being no constructor.
     `÷` and `%` are the operations that answer with one, on every numeric type.
 
-[ ] let the error of a result carry a value: `TYPE1?TYPE2`.  The syntax is parsed and refused (9902), because nothing in the
-    language constructs an error value -- so a program that wrote the type could put nothing in it.  The sum type now exists, so
-    what this waits on is a way to *write* a value of one, and a decision about what the error type of a division should then be:
-    today the two cases a division cannot answer, a zero divisor and the one overflowing signed pair, are not told apart.
+[ ] let the error of a result carry a value: `TYPE1?TYPE2`.  The syntax is parsed and refused (9902), and this is now the only
+    part of the result type that is not implemented.  It is not a question about the result type any more: the sum type exists,
+    and what is missing is a way to *write* a value of one, which is the `[?]` entry above.  Until something can construct an
+    error, such a type is one no program could put anything in.  A decision rides on it: what the error type of a division should
+    then be, the two cases a division cannot answer -- a zero divisor and the one overflowing signed pair -- not being told apart
+    today.  In memory such a result is the larger of the two payloads and a tag, which is what a sum of two variants already is.
 
-[ ] let a variable at the top level hold a result, and a parameter take one.  Both are refused today (9902 and 8501).  A variable
-    at the top level is a place in memory and what a result looks like in memory is not settled -- it is two things and where the
-    second goes is a layout question.  A parameter needs the positional mapping to account for a value that takes two registers.
-    A local holds one already, a local being a value and needing no layout.
+[x] let a variable at the top level hold a result, and a parameter take one.  Done: in memory a result is its answer and one byte
+    beside it saying whether there is one, so reading such a variable is two reads of one place and writing it is two writes; in
+    registers it is two, and passing one takes one register of the answer's kind and one ordinary one, which is what the three
+    ABIs already do with a two-word answer.  The argument mapping now counts a register out of the list its kind comes from
+    rather than by position, which was already wrong for a floating-point argument standing beside an integer one.
 
 
 Runtime

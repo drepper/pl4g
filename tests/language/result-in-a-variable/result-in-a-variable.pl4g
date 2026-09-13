@@ -1,0 +1,31 @@
+※ pl4g-test: compile=ok run=native,qemu exit=64 diag=none
+
+※ A variable at the top level may hold a result.  What one looks like in
+※ memory is the answer where an answer goes and one byte beside it saying
+※ whether there is one, so reading such a variable is two reads of one place
+※ and writing it is two writes.
+※
+※ The only constant of a result type a program can write is the successful
+※ one: a value of the answer type written where a result is wanted is that
+※ result, and there is no other way to write one.
+
+let hundred: mut u8 = 100u8
+let none: mut u8 = 0u8
+let seven: mut u8 = 7u8
+
+※ the successful result holding one, which is how a result is initialized
+@[visible]
+let kept: mut u8? = 1u8
+
+※ one that nothing assigns to, which goes in the read-only section
+@[visible]
+let fixed: u8? = 9u8
+
+@[startup]
+fn main() → u8:
+    ※ a division with no answer, kept and then read back
+    kept ← hundred ÷ none
+    let after: u8 = kept ?? 50u8
+    ※ and one with an answer
+    kept ← hundred ÷ seven
+    after + (kept ?? 0u8) + (fixed ?? 0u8) - 9u8

@@ -517,6 +517,19 @@ read without the error having been dealt with, because reading it is what `?` an
 `??` is C#'s and Swift's spelling for the same idea, applied there to a value that may be absent rather than to one that may have
 failed; Rust spells it `unwrap_or`, a method call, which this language has no way to write.
 
+**A result is a value like any other.**  A local holds one, a variable at the top level holds one, a function takes one and
+answers with one.  The only constant of a result type a program can write is the successful one, by the rule above: `let kept: mut
+u8? = 1u8` is the result holding one.
+
+##### What a result occupies
+
+The compiler decides this, as it does for a product and a sum, and the language says only what follows.  In memory a result is
+its answer where an answer goes and one byte beside it saying whether there is one, rounded up to the answer's alignment -- the
+same shape a sum has, and not a sum, because the error carries nothing where a variant of a sum carries something.  In registers
+it is two: the answer in a register of whatever kind the answer wants, and the truth value in an ordinary one.  Passed to a
+function or answered with, that is the two registers every one of the three ABIs already uses for a two-word answer, and a
+floating-point answer takes one register of each kind.
+
 **A division whose operands are both written down and have no answer between them is diagnosed** -- 4215 for a zero divisor, 4223
 for the one overflowing pair.  Both are warnings, since the expression is well formed and its value is the error; they are
 reported because the error is the only thing such a division will ever produce, which is nearly always a mistake.  `@[ignore]`

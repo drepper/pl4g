@@ -24,6 +24,8 @@ from ..branches import (CONDITIONS, UnsupportedBranch, folded_into_branch,
 from ..faults import Messages, describe
 from ..pool import Constants
 from ..narrow import normalize
+from ...ir.layout import DataLayout, tag_offset_of
+from ..callconv import TooManyArguments, argument_places
 from ..saturate import (DIVISION, NAMES, SATURATING, TRAPPING, Unsupported,
                         SHIFTS, lower_division_result, lower_saturating,
                         lower_shift, lower_trapping)
@@ -117,6 +119,11 @@ _OPERATIONS: Final[dict[BinOp, "Op"]] = {
 _UNARY_OPERATIONS: Final[dict[UnOp, "Op"]] = {
     UnOp.NOT: ops.NOT, UnOp.NEG: ops.NEG,
 }
+
+
+#: What memory looks like here.  Every one of these targets has an eight-byte
+#: pointer, and nothing else about the layout differs between them.
+_LAYOUT: Final[DataLayout] = DataLayout(pointer_size=8)
 
 
 class UnsupportedOperation(Exception):
@@ -682,7 +689,7 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
     from ...ir.inst import (CastInst, CastKind, FailedInst, UnwrapInst,
                             WrapInst)
     from ...ir.value import FloatConst, UndefConst
-    from ...ir.layout import DataLayout, encode_float
+    from ...ir.layout import encode_float
     from ..globals import symbol_of
 
     asm.begin_function(symbol_name(func),
@@ -784,8 +791,7 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
                     "a floating-point constant, with nowhere to put it", None)
             bits = _width_of(value.ty)
             symbol = constants.symbol(
-                encode_float(value.value, value.ty,
-                             DataLayout(pointer_size=8)), bits // 8)
+                encode_float(value.value, value.ty, _LAYOUT), bits // 8)
             held = _new_value(value.ty, registers)
             asm.loadreg(held, asm.mem(disp_sym=SymExpr(asm.streamer.symbol(symbol)),
                                       rip_relative=True, size_bits=bits), span)
@@ -837,21 +843,38 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
     # destroys, so a parameter still wanted after a call has to be somewhere
     # else by then.  The hint usually makes the copy disappear where there is
     # no call to make it necessary.
-    for index, block in enumerate(func.blocks):
-        incoming = cconv.int_arg_regs if index == 0 else ()
-        for position, param in enumerate(block.params):
-            if isinstance(param.ty, ResultType):
-                raise UnsupportedOperation(
-                    "a parameter whose type is a result", None)
-            arriving = incoming[position] if position < len(incoming) else None
-            held[id(param)] = _new_value(param.ty, registers, hint=arriving)
     entry = func.blocks[0] if func.blocks else None
+    try:
+        arriving = (argument_places(cconv, [p.ty for p in entry.params])
+                    if entry is not None else [])
+    except TooManyArguments as many:
+        raise UnsupportedOperation(
+            "a function with more arguments than the convention passes in "
+            "registers", None) from many
+    for index, block in enumerate(func.blocks):
+        for position, param in enumerate(block.params):
+            if index != 0:
+                if isinstance(param.ty, ResultType):
+                    raise UnsupportedOperation(
+                        "a block parameter whose type is a result", None)
+                held[id(param)] = _new_value(param.ty, registers)
+                continue
+            first, second = arriving[position]
+            answer = param.ty.ok if isinstance(param.ty, ResultType) else param.ty
+            held[id(param)] = _new_value(
+                answer, registers, hint=_as_argument(first, answer, registers))
+            if second is not None:
+                flags[id(param)] = _new_value(
+                    BOOL, registers, hint=_as_argument(second, BOOL, registers))
     if entry is not None:
         for position, param in enumerate(entry.params):
-            if position < len(cconv.int_arg_regs):
-                asm.loadreg(held[id(param)],
-                            MCReg(_argument_register(cconv, position, param.ty,
-                                                     registers)), func.span)
+            first, second = arriving[position]
+            answer = param.ty.ok if isinstance(param.ty, ResultType) else param.ty
+            asm.loadreg(held[id(param)],
+                        MCReg(_as_argument(first, answer, registers)), func.span)
+            if second is not None:
+                asm.loadreg(flags[id(param)],
+                            MCReg(_as_argument(second, BOOL, registers)), func.span)
 
     for index, block in enumerate(func.blocks):
         if index > 0:
@@ -864,6 +887,33 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
                     # order the operations that touch it, and there is nothing
                     # yet for it to order.
                     pass
+                case LoadInst() if isinstance(inst.ty, ResultType):
+                    address = inst.operands[1]
+                    if not isinstance(address, GlobalVar):
+                        raise UnsupportedOperation(
+                            "reading through an address that is not a variable", span)
+                    answer = inst.ty.ok
+                    destination = _new_value(
+                        answer, registers,
+                        hint=(_result_register(answer, cconv, registers)
+                              if inst is returned else None))
+                    failed = _new_value(
+                        BOOL, registers,
+                        hint=(_result_register(BOOL, cconv, registers, 1)
+                              if inst is returned else None))
+                    held[id(inst)] = destination
+                    flags[id(inst)] = failed
+                    # Two reads of one place: the answer where an answer goes,
+                    # and the truth value where the layout puts it.
+                    place = asm.streamer.symbol(symbol_of(address))
+                    asm.loadreg(destination,
+                                asm.mem(disp_sym=SymExpr(place), rip_relative=True,
+                                        size_bits=_width_of(answer),
+                                        signed=_is_signed(answer)), inst.span)
+                    asm.loadreg(failed,
+                                asm.mem(disp_sym=SymExpr(place), rip_relative=True,
+                                        disp=tag_offset_of(inst.ty, _LAYOUT),
+                                        size_bits=8, signed=False), inst.span)
                 case LoadInst():
                     address = inst.operands[1]
                     if not isinstance(address, GlobalVar):
@@ -887,6 +937,23 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
                         raise UnsupportedOperation(
                             "writing through an address that is not a variable", span)
                     written = inst.operands[2]
+                    if isinstance(written.ty, ResultType):
+                        # Two writes of one place, as a read of one is two.
+                        answer = written.ty.ok
+                        place = asm.streamer.symbol(symbol_of(address))
+                        asm.store(
+                            asm.mem(disp_sym=SymExpr(place), rip_relative=True,
+                                    size_bits=_width_of(answer),
+                                    signed=_is_signed(answer)),
+                            MCReg(operands.register_of(written, span),
+                                  bits=_width_of(answer)), inst.span)
+                        asm.store(
+                            asm.mem(disp_sym=SymExpr(place), rip_relative=True,
+                                    disp=tag_offset_of(written.ty, _LAYOUT),
+                                    size_bits=8),
+                            MCReg(operands.flag_of(written, span),
+                                  bits=8), inst.span)
+                        continue
                     if isinstance(written.ty, FloatType):
                         # A floating-point value goes to memory from a register
                         # of its own kind, and a constant one is read out of the
@@ -1192,10 +1259,13 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
                         raise UnsupportedOperation(
                             "a call through something that is not a named function",
                             span)
-                    if len(inst.operands) > len(cconv.int_arg_regs):
+                    try:
+                        going = argument_places(
+                            cconv, [a.ty for a in inst.operands])
+                    except TooManyArguments as many:
                         raise UnsupportedOperation(
                             "a call with more arguments than the convention passes "
-                            "in registers", span)
+                            "in registers", span) from many
                     # The arguments go into the registers the convention names,
                     # in order.  Each is moved as late as it can be: everything
                     # the call needs is read before any of them is written, so
@@ -1203,9 +1273,19 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
                     # place -- which is only true while every argument is a
                     # value the function already holds.
                     for position, argument in enumerate(inst.operands):
+                        first, second = going[position]
+                        if isinstance(argument.ty, ResultType):
+                            asm.loadreg(
+                                _as_argument(first, argument.ty.ok, registers),
+                                MCReg(operands.register_of(argument, span)),
+                                inst.span)
+                            assert second is not None
+                            asm.loadreg(
+                                _as_argument(second, BOOL, registers),
+                                MCReg(operands.flag_of(argument, span)), inst.span)
+                            continue
                         asm.loadreg(
-                            _argument_register(cconv, position, argument.ty,
-                                               registers),
+                            _as_argument(first, argument.ty, registers),
                             operands.value(argument, inst.span), inst.span)
                     asm.call(symbol_name(callee), inst.span)
                     if isinstance(inst.ty, ResultType):
@@ -1268,12 +1348,13 @@ def _bits_of(ty: "Type") -> int:
     return ty.bits
 
 
-def _argument_register(cconv: "CallConvDesc", index: int, ty: "Type",
-                       registers: "RegisterInfo") -> "PhysReg":
-    """The register an argument is passed in, named at the width of its type.
+def _as_argument(place: "PhysReg", ty: "Type",
+                 registers: "RegisterInfo") -> "PhysReg":
+    """*place* named at the width a value of *ty* is passed at.
 
     The caller writes this view and the callee reads it, and both take the width
-    from the type, which is what makes them agree.
+    from the type, which is what makes them agree.  Which register *place* is
+    comes from the convention, counted per kind rather than per position.
     """
     from ...ir.types import FloatType
 
@@ -1281,9 +1362,8 @@ def _argument_register(cconv: "CallConvDesc", index: int, ty: "Type",
         # The whole register, not a view of it at the width of the value: what
         # an instruction names is a view, and the value's own register is the
         # whole of it, so this is the same register the callee computes into.
-        return registers.view(cconv.float_arg_regs[index].unit,
-                              _FLOAT_REGISTER_BITS)
-    return registers.view(cconv.int_arg_regs[index].unit, max(32, _width_of(ty)))
+        return registers.view(place.unit, _FLOAT_REGISTER_BITS)
+    return registers.view(place.unit, max(32, _width_of(ty)))
 
 
 def _result_register(ty: "Type", cconv: "CallConvDesc",

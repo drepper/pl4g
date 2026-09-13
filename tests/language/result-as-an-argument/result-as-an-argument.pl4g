@@ -1,0 +1,45 @@
+※ pl4g-test: compile=ok run=native,qemu exit=0 diag=none
+
+※ A result may be passed to a function and answered with.  It takes two
+※ registers -- the answer in the register an answer of its kind goes in, and
+※ the truth value beside it in an ordinary one -- which is what every one of
+※ these ABIs already does with a two-word answer.
+※
+※ A floating-point result and a whole-number one stand beside ordinary values
+※ here, so that the two kinds of register are counted apart: a floating-point
+※ argument does not use up an integer register, and a result whose answer is
+※ floating-point takes one of each.
+
+let six: mut f64 = 6f64
+let two: mut f64 = 2f64
+let nought: mut f64 = 0f64
+let twelve: mut u8 = 12u8
+let three: mut u8 = 3u8
+let five: mut u8 = 5u8
+let zero: mut u8 = 0u8
+let one: mut f64 = 1f64
+
+let two_hundred: mut u8 = 200u8
+
+fn stop_unless(ok: bool):
+    ※ An addition whose answer will not fit stops the program, and `or` does
+    ※ not compute its right side unless the left one left the answer open.
+    @[ignore(5005)]
+    ok or (two_hundred + two_hundred = 0u8)
+
+fn alike(a: f64?, n: u8, b: f64, q: u8?) → bool:
+    ((a ?? 0f64) + b ≅ 4f64) ∧ ((q ?? 0u8) + n = 9u8)
+
+※ a result handed on to another function and answered with
+fn onward(q: u8?) → u8?:
+    q? + 1u8
+
+@[startup]
+fn main() → u8:
+    stop_unless(alike(six ÷ two, five, one, twelve ÷ three))
+    stop_unless(¬ alike(six ÷ nought, five, one, twelve ÷ three))
+    stop_unless(onward(twelve ÷ three) ?? 0u8 = 5u8)
+    ※ an error handed to a function, propagated out of it by `?`, and
+    ※ answered for by `??` at the end of the chain
+    stop_unless(onward(twelve ÷ zero) ?? 7u8 = 7u8)
+    0u8
