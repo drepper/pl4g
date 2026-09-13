@@ -57,6 +57,7 @@ the parser does, and they are the floor everything else is measured against.
 | `41f13c3` | 1.19 | 2.04 | 1.87 | 1.61 |
 | `e7fb804` | 1.23 | 2.04 | 1.89 | 1.59 |
 | `d0caa00` | 1.14 | 1.90 | 1.98 | 1.46 |
+| `df0bfc5` | 1.14 | 1.88 | 1.89 | 1.47 |
 
 ### Variables and memory
 
@@ -98,6 +99,7 @@ backend do.
 | `41f13c3` | 1.36 | 1.92 | 1.67 |
 | `e7fb804` | 1.37 | 1.87 | 1.73 |
 | `d0caa00` | 1.34 | 1.82 | 1.53 |
+| `df0bfc5` | 1.27 | 1.76 | 1.58 |
 
 ### Register pressure
 
@@ -139,6 +141,7 @@ and they are the only ones that reach the frame.
 | `41f13c3` | 2.10 | 7.32 |
 | `e7fb804` | 2.21 | 7.38 |
 | `d0caa00` | 2.04 | 7.19 |
+| `df0bfc5` | 2.03 | 7.19 |
 
 ### What is left out
 
@@ -180,6 +183,7 @@ decision log does.
 | `41f13c3` | 1.69 | 1.79 |
 | `e7fb804` | 1.70 | 1.82 |
 | `d0caa00` | 1.58 | 1.63 |
+| `df0bfc5` | 1.54 | 1.68 |
 
 ### Expressions
 
@@ -221,46 +225,48 @@ optimizer does.
 | `41f13c3` | 1.98 | 1.61 | 2.58 | 2.75 | 2.45 | 1.98 | 2.17 | 2.77 | 2.43 | 2.41 | 6.40 | 9.62 | 4.10 | 10.07 |  |
 | `e7fb804` | 1.90 | 1.61 | 2.66 | 2.81 | 2.58 | 1.87 | 2.15 | 2.75 | 2.50 | 2.47 | 6.45 | 9.96 | 3.96 | 10.11 | 4.29 |
 | `d0caa00` | 1.87 | 1.51 | 2.45 | 2.62 | 2.44 | 1.83 | 2.04 | 2.60 | 2.31 | 2.35 | 6.36 | 9.62 | 3.79 | 10.51 | 4.23 |
+| `df0bfc5` | 1.85 | 1.47 | 2.58 | 2.55 | 2.40 | 1.88 | 2.00 | 2.62 | 2.31 | 2.35 | 6.41 | 9.60 | 3.70 | 10.00 | 4.16 |
 
 ### Types
 
 Definitions the program writes.  These move when the parser, the name resolution or the layout does.
 
-| commit | type-definitions | enum-values |
-|---|---|---|
-| `eee64a3` |  |  |
-| `af657ad` |  |  |
-| `2f564cb` |  |  |
-| `37dbb28` |  |  |
-| `1c4ae78` |  |  |
-| `f391839` |  |  |
-| `04c20c9` |  |  |
-| `3020cf6` |  |  |
-| `9bcaf84` |  |  |
-| `40c35bb` |  |  |
-| `9437d8a` |  |  |
-| `d0c8cf5` |  |  |
-| `73ce857` |  |  |
-| `ed1c028` |  |  |
-| `1269bd5` |  |  |
-| `db0b436` |  |  |
-| `25bb4e0` |  |  |
-| `baf1f3c` |  |  |
-| `74ac227` |  |  |
-| `c0f29f2` |  |  |
-| `5c3aec4` |  |  |
-| `f7ba2fc` |  |  |
-| `3e9eb27` |  |  |
-| `0990c74` |  |  |
-| `05d8da1` |  |  |
-| `03887ff` |  |  |
-| `87c066b` |  |  |
-| `ca395a6` |  |  |
-| `230b8a7` |  |  |
-| `5706c5f` | 1.42 |  |
-| `41f13c3` | 1.53 |  |
-| `e7fb804` | 1.54 |  |
-| `d0caa00` | 1.60 | 3.76 |
+| commit | type-definitions | enum-values | enum-flag |
+|---|---|---|---|
+| `eee64a3` |  |  |  |
+| `af657ad` |  |  |  |
+| `2f564cb` |  |  |  |
+| `37dbb28` |  |  |  |
+| `1c4ae78` |  |  |  |
+| `f391839` |  |  |  |
+| `04c20c9` |  |  |  |
+| `3020cf6` |  |  |  |
+| `9bcaf84` |  |  |  |
+| `40c35bb` |  |  |  |
+| `9437d8a` |  |  |  |
+| `d0c8cf5` |  |  |  |
+| `73ce857` |  |  |  |
+| `ed1c028` |  |  |  |
+| `1269bd5` |  |  |  |
+| `db0b436` |  |  |  |
+| `25bb4e0` |  |  |  |
+| `baf1f3c` |  |  |  |
+| `74ac227` |  |  |  |
+| `c0f29f2` |  |  |  |
+| `5c3aec4` |  |  |  |
+| `f7ba2fc` |  |  |  |
+| `3e9eb27` |  |  |  |
+| `0990c74` |  |  |  |
+| `05d8da1` |  |  |  |
+| `03887ff` |  |  |  |
+| `87c066b` |  |  |  |
+| `ca395a6` |  |  |  |
+| `230b8a7` |  |  |  |
+| `5706c5f` | 1.42 |  |  |
+| `41f13c3` | 1.53 |  |  |
+| `e7fb804` | 1.54 |  |  |
+| `d0caa00` | 1.60 | 3.76 |  |
+| `df0bfc5` | 1.38 | 3.72 | 3.75 |
 
 Process
 -------
@@ -306,6 +312,7 @@ worth showing here, and every figure is in the JSON beside this file.
 | `41f13c3` | 77 | 89 |
 | `e7fb804` | 80 | 91 |
 | `d0caa00` | 80 | 96 |
+| `df0bfc5` | 81 | 90 |
 
 What each row is:
 
@@ -342,6 +349,7 @@ What each row is:
 - `41f13c3` -- 📝 Time a result passed to a function too
 - `e7fb804` -- 📝 Time a match too
 - `d0caa00` -- 📝 Time the enumerations too
+- `df0bfc5` -- 📝 Time a flag enumeration too
 
 What each program exercises:
 
@@ -373,3 +381,4 @@ What each program exercises:
 - `match-a-result` -- three matches, one of them carrying a name past
 - `type-definitions` -- eight definitions in all three notations
 - `enum-values` -- two enumerations, and three matches over them
+- `enum-flag` -- a flag enumeration, its operators and three matches

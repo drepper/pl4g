@@ -27,7 +27,8 @@
     "type-definitions": "eight definitions in all three notations",
     "result-as-an-argument": "results passed and answered with, both kinds",
     "match-a-result": "three matches, one of them carrying a name past",
-    "enum-values": "two enumerations, and three matches over them"
+    "enum-values": "two enumerations, and three matches over them",
+    "enum-flag": "a flag enumeration, its operators and three matches"
   },
   "commits": [
     {
@@ -161,6 +162,10 @@
     {
       "hash": "d0caa00",
       "subject": "📝 Time the enumerations too"
+    },
+    {
+      "hash": "df0bfc5",
+      "subject": "📝 Time a flag enumeration too"
     }
   ],
   "times": {
@@ -2324,6 +2329,124 @@
       "enum-values": [
         3.761,
         85.64674796070904
+      ]
+    },
+    "df0bfc5": {
+      "exit0": [
+        1.1380000000000001,
+        82.5885150115937
+      ],
+      "global-variable": [
+        1.266,
+        82.2501250077039
+      ],
+      "assign-widths": [
+        1.764,
+        82.22801197553053
+      ],
+      "many-values-at-once": [
+        2.031,
+        81.7191950045526
+      ],
+      "unreached-function": [
+        1.543,
+        81.20411995332688
+      ],
+      "export-visibility": [
+        1.6840000000000002,
+        82.65260100597516
+      ],
+      "digit-separators": [
+        1.886,
+        82.1952520054765
+      ],
+      "boolean-values": [
+        1.4669999999999999,
+        81.44401997560635
+      ],
+      "bitwise-operators": [
+        1.847,
+        81.53295400552452
+      ],
+      "bitwise-precedence": [
+        1.4709999999999999,
+        81.71409700298682
+      ],
+      "spill-to-the-frame": [
+        7.187,
+        87.8932080231607
+      ],
+      "boolean-in-memory": [
+        1.584,
+        83.81030597956851
+      ],
+      "comparison-operators": [
+        2.5789999999999997,
+        87.25880197016522
+      ],
+      "logic-operators": [
+        2.5500000000000003,
+        84.9063569912687
+      ],
+      "logic-short-circuit": [
+        2.4010000000000002,
+        84.31564702186733
+      ],
+      "saturating-precedence": [
+        1.876,
+        84.46969999931753
+      ],
+      "arithmetic-operators": [
+        1.9969999999999999,
+        84.08538001822308
+      ],
+      "semicolon-separates-statements": [
+        1.8800000000000001,
+        83.52628798456863
+      ],
+      "call-nested": [
+        2.6189999999999998,
+        83.0849829944782
+      ],
+      "arithmetic-division": [
+        2.308,
+        80.69066499592736
+      ],
+      "shift-operators": [
+        2.346,
+        82.86624401807785
+      ],
+      "float-arithmetic": [
+        6.406000000000001,
+        87.37771201413125
+      ],
+      "float-approximate": [
+        9.604000000000001,
+        90.36047599511221
+      ],
+      "result-type": [
+        3.7019999999999995,
+        84.40941997105256
+      ],
+      "type-definitions": [
+        1.379,
+        81.54877799097449
+      ],
+      "result-as-an-argument": [
+        10.002,
+        88.57750002061948
+      ],
+      "match-a-result": [
+        4.157,
+        86.49621397489682
+      ],
+      "enum-values": [
+        3.718,
+        86.21828502509743
+      ],
+      "enum-flag": [
+        3.7520000000000002,
+        83.53418001206592
       ]
     }
   }
