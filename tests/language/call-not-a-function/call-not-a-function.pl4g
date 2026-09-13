@@ -1,0 +1,10 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4210 LANG_CALL_NOT_A_FUNCTION
+
+※ Only a function can be called.  A variable holds a value, which is not
+※ something to hand arguments to.
+let counter: u8 = 3u8
+
+@[startup]
+fn main() → u8:
+    counter(1u8)

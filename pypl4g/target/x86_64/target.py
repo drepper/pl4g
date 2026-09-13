@@ -70,7 +70,8 @@ class X86_64Target:
                          pad_byte=PAD_BYTE,
                          machine_passes=passes_for(self.table, opt_level),
                          registers=self.registers,
-                         allocation_order=CC_PL4G_V0.allocation_order)
+                         allocation_order=CC_PL4G_V0.allocation_order,
+                         callee_saved=CC_PL4G_V0.callee_saved)
 
     def generate(self, module: Module, asm: Assembler, diags: DiagEngine,
                  opt_level: int, sources: "SourceManager | None" = None) -> None:

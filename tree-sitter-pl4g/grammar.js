@@ -203,6 +203,7 @@ module.exports = grammar({
     _non_comparison: $ => choice(
       $.binary_expression,
       $.unary_expression,
+      $.call_expression,
       $.member_expression,
       $.parenthesized_expression,
       $.integer_literal,
@@ -255,6 +256,14 @@ module.exports = grammar({
     // the same rule '!' follows in C, Go and Rust.
     unary_expression: $ => prec(9, seq(
       field('operator', choice('~', '\u00ac')), $._non_comparison,
+    )),
+
+    // A call and a member both bind tighter than any operator, and to whatever
+    // stands immediately before them: `a.b(c)` calls `a.b`, and `f(x) & 1` ands
+    // what the call answered with.  Arguments are positional.
+    call_expression: $ => prec(10, seq(
+      field('function', $._non_comparison),
+      '(', sepBy(',', field('argument', $._expression)), ')',
     )),
 
     // Something named through the module it belongs to, which binds tighter

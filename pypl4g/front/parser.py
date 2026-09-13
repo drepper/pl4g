@@ -560,14 +560,41 @@ class Parser:
                          operand=operand)
 
     def _parse_primary(self) -> ast.Expr:
-        """Parse an operand, with whatever is written after it."""
+        """Parse an operand, with whatever is written after it.
+
+        Both of these bind tighter than any operator, and to whatever stands
+        immediately before them: `a.b(c)` calls `a.b`, and `f(x) + 1` adds to
+        what the call answered with.
+        """
         found = self._parse_atom()
-        while self._check(TokKind.DOT):
-            self._advance()
-            name = self._expect(TokKind.IDENT, D.LANG_SYNTAX_EXPECTED_MEMBER)
-            found = ast.Member(span=found.span.to(name.span), base=found,
-                               name=name.text, name_span=name.span)
-        return found
+        while True:
+            if self._check(TokKind.DOT):
+                self._advance()
+                name = self._expect(TokKind.IDENT, D.LANG_SYNTAX_EXPECTED_MEMBER)
+                found = ast.Member(span=found.span.to(name.span), base=found,
+                                   name=name.text, name_span=name.span)
+                continue
+            if self._check(TokKind.LPAREN):
+                found = self._parse_call(found)
+                continue
+            return found
+
+    def _parse_call(self, callee: ast.Expr) -> ast.Expr:
+        """Parse the arguments written after what is being called.
+
+        Positional, and separated by commas, as an attribute's arguments are.
+        A call with none is written with the parentheses all the same: they are
+        what says a call is being made, not what carries the arguments.
+        """
+        self._expect(TokKind.LPAREN)
+        args: list[ast.Expr] = []
+        if not self._check(TokKind.RPAREN):
+            while True:
+                args.append(self._parse_expression())
+                if self._accept(TokKind.COMMA) is None:
+                    break
+        end = self._expect(TokKind.RPAREN, D.LANG_SYNTAX_EXPECTED_CLOSING_PAREN).span
+        return ast.Call(span=callee.span.to(end), callee=callee, args=tuple(args))
 
     def _parse_atom(self) -> ast.Expr:
         """Parse an expression with nothing binding it to what is around it."""

@@ -1,0 +1,14 @@
+※ pl4g-test: compile=ok run=native,qemu exit=42 diag=none
+
+※ A call is an expression, so it may stand wherever one may -- including as
+※ the argument of another call, and on either side of an operator.
+
+fn add_one(n: u8) → u8:
+    n ⊞ 1u8
+
+fn add_two(n: u8) → u8:
+    add_one(add_one(n))
+
+@[startup]
+fn main() → u8:
+    add_two(40u8) ⊞ add_two(0u8) ⊟ 2u8

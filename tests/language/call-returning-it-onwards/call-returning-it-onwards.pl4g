@@ -1,0 +1,18 @@
+※ pl4g-test: compile=ok run=native,qemu exit=7 diag=none
+
+※ The one place such a call may stand after 'return': in a function that also
+※ answers with nothing, where it means the call and then returning.  No value
+※ is carried in it, which is why it is an abbreviation and not an exception.
+
+let counter: mut u8 = 0u8
+
+fn prepare():
+    counter ← 7u8
+
+fn also_prepare():
+    return prepare()
+
+@[startup]
+fn main() → u8:
+    also_prepare()
+    counter

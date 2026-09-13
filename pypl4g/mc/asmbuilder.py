@@ -31,8 +31,8 @@ from .desc import InstFlags
 from .machine import MachineBasicBlock, MachineFunction
 from .operand import MCImm, MCMem, MCOperand, MCReg, MCSymRef, RelocKind, SymExpr
 from .ops import Condition, Op
-from .reg import Reg, RegisterInfo, RegUnit
-from .regalloc import Assignment, allocate
+from .reg import PhysReg, Reg, RegisterInfo, RegUnit
+from .regalloc import Assignment, allocate, registers_of
 from .streamer import MCStreamer
 from .symbol import MCSection, MCSymbol, SymBinding, SymKind, SymVisibility
 
@@ -121,6 +121,20 @@ class InstructionSelector(Protocol):
         """
         ...
 
+    def link_slot_size(self) -> int:
+        """How much room a function that calls has to set aside for its own
+        return address, which is none where a call has already put it somewhere
+        a further call cannot reach."""
+        ...
+
+    def select_save_link(self, offset: int, span: Span) -> Sequence[MCInst]:
+        """Instructions that put the return address into the frame at *offset*."""
+        ...
+
+    def select_restore_link(self, offset: int, span: Span) -> Sequence[MCInst]:
+        """Instructions that take it back out again."""
+        ...
+
     def select_clamp(self, cond: Condition, dst: Reg, lhs: MCOperand, rhs: MCOperand,
                      bound: MCOperand, span: Span) -> Sequence[MCInst]:
         """Instructions that put *bound* into *dst* where *lhs* and *rhs* stand
@@ -174,7 +188,8 @@ class Assembler:
                  function_alignment: int = 16, pad_byte: int = 0xCC,
                  machine_passes: Sequence["MachinePass"] = (),
                  registers: "RegisterInfo | None" = None,
-                 allocation_order: Sequence["RegUnit"] = ()) -> None:
+                 allocation_order: Sequence["RegUnit"] = (),
+                 callee_saved: "frozenset[RegUnit] | None" = None) -> None:
         self._selector = selector
         self._streamer = streamer
         self._alignment = function_alignment
@@ -184,6 +199,9 @@ class Assembler:
         #: decide.
         self._registers = registers
         self._allocation_order = tuple(allocation_order)
+        #: The units a function must hand back as it found them.  The
+        #: convention says which, since that is what a convention is about.
+        self._callee_saved = frozenset(callee_saved or ())
         #: What the allocator decided, for each function, in the order the
         #: functions were built.  The debugging dump reads it; nothing else does.
         self.assignments: list["Assignment"] = []
@@ -327,18 +345,70 @@ class Assembler:
         back would return to a caller whose stack had moved.
         """
         size = function.frame.size
-        if size == 0:
+        # A function that calls has to keep its own return address somewhere a
+        # call cannot reach.  On the architecture whose call instruction pushes
+        # it, that is already true and this costs nothing; on the two that leave
+        # it in a register, the register is the first thing the next call writes.
+        calls = any(InstFlags.CALL in inst.desc.flags
+                    for block in function.blocks for inst in block.insts)
+        # And only where it returns.  A function that never comes back -- the
+        # entry point is the one there is -- has no caller to return to, so
+        # keeping its return address would be keeping something nothing reads.
+        returns = any(InstFlags.RETURN in inst.desc.flags
+                      for block in function.blocks for inst in block.insts)
+        link = self._selector.link_slot_size() if calls and returns else 0
+        # And every register the convention says a function hands back as it
+        # found it.  The allocator gives those out -- they are the ones worth
+        # having when a call would destroy the others -- so a function that took
+        # one has to put it back, or its caller loses whatever it held.
+        kept = self._kept_registers(function) if returns else []
+        total = size + link + 8 * len(kept)
+        if total == 0:
             return
+        opening = list(self._selector.select_frame(total, INVALID_SPAN))
+        if link:
+            opening.extend(self._selector.select_save_link(size, INVALID_SPAN))
+        for index, register in enumerate(kept):
+            opening.extend(self._selector.select_spill(
+                size + link + 8 * index, register, INVALID_SPAN))
         entry = function.blocks[0]
-        entry.insts = [*self._selector.select_frame(size, INVALID_SPAN),
-                       *entry.insts]
+        entry.insts = [*opening, *entry.insts]
         for block in function.blocks:
             out: list[MCInst] = []
             for inst in block.insts:
                 if InstFlags.RETURN in inst.desc.flags:
-                    out.extend(self._selector.select_unframe(size, inst.span))
+                    for index, register in enumerate(kept):
+                        out.extend(self._selector.select_reload(
+                            register, size + link + 8 * index, inst.span))
+                    if link:
+                        out.extend(self._selector.select_restore_link(size, inst.span))
+                    out.extend(self._selector.select_unframe(total, inst.span))
                 out.append(inst)
             block.insts = out
+
+    def _kept_registers(self, function: MachineFunction) -> list[Reg]:
+        """The callee-saved registers this function turned out to use.
+
+        Asked of the finished code rather than of the allocator, so that a
+        register put there by anything else -- a fixed operand, a helper -- is
+        counted too.
+        """
+        if not self._callee_saved or self._registers is None:
+            return []
+        used: set[RegUnit] = set()
+        for block in function.blocks:
+            for inst in block.insts:
+                for operand in inst.operands:
+                    for register, _ in registers_of(operand):
+                        if isinstance(register, PhysReg):
+                            used.add(register.unit)
+                for register in (*inst.desc.implicit_defs, *inst.desc.implicit_uses):
+                    if isinstance(register, PhysReg):
+                        used.add(register.unit)
+        order = {unit: index for index, unit in enumerate(self._allocation_order)}
+        wanted = sorted(used & self._callee_saved,
+                        key=lambda unit: order.get(unit, len(order)))
+        return [self._registers.view(unit, 64) for unit in wanted]
 
     # -- operands --------------------------------------------------------------
 

@@ -1,0 +1,11 @@
+※ pl4g-test: compile=ok run=native,qemu exit=42 diag=none
+
+※ Several arguments, taken in the order they are written.  Subtraction is not
+※ symmetric, so the order is visible in the answer.
+
+fn difference(a: u8, b: u8) → u8:
+    a ⊟ b
+
+@[startup]
+fn main() → u8:
+    difference(50u8, 8u8)

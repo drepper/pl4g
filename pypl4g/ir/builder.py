@@ -7,7 +7,9 @@ generated rather than only when the verifier runs.
 
 from ..source.location import INVALID_SPAN, Span
 from .function import BasicBlock, Function
-from .inst import (BinaryInst, BinOp, BlockTarget, BrInst, CastInst, CastKind,
+from typing import Sequence
+
+from .inst import (CallInst, BinaryInst, BinOp, BlockTarget, BrInst, CastInst, CastKind,
                    CmpInst, CmpPred, CondBrInst, Instruction, LoadInst, MemStartInst,
                    RetInst, StoreInst, Terminator, UnaryInst, UnOp, UnreachableInst)
 from .module import Module
@@ -82,6 +84,11 @@ class IRBuilder:
                 span: Span = INVALID_SPAN) -> Value:
         """Append a comparison."""
         return self._append(CmpInst(pred, lhs, rhs, BOOL, span))
+
+    def call(self, callee: object, args: Sequence[Value], result_ty: Type,
+             span: Span = INVALID_SPAN) -> Value:
+        """Append a call to *callee*."""
+        return self._append(CallInst(callee, args, result_ty, span))
 
     def cast(self, kind: CastKind, value: Value, target: Type,
              span: Span = INVALID_SPAN) -> Value:

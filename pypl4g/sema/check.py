@@ -213,6 +213,9 @@ class Checker:
         #: A construct that raises one cannot be compiled, so the definition it
         #: belongs to is discarded rather than half built.
         self._discard_function: bool = False
+        #: Which argument of which function is being lowered, so that a type
+        #: that does not match is reported as what it is.
+        self._handing_over: tuple[str, int] | None = None
         #: What each top-level definition says it raises, and where it says so.
         self._expected_pairs: dict[str, list[_Expected]] = {}
         #: Every variable defined at the top level of any file, in the order it
@@ -413,8 +416,9 @@ class Checker:
             return UndefConst(ERROR)
         if isinstance(found, GlobalVar):
             return builder.load(found, expr.span)
-        self._diags.emit(D.IMPL_UNIMPLEMENTED_FEATURE, expr.span,
-                         feature="naming a function of another module")
+        # A function is not a value, so naming one outside a call is naming
+        # something there is nothing to do with.
+        self._diags.emit(D.LANG_CALL_NOT_A_FUNCTION, expr.span, name=expr.name)
         return UndefConst(ERROR)
 
     def _variable_type(self, node: ast.VarDef) -> Type | None:
@@ -1052,6 +1056,11 @@ class Checker:
         the expression whether it has an effect instead of knowing that none
         has.
         """
+        if isinstance(expr, ast.Call):
+            # The exception this rule was written to leave room for.  A call
+            # does whatever the function does, whether or not anyone wants what
+            # it answers with.
+            return
         found = self._diags.emit(D.LANG_STMT_VALUE_DISCARDED, expr.span)
         if isinstance(expr, ast.Binary) and expr.op is ast.BinaryOp.EQUAL:
             found.note(D.LANG_STMT_ASSIGNMENT_IS_AN_ARROW, expr.span)
@@ -1183,6 +1192,15 @@ class Checker:
             builder.ret(None, stmt.span)
             return
         if func.ty.ret is VOID:
+            if isinstance(stmt.value, ast.Call):
+                # `return f()` where both answer with nothing is the call and
+                # then a return carrying nothing.  No value is named anywhere in
+                # it, which is why it is an abbreviation and not an exception to
+                # the rule that such a call has nothing to use.
+                answer = self._lower_expr(builder, stmt.value, None)
+                if answer.ty is VOID or answer.ty is ERROR:
+                    builder.ret(None, stmt.span)
+                    return
             self._diags.emit(D.LANG_FUNCDEF_RETURN_VALUE_IN_VOID, stmt.span, name=func.name)
             builder.ret(None, stmt.span)
             return
@@ -1208,6 +1226,8 @@ class Checker:
                     # would have whatever reads it report the same thing again.
                     return UndefConst(ERROR)
                 return builder.bool_const(expr.value)
+            case ast.Call():
+                return self._lower_call(builder, expr, expected)
             case ast.NameRef():
                 return self._lower_name(builder, expr, expected)
             case ast.Binary() if expr.op in _COMPARISONS:
@@ -1539,6 +1559,86 @@ class Checker:
             return None
         return chosen
 
+    def _lower_call(self, builder: IRBuilder, expr: ast.Call,
+                    expected: Type | None) -> Value:
+        """Lower a call, checking it against what the function takes and gives.
+
+        A function is not a value, so what is called is resolved here rather
+        than lowered as an expression: there is nothing for a name that stands
+        for a function to become.
+        """
+        func = self._callee(expr.callee)
+        if func is None:
+            return UndefConst(ERROR)
+        wanted = func.ty.params
+        if len(expr.args) != len(wanted):
+            self._diags.emit(D.LANG_CALL_WRONG_ARGUMENT_COUNT, expr.span,
+                             name=func.name, expected=len(wanted),
+                             found=len(expr.args))
+            return UndefConst(ERROR)
+        args: list[Value] = []
+        for position, (written, ty) in enumerate(zip(expr.args, wanted), start=1):
+            outer, self._handing_over = self._handing_over, (func.name, position)
+            try:
+                args.append(self._lower_expr(builder, written, ty))
+            finally:
+                self._handing_over = outer
+        if any(value.ty is ERROR for value in args):
+            return UndefConst(ERROR)
+        answer = builder.call(func, args, func.ty.ret, expr.span)
+        if func.ty.ret is VOID and expected is not None:
+            # Somewhere wants a value and there is none.  The two places a call
+            # like this may stand are a statement of its own and after `return`
+            # in a function that also answers with nothing, and neither of them
+            # asks for one.
+            self._diags.emit(D.LANG_CALL_HAS_NO_VALUE, expr.span, name=func.name)
+            return UndefConst(ERROR)
+        if expected is not None and answer.ty is not expected:
+            self._report_mismatch(expr.span, answer.ty, expected)
+            return UndefConst(ERROR)
+        return answer
+
+    def _callee(self, expr: ast.Expr) -> Function | None:
+        """The function a call names, or nothing where it does not name one."""
+        match expr:
+            case ast.NameRef():
+                found = self._top.get(expr.name)
+                if isinstance(found, Function):
+                    return found
+                if found is None and self._find_local(expr.name) is None:
+                    self._diags.emit(D.LANG_FILESTRUCT_UNDEFINED_NAME, expr.span,
+                                     name=expr.name)
+                    return None
+                self._diags.emit(D.LANG_CALL_NOT_A_FUNCTION, expr.span,
+                                 name=expr.name)
+                return None
+            case ast.Member():
+                return self._callee_of_module(expr)
+            case _:
+                self._diags.emit(D.LANG_CALL_NOT_A_FUNCTION, expr.span, name="this")
+                return None
+
+    def _callee_of_module(self, expr: ast.Member) -> Function | None:
+        """The function another module exports under this name."""
+        base = expr.base
+        if not isinstance(base, ast.NameRef):
+            self._diags.emit(D.LANG_IMPORT_NOT_A_MODULE, expr.span,
+                             name="an expression")
+            return None
+        held = self._top.get(base.name)
+        if not isinstance(held, LoadedModule):
+            self._diags.emit(D.LANG_IMPORT_NOT_A_MODULE, base.span, name=base.name)
+            return None
+        found = held.exports.get(expr.name)
+        if found is None:
+            self._diags.emit(D.LANG_IMPORT_NOT_EXPORTED, expr.name_span,
+                             name=expr.name, module=base.name)
+            return None
+        if not isinstance(found, Function):
+            self._diags.emit(D.LANG_CALL_NOT_A_FUNCTION, expr.span, name=expr.name)
+            return None
+        return found
+
     def _lower_name(self, builder: IRBuilder, ref: ast.NameRef,
                     expected: Type | None) -> Value:
         """Lower a reference to a name.
@@ -1587,6 +1687,12 @@ class Checker:
                 self._diags.emit(D.LANG_TYPE_OPERAND_MISMATCH, span,
                                  operator=self._operand_of,
                                  expected=expected.render(), found=found.render())
+            return
+        if self._handing_over is not None:
+            name, position = self._handing_over
+            self._diags.emit(D.LANG_CALL_ARGUMENT_MISMATCH, span, position=position,
+                             name=name, expected=expected.render(),
+                             found=found.render())
             return
         if self._assigning is not None:
             self._diags.emit(D.LANG_TYPE_ASSIGNMENT_MISMATCH, span,

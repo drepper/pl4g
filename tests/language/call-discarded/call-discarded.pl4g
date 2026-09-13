@@ -1,0 +1,16 @@
+※ pl4g-test: compile=ok run=native,qemu exit=7 diag=none
+
+※ A call may stand as a statement of its own with nothing taking its answer.
+※ It is the first expression in the language that does something besides
+※ produce a value, which is the exception the rule about discarded values was
+※ written to leave room for.
+
+let counter: mut u8 = 0u8
+
+fn prepare():
+    counter ← 7u8
+
+@[startup]
+fn main() → u8:
+    prepare()
+    counter

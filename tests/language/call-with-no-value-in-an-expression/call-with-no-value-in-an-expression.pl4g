@@ -1,0 +1,10 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4212 LANG_CALL_HAS_NO_VALUE
+
+※ Nor to be an operand of anything.
+fn prepare():
+    return
+
+@[startup]
+fn main() → u8:
+    prepare() ⊞ 1u8

@@ -16,7 +16,7 @@ from typing import Final
 from ...mc.desc import InstFlags, OperandKind, OperandRole, OperandSpec
 from .desc import INSTRUCTION_SIZE, Field, FieldKind, RVInstDesc
 from .fixups import BRANCH, JAL, PCREL_HI20, PCREL_LO12_I, PCREL_PAIR_DISTANCE
-from .regs import GPR, RA
+from .regs import CALLER_SAVED, GPR, RA
 
 #: The word the architecture leaves undefined, which is what padding is filled
 #: with so that falling into it traps.
@@ -289,9 +289,16 @@ RISCV_INSTRS: Final[tuple[RVInstDesc, ...]] = (
                flags=InstFlags.TERMINATOR, est_size=INSTRUCTION_SIZE,
                roles=_READS_BOTH_AND_TARGET),
     # jal ra, label      (the return address register is part of the template)
+    # A call destroys every register the convention calls caller-saved, so the
+    # allocator has to be told -- otherwise a value held across one is silently
+    # lost.  Naming them here puts a convention's business in the instruction
+    # table, which is not where it belongs; it costs nothing today, every
+    # convention this target has calling the same registers caller-saved, and
+    # the entry in the to-do list says what to do when one does not.
     RVInstDesc("jal", (_sym(),), template=0x000000EF,
                fields=(Field(FieldKind.RELOCATION, 0, 12, 20, reloc=JAL),),
-               implicit_defs=(RA,), flags=InstFlags.CALL, est_size=INSTRUCTION_SIZE),
+               implicit_defs=(RA, *CALLER_SAVED), flags=InstFlags.CALL,
+               est_size=INSTRUCTION_SIZE),
     # ret                is  jalr zero, ra, 0
     RVInstDesc("ret", (), template=0x00008067, implicit_uses=(RA,),
                flags=InstFlags.TERMINATOR | InstFlags.RETURN, est_size=INSTRUCTION_SIZE),

@@ -6,24 +6,16 @@ To Do List for the PL4g language
 
 [x] expressions can use `(` and `)` for grouping, like most other languages.  Done with the expression parser.
 
-[?] there is no way to call a function.  A function can be defined and is emitted, but nothing in the language names one in an
-    expression, so every function other than the startup function, a constructor or a destructor is unreachable by construction.
-    Question: the obvious syntax is `f(a, b)`, which the attribute argument list already uses and which nothing else claims.  What
-    is not obvious is whether arguments may be named, as attribute arguments already are, which would fit the language but means
-    overload resolution has to consider names.  That is now the only part of the question left open.
-    Settled since the question was written, and to be implemented with the call:
-    - A call whose value is discarded is allowed.  It is the first expression in the language that does something besides produce
-      a value, which is the exception 5005 was written to leave room for and which its wording already names.
-    - A call to a function that answers with nothing has no answer, so naming one where a value is wanted is an error: it cannot
-      start a variable, be assigned, or be an operand.  The representation already refuses to hold such a thing, and there is a
-      test for it; what the front end has to add is the report, with the place the call was written.
-    - `return f()` is allowed in a function that itself answers with nothing, where `f` also answers with nothing, as an
-      abbreviation for the call followed by returning.  No value is carried in it, so it is not an exception to the rule above --
-      it lowers to two instructions, neither of which names a value.
-    What the compiler needs besides the syntax: the backends have no rule for `CallInst`, and the register allocator has no notion
-    of a call destroying the registers a convention calls caller-saved.  The second is the one that matters, since without it a
-    value held across a call is silently lost; the machinery for it is already there, the call having only to declare those
-    registers as ones it writes, which is how the flags register is already handled.
+[x] there is no way to call a function.  Done: `f(a, b)`, positional, binding tighter than every operator and to whatever stands
+    immediately before it.  A call hands over exactly what the function takes and each argument has the type of its parameter
+    (4211, 4213); only a function can be called (4210); a call to a function that answers with nothing has no answer to use
+    (4212), except as a statement of its own and after `return` in a function that also answers with nothing.
+    Still open, and the only part of the original question that was: whether arguments may also be named, as an attribute's are.
+    Nothing in what was built forecloses it.
+
+[ ] let a function say that its answer must not be dropped, so that a call whose value is discarded can be reported where the
+    answer was the point.  Rust has `#[must_use]` for this and reports it as a warning; the shape here would be an attribute, and
+    the rule that a statement's value must be used is what it would switch back on for that one function.
 
 [?] there is no control flow.  A function body is a straight-line list of statements: there is no `if`, no loop and no way to
     choose between two values.  The intermediate representation has had branches and block parameters from the start and nothing

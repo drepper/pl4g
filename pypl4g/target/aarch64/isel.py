@@ -26,7 +26,7 @@ from ..saturate import (DIVISION, NAMES, SATURATING, TRAPPING, Unsupported,
 from . import ops as a64ops
 from .startup import ABORT_SYMBOL
 from .opcodes import AARCH64_INSTRS
-from .regs import GPR, INFO, SP
+from .regs import GPR, INFO, SP, X30
 
 if TYPE_CHECKING:
     from ...ir.function import Function
@@ -448,6 +448,20 @@ class A64Selector(InstructionSelector):
 
     # -- the stack -------------------------------------------------------------
 
+    def link_slot_size(self) -> int:
+        """A whole stack unit, the stack having to stay aligned to sixteen."""
+        return 16
+
+    def select_save_link(self, offset: int, span: Span) -> Sequence[MCInst]:
+        """Instructions that put the return address into the frame at *offset*."""
+        return (self._inst("str", (MCReg(X30, bits=64), MCReg(SP),
+                                   MCImm(offset, 12, signed=False)), span),)
+
+    def select_restore_link(self, offset: int, span: Span) -> Sequence[MCInst]:
+        """Instructions that take it back out again."""
+        return (self._inst("ldr", (MCReg(X30, bits=64), MCReg(SP),
+                                   MCImm(offset, 12, signed=False)), span),)
+
     def select_spill(self, slot: int, source: Reg, span: Span) -> Sequence[MCInst]:
         """Instructions that write *source* to the frame slot at *slot*."""
         return (self._inst("str", (MCReg(source, bits=64), MCReg(SP),
@@ -474,12 +488,13 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
                    registers: "RegisterInfo", messages: "Messages | None" = None,
                    sources: "SourceManager | None" = None) -> None:
     """Build the machine form of one IR function."""
-    from ...ir.inst import (BinaryInst, BrInst, CmpInst, CondBrInst, LoadInst,
-                            MemStartInst, RetInst, StoreInst, UnaryInst,
-                            UnreachableInst)
+    from ...ir.inst import (BinaryInst, BrInst, CallInst, CmpInst, CondBrInst,
+                            LoadInst, MemStartInst, RetInst, StoreInst,
+                            UnaryInst, UnreachableInst)
+    from ...ir.function import Function as _Function
     from ...ir.mangle import symbol_name
     from ...ir.module import GlobalVar
-    from ...ir.types import BoolType, IntType
+    from ...ir.types import BoolType, IntType, VOID
     from ..globals import symbol_of
 
     asm.begin_function(symbol_name(func),
@@ -562,9 +577,25 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
     # Every block parameter gets its register before any block is walked: a
     # branch writes the parameters of the block it goes to, and that block may
     # come later in the layout than the branch does.
-    for block in func.blocks:
-        for param in block.params:
-            held[id(param)] = _new_value(param.ty, registers)
+    #
+    # The entry block's parameters are the function's own, and they arrive in
+    # the registers the convention names rather than being written by a branch.
+    # They are copied out at once: the registers they come in are ones a call
+    # destroys, so a parameter still wanted after a call has to be somewhere
+    # else by then.  The hint usually makes the copy disappear where there is
+    # no call to make it necessary.
+    for index, block in enumerate(func.blocks):
+        incoming = cconv.int_arg_regs if index == 0 else ()
+        for position, param in enumerate(block.params):
+            arriving = incoming[position] if position < len(incoming) else None
+            held[id(param)] = _new_value(param.ty, registers, hint=arriving)
+    entry = func.blocks[0] if func.blocks else None
+    if entry is not None:
+        for position, param in enumerate(entry.params):
+            if position < len(cconv.int_arg_regs):
+                asm.loadreg(held[id(param)],
+                            MCReg(_argument_register(cconv, position, param.ty,
+                                                     registers)), func.span)
 
     for index, block in enumerate(func.blocks):
         if index > 0:
@@ -714,6 +745,38 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
                               if inst is returned else None))
                     held[id(inst)] = destination
                     lower_comparison(asm, inst, operands, destination)
+                case CallInst():
+                    callee = inst.callee
+                    if not isinstance(callee, _Function):
+                        raise UnsupportedOperation(
+                            "a call through something that is not a named function",
+                            span)
+                    if len(inst.operands) > len(cconv.int_arg_regs):
+                        raise UnsupportedOperation(
+                            "a call with more arguments than the convention passes "
+                            "in registers", span)
+                    # The arguments go into the registers the convention names,
+                    # in order.  Each is moved as late as it can be: everything
+                    # the call needs is read before any of them is written, so
+                    # one argument cannot be overwritten by another being put in
+                    # place -- which is only true while every argument is a
+                    # value the function already holds.
+                    for position, argument in enumerate(inst.operands):
+                        asm.loadreg(
+                            _argument_register(cconv, position, argument.ty,
+                                               registers),
+                            operands.value(argument, inst.span), inst.span)
+                    asm.call(symbol_name(callee), inst.span)
+                    if inst.ty is not VOID:
+                        destination = _new_value(
+                            inst.ty, registers,
+                            hint=(_result_register(inst.ty, cconv, registers)
+                                  if inst is returned else None))
+                        held[id(inst)] = destination
+                        asm.loadreg(destination,
+                                    MCReg(_result_register(inst.ty, cconv,
+                                                           registers)),
+                                    inst.span)
                 case UnreachableInst():
                     asm.op(ops.TRAP, None, span=inst.span)
                 case BrInst() | CondBrInst():
@@ -729,6 +792,16 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
                     raise UnsupportedOperation("".join((
                         "the instruction '", inst.opcode, "'")), span)
     asm.end_function()
+
+def _argument_register(cconv: "CallConvDesc", index: int, ty: "Type",
+                       registers: "RegisterInfo") -> "PhysReg":
+    """The register an argument is passed in, named at the width of its type.
+
+    The caller writes this view and the callee reads it, and both take the width
+    from the type, which is what makes them agree.
+    """
+    return registers.view(cconv.int_arg_regs[index].unit, max(32, _width_of(ty)))
+
 
 def _result_register(ty: "Type", cconv: "CallConvDesc",
                      registers: "RegisterInfo") -> "PhysReg":

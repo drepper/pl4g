@@ -170,6 +170,18 @@ class UnaryOp(StrEnum):
 
 
 @dataclass(frozen=True, slots=True)
+class Call(Expr):
+    """A function called with the arguments written after its name.
+
+    Arguments are positional.  Whether they may be named as well is the one
+    part of the question about calls still open, and nothing here forecloses it.
+    """
+
+    callee: Expr
+    args: tuple[Expr, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
 class Member(Expr):
     """Something named through the thing it belongs to: `modname.NAME`."""
 

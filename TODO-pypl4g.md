@@ -72,6 +72,10 @@ To Do List for the pypl4g compiler
     same entry covers a branch handing a block its own parameters rearranged, which needs a temporary the way any parallel copy
     does.
 
+[ ] let the instruction table stop naming the registers a call destroys.  They are a convention's business and the table cannot
+    reach a convention, so each backend names them beside its registers and the call row uses them.  It costs nothing today,
+    every convention each target has naming the same set; the day one does not, the call will have to carry them per instance.
+
 [ ] let an operand require a particular register, so that an instruction with a fixed register pair can be used.  x86-64 needs
     it for the one-operand multiply, which is the only way to see the upper half of a product there, and for division, which
     writes its quotient and remainder to a fixed pair.  Until then a saturating multiplication of the widest type is refused on

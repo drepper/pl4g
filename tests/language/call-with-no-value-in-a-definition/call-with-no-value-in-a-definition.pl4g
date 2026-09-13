@@ -1,0 +1,12 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4212 LANG_CALL_HAS_NO_VALUE
+
+※ A function that answers with nothing has no answer to put in a variable.
+fn prepare():
+    return
+
+@[startup]
+fn main() → u8:
+    @[ignore(4006)]
+    let kept: u8 = prepare()
+    0u8

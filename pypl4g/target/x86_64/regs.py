@@ -117,3 +117,12 @@ HIGH_BYTE_REGS: Final[frozenset[str]] = frozenset(_HIGH_BYTE.values())
 SEGMENT_PREFIX: Final[dict[str, int]] = {
     "es": 0x26, "cs": 0x2E, "ss": 0x36, "ds": 0x3E, "fs": 0x64, "gs": 0x65,
 }
+
+
+#: The registers a call destroys, which is what the language's convention and
+#: the system's both say.  They are named here rather than taken from a
+#: convention because the instruction table cannot reach one; the two
+#: conventions this target has name the same set, so nothing is lost by it yet.
+CALLER_SAVED: Final[tuple[PhysReg, ...]] = tuple(
+    reg(name) for name in
+    ("rax", "rcx", "rdx", "rsi", "rdi", "r8", "r9", "r10", "r11"))

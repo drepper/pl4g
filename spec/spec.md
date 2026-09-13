@@ -196,6 +196,32 @@ The relative binding of the three is the one C settled on and Rust, Go and Zig k
 these the same way.  C's choice of making them bind *looser* than comparison is a famous defect, which this language does not
 inherit: the comparisons bind looser than the bitwise operators, so `a & b = c` reads as `(a & b) = c`.
 
+#### Calls
+
+A function is called by writing its arguments after its name, in parentheses:
+
+```
+twice(21u8)
+difference(50u8, 8u8)
+prepare()
+```
+
+**Arguments are positional**: what an argument is for is decided by where it stands.  A call hands over exactly the arguments
+the function takes -- nothing is variadic, nothing has a default -- and each has the type of the parameter it is handed to, with
+nothing widened to make two types meet.  A literal with no suffix takes the parameter's type, which is what lets a call be written
+with plain numbers.  Whether arguments may also be *named*, as an attribute's are, is not decided; nothing here forecloses it.
+
+A call binds tighter than every operator and to whatever stands immediately before it, so `a.b(c)` calls `a.b` and `f(x) + 1` adds
+to what the call answered with.  The parentheses are what say a call is being made, not what carry the arguments, so a call with
+none is written with them all the same.
+
+**A call may stand as a statement of its own.**  It is the first expression in the language that does something besides produce a
+value, which is why the rule that a statement's value must be used does not apply to it.
+
+Compare C, C++, Java and Go, where a call is likewise the exception to the discarded-value rule; and Rust, where a call producing
+a value that is discarded is a warning unless the type says otherwise.  A rule of that kind wants a way for a function to say its
+answer must not be dropped, which this language will want too and does not have yet.
+
 #### Arithmetic
 
 | Operator | Meaning |

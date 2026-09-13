@@ -1629,6 +1629,119 @@
       "option": null
     },
     {
+      "number": 4210,
+      "name": "LANG_CALL_NOT_A_FUNCTION",
+      "severity": "error",
+      "message": "'{name}' is not a function",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "what was called"
+        }
+      ],
+      "cause": "Only a function can be called.  A variable holds a value and a module is a place names are found in; neither is something to hand arguments to.  A call through a value that happens to be the address of a function will be a different thing, written differently, when there are addresses to hold.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Calls",
+        "requirement": "A function is called by writing its arguments after its name."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4211,
+      "name": "LANG_CALL_WRONG_ARGUMENT_COUNT",
+      "severity": "error",
+      "message": "'{name}' takes {expected} arguments, not {found}",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the function"
+        },
+        {
+          "name": "expected",
+          "type": "integer",
+          "description": "how many it takes"
+        },
+        {
+          "name": "found",
+          "type": "integer",
+          "description": "how many were written"
+        }
+      ],
+      "cause": "A call hands over exactly the arguments the function takes.  There are no defaults and nothing is variadic, so a count that does not match is a mistake and not a form of the call.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Calls",
+        "requirement": "A call hands over exactly the arguments the function takes, in order."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4212,
+      "name": "LANG_CALL_HAS_NO_VALUE",
+      "severity": "error",
+      "message": "'{name}' answers with nothing, so there is no value here to use",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the function"
+        }
+      ],
+      "cause": "A function whose header has no arrow answers with nothing, so a call to it has no answer: it cannot start a variable, be assigned, or be an operand.  The one place such a call may be written is where nothing is wanted of it -- as a statement of its own, or after `return` in a function that also answers with nothing, which is the call followed by returning and carries no value either.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition",
+        "requirement": "A call to a function that answers with nothing has no answer, so naming one where a value is wanted is an error."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4213,
+      "name": "LANG_CALL_ARGUMENT_MISMATCH",
+      "severity": "error",
+      "message": "argument {position} of '{name}' is '{expected}', not '{found}'",
+      "args": [
+        {
+          "name": "position",
+          "type": "integer",
+          "description": "which argument, counting from one"
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the function"
+        },
+        {
+          "name": "expected",
+          "type": "string",
+          "description": "the type the parameter has"
+        },
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type of what was written"
+        }
+      ],
+      "cause": "An argument has the type of the parameter it is handed to, and nothing is widened to make two types meet -- the same rule every other place a value is written into something follows.  A literal without a suffix takes the parameter's type, which is what lets a call be written with plain numbers.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Calls",
+        "requirement": "A call hands over exactly the arguments the function takes, in order."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 4401,
       "name": "LANG_FUNCDEF_SPECIAL_NO_STARTUP",
       "severity": "error",

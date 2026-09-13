@@ -1,0 +1,11 @@
+※ pl4g-test: compile=ok run=native,qemu exit=42 diag=none
+
+※ A function is called by writing its arguments after its name.  They are
+※ positional: what they are is decided by where they stand.
+
+fn twice(n: u8) → u8:
+    n ⊞ n
+
+@[startup]
+fn main() → u8:
+    twice(21u8)

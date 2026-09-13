@@ -82,3 +82,11 @@ CALLEE_SAVED_NAMES: Final[tuple[str, ...]] = (
 CALLER_SAVED_NAMES: Final[tuple[str, ...]] = (
     "ra", "t0", "t1", "t2", "t3", "t4", "t5", "t6",
     "a0", "a1", "a2", "a3", "a4", "a5", "a6", "a7")
+
+
+#: The registers a call destroys.  See the note beside the same name in the
+#: x86-64 backend.
+CALLER_SAVED: Final[tuple[PhysReg, ...]] = tuple(
+    reg(name) for name in
+    ("ra", "t0", "t1", "t2", "t3", "t4", "t5", "t6",
+     "a0", "a1", "a2", "a3", "a4", "a5", "a6", "a7"))

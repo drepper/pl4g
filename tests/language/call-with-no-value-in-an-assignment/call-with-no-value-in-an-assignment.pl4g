@@ -1,0 +1,13 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 4212 LANG_CALL_HAS_NO_VALUE
+
+※ Nor to assign.
+let kept: mut u8 = 0u8
+
+fn prepare():
+    return
+
+@[startup]
+fn main() → u8:
+    kept ← prepare()
+    kept

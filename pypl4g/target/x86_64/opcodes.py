@@ -10,7 +10,7 @@ from typing import Final
 
 from ...mc.desc import InstFlags, OperandKind, OperandRole, OperandSpec
 from .desc import ModRMUse, OpMap, OpSize, X86InstDesc
-from .regs import EFLAGS, GPR, R11, RCX
+from .regs import CALLER_SAVED, EFLAGS, GPR, R11, RCX
 
 
 def _r(bits: int) -> OperandSpec:
@@ -347,9 +347,15 @@ X86_INSTRS: Final[tuple[X86InstDesc, ...]] = (
     X86InstDesc("jae", (_rel(32),), opcode=0x83, map=OpMap.M0F,
                 rel_op=0, rel_bits=32, implicit_uses=(EFLAGS,),
                 flags=InstFlags.TERMINATOR, est_size=6),
+    # A call destroys every register the convention calls caller-saved, so the
+    # allocator has to be told -- otherwise a value held across one is silently
+    # lost.  Naming them here puts a convention's business in the instruction
+    # table, which is not where it belongs; it costs nothing today, every
+    # convention this target has calling the same registers caller-saved, and
+    # the entry in the to-do list says what to do when one does not.
     # call rel32                         E8 cd
     X86InstDesc("call", (_rel(32),), opcode=0xE8, rel_op=0, rel_bits=32,
-                flags=InstFlags.CALL, est_size=5),
+                implicit_defs=CALLER_SAVED, flags=InstFlags.CALL, est_size=5),
     # ret                                C3
     X86InstDesc("ret", (), opcode=0xC3, flags=InstFlags.TERMINATOR | InstFlags.RETURN, est_size=1),
     # syscall                            0F 05
