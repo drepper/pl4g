@@ -104,7 +104,8 @@ GROUPS: tuple[Group, ...] = (
           "name resolution or the layout does.",
           {"type-definitions": "eight definitions in all three notations",
            "enum-values": "two enumerations, and three matches over them",
-           "enum-flag": "a flag enumeration, its operators and three matches"}),
+           "enum-flag": "a flag enumeration, its operators and three matches",
+           "collection-syntax": "sets and dictionaries, their types and lookups"}),
 )
 
 #: How many times each sample is compiled.  The best is kept.
