@@ -31,6 +31,10 @@
     {
       "hash": "1c4ae78",
       "subject": "✨ What the compiler leaves out is recorded in the decision log"
+    },
+    {
+      "hash": "f391839",
+      "subject": "✨ A local the sweep removes is logged too, by the name it was given"
     }
   ],
   "times": {
@@ -226,6 +230,48 @@
       "bitwise-precedence": [
         1.417,
         70.49162601470016
+      ]
+    },
+    "f391839": {
+      "exit0": [
+        1.0510000000000002,
+        67.15106198680587
+      ],
+      "global-variable": [
+        1.218,
+        70.39953701314516
+      ],
+      "assign-widths": [
+        1.63,
+        68.84814897784963
+      ],
+      "many-values-at-once": [
+        1.8840000000000001,
+        70.97310101380572
+      ],
+      "unreached-function": [
+        1.441,
+        69.32548899203539
+      ],
+      "export-visibility": [
+        1.4460000000000002,
+        70.90743197477423
+      ],
+      "digit-separators": [
+        1.601,
+        68.11143999220803
+      ],
+      "boolean-values": [
+        1.447,
+        67.4124560027849
+      ],
+      "bitwise-operators": [
+        1.569,
+        68.00418900093064
+      ],
+      "bitwise-precedence": [
+        1.3979999999999997,
+        67.96715199016035
       ]
     }
   }
