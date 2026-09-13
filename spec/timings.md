@@ -49,6 +49,7 @@ the parser does, and they are the floor everything else is measured against.
 | `3e9eb27` | 1.20 | 1.70 | 1.56 | 1.35 |
 | `0990c74` | 1.05 | 1.69 | 1.56 | 1.37 |
 | `05d8da1` | 0.94 | 1.58 | 1.45 | 1.23 |
+| `03887ff` | 1.15 | 1.91 | 1.76 | 1.57 |
 
 ### Variables and memory
 
@@ -82,6 +83,7 @@ backend do.
 | `3e9eb27` | 1.18 | 1.58 | 1.37 |
 | `0990c74` | 1.20 | 1.59 | 1.39 |
 | `05d8da1` | 1.05 | 1.46 | 1.29 |
+| `03887ff` | 1.36 | 1.81 | 1.60 |
 
 ### Register pressure
 
@@ -115,6 +117,7 @@ and they are the only ones that reach the frame.
 | `3e9eb27` | 1.76 | 5.99 |
 | `0990c74` | 1.81 | 5.97 |
 | `05d8da1` | 1.70 | 5.88 |
+| `03887ff` | 2.04 | 7.24 |
 
 ### What is left out
 
@@ -148,39 +151,41 @@ decision log does.
 | `3e9eb27` | 1.40 | 1.46 |
 | `0990c74` | 1.44 | 1.48 |
 | `05d8da1` | 1.31 | 1.49 |
+| `03887ff` | 1.54 | 1.62 |
 
 ### Expressions
 
 Operators, and the folding of them.  These move when the expression parser, the semantic analysis or the
 optimizer does.
 
-| commit | bitwise-operators | bitwise-precedence | comparison-operators | logic-operators | logic-short-circuit | saturating-precedence | arithmetic-operators | call-nested | arithmetic-division | shift-operators |
-|---|---|---|---|---|---|---|---|---|---|---|
-| `eee64a3` |  |  |  |  |  |  |  |  |  |  |
-| `af657ad` |  |  |  |  |  |  |  |  |  |  |
-| `2f564cb` | 1.47 | 1.22 |  |  |  |  |  |  |  |  |
-| `37dbb28` | 1.55 | 1.22 |  |  |  |  |  |  |  |  |
-| `1c4ae78` | 1.56 | 1.42 |  |  |  |  |  |  |  |  |
-| `f391839` | 1.57 | 1.40 |  |  |  |  |  |  |  |  |
-| `04c20c9` | 1.58 | 1.39 |  |  |  |  |  |  |  |  |
-| `3020cf6` | 1.44 | 1.28 |  |  |  |  |  |  |  |  |
-| `9bcaf84` | 1.46 | 1.28 |  |  |  |  |  |  |  |  |
-| `40c35bb` | 1.51 | 1.31 |  |  |  |  |  |  |  |  |
-| `9437d8a` | 1.54 | 1.45 |  |  |  |  |  |  |  |  |
-| `d0c8cf5` | 1.55 | 1.36 |  |  |  |  |  |  |  |  |
-| `73ce857` | 1.58 | 1.39 |  |  |  |  |  |  |  |  |
-| `ed1c028` | 1.65 | 1.45 |  |  |  |  |  |  |  |  |
-| `1269bd5` | 1.58 | 1.43 | 2.40 |  |  |  |  |  |  |  |
-| `db0b436` | 1.66 | 1.42 | 2.36 |  |  |  |  |  |  |  |
-| `25bb4e0` | 1.67 | 1.39 | 2.29 | 2.39 | 2.33 |  |  |  |  |  |
-| `baf1f3c` | 1.69 | 1.48 | 2.37 | 2.55 | 2.35 |  |  |  |  |  |
-| `74ac227` | 1.71 | 1.37 | 2.29 | 2.41 | 2.27 | 1.57 |  |  |  |  |
-| `c0f29f2` | 1.60 | 1.41 | 2.43 | 2.48 | 2.43 | 1.73 | 1.83 |  |  |  |
-| `5c3aec4` | 1.83 | 1.55 | 2.67 | 2.79 | 2.56 | 1.76 | 1.95 |  |  |  |
-| `f7ba2fc` | 1.65 | 1.44 | 2.61 | 2.65 | 2.43 | 1.67 | 1.75 |  |  |  |
-| `3e9eb27` | 1.54 | 1.34 | 2.16 | 2.27 | 2.09 | 1.54 | 1.81 | 2.23 |  |  |
-| `0990c74` | 1.56 | 1.36 | 2.17 | 2.31 | 2.09 | 1.52 | 1.79 | 2.25 | 2.09 |  |
-| `05d8da1` | 1.45 | 1.22 | 2.06 | 2.13 | 2.01 | 1.42 | 1.70 | 2.16 | 1.86 | 2.00 |
+| commit | bitwise-operators | bitwise-precedence | comparison-operators | logic-operators | logic-short-circuit | saturating-precedence | arithmetic-operators | call-nested | arithmetic-division | shift-operators | float-arithmetic |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| `eee64a3` |  |  |  |  |  |  |  |  |  |  |  |
+| `af657ad` |  |  |  |  |  |  |  |  |  |  |  |
+| `2f564cb` | 1.47 | 1.22 |  |  |  |  |  |  |  |  |  |
+| `37dbb28` | 1.55 | 1.22 |  |  |  |  |  |  |  |  |  |
+| `1c4ae78` | 1.56 | 1.42 |  |  |  |  |  |  |  |  |  |
+| `f391839` | 1.57 | 1.40 |  |  |  |  |  |  |  |  |  |
+| `04c20c9` | 1.58 | 1.39 |  |  |  |  |  |  |  |  |  |
+| `3020cf6` | 1.44 | 1.28 |  |  |  |  |  |  |  |  |  |
+| `9bcaf84` | 1.46 | 1.28 |  |  |  |  |  |  |  |  |  |
+| `40c35bb` | 1.51 | 1.31 |  |  |  |  |  |  |  |  |  |
+| `9437d8a` | 1.54 | 1.45 |  |  |  |  |  |  |  |  |  |
+| `d0c8cf5` | 1.55 | 1.36 |  |  |  |  |  |  |  |  |  |
+| `73ce857` | 1.58 | 1.39 |  |  |  |  |  |  |  |  |  |
+| `ed1c028` | 1.65 | 1.45 |  |  |  |  |  |  |  |  |  |
+| `1269bd5` | 1.58 | 1.43 | 2.40 |  |  |  |  |  |  |  |  |
+| `db0b436` | 1.66 | 1.42 | 2.36 |  |  |  |  |  |  |  |  |
+| `25bb4e0` | 1.67 | 1.39 | 2.29 | 2.39 | 2.33 |  |  |  |  |  |  |
+| `baf1f3c` | 1.69 | 1.48 | 2.37 | 2.55 | 2.35 |  |  |  |  |  |  |
+| `74ac227` | 1.71 | 1.37 | 2.29 | 2.41 | 2.27 | 1.57 |  |  |  |  |  |
+| `c0f29f2` | 1.60 | 1.41 | 2.43 | 2.48 | 2.43 | 1.73 | 1.83 |  |  |  |  |
+| `5c3aec4` | 1.83 | 1.55 | 2.67 | 2.79 | 2.56 | 1.76 | 1.95 |  |  |  |  |
+| `f7ba2fc` | 1.65 | 1.44 | 2.61 | 2.65 | 2.43 | 1.67 | 1.75 |  |  |  |  |
+| `3e9eb27` | 1.54 | 1.34 | 2.16 | 2.27 | 2.09 | 1.54 | 1.81 | 2.23 |  |  |  |
+| `0990c74` | 1.56 | 1.36 | 2.17 | 2.31 | 2.09 | 1.52 | 1.79 | 2.25 | 2.09 |  |  |
+| `05d8da1` | 1.45 | 1.22 | 2.06 | 2.13 | 2.01 | 1.42 | 1.70 | 2.16 | 1.86 | 2.00 |  |
+| `03887ff` | 1.78 | 1.57 | 2.49 | 2.59 | 2.41 | 1.67 | 2.01 | 2.55 | 2.17 | 2.34 | 5.54 |
 
 Process
 -------
@@ -218,6 +223,7 @@ worth showing here, and every figure is in the JSON beside this file.
 | `3e9eb27` | 64 | 75 |
 | `0990c74` | 65 | 71 |
 | `05d8da1` | 65 | 73 |
+| `03887ff` | 75 | 90 |
 
 What each row is:
 
@@ -246,6 +252,7 @@ What each row is:
 - `3e9eb27` -- ✨ Function calls, with positional arguments
 - `0990c74` -- ✨ Division and what is left over: `÷` and `%`
 - `05d8da1` -- ✨ Moving bits sideways: « » ↺ ↻, and an overflow seen while compiling
+- `03887ff` -- 📝 Time the floating-point sample too
 
 What each program exercises:
 
@@ -270,3 +277,4 @@ What each program exercises:
 - `call-nested` -- four calls, two of them nested
 - `arithmetic-division` -- a division and a remainder, each checked twice
 - `shift-operators` -- two shifts, each with its distance checked
+- `float-arithmetic` -- ten floating-point answers, each asserted
