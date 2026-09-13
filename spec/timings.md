@@ -2,12 +2,14 @@ Compiler Timings
 ================
 
 How long the compiler takes on each sample program, in milliseconds, the
-best of five runs.  One column per commit, added by `bin/pl4g-timing`; a
-blank means the sample did not exist yet at that commit.  Measured on one
-machine, so the numbers are worth comparing with each other and with
-nobody else's.
+best of five runs.  One row per commit and one column per program: the
+commits go on for ever and the programs do not, so the tables grow down
+rather than across, and the programs are split into groups by what would
+move them.  A blank means the sample did not exist yet at that commit.
 
-A hash ending in `+` was measured with changes not yet committed.
+Measured on one machine, so the numbers are worth comparing with each
+other and with nobody else's.  A hash ending in `+` was measured with
+changes not yet committed.  Written by `bin/pl4g-timing`.
 
 Work
 ----
@@ -15,41 +17,119 @@ Work
 The sum of the compiler's own stages, which is what a change to the
 compiler moves.
 
-| program | eee64a3 | af657ad | 2f564cb | 37dbb28 | 1c4ae78 | f391839 | 04c20c9 | 3020cf6 | 9bcaf84 |
-|---|---|---|---|---|---|---|---|---|---|
-| exit0 | 0.90 | 0.89 | 0.88 | 0.89 | 1.06 | 1.05 | 1.07 | 0.93 | 0.99 |
-| global-variable | 1.05 | 1.10 | 1.04 | 1.05 | 1.22 | 1.22 | 1.20 | 1.15 | 1.16 |
-| assign-widths | 1.50 | 1.49 | 1.50 | 1.64 | 1.63 | 1.63 | 1.66 | 1.55 | 1.60 |
-| many-values-at-once | 1.73 | 1.74 | 1.87 | 1.90 | 1.90 | 1.88 | 1.87 | 1.81 | 1.78 |
-| unreached-function | 1.33 | 1.31 | 1.33 | 1.44 | 1.46 | 1.44 | 1.44 | 1.36 | 1.38 |
-| export-visibility | 1.28 | 1.27 | 1.30 | 1.47 | 1.42 | 1.45 | 1.44 | 1.34 | 1.39 |
-| digit-separators | 1.46 | 1.47 | 1.49 | 1.63 | 1.64 | 1.60 | 1.62 | 1.51 | 1.55 |
-| boolean-values | 1.25 | 1.24 | 1.23 | 1.27 | 1.39 | 1.45 | 1.38 | 1.40 | 1.31 |
-| bitwise-operators |  |  | 1.47 | 1.55 | 1.56 | 1.57 | 1.58 | 1.44 | 1.46 |
-| bitwise-precedence |  |  | 1.22 | 1.22 | 1.42 | 1.40 | 1.39 | 1.28 | 1.28 |
+### The smallest programs
+
+What a compilation costs when there is next to nothing to compile.  These move when the driver, the lexer or
+the parser does, and they are the floor everything else is measured against.
+
+| commit | exit0 | digit-separators | boolean-values |
+|---|---|---|---|
+| `eee64a3` | 0.90 | 1.46 | 1.25 |
+| `af657ad` | 0.89 | 1.47 | 1.24 |
+| `2f564cb` | 0.88 | 1.49 | 1.23 |
+| `37dbb28` | 0.89 | 1.63 | 1.27 |
+| `1c4ae78` | 1.06 | 1.64 | 1.39 |
+| `f391839` | 1.05 | 1.60 | 1.45 |
+| `04c20c9` | 1.07 | 1.62 | 1.38 |
+| `3020cf6` | 0.93 | 1.51 | 1.40 |
+| `9bcaf84` | 0.99 | 1.55 | 1.31 |
+| `40c35bb` | 1.00 | 1.52 | 1.29 |
+
+### Variables and memory
+
+Reading and writing variables, including one of every width.  These move when the loads and stores of a
+backend do.
+
+| commit | global-variable | assign-widths |
+|---|---|---|
+| `eee64a3` | 1.05 | 1.50 |
+| `af657ad` | 1.10 | 1.49 |
+| `2f564cb` | 1.04 | 1.50 |
+| `37dbb28` | 1.05 | 1.64 |
+| `1c4ae78` | 1.22 | 1.63 |
+| `f391839` | 1.22 | 1.63 |
+| `04c20c9` | 1.20 | 1.66 |
+| `3020cf6` | 1.15 | 1.55 |
+| `9bcaf84` | 1.16 | 1.60 |
+| `40c35bb` | 1.18 | 1.62 |
+
+### Register pressure
+
+More values wanted at once than a backend can hold in registers.  These move when the register allocator does,
+and they are the only ones that reach the frame.
+
+| commit | many-values-at-once | spill-to-the-frame |
+|---|---|---|
+| `eee64a3` | 1.73 |  |
+| `af657ad` | 1.74 |  |
+| `2f564cb` | 1.87 |  |
+| `37dbb28` | 1.90 |  |
+| `1c4ae78` | 1.90 |  |
+| `f391839` | 1.88 |  |
+| `04c20c9` | 1.87 |  |
+| `3020cf6` | 1.81 |  |
+| `9bcaf84` | 1.78 |  |
+| `40c35bb` | 1.83 | 6.26 |
+
+### What is left out
+
+Definitions the compiler drops and definitions it keeps.  These move when the reachability pass or the
+decision log does.
+
+| commit | unreached-function | export-visibility |
+|---|---|---|
+| `eee64a3` | 1.33 | 1.28 |
+| `af657ad` | 1.31 | 1.27 |
+| `2f564cb` | 1.33 | 1.30 |
+| `37dbb28` | 1.44 | 1.47 |
+| `1c4ae78` | 1.46 | 1.42 |
+| `f391839` | 1.44 | 1.45 |
+| `04c20c9` | 1.44 | 1.44 |
+| `3020cf6` | 1.36 | 1.34 |
+| `9bcaf84` | 1.38 | 1.39 |
+| `40c35bb` | 1.41 | 1.37 |
+
+### Expressions
+
+Operators, and the folding of them.  These move when the expression parser, the semantic analysis or the
+optimizer does.
+
+| commit | bitwise-operators | bitwise-precedence |
+|---|---|---|
+| `eee64a3` |  |  |
+| `af657ad` |  |  |
+| `2f564cb` | 1.47 | 1.22 |
+| `37dbb28` | 1.55 | 1.22 |
+| `1c4ae78` | 1.56 | 1.42 |
+| `f391839` | 1.57 | 1.40 |
+| `04c20c9` | 1.58 | 1.39 |
+| `3020cf6` | 1.44 | 1.28 |
+| `9bcaf84` | 1.46 | 1.28 |
+| `40c35bb` | 1.51 | 1.31 |
 
 Process
 -------
 
 The whole run, which is what someone waiting for the compiler waits
-for.  For the bootstrap compiler this is mostly starting the interpreter and
-importing the package, so it says little about code generation and a good deal
-about how much of the compiler an ordinary compilation has to import.
+for.  For the bootstrap compiler this is mostly starting the
+interpreter and importing the package, so what one sample costs and
+what the next costs is noise; only the range across all of them is
+worth showing here, and every figure is in the JSON beside this file.
 
-| program | eee64a3 | af657ad | 2f564cb | 37dbb28 | 1c4ae78 | f391839 | 04c20c9 | 3020cf6 | 9bcaf84 |
-|---|---|---|---|---|---|---|---|---|---|
-| exit0 | 69 | 69 | 67 | 68 | 71 | 67 | 69 | 71 | 73 |
-| global-variable | 68 | 69 | 69 | 66 | 71 | 70 | 68 | 71 | 71 |
-| assign-widths | 69 | 69 | 70 | 67 | 71 | 69 | 70 | 72 | 74 |
-| many-values-at-once | 69 | 70 | 69 | 69 | 68 | 71 | 68 | 75 | 74 |
-| unreached-function | 71 | 69 | 68 | 66 | 71 | 69 | 69 | 70 | 71 |
-| export-visibility | 68 | 65 | 69 | 69 | 70 | 71 | 68 | 71 | 72 |
-| digit-separators | 68 | 66 | 68 | 68 | 68 | 68 | 70 | 72 | 71 |
-| boolean-values | 68 | 67 | 72 | 69 | 67 | 67 | 67 | 75 | 70 |
-| bitwise-operators |  |  | 72 | 68 | 70 | 68 | 69 | 71 | 72 |
-| bitwise-precedence |  |  | 68 | 67 | 70 | 68 | 68 | 73 | 71 |
+| commit | fastest | slowest |
+|---|---|---|
+| `eee64a3` | 68 | 71 |
+| `af657ad` | 65 | 70 |
+| `2f564cb` | 67 | 72 |
+| `37dbb28` | 66 | 69 |
+| `1c4ae78` | 67 | 71 |
+| `f391839` | 67 | 71 |
+| `04c20c9` | 67 | 70 |
+| `3020cf6` | 70 | 75 |
+| `9bcaf84` | 70 | 74 |
+| `40c35bb` | 70 | 78 |
 
-What each column is:
+What each row is:
 
 - `eee64a3` -- ✨ A register allocator, by linear scan, which does not spill
 - `af657ad` -- ✨ Conditional branches, selected with their comparison and turned round
@@ -60,16 +140,18 @@ What each column is:
 - `04c20c9` -- ✨ A grammar for editors, and a program that shows a log against its source
 - `3020cf6` -- ✨ Spilling to a stack frame, by rewriting and starting again
 - `9bcaf84` -- ⚡ A spilled value is read from the frame once for as many instructions as read it
+- `40c35bb` -- 📝 Timing tables grow down, not across, and are grouped
 
-What each sample exercises:
+What each program exercises:
 
 - `exit0` -- the smallest conforming program
-- `global-variable` -- one variable, read once
-- `assign-widths` -- a store of every width
-- `many-values-at-once` -- four values live at once, which the allocator places
-- `unreached-function` -- a function and a variable that are dropped
-- `export-visibility` -- several definitions, some exported
 - `digit-separators` -- literals in every base
 - `boolean-values` -- truth values in both sections
-- `bitwise-operators` -- an expression with four operators and two variables
+- `global-variable` -- one variable, read once
+- `assign-widths` -- a store of every width
+- `many-values-at-once` -- four values live at once
+- `spill-to-the-frame` -- thirty-two at once, which no target can hold
+- `unreached-function` -- a function and a variable that are dropped
+- `export-visibility` -- several definitions, some exported
+- `bitwise-operators` -- four operators over two variables
 - `bitwise-precedence` -- an expression the folder collapses entirely

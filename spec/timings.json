@@ -9,7 +9,8 @@
     "digit-separators": "literals in every base",
     "boolean-values": "truth values in both sections",
     "bitwise-operators": "an expression with four operators and two variables",
-    "bitwise-precedence": "an expression the folder collapses entirely"
+    "bitwise-precedence": "an expression the folder collapses entirely",
+    "spill-to-the-frame": "thirty-two at once, which no target can hold"
   },
   "commits": [
     {
@@ -47,6 +48,10 @@
     {
       "hash": "9bcaf84",
       "subject": "⚡ A spilled value is read from the frame once for as many instructions as read it"
+    },
+    {
+      "hash": "40c35bb",
+      "subject": "📝 Timing tables grow down, not across, and are grouped"
     }
   ],
   "times": {
@@ -410,6 +415,52 @@
       "bitwise-precedence": [
         1.2799999999999998,
         70.70782000664622
+      ]
+    },
+    "40c35bb": {
+      "exit0": [
+        1.0,
+        74.16284695500508
+      ],
+      "global-variable": [
+        1.1769999999999998,
+        72.94470100896433
+      ],
+      "assign-widths": [
+        1.625,
+        74.3271040264517
+      ],
+      "many-values-at-once": [
+        1.8339999999999999,
+        74.46642394643277
+      ],
+      "unreached-function": [
+        1.41,
+        70.98459696862847
+      ],
+      "export-visibility": [
+        1.372,
+        74.13806999102235
+      ],
+      "digit-separators": [
+        1.518,
+        69.6201300015673
+      ],
+      "boolean-values": [
+        1.293,
+        71.5525530395098
+      ],
+      "bitwise-operators": [
+        1.51,
+        71.32999802706763
+      ],
+      "bitwise-precedence": [
+        1.309,
+        71.26987603260204
+      ],
+      "spill-to-the-frame": [
+        6.26,
+        77.97023502644151
       ]
     }
   }
