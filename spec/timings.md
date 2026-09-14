@@ -74,6 +74,7 @@ the parser does, and they are the floor everything else is measured against.
 | `9958f2d` | 1.12 | 2.03 | 1.86 | 1.51 |
 | `bed0605` | 1.10 | 1.97 | 1.85 | 1.51 |
 | `beb9413` | 1.30 | 2.17 | 2.10 | 1.75 |
+| `e29a5db` | 1.21 | 2.08 | 2.02 | 1.71 |
 
 ### Variables and memory
 
@@ -132,6 +133,7 @@ backend do.
 | `9958f2d` | 1.39 | 1.95 | 1.61 |
 | `bed0605` | 1.33 | 1.83 | 1.62 |
 | `beb9413` | 1.60 | 2.15 | 1.76 |
+| `e29a5db` | 1.44 | 1.93 | 1.94 |
 
 ### Register pressure
 
@@ -190,6 +192,7 @@ and they are the only ones that reach the frame.
 | `9958f2d` | 2.17 | 7.81 |
 | `bed0605` | 2.15 | 7.85 |
 | `beb9413` | 2.21 | 8.25 |
+| `e29a5db` | 2.32 | 7.94 |
 
 ### What is left out
 
@@ -248,6 +251,7 @@ decision log does.
 | `9958f2d` | 1.70 | 1.78 |
 | `bed0605` | 1.68 | 1.75 |
 | `beb9413` | 1.76 | 2.12 |
+| `e29a5db` | 1.92 | 1.94 |
 
 ### Expressions
 
@@ -306,121 +310,124 @@ optimizer does.
 | `9958f2d` | 1.81 | 1.58 | 2.62 | 2.76 | 2.57 | 1.92 | 2.04 | 2.91 | 3.24 | 2.87 | 2.68 | 7.11 | 11.05 | 3.98 | 9.42 | 4.56 | 3.36 | 3.32 |
 | `bed0605` | 1.84 | 1.59 | 2.79 | 2.92 | 2.83 | 1.83 | 2.05 | 2.82 | 3.34 | 2.67 | 2.44 | 6.99 | 11.19 | 3.94 | 9.24 | 4.57 | 3.47 | 3.50 |
 | `beb9413` | 2.15 | 1.86 | 3.21 | 3.18 | 2.91 | 1.98 | 2.01 | 2.90 | 3.44 | 2.70 | 2.49 | 7.13 | 11.21 | 4.22 | 9.34 | 4.73 | 3.52 | 3.57 |
+| `e29a5db` | 2.04 | 1.79 | 3.09 | 3.05 | 2.85 | 2.08 | 2.16 | 2.99 | 3.38 | 2.78 | 2.73 | 7.32 | 11.28 | 4.12 | 9.46 | 4.69 | 3.58 | 3.64 |
 
 ### Types
 
 Definitions the program writes.  These move when the parser, the name resolution or the layout does.
 
-| commit | type-definitions | enum-values | enum-flag | array-fixed | array-slice | array-global | array-table |
-|---|---|---|---|---|---|---|---|
-| `eee64a3` |  |  |  |  |  |  |  |
-| `af657ad` |  |  |  |  |  |  |  |
-| `2f564cb` |  |  |  |  |  |  |  |
-| `37dbb28` |  |  |  |  |  |  |  |
-| `1c4ae78` |  |  |  |  |  |  |  |
-| `f391839` |  |  |  |  |  |  |  |
-| `04c20c9` |  |  |  |  |  |  |  |
-| `3020cf6` |  |  |  |  |  |  |  |
-| `9bcaf84` |  |  |  |  |  |  |  |
-| `40c35bb` |  |  |  |  |  |  |  |
-| `9437d8a` |  |  |  |  |  |  |  |
-| `d0c8cf5` |  |  |  |  |  |  |  |
-| `73ce857` |  |  |  |  |  |  |  |
-| `ed1c028` |  |  |  |  |  |  |  |
-| `1269bd5` |  |  |  |  |  |  |  |
-| `db0b436` |  |  |  |  |  |  |  |
-| `25bb4e0` |  |  |  |  |  |  |  |
-| `baf1f3c` |  |  |  |  |  |  |  |
-| `74ac227` |  |  |  |  |  |  |  |
-| `c0f29f2` |  |  |  |  |  |  |  |
-| `5c3aec4` |  |  |  |  |  |  |  |
-| `f7ba2fc` |  |  |  |  |  |  |  |
-| `3e9eb27` |  |  |  |  |  |  |  |
-| `0990c74` |  |  |  |  |  |  |  |
-| `05d8da1` |  |  |  |  |  |  |  |
-| `03887ff` |  |  |  |  |  |  |  |
-| `87c066b` |  |  |  |  |  |  |  |
-| `ca395a6` |  |  |  |  |  |  |  |
-| `230b8a7` |  |  |  |  |  |  |  |
-| `5706c5f` | 1.42 |  |  |  |  |  |  |
-| `41f13c3` | 1.53 |  |  |  |  |  |  |
-| `e7fb804` | 1.54 |  |  |  |  |  |  |
-| `d0caa00` | 1.60 | 3.76 |  |  |  |  |  |
-| `df0bfc5` | 1.38 | 3.72 | 3.75 |  |  |  |  |
-| `af86f5d` | 1.36 | 3.70 | 3.77 |  |  |  |  |
-| `7de9bb1` | 1.39 | 3.84 | 3.87 |  |  |  |  |
-| `08bdd97` | 1.38 | 3.88 | 4.03 |  |  |  |  |
-| `3ef3db4` | 1.41 | 3.85 | 3.92 |  |  |  |  |
-| `90846b5` | 1.40 | 3.91 | 3.94 |  |  |  |  |
-| `e927edf` | 1.54 | 3.80 | 3.89 |  |  |  |  |
-| `53908ab` | 1.50 | 3.81 | 3.87 |  |  |  |  |
-| `9ffbf29` | 1.29 | 3.49 | 3.42 |  |  |  |  |
-| `603f175` | 1.29 | 3.75 | 3.94 |  |  |  |  |
-| `f067535` | 1.39 | 4.05 | 3.99 |  |  |  |  |
-| `bbf4758` | 1.43 | 4.10 | 4.06 |  |  |  |  |
-| `c374354` | 1.43 | 4.09 | 4.18 |  |  |  |  |
-| `9e55aab` | 1.57 | 4.33 | 4.32 |  |  |  |  |
-| `9958f2d` | 1.46 | 4.07 | 4.05 |  |  |  |  |
-| `bed0605` | 1.42 | 3.99 | 4.03 | 4.64 | 5.44 | 2.77 |  |
-| `beb9413` | 1.48 | 4.13 | 4.16 | 4.82 | 5.74 | 3.14 | 6.76 |
+| commit | type-definitions | enum-values | enum-flag | array-fixed | array-slice | array-global | array-table | array-row |
+|---|---|---|---|---|---|---|---|---|
+| `eee64a3` |  |  |  |  |  |  |  |  |
+| `af657ad` |  |  |  |  |  |  |  |  |
+| `2f564cb` |  |  |  |  |  |  |  |  |
+| `37dbb28` |  |  |  |  |  |  |  |  |
+| `1c4ae78` |  |  |  |  |  |  |  |  |
+| `f391839` |  |  |  |  |  |  |  |  |
+| `04c20c9` |  |  |  |  |  |  |  |  |
+| `3020cf6` |  |  |  |  |  |  |  |  |
+| `9bcaf84` |  |  |  |  |  |  |  |  |
+| `40c35bb` |  |  |  |  |  |  |  |  |
+| `9437d8a` |  |  |  |  |  |  |  |  |
+| `d0c8cf5` |  |  |  |  |  |  |  |  |
+| `73ce857` |  |  |  |  |  |  |  |  |
+| `ed1c028` |  |  |  |  |  |  |  |  |
+| `1269bd5` |  |  |  |  |  |  |  |  |
+| `db0b436` |  |  |  |  |  |  |  |  |
+| `25bb4e0` |  |  |  |  |  |  |  |  |
+| `baf1f3c` |  |  |  |  |  |  |  |  |
+| `74ac227` |  |  |  |  |  |  |  |  |
+| `c0f29f2` |  |  |  |  |  |  |  |  |
+| `5c3aec4` |  |  |  |  |  |  |  |  |
+| `f7ba2fc` |  |  |  |  |  |  |  |  |
+| `3e9eb27` |  |  |  |  |  |  |  |  |
+| `0990c74` |  |  |  |  |  |  |  |  |
+| `05d8da1` |  |  |  |  |  |  |  |  |
+| `03887ff` |  |  |  |  |  |  |  |  |
+| `87c066b` |  |  |  |  |  |  |  |  |
+| `ca395a6` |  |  |  |  |  |  |  |  |
+| `230b8a7` |  |  |  |  |  |  |  |  |
+| `5706c5f` | 1.42 |  |  |  |  |  |  |  |
+| `41f13c3` | 1.53 |  |  |  |  |  |  |  |
+| `e7fb804` | 1.54 |  |  |  |  |  |  |  |
+| `d0caa00` | 1.60 | 3.76 |  |  |  |  |  |  |
+| `df0bfc5` | 1.38 | 3.72 | 3.75 |  |  |  |  |  |
+| `af86f5d` | 1.36 | 3.70 | 3.77 |  |  |  |  |  |
+| `7de9bb1` | 1.39 | 3.84 | 3.87 |  |  |  |  |  |
+| `08bdd97` | 1.38 | 3.88 | 4.03 |  |  |  |  |  |
+| `3ef3db4` | 1.41 | 3.85 | 3.92 |  |  |  |  |  |
+| `90846b5` | 1.40 | 3.91 | 3.94 |  |  |  |  |  |
+| `e927edf` | 1.54 | 3.80 | 3.89 |  |  |  |  |  |
+| `53908ab` | 1.50 | 3.81 | 3.87 |  |  |  |  |  |
+| `9ffbf29` | 1.29 | 3.49 | 3.42 |  |  |  |  |  |
+| `603f175` | 1.29 | 3.75 | 3.94 |  |  |  |  |  |
+| `f067535` | 1.39 | 4.05 | 3.99 |  |  |  |  |  |
+| `bbf4758` | 1.43 | 4.10 | 4.06 |  |  |  |  |  |
+| `c374354` | 1.43 | 4.09 | 4.18 |  |  |  |  |  |
+| `9e55aab` | 1.57 | 4.33 | 4.32 |  |  |  |  |  |
+| `9958f2d` | 1.46 | 4.07 | 4.05 |  |  |  |  |  |
+| `bed0605` | 1.42 | 3.99 | 4.03 | 4.64 | 5.44 | 2.77 |  |  |
+| `beb9413` | 1.48 | 4.13 | 4.16 | 4.82 | 5.74 | 3.14 | 6.76 |  |
+| `e29a5db` | 1.58 | 4.02 | 4.19 | 4.66 | 5.58 | 2.82 | 6.55 | 5.37 |
 
 ### Loops
 
 A branch backwards, which is what makes liveness a question about the graph rather than about the layout.
 These move when the register allocator or the branch lowering does.
 
-| commit | while-loop | while-loop-nested | foreach-over-a-range | foreach-range-step |
-|---|---|---|---|---|
-| `eee64a3` |  |  |  |  |
-| `af657ad` |  |  |  |  |
-| `2f564cb` |  |  |  |  |
-| `37dbb28` |  |  |  |  |
-| `1c4ae78` |  |  |  |  |
-| `f391839` |  |  |  |  |
-| `04c20c9` |  |  |  |  |
-| `3020cf6` |  |  |  |  |
-| `9bcaf84` |  |  |  |  |
-| `40c35bb` |  |  |  |  |
-| `9437d8a` |  |  |  |  |
-| `d0c8cf5` |  |  |  |  |
-| `73ce857` |  |  |  |  |
-| `ed1c028` |  |  |  |  |
-| `1269bd5` |  |  |  |  |
-| `db0b436` |  |  |  |  |
-| `25bb4e0` |  |  |  |  |
-| `baf1f3c` |  |  |  |  |
-| `74ac227` |  |  |  |  |
-| `c0f29f2` |  |  |  |  |
-| `5c3aec4` |  |  |  |  |
-| `f7ba2fc` |  |  |  |  |
-| `3e9eb27` |  |  |  |  |
-| `0990c74` |  |  |  |  |
-| `05d8da1` |  |  |  |  |
-| `03887ff` |  |  |  |  |
-| `87c066b` |  |  |  |  |
-| `ca395a6` |  |  |  |  |
-| `230b8a7` |  |  |  |  |
-| `5706c5f` |  |  |  |  |
-| `41f13c3` |  |  |  |  |
-| `e7fb804` |  |  |  |  |
-| `d0caa00` |  |  |  |  |
-| `df0bfc5` |  |  |  |  |
-| `af86f5d` |  |  |  |  |
-| `7de9bb1` |  |  |  |  |
-| `08bdd97` |  |  |  |  |
-| `3ef3db4` |  |  |  |  |
-| `90846b5` |  |  |  |  |
-| `e927edf` |  |  |  |  |
-| `53908ab` |  |  |  |  |
-| `9ffbf29` |  |  |  |  |
-| `603f175` |  |  |  |  |
-| `f067535` | 2.39 | 3.42 |  |  |
-| `bbf4758` | 2.43 | 3.43 | 2.31 | 3.63 |
-| `c374354` | 2.53 | 3.50 | 2.32 | 3.75 |
-| `9e55aab` | 2.43 | 3.13 | 2.44 | 3.82 |
-| `9958f2d` | 2.28 | 2.89 | 2.20 | 3.59 |
-| `bed0605` | 2.46 | 3.06 | 2.20 | 3.65 |
-| `beb9413` | 2.67 | 3.10 | 2.43 | 3.72 |
+| commit | while-loop | while-loop-nested | foreach-over-a-range | foreach-range-step | foreach-over-an-array | foreach-over-a-collection |
+|---|---|---|---|---|---|---|
+| `eee64a3` |  |  |  |  |  |  |
+| `af657ad` |  |  |  |  |  |  |
+| `2f564cb` |  |  |  |  |  |  |
+| `37dbb28` |  |  |  |  |  |  |
+| `1c4ae78` |  |  |  |  |  |  |
+| `f391839` |  |  |  |  |  |  |
+| `04c20c9` |  |  |  |  |  |  |
+| `3020cf6` |  |  |  |  |  |  |
+| `9bcaf84` |  |  |  |  |  |  |
+| `40c35bb` |  |  |  |  |  |  |
+| `9437d8a` |  |  |  |  |  |  |
+| `d0c8cf5` |  |  |  |  |  |  |
+| `73ce857` |  |  |  |  |  |  |
+| `ed1c028` |  |  |  |  |  |  |
+| `1269bd5` |  |  |  |  |  |  |
+| `db0b436` |  |  |  |  |  |  |
+| `25bb4e0` |  |  |  |  |  |  |
+| `baf1f3c` |  |  |  |  |  |  |
+| `74ac227` |  |  |  |  |  |  |
+| `c0f29f2` |  |  |  |  |  |  |
+| `5c3aec4` |  |  |  |  |  |  |
+| `f7ba2fc` |  |  |  |  |  |  |
+| `3e9eb27` |  |  |  |  |  |  |
+| `0990c74` |  |  |  |  |  |  |
+| `05d8da1` |  |  |  |  |  |  |
+| `03887ff` |  |  |  |  |  |  |
+| `87c066b` |  |  |  |  |  |  |
+| `ca395a6` |  |  |  |  |  |  |
+| `230b8a7` |  |  |  |  |  |  |
+| `5706c5f` |  |  |  |  |  |  |
+| `41f13c3` |  |  |  |  |  |  |
+| `e7fb804` |  |  |  |  |  |  |
+| `d0caa00` |  |  |  |  |  |  |
+| `df0bfc5` |  |  |  |  |  |  |
+| `af86f5d` |  |  |  |  |  |  |
+| `7de9bb1` |  |  |  |  |  |  |
+| `08bdd97` |  |  |  |  |  |  |
+| `3ef3db4` |  |  |  |  |  |  |
+| `90846b5` |  |  |  |  |  |  |
+| `e927edf` |  |  |  |  |  |  |
+| `53908ab` |  |  |  |  |  |  |
+| `9ffbf29` |  |  |  |  |  |  |
+| `603f175` |  |  |  |  |  |  |
+| `f067535` | 2.39 | 3.42 |  |  |  |  |
+| `bbf4758` | 2.43 | 3.43 | 2.31 | 3.63 |  |  |
+| `c374354` | 2.53 | 3.50 | 2.32 | 3.75 |  |  |
+| `9e55aab` | 2.43 | 3.13 | 2.44 | 3.82 |  |  |
+| `9958f2d` | 2.28 | 2.89 | 2.20 | 3.59 |  |  |
+| `bed0605` | 2.46 | 3.06 | 2.20 | 3.65 |  |  |
+| `beb9413` | 2.67 | 3.10 | 2.43 | 3.72 |  |  |
+| `e29a5db` | 2.55 | 3.15 | 2.33 | 3.85 | 7.57 | 23.02 |
 
 ### Collections
 
@@ -479,6 +486,7 @@ changes, and they are the only samples that carry code the compiler wrote for it
 | `9958f2d` | 16.38 | 22.10 | 14.52 | 17.13 |
 | `bed0605` | 16.52 | 22.37 | 14.83 | 17.45 |
 | `beb9413` | 16.62 | 22.60 | 14.64 | 17.49 |
+| `e29a5db` | 16.56 | 22.87 | 14.75 | 17.30 |
 
 Process
 -------
@@ -541,6 +549,7 @@ worth showing here, and every figure is in the JSON beside this file.
 | `9958f2d` | 87 | 108 |
 | `bed0605` | 88 | 114 |
 | `beb9413` | 90 | 115 |
+| `e29a5db` | 92 | 119 |
 
 What each row is:
 
@@ -594,6 +603,7 @@ What each row is:
 - `9958f2d` -- ⚡ Work out every physical register's stretches in one walk
 - `bed0605` -- ✨ Arrays, fixed and dynamic
 - `beb9413` -- ✨ An array has a shape
+- `e29a5db` -- ✨ A loop takes its values from four things, not one
 
 What each program exercises:
 
@@ -633,10 +643,13 @@ What each program exercises:
 - `array-slice` -- a run of elements, passed to a function
 - `array-global` -- an array at the top level, read three times
 - `array-table` -- a table, a cube, and one of no stated shape
+- `array-row` -- a row taken out of a table, and passed on
 - `while-loop` -- one loop, carrying two values
 - `while-loop-nested` -- a loop inside a loop, in both notations
 - `foreach-over-a-range` -- a loop over a range, counting up by one
 - `foreach-range-step` -- three ranges, one of them counting down
+- `foreach-over-an-array` -- a vector, a table by rows, and a run
+- `foreach-over-a-collection` -- a set and a dictionary, walked three ways
 - `collection-syntax` -- a set and a dictionary, read and written
 - `collection-operators` -- all four set operators, over two sets
 - `collection-grows` -- forty entries, which is four doublings
