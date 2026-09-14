@@ -3166,6 +3166,43 @@ the conformance rule this one has.
 
 ---
 
+## 2026-09-15T08:00+02:00 — language
+
+**The operators walk arrays**
+
+Decided on the user's direction, which is the to-do item the `listable` work left open: the arithmetic, the comparisons, the
+bitwise operators and the logical ones walk an array the way a marked function does.
+
+**No attribute is written on them.**  An operator is not a definition and there is nowhere to put one; and every operator that
+would be marked would be marked, which is what saying it of all of them says.  So the rule is the language's rather than each
+operator's, which is the one place this parts company with the function case -- and it parts company for the reason the function
+case gave for putting the attribute on the function: what it means to hand an operator an array is not something a caller should
+have to say, and an operator has no other place to say it.
+
+**The rule is the same rule**, asked of an operator whose operands are never arrays instead of a parameter whose type says what
+it takes.  `_walk_operands` and `_walked` share `_one_less`, `_one_of` and the two diagnostics; what differs is only where the
+stopping point comes from, which for an operator is "not an array" and for a function is the parameter.
+
+**`and` and `or` are not walked, and could not be.**  Which side is worked out is what they are about, and over an array there is
+no such thing as which side: the first element might decide it one way and the second the other.  A program that means the walk
+writes `∧` and `∨`, which work out both sides -- which is the distinction those two spellings were introduced for, arriving here
+with a second thing to say for itself.
+
+**An operator walks by being lowered again**, once per element, with a node holding an already-worked-out value standing where
+each operand was written.  Rejected: pulling the scalar half of each operator out into a function the walk could call.  It is the
+obvious shape and it would have meant every check an operator makes -- the exact-float warning, the folding, the saturating
+forms, which predicate a signed type compares with -- either moving or being duplicated, and a check that exists in two places
+is one that will differ in two places.  Lowering the operator again is the same code by construction.
+
+Compare: APL, BQN and Uiua, where every scalar function threads over arrays and no operator is marked because the whole language
+is this; NumPy and Julia, where the operators on an array are separate definitions on an array type, so the question is answered
+by dispatch rather than by a rule -- which works because those languages have a way to write such a definition and this one does
+not yet; Fortran, whose elemental intrinsics are exactly this and whose operators likewise work element by element on
+conformable arrays, with the conformance rule this one has; and C, C++, Rust and Go, where none of it happens and `v + w` on two
+arrays is either a pointer sum or a compilation error.
+
+---
+
 ---
 
 Open questions

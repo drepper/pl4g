@@ -3979,7 +3979,7 @@
       "number": 4481,
       "name": "LANG_LISTABLE_SHAPES_DIFFER",
       "severity": "error",
-      "message": "this is {found} along, and another argument being walked is {wanted}",
+      "message": "this is {found} along, and another being walked is {wanted}",
       "args": [
         {
           "name": "found",
@@ -3992,7 +3992,7 @@
           "description": "how many the others have"
         }
       ],
-      "cause": "Two arguments walked together are walked in step: the first of one goes with the first of the other, and there is no first of one to go with a second the other does not have.  An argument that is not an array is not walked at all and is handed to every call, so the rule is about the ones being walked and about nothing else.",
+      "cause": "Two things walked together are walked in step: the first of one goes with the first of the other, and there is no first of one to go with a second the other does not have.  One that is not an array is not walked at all and is used at every turn, so the rule is about the ones being walked and about nothing else.  It is the same rule for an operator's two sides as for a listable function's arguments.",
       "spec": {
         "document": "spec/spec.md",
         "section": "The Language / Expressions / Calls",
@@ -4006,7 +4006,7 @@
       "number": 4482,
       "name": "LANG_LISTABLE_CANNOT_WALK",
       "severity": "error",
-      "message": "'{found}' cannot be walked down to the '{wanted}' this parameter takes",
+      "message": "'{found}' cannot be walked down to the '{wanted}' that is wanted here",
       "args": [
         {
           "name": "found",
@@ -4016,14 +4016,14 @@
         {
           "name": "wanted",
           "type": "string",
-          "description": "the type of the parameter"
+          "description": "the type wanted -- a parameter's, or what an operator is defined on"
         }
       ],
-      "cause": "Walking takes one dimension off an array at a time and stops when what is left is what the parameter takes.  Where the two never meet -- an array of a different element type, or one of a length the type does not say, whose shape the answer would have to be and is not known -- there is no walk to make.",
+      "cause": "Walking takes one dimension off an array at a time and stops when what is left is what is wanted: what a parameter takes, or what an operator is defined on.  Where the two never meet -- an array of a different element type, or one of a length the type does not say, whose shape the answer would have to be and is not known -- there is no walk to make.",
       "spec": {
         "document": "spec/spec.md",
         "section": "The Language / Expressions / Calls",
-        "requirement": "An argument walked has a type the walk reaches the parameter's from, and every dimension walked is one the type states."
+        "requirement": "Anything walked has a type the walk reaches the wanted one from, and every dimension walked is one the type states."
       },
       "since": "0.1",
       "default_enabled": true,

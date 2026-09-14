@@ -186,6 +186,20 @@ def _collect_assigned(block: "ast.Block", into: list[str]) -> None:
                 pass
 
 
+def _spread_out(at: int, shape: "tuple[int, ...]") -> "tuple[int, ...]":
+    """Which element of each dimension the *at*-th of the run is.
+
+    Row-major, so the last dimension moves fastest -- the order an array written
+    down is filled in, and the order its elements lie in.
+    """
+    found: list[int] = []
+    left = at
+    for along in reversed(shape):
+        found.append(left % along)
+        left //= along
+    return tuple(reversed(found))
+
+
 def _says_its_type(expr: ast.Expr) -> bool:
     """Whether an expression says on its own what type it has.
 
@@ -387,6 +401,20 @@ def _heap(module: Module) -> GlobalVar:
         name=HEAP_SYMBOL, value_type=ARENA,
         ptr_type=module.types.ptr_type(ARENA, mutable=True),
         initializer=None, linkage=Linkage.INTERNAL), key=HEAP_NAME)
+
+
+@dataclass(frozen=True, slots=True)
+class _Ready(ast.Expr):
+    """A value already worked out, standing where an expression would.
+
+    No parser makes one.  It exists so that an operator walked over an array can
+    be lowered for one element by lowering the operator again with the element
+    in place of what was written -- which means every check and every choice the
+    operator makes is made once per element by the code that already makes it,
+    rather than by a second copy of that code written for the walk.
+    """
+
+    value: Value
 
 
 @dataclass(slots=True)
@@ -4285,6 +4313,8 @@ class Checker:
             case ast.Match():
                 return self._lower_match(builder, expr, builder.function,
                                          expected, True)
+            case _Ready():
+                return expr.value
             case ast.Try():
                 return self._lower_try(builder, expr, expected)
             case ast.Binary() if expr.op is ast.BinaryOp.OR_ELSE:
@@ -4322,19 +4352,33 @@ class Checker:
         what lets `count = 1u8` and `1u8 = count` mean the same thing, the same
         way the bitwise operators do it.
         """
-        if not self._accepts(expected, BOOL):
+        # What is wanted must be a truth value, or an array of them where the
+        # operands turn out to be arrays; which of the two it is, is not known
+        # until they are lowered, so what is asked here is only that the answer
+        # could be either.
+        if expected is not None and self._scalar_of(expected) is not BOOL:
             self._report_mismatch(expr.span, BOOL, expected)
             return UndefConst(ERROR)
         context = self._hint_of(expr.left) or self._hint_of(expr.right)
         outer, self._operand_of = self._operand_of, expr.op.value
+        was_listing, self._listing = self._listing, True
         try:
             left = self._lower_expr(builder, expr.left, context)
-            ty = self._comparable(expr.left.span, expr.op, self._value_type_of(left))
+            ty = self._comparable(expr.left.span, expr.op,
+                                  self._scalar_of(self._value_type_of(left)))
             right = self._lower_expr(builder, expr.right,
                                      ty if ty is not ERROR else context)
         finally:
             self._operand_of = outer
-        found = self._comparable(expr.right.span, expr.op, self._value_type_of(right))
+            self._listing = was_listing
+        if ty is not ERROR:
+            walked = self._walk_operands(builder, expr,
+                                         (("left", left), ("right", right)),
+                                         expected)
+            if walked is not None:
+                return walked
+        found = self._comparable(expr.right.span, expr.op,
+                                 self._scalar_of(self._value_type_of(right)))
         if ty is ERROR or found is ERROR:
             return UndefConst(ERROR)
         if found is not ty:
@@ -4356,6 +4400,10 @@ class Checker:
         # way a signed number is, and nothing else here is ordered at all.
         signed_reading = isinstance(ty, FloatType) or (isinstance(ty, IntType)
                                                        and ty.signed)
+        if not self._accepts(expected, BOOL):
+            # Nothing was walked, so the answer is one truth value after all.
+            self._report_mismatch(expr.span, BOOL, expected)
+            return UndefConst(ERROR)
         return builder.compare(signed if signed_reading else unsigned,
                                left, right, expr.span)
 
@@ -4374,14 +4422,20 @@ class Checker:
         exactly.  Doing it that way round rather than widening both operands
         first is one instruction instead of two and gives the same answer.
         """
-        if not self._accepts(expected, BOOL):
+        # What is wanted must be a truth value, or an array of them where the
+        # operands turn out to be arrays; which of the two it is, is not known
+        # until they are lowered, so what is asked here is only that the answer
+        # could be either.
+        if expected is not None and self._scalar_of(expected) is not BOOL:
             self._report_mismatch(expr.span, BOOL, expected)
             return UndefConst(ERROR)
         context = self._hint_of(expr.left) or self._hint_of(expr.right)
         outer, self._operand_of = self._operand_of, expr.op.value
+        was_listing, self._listing = self._listing, True
         try:
             left = self._lower_expr(builder, expr.left, context)
-            ty = self._value_type_of(left)
+            ty = self._scalar_of(self._value_type_of(left))
+            assert ty is not None
             if ty is not ERROR and not isinstance(ty, FloatType):
                 self._diags.emit(D.LANG_TYPE_APPROXIMATE_NEEDS_A_FLOAT,
                                  expr.left.span, operator=expr.op.value,
@@ -4391,7 +4445,15 @@ class Checker:
                                      ty if ty is not ERROR else context)
         finally:
             self._operand_of = outer
-        found = self._value_type_of(right)
+            self._listing = was_listing
+        if ty is not ERROR:
+            walked = self._walk_operands(builder, expr,
+                                         (("left", left), ("right", right)),
+                                         expected)
+            if walked is not None:
+                return walked
+        found = self._scalar_of(self._value_type_of(right))
+        assert found is not None
         if ty is ERROR or found is ERROR:
             return UndefConst(ERROR)
         if not isinstance(found, FloatType):
@@ -4431,16 +4493,25 @@ class Checker:
         with one rather than a complement: complementing one gives every bit but
         the lowest as well.
         """
-        if not self._accepts(expected, BOOL):
+        if expected is not None and self._scalar_of(expected) is not BOOL:
             self._report_mismatch(expr.span, BOOL, expected)
             return UndefConst(ERROR)
         outer, self._operand_of = self._operand_of, expr.op.value
+        was_listing, self._listing = self._listing, True
         try:
-            left = self._boolean(builder, expr.left, expr.op)
-            right = self._boolean(builder, expr.right, expr.op)
+            left = self._boolean(builder, expr.left, expr.op, walked=True)
+            right = self._boolean(builder, expr.right, expr.op, walked=True)
         finally:
             self._operand_of = outer
+            self._listing = was_listing
         if left is None or right is None:
+            return UndefConst(ERROR)
+        walked = self._walk_operands(builder, expr,
+                                     (("left", left), ("right", right)), expected)
+        if walked is not None:
+            return walked
+        if not self._accepts(expected, BOOL):
+            self._report_mismatch(expr.span, BOOL, expected)
             return UndefConst(ERROR)
         operation, inverted = _LOGIC_OPS[expr.op]
         found = builder.binary(operation, left, right, expr.span)
@@ -4592,18 +4663,24 @@ class Checker:
         return answer
 
     def _boolean(self, builder: IRBuilder, expr: ast.Expr,
-                 op: ast.BinaryOp | ast.UnaryOp) -> Value | None:
+                 op: "ast.BinaryOp | ast.UnaryOp",
+                 walked: bool = False) -> "Value | None":
         """Lower *expr* where only a truth value will do, or report why not.
 
         Nothing else counts as one.  C's rule that any number other than zero is
         true is what `if (x = 0)` comes from, and where the question really is
         whether a number is zero, `≠` asks it.
+
+        *walked* says the operator takes an array of them as well, which the
+        ones that work out both sides do and the ones that work out one side
+        only do not: what `and` would even mean over an array is a question with
+        no answer, since which side is worked out is what it is about.
         """
         value = self._lower_expr(builder, expr, BOOL)
         ty = self._value_type_of(value)
         if ty is ERROR:
             return None
-        if ty is not BOOL:
+        if (self._scalar_of(ty) if walked else ty) is not BOOL:
             self._diags.emit(D.LANG_TYPE_OPERAND_NOT_BOOLEAN, expr.span,
                              operator=op.value, found=ty.render())
             return None
@@ -4699,12 +4776,17 @@ class Checker:
         what lets a literal without a suffix stand on either side of one that
         has a type, which a rule that only looked leftwards would not allow.
         """
-        context = self._aiming_at(expected) if expected is not None \
-            else self._hint_of(expr)
+        # An operator is defined on values and not on arrays, so what is wanted
+        # of each side is what an array of them would be an array of -- which
+        # lets a number stand beside an array and take its element's type.
+        context = self._scalar_of(self._aiming_at(expected)) \
+            if expected is not None else self._hint_of(expr)
         outer, self._operand_of = self._operand_of, expr.op.value
+        was_listing, self._listing = self._listing, True
         try:
             left = self._lower_expr(builder, expr.left, context)
-            ty = self._value_type_of(left)
+            ty = self._scalar_of(self._value_type_of(left))
+            assert ty is not None
             if ty is not ERROR and not self._operand_type_stands(expr.op, ty):
                 self._diags.emit(D.LANG_TYPE_OPERAND_NOT_INTEGER, expr.left.span,
                                  operator=expr.op.value, found=ty.render())
@@ -4713,7 +4795,15 @@ class Checker:
                                      ty if ty is not ERROR else context)
         finally:
             self._operand_of = outer
-        found = self._value_type_of(right)
+            self._listing = was_listing
+        if ty is not ERROR:
+            walked = self._walk_operands(builder, expr,
+                                         (("left", left), ("right", right)),
+                                         expected)
+            if walked is not None:
+                return walked
+        found = self._scalar_of(self._value_type_of(right))
+        assert found is not None
         if ty is ERROR or found is ERROR:
             return UndefConst(ERROR)
         if not self._operand_type_stands(expr.op, found):
@@ -4868,10 +4958,17 @@ class Checker:
         if expr.op is ast.UnaryOp.LOGIC_NOT:
             return self._lower_not(builder, expr, expected)
         outer, self._operand_of = self._operand_of, expr.op.value
+        was_listing, self._listing = self._listing, True
         try:
-            operand = self._lower_expr(builder, expr.operand, expected)
+            operand = self._lower_expr(builder, expr.operand,
+                                       self._scalar_of(expected))
         finally:
             self._operand_of = outer
+            self._listing = was_listing
+        walked = self._walk_operands(builder, expr, (("operand", operand),),
+                                     expected)
+        if walked is not None:
+            return walked
         ty = self._value_type_of(operand)
         if ty is ERROR:
             return UndefConst(ERROR)
@@ -4885,15 +4982,24 @@ class Checker:
     def _lower_not(self, builder: IRBuilder, expr: ast.Unary,
                    expected: Type | None) -> Value:
         """Lower `¬`, which answers the opposite of what its operand says."""
-        if not self._accepts(expected, BOOL):
+        if expected is not None and self._scalar_of(expected) is not BOOL:
             self._report_mismatch(expr.span, BOOL, expected)
             return UndefConst(ERROR)
         outer, self._operand_of = self._operand_of, expr.op.value
+        was_listing, self._listing = self._listing, True
         try:
-            operand = self._boolean(builder, expr.operand, expr.op)
+            operand = self._boolean(builder, expr.operand, expr.op, walked=True)
         finally:
             self._operand_of = outer
+            self._listing = was_listing
         if operand is None:
+            return UndefConst(ERROR)
+        walked = self._walk_operands(builder, expr, (("operand", operand),),
+                                     expected)
+        if walked is not None:
+            return walked
+        if not self._accepts(expected, BOOL):
+            self._report_mismatch(expr.span, BOOL, expected)
             return UndefConst(ERROR)
         return self._negate(builder, operand, expr.span)
 
@@ -5040,6 +5146,110 @@ class Checker:
             self._report_mismatch(expr.span, answer.ty, expected)
             return UndefConst(ERROR)
         return answer
+
+    def _scalar_of(self, ty: "Type | None") -> "Type | None":
+        """What an array is an array of, however many dimensions deep.
+
+        What an operator is defined on is never an array, so this is what is
+        wanted of an operand that may turn out to be one -- and of a literal
+        standing beside it, which is why it is asked of the context and not only
+        of the value.
+        """
+        while isinstance(ty, ArrayType):
+            ty = ty.element
+        return ty
+
+    def _walk_operands(self, builder: IRBuilder, expr: ast.Expr,
+                       given: "Sequence[tuple[str, Value]]",
+                       expected: "Type | None") -> "Value | None":
+        """Where an operand is an array, apply the operator element by element.
+
+        Nothing where none of them is one, which is every operator on every
+        ordinary value and is the path this must not slow down.
+
+        What it does where one of them is: the operands that are arrays are
+        walked in step and the ones that are not are used at every turn, exactly
+        as a `listable` function's arguments are -- one rule, asked of an
+        operator whose operands are never arrays instead of a parameter whose
+        type says what it takes.  The operator is then lowered again for each
+        element with the elements standing where the operands were written, so
+        that every check it makes is made for each, by the code that makes it.
+        """
+        values = [value for _, value in given]
+        if not any(isinstance(value.ty, ArrayType) for value in values):
+            return None
+        wanted = [self._scalar_of(value.ty) for value in values]
+        if any(ty is None or ty is ERROR for ty in wanted):
+            return UndefConst(ERROR)
+        shape = self._shape_walked(values, wanted, expr.span)
+        if shape is None:
+            return UndefConst(ERROR)
+        names = [name for name, _ in given]
+        total = 1
+        for along in shape:
+            total *= along
+        made: list[Value] = []
+        for at in range(total):
+            one = self._element_answer(builder, expr, names, values, wanted,
+                                       _spread_out(at, shape))
+            if self._value_type_of(one) is ERROR:
+                return UndefConst(ERROR)
+            made.append(one)
+        element = self._value_type_of(made[0])
+        answer = self._module.types.array_type(element, shape)
+        place = builder.frame(answer, expr.span)
+        for at, one in enumerate(made):
+            builder.store(
+                self._element_place(builder, place, element,
+                                    builder.int_const(U64, at), expr.span),
+                one, expr.span)
+        held = builder.cast(CastKind.BITCAST, place, answer, expr.span)
+        if not self._accepts(expected, answer):
+            self._report_mismatch(expr.span, answer, expected)
+            return UndefConst(ERROR)
+        return held
+
+    def _shape_walked(self, values: "Sequence[Value]", wanted: "Sequence[Type]",
+                      span: Span) -> "tuple[int, ...] | None":
+        """How many along each dimension the operands are walked."""
+        found: list[int] = []
+        seen = [value.ty for value in values]
+        while True:
+            walked = [at for at, (ty, want) in enumerate(zip(seen, wanted))
+                      if ty is not want]
+            if not walked:
+                return tuple(found)
+            along: "int | None" = None
+            for at in walked:
+                ty = seen[at]
+                if not (isinstance(ty, ArrayType) and ty.fixed):
+                    self._diags.emit(D.LANG_LISTABLE_CANNOT_WALK, span,
+                                     found=ty.render(), wanted=wanted[at].render())
+                    return None
+                if along is None:
+                    along = ty.shape[0]
+                elif along != ty.shape[0]:
+                    self._diags.emit(D.LANG_LISTABLE_SHAPES_DIFFER, span,
+                                     found=ty.shape[0], wanted=along)
+                    return None
+                seen[at] = self._one_less(ty)
+            assert along is not None
+            found.append(along)
+
+    def _element_answer(self, builder: IRBuilder, expr: ast.Expr,
+                        names: "Sequence[str]", values: "Sequence[Value]",
+                        wanted: "Sequence[Type]", index: "tuple[int, ...]") -> Value:
+        """Lower the operator once, for the element the index names."""
+        taken: dict[str, object] = {}
+        for name, value, want in zip(names, values, wanted):
+            picked = value
+            for along in index:
+                ty = self._value_type_of(picked)
+                if ty is want or not isinstance(ty, ArrayType):
+                    break
+                picked = self._one_of(builder, picked, want, along, expr.span)
+            taken[name] = _Ready(span=expr.span, value=picked)
+        return self._lower_expr(builder, replace(expr, **taken), None)
 
     def _walked(self, builder: IRBuilder, func: Function,
                 args: "list[Value]", expr: ast.Call,
@@ -5517,9 +5727,13 @@ class Checker:
                              found=found.render(), expected=expected.render())
             return
         if self._operand_of is not None:
-            # Two different mistakes: an operand of a kind the operator has no
-            # meaning for, and two operands of one kind whose widths differ.
-            if not isinstance(found, IntType):
+            # Three different mistakes: an operand where a truth value is what
+            # the operator takes, one of a kind the operator has no meaning for,
+            # and two operands of one kind whose widths differ.
+            if expected is BOOL:
+                self._diags.emit(D.LANG_TYPE_OPERAND_NOT_BOOLEAN, span,
+                                 operator=self._operand_of, found=found.render())
+            elif not isinstance(found, IntType):
                 self._diags.emit(D.LANG_TYPE_OPERAND_NOT_INTEGER, span,
                                  operator=self._operand_of, found=found.render())
             else:

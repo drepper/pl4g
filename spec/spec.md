@@ -2216,6 +2216,26 @@ neither can one the walk never reaches the parameter's type from.
 
 **A function that takes nothing may not be marked** (4483): there is nothing to hand it an array in place of.
 
+**The operators walk arrays too**, and by the same rule.  No attribute is written on them: an operator is not a definition, so
+there is nowhere to write one, and every operator that would be marked would be marked -- which is what saying it of all of them
+says.
+
+```
+v + w                            ※ both sides walked, in step
+v + 10u8                         ※ one side walked, the number used at every turn
+v > 2u8                          ※ bool⟦3⟧: the answer is the operator's type
+m + col                          ※ a table against a column: each row meets its number
+```
+
+What is walked is **everything that works out both of its sides**: the arithmetic and its saturating forms, the comparisons
+exact and approximate, the bitwise operators and the shifts, the logical operators written with glyphs, and the two written
+before their operand.  The walk goes down to what the operator is defined on, which is never an array, so it goes all the way.
+
+**`and` and `or` are not walked**, and could not be.  Which side is worked out is what they are about, and over an array there is
+no such thing as which side: the first element might decide it one way and the second the other.  A program that means the walk
+writes `∧` and `∨`, which work out both sides and say so.
+
+
 **The calls are written out**, one per element, rather than made in a loop.  That is what a shape known while compiling makes
 possible and is why one is required; a loop would be wanted where the shapes grow, and nothing about what this means would change.
 

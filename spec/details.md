@@ -1059,6 +1059,23 @@ lets `added(v, 10)` work: the literal still asks `_aiming_at` for the parameter'
 let through permissively is then checked once, by `_walking_shape`, which is the only place that can say what is wrong with a
 *walk* rather than with an argument -- a dimension the type does not state, or two arguments that disagree.
 
+**An operator walks by being lowered again.**  Each operator's lowering pauses after its operands are lowered and asks
+`_walk_operands`; where none of them is an array -- which is every operator on every ordinary value, and the path this must not
+slow down -- it answers nothing and the lowering carries on as it was.  Where one is, the operator is lowered once per element
+with a `_Ready` node standing where each operand was written: a node no parser makes, holding a value already worked out.  So
+every check and every choice the operator makes -- the exact-float warning, the constant folding, the saturating forms, which
+comparison predicate a signed type takes -- is made for each element by the code that already makes it, rather than by a second
+copy of that code written for the walk.
+
+What that costs is one line in each operator: the operand's context is asked of `_scalar_of`, so that a number written beside an
+array takes the array's element type; `_listing` is in force while the operands are lowered, so that an array is let through
+where one of its elements is wanted; and `_walk_operands` is asked once afterwards.  The two that answer a truth value had to
+have their early check relaxed as well -- what is wanted of them may be an array of truth values, which is not known until the
+operands are lowered.
+
+**`and` and `or` do not walk**, and `_boolean` takes a flag saying which kind of operator is asking rather than accepting an
+array everywhere: which side is worked out is what they are about, and over an array there is no such thing as which side.
+
 **The calls are written out rather than looped**, one per element of the shape.  A loop would need the answer's storage and the
 index to be worked out at run time, which is the same machinery a dynamic array wants; both are the same piece of work and neither
 is here.  What it costs today is code proportional to the shape, which is why a shape the type states is required and not merely

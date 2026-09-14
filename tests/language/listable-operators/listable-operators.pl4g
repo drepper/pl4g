@@ -1,0 +1,43 @@
+※ pl4g-test: compile=ok run=native,qemu exit=42 diag=none
+
+※ The operators walk an array the way a `listable` function does, and it is the
+※ same rule: the sides that are arrays are walked in step, the sides that are
+※ not are used at every turn, and the walk goes down to what the operator is
+※ defined on -- which is never an array, so it goes all the way.
+※
+※ What is walked is everything that works out both of its sides: the arithmetic,
+※ the comparisons, the bitwise operators and the shifts, the logical ones written
+※ with glyphs, and the two written before their operand.  `and` and `or` are not,
+※ and could not be: which side is worked out is what they are about, and over an
+※ array there is no such thing as which side.
+※
+※ The answer's shape is the argument's and what it holds is the operator's, so a
+※ comparison over an array of numbers gives an array of truth values.
+
+@[startup]
+fn main() → u8:
+    let v: u8⟦3⟧ = ⟦1u8, 2u8, 3u8⟧
+    let w: u8⟦3⟧ = ⟦10u8, 20u8, 30u8⟧
+    ※ both sides walked, in step
+    let sum: u8⟦3⟧ = v + w
+    ※ one side walked and a number used at every turn, either way round
+    let up: u8⟦3⟧ = v + 10u8
+    let down: u8⟦3⟧ = 40u8 - v
+    ※ a comparison, whose answer is of the operator's type and not the argument's
+    let over: bool⟦3⟧ = v > 2u8
+    ※ the logical operators that work out both sides, and the two unary ones
+    let both: bool⟦3⟧ = over ∧ ¬over
+    let bits: u8⟦3⟧ = ~v & 15u8
+    ※ a shift, and the saturating arithmetic
+    let wide: u8⟦3⟧ = v « 2u8
+    let held: u8⟦3⟧ = v ⊠ 200u8
+    ※ a table walked against a column: each row meets its own number
+    let m: u8⟦2,3⟧ = ⟦⟦1u8, 2u8, 3u8⟧, ⟦4u8, 5u8, 6u8⟧⟧
+    let col: u8⟦2⟧ = ⟦10u8, 20u8⟧
+    let raised: u8⟦2,3⟧ = m + col
+    let counted: u8 = sum⟦0⟧ + up⟦0⟧ + down⟦2⟧ + bits⟦2⟧ + wide⟦0⟧
+    if over⟦2⟧ ∧ ¬over⟦0⟧ ∧ ¬both⟦1⟧ ∧ held⟦2⟧ = 255u8 ∧ raised⟦1,0⟧ = 24u8:
+        ※ 11 + 11 + 37 + 12 + 4 = 75, less what the checks stand for
+        counted - 33u8
+    else:
+        0u8

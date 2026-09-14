@@ -126,7 +126,8 @@ GROUPS: tuple[Group, ...] = (
            "array-global": "an array at the top level, read three times",
            "array-table": "a table, a cube, and one of no stated shape",
            "array-row": "a row taken out of a table, and passed on",
-           "listable-over-an-array": "four walks, one of them over a table twice"}),
+           "listable-over-an-array": "four walks, one of them over a table twice",
+           "listable-operators": "ten operators walked, and a table against a column"}),
     Group("Loops",
           "A branch backwards, which is what makes liveness a question about "
           "the graph rather than about the layout.  These move when the "

@@ -480,10 +480,10 @@ To Do List for the PL4g language
     say that a parameter is not shared with anything the caller can still see.  A type that said so -- the parameter is this
     call's alone -- would make such a function pure and is what C's `restrict` gestures at.
 
-[ ] decide whether the built-in operators walk arrays, so that `v + w` is element by element.  `@[listable]` says it of a
-    function and the mechanism would carry over unchanged, but an operator is not a definition and there is nowhere to write the
-    attribute; making them all walk is a decision about the language rather than about one function, and making none of them walk
-    leaves a program writing `added(v, w)` for what every array language spells `v + w`.
+[x] the built-in operators walk arrays, so that `v + w` is element by element.  Done: the arithmetic, the comparisons exact and
+    approximate, the bitwise operators and the shifts, the logical ones written with glyphs, and the two written before their
+    operand.  No attribute, an operator being no definition and every one that would be marked being marked.  `and` and `or` are
+    not walked and could not be, which side is worked out being what they are about.
 
 [ ] walk an array whose type does not say its length.  Refused today (4482): the answer's shape is the shape walked, and the room
     for it is taken before the calls are written.  It wants what a dynamic array wants anyway -- storage worked out while the
