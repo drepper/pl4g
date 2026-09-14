@@ -15,6 +15,12 @@ from conftest import describe, run_compiler
 pytestmark = pytest.mark.skipif(not shutil.which("make"), reason="make is not installed")
 
 
+#: Every test here builds in the same directory, so they run on one worker:
+#: one of them running `make clean` while another looks for what it built is a
+#: failure with nothing wrong in it.
+pytestmark = pytest.mark.xdist_group("examples")
+
+
 @pytest.fixture(scope="module")
 def examples(root: Path) -> Path:
     """The examples directory."""

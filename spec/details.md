@@ -636,6 +636,45 @@ shared layers had to be able to express:
 | Segment alignment | 4 KiB | 64 KiB | 4 KiB |
 
 
+Microarchitecture levels
+------------------------
+
+"x86-64" has meant several quite different machines over twenty-five years, and the architecture's own documentation names four
+sets of features -- `x86-64-v1` through `x86-64-v4` -- for saying which one a program was built for.  `--mclevel=LEVEL` says which
+one to build for, and `v4` is what a program gets unless it says otherwise.
+
+**The name is interpreted by the target and by nothing else.**  The levels are each architecture's own: they are the names that
+architecture's documentation gives to what a processor of a given age can do, so there is no set of them the targets share and a
+name from one means nothing to another.  A target says which it has, by having them; asking for a level of one that has none is
+reported (1012), and asking for a name that is not one of its is reported with the list (1011).  AArch64 and RISC-V have none here.
+
+**A program says at its own entry point whether the processor can run it.**  Before the constructors, before the startup function,
+a program built for anything but the oldest level asks the processor what it has; where it has not got it, the program writes one
+line to standard error and exits with status 1.  That is the difference between a sentence and an illegal instruction in the
+middle of somebody else's afternoon.
+
+- **`CPUID` is what asks**, which is the instruction the architecture provides for the question.  It is answered the same way on
+  every operating system, it needs nothing to be mounted, and it cannot be out of date about the processor the program is
+  actually running on -- which a file the kernel wrote can be.
+- **One `CPUID` per leaf**, its answer masked down to the bits the level wants and compared against that mask: all of them or
+  none of it.  The leaves and the bits are in `levels.py`, written out with the names the architecture's tables use, and nothing
+  about which bit means what is decided anywhere else.
+- **A leaf is asked to exist before it is asked anything.**  Leaf zero answers with the highest ordinary leaf and leaf
+  `0x80000000` with the highest extended one, so each is asked once first; a processor old enough not to have leaf seven is old
+  enough not to have what leaf seven would have reported.
+- **It exits rather than trapping.**  Nothing has gone wrong inside the program -- it is the machine that is wrong for it -- and a
+  signal would say that something had.
+
+**v1 emits nothing**, every x86-64 processor having v1 by being one.  What the others cost is a few hundred bytes run once, which
+`test_asking_the_processor_is_what_a_level_costs` states as a number so that a change to it is something somebody chose.  The
+tests that are about how small an image can be, and the golden assembly dumps, are built at v1 for the same reason: what they are
+about is the program, and the same forty lines repeated in each of them would bury it.
+
+**Nothing generated uses a level yet.**  Every instruction this compiler emits is in v1, so today the level is a promise about
+what the code generator may do rather than a description of what it does.  The check is worth having before the code that needs
+it: it is what makes adding such code a change to one place.
+
+
 Variables
 ---------
 

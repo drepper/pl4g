@@ -104,6 +104,7 @@ EAX: Final[PhysReg] = reg("eax")
 ECX: Final[PhysReg] = reg("ecx")
 EDX: Final[PhysReg] = reg("edx")
 EBP: Final[PhysReg] = reg("ebp")
+EBX: Final[PhysReg] = reg("ebx")
 EDI: Final[PhysReg] = reg("edi")
 ESI: Final[PhysReg] = reg("esi")
 

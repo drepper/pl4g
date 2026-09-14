@@ -278,6 +278,15 @@ To Do List for the pypl4g compiler
     reads the answer.  Dropping it would mean dropping the `frame` that was made for it too, which is a thing the sweep could
     learn: a frame nothing else reads, handed to one call and read by loads that go with it.
 
+[ ] generate for the microarchitecture level.  `--mclevel` is read, checked and enforced at startup, and nothing the code
+    generator emits is above v1 -- so the level is a promise about what it may do rather than a description of what it does.
+    `POPCNT` and `LZCNT` from v2 and v3 are the two the compiler would use first, both standing in for a loop today.
+
+[ ] ask `XGETBV` as well as `CPUID` for the levels that want vector state.  `OSXSAVE` says the processor lets the operating
+    system enable the wide registers; that the operating system has actually enabled them is a further question, and the answer
+    is in `XCR0`.  Nothing is generated that uses them, so nothing depends on it yet; a v3 or v4 program on a kernel that had
+    turned AVX off would pass the check and fault.
+
 [ ] count registers per part recursively.  `parts_of` gives a tuple its members and stops, so a member that is itself several
     values -- a result among them, `〈u8?, u8〉` -- is given one register where it needs two, and the program is refused with a
     message about an encoding of `mov`.  It has never worked; what it wants is for everything that counts parts to flatten, which

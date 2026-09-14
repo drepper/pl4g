@@ -3203,6 +3203,53 @@ arrays is either a pointer sum or a compilation error.
 
 ---
 
+## 2026-09-15T10:00+02:00 — compiler
+
+**Microarchitecture levels**
+
+Decided on the user's direction: `--mclevel=LEVEL`, read by each target for itself; x86-64 takes `v1` to `v4`, defaults to `v4`,
+and has a program check for its level at startup with `CPUID` rather than through a file.
+
+**The option is one option and the names are the target's.**  A level is not a property compilers share: they are the names one
+architecture's own documentation gives to what a processor of a given age can do, and there is no meaning to `v3` on AArch64.  So
+the driver validates nothing itself -- it asks the target what it has and reports either that there are none (1012) or that this
+is not one of them, with the list (1011).  Rejected: a shared enumeration of "levels" across targets, which would have had to
+invent a meaning for each name on each architecture.
+
+**The default is the newest, which is the aggressive choice and the right one.**  A program built for v4 that lands on an older
+machine says so in one line the moment it is started; a program built for v1 runs everywhere and quietly leaves twenty years of
+instructions on the table, with nothing to tell anyone.  Which of those two a reader would rather have found out about is not a
+close question.  The cost is borne by the other half of this: without the check, the aggressive default would mean an illegal
+instruction in the middle of somebody's afternoon, and that would make the conservative default the only defensible one.
+
+**`CPUID` and not `/proc/cpuinfo`.**  The user asked for the instruction and it is what the architecture provides for exactly
+this question: answered the same way on every operating system, needing nothing to be mounted, and unable to be out of date about
+the processor the program is actually running on -- which a file the kernel wrote can be, on a machine whose processors differ or
+whose kernel was told to lie.  It is also the only one available to a program that depends on nothing from the system, which this
+compiler's output is.
+
+**A leaf is asked to exist before it is asked anything**, leaf zero and leaf `0x80000000` answering with the highest ordinary and
+extended leaves.  A processor old enough not to have leaf seven is old enough not to have what leaf seven reports, so the
+existence check and the feature check give the same answer -- but reading a leaf that does not exist gives whatever the highest
+one does, which is a wrong answer rather than no answer.
+
+**It exits rather than trapping**, which is where this parts company with how the language reports a fault.  A fault is the
+program doing something it cannot; this is the program being started on a machine it was not built for, and nothing inside it has
+gone wrong.  A signal would say that something had.
+
+Compare: GCC and Clang's `-march=x86-64-v3`, which is where the names come from and which generate for the level and check
+nothing -- the resulting `SIGILL` being what the level exists to explain afterwards; glibc's `ld.so`, which does check, through
+`CPUID` in the loader, and can pick between several builds of a library because there is a loader to do the picking; Go, which
+checks a small set of features in its runtime at startup and prints a line very like this one; and the Linux kernel, which checks
+at boot and prints what is missing.  This follows the last two: the check belongs in the program when there is nothing else to
+put it in.
+
+**Nothing generated uses a level yet**, every instruction this compiler emits being in v1.  The check is worth having before the
+code that needs it, since it is what makes adding such code a change to one place -- and having it now is what makes the default
+defensible now.
+
+---
+
 ---
 
 Open questions

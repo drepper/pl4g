@@ -90,14 +90,22 @@ class Built:
 @pytest.fixture(scope="module", params=compiler_targets())
 def built(request: pytest.FixtureRequest,
           tmp_path_factory: pytest.TempPathFactory) -> Built:
-    """Compile the smallest conforming program for one target."""
+    """Compile the smallest conforming program for one target.
+
+    At the oldest microarchitecture level, which on x86-64 is what makes it the
+    smallest: every level above it has the program ask the processor whether it
+    can run at all, which is code and is meant to be.  What that costs is said
+    below, on its own, rather than mixed into what a program is.
+    """
     triple = str(request.param)
     directory = tmp_path_factory.mktemp("".join(("elf-", architecture_of(triple))))
     source = directory / "exit0.pl4g"
     source.write_text(SOURCE, encoding="utf-8")
     output = directory / "exit0"
-    proc = run_compiler(["-o", str(output), "-O1", "".join(("--target=", triple)),
-                         str(source)])
+    arguments = ["-o", str(output), "-O1", "".join(("--target=", triple))]
+    if architecture_of(triple) == "x86_64":
+        arguments.append("--mclevel=v1")
+    proc = run_compiler([*arguments, str(source)])
     assert proc.returncode == 0, describe(proc)
     return Built(triple=triple, path=output, image=elfcheck.parse(output.read_bytes()))
 
@@ -259,6 +267,31 @@ def test_disassembles_to_the_expected_code(built: Built) -> None:
 def test_the_image_is_small(built: Built) -> None:
     """Generating small code is a stated priority; this notices a regression."""
     assert built.path.stat().st_size < 1024
+
+
+def test_asking_the_processor_is_what_a_level_costs(tmp_path: Path) -> None:
+    """What the default level adds to every program, said once and in one place.
+
+    A few hundred bytes of `CPUID` and a message, run once before anything else.
+    The number is here so that a change to it is a thing somebody chose rather
+    than something that happened, and so that a reader deciding between the
+    levels can see what the choice is about.
+    """
+    source = tmp_path / "exit0.pl4g"
+    source.write_text(SOURCE, encoding="utf-8")
+    sizes: dict[str, int] = {}
+    for level in ("v1", "v2", "v3", "v4"):
+        output = tmp_path / level
+        proc = run_compiler(["-o", str(output), "-O1",
+                             "--target=x86_64-linux-none",
+                             "".join(("--mclevel=", level)), str(source)])
+        assert proc.returncode == 0, describe(proc)
+        sizes[level] = output.stat().st_size
+    assert sizes["v1"] < sizes["v2"] < sizes["v3"], sizes
+    # v4 asks one more leaf than v3 does and asks it of a leaf already being
+    # asked, so it costs nothing beyond the wider mask.
+    assert sizes["v4"] == sizes["v3"], sizes
+    assert sizes["v4"] - sizes["v1"] < 512, sizes
 
 
 def test_a_group_with_nothing_in_it_costs_no_segment(built: Built) -> None:

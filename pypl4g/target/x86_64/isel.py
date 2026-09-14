@@ -96,6 +96,7 @@ _CMOV: Final[dict[Condition, str]] = {
 #: Operations that map to a single instruction with no operands.
 _NULLARY: Final[dict[str, str]] = {
     x86ops.SYSCALL.name: "syscall",
+    x86ops.CPUID.name: "cpuid",
     ops.TRAP.name: "ud2",
 }
 

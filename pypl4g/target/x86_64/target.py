@@ -24,6 +24,7 @@ from ..pool import Constants
 from ..globals import emit_globals
 from ..target import ImageDefaults
 from .abi import CC_PL4G, lookup as lookup_cconv
+from . import levels
 from .encoder import EncodingError, encode
 from .isel import UnsupportedOperation, X86Selector, lower_function
 from .opcodes import X86_INSTRS
@@ -46,11 +47,27 @@ IMAGE_DEFAULTS: Final[ImageDefaults] = ImageDefaults(
 class X86_64Target:
     """Code generation for x86-64."""
 
+    #: The levels this architecture defines, oldest first, and the one a
+    #: program is built for unless it says otherwise.  Everything about what
+    #: they mean is in `levels`; what is here is only that this target has them.
+    mclevels: "tuple[str, ...]" = levels.NAMES
+    mclevel_default: str = levels.DEFAULT
+
     def __init__(self) -> None:
         self.triple: str = "x86_64-linux-none"
         self.pointer_bits: int = 64
         self.registers: RegisterInfo = INFO
         self.table = InstrTable(X86_INSTRS)
+        self._mclevel: str = levels.DEFAULT
+
+    def use_mclevel(self, name: str) -> None:
+        """Generate for this level from now on.
+
+        Checked before it is set, by whoever read the command line: what a name
+        means is this target's business, so what is and is not a name is too.
+        """
+        assert name in levels.NAMES, name
+        self._mclevel = name
 
     def encode(self, inst: MCInst) -> tuple[bytes, list[MCFixup]]:
         """Encode one instruction."""
@@ -136,7 +153,10 @@ class X86_64Target:
             # function that faults follows: it is written as instructions,
             # and hand-written code names its registers outright.
             emit_abort(asm, lookup_cconv(SYSTEM_CCONV))
-        emit_start(asm, module, lookup_cconv(module.startup.cconv))
+        refused = messages.symbol(levels.described(self._mclevel)) \
+            if levels.requirements(self._mclevel) else None
+        emit_start(asm, module, lookup_cconv(module.startup.cconv),
+                   self._mclevel, refused)
         messages.emit(asm)
         constants.emit(asm)
 

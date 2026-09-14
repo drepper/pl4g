@@ -16,7 +16,11 @@ testpaths = ["tests"]
 # with sixty-four of them, which is the difference between running the suite
 # after each change and running it when it occurs to you.  `-n0` on the command
 # line puts it back in one process, which is what a debugger wants.
-addopts = ["-n", "auto"]
+# `loadgroup` rather than the default, so that tests marked as one group land
+# on one worker: the ones that build the examples share a build directory, and
+# one of them running `make clean` while another looks for what it built is a
+# failure with nothing wrong in it.
+addopts = ["-n", "auto", "--dist", "loadgroup"]
 markers = [
     "qemu: runs the generated binary under qemu-user",
     "objdump: compares generated encodings against an external disassembler",

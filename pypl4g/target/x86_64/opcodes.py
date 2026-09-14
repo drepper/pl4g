@@ -10,7 +10,8 @@ from typing import Final
 
 from ...mc.desc import InstFlags, OperandKind, OperandRole, OperandSpec
 from .desc import ModRMUse, OpMap, OpSize, X86InstDesc
-from .regs import CALLER_SAVED, EFLAGS, GPR, R11, RAX, RCX, RDX, VEC
+from .regs import (CALLER_SAVED, EFLAGS, GPR, R11, RAX, RBX, RCX, RDX,
+                   VEC)
 
 
 def _r(bits: int) -> OperandSpec:
@@ -561,6 +562,13 @@ X86_INSTRS: Final[tuple[X86InstDesc, ...]] = (
     # syscall                            0F 05
     X86InstDesc("syscall", (), opcode=0x05, map=OpMap.M0F,
                 implicit_defs=(RCX, R11, EFLAGS), est_size=2),
+    # cpuid                              0F A2
+    # It reads the leaf in EAX and the subleaf in ECX and answers in all four,
+    # which is why every one of them is written down: nothing else tells the
+    # register allocator that a value in EBX does not survive it.
+    X86InstDesc("cpuid", (), opcode=0xA2, map=OpMap.M0F,
+                implicit_uses=(RAX, RCX),
+                implicit_defs=(RAX, RBX, RCX, RDX), est_size=2),
     # ud2                                0F 0B
     X86InstDesc("ud2", (), opcode=0x0B, map=OpMap.M0F,
                 flags=InstFlags.TERMINATOR | InstFlags.BARRIER, est_size=2),

@@ -103,6 +103,9 @@ class CommandLine:
         if word.startswith("--target="):
             self._options.triple = word[len("--target="):]
             return index
+        if word.startswith("--mclevel="):
+            self._options.mclevel = word[len("--mclevel="):]
+            return index
         if word.startswith("--module-path="):
             self._options.module_path.extend(
                 parse_search_path(word[len("--module-path="):]))

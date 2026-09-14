@@ -65,11 +65,19 @@ def test_asm_matches_golden(root: Path, name: str, triple: str,
 
     There is one dump per architecture, so a change in either backend has to be
     acknowledged rather than slipping through.
+
+    At the oldest microarchitecture level on x86-64, so that what the dump shows
+    is the program.  Every level above it puts the same forty-odd lines of
+    `CPUID` at the entry point of every program, which would be repeated in each
+    of these files and would bury the thing each file is about; what that code
+    is, is checked where it is the subject.
     """
     output = tmp_path / "out.asm"
-    proc = run_compiler(["-o", str(output), "--emit=asm", "-O1",
-                         "".join(("--target=", triple)),
-                         str(_language_test(root, name))])
+    arguments = ["-o", str(output), "--emit=asm", "-O1",
+                 "".join(("--target=", triple))]
+    if architecture_of(triple) == "x86_64":
+        arguments.append("--mclevel=v1")
+    proc = run_compiler([*arguments, str(_language_test(root, name))])
     assert proc.returncode == 0, describe(proc)
     golden = GOLDEN / "".join((name, ".", architecture_of(triple), ".asm"))
     _compare(golden, output.read_text(encoding="utf-8"))

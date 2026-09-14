@@ -12,3 +12,7 @@ from ...mc.ops import Op, register
 #: Enters the kernel.  No destination, and the operands it reads and writes are
 #: fixed by the calling convention of the system call interface.
 SYSCALL: Final[Op] = register(Op("x86.syscall", 0, has_result=False))
+
+#: Asks the processor what it can do.  The leaf goes in EAX and the subleaf in
+#: ECX; all four of EAX, EBX, ECX and EDX come back written.
+CPUID: Final[Op] = register(Op("x86.cpuid", 0, has_result=False))

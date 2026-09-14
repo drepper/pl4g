@@ -138,11 +138,37 @@ class Driver:
         self._timed("optimization", start)
         return module
 
+    def _settle_mclevel(self, target: object) -> bool:
+        """Tell the target which of its microarchitecture levels to generate for.
+
+        What the levels are is each architecture's own business -- they are the
+        names its own documentation gives to what a processor of a given age can
+        do -- so there is no set of them all the targets share, and a name from
+        one means nothing to another.  A target that has none says so by having
+        none, and asking for a level of it is asking for something with no
+        meaning rather than for the only thing there is.
+        """
+        wanted = self.options.mclevel
+        known: "tuple[str, ...]" = getattr(target, "mclevels", ())
+        if wanted is None:
+            return True
+        if not known:
+            self.diags.emit(D.IMPL_CLI_NO_MCLEVELS, triple=self.options.triple)
+            return False
+        if wanted not in known:
+            self.diags.emit(D.IMPL_CLI_UNKNOWN_MCLEVEL, level=wanted,
+                            triple=self.options.triple, known=", ".join(known))
+            return False
+        target.use_mclevel(wanted)  # type: ignore[attr-defined]
+        return True
+
     def _generate(self, module: Module) -> int:
         """Generate code and write the image."""
         target = lookup_target(self.options.triple)
         if target is None:
             self.diags.emit(D.IMPL_CLI_UNKNOWN_TARGET, triple=self.options.triple)
+            return ExitCode.ERRORS
+        if not self._settle_mclevel(target):
             return ExitCode.ERRORS
         start = perf_counter()
         streamer = MCStreamer(encode=target.encode)

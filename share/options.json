@@ -45,6 +45,14 @@
       "help": "generate code for TRIPLE"
     },
     {
+      "short": null,
+      "long": "--mclevel",
+      "arg": "joined_equals",
+      "metavar": "LEVEL",
+      "since": "0.1",
+      "help": "the microarchitecture level the generated program may use; x86-64 has v1 to v4 and uses v4 unless this says otherwise"
+    },
+    {
       "short": "-O",
       "long": null,
       "arg": "joined",
