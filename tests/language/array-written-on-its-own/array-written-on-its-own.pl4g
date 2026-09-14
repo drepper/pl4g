@@ -1,0 +1,15 @@
+※ pl4g-test: compile=ok run=native,qemu exit=42 diag=none
+
+※ An array written where nothing says what type is wanted of it takes its type
+※ from its elements: they are of one type and there are as many of them as are
+※ written, which is the whole of an array's type.  Nothing else could say it,
+※ and refusing to read it would refuse a thing every part of which is written
+※ down.
+
+@[startup]
+fn main() → u8:
+    ※ looked in where it stands, with no name and no type anywhere
+    let one: u8 = ⟦42u8, 2u8⟧⟦0⟧
+    ※ the same, a dimension deep
+    let two: u8 = ⟦⟦1u8, 2u8⟧, ⟦3u8, 4u8⟧⟧⟦1, 1⟧
+    one - two + 4u8

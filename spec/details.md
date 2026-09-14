@@ -778,6 +778,19 @@ ended up with.
 which variables are read and written, which is every variable a load or a store names; an array is named by neither, since what a
 value of one is, is its address.
 
+**An array written down is lowered once, and where its type comes from decides how.**  Where something says what type is wanted
+-- a name of an array type, a parameter, an element of an array already settled -- the elements are that type's element type, and
+`_fill` lowers each of them into it as it writes them into the run.  That is what lets a literal with no suffix stand as an
+element.  Where nothing says, as in `⟦1u8, 2u8⟧⟦0⟧`, the elements are the only thing that can say it: `_array_written` lowers
+them to ask, and hands what they came to on to `_fill`, which writes those values rather than lowering the same expressions
+again.  `_shape_written` gives them in row-major order, which is the order `_fill` walks, so the place a value has in the list is
+the place its element has in the run -- and a call written as an element is made once.
+
+An array of no stated length wanted of a written array is told to the writing rather than worked around it: `_spread` hands the
+wanted type down when what it is lowering is a written array, so the elements take their type from it, and lets go of the length
+afterwards exactly as it does for a name.  Both of these were crashes before -- `_array_written` settles a type before there is
+anywhere to put code, and asked the elements anyway.
+
 What a loop takes its values from
 ---------------------------------
 

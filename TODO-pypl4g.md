@@ -267,11 +267,16 @@ To Do List for the pypl4g compiler
     three values named in `target.py` so that choosing between them is a constant rather than a change to the writer.  It is zero
     today, which is not "unset" -- it says the base integer set and the soft-float convention, which is what is emitted.
 
-[ ] stop `let d: u8⟦⟧ = ⟦1u8, 2u8⟧` inside a function from crashing the compiler.  `_array_written` settles the type before any
-    code is made and so calls `_one_type` with no builder; every other way of reaching it is refused earlier, and this one is not.
-    What it should do is the question behind the crash: the writing makes a `u8⟦2⟧`, so either the fixed array decays to the
-    dynamic one the way it does when it is handed to a parameter, or the mismatch is reported.  Found while spreading an array,
-    which needed a dynamic one to refuse; a parameter gives one, so nothing depends on this.
+[x] stop `let d: u8⟦⟧ = ⟦1u8, 2u8⟧` inside a function from crashing the compiler.  Done, and it was two crashes rather than one,
+    both of them `_array_written` lowering elements with no builder to lower them into.  Where a type is wanted the elements are
+    not lowered there at all -- their type is the wanted type's element type, and `_fill` lowers them into it once.  Where nothing
+    is wanted, as in `⟦1u8, 2u8⟧⟦0⟧`, they say their own type and what they came to is carried to `_fill` rather than worked out
+    twice, which is what keeps a call written as an element from being made twice.  The array decays as it always did.
+
+[ ] report a tuple holding an array.  `〈⟦1u8, 2u8⟧〉` reaches the code generator and fails there (9901, "making a 〈u8⟦2⟧〉, which
+    is one value and not several"), so what a reader is told is an internal error about a program the front end accepted.  Either
+    an array is a thing a tuple may hold, in which case `parts_of` has to say what its parts are, or it is not and the checker
+    says so.  Found beside the crash above; nothing the language offers today needs it.
 
 
 Optimizations

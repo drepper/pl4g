@@ -1908,40 +1908,60 @@ class Checker:
         so the writing goes straight into the run at the place the shape puts
         it and nothing is copied afterwards.
         """
-        ty = self._array_written(expr, expected)
+        ty, ready = self._array_written(builder, expr, expected)
         if ty is None:
             return UndefConst(ERROR)
+        if ready is not None and len(ready) != ty.count:
+            # The writing is not the same width all the way along, so what was
+            # lowered does not line up with the run.  `_fill` says which list
+            # is the wrong length, which is what a reader needs to hear.
+            ready = None
         place = builder.frame(ty, expr.span)
-        if not self._fill(builder, expr, ty, place, 0, ty.shape):
+        if not self._fill(builder, expr, ty, place, 0, ty.shape, ready):
             return UndefConst(ERROR)
         return builder.cast(CastKind.BITCAST, place, ty, expr.span)
 
-    def _array_written(self, expr: ast.ArrayLit,
-                       expected: Type | None) -> "ArrayType | None":
-        """What type an array written down has.
+    def _array_written(self, builder: IRBuilder, expr: ast.ArrayLit,
+                       expected: Type | None
+                       ) -> "tuple[ArrayType | None, list[Value] | None]":
+        """What type an array written down has, and what its elements came to.
 
         The shape comes from what it is wanted as where that says, and from how
         deep and how wide the writing is where it does not.  A shape written on
         both sides has to agree: an array of a different length is an array of a
         different type, and nothing is padded out or dropped.
+
+        The elements come back only where they had to be lowered to answer the
+        question, which is where nothing says what type they have.  Everywhere
+        else the type says it and they are lowered once, by `_fill`, into the
+        type it says -- which is what lets a literal with no suffix stand as an
+        element.
         """
         wanted = expected if isinstance(expected, ArrayType) else None
         if wanted is not None and wanted.fixed:
             if len(expr.elements) != wanted.shape[0]:
                 self._diags.emit(D.LANG_ARRAY_WRONG_LENGTH, expr.span,
                                  given=len(expr.elements), wanted=wanted.shape[0])
-                return None
-            return wanted
+                return None, None
+            return wanted, None
         shape, inner = self._shape_written(expr)
-        element = self._one_type(
-            None, inner, wanted.element if wanted is not None else None)
+        if wanted is not None:
+            # An array of no stated length is wanted, which happens where one is
+            # handed to a parameter or given to a name of such a type.  What the
+            # writing makes is the array with the length in it, which the caller
+            # is the one to let go of; the elements are its element type, and
+            # asking them instead would ask before there is anywhere to put the
+            # answer.  A rank that does not match is left to the caller too,
+            # since what it has to say is that the two types are not the same.
+            return self._module.types.array_type(wanted.element, shape), None
+        # Nothing says what these are, so they say it themselves.  They are
+        # lowered here rather than twice: `_fill` writes them into the run in
+        # the order `_shape_written` gave them, which is the order they lie in.
+        values: list[Value] = []
+        element = self._one_type(builder, inner, None, values)
         if element is ERROR:
-            return None
-        found = self._module.types.array_type(element, shape)
-        if wanted is not None and wanted is not found:
-            self._report_mismatch(expr.span, found, wanted)
-            return None
-        return found
+            return None, None
+        return self._module.types.array_type(element, shape), values
 
     def _shape_written(self, expr: ast.ArrayLit
                        ) -> "tuple[tuple[int | None, ...], tuple[ast.Expr, ...]]":
@@ -1966,12 +1986,15 @@ class Checker:
         return tuple(shape), inner
 
     def _fill(self, builder: IRBuilder, expr: ast.ArrayLit, ty: ArrayType,
-              place: Value, at: int, shape: "tuple[int | None, ...]") -> bool:
+              place: Value, at: int, shape: "tuple[int | None, ...]",
+              ready: "Sequence[Value] | None" = None) -> bool:
         """Write what was written down into the run of elements, in order.
 
         *at* is how many elements are already behind it, so that a dimension
         deeper simply carries on where the one above it left off -- which is
-        what row-major order is.
+        what row-major order is.  It is therefore also where the element is in
+        *ready*, where the elements were lowered before this was reached; there
+        is one such place, and what put them there laid them out this way.
         """
         if len(expr.elements) != shape[0]:
             self._diags.emit(D.LANG_ARRAY_WRONG_LENGTH, expr.span,
@@ -1979,8 +2002,9 @@ class Checker:
             return False
         if len(shape) == 1:
             for index, written in enumerate(expr.elements):
-                value = self._lower_into(builder, written, ty.element,
-                                         written.span)
+                value = ready[at + index] if ready is not None \
+                    else self._lower_into(builder, written, ty.element,
+                                          written.span)
                 if self._value_type_of(value) is ERROR:
                     return False
                 builder.store(
@@ -1998,7 +2022,7 @@ class Checker:
                                  written.span)
                 return False
             if not self._fill(builder, written, ty, place, at + index * step,
-                              shape[1:]):
+                              shape[1:], ready):
                 return False
         return True
 
@@ -2511,9 +2535,16 @@ class Checker:
         return builder.cast(CastKind.BITCAST, word,
                             self._module.types.ptr_type(ty, mutable=True))
 
-    def _one_type(self, builder: "IRBuilder | None", written: "Sequence[ast.Expr]",
-                  wanted: Type | None) -> Type:
-        """Lower each of *written* and give back the one type they share."""
+    def _one_type(self, builder: IRBuilder, written: "Sequence[ast.Expr]",
+                  wanted: Type | None,
+                  into: "list[Value] | None" = None) -> Type:
+        """Lower each of *written* and give back the one type they share.
+
+        *into* collects what they came to, for a caller that has to lower them
+        to learn the type and would otherwise lower them a second time to use
+        them.  What is collected is every one of them, including any whose type
+        did not agree, so that the places line up with what was written.
+        """
         found: Type | None = wanted
         spoiled = False
         # Nothing is expected of an entry: what it is, is what the collection
@@ -2523,6 +2554,8 @@ class Checker:
         self._initializing, self._assigning = None, None
         for entry in written:
             value = self._lower_expr(builder, entry, None)
+            if into is not None:
+                into.append(value)
             ty = self._value_type_of(value)
             if ty is ERROR:
                 spoiled = True
@@ -4627,8 +4660,18 @@ class Checker:
 
     def _spread(self, builder: IRBuilder, expr: ast.Expr, expected: ArrayType,
                 span: Span) -> Value:
-        """Lower *expr* where an array of no stated length is wanted."""
-        value = self._lower_expr(builder, expr, None)
+        """Lower *expr* where an array of no stated length is wanted.
+
+        An array written down is the one thing that has to be told what is
+        wanted of it: its elements take their type from where they stand, and
+        where they stand is an array of the element type wanted here.  The
+        length is the one part the writing settles for itself, which is why
+        what comes back still has one and is let go of below.  Everything else
+        is a value with a type of its own and is lowered with nothing expected.
+        """
+        value = self._lower_expr(builder, expr,
+                                 expected if isinstance(expr, ast.ArrayLit)
+                                 else None)
         found = self._value_type_of(value)
         if found is expected or found is ERROR:
             return value
