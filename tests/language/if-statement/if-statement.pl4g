@@ -14,7 +14,7 @@ let b: mut u8 = 9u8
 @[visible]
 let kept: mut u8 = 0u8
 
-@[startup]
+@[startup, impure]
 fn main() → u8:
     ※ a statement of its own, with no else
     if a < b:

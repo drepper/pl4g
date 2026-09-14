@@ -10,7 +10,7 @@ let one: u8 = 1u8
 @[visible]
 let halved: mut u8 = 0u8
 
-@[startup]
+@[startup, impure]
 fn main() → u8:
     halved ← thirteen » one
     thirteen « one

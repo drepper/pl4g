@@ -472,6 +472,14 @@ To Do List for the PL4g language
     needed was that whatever lowers one to learn its type hands the value back.
 
 
+[ ] use purity for more than dropping a call nothing reads.  A call made twice with the same arguments may be worked out once, a
+    call whose arguments do not change may be moved out of a loop, and a pure function whose arguments are all constants may be
+    worked out while compiling.  None of them needs the language to say anything further; each is a pass.
+
+[ ] consider whether a pure function may write through an array it was handed.  It may not today (4479), there being no way to
+    say that a parameter is not shared with anything the caller can still see.  A type that said so -- the parameter is this
+    call's alone -- would make such a function pure and is what C's `restrict` gestures at.
+
 [ ] give a program a way to choose how a function answers with more than one value.  The choice is a property of the function
     already and there is one style, so there is nothing yet to choose between; when there is a second, an attribute beside
     `@[cdecl]` is where it goes, and `ReturnStyle` is what it sets.

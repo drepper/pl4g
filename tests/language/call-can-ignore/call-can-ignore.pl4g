@@ -12,15 +12,16 @@
 
 let counter: mut u8 = 0u8
 
-@[can_ignore]
+@[can_ignore, impure]
 fn bump() → u8:
     counter ← counter + 1u8
     counter
 
+@[impure]
 fn prepare():
     counter ← 5u8
 
-@[startup]
+@[startup, impure]
 fn main() → u8:
     ※ nothing takes what it answers with, and the attribute says that is meant
     prepare()

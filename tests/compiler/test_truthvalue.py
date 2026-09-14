@@ -181,7 +181,7 @@ SOURCE = """let ready: bool = true
 @[visible]
 let seen: mut bool = false
 
-@[startup]
+@[startup, impure]
 fn main() \N{RIGHTWARDS ARROW} u8:
     seen \N{LEFTWARDS ARROW} ready
     0u8

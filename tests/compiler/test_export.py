@@ -35,7 +35,7 @@ fn reachable() \N{RIGHTWARDS ARROW} u8:
 
 \N{REFERENCE MARK} Not exported, but the entry point calls it, so it is in the image
 \N{REFERENCE MARK} and this says what a name that is kept in looks like.
-@[constructor]
+@[constructor, impure]
 fn prepare():
     private \N{LEFTWARDS ARROW} 8u8
 
@@ -43,7 +43,7 @@ fn prepare():
 fn unreached() \N{RIGHTWARDS ARROW} u8:
     2u8
 
-@[startup]
+@[startup, impure]
 fn main() \N{RIGHTWARDS ARROW} u8:
     shared
 """
@@ -139,9 +139,9 @@ def test_visible_is_the_only_thing_that_changes_it(compile_source) -> None:  # n
     """Without the attribute a definition is kept in, whatever else it says."""
     proc, output = compile_source("".join((
         "let g: mut u8 = 0u8\n\n",
-        "@[align(16), constructor]\nfn helper():\n",
+        "@[align(16), constructor, impure]\nfn helper():\n",
         "    g \N{LEFTWARDS ARROW} 1u8\n\n",
-        "@[startup]\nfn main() ", ARROW, " u8:\n    1u8\n")))
+        "@[startup, impure]\nfn main() ", ARROW, " u8:\n    1u8\n")))
     assert proc.returncode == 0, describe(proc)
     parsed = elfcheck.parse(output.read_bytes())
     symbol = parsed.symbol("helper()void")
@@ -159,7 +159,7 @@ let offered: u8 = 2u8
 @[export, visible]
 let both: u8 = 3u8
 
-@[startup]
+@[startup, impure]
 fn main() \N{RIGHTWARDS ARROW} u8:
     lent
 """
@@ -184,7 +184,7 @@ def test_offering_a_symbol_does_not_export_the_definition(tmp_path) -> None:  # 
                                        encoding="utf-8")
     source = tmp_path / "main.pl4g"
     source.write_text("".join((
-        'let l := import("lib")\n\n@[startup]\nfn main() ', ARROW,
+        'let l := import("lib")\n\n@[startup, impure]\nfn main() ', ARROW,
         " u8:\n    l.v\n")), encoding="utf-8")
     proc = run_compiler(["-o", str(tmp_path / "out"), str(source)])
     assert proc.returncode != 0

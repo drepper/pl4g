@@ -7,7 +7,7 @@
 let a: mut u8 = 0u8
 let b: mut u8 = 0u8
 
-@[startup]
+@[startup, impure]
 fn main() → u8:
     a ← 3u8; b ← 4u8
     a + b

@@ -9,7 +9,7 @@
 @[visible]
 let kept: mut u8 = 0u8
 
-@[startup]
+@[startup, impure]
 fn main() → u8:
     @[expect(4215)]
     kept ← 100u8 ÷ 0u8 ?? 1u8

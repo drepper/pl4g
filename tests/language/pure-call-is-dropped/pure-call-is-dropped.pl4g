@@ -1,0 +1,30 @@
+※ pl4g-test: compile=ok opt=0,1
+※ pl4g-test: run=native,qemu exit=42
+※ pl4g-test: diag=none
+
+※ A call to a pure function whose answer nothing reads is an instruction the
+※ program need not run, and the optimizer drops it.  That is what makes
+※ `_ ← f()` worth writing rather than merely allowed: the answer goes nowhere,
+※ so with nothing else to do the call goes too.
+※
+※ What a dropped call takes with it is any way it had of stopping the program:
+※ an overflow inside a call nobody made cannot be reached.  That follows from
+※ the call being removable at all, which is what purity was declared for.
+
+fn worked_out(n: u8) → u8:
+    n + n
+
+let seen: mut u8 = 0u8
+
+@[impure]
+fn notes(n: u8) → u8:
+    ※ this one changes something, so it is made whether or not anyone looks
+    seen ← n
+    n
+
+@[startup, impure]
+fn main() → u8:
+    ※ nothing reads this, and nothing else depends on it having happened
+    _ ← worked_out(3u8)
+    _ ← notes(42u8)
+    seen

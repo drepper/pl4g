@@ -19,7 +19,7 @@ let neither: mut bool = false
 @[visible]
 let opposite: mut bool = false
 
-@[startup]
+@[startup, impure]
 fn main() → u8:
     both ← yes ∧ no
     either ← yes ∨ no

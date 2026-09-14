@@ -118,7 +118,9 @@ def _declared(module: Module, name: str, params: tuple[Type, ...],
         return found
     return module.add_function(Function(
         name, module.types.func_type(params, result),
-        FuncAttrs(abi=SYSTEM_CCONV), cconv=SYSTEM_CCONV,
+        # The runtime allocates and writes tables, all of which outlives the
+        # call: what the language calls impure is what these are for.
+        FuncAttrs(abi=SYSTEM_CCONV, impure=True), cconv=SYSTEM_CCONV,
         linkage=Linkage.VISIBLE))
 
 
@@ -130,7 +132,7 @@ def _generated(module: Module, name: str, params: tuple[Type, ...],
         return found, False
     func = module.add_function(Function(
         name, module.types.func_type(params, result),
-        FuncAttrs(abi="pl4g.runtime"), linkage=Linkage.INTERNAL))
+        FuncAttrs(abi="pl4g.runtime", impure=True), linkage=Linkage.INTERNAL))
     return func, True
 
 

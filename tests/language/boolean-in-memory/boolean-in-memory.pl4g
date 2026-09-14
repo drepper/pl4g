@@ -16,7 +16,7 @@ let seen: mut bool = false
 @[visible]
 let after: mut u8 = 6u8
 
-@[startup]
+@[startup, impure]
 fn main() → u8:
     seen ← ready
     ※ Nothing here can look at the guards yet -- there is no way to compare --

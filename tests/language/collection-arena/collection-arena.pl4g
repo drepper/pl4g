@@ -15,7 +15,7 @@
 
 let scratch: mut arena = ⎕arena
 
-@[startup]
+@[startup, impure]
 fn main() → u8:
     let a: ⸨u8⸩ = ⸨1u8, 2u8⸩ in scratch
     let b: ⸨u8⸩ = ⸨2u8, 3u8⸩ in ⎕heap

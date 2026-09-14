@@ -13,7 +13,7 @@ let seven: u8 = 7u8
 @[visible]
 let rest: mut u8 = 0u8
 
-@[startup]
+@[startup, impure]
 fn main() → u8:
     rest ← hundred % seven ?? 0u8
     hundred ÷ seven ?? 0u8

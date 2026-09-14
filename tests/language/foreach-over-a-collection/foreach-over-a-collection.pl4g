@@ -10,7 +10,7 @@
 ※ everything.  So the answers here do not depend on the order: adding up what is
 ※ there gives the same number whatever order the walk finds it in.
 
-@[startup]
+@[startup, impure]
 fn main() → u8:
     let s: ⸨u8⸩ = ⸨1u8, 2u8, 4u8, 8u8, 16u8⸩
     let held: mut u8 = 0u8

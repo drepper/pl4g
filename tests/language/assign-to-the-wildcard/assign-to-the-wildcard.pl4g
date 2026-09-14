@@ -12,11 +12,12 @@
 
 let counter: mut u8 = 0u8
 
+@[impure]
 fn bump() → u8:
     counter ← counter + 1u8
     counter
 
-@[startup]
+@[startup, impure]
 fn main() → u8:
     ※ this call is made for what it does
     _ ← bump()

@@ -36,7 +36,7 @@ def keeping(answer: str, left: str, operator: str, right: str) -> str:
     """A program whose only act is to keep the answer to one comparison."""
     return "".join((
         "@[visible]\nlet answer: mut bool = ", answer, "\n\n",
-        "@[startup]\nfn main() ", ARROW, " u8:\n",
+        "@[startup, impure]\nfn main() ", ARROW, " u8:\n",
         "    answer ", ASSIGN, " ", left, " ", operator, " ", right, "\n",
         "    0u8\n"))
 
@@ -98,7 +98,7 @@ def test_the_predicate_follows_the_type_of_the_operands(
         text = compile_to_ir(tmp_path, "".join((
             "let a: ", ty, " = 1", ty, "\nlet b: ", ty, " = 2", ty, "\n\n",
             "@[visible]\nlet answer: mut bool = false\n\n",
-            "@[startup]\nfn main() ", ARROW, " u8:\n",
+            "@[startup, impure]\nfn main() ", ARROW, " u8:\n",
             "    answer ", ASSIGN, " a ", operator, " b\n    0u8\n")))
         assert "".join(("icmp.", wanted, ".", ty)) in text, text
 
@@ -111,7 +111,7 @@ def test_a_comparison_binds_looser_than_the_bitwise_operators(tmp_path) -> None:
     text = compile_to_ir(tmp_path, "".join((
         "let flags: u8 = 170u8\nlet mask: u8 = 10u8\n\n",
         "@[visible]\nlet answer: mut bool = false\n\n",
-        "@[startup]\nfn main() ", ARROW, " u8:\n",
+        "@[startup, impure]\nfn main() ", ARROW, " u8:\n",
         "    answer ", ASSIGN, " flags & mask = mask\n    0u8\n")), "-O0")
     # The "and" is computed, and the comparison reads what it computed.
     assert "and.u8" in text, text
@@ -137,7 +137,7 @@ def test_no_comparison_chains(tmp_path, operator: str) -> None:  # noqa: ANN001
     of two of them is refused and not only the ones that look odd."""
     refuses(tmp_path, "".join((
         "let a: u8 = 1u8\nlet b: u8 = 2u8\nlet c: u8 = 3u8\n\n",
-        "@[startup]\nfn main() ", ARROW, " bool:\n",
+        "@[startup, impure]\nfn main() ", ARROW, " bool:\n",
         "    a ", operator, " b ", operator, " c\n")), 3014)
 
 
@@ -146,7 +146,7 @@ def test_two_different_comparisons_do_not_chain_either(tmp_path) -> None:  # noq
     and gets the same answer."""
     refuses(tmp_path, "".join((
         "let a: u8 = 1u8\nlet b: u8 = 2u8\nlet c: u8 = 3u8\n\n",
-        "@[startup]\nfn main() ", ARROW, " bool:\n    a < b = c\n")), 3014)
+        "@[startup, impure]\nfn main() ", ARROW, " bool:\n    a < b = c\n")), 3014)
 
 
 def test_parenthesizing_a_chain_says_what_was_meant(tmp_path) -> None:  # noqa: ANN001
@@ -159,7 +159,7 @@ def test_parenthesizing_a_chain_says_what_was_meant(tmp_path) -> None:  # noqa: 
     text = compile_to_ir(tmp_path, "".join((
         "let a: u8 = 1u8\nlet b: u8 = 2u8\nlet ready: bool = true\n\n",
         "@[visible]\nlet answer: mut bool = false\n\n",
-        "@[startup]\nfn main() ", ARROW, " u8:\n",
+        "@[startup, impure]\nfn main() ", ARROW, " u8:\n",
         "    answer ", ASSIGN, " (a < b) = ready\n    0u8\n")), "-O0")
     # The inner comparison answers with a truth value, and the outer one
     # compares that answer -- which is the thing the chain would have meant.

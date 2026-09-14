@@ -15,7 +15,7 @@ let same: mut bool = false
 @[visible]
 let differ: mut bool = false
 
-@[startup]
+@[startup, impure]
 fn main() → u8:
     same ← here = there
     differ ← here ≠ other

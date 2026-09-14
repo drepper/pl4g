@@ -35,9 +35,9 @@ def raises(proc, number: int) -> bool:  # noqa: ANN001
 def test_a_header_without_an_arrow_answers_with_nothing(tmp_path) -> None:  # noqa: ANN001
     """And needs no `return`, no last expression, and no complaint."""
     proc = compile_source(tmp_path, "".join((
-        "let counter: mut u8 = 0u8\n\n@[constructor]\nfn prepare():\n",
+        "let counter: mut u8 = 0u8\n\n@[constructor, impure]\nfn prepare():\n",
         "    counter ", ASSIGN, " 7u8\n\n",
-        "@[startup]\nfn main() ", ARROW, " u8:\n    counter\n")))
+        "@[startup, impure]\nfn main() ", ARROW, " u8:\n    counter\n")))
     assert proc.returncode == 0, describe(proc)
     assert proc.stderr.strip() == "", proc.stderr
 
@@ -47,7 +47,7 @@ def test_writing_the_nothing_out_is_refused(tmp_path) -> None:  # noqa: ANN001
     meaning is what the language admits nowhere."""
     proc = compile_source(tmp_path, "".join((
         "@[constructor]\nfn prepare() ", ARROW, " void:\n    0u8\n\n",
-        "@[startup]\nfn main() ", ARROW, " u8:\n    0u8\n")))
+        "@[startup, impure]\nfn main() ", ARROW, " u8:\n    0u8\n")))
     assert raises(proc, 4209), describe(proc)
 
 
@@ -55,7 +55,7 @@ def test_a_return_in_it_carries_nothing(tmp_path) -> None:  # noqa: ANN001
     """There is nothing for it to carry."""
     proc = compile_source(tmp_path, "".join((
         "@[constructor]\nfn prepare():\n    return 1u8\n\n",
-        "@[startup]\nfn main() ", ARROW, " u8:\n    0u8\n")))
+        "@[startup, impure]\nfn main() ", ARROW, " u8:\n    0u8\n")))
     assert raises(proc, 5004), describe(proc)
 
 
@@ -66,7 +66,7 @@ def test_the_advice_to_omit_return_is_not_given_where_it_would_not_help(tmp_path
     value goes nowhere."""
     proc = compile_source(tmp_path, "".join((
         "@[constructor]\nfn prepare():\n    return 1u8\n\n",
-        "@[startup]\nfn main() ", ARROW, " u8:\n    0u8\n")))
+        "@[startup, impure]\nfn main() ", ARROW, " u8:\n    0u8\n")))
     assert raises(proc, 5004), describe(proc)
     assert not raises(proc, 5002), describe(proc)
 
@@ -74,9 +74,9 @@ def test_the_advice_to_omit_return_is_not_given_where_it_would_not_help(tmp_path
 def test_a_bare_return_at_the_end_is_still_redundant(tmp_path) -> None:  # noqa: ANN001
     """The advice does apply where the statement is one the function wanted."""
     proc = compile_source(tmp_path, "".join((
-        "let counter: mut u8 = 0u8\n\n@[constructor]\nfn prepare():\n",
+        "let counter: mut u8 = 0u8\n\n@[constructor, impure]\nfn prepare():\n",
         "    counter ", ASSIGN, " 1u8\n    return\n\n",
-        "@[startup]\nfn main() ", ARROW, " u8:\n    counter\n")))
+        "@[startup, impure]\nfn main() ", ARROW, " u8:\n    counter\n")))
     assert raises(proc, 5002), describe(proc)
 
 
@@ -86,7 +86,7 @@ def test_a_semicolon_separates_statements_in_the_layout_notation(tmp_path) -> No
     """What a statement is does not depend on which notation it is written in."""
     proc = compile_source(tmp_path, "".join((
         "let a: mut u8 = 0u8\nlet b: mut u8 = 0u8\n\n",
-        "@[startup]\nfn main() ", ARROW, " u8:\n",
+        "@[startup, impure]\nfn main() ", ARROW, " u8:\n",
         "    a ", ASSIGN, " 3u8; b ", ASSIGN, " 4u8\n    a + b\n")))
     assert proc.returncode == 0, describe(proc)
     assert proc.stderr.strip() == "", proc.stderr
@@ -96,7 +96,7 @@ def test_a_trailing_semicolon_leaves_no_value(tmp_path) -> None:  # noqa: ANN001
     """It separates and never terminates, so what follows it is a statement --
     the empty one, which produces nothing."""
     proc = compile_source(tmp_path, "".join((
-        "@[startup]\nfn main() ", ARROW, " u8:\n",
+        "@[startup, impure]\nfn main() ", ARROW, " u8:\n",
         "    @[ignore(5005)]\n    7u8;\n")))
     assert raises(proc, 5003), describe(proc)
 
@@ -104,9 +104,9 @@ def test_a_trailing_semicolon_leaves_no_value(tmp_path) -> None:  # noqa: ANN001
 def test_a_trailing_semicolon_asks_for_nothing_where_nothing_is_wanted(tmp_path) -> None:  # noqa: ANN001
     """The same semicolon in a function that answers with nothing."""
     proc = compile_source(tmp_path, "".join((
-        "let counter: mut u8 = 0u8\n\n@[constructor]\nfn prepare():\n",
+        "let counter: mut u8 = 0u8\n\n@[constructor, impure]\nfn prepare():\n",
         "    counter ", ASSIGN, " 7u8;\n\n",
-        "@[startup]\nfn main() ", ARROW, " u8:\n    counter\n")))
+        "@[startup, impure]\nfn main() ", ARROW, " u8:\n    counter\n")))
     assert proc.returncode == 0, describe(proc)
     assert proc.stderr.strip() == "", proc.stderr
 
@@ -123,7 +123,7 @@ def test_how_many_statements_a_run_of_semicolons_makes(tmp_path, body: str,  # n
     from pypl4g.front.parser import parse
     from pypl4g.source.manager import SourceManager
 
-    text = "".join(("@[startup]\nfn main() ", ARROW, " u8:\n    ", body, "\n"))
+    text = "".join(("@[startup, impure]\nfn main() ", ARROW, " u8:\n    ", body, "\n"))
     sources = SourceManager()
     source = sources.add(tmp_path / "t.pl4g", text)
     engine, collected = collecting_engine(None)
@@ -140,5 +140,5 @@ def test_how_many_statements_a_run_of_semicolons_makes(tmp_path, body: str,  # n
 def test_the_brace_notation_counts_them_the_same_way(tmp_path) -> None:  # noqa: ANN001
     """The rule is about semicolons, not about which notation they are in."""
     proc = compile_source(tmp_path, "".join((
-        "@[startup]\nfn main() ", ARROW, " u8 { 7u8; }\n")))
+        "@[startup, impure]\nfn main() ", ARROW, " u8 { 7u8; }\n")))
     assert raises(proc, 5003), describe(proc)

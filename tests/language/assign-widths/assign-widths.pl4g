@@ -21,7 +21,7 @@ let word_value: mut u32 = 0u32
 @[expect(4007)]
 let wide_value: mut u64 = 0u64
 
-@[startup]
+@[startup, impure]
 fn main() → u8:
     byte_value ← 200u8
     half_value ← 1000u16

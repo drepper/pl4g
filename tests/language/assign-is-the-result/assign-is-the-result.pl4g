@@ -6,6 +6,6 @@
 ※ is the function's result -- here, the exit status.
 let counter: mut u8 = 1u8
 
-@[startup]
+@[startup, impure]
 fn main() → u8:
     counter ← 42u8

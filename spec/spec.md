@@ -2168,6 +2168,61 @@ where `NAME` is a valid identifier naming the function, `ARG?` are parameter nam
 the function header is followed by a colon, a newline, and then the properly indented code.  When the function header is followed by
 a `{` it uses the explicit syntax and continues until the respective closing `}`.
 
+##### What a function may change
+
+**A function is pure unless it says otherwise.**  What pure means here is that calling it changes nothing a later call or a later
+reader could notice, which is what lets a caller move a call, make it once instead of twice, or not make it at all.
+
+```
+@[impure]
+fn bump():
+    counter ← counter + 1u8
+```
+
+A pure function may **read** anything, a variable at the top level among it; it may **write its own storage**, an array it made
+being gone when the call ends; and it may call other pure functions.  What it may not do is change anything that was there before
+the call or is there after it:
+
+| | |
+|---|---|
+| writing a variable at the top level | 4478 |
+| writing memory it did not make -- an array it was handed, a set or a dictionary | 4479 |
+| calling a function marked `@[impure]` | 4480 |
+
+**Making a set or a dictionary is a change**, since it takes room out of an arena and the next call gets what this one left of
+it.  So a function that builds one is `@[impure]`, whatever it does with it afterwards.
+
+**Purity is a property of everything a call reaches**, not of one function's own statements: whatever the callee may change, the
+caller may change by calling it.  So a function calling an impure one is itself `@[impure]`, and the chain of those attributes is
+the one line that says where the effects in a program begin.
+
+**The default is the strict one**, which is the opposite of the choice a language written by people would make.  A generator
+knows what it is emitting: saying `@[impure]` where an effect is meant costs it one word, and having the compiler check the rest
+costs it nothing.  The value is in what the default buys -- every function that does not say otherwise is one a caller may
+rearrange -- and a default that has to be asked for is one most functions would never be given.
+
+**What purity is worth, today, is that a call nothing reads is not made.**
+
+```
+_ ← worked_out(3u8)     ※ pure: the call is dropped
+_ ← notes(42u8)         ※ impure: the call is made, whoever wants the answer
+```
+
+That is what makes `_ ←` worth writing rather than merely allowed.  **A dropped call takes with it any way it had of stopping the
+program**: an overflow inside a call nobody made cannot be reached.  That follows from the call being removable at all, which is
+what the attribute was declared for; a program that wants the check to happen wants the answer, and reading the answer keeps the
+call.
+
+More will follow from it -- a call made twice with the same arguments worked out once, a call moved out of a loop -- and none of
+it needs the language to say anything further.
+
+Compare: Rust, whose `const fn` is a different question (what may run while compiling) and whose purity is otherwise carried by
+`&mut` in the type system, so that the compiler knows what may be changed without anything being declared; Haskell, where purity
+is the default and effects live in a type, which is the same default reached by a much larger mechanism; D's `pure`, which is
+this -- an attribute, checked, with the compiler free to elide calls -- and which is the closest existing design; C and C++,
+where `__attribute__((pure))` and `[[gnu::const]]` are promises the compiler does not check, so a wrong one is undefined
+behaviour rather than a message; and Zig, which has no such attribute and infers what it can.
+
 ##### Parameters a function may change
 
 A parameter may be marked `mut`, which says the body may bind the name to something else.  `mut` stands where it stands in a

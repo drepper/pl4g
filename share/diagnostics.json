@@ -3916,6 +3916,66 @@
       "option": null
     },
     {
+      "number": 4478,
+      "name": "LANG_PURE_CHANGES_A_VARIABLE",
+      "severity": "error",
+      "message": "'{name}' outlives this call, and a pure function changes nothing that does",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the variable being changed"
+        }
+      ],
+      "cause": "A function is pure unless it says otherwise, and what pure means is that calling it changes nothing a later call or a later reader could notice -- which is what lets a caller move a call, make it once instead of twice, or not make it at all.  A variable at the top level exists before the call and after it, so writing one is exactly the thing being ruled out.  Where the change is the point of the function, `@[impure]` on it says so.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition",
+        "requirement": "A function without '@[impure]' changes nothing that outlives the call."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4479,
+      "name": "LANG_PURE_WRITES_ELSEWHERE",
+      "severity": "error",
+      "message": "this writes memory the function did not make, and a pure function does not",
+      "args": [],
+      "cause": "A pure function may write its own storage -- an array it made, which is gone when the call ends -- and nothing else.  An array it was handed belongs to the caller, and a set or a dictionary lives in an arena that outlives the call, so writing either is a change someone else can see.  Where that is the point of the function, `@[impure]` on it says so.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition",
+        "requirement": "A function without '@[impure]' writes only storage it made itself."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4480,
+      "name": "LANG_PURE_CALLS_IMPURE",
+      "severity": "error",
+      "message": "'{name}' may change what outlives it, and this function is pure",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the function being called"
+        }
+      ],
+      "cause": "Whatever the callee may change, the caller may change by calling it, so purity is a property of everything a call reaches and not of one function's own statements.  A function that calls one marked `@[impure]` is therefore marked `@[impure]` itself -- which is the one line that says where the effects in a program begin.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition",
+        "requirement": "A function calling one marked '@[impure]' is itself marked '@[impure]'."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 5001,
       "name": "LANG_STMT_UNREACHABLE",
       "severity": "warning",

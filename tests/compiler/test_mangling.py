@@ -99,7 +99,7 @@ def test_the_verifier_catches_two_functions_under_one_symbol() -> None:
         verify(module)
 
 
-SOURCE = """@[startup]
+SOURCE = """@[startup, impure]
 fn main() \N{RIGHTWARDS ARROW} u8:
     0
 """

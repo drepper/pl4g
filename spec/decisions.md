@@ -3068,6 +3068,55 @@ place rather than a new one.
 
 ---
 
+## 2026-09-15T04:00+02:00 — language
+
+**What a function may change**
+
+Decided on the user's direction: a function is pure unless `@[impure]` says otherwise; a pure function may not change anything
+that outlives the call; a function calling an impure one is impure; and a pure call whose answer nothing reads is not made.
+
+**The default is the strict one, which is the whole point.**  Every language that has this makes purity the thing you ask for --
+D's `pure`, GCC's `__attribute__((pure))`, Rust's `const fn` for its own question -- because they are written by people, for whom
+the annotation is a cost paid per function.  A generator pays it once per kind of function it emits and knows which kind it is
+emitting, so the cost is near zero and the value is in what the default buys: every function that says nothing is one a caller
+may rearrange.  A default that has to be asked for is one most functions would never be given.
+
+**Purity is a property of everything a call reaches**, so the attribute is transitive by requirement rather than by inference
+(4480).  Inferring it was the alternative and is what Zig does: the compiler can see the whole program, so it could work out which
+functions have effects and never ask.  Not taken, because the answer would then be invisible in the source -- a reader could not
+tell whether a function is one a caller may drop without following every call it makes -- and because a change deep in the program
+would silently change what is true of a function far away.  Written down, it changes the signature, and changing a signature is a
+thing the program can be made to say.
+
+**What counts as a change is asked of the value, not of the syntax.**  `_made_here` walks a place back to a `frame` -- storage
+this call made and will lose -- so a row of a local array, an element of one and a slice of one all answer correctly without being
+listed.  An array a function was handed belongs to the caller, so writing into one is an effect; that is stricter than C, where a
+`pure` function may write through a pointer it was given, and it is the right strictness for a language with no way to say that a
+parameter is not shared.
+
+**Making a collection is a change**, since it takes room out of an arena the next call will find shorter.  That makes any
+function building a set or a dictionary impure, which is a real consequence and the honest one: the arena is a variable at the top
+level and allocating writes it.
+
+**The optimization cost one line.**  `CallInst.has_effects` asks the callee's attribute instead of answering `True`, and
+dead-code elimination -- which already drops what nothing uses and what has no effects -- does the rest without being told what
+purity is.
+
+**A dropped call takes its faults with it**, which is stated rather than hidden: an overflow inside a call nobody made cannot be
+reached.  It follows from the call being removable at all, and a program that wants the check wants the answer, which keeps the
+call.  The alternative -- a pure function that may still stop the program, so calls must be kept -- would have made the attribute
+worth nothing today.
+
+Compare, beyond the above: Haskell, where purity is the default and effects live in the type, the same default reached by a far
+larger mechanism; D's `pure`, an attribute, checked, with calls free to be elided, which is the closest existing design and which
+still defaults the other way; and C and C++, whose `pure` and `const` attributes are promises nobody checks, so a wrong one is
+undefined behaviour rather than a message.
+
+Sixty-one language tests and twenty compiler sources gained the attribute, which is the churn the user predicted and is itself a
+fact about the default: what needed it is every program that does something.
+
+---
+
 ---
 
 Open questions

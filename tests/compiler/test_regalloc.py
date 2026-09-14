@@ -280,7 +280,7 @@ let wb: mut u8 = 0u8
 @[expect(4007)]
 let wc: mut u8 = 0u8
 
-@[startup]
+@[startup, impure]
 fn main() \N{RIGHTWARDS ARROW} u8:
     let va: u8 = a
     let vb: u8 = b
@@ -321,7 +321,7 @@ def test_far_more_values_than_registers_still_runs(triple: str, tmp_path) -> Non
     lines += ["".join(("let w", n, ": mut u8 = 0u8") if n == names[0]
                       else ("@[expect(4007)]\nlet w", n, ": mut u8 = 0u8"))
               for n in names]
-    lines += ["@[startup]", "fn main() \N{RIGHTWARDS ARROW} u8:"]
+    lines += ["@[startup, impure]", "fn main() \N{RIGHTWARDS ARROW} u8:"]
     lines += ["".join(("    let ", n, ": u8 = g", n)) for n in names]
     lines += ["".join(("    w", n, " \N{LEFTWARDS ARROW} ", n))
               for n in reversed(names)]

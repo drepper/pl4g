@@ -13,7 +13,7 @@ let b: mut f64 = 1.5f64
 @[visible]
 let same: mut bool = false
 
-@[startup]
+@[startup, impure]
 fn main() → u8:
     same ← a = b
     0u8

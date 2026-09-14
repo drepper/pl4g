@@ -45,7 +45,7 @@ def keeping(expression: str) -> str:
     """A program whose only act is to keep the answer to one expression."""
     return "".join((
         "@[visible]\nlet answer: mut bool = false\n\n",
-        "@[startup]\nfn main() ", ARROW, " u8:\n",
+        "@[startup, impure]\nfn main() ", ARROW, " u8:\n",
         "    answer ", ASSIGN, " ", expression, "\n    0u8\n"))
 
 
@@ -126,7 +126,7 @@ def test_turning_a_truth_value_round_is_not_complementing_it(tmp_path) -> None: 
     text = compile_to_ir(tmp_path, "".join((
         "let ready: bool = true\n\n",
         "@[visible]\nlet answer: mut bool = false\n\n",
-        "@[startup]\nfn main() ", ARROW, " u8:\n",
+        "@[startup, impure]\nfn main() ", ARROW, " u8:\n",
         "    answer ", ASSIGN, " ", NOT, " ready\n    0u8\n")), "-O0")
     assert "xor.bool" in text, text
     assert "not.bool" not in text, text
@@ -139,7 +139,7 @@ def test_the_logical_operators_bind_looser_than_the_comparisons(tmp_path) -> Non
     text = compile_to_ir(tmp_path, "".join((
         "let a: u8 = 1u8\nlet b: u8 = 2u8\nlet c: u8 = 3u8\nlet d: u8 = 4u8\n\n",
         "@[visible]\nlet answer: mut bool = false\n\n",
-        "@[startup]\nfn main() ", ARROW, " u8:\n",
+        "@[startup, impure]\nfn main() ", ARROW, " u8:\n",
         "    answer ", ASSIGN, " a < b ", AND, " c < d\n    0u8\n")), "-O0")
     # Both comparisons are made, and the "and" is what joins their answers.
     assert text.count("icmp.") == 2, text
@@ -153,7 +153,7 @@ def test_and_binds_tighter_than_or(tmp_path) -> None:  # noqa: ANN001
     text = compile_to_ir(tmp_path, "".join((
         "let a: bool = true\nlet b: bool = false\nlet c: bool = true\n\n",
         "@[visible]\nlet answer: mut bool = false\n\n",
-        "@[startup]\nfn main() ", ARROW, " u8:\n",
+        "@[startup, impure]\nfn main() ", ARROW, " u8:\n",
         "    answer ", ASSIGN, " a ", OR, " b ", AND, " c\n    0u8\n")), "-O0")
     assert text.index("and.bool") < text.index("or.bool"), text
 
@@ -164,7 +164,7 @@ def test_not_binds_tighter_than_anything_between_two_operands(tmp_path) -> None:
     text = compile_to_ir(tmp_path, "".join((
         "let ready: bool = true\nlet seen: bool = false\n\n",
         "@[visible]\nlet answer: mut bool = false\n\n",
-        "@[startup]\nfn main() ", ARROW, " u8:\n",
+        "@[startup, impure]\nfn main() ", ARROW, " u8:\n",
         "    answer ", ASSIGN, " ", NOT, " ready ", AND, " seen\n    0u8\n")), "-O0")
     assert text.index("xor.bool") < text.index("and.bool"), text
 

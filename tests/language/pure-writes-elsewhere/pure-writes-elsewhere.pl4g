@@ -1,0 +1,15 @@
+※ pl4g-test: compile=error diag=4479
+
+※ A pure function may write its own storage -- an array it made, which is gone
+※ when the call ends -- and nothing else.  An array it was handed belongs to the
+※ caller, so writing into one is a change the caller can see when the call comes
+※ back.
+
+fn clear(v: u8⟦⟧):
+    v⟦0⟧ ← 0u8
+
+@[startup, impure]
+fn main() → u8:
+    let room: mut u8⟦2⟧ = ⟦7u8, 8u8⟧
+    clear(room)
+    room⟦0⟧

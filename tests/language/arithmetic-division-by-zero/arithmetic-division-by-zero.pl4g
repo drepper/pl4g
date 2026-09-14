@@ -12,7 +12,7 @@ let none: u8 = 0u8
 @[visible]
 let rest: mut u8 = 0u8
 
-@[startup]
+@[startup, impure]
 fn main() → u8:
     rest ← hundred % none ?? 3u8
     hundred ÷ none ?? 9u8

@@ -17,7 +17,7 @@ enum Code:
 @[visible]
 let seen: mut Code = Code.retry
 
-@[startup]
+@[startup, impure]
 fn main() → u8:
     let first: u8 = match seen:
         ok:

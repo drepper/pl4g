@@ -17,7 +17,7 @@ from conftest import (ARCH_TOOLS, ELFLINT, architecture_of, check_conformance,
                       compiler_targets, describe, run_compiler, runner_for)
 
 SOURCE = """\N{REFERENCE MARK} A program that exits with status 0.
-@[startup]
+@[startup, impure]
 fn main() \N{RIGHTWARDS ARROW} u8:
     0
 """

@@ -8,7 +8,7 @@
 ※ changed: an operator answers with a value everywhere else in the language, and
 ※ a set is no different for being a place in memory.
 
-@[startup]
+@[startup, impure]
 fn main() → u8:
     let a: ⸨u8⸩ = ⸨1u8, 2u8, 3u8⸩
     let b: ⸨u8⸩ = ⸨3u8, 4u8⸩

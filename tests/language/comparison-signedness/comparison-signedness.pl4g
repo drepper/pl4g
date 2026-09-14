@@ -15,7 +15,7 @@ let signed_says: mut bool = false
 @[visible]
 let unsigned_says: mut bool = false
 
-@[startup]
+@[startup, impure]
 fn main() → u8:
     signed_says ← negative < positive
     unsigned_says ← big < one

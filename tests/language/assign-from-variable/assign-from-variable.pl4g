@@ -6,7 +6,7 @@
 let source: u8 = 23u8
 let target: mut u8 = 0u8
 
-@[startup]
+@[startup, impure]
 fn main() → u8:
     target ← source
     target

@@ -12,7 +12,7 @@ let quotient: mut i8 = 0i8
 @[visible]
 let rest: mut i8 = 0i8
 
-@[startup]
+@[startup, impure]
 fn main() → u8:
     quotient ← minus_seven ÷ two ?? 0i8
     rest ← minus_seven % two ?? 0i8

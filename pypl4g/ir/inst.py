@@ -315,12 +315,19 @@ class CallInst(Instruction):
 
     @property
     def has_effects(self) -> bool:
-        """A call does whatever the callee does, which is not known here.
+        """A call does whatever the callee does, which the callee says.
 
-        When purity is inferred or declared, a call to a function that has no
-        effects will be able to say so; until then every call is kept.
+        A function that may change something that outlives the call has to be
+        made whether or not anyone wants its answer; a function that only works
+        out an answer does not, so a call to one that nothing reads is an
+        instruction the program need not run.
+
+        Asked of the callee by name rather than by type, since a callee that is
+        not a function this module knows -- an indirect call, when there is one
+        -- says nothing, and what it does not say has to be assumed.
         """
-        return True
+        attrs = getattr(self.callee, "attrs", None)
+        return bool(getattr(attrs, "impure", True))
 
     def __init__(self, callee: object, args: Sequence[Value], result_ty: Type,
                  span: Span = INVALID_SPAN) -> None:

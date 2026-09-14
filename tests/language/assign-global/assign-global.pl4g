@@ -5,7 +5,7 @@
 ※ A variable at the top level is an address, so changing it writes memory.
 let counter: mut u8 = 1u8
 
-@[startup]
+@[startup, impure]
 fn main() → u8:
     counter ← 7u8
     counter

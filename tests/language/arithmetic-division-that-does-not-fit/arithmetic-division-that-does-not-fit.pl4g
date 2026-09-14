@@ -11,7 +11,7 @@ let minus_one: i8 = ⁻1i8
 @[visible]
 let kept: mut i8 = 0i8
 
-@[startup]
+@[startup, impure]
 fn main() → u8:
     kept ← smallest ÷ minus_one ?? ⁻7i8
     0u8

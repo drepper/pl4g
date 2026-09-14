@@ -1,0 +1,31 @@
+※ pl4g-test: compile=ok run=native,qemu exit=42 diag=none
+
+※ A function is pure unless it says otherwise, and what pure means is that
+※ calling it changes nothing a later call or a later reader could notice.  That
+※ is what lets a caller move a call, make it once instead of twice, or not make
+※ it at all -- which is worth having by default rather than on request.
+※
+※ A pure function may read anything, including a variable at the top level; it
+※ may write its own storage, an array it made being gone when the call ends; and
+※ it may call other pure functions.  What it may not do is change anything that
+※ was there before the call or is there after it.
+
+let base: u8 = 20u8
+
+fn doubled(n: u8) → u8:
+    n + n
+
+fn summed(v: u8⟦3⟧) → u8:
+    ※ reading an array it was handed is not changing it
+    v⟦0⟧ + v⟦1⟧ + v⟦2⟧
+
+fn worked_out() → u8:
+    ※ its own storage, written and then read, all inside one call
+    let room: mut u8⟦3⟧ = ⟦1u8, 0u8, 0u8⟧
+    room⟦1⟧ ← 0u8
+    ※ reading a variable at the top level, and calling another pure function
+    summed(room) + doubled(base)
+
+@[startup]
+fn main() → u8:
+    worked_out() + 1u8

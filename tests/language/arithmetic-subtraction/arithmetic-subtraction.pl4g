@@ -10,7 +10,7 @@ let three: i8 = 3i8
 @[visible]
 let same: mut i8 = 0i8
 
-@[startup]
+@[startup, impure]
 fn main() → u8:
     same ← three + ⁻3i8
     twenty - 3u8

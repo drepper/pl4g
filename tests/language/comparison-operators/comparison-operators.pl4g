@@ -21,7 +21,7 @@ let at_most: mut bool = false
 @[visible]
 let at_least: mut bool = false
 
-@[startup]
+@[startup, impure]
 fn main() → u8:
     equal ← small = large
     differ ← small ≠ large

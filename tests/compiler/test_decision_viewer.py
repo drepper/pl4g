@@ -21,7 +21,7 @@ let only_by_dropped: u8 = 9u8
 fn unreached() \N{RIGHTWARDS ARROW} u8:
     only_by_dropped
 
-@[startup]
+@[startup, impure]
 fn main() \N{RIGHTWARDS ARROW} u8:
     @[ignore(4006)]
     let unread: u8 = used
@@ -72,7 +72,7 @@ def test_the_whole_source_is_shown_not_only_the_lines_with_records(compiled) -> 
     _, log = compiled
     out = view(log).stdout
     assert "A program with things to decide about" in out, "the comment is missing"
-    assert "@[startup]" in out, "a line with no decision on it is missing"
+    assert "@[startup, impure]" in out, "a line with no decision on it is missing"
 
 
 def test_a_pattern_chooses_which_files_are_shown(compiled) -> None:  # noqa: ANN001

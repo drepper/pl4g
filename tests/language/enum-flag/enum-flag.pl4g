@@ -19,7 +19,7 @@ let mine: mut Perm = Perm.read
 @[visible]
 let readable: mut bool = false
 
-@[startup]
+@[startup, impure]
 fn main() → u8:
     mine ← mine | Perm.write
     readable ← (mine & Perm.read) = Perm.read

@@ -71,6 +71,11 @@ class FuncAttrs:
     #: the point of calling it, and the ones that may be called for what they do
     #: instead say so.
     can_ignore: bool = False
+    #: Whether the function may change anything that outlives the call.  It may
+    #: not by default: a function that only works out an answer is one a caller
+    #: may move, repeat or drop, and that is worth having by default rather than
+    #: on request.
+    impure: bool = False
     extra: Mapping[str, AttrValue] = field(default_factory=dict)
 
 

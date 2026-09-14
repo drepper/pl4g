@@ -8,7 +8,7 @@
 let g: mut u8 = 0u8
 
 ※ Reached, because the entry point calls the constructors itself.
-@[constructor]
+@[constructor, impure]
 fn prepare():
     g ← 7u8
 

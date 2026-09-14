@@ -13,7 +13,7 @@ import pytest
 from conftest import run_compiler
 from pypl4g.driver.options import ExitCode, load_option_table
 
-GOOD = """@[startup]
+GOOD = """@[startup, impure]
 fn main() \N{RIGHTWARDS ARROW} u8:
     0
 """
@@ -106,7 +106,7 @@ def test_unknown_warning_name_is_reported(source: Path, tmp_path: Path) -> None:
 def test_warnings_can_be_turned_off_and_made_errors(tmp_path: Path) -> None:
     """A warning is controlled by the option its catalog entry declares."""
     source = tmp_path / "t.pl4g"
-    source.write_text("@[startup]\nfn main() \N{RIGHTWARDS ARROW} u8:\n    return 0\n",
+    source.write_text("@[startup, impure]\nfn main() \N{RIGHTWARDS ARROW} u8:\n    return 0\n",
                       encoding="utf-8")
     output = tmp_path / "out"
     plain = run_compiler(["-o", str(output), str(source)])
@@ -163,7 +163,7 @@ let only_by_dropped: u8 = 9u8
 fn unreached() \N{RIGHTWARDS ARROW} u8:
     only_by_dropped
 
-@[startup]
+@[startup, impure]
 fn main() \N{RIGHTWARDS ARROW} u8:
     used
 """
@@ -214,7 +214,7 @@ def test_nothing_the_image_offers_is_ever_logged_as_dropped(tmp_path: Path) -> N
     source.write_text("".join((
         "@[visible]\nlet shared: u8 = 1u8\n\n",
         "@[visible]\nfn reachable() \N{RIGHTWARDS ARROW} u8:\n    1u8\n\n",
-        "@[startup]\nfn main() \N{RIGHTWARDS ARROW} u8:\n    1u8\n")),
+        "@[startup, impure]\nfn main() \N{RIGHTWARDS ARROW} u8:\n    1u8\n")),
         encoding="utf-8")
     log = tmp_path / "decisions.json"
     proc = run_compiler(["-o", str(tmp_path / "out"),
@@ -233,7 +233,7 @@ def test_time_report(source: Path, tmp_path: Path) -> None:
 
 DROPPED_LOCAL = """let g: u8 = 3u8
 
-@[startup]
+@[startup, impure]
 fn main() \N{RIGHTWARDS ARROW} u8:
     @[ignore(4006)]
     let unread: u8 = g

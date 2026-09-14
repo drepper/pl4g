@@ -19,7 +19,7 @@ fn holds(s: ⸨u8⸩, k: u8) → bool:
 fn kept(d: ⸨Key: u8⸩, k: Key) → u8:
     d⸨k⸩ ?? 0u8
 
-@[startup]
+@[startup, impure]
 fn main() → u8:
     let s: ⸨u8⸩ = ⸨1u8, 2u8, 3u8⸩
     let d: mut ⸨Key: u8⸩ = ⸨Key.a: 1u8, Key.b: 2u8⸩

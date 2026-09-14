@@ -7,7 +7,7 @@ let kept: mut u8 = 0u8
 fn prepare():
     return
 
-@[startup]
+@[startup, impure]
 fn main() → u8:
     kept ← prepare()
     kept

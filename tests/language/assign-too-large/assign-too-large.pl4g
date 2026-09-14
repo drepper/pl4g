@@ -4,7 +4,7 @@
 ※ The rule against narrowing a value holds for an assignment too.
 let counter: mut u8 = 1u8
 
-@[startup]
+@[startup, impure]
 fn main() → u8:
     counter ← 300u8
     counter

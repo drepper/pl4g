@@ -76,7 +76,7 @@ def _is_byte(word: str) -> bool:
 
 #: The function the whole arrangement is for: it answers with what it was given.
 IDENTITY = "".join(("fn f(p: u8) ", ARROW, " u8:\n    p\n\n",
-                    "@[startup]\nfn main() ", ARROW, " u8:\n    f(42u8)\n"))
+                    "@[startup, impure]\nfn main() ", ARROW, " u8:\n    f(42u8)\n"))
 
 
 @pytest.mark.parametrize("triple", compiler_targets())
@@ -104,7 +104,7 @@ def test_and_it_runs(triple: str, tmp_path) -> None:  # noqa: ANN001
 TWO_CONVENTIONS = "".join((
     "@[cdecl]\nfn theirs(a: u8, b: u8) ", ARROW, " u8:\n    a | b\n\n",
     "fn ours(a: u8, b: u8) ", ARROW, " u8:\n    a | b\n\n",
-    "@[startup]\nfn main() ", ARROW, " u8:\n",
+    "@[startup, impure]\nfn main() ", ARROW, " u8:\n",
     "    theirs(32u8, 8u8) | ours(2u8, 0u8)\n"))
 
 
@@ -132,7 +132,7 @@ ACROSS_A_CALL = "".join((
     "".join("".join(("let v", str(n), ": u8 = ", str(1 << n), "u8\n"))
             for n in range(5)),
     "\nfn twice(p: u8) ", ARROW, " u8:\n    p | p\n\n",
-    "@[startup]\nfn main() ", ARROW, " u8:\n",
+    "@[startup, impure]\nfn main() ", ARROW, " u8:\n",
     "    let a: u8 = v0\n    let b: u8 = v1\n    let c: u8 = v2\n",
     "    let d: u8 = v3\n    let e: u8 = v4\n",
     "    let got: u8 = twice(32u8)\n",

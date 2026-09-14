@@ -18,7 +18,7 @@ ARROW = "\N{RIGHTWARDS ARROW}"
 
 def expression(text: str) -> ast.Expr:
     """Parse *text* as the body of a startup function and return the expression."""
-    source = "".join(("@[startup]\nfn main() ", ARROW, " u8:\n    ", text, "\n"))
+    source = "".join(("@[startup, impure]\nfn main() ", ARROW, " u8:\n    ", text, "\n"))
     sources = SourceManager()
     unit_source = sources.add(Path("t.pl4g"), source)
     engine, collected = collecting_engine(None)
@@ -93,7 +93,7 @@ def compile_expression(text: str, *extra: str,
     source = tmp_path / "t.pl4g"
     source.write_text("".join((
         "let a: u8 = 0b1100_0011u8\nlet b: u8 = 0b0101_0101u8\n\n",
-        "@[startup]\nfn main() ", ARROW, " u8:\n    ", text, "\n")), encoding="utf-8")
+        "@[startup, impure]\nfn main() ", ARROW, " u8:\n    ", text, "\n")), encoding="utf-8")
     output = tmp_path / "out"
     proc = run_compiler(["-o", str(output), "--emit=ir", *extra, str(source)])
     return proc, output.read_text(encoding="utf-8") if proc.returncode == 0 else ""
@@ -182,7 +182,7 @@ def test_the_program_computes_it(triple: str, written: str, expected: int,
     source = tmp_path / "t.pl4g"
     source.write_text("".join((
         "let a: u8 = 0b1100_0011u8\nlet b: u8 = 0b0101_0101u8\n\n",
-        "@[startup]\nfn main() ", ARROW, " u8:\n    ", written, "\n")),
+        "@[startup, impure]\nfn main() ", ARROW, " u8:\n    ", written, "\n")),
         encoding="utf-8")
     output = tmp_path / "out"
     proc = run_compiler(["-o", str(output), "".join(("--target=", triple)),

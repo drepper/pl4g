@@ -12,7 +12,7 @@ let big: u64 = 4294967296u64
 @[visible]
 let answer: mut u64 = 0u64
 
-@[startup]
+@[startup, impure]
 fn main() → u8:
     answer ← big ⊠ big
     0u8

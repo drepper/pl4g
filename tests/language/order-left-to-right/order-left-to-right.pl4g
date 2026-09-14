@@ -17,17 +17,19 @@
 
 let order: mut u8 = 0u8
 
+@[impure]
 fn note(n: u8) → u8:
     order ← order × 5u8 + n
     n
 
+@[impure]
 fn pair_of(n: u8) → 〈u8, u8〉:
     〈note(n), note(n + 1u8)〉
 
 fn four(a: u8, b: u8, c: u8, d: u8) → u8:
     a + b + c + d
 
-@[startup]
+@[startup, impure]
 fn main() → u8:
     ※ 1, then the two the spread stands for, then 4
     let sum: u8 = four(note(1u8), ⁂pair_of(2u8), note(4u8))

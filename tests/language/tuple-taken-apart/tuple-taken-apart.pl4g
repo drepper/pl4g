@@ -20,7 +20,7 @@ fn sorted(x: u8, y: u8) → 〈u8, u8〉:
     else:
         〈y, x〉
 
-@[startup]
+@[startup, impure]
 fn main() → u8:
     ※ into variables at the top level
     low, high ← sorted(b, a)

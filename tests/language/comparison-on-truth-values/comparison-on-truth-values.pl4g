@@ -9,7 +9,7 @@ let same: mut bool = false
 @[visible]
 let different: mut bool = false
 
-@[startup]
+@[startup, impure]
 fn main() → u8:
     same ← ready = seen
     different ← ready ≠ seen

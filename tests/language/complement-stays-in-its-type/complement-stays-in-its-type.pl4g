@@ -13,7 +13,7 @@ let byte_agrees: mut bool = false
 @[visible]
 let half_agrees: mut bool = false
 
-@[startup]
+@[startup, impure]
 fn main() → u8:
     byte_agrees ← ~ fifteen = 240u8
     half_agrees ← ~ sixteen_bits = 65520u16

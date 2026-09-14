@@ -1,0 +1,15 @@
+※ pl4g-test: compile=error diag=4478
+
+※ A variable at the top level exists before the call and after it, so writing
+※ one is exactly the thing being ruled out: a second call would find what the
+※ first left, and a reader anywhere could tell that the call was made.
+
+let counter: mut u8 = 0u8
+
+fn bump():
+    counter ← counter + 1u8
+
+@[startup, impure]
+fn main() → u8:
+    bump()
+    counter

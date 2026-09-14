@@ -12,5 +12,5 @@ let seven: mut u8 = 7u8
 @[visible]
 let kept: mut u8 = 0u8
 
-@[startup]
+@[startup, impure]
 fn main() → u8 { match hundred ÷ seven { u8(q) { kept ← q } ⊥ { kept ← 9u8 } } ; kept }

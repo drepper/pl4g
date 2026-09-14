@@ -93,6 +93,8 @@ GROUPS: tuple[Group, ...] = (
            "arithmetic-operators": "a sum and a product that check and can fault",
            "call-nested": "four calls, two of them nested",
            "assign-to-the-wildcard": "two answers taken and two dropped into '_'",
+           "pure-by-default": "four pure functions, one of them writing its own array",
+           "pure-call-is-dropped": "a pure call dropped and an impure one kept",
            "parameter-mut": "a parameter counted down in, and one that is not",
            "cdecl-attribute": "two conventions in one program, called both ways",
            "arithmetic-division": "a division and a remainder, each checked twice",

@@ -1,0 +1,22 @@
+※ pl4g-test: compile=error diag=4480
+
+※ Whatever the callee may change, the caller may change by calling it, so
+※ purity is a property of everything a call reaches and not of one function's
+※ own statements.  A function calling one marked `@[impure]` is marked
+※ `@[impure]` itself, which is the one line that says where the effects in a
+※ program begin.
+
+let counter: mut u8 = 0u8
+
+@[impure]
+fn bump():
+    counter ← counter + 1u8
+
+fn twice():
+    bump()
+    bump()
+
+@[startup, impure]
+fn main() → u8:
+    twice()
+    counter

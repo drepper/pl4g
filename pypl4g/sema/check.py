@@ -17,7 +17,8 @@ from ..front.token import (BOTTOM_GLYPH, BUILTIN_GLYPH, EMPTY_ARENA_NAME,
                           TOLERANCE_NAME, WILDCARD_NAME)
 from ..ir.builder import IRBuilder
 from ..ir.layout import DataLayout, stride_of
-from ..ir.inst import BinOp, CastKind, CmpPred, Instruction, UnOp
+from ..ir.inst import (BinaryInst, BinOp, CastInst, CastKind, CmpPred,
+                       ExtractInst, FrameInst, Instruction, UnOp)
 from . import tables
 from ..ir.function import (DEFAULT_CCONV, SYSTEM_CCONV, BasicBlock, FuncAttrs,
                            Function,
@@ -502,6 +503,10 @@ class Checker:
         #: arms, and about which the unread-value rule therefore says nothing
         #: while the arms are being checked.
         self._carried: set[int] = set()
+        #: Whether the function being lowered said it may change things that
+        #: outlive the call.  Where it did not, the places that would make such
+        #: a change report one instead.
+        self._impure: bool = False
         #: Whether what is being lowered is what a loop comes to, which is
         #: what a `break` hands over and what an `else` arm gives.  A mismatch
         #: there is about the loop rather than about whatever the loop stands
@@ -1340,6 +1345,7 @@ class Checker:
         inline = InlineHint.DEFAULT
         abi: str | None = None
         can_ignore = False
+        impure = False
         linkage = self._linkage_of(bound)
         extra: dict[str, int | str | bool] = {}
         for attr in bound:
@@ -1357,6 +1363,8 @@ class Checker:
                 case "inline":
                     inline = (InlineHint.NEVER if attr.as_str("mode") == "never"
                               else InlineHint.ALWAYS)
+                case "impure":
+                    impure = True
                 case "can_ignore":
                     can_ignore = True
                 case "cdecl":
@@ -1376,7 +1384,8 @@ class Checker:
                 case _:
                     pass
         return FuncAttrs(special=special, priority=priority, inline=inline, abi=abi,
-                         can_ignore=can_ignore, extra=extra), linkage
+                         can_ignore=can_ignore, impure=impure,
+                         extra=extra), linkage
 
     # -- types -----------------------------------------------------------------
 
@@ -1725,6 +1734,7 @@ class Checker:
         block = func.add_block()
         builder = IRBuilder(self._module, func)
         outer_answer, self._answering = self._answering, func.ty.ret
+        outer_impure, self._impure = self._impure, func.attrs.impure
         self._push_scope()
         for index, param in enumerate(node.params):
             value = block.add_param(func.ty.params[index], param.name)
@@ -1734,6 +1744,7 @@ class Checker:
         self._lower_block(builder, node.body, func)
         self._pop_scope()
         self._answering = outer_answer
+        self._impure = outer_impure
         if not builder.is_terminated:
             if func.ty.ret is VOID:
                 builder.ret()
@@ -2420,6 +2431,8 @@ class Checker:
                              given=len(stmt.indices), wanted=ty.rank)
             return
         start, lengths = self._shape_of(builder, base, ty, stmt.span)
+        if not self._made_here(start):
+            self._an_effect(D.LANG_PURE_WRITES_ELSEWHERE, stmt.span)
         offset = self._offset_of(builder, stmt.indices, ty, lengths, stmt.span)
         if offset is None:
             return
@@ -2483,6 +2496,9 @@ class Checker:
             self._diags.emit(D.LANG_COLLECTION_VALUE_TOO_LARGE, expr.span,
                              found=ty.value.render())
             return UndefConst(ERROR)
+        # Making one takes room out of an arena, and an arena outlives the
+        # call: the next call gets what this one left of it.
+        self._an_effect(D.LANG_PURE_WRITES_ELSEWHERE, expr.span)
         return self._build_collection(builder, expr, ty,
                                       self._arena_named(expr.arena), ready)
 
@@ -2742,6 +2758,7 @@ class Checker:
         value = self._lower_into(builder, stmt.value, ty.value, stmt.span)
         if self._value_type_of(key) is ERROR or self._value_type_of(value) is ERROR:
             return
+        self._an_effect(D.LANG_PURE_WRITES_ELSEWHERE, stmt.span)
         place = self._put_key(builder, base, key, stmt.span)
         builder.store(self._value_place(builder, place, ty.value), value,
                       stmt.span)
@@ -4072,6 +4089,7 @@ class Checker:
             return None
         if not self._check_mutable(node, target.mutable, target.span):
             return None
+        self._an_effect(D.LANG_PURE_CHANGES_A_VARIABLE, node.span, name=node.name)
         value = self._checked_value(builder, node, target.value_type)
         builder.store(target, value, node.span)
         return builder.load(target, node.span) if wants_value else None
@@ -4130,6 +4148,7 @@ class Checker:
             self._report_mismatch(node.span, self._value_type_of(value),
                                   target.value_type)
             return
+        self._an_effect(D.LANG_PURE_CHANGES_A_VARIABLE, node.span, name=node.name)
         builder.store(target, value, node.span)
 
     def _checked_value(self, builder: IRBuilder, node: ast.AssignStmt,
@@ -4983,6 +5002,8 @@ class Checker:
             return UndefConst(ERROR)
         if any(value.ty is ERROR for value in args):
             return UndefConst(ERROR)
+        if func.attrs.impure:
+            self._an_effect(D.LANG_PURE_CALLS_IMPURE, expr.span, name=func.name)
         answer = builder.call(func, args, func.ty.ret, expr.span)
         if func.ty.ret is VOID and expected is not None:
             # Somewhere wants a value and there is none.  The two places a call
@@ -5271,6 +5292,43 @@ class Checker:
         if found is expected:
             return True
         return isinstance(expected, ResultType) and found is expected.ok
+
+    def _an_effect(self, which: int, span: Span, **args: object) -> None:
+        """Report a change that outlives the call, where the function is pure.
+
+        Everything that makes such a change comes through here, so that what
+        "pure" means is one list rather than a rule each place remembers: a
+        variable at the top level written, memory the function did not make
+        written, and a function that may do either called.
+        """
+        if self._impure:
+            return
+        self._diags.emit(which, span, **args)
+
+    def _made_here(self, place: Value) -> bool:
+        """Whether a place is storage this call made and this call will lose.
+
+        A frame is that, and so is anything worked out from one -- a bitcast of
+        it, a row of it, an element of it.  Anything else came from somewhere
+        that outlives the call: a variable at the top level, a parameter the
+        caller handed over, something read out of memory.
+
+        Asked of the value rather than of what was written, because the same
+        question has the same answer however the place was arrived at.
+        """
+        seen = place
+        while True:
+            if isinstance(seen, FrameInst):
+                return True
+            if isinstance(seen, CastInst) or (
+                    isinstance(seen, BinaryInst)
+                    and seen.op in (BinOp.ADD, BinOp.SUB)):
+                seen = seen.operands[0]
+                continue
+            if isinstance(seen, ExtractInst):
+                seen = seen.operands[0]
+                continue
+            return False
 
     def _report_mismatch(self, span: Span, found: Type, expected: Type) -> None:
         """Report a type that does not match what the context requires.

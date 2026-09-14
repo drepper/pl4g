@@ -27,7 +27,7 @@ let chosen: mut Colour = Colour.green
 @[visible]
 let side: Wide = Wide.second
 
-@[startup]
+@[startup, impure]
 fn main() → u8:
     let kept: mut u8 = 0u8
     match chosen:

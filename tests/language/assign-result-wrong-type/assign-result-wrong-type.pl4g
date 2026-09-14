@@ -4,6 +4,6 @@
 ※ The variable an assignment stands for must have the type the function returns.
 let counter: mut u16 = 1u16
 
-@[startup]
+@[startup, impure]
 fn main() → u8:
     counter ← 7u16

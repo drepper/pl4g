@@ -15,7 +15,7 @@ let either: mut bool = false
 @[visible]
 let chained: mut bool = false
 
-@[startup]
+@[startup, impure]
 fn main() → u8:
     both ← yes and no
     either ← yes or no

@@ -972,6 +972,29 @@ The rule that makes this easy to keep: **a function that answers what type somet
 `_one_type` takes an `into` list, `_array_written` answers the elements beside the type, and `_entries_written` answers an
 `_Entries`.  Anything that asks a type and throws the value away will lower it a second time somewhere.
 
+What a function may change
+--------------------------
+
+`FuncAttrs.impure` says whether a function may change what outlives the call, and everything that would make such a change goes
+through `_an_effect`, which reports where the function being lowered did not say it may.  One list rather than a rule each place
+remembers: a variable at the top level written, memory the function did not make written, a collection made, and a call to a
+function that may do any of those.
+
+**What counts as "memory it did not make" is asked of the value, not of the syntax.**  `_made_here` walks a place back through
+the casts and the arithmetic that named it: a `frame` is storage this call made and will lose, and anything worked out from one
+still is.  Anything else -- a variable at the top level, a parameter the caller handed over, something read out of memory -- came
+from somewhere that outlives the call.  Asking it this way means a row of a local array, an element of one and a slice of one all
+answer correctly without any of them being listed.
+
+**`CallInst.has_effects` asks the callee**, by attribute rather than by type, so a callee that is not a function this module knows
+says nothing and what it does not say is assumed.  That one line is the whole of the optimization: dead-code elimination already
+drops an instruction that nothing uses and that has no effects, so a pure call whose answer nothing reads goes with no pass
+knowing what purity is.
+
+**The runtime is impure**, both the hand-written symbols and the generated table functions: they allocate and they write tables,
+all of which outlives the call.  They are reached from `_put_key` and its neighbours rather than from `_lower_call`, so what
+reports a program using a collection is the collection rule and not the call rule.
+
 An answer that has to be taken
 -----------------------------
 

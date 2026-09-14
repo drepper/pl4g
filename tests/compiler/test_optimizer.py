@@ -74,10 +74,11 @@ def test_a_write_stays_even_though_nothing_reads_it_back() -> None:
     assert [i.opcode for i in block.insts] == ["mem.start", "store", "ret"]
 
 
-def test_a_call_stays_because_nothing_here_knows_what_it_does() -> None:
-    """Purity is not inferred or declared yet, so every call is kept."""
+def test_a_call_stays_where_the_callee_may_change_something() -> None:
+    """A call to an impure function is made whether or not anyone wants its answer."""
     module = Module("t")
-    callee = Function("side", module.types.func_type((), U8), FuncAttrs())
+    callee = Function("side", module.types.func_type((), U8),
+                      FuncAttrs(impure=True))
     module.add_function(callee)
     func = _startup(module)
     block = func.entry
@@ -86,6 +87,24 @@ def test_a_call_stays_because_nothing_here_knows_what_it_does() -> None:
     block.append(RetInst(module.int_const(U8, 0)))
     assert not DeadCodeElimination().run(module)
     assert [i.opcode for i in block.insts] == ["call", "ret"]
+
+
+def test_a_call_goes_where_the_callee_only_works_out_an_answer() -> None:
+    """A pure call nothing reads is an instruction the program need not run.
+
+    Which is what makes `_ \N{LEFTWARDS ARROW} f()` worth writing rather than merely allowed: the
+    answer goes nowhere, so with nothing else to do the call goes too.
+    """
+    module = Module("t")
+    callee = Function("worked_out", module.types.func_type((), U8), FuncAttrs())
+    module.add_function(callee)
+    func = _startup(module)
+    block = func.entry
+    assert block is not None
+    block.append(CallInst(callee, (), U8))
+    block.append(RetInst(module.int_const(U8, 0)))
+    assert DeadCodeElimination().run(module)
+    assert [i.opcode for i in block.insts] == ["ret"]
 
 
 def test_every_shape_says_for_itself_whether_it_has_effects() -> None:
@@ -106,7 +125,7 @@ def test_every_shape_says_for_itself_whether_it_has_effects() -> None:
 
 UNREAD = """let g: u8 = 3u8
 
-@[startup]
+@[startup, impure]
 fn main() \N{RIGHTWARDS ARROW} u8:
     @[ignore(4006)]
     let unread: u8 = g
@@ -271,14 +290,14 @@ def test_a_declaration_nothing_calls_goes_too() -> None:
 
 UNREACHED = """let g: mut u8 = 0u8
 
-@[constructor]
+@[constructor, impure]
 fn prepare():
     g \N{LEFTWARDS ARROW} 7u8
 
 fn unreached() \N{RIGHTWARDS ARROW} u8:
     2u8
 
-@[startup]
+@[startup, impure]
 fn main() \N{RIGHTWARDS ARROW} u8:
     g
 """
@@ -389,7 +408,7 @@ let only_by_dropped: u8 = 9u8
 fn unreached() \N{RIGHTWARDS ARROW} u8:
     only_by_dropped
 
-@[startup]
+@[startup, impure]
 fn main() \N{RIGHTWARDS ARROW} u8:
     used
 """

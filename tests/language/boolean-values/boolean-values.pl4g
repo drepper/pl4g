@@ -10,7 +10,7 @@ let ready: bool = true
 @[expect(4007)]
 let seen: mut bool = false
 
-@[startup]
+@[startup, impure]
 fn main() → u8:
     seen ← ready
     1u8

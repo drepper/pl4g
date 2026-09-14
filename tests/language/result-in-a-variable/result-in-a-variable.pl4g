@@ -21,7 +21,7 @@ let kept: mut u8? = 1u8
 @[visible]
 let fixed: u8? = 9u8
 
-@[startup]
+@[startup, impure]
 fn main() → u8:
     ※ a division with no answer, kept and then read back
     kept ← hundred ÷ none

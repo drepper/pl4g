@@ -5,7 +5,7 @@
 ※ Each assignment supersedes the one before it.
 let counter: mut u8 = 1u8
 
-@[startup]
+@[startup, impure]
 fn main() → u8:
     counter ← 10u8
     counter ← 20u8

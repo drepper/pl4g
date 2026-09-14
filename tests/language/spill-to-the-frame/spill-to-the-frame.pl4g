@@ -138,7 +138,7 @@ let w30: mut u8 = 0u8
 @[expect(4007)]
 let w31: mut u8 = 0u8
 
-@[startup]
+@[startup, impure]
 fn main() → u8:
     let v0: u8 = g0
     let v1: u8 = g1

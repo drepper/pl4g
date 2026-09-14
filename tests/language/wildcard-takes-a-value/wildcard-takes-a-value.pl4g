@@ -6,10 +6,11 @@
 
 let counter: mut u8 = 0u8
 
+@[impure]
 fn prepare():
     counter ← 5u8
 
-@[startup]
+@[startup, impure]
 fn main() → u8:
     _ ← prepare()
     counter
