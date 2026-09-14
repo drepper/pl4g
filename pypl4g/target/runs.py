@@ -42,7 +42,7 @@ whole register safe rather than merely convenient.
 
 from __future__ import annotations
 
-from typing import Protocol, Sequence
+from typing import Protocol
 
 from ..ir.inst import BinOp
 from ..ir.layout import DataLayout, stride_of
@@ -83,13 +83,16 @@ def lower_trapping(asm: Assembler, op: BinOp, ty: VecType, left: MCOperand,
     asm.run_op(_PLAIN[op], destination, left, right, lane.bits, span)
     answer = MCReg(destination, bits=asm.run_bits)
     bad = _went_past(asm, op, lane, left, right, answer, scratch, span)
+    # Only the lanes the run covers are asked about: what is beyond it is not
+    # the program's, and may well have gone past where none of the program's
+    # elements did.
     found = scratch.scratch()
-    asm.run_top_bits(found, bad, span)
-    # Only the lanes the run covers: what is beyond it is not the program's.
-    asm.op(ops.AND, found, MCReg(found, bits=32),
-           MCImm(_live(ty, layout, asm.run_bits), 32, signed=False), span=span)
+    asm.run_any_lane(found, bad, stride_of(lane, layout), ty.lanes, span)
+    # The whole register, not the low half of it: what says a lane went past may
+    # be anywhere in what the target left there, and a target that uses less of
+    # it leaves the rest clear.
     carry_on = asm.reserve_label("in.range")
-    asm.branch(Condition.EQ, MCReg(found, bits=32), MCImm(0, 32, signed=False),
+    asm.branch(Condition.EQ, MCReg(found, bits=64), MCImm(0, 64, signed=False),
                carry_on, span)
     fault.out_of_range(asm, span)
     asm.block(carry_on)
@@ -141,23 +144,19 @@ def _op(asm: Assembler, what: ops.Op, lane: IntType, left: MCOperand,
     return MCReg(into, bits=asm.run_bits)
 
 
-def _live(ty: VecType, layout: DataLayout, bits: int) -> int:
-    """Which of the gathered bits belong to lanes the run actually covers.
+def top_bytes(stride: int, lanes: int, bits: int) -> int:
+    """Which bytes of a register hold the answer for a lane the run covers.
 
-    One bit per byte of the register comes back, so a lane's own answer is the
-    bit of its topmost byte -- the top bit of a lane is the top bit of the byte
-    it ends in.  A run shorter than the register leaves the rest of the bits
-    saying whatever the lanes beyond it came to, and none of that is the
-    program's.
+    The top bit of a lane is the top bit of the byte the lane ends in, so a
+    lane's own answer is in its topmost byte and in no other.  A run shorter
+    than the register leaves the bytes beyond it saying whatever the lanes
+    beyond it came to, and none of that is the program's.
+
+    Both targets want this and each wants it differently -- as a mask of
+    gathered bits on one, as sixteen bytes of constant on the other -- so what
+    is shared is which bytes, and the shape it is wanted in is theirs.
     """
-    stride = stride_of(ty.element, layout)
     mask = 0
-    for lane in range(min(ty.lanes, bits // 8 // stride)):
+    for lane in range(min(lanes, bits // 8 // stride)):
         mask |= 1 << ((lane + 1) * stride - 1)
     return mask
-
-
-#: The saturating operations a run has an instruction for, by lane width.  The
-#: wider lanes have none on any of these machines, so those are still done an
-#: element at a time.
-SATURATING: Sequence[BinOp] = (BinOp.SAT_ADD, BinOp.SAT_SUB)

@@ -26,12 +26,14 @@ from ..branches import (CONDITIONS, Move, UnsupportedBranch,
 from ..faults import Messages, describe
 from ..pool import Constants
 from ..narrow import normalize
-from ...ir.layout import DataLayout, align_of, size_of, tag_offset_of
-from ...ir.types import parts_of
+from ...ir.layout import (DataLayout, align_of, size_of, stride_of,
+                          tag_offset_of)
+from ...ir.types import VecType, parts_of
 from ..callconv import TooManyArguments, argument_places, result_places
 from ..saturate import (DIVISION, NAMES, SATURATING, TRAPPING, Unsupported,
                         SHIFTS, lower_division_result, lower_saturating,
                         lower_shift, lower_trapping)
+from ..runs import lower_trapping as lower_trapping_run
 from . import ops as a64ops
 from ...ir.function import SYSTEM_CCONV
 from .abi import lookup as lookup_cconv
@@ -237,6 +239,167 @@ class A64Selector(InstructionSelector):
                                         MCReg(src.reg, bits=64)), span),)
         raise UnsupportedOperation(
             "putting that kind of operand in a floating-point register", span)
+
+    #: How many bits one of these registers holds.
+    run_bits: int = 128
+
+    #: How the sixteen bytes are divided into lanes, by how wide one lane is.
+    #: This is part of the instruction here rather than of its operands, so it
+    #: is part of the mnemonic.
+    _ARRANGEMENT: Final[dict[int, str]] = {8: "16b", 16: "8h", 32: "4s", 64: "2d"}
+
+    #: The bitwise three, whose answer does not depend on how the bits are
+    #: divided, so all three are written as bytes whatever the lanes are.
+    _RUN_OPERATIONS: Final[dict[str, str]] = {
+        ops.AND.name: "and.16b", ops.OR.name: "orr.16b", ops.XOR.name: "eor.16b",
+    }
+
+    #: And the arithmetic, which does depend on it.
+    _RUN_ARITHMETIC: Final[dict[str, str]] = {
+        ops.PLUS.name: "add", ops.MINUS.name: "sub",
+    }
+
+    def select_run_move(self, dst: Reg | MCMem, src: MCOperand, bits: int,
+                        span: Span) -> Sequence[MCInst]:
+        """Move *bits* of a run of elements into or out of one of these registers."""
+        if bits not in (32, 64, 128):
+            raise UnsupportedOperation("".join((
+                "moving ", str(bits), " bits of a run of elements")), span)
+        if isinstance(dst, MCMem):
+            if not isinstance(src, MCReg):
+                raise UnsupportedOperation("writing a run that is not in a register",
+                                           span)
+            return self._run_place("str", MCReg(src.reg, bits=bits), dst, span)
+        if isinstance(src, MCMem):
+            return self._run_place("ldr", MCReg(dst, bits=bits), src, span)
+        if isinstance(src, MCReg):
+            if self._same_register(dst, src):
+                return ()
+            # The whole of one register goes, whatever the run is: what is
+            # beyond the run has to be clear and staying clear is a property of
+            # the register and not of part of one.  There is no move between two
+            # of these; an `or` of a register with itself is how it is written.
+            whole = MCReg(src.reg, bits=128)
+            return (self._inst("orr.16b", (MCReg(dst, bits=128), whole, whole),
+                               span),)
+        raise UnsupportedOperation("putting that kind of operand in a run register",
+                                   span)
+
+    def _run_place(self, mnemonic: str, held: MCReg, place: MCMem,
+                   span: Span) -> Sequence[MCInst]:
+        """A read or a write of a run, with the address built where it must be.
+
+        No instruction here can name an address outright, so one is built a page
+        at a time; and the register it is built in cannot be the destination, a
+        run not living in an ordinary register.
+        """
+        base = MCReg(INFO.new_virtual(GPR, 64))
+        offset = MCImm(place.disp, 12, signed=False)
+        if place.disp_sym is None:
+            where = MCReg(place.base, bits=64) if place.base is not None else base
+            return (self._inst(mnemonic, (held, where, offset), span),)
+        symbol = MCSymRef(place.disp_sym)
+        return (
+            self._inst("adrp", (base, symbol), span),
+            self._inst("add.lo12", (base, base, symbol), span),
+            self._inst(mnemonic, (held, base, offset), span),
+        )
+
+    def select_run_op(self, op: Op, dst: Reg, left: MCOperand, right: MCOperand,
+                      bits: int, span: Span) -> Sequence[MCInst]:
+        """Do *op* to every lane of a run at once.
+
+        Three operands here, so nothing has to be moved into place first: the
+        destination is named separately from both of the sources.
+        """
+        mnemonic = self._RUN_OPERATIONS.get(op.name)
+        if mnemonic is None:
+            arithmetic = self._RUN_ARITHMETIC.get(op.name)
+            arrangement = self._ARRANGEMENT.get(bits)
+            if arithmetic is None or arrangement is None:
+                raise UnsupportedOperation("".join((
+                    "'", op.name, "' over a whole run of ", str(bits),
+                    "-bit elements")), span)
+            mnemonic = ".".join((arithmetic, arrangement))
+        return (self._inst(mnemonic, (MCReg(dst, bits=128), _run_whole(left),
+                                      _run_whole(right)), span),)
+
+    def select_run_saturating(self, dst: Reg, left: MCOperand, right: MCOperand,
+                              adding: bool, signed: bool, bits: int,
+                              span: Span) -> Sequence[MCInst]:
+        """Add or subtract every lane, stopping at the end of the lane's type."""
+        arrangement = self._ARRANGEMENT.get(bits)
+        if arrangement is None:
+            raise UnsupportedOperation("".join((
+                "saturating arithmetic over a run of ", str(bits),
+                "-bit elements")), span)
+        name = "".join(("s" if signed else "u", "q", "add" if adding else "sub",
+                        ".", arrangement))
+        return (self._inst(name, (MCReg(dst, bits=128), _run_whole(left),
+                                  _run_whole(right)), span),)
+
+    def select_run_splat(self, dst: Reg, src: MCOperand, bits: int,
+                         span: Span) -> Sequence[MCInst]:
+        """Put one value in every lane of *dst*, which is one instruction here."""
+        arrangement = self._ARRANGEMENT.get(bits)
+        if arrangement is None:
+            raise UnsupportedOperation("".join((
+                "one value of ", str(bits), " bits in every lane")), span)
+        before: list[MCInst] = []
+        if isinstance(src, MCImm):
+            carried = INFO.new_virtual(GPR, 64)
+            before.extend(self.select_move(carried, src, span))
+            src = MCReg(carried)
+        if not isinstance(src, MCReg):
+            raise UnsupportedOperation(
+                "spreading that kind of operand over every lane", span)
+        return (*before,
+                self._inst(".".join(("dup", arrangement)),
+                           (MCReg(dst, bits=128),
+                            MCReg(src.reg, bits=64 if bits == 64 else 32)), span))
+
+    def select_run_ones(self, dst: Reg, span: Span) -> Sequence[MCInst]:
+        """Every bit of *dst* set.
+
+        There is no instruction that puts a constant in one of these registers
+        without an immediate this table does not carry, and this needs none: a
+        register exclusive-ored with itself is every bit clear, and turned round
+        is every bit set.
+        """
+        target = MCReg(dst, bits=128)
+        return (self._inst("eor.16b", (target, target, target), span),
+                self._inst("not.16b", (target, target), span))
+
+    def select_run_any_lane(self, dst: Reg, src: MCOperand, stride: int,
+                            lanes: int, span: Span) -> Sequence[MCInst]:
+        """Whether any lane the run covers has its top bit set.
+
+        Each lane is first turned into every bit of itself set or every bit
+        clear, by the comparison with zero that asks exactly the question the
+        top bit answers.  After that no byte of a lane that did not go past
+        holds anything, so what is left is whether any byte of the run is not
+        zero -- and *of the run*, which is why a short one is reduced over only
+        the bytes it covers rather than over the whole register.
+        """
+        if not isinstance(src, MCReg):
+            raise UnsupportedOperation(
+                "asking about the lanes of something not in a register", span)
+        arrangement = self._ARRANGEMENT.get(stride * 8)
+        if arrangement is None:
+            raise UnsupportedOperation("".join((
+                "asking about lanes of ", str(stride), " bytes")), span)
+        held = MCReg(src.reg, bits=128)
+        made = [self._inst(".".join(("cmlt", arrangement)), (held, held), span)]
+        covered = stride * lanes
+        if covered > 8:
+            # More than one ordinary register's worth: the largest byte of the
+            # sixteen answers for all of them.
+            made.append(self._inst("umaxv.16b", (held, held), span))
+            covered = 4
+        return (*made,
+                self._inst("fmov", (MCReg(dst, bits=64 if covered > 4 else 32),
+                                    MCReg(src.reg, bits=64 if covered > 4 else 32)),
+                           span))
 
     def _materialize(self, dst: Reg, value: int, span: Span) -> Sequence[MCInst]:
         """Instructions that build the constant *value* a quarter of a word at a
@@ -728,16 +891,20 @@ class A64Selector(InstructionSelector):
     def select_spill(self, slot: int, source: Reg, span: Span) -> Sequence[MCInst]:
         """Instructions that write *source* to the frame slot at *slot*.
 
-        Eight bytes whichever kind of register it is: the slot is that wide, and
-        what is written is read back by the instruction beside this one.
+        Eight bytes of an ordinary register, and the whole of one of the others:
+        the same register holds a floating-point value and a whole run of
+        elements, and which of the two a spill is saving is not something it can
+        see.  A slot for one is as wide as the register, so there is room.
         """
-        return (self._inst("str", (MCReg(source, bits=64), MCReg(SP),
+        bits = 128 if self._is_float(source) else 64
+        return (self._inst("str", (MCReg(source, bits=bits), MCReg(SP),
                                    MCImm(slot, 12, signed=False)), span),)
 
     def select_reload(self, destination: Reg, slot: int,
                       span: Span) -> Sequence[MCInst]:
         """Instructions that read the frame slot at *slot* into *destination*."""
-        return (self._inst("ldr", (MCReg(destination, bits=64), MCReg(SP),
+        bits = 128 if self._is_float(destination) else 64
+        return (self._inst("ldr", (MCReg(destination, bits=bits), MCReg(SP),
                                    MCImm(slot, 12, signed=False)), span),)
 
     def select_frame(self, size: int, span: Span) -> Sequence[MCInst]:
@@ -758,16 +925,18 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                    known_clobbers: Mapping[str, frozenset[RegUnit]] | None = None
                    ) -> None:
     """Build the machine form of one IR function."""
-    from ...ir.inst import (AddressInst, BinaryInst, BrInst, CallInst, CmpInst,
+    from ...ir.inst import (AddressInst, AnyLaneInst, BinaryInst, BrInst,
+                            CallInst, CmpInst,
                             CondBrInst,
                             FrameInst, AssertInst,
-                            LoadInst, MemStartInst, RetInst, StoreInst,
+                            LoadInst, MemStartInst, RetInst, SplatInst, StoreInst,
                             UnaryInst, UnreachableInst)
     from ...ir.function import Function as _Function
     from ...ir.mangle import symbol_name
     from ...ir.module import GlobalVar
     from ...ir.types import (BOOL, BoolType, DictType, EnumType, FloatType,
-                             IntType, MEM, PtrType, ResultType, SetType, VOID)
+                             IntType, MEM, PtrType, ResultType, SetType,
+                             VecType, VOID)
     from ...ir.inst import (CastInst, CastKind, ExtractInst, FailedInst,
                             TupleInst, UnwrapInst, WrapInst)
     from ...ir.value import FloatConst, UndefConst
@@ -894,6 +1063,10 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
         def scratch(self) -> VirtReg:
             """A register of the full width, for a value with no name of its own."""
             return registers.new_virtual(GPR, 64)
+
+        def run_scratch(self) -> VirtReg:
+            """A register holding a whole run, for one with no name of its own."""
+            return registers.new_virtual(VEC, _FLOAT_REGISTER_BITS)
 
     operands = _Operands()
 
@@ -1026,6 +1199,82 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                     held[id(inst)] = destination
                     asm.address(destination,
                                 symbol_of(inst.operands[0]), inst.span)
+                case LoadInst() if isinstance(inst.ty, VecType):
+                    address = inst.operands[1]
+                    bits = _run_bits(inst.ty)
+                    destination = _new_value(inst.ty, registers)
+                    held[id(inst)] = destination
+                    asm.run_move(destination,
+                                 place_of(address, span, size_bits=bits),
+                                 bits, inst.span)
+                case StoreInst() if isinstance(inst.operands[2].ty, VecType):
+                    written = inst.operands[2]
+                    assert isinstance(written.ty, VecType)
+                    bits = _run_bits(written.ty)
+                    asm.run_store(place_of(inst.operands[1], span, size_bits=bits),
+                                  MCReg(operands.register_of(written, inst.span),
+                                        bits=128),
+                                  bits, inst.span)
+                case SplatInst():
+                    assert isinstance(inst.ty, VecType)
+                    destination = _new_value(inst.ty, registers)
+                    held[id(inst)] = destination
+                    asm.run_splat(destination,
+                                  operands.value(inst.operands[0], inst.span),
+                                  _width_of(inst.ty.element), inst.span)
+                case BinaryInst() if isinstance(inst.ty, VecType) \
+                        and inst.op in TRAPPING:
+                    destination = _new_value(inst.ty, registers)
+                    held[id(inst)] = destination
+                    try:
+                        lower_trapping_run(
+                            asm, inst.op, inst.ty,
+                            operands.value(inst.operands[0], inst.span),
+                            operands.value(inst.operands[1], inst.span),
+                            destination, operands,
+                            _Fault("".join((NAMES[inst.op], " that does not fit")),
+                                   inst.span),
+                            _LAYOUT, inst.span)
+                    except Unsupported as unsupported:
+                        raise UnsupportedOperation(unsupported.what, span) \
+                            from unsupported
+                case BinaryInst() if isinstance(inst.ty, VecType) \
+                        and inst.op in SATURATING:
+                    destination = _new_value(inst.ty, registers)
+                    held[id(inst)] = destination
+                    asm.run_saturating(
+                        destination,
+                        operands.value(inst.operands[0], inst.span),
+                        operands.value(inst.operands[1], inst.span),
+                        inst.op is BinOp.SAT_ADD,
+                        _is_signed(inst.ty.element), _width_of(inst.ty.element),
+                        inst.span)
+                case BinaryInst() if isinstance(inst.ty, VecType):
+                    destination = _new_value(inst.ty, registers)
+                    held[id(inst)] = destination
+                    operation = _OPERATIONS.get(inst.op)
+                    if operation is None:
+                        raise UnsupportedOperation("".join((
+                            "'", inst.op.value, "' over a whole run")), span)
+                    asm.run_op(operation, destination,
+                               operands.value(inst.operands[0], inst.span),
+                               operands.value(inst.operands[1], inst.span),
+                               _width_of(inst.ty.element), inst.span)
+                case UnaryInst() if isinstance(inst.ty, VecType):
+                    if inst.op is not UnOp.NOT:
+                        raise UnsupportedOperation("".join((
+                            "'", inst.op.value, "' over a whole run")), span)
+                    destination = _new_value(inst.ty, registers)
+                    held[id(inst)] = destination
+                    # Every bit of a register set, which this architecture has
+                    # no constant for and one instruction for: every lane of a
+                    # register compared with itself is equal to itself.
+                    ones = _new_value(inst.ty, registers)
+                    asm.run_ones(ones, inst.span)
+                    asm.run_op(ops.XOR, destination,
+                               operands.value(inst.operands[0], inst.span),
+                               MCReg(ones, bits=128), _width_of(inst.ty.element),
+                               inst.span)
                 case LoadInst() if isinstance(inst.ty, ResultType):
                     address = inst.operands[1]
                     answer = inst.ty.ok
@@ -1535,6 +1784,13 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                         "the instruction '", inst.opcode, "'")), span)
     asm.end_function()
 
+def _run_whole(operand: MCOperand) -> MCOperand:
+    """A run register named as the whole of one, which is what these read."""
+    if isinstance(operand, MCReg):
+        return MCReg(operand.reg, bits=128)
+    return operand
+
+
 def _is_floating(ty: Type) -> bool:
     """Whether *ty* is a floating-point type, or a result answering with one."""
     from ...ir.types import FloatType, ResultType
@@ -1630,7 +1886,7 @@ def _new_value(ty: Type, registers: RegisterInfo,
     The hint says where the value is wanted anyway.  Taking it turns the move
     that would put it there into a move of a register to itself, which then goes.
     """
-    from ...ir.types import FloatType, ProductType, SumType
+    from ...ir.types import FloatType, ProductType, SumType, VecType
 
     if isinstance(ty, (ProductType, SumType)):
         # A product is every one of its fields at once and a sum is one of its
@@ -1639,9 +1895,12 @@ def _new_value(ty: Type, registers: RegisterInfo,
         # of one yet, so this is where saying so belongs.
         raise UnsupportedOperation("".join((
             "a value of type '", ty.render(), "'")), None)
-    if isinstance(ty, FloatType):
-        # A floating-point value belongs to the other kind of register, and the
-        # allocator now asks a value which kind it wants rather than assuming.
+    if isinstance(ty, (FloatType, VecType)):
+        # A floating-point value and a whole run of elements both belong to the
+        # other kind of register, and the allocator asks a value which kind it
+        # wants rather than assuming.  A run takes the whole register whatever
+        # its length, since what is beyond the run has to be clear and staying
+        # clear is a property of the register and not of part of one.
         return registers.new_virtual(VEC, _FLOAT_REGISTER_BITS,
                                      hint=hint)
     bits = _width_of(ty)
@@ -1670,6 +1929,11 @@ def _returned_value(func: Function) -> object:
             if isinstance(inst, RetInst) and inst.operands:
                 return inst.operands[0]
     return None
+
+def _run_bits(ty: VecType) -> int:
+    """How many bits of memory a whole run of elements occupies."""
+    return ty.lanes * stride_of(ty.element, _LAYOUT) * 8
+
 
 def _width_of(ty: Type) -> int:
     """How many bits a value of *ty* occupies in memory.

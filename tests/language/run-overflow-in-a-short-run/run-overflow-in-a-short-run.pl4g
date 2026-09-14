@@ -1,0 +1,14 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=64 diag=none
+
+※ A run of eight bytes, whose last element is the one that goes past.  Eight
+※ bytes is half a register on every machine here, so the answer about that
+※ element sits in the half a target reading the cheaper way would not look at --
+※ which is exactly what one of them did, and is why this is its own test rather
+※ than a line in another.
+
+let v: u8⟦8⟧ = ⟦1u8, 2u8, 3u8, 4u8, 5u8, 6u8, 7u8, 60u8⟧
+
+@[startup]
+fn main() → u8:
+    let up: u8⟦8⟧ = v + 200u8
+    up⟦0⟧

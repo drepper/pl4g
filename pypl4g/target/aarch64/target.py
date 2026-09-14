@@ -25,6 +25,7 @@ from ..faults import Messages
 from ..pool import Constants
 from ..globals import emit_globals
 from ..vectors import Vectors, settle as settle_vectors
+from ...ir.inst import BinOp, UnOp
 from ..target import ImageDefaults
 from .abi import CC_PL4G, lookup as lookup_cconv
 from .encoder import EncodingError, encode
@@ -83,10 +84,25 @@ class AArch64Target:
     def vectors(self) -> Vectors:
         """What this machine can do to a run of elements at once.
 
-        Nothing yet.  Every run is done an element at a time, which is what the
-        program means.
+        Sixteen bytes at a time.  The Advanced SIMD instructions are in the
+        base this compiler builds for -- a processor of this architecture
+        running Linux has them -- so this is what every one of them can do and
+        there is no level to ask for it with.
+
+        The bitwise three at every lane width, since a register of bits is the
+        same answer however it is divided into lanes.  Adding and subtracting at
+        every lane width too, each with the check that says whether any lane
+        went past.  And the saturating pair at every width, which this machine
+        has and the other one has only for the two narrow ones.  Multiplying is
+        not here: seeing that a product went past wants the upper half of it.
         """
-        return Vectors()
+        every = 64
+        return Vectors(
+            bits=128,
+            binary={BinOp.AND: every, BinOp.OR: every, BinOp.XOR: every,
+                    BinOp.ADD: every, BinOp.SUB: every,
+                    BinOp.SAT_ADD: every, BinOp.SAT_SUB: every},
+            unary={UnOp.NOT: every})
 
     def generate(self, module: Module, asm: Assembler, diags: DiagEngine,
                  opt_level: int, sources: SourceManager | None = None) -> None:

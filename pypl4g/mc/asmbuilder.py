@@ -197,10 +197,17 @@ class InstructionSelector(Protocol):
         """
         ...
 
-    def select_run_top_bits(self, dst: Reg, src: MCOperand,
-                            span: Span) -> Sequence[MCInst]:
-        """Instructions that gather the top bit of every byte of a run into an
-        ordinary register."""
+    def select_run_any_lane(self, dst: Reg, src: MCOperand, stride: int,
+                            lanes: int, span: Span) -> Sequence[MCInst]:
+        """Instructions that put into *dst* something that is zero exactly when
+        no lane of the run has its top bit set.
+
+        Only the *lanes* lanes of *stride* bytes each that the run covers are
+        asked about; what is beyond them is whatever the register happened to
+        hold and is nobody's answer.  What the value is beyond being zero or not
+        is the target's business -- one gathers a bit per byte, another the
+        largest byte -- so nothing reads it except a comparison with zero.
+        """
         ...
 
     def select_run_saturating(self, dst: Reg, left: MCOperand, right: MCOperand,
@@ -763,10 +770,12 @@ class Assembler:
         """Do *op* to every lane of *bits* bits of a run at once."""
         self._emit(self._selector.select_run_op(op, dst, left, right, bits, span))
 
-    def run_top_bits(self, dst: Reg, src: MCOperand,
+    def run_any_lane(self, dst: Reg, src: MCOperand, stride: int, lanes: int,
                      span: Span = INVALID_SPAN) -> None:
-        """Gather the top bit of every byte of a run into an ordinary register."""
-        self._emit(self._selector.select_run_top_bits(dst, src, span))
+        """Put into *dst* something zero exactly when no lane of the run that
+        the program covers has its top bit set."""
+        self._emit(self._selector.select_run_any_lane(dst, src, stride, lanes,
+                                                      span))
 
     def run_saturating(self, dst: Reg, left: MCOperand, right: MCOperand,
                        adding: bool, signed: bool, bits: int,

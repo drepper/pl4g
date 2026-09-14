@@ -34,7 +34,7 @@ from ..callconv import TooManyArguments, argument_places, result_places
 from ..saturate import (DIVISION, NAMES, SATURATING, TRAPPING, Unsupported,
                         SHIFTS, lower_division_result, lower_saturating,
                         lower_shift, lower_trapping)
-from ..runs import lower_trapping as lower_trapping_run
+from ..runs import lower_trapping as lower_trapping_run, top_bytes
 
 if TYPE_CHECKING:
     from ...mc.reg import PhysReg
@@ -555,14 +555,22 @@ class X86Selector(InstructionSelector):
         return (*moved, self._inst(mnemonic, (MCReg(dst, bits=128),
                                               _named_at(right, 128)), span))
 
-    def select_run_top_bits(self, dst: Reg, src: MCOperand,
-                            span: Span) -> Sequence[MCInst]:
-        """Gather the top bit of every byte of a run into an ordinary register."""
+    def select_run_any_lane(self, dst: Reg, src: MCOperand, stride: int,
+                            lanes: int, span: Span) -> Sequence[MCInst]:
+        """Whether any lane the run covers has its top bit set.
+
+        One instruction gathers the top bit of every byte into an ordinary
+        register, and one `and` throws away the bits belonging to bytes that are
+        not the last byte of a lane the run covers.  What is left is zero
+        exactly when no such lane went past.
+        """
         if not isinstance(src, MCReg):
             raise UnsupportedOperation(
                 "gathering the top bits of something not in a register", span)
-        return (self._inst("pmovmskb", (MCReg(dst, bits=32),
-                                        MCReg(src.reg, bits=128)), span),)
+        target = MCReg(dst, bits=32)
+        wanted = top_bytes(stride, lanes, 128)
+        return (self._inst("pmovmskb", (target, MCReg(src.reg, bits=128)), span),
+                self._inst("and", (target, MCImm(wanted, 32, signed=False)), span))
 
     def select_run_ones(self, dst: Reg, span: Span) -> Sequence[MCInst]:
         """Every bit of *dst* set.

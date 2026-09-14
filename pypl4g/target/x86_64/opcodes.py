@@ -190,6 +190,16 @@ X86_INSTRS: Final[tuple[X86InstDesc, ...]] = (
                 reg_op=1, rm_op=0, implicit_defs=(EFLAGS,), flags=InstFlags.ZEXT32,
                 est_size=2, roles=_ACCUMULATE),
     # and r/m64, r64                     REX.W 21 /r
+    # and r/m32, imm32                   81 /4 id
+    X86InstDesc("and", (_rm(32), _imm(32)), opcode=0x81,
+                modrm=ModRMUse.EXT_RM, ext=4, rm_op=0, imm_op=1, imm_bits=32,
+                implicit_defs=(EFLAGS,), flags=InstFlags.ZEXT32,
+                est_size=6, roles=_ACCUMULATE),
+    # and r/m32, imm8 (sign extended)    83 /4 ib
+    X86InstDesc("and", (_rm(32), _imm(8)), opcode=0x83,
+                modrm=ModRMUse.EXT_RM, ext=4, rm_op=0, imm_op=1, imm_bits=8,
+                implicit_defs=(EFLAGS,), flags=InstFlags.ZEXT32,
+                est_size=3, roles=_ACCUMULATE),
     X86InstDesc("and", (_rm(64), _r(64)), opcode=0x21, opsize=OpSize.REXW,
                 modrm=ModRMUse.REG_RM, reg_op=1, rm_op=0, implicit_defs=(EFLAGS,),
                 est_size=3, roles=_ACCUMULATE),
