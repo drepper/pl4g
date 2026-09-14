@@ -76,6 +76,7 @@ the parser does, and they are the floor everything else is measured against.
 | `beb9413` | 1.30 | 2.17 | 2.10 | 1.75 |
 | `e29a5db` | 1.21 | 2.08 | 2.02 | 1.71 |
 | `659fce3` | 1.13 | 1.95 | 1.94 | 1.55 |
+| `fa870d4` | 1.18 | 1.91 | 1.82 | 1.66 |
 
 ### Variables and memory
 
@@ -136,6 +137,7 @@ backend do.
 | `beb9413` | 1.60 | 2.15 | 1.76 |
 | `e29a5db` | 1.44 | 1.93 | 1.94 |
 | `659fce3` | 1.35 | 1.94 | 1.66 |
+| `fa870d4` | 1.38 | 2.17 | 2.00 |
 
 ### Register pressure
 
@@ -196,6 +198,7 @@ and they are the only ones that reach the frame.
 | `beb9413` | 2.21 | 8.25 |
 | `e29a5db` | 2.32 | 7.94 |
 | `659fce3` | 2.19 | 7.91 |
+| `fa870d4` | 2.49 | 8.38 |
 
 ### What is left out
 
@@ -256,6 +259,7 @@ decision log does.
 | `beb9413` | 1.76 | 2.12 |
 | `e29a5db` | 1.92 | 1.94 |
 | `659fce3` | 1.72 | 1.78 |
+| `fa870d4` | 1.83 | 1.76 |
 
 ### Expressions
 
@@ -316,6 +320,7 @@ optimizer does.
 | `beb9413` | 2.15 | 1.86 | 3.21 | 3.18 | 2.91 | 1.98 | 2.01 | 2.90 | 3.44 | 2.70 | 2.49 | 7.13 | 11.21 | 4.22 | 9.34 | 4.73 | 3.52 | 3.57 |  |
 | `e29a5db` | 2.04 | 1.79 | 3.09 | 3.05 | 2.85 | 2.08 | 2.16 | 2.99 | 3.38 | 2.78 | 2.73 | 7.32 | 11.28 | 4.12 | 9.46 | 4.69 | 3.58 | 3.64 |  |
 | `659fce3` | 1.86 | 1.59 | 2.80 | 2.91 | 2.84 | 1.83 | 2.03 | 2.93 | 3.44 | 2.72 | 2.59 | 7.07 | 11.14 | 4.18 | 9.43 | 4.68 | 3.44 | 3.55 | 2.92 |
+| `fa870d4` | 1.89 | 1.77 | 3.25 | 2.67 | 2.49 | 1.90 | 2.09 | 2.94 | 3.47 | 3.02 | 2.71 | 7.33 | 11.54 | 4.10 | 9.32 | 4.75 | 3.53 | 3.60 | 3.30 |
 
 ### Types
 
@@ -375,6 +380,7 @@ Definitions the program writes.  These move when the parser, the name resolution
 | `beb9413` | 1.48 | 4.13 | 4.16 | 4.82 | 5.74 | 3.14 | 6.76 |  |
 | `e29a5db` | 1.58 | 4.02 | 4.19 | 4.66 | 5.58 | 2.82 | 6.55 | 5.37 |
 | `659fce3` | 1.57 | 4.14 | 4.21 | 4.75 | 5.64 | 3.11 | 6.62 | 5.35 |
+| `fa870d4` | 1.48 | 4.24 | 4.35 | 4.78 | 5.46 | 3.29 | 6.70 | 5.56 |
 
 ### Loops
 
@@ -435,6 +441,7 @@ These move when the register allocator or the branch lowering does.
 | `beb9413` | 2.67 | 3.10 | 2.43 | 3.72 |  |  |
 | `e29a5db` | 2.55 | 3.15 | 2.33 | 3.85 | 7.57 | 23.02 |
 | `659fce3` | 2.53 | 3.13 | 2.24 | 3.75 | 7.45 | 23.11 |
+| `fa870d4` | 2.54 | 3.24 | 2.23 | 3.76 | 7.57 | 23.09 |
 
 ### Collections
 
@@ -495,6 +502,7 @@ changes, and they are the only samples that carry code the compiler wrote for it
 | `beb9413` | 16.62 | 22.60 | 14.64 | 17.49 |
 | `e29a5db` | 16.56 | 22.87 | 14.75 | 17.30 |
 | `659fce3` | 16.71 | 22.52 | 14.74 | 17.43 |
+| `fa870d4` | 16.67 | 22.73 | 14.80 | 17.51 |
 
 Process
 -------
@@ -559,6 +567,7 @@ worth showing here, and every figure is in the JSON beside this file.
 | `beb9413` | 90 | 115 |
 | `e29a5db` | 92 | 119 |
 | `659fce3` | 91 | 117 |
+| `fa870d4` | 85 | 115 |
 
 What each row is:
 
@@ -614,6 +623,7 @@ What each row is:
 - `beb9413` -- ✨ An array has a shape
 - `e29a5db` -- ✨ A loop takes its values from four things, not one
 - `659fce3` -- ✨ A member of a tuple is named the way an element of an array is
+- `fa870d4` -- ✨ A tuple's index is every constant the compiler knows, and only those
 
 What each program exercises:
 
