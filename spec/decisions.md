@@ -2589,6 +2589,43 @@ program that used it.
 
 ---
 
+## 2026-09-15T05:00+02:00 — language
+
+**An array has a shape**
+
+Decided on the user's direction: more than one dimension, with the indices separated by commas.
+
+**A shape and not a nesting.**  `T⟦2,3⟧` is one array of two dimensions, not an array of two whose elements are arrays of
+three, and `m⟦i,j⟧` asks for a place in it.  That is the array languages' reading -- APL, BQN and NumPy all give an array a
+shape -- and this language's first page says its style is theirs.  C, Go, Rust and Zig have only the other reading and spell it
+`m[i][j]`.
+
+Both readings exist here and are different types laid out alike: `T⟦3⟧⟦2⟧` is two arrays of three and is indexed with two pairs of
+brackets.  Keeping both is not a second spelling of one thing: what differs is what the program says it means, and one pair of
+brackets against two is exactly the difference.
+
+**Row-major**, which is what every language but Fortran does.  It is the choice that makes a row of a table a run of elements, and
+so the choice that will make taking a row out of one cost a multiplication and no copy.  It also puts the index arithmetic in the
+ordinary Horner shape, which for a vector comes to the index itself -- nothing is paid for the generality.
+
+**Every dimension says how many, or none does.**  Half of each would make the parts of a value depend on which half was told,
+which is a third shape of value for one case; the case (`T⟦,4⟧`, a run-time number of rows of four) is real and is in the list.
+
+**One index per dimension, and each checked against its own.**  `m⟦0,5⟧` of a two-by-three is outside, though it is within the
+six elements there are in all -- which is what a single check against the total would have let through, and what C lets through
+with no check at all.  Fewer indices than dimensions is refused rather than read as a row: taking a row out is worth having and is
+one decision with slicing a table, and both are in the list.
+
+**A literal is written a dimension deep.**  The outer list is the first dimension, which is the same order the shape is written in
+and the order the elements are laid out in.  The shape can therefore be read off a literal that is written with no type beside it,
+which is what `let m := ⟦⟦1u8,2u8⟧,⟦3u8,4u8⟧⟧` needs.
+
+**Only a vector is sliced.**  A row of a table is a run and a column is not: its elements are a row apart, which is a stride and
+not something a place and a count can say.  NumPy's answer is a stride beside the place and the count, and that is the entry in the
+list; until then a run out of a table has nothing to be.
+
+---
+
 ---
 
 Open questions

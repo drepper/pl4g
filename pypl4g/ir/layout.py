@@ -64,15 +64,19 @@ def size_of(ty: Type, layout: DataLayout) -> int:
                 total = _align_up(total, align_of(member, layout))
                 total += size_of(member, layout)
             return _align_up(total, align_of(ty, layout))
-        case ArrayType() if ty.length is not None:
+        case ArrayType() if ty.fixed:
             # Its elements and nothing else, which is what "the type carries
             # everything" means: how many there are is in the type, so no room
-            # is spent saying it again.
-            return ty.length * stride_of(ty.element, layout)
+            # is spent saying it again.  However many dimensions the shape has,
+            # the elements are one run: the last dimension is the one whose
+            # neighbours are next to each other.
+            count = ty.count
+            assert count is not None
+            return count * stride_of(ty.element, layout)
         case ArrayType():
-            # Where the elements are and how many there are, which is what an
-            # array whose type does not say has to carry with it.
-            return 2 * layout.pointer_size
+            # Where the elements are and one count per dimension, which is what
+            # an array whose type does not say its shape has to carry with it.
+            return (1 + ty.rank) * layout.pointer_size
         case SetType() | DictType():
             # A handle, which is where the table is and nothing else: how many
             # entries it has and how much room it has for them are in the table
@@ -121,7 +125,7 @@ def align_of(ty: Type, layout: DataLayout) -> int:
             return align_of(ty.holder, layout)
         case TupleType():
             return max((align_of(m, layout) for m in ty.members), default=1)
-        case ArrayType() if ty.length is not None:
+        case ArrayType() if ty.fixed:
             # An array starts where its first element would, so the system's
             # rule is that it is aligned as one element is.  Where nothing
             # outside is reading it, one large enough to be worth reading a word

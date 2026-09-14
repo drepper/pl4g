@@ -1,0 +1,13 @@
+※ pl4g-test: compile=error diag=4459
+
+※ A run of elements is a place and a count.  A row of a table is one, and a
+※ column is not: its elements are a row apart, which is a stride and not
+※ something a place and a count can say.
+
+fn take(xs: u8⟦⟧) → u8:
+    xs⟦0⟧
+
+@[startup]
+fn main() → u8:
+    let m: u8⟦2,3⟧ = ⟦⟦1u8,2u8,3u8⟧,⟦4u8,5u8,6u8⟧⟧
+    take(m⟦0…1,0⟧)

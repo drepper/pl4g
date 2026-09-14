@@ -3423,6 +3423,87 @@
       "option": null
     },
     {
+      "number": 4456,
+      "name": "LANG_ARRAY_SHAPE_IS_HALF_TOLD",
+      "severity": "error",
+      "message": "an array says how many along every dimension or along none",
+      "args": [],
+      "cause": "An array either carries its shape in the type, and then needs no room beyond its elements, or carries the whole of it beside the elements.  Half of each would be a value whose parts depend on which half is which, which is a second kind of array for a case nothing has asked for.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Arrays",
+        "requirement": "Every dimension of an array type states its size, or none does."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4457,
+      "name": "LANG_ARRAY_WRONG_RANK",
+      "severity": "error",
+      "message": "the number of indices, {given}, is not the number of dimensions, {wanted}",
+      "args": [
+        {
+          "name": "given",
+          "type": "number",
+          "description": "how many were written"
+        },
+        {
+          "name": "wanted",
+          "type": "number",
+          "description": "how many dimensions the array has"
+        }
+      ],
+      "cause": "There is one index per dimension, in the order the shape was written in.  Fewer would name a row rather than an element, which is a thing this language does not yet take out of an array, and more would name a dimension the array does not have.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Arrays",
+        "requirement": "An array is looked in with one index per dimension."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4458,
+      "name": "LANG_ARRAY_NOT_WRITTEN_DEEP_ENOUGH",
+      "severity": "error",
+      "message": "one value is written here where a list of them is wanted",
+      "args": [],
+      "cause": "An array of more than one dimension is written a dimension deep: the outer list is the first dimension and each of its entries is the array of the dimensions left.  There are dimensions still to write here, and what stands there is one value.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Arrays",
+        "requirement": "An array of rank *r* written down is nested *r* deep."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4459,
+      "name": "LANG_ARRAY_SLICE_OF_A_TABLE",
+      "severity": "error",
+      "message": "a run is taken out of a vector, not out of '{found}'",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the array type written"
+        }
+      ],
+      "cause": "A run of elements is a place and a count.  A row of a table is one, and a column is not: its elements are a row apart, which is a stride and not something a place and a count can say.  Until a slice can carry a stride, only a vector is sliced.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Arrays",
+        "requirement": "Only an array of one dimension is sliced."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 5001,
       "name": "LANG_FUNCDEF_RETURN_UNREACHABLE",
       "severity": "warning",

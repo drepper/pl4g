@@ -1,0 +1,26 @@
+※ pl4g-test: compile=ok run=native,qemu exit=100 diag=none
+
+※ An array has a shape: one entry per dimension, separated by commas.  `u8⟦2,3⟧`
+※ is two rows of three and `u8⟦2,2,2⟧` a cube; there is no limit on how many.
+※
+※ The elements are in row-major order -- the last dimension is the one whose
+※ neighbours are next to each other -- which is what every language but Fortran
+※ does and what makes a row of a table a run of elements.
+※
+※ An array of more than one dimension is written a dimension deep: the outer
+※ list is the first dimension and each of its entries is the array of the
+※ dimensions left.
+※
+※ There is one index per dimension, in the order the shape was written in, and
+※ each is checked against its own dimension.
+
+let grid: u8⟦3,3⟧ = ⟦⟦1u8,2u8,4u8⟧, ⟦8u8,16u8,32u8⟧, ⟦64u8,0u8,0u8⟧⟧
+
+※ a table whose type does not say its shape carries one count per dimension
+fn corner(t: u8⟦,⟧, r: u8, c: u8) → u8:
+    t⟦r,c⟧
+
+@[startup]
+fn main() → u8:
+    let cube: u8⟦2,2,2⟧ = ⟦⟦⟦1u8,2u8⟧,⟦4u8,8u8⟧⟧, ⟦⟦16u8,32u8⟧,⟦64u8,128u8⟧⟧⟧
+    corner(grid, 2u8, 0u8) + cube⟦1,0,1⟧ + cube⟦0,1,0⟧

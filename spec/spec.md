@@ -958,6 +958,25 @@ however alike they read.  A type, a value of one and a lookup in one are written
 **The type is written after what it holds.**  `u8⟦4⟧` is four of them, which is the order it is read in: four of these, not an
 array of four whose elements are these.  More than one may follow -- `u8⟦4⟧⟦3⟧` is three arrays of four.
 
+##### Shape
+
+**An array has a shape: one entry per dimension, separated by commas.**  `u8⟦4⟧` is a vector of four, `u8⟦2,3⟧` a table of two
+rows of three, `u8⟦2,2,2⟧` a cube.  There is no limit on how many.
+
+```
+let m: u8⟦2,3⟧ = ⟦⟦1u8, 2u8, 3u8⟧, ⟦10u8, 20u8, 30u8⟧⟧
+let n: u8 = m⟦1,2⟧
+```
+
+**The elements are in row-major order**: the last dimension is the one whose neighbours are next to each other.  That is what
+every language but Fortran does, and it is what makes a row of a table a run of elements rather than a stride.
+
+**An array of more than one dimension is written a dimension deep** (4458): the outer list is the first dimension and each of its
+entries is the array of the dimensions left.
+
+**There is one index per dimension** (4457), in the order the shape was written in, and **each is checked against its own
+dimension** -- `m⟦0,5⟧` of a two-by-three is outside, though it would be within the six elements there are in all.
+
 ##### Fixed and dynamic
 
 **`T⟦N⟧` says how many elements there are**, and carries everything about the array but the elements themselves.  A value of one
@@ -965,7 +984,11 @@ needs no room beyond theirs, and what a value of one *is*, is where the elements
 many elements there are is part of the type, so it is something the compiler reads rather than something the program works out.
 
 **`T⟦⟧` does not**, and is where the elements are together with how many there are.  It owns nothing: the elements are an array's,
-or part of one.
+or part of one.  For an array of more than one dimension it carries one count per dimension, so `T⟦,⟧` is a table of no stated
+shape and takes three words.
+
+**Every dimension says how many, or none does** (4456).  Half of each would be a value whose parts depend on which half is which,
+which is a second kind of array for a case nothing has asked for.
 
 **A `T⟦N⟧` stands where a `T⟦⟧` is wanted**, which is how an array is passed to something that takes any length.  That goes one
 way only: a `T⟦4⟧` promises four, and nothing that has lost its count can promise that.
@@ -991,6 +1014,9 @@ and where, and the program stops.
 `a⟦i…j⟧` is the elements from `i` up to but not including `j`, which is a `T⟦⟧`.  It is the same half-open convention a range has
 everywhere else, so the count is the difference between the ends.  A step there is refused (4453): what a slice is, is a place and
 a count, and every other element is not something a place and a count can say.
+
+**Only a vector is sliced** (4459), for the same reason.  A row of a table is a run of elements and a column is not: its elements
+are a row apart, which is a stride.  Until a slice can carry a stride there is nothing for a run out of a table to be.
 
 ##### Where the elements are
 
@@ -1026,6 +1052,13 @@ Compare: C, whose arrays decay to a pointer and lose their length, which is wher
 `[4]T` and `[]T` are exactly this pair and which this follows; Rust's `[T; 4]` and `&[T]`, the same pair with a lifetime on the
 second; Zig's `[4]T` and `[]T`.  What none of them writes is the length after the element type; C writes `T a[4]`, which puts part
 of the type on the left of the name and part on the right, and every language since has moved it to one side.
+
+On shape this follows the array languages rather than the systems ones.  A `u8⟦2,3⟧` is one array of two dimensions, not an array
+of two whose elements are arrays of three: it has a shape the way an array in APL, BQN or NumPy has one, and `m⟦i,j⟧` asks for a
+place in it rather than for an element of an element.  C, Go, Rust and Zig all have only the second reading and spell it `m[i][j]`;
+this language has that reading too -- `u8⟦3⟧⟦2⟧` is two arrays of three -- and the two are laid out alike and are different types.
+The difference shows where a program says what it means: a table is indexed with one pair of brackets, and an array of arrays with
+two.
 
 #### Arenas
 

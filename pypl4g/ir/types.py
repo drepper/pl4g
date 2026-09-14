@@ -250,34 +250,64 @@ class TupleType(Type):
 
 @dataclass(frozen=True, slots=True)
 class ArrayType(Type):
-    """Several values of one type, one after another.
+    """Several values of one type, laid out one after another.
 
-    `length` is how many, where the type says; nothing where it does not.  A
-    type that says carries everything about the array but the elements
+    `shape` is how many along each dimension: one number for a vector, two for
+    a table, and so on.  A dimension is a number where the type says how many
+    and nothing where it does not, and the two are not mixed within one type --
+    an array either carries its shape in the type or carries the whole of it
+    beside the elements.
+
+    A type that says carries everything about the array but the elements
     themselves, so a value of one needs no room beyond theirs.  A type that
-    does not is a place and a count, which is two words and says nothing about
+    does not is a place and one count per dimension, and says nothing about
     where the elements are -- they may be an array's, or part of one.
+
+    The elements are in row-major order: the last dimension is the one whose
+    neighbours are next to each other.  That is what every language but Fortran
+    does, and it is what makes taking a row out of a table a run of elements
+    rather than a stride.
     """
 
     element: Type
-    length: int | None = None
+    shape: tuple[int | None, ...] = (None,)
+
+    @property
+    def rank(self) -> int:
+        """How many dimensions it has, which is at least one."""
+        return len(self.shape)
 
     @property
     def fixed(self) -> bool:
         """Whether the type says how many elements there are."""
-        return self.length is not None
+        return all(along is not None for along in self.shape)
+
+    @property
+    def count(self) -> "int | None":
+        """How many elements in all, where the type says."""
+        if not self.fixed:
+            return None
+        total = 1
+        for along in self.shape:
+            assert along is not None
+            total *= along
+        return total
+
+    def _dimensions(self) -> str:
+        """The shape as it is written between the brackets."""
+        return ",".join("" if along is None else str(along)
+                        for along in self.shape)
 
     def render(self) -> str:
         """The name of this type in the textual form of the IR."""
         return "".join((self.element.render(),
-                        "\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}",
-                        "" if self.length is None else str(self.length),
+                        "\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}", self._dimensions(),
                         "\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}"))
 
     def mangled(self) -> str:
         """The normalized name of this type, for use inside a symbol name."""
         return "".join(("array<", self.element.mangled(), ",",
-                        "" if self.length is None else str(self.length), ">"))
+                        self._dimensions(), ">"))
 
 
 @dataclass(frozen=True, slots=True)
@@ -425,7 +455,7 @@ class TypeContext:
     def __init__(self) -> None:
         self._results: dict[tuple[Type, Type | None], ResultType] = {}
         self._tuples: dict[tuple[Type, ...], TupleType] = {}
-        self._arrays: dict[tuple[Type, int | None], ArrayType] = {}
+        self._arrays: dict[tuple[Type, tuple[int | None, ...]], ArrayType] = {}
         self._sets: dict[Type, SetType] = {}
         self._dicts: dict[tuple[Type, Type], DictType] = {}
         self._pointers: dict[tuple[Type, bool], PtrType] = {}
@@ -455,12 +485,13 @@ class TypeContext:
             self._tuples[key] = found
         return found
 
-    def array_type(self, element: Type, length: "int | None" = None) -> ArrayType:
-        """Return the array type over *element*, of *length* where one is known."""
-        key = (element, length)
+    def array_type(self, element: Type,
+                   shape: "Sequence[int | None]" = (None,)) -> ArrayType:
+        """Return the array type over *element* with this shape."""
+        key = (element, tuple(shape))
         found = self._arrays.get(key)
         if found is None:
-            found = ArrayType(element, length)
+            found = ArrayType(element, tuple(shape))
             self._arrays[key] = found
         return found
 
@@ -541,8 +572,8 @@ def parts_of(ty: Type) -> tuple[Type, ...]:
     """What a value of *ty* is, where it is more than one value travelling as one.
 
     A result is its answer and the truth value beside it; a tuple is its
-    members; an array whose type does not say how many elements it has is where
-    they are and how many there are; anything else is itself.  Everything that
+    members; an array whose type does not say its shape is where the elements
+    are and one count per dimension; anything else is itself.  Everything that
     has to say where such a value goes -- a register, an argument, an answer --
     asks this rather than knowing the shapes, so a shape added later is added
     here.
@@ -554,6 +585,6 @@ def parts_of(ty: Type) -> tuple[Type, ...]:
         return (ty.ok, BOOL)
     if isinstance(ty, TupleType):
         return ty.members
-    if isinstance(ty, ArrayType) and ty.length is None:
-        return (_pointer_to(ty.element), U64)
+    if isinstance(ty, ArrayType) and not ty.fixed:
+        return (_pointer_to(ty.element), *(U64 for _ in ty.shape))
     return (ty,)

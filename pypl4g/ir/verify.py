@@ -426,7 +426,7 @@ def _is_an_address(ty: Type) -> bool:
     in the type and there is nothing else to carry.
     """
     return isinstance(ty, (PtrType, SetType, DictType)) or (
-        isinstance(ty, ArrayType) and ty.length is not None)
+        isinstance(ty, ArrayType) and ty.fixed)
 
 
 def _counts(ty: Type) -> bool:

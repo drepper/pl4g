@@ -1219,7 +1219,7 @@
         ]
       },
       "index": {
-        "multiple": false,
+        "multiple": true,
         "required": true,
         "types": [
           {

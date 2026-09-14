@@ -181,9 +181,13 @@ module.exports = grammar({
     // one may follow, which is an array of arrays.  The element type comes
     // first because that is the order it is read in: four of these, not an
     // array of four whose elements are these.
+    //
+    // One entry per dimension, separated by commas: `i32\u27e63,4\u27e7` is a table.
+    // An entry left out says the type does not carry how many there are along
+    // that dimension, so `i32\u27e6,\u27e7` is a table of no stated shape.
     type: $ => seq($._plain_type, repeat($._array_suffix)),
 
-    _array_suffix: $ => seq('\u27e6', optional(field('length', $._expression)),
+    _array_suffix: $ => seq('\u27e6', sepBy(',', optional(field('length', $._expression))),
                             '\u27e7'),
 
     _plain_type: $ => choice(
@@ -575,11 +579,12 @@ module.exports = grammar({
     array_literal: $ => seq('\u27e6', sepBy(',', $._expression), '\u27e7'),
 
     // Which element is wanted, or -- where a range stands there -- which run
-    // of them.  It binds as tightly as a call does, and to whatever stands
+    // of them.  One index per dimension, in the order the shape was written
+    // in.  It binds as tightly as a call does, and to whatever stands
     // immediately before it.
     element_expression: $ => prec(10, seq(
       field('array', $._non_comparison),
-      '\u27e6', field('index', $._expression), '\u27e7',
+      '\u27e6', sepBy1(',', field('index', $._expression)), '\u27e7',
     )),
 
     set_literal: $ => seq('\u2e28', sepBy(',', $._expression), '\u2e29',

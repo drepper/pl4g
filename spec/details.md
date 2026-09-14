@@ -724,14 +724,21 @@ two halves are independent and no such rule is needed.
 Arrays
 ------
 
-**What a value of an array type is, is where its elements are.**  A type that says how many carries everything about the array but
+**What a value of an array type is, is where its elements are.**  A type that says its shape carries everything about the array but
 the elements themselves, so there is nothing else for a value of one to hold; the backend treats it as an address, and the
-representation says so by letting a fixed-length array type stand where a pointer does in a `bitcast`.
+representation says so by letting such a type stand where a pointer does in a `bitcast`.
 
-**A type that does not say how many is two parts**: where the elements are and how many there are.  That is the same machinery a
-result and a tuple already use -- `parts_of` answers with two types, and everything that places a value asks `parts_of` rather than
-knowing the shapes -- so it needed no new mechanism, only the generalization of two rules in the verifier from "a tuple" to
-"anything of several parts".
+**A type that does not say its shape is a place and one count per dimension.**  That is the same machinery a result and a tuple
+already use -- `parts_of` answers with several types, and everything that places a value asks `parts_of` rather than knowing the
+shapes -- so it needed no new mechanism, only the generalization of two rules in the verifier from "a tuple" to "anything of
+several parts".  A vector of no stated length is two parts, a table three, and so on.
+
+**The shape is a tuple of dimensions, and the elements are one run.**  Row-major, which is what makes a row of a table a run and
+puts the index arithmetic in the ordinary Horner shape: each index is added on after what is already there has been multiplied by
+the dimension it steps through.  For a vector that comes to the index itself, so nothing is paid for the generality.
+
+Every dimension says how many or none does.  Mixing them would make the parts of a value depend on which dimensions were told,
+which is a second kind of array; the diagnostic says so rather than the compiler inventing a rule.
 
 **Where the elements are depends on the array.**  A variable at the top level holds them itself.  One inside a function holds them
 in the function's frame, which is what the `frame` instruction reserves: it answers with where the room is, and the room lasts
@@ -746,7 +753,8 @@ The frame hands out **bytes** rather than slots for this reason.  A spilled regi
 register; an array takes as much as its elements make it, aligned as its type asks.  Offsets once given out never move, which is
 what lets the lowering take room before the allocator knows whether it will need any.
 
-**Every read and every write is checked**, and the check is an instruction of its own.  What it tests is not about the read it
+**Every index is checked against its own dimension**, not against how many elements there are in all: `m⟦0,5⟧` of a two-by-three
+is outside though it is within the six.  The check is an instruction of its own.  What it tests is not about the read it
 guards -- an index is compared against a length, and neither is part of the load -- so it is not a flag on the load the way the
 overflow check is a property of an addition.  It lowers to a comparison and a branch that does not come back, through the same
 fault path an addition that does not fit uses.

@@ -109,7 +109,8 @@ GROUPS: tuple[Group, ...] = (
            "enum-flag": "a flag enumeration, its operators and three matches",
            "array-fixed": "an array whose type says how long it is",
            "array-slice": "a run of elements, passed to a function",
-           "array-global": "an array at the top level, read three times"}),
+           "array-global": "an array at the top level, read three times",
+           "array-table": "a table, a cube, and one of no stated shape"}),
     Group("Loops",
           "A branch backwards, which is what makes liveness a question about "
           "the graph rather than about the layout.  These move when the "

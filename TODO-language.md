@@ -91,11 +91,25 @@ To Do List for the PL4g language
     loop is a statement for that reason: with nothing that leaves it early, every way out is the condition, and a construct whose
     only way out produces nothing produces nothing.  Rust's `loop` is the shape to compare against if `break` arrives.
 
-[x] add support for arrays.  Done: `T⟦N⟧` says how many elements there are and carries nothing but them; `T⟦⟧` is
-    where they are and how many there are, and a `T⟦N⟧` stands where one is wanted.  `a⟦i⟧` reads an element and
-    `a⟦i…j⟧` a run of them; every access is checked, while compiling where both ends are written down and while
-    running where either is not.  A variable at the top level holds its elements itself and one inside a function holds them in the
-    frame.  A variable marked `@[cdecl]` is laid out the way the system would and every other one whichever way is better.
+[x] add support for arrays.  Done: an array has a shape, one entry per dimension -- `T⟦4⟧` a vector, `T⟦2,3⟧` a table -- and
+    either every dimension says how many or none does.  A type that says carries nothing but the elements; one that does not is
+    where they are and one count per dimension, and the first stands where the second is wanted.  `a⟦i,j⟧` reads an element,
+    one index per dimension in row-major order, and `a⟦i…j⟧` takes a run out of a vector; every access is checked,
+    while compiling where both ends are written down and while running where either is not.  A variable at the top level holds its
+    elements itself and one inside a function holds them in the frame.  A variable marked `@[cdecl]` is laid out the way the system
+    would and every other one whichever way is better.
+
+[ ] take a row out of a table.  `m⟦i⟧` of a `T⟦2,3⟧` is refused (4457) and would be a `T⟦3⟧`: row-major means a row is a run of
+    elements, so it costs one multiplication and no copy.  It is left out only because indexing with fewer indices than there are
+    dimensions is a rule worth writing down once rather than twice, and the entry below wants the same decision.
+
+[ ] slice a table.  Refused (4459).  A row is a run and a column is not: its elements are a row apart.  A slice that could say so
+    would carry a stride beside the place and the count, which is what NumPy does and what turns a slice into a view of any shape.
+    Worth doing with the entry above and with the one about arrays that grow, since all three change what a `T⟦⟧` carries.
+
+[ ] let a dimension be told and another not.  Refused (4456): an array either carries its whole shape in the type or none of it.
+    A `T⟦,4⟧` -- a run-time number of rows of four -- is the useful case, and it wants a value carrying only the counts the
+    type left out, which is a third shape of value for the sake of one case.  Worth it when something asks.
 
 [ ] an array that can grow.  A `T⟦⟧` is a place and a count and owns nothing, so there is nothing to grow: appending
     wants a third thing beside them -- how much room there is -- and an arena to ask for more from, which is what Go's slice header

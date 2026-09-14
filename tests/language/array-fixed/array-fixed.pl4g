@@ -3,7 +3,7 @@
 ※ An array holds several values of one type, one after another.  Its type is
 ※ written after what it holds -- `u8⟦4⟧` is four of them -- because that is the
 ※ order it is read in: four of these, not an array of four whose elements are
-※ these.
+※ these.  One entry per dimension: `u8⟦4⟧` is a vector and `u8⟦2,3⟧` a table.
 ※
 ※ A type that says how many carries everything about the array but the elements
 ※ themselves, so a value of one needs no room beyond theirs.  What a value of

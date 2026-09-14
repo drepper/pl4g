@@ -435,13 +435,21 @@ class Parser:
             found = self._parse_named_type()
         while self._check(TokKind.ARRAY_OPEN):
             self._advance()
-            length = (None if self._check(TokKind.ARRAY_CLOSE)
-                      else self._parse_expression())
+            shape = [self._parse_dimension()]
+            while self._accept(TokKind.COMMA) is not None:
+                shape.append(self._parse_dimension())
             end = self._expect(TokKind.ARRAY_CLOSE,
                                D.LANG_SYNTAX_EXPECTED_CLOSING_ARRAY).span
             found = ast.ArrayTypeRef(span=found.span.to(end), element=found,
-                                     length=length)
+                                     shape=tuple(shape))
         return found
+
+    def _parse_dimension(self) -> "ast.Expr | None":
+        """Parse how many there are along one dimension, or nothing for a
+        dimension the type does not say the size of."""
+        if self._check(TokKind.ARRAY_CLOSE) or self._check(TokKind.COMMA):
+            return None
+        return self._parse_expression()
 
     def _parse_tuple_type(self) -> ast.TupleTypeRef:
         """Parse ``\N{LEFT ANGLE BRACKET}TYPE, TYPE\N{RIGHT ANGLE BRACKET}``."""
@@ -994,7 +1002,7 @@ class Parser:
                                    base=target.base, key=target.key, value=value)
         if isinstance(target, ast.Element):
             return ast.ElementAssign(span=target.span.to(value.span),
-                                     base=target.base, index=target.index,
+                                     base=target.base, indices=target.indices,
                                      value=value)
         self._diags.emit(D.LANG_ASSIGN_NOT_A_PLACE, target.span)
         raise _Bail()
@@ -1090,11 +1098,13 @@ class Parser:
                 continue
             if self._check(TokKind.ARRAY_OPEN):
                 self._advance()
-                index = self._parse_expression()
+                indices = [self._parse_expression()]
+                while self._accept(TokKind.COMMA) is not None:
+                    indices.append(self._parse_expression())
                 end = self._expect(TokKind.ARRAY_CLOSE,
                                    D.LANG_SYNTAX_EXPECTED_CLOSING_ARRAY).span
                 found = ast.Element(span=found.span.to(end), base=found,
-                                    index=index)
+                                    indices=tuple(indices))
                 continue
             if self._check(TokKind.QUESTION):
                 mark = self._advance()

@@ -117,12 +117,14 @@ class CollectionTypeRef(Node):
 class ArrayTypeRef(Node):
     """`T\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}N\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}`, several values of one type, or `T\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}`, as many as there turn out to be.
 
-    `length` is what was written between the brackets, and is nothing where
-    nothing was: the type then says what the elements are and not how many.
+    `shape` is one entry per dimension, in the order they were written; an entry
+    is nothing where nothing was written for it, which says the type does not
+    carry how many there are along that dimension.  How many entries there are
+    is the rank, so `T\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}3,4\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}` is a table and `T\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET},\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}` a table of no stated shape.
     """
 
     element: "TypeExpr"
-    length: "Expr | None" = None
+    shape: tuple["Expr | None", ...] = (None,)
 
 
 type TypeExpr = TypeRef | CollectionTypeRef | TupleTypeRef | ArrayTypeRef
@@ -312,12 +314,14 @@ class ArrayLit(Expr):
 class Element(Expr):
     """`a\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}i\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}`: one element of an array, or `a\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}i\N{HORIZONTAL ELLIPSIS}j\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}`, a run of them.
 
-    Which of the two it is, is what stands between the brackets: a range there
-    asks for a run and anything else for one element.
+    There is one index per dimension, separated by commas, in the order the
+    shape was written in.  Which of the two things it is, is what stands between
+    the brackets: a range there asks for a run and anything else for one
+    element.
     """
 
     base: Expr
-    index: Expr
+    indices: tuple[Expr, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -479,7 +483,7 @@ class ElementAssign(Stmt):
     """`a\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}i\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET} \N{LEFTWARDS ARROW} v`: what an array holds at one place, changed."""
 
     base: Expr
-    index: Expr
+    indices: tuple[Expr, ...]
     value: Expr
 
 
