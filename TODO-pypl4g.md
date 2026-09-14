@@ -287,6 +287,12 @@ To Do List for the pypl4g compiler
     is in `XCR0`.  Nothing is generated that uses them, so nothing depends on it yet; a v3 or v4 program on a kernel that had
     turned AVX off would pass the check and fault.
 
+[ ] give the kinds of fault numbers of their own, out of the reserved range.  Everything leaves through 64 today, which is the
+    general one; an answer that will not fit, a division by zero, an index outside its array and an allocation that failed are
+    four different things a caller might want to act on differently.  What argues against it is that the message already names
+    the operation, the function and the line, so a number would say less than what is there -- it is worth doing when something
+    is reading the status rather than the message.
+
 [ ] count registers per part recursively.  `parts_of` gives a tuple its members and stops, so a member that is itself several
     values -- a result among them, `〈u8?, u8〉` -- is given one register where it needs two, and the program is refused with a
     message about an encoding of `mov`.  It has never worked; what it wants is for everything that counts parts to flatten, which

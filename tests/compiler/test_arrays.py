@@ -14,6 +14,7 @@ import subprocess
 
 import pytest
 
+from pypl4g.target import statuses
 from conftest import compiler_targets, describe, run_compiler, runner_for
 from pypl4g.ir.layout import DataLayout, WIDE_ENOUGH, align_of, size_of, stride_of
 from pypl4g.ir.types import TypeContext, U8, U16, U32, U64
@@ -131,7 +132,8 @@ def test_an_index_outside_the_array_stops_the_program(
         "    let a: u8", OPEN, "4", CLOSE, " = ", OPEN, "1u8, 2u8, 4u8, 8u8", CLOSE, "\n",
         "    let at: u8 = 9u8\n",
         "    a", OPEN, "at", CLOSE, "\n"))
-    assert run_it(tmp_path, triple, source) < 0, "it should die by a signal"
+    assert run_it(tmp_path, triple, source) == statuses.GENERAL, \
+        "it should stop with the status the runtime reserves"
 
 
 @pytest.mark.parametrize("triple", compiler_targets())
@@ -166,4 +168,5 @@ def test_every_dimension_is_checked_against_its_own(triple: str,
         OPEN, OPEN, "1u8,2u8,4u8", CLOSE, ",", OPEN, "8u8,16u8,32u8", CLOSE, CLOSE, "\n",
         "    let c: u8 = 5u8\n",
         "    m", OPEN, "0,c", CLOSE, "\n"))
-    assert run_it(tmp_path, triple, source) < 0, "it should die by a signal"
+    assert run_it(tmp_path, triple, source) == statuses.GENERAL, \
+        "it should stop with the status the runtime reserves"

@@ -1,11 +1,12 @@
-※ pl4g-test: compile=ok run=native,qemu exit=-4 diag=none
+※ pl4g-test: compile=ok run=native,qemu exit=64 diag=none
 
 ※ An answer that is an infinity is an answer the operation did not have, so
 ※ the program stops, the way it does when a sum will not fit its type.  That
 ※ is what keeps floating point behaving like the rest of the language rather
 ※ than like an exception to it: elsewhere every value a program holds is a
 ※ value its type can represent, and an infinity is what a type says when it
-※ cannot say the number.  Four is SIGILL, which every target raises.
+※ cannot say the number.  64 is what the runtime exits with for a stop it has
+※ no more particular number for.
 
 let huge: mut f64 = 1e308f64
 let ten: mut f64 = 10f64

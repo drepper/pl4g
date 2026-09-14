@@ -1,4 +1,4 @@
-※ pl4g-test: compile=ok run=native,qemu exit=-4 diag=none
+※ pl4g-test: compile=ok run=native,qemu exit=64 diag=none
 
 ※ A division whose answer will not fit stops the program, as every other
 ※ operation that overflows does.  It is worth a test of its own because a

@@ -1,4 +1,4 @@
-※ pl4g-test: compile=ok run=native,qemu exit=-4 diag=none
+※ pl4g-test: compile=ok run=native,qemu exit=64 diag=none
 
 ※ A distance of the width or more has no answer, and the three architectures
 ※ answer it three different ways -- two take the distance modulo the width of

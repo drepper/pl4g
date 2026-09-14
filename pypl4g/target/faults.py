@@ -18,11 +18,16 @@ a program that depends on nothing from the system can write to.  Whether the
 descriptor is open is not asked: a program started with it closed would have the
 message go to whatever was opened next, and that is still better than nowhere.
 
-**It ends by trapping rather than by exiting.**  The program dies by a signal at
-the point of the fault with its stack still standing, which is what a debugger
-wants to be handed, and the message has already been written by the time the
-signal arrives.  A status would say less and would be indistinguishable from a
-program that meant to exit with it.
+**It ends by exiting rather than by trapping**, with a status out of the range
+the runtime reserves -- 64 through 127, of which 64 is the general one.  A signal
+is not a status: a shell reports one as 128 plus the number, which collides with
+whatever the program might have chosen to exit with, and a caller has to know to
+look for it.  A program that dies of a signal really did die of one, and that is
+worth being able to believe.
+
+The reservation is what answers the objection that used to argue for the signal
+-- that a status would be indistinguishable from a program that meant to exit
+with it.  It is not, because 64 through 127 are nobody else's.
 """
 
 from __future__ import annotations

@@ -17,6 +17,7 @@ from ...ir.mangle import symbol_name
 from ...ir.module import Module
 from ...mc import ops
 from ...mc.asmbuilder import Assembler
+from .. import statuses
 from ..callconv import CallConvDesc
 from . import ops as x86ops
 from ..allocator import AllocatorRegs, SyscallABI
@@ -89,11 +90,6 @@ STANDARD_ERROR: Final[int] = 2
 ABORT_SYMBOL: Final[str] = "__pl4g_abort"
 
 
-#: What the process exits with where the processor is not the one the program
-#: was built for.  Not a trap: nothing has gone wrong inside the program, and a
-#: signal would say that something had.
-UNSUPPORTED_STATUS: Final[int] = 1
-
 #: The number of the Linux system call that writes, and the descriptor the
 #: message goes to.
 NR_WRITE_HERE: Final[int] = 1
@@ -143,7 +139,7 @@ def _check_level(asm: Assembler, level: str, refused: str) -> None:
                              signed=False))
     asm.loadreg(EAX, asm.imm(NR_WRITE_HERE, 32, signed=False))
     asm.op(x86ops.SYSCALL)
-    asm.loadreg(EDI, asm.imm(UNSUPPORTED_STATUS, 32, signed=False))
+    asm.loadreg(EDI, asm.imm(statuses.WRONG_PROCESSOR, 32, signed=False))
     asm.loadreg(EAX, asm.imm(NR_EXIT_GROUP, 32, signed=False))
     asm.op(x86ops.SYSCALL)
     asm.op(ops.TRAP)
@@ -158,10 +154,11 @@ def emit_abort(asm: Assembler, cconv: CallConvDesc) -> None:
     compile time, so there is no formatting here, no number to turn into text,
     and nothing that could itself fail.
 
-    It ends by trapping rather than by exiting, so the program dies by a signal
-    at the point of the fault with its stack still standing, which is what a
-    debugger wants to be handed.  The message has already been written by then,
-    so nothing is lost to the signal.
+    It ends by exiting rather than by trapping, with a status out of the range
+    the runtime reserves.  A signal is not a status: a shell reports one as 128
+    plus the number, which collides with whatever the program might have chosen
+    to exit with, and a caller has to know to look for it.  A program that dies
+    of a signal really did die of one, and that is worth being able to believe.
     """
     first, second, third = cconv.int_arg_regs[:3]
     asm.begin_function(ABORT_SYMBOL, exported=False)
@@ -172,6 +169,11 @@ def emit_abort(asm: Assembler, cconv: CallConvDesc) -> None:
     asm.loadreg(first, asm.imm(STANDARD_ERROR, 32, signed=False))
     asm.loadreg(EAX, asm.imm(NR_WRITE, 32, signed=False))
     asm.op(x86ops.SYSCALL)
+    asm.loadreg(EDI, asm.imm(statuses.GENERAL, 32, signed=False))
+    asm.loadreg(EAX, asm.imm(NR_EXIT_GROUP, 32, signed=False))
+    asm.op(x86ops.SYSCALL)
+    # exit_group does not return; trapping makes that explicit rather than
+    # letting control run off the end of the section.
     asm.op(ops.TRAP)
     asm.end_function()
 

@@ -1,9 +1,11 @@
-※ pl4g-test: compile=ok run=native,qemu exit=-4 diag=none
+※ pl4g-test: compile=ok run=native,qemu exit=64 diag=none
 
 ※ An answer that will not fit stops the program and says so.  It dies by a
-※ signal at the point of the fault, with its stack still standing, which is
-※ what a debugger wants to be handed; the message has already been written by
-※ the time the signal arrives.  Four is SIGILL, which every target raises.
+※ status out of the range the runtime reserves for a stop it reports -- 64
+※ through 127, with 64 the general one -- after writing what went wrong.  It
+※ exits rather than dying by a signal: a shell reports a signal as 128 plus its
+※ number, which collides with whatever a program might have chosen to exit
+※ with, and a program that dies of a signal really did die of one.
 
 let two_hundred: u8 = 200u8
 let one_hundred: u8 = 100u8

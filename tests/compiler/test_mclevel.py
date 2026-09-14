@@ -20,6 +20,7 @@ from pathlib import Path
 
 import pytest
 
+from pypl4g.target import statuses
 from conftest import describe, run_compiler
 
 SOURCE = "".join((
@@ -153,11 +154,13 @@ def test_a_processor_that_cannot_run_it_is_told_so(built: dict[str, Path],
                                                    cpu: str, level: str) -> None:
     """The whole point: a clear line of text, not an illegal instruction.
 
-    And a status rather than a signal, nothing having gone wrong inside the
-    program -- it is the machine that is wrong for it.
+    And a status out of the range the runtime reserves, with a number of its own
+    within it: this is the one stop that happens before the program has run at
+    all, and what to do about it -- build for an older level, or find a newer
+    machine -- is a different thing to do.
     """
     proc = _emulated(cpu, built[level])
-    assert proc.returncode == 1, describe(proc)
+    assert proc.returncode == statuses.WRONG_PROCESSOR, describe(proc)
     assert b"built for x86-64-" in proc.stderr, proc.stderr
     assert level.encode("ascii") in proc.stderr, proc.stderr
     assert proc.stdout == b""

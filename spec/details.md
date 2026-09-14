@@ -636,6 +636,22 @@ shared layers had to be able to express:
 | Segment alignment | 4 KiB | 64 KiB | 4 KiB |
 
 
+Exit statuses the runtime reserves
+----------------------------------
+
+`pypl4g/target/statuses.py` is where the reserved range is written down, and every place that ends a program the runtime stopped
+reads it from there: the fault helper on each of the three targets, and the x86-64 entry point's check of the processor.  There is
+one such number per kind of stop and they are all in one file, so that what a status means is a thing to look up rather than a
+thing to remember.
+
+**A fault exits rather than traps**, which is a change from what this compiler first did.  The argument for the trap was that a
+signal hands a debugger the stack as it stood; the argument against is that a signal is not a status, a shell reports it as 128
+plus the number, and it therefore collides with whatever the program might have chosen to exit with.  What settles it is the
+reservation: 64 through 127 being nobody else's is what makes a status able to say "the runtime stopped this" without also
+claiming the program meant it.
+
+**The message is still written first**, so nothing is lost either way; what the trap gave up was never the message.
+
 Microarchitecture levels
 ------------------------
 

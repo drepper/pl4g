@@ -2492,6 +2492,42 @@ by calling into the library with an `int` that is likewise truncated; and Rust, 
 reason.  The choice here is the most explicit of these: one signature, the status is the returned value and nothing else, and the
 type says what a status can actually be.
 
+##### Exit statuses the runtime reserves
+
+**A program the runtime stops leaves through exit with a status, never through a signal.**  A signal is not a status: a shell
+reports one as 128 plus the number, which collides with whatever a program might have chosen to exit with, and a caller has to
+know to look for it.  A program that dies of a signal really did die of one, and that is worth being able to believe.
+
+**64 through 127 are reserved** for stops the runtime reports.  That leaves the ranges either side to their owners:
+
+| Range | Whose |
+|---|---|
+| 0–63 | the program's own, the startup function's result |
+| 64–127 | the runtime's, for a stop it reports |
+| 128–255 | a signal the program really died of, as the shell reports it |
+
+**64 is the general one**: a stop the runtime has no more particular number for yet.  Everything a *fault* reports leaves through
+it -- an answer that will not fit, a division by zero, an index outside its array, a shift too far, an allocation that failed --
+because what went wrong is in the message, which names the operation, the function and the line, and a number could only say less.
+
+**65 is the processor not being the one the program was built for**, which has a number of its own because it is the one stop that
+happens before the program has run at all, and because what to do about it -- build for an older microarchitecture level, or find
+a newer machine -- is a different thing to do.
+
+**The reservation is what makes a status enough to say it with.**  Without it, a runtime stop and a program that chose to fail
+would be the same number, which is the objection that used to argue for the signal; with it, a caller can tell the three cases
+apart without knowing anything about the program.
+
+A program is not stopped from returning a status in the reserved range: the startup function answers with a `u8` and every value
+of one is a status.  What the reservation says is what a program that does so is giving up, which is the ability of its caller to
+believe it.
+
+Compare: `sysexits.h`, whose 64 through 78 are the convention this borrows its range and its starting number from -- and which is
+advisory where this is the compiler's own, so the runtime can actually keep it; the shell's 128 plus the signal number, which is
+the reason the top range is spoken for and not something this chose; Python, which exits 1 for an uncaught exception and so
+cannot be told from a program that meant to; and Go, which exits 2 and panics through a signal-like path that prints a stack
+trace.  What none of them has is a range reserved on both sides, which is what lets all three cases be told apart rather than two.
+
 A constructor and a destructor take no parameters and return `void`, because the sequence that calls them has nothing to pass and
 nowhere to put a result.
 

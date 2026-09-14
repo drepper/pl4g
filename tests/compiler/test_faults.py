@@ -13,15 +13,18 @@ import subprocess
 
 import pytest
 
+from pypl4g.target import statuses
 from conftest import (architecture_of, compiler_targets, describe, run_compiler,
                       runner_for)
 
 ARROW = "\N{RIGHTWARDS ARROW}"
 TIMES = "\N{MULTIPLICATION SIGN}"
 
-#: What the shell reports for a process killed by an illegal instruction, which
-#: is how a fault stops the program on every target.
-KILLED_BY_SIGILL = -4
+#: What a program the runtime stopped exits with: the general one of the range
+#: reserved for a stop it reports.  A status and not a signal, so that a caller
+#: can tell it apart both from a program that chose to fail and from one that
+#: really did die of a signal.
+STOPPED = statuses.GENERAL
 
 OVERFLOWS = "".join((
     "let two_hundred: u8 = 200u8\nlet one_hundred: u8 = 100u8\n\n",
@@ -50,7 +53,7 @@ def test_an_answer_that_does_not_fit_stops_the_program(triple: str, tmp_path) ->
     """And stops it the same way on every target, which is what lets a program
     mean one thing wherever it is compiled."""
     proc = compile_and_run(tmp_path, triple, OVERFLOWS)
-    assert proc.returncode == KILLED_BY_SIGILL, describe(proc)
+    assert proc.returncode == STOPPED, describe(proc)
 
 
 @pytest.mark.parametrize("triple", compiler_targets())

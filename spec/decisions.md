@@ -3294,6 +3294,44 @@ and the loop is written out by hand each time.
 
 ---
 
+## 2026-09-15T14:00+02:00 — language
+
+**Exit statuses the runtime reserves**
+
+Decided on the user's direction, and it reverses a decision this compiler had already made: a program the runtime stops exits
+with a status, never through a signal, and 64 through 127 are reserved for those stops.
+
+**What the reservation buys is that all three cases can be told apart.**  0 to 63 is the program's own, 64 to 127 is the
+runtime's, and 128 to 255 is the shell's way of reporting a signal -- so a caller can distinguish a program that chose to fail, a
+program the runtime stopped, and a program that really died of a signal, without knowing anything about the program.  No language
+compared with here has a range reserved on *both* sides, which is what lets there be three cases rather than two.
+
+**This overturns the trap.**  A fault used to end with an illegal instruction, and the reason written down for it was that a
+signal hands a debugger the stack as it stood, while "a status would say less and would be indistinguishable from a program that
+meant to exit with it".  The second half of that was the real argument, and the reservation answers it: 64 through 127 are nobody
+else's, so a status does say it.  The first half survives as a real cost -- a debugger is handed a process that has already
+exited -- and it is outweighed by what a signal costs everyone who is not running a debugger, which is every caller: a shell
+reporting 132 cannot be told from a program that exited with 132.
+
+**64 is the general one** and everything a fault reports leaves through it.  What went wrong is in the message, which names the
+operation, the function and the line; a number could only say less than that, so distinguishing overflow from an index out of
+range by status would be paying a number for something already said better.
+
+**65 is the processor not being the one the program was built for**, which earns a number because it is the one stop that happens
+before the program has run at all, and because what a reader does about it is different in kind: build for an older level, or
+find a newer machine.  It had been exiting with 1, which is in the program's own range and was wrong the day it was written.
+
+**A program may still return a status in the reserved range.**  The startup function answers with a `u8` and every value of one
+is a status; refusing 64 to 127 would mean a rule about a number in a language that otherwise has none.  What the reservation says
+is what a program doing that gives up, which is its caller's ability to believe it.
+
+Compare: `sysexits.h`, whose 64 through 78 this borrows both the range and the starting number from, and which is advisory where
+this is the compiler's own -- so this runtime can actually keep it; the shell's 128 plus the signal number, which is why the top
+range is spoken for and is not something this chose; Python, which exits 1 for an uncaught exception and so cannot be told from a
+program that meant to; and Go, which exits 2.
+
+---
+
 ---
 
 Open questions
