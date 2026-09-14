@@ -31,11 +31,33 @@ def sources() -> list[Path]:
     return found
 
 
+#: What `tree-sitter` says when it could not get the grammar loaded at all,
+#: which is a different answer from "this program does not parse" and must not
+#: be read as one.  It builds the grammar into a shared library on first use and
+#: again whenever the generated parser is newer; where many of these run at once
+#: -- a suite over many cores -- one of them can find that library part way
+#: through being written.
+_NOT_LOADED = "Failed to load language"
+
+
 def grammar_parses(path: Path) -> bool:
-    """Whether the grammar reads *path* without an error node."""
-    proc = subprocess.run([TREE_SITTER, "parse", "--quiet", str(path)],
-                          cwd=GRAMMAR, capture_output=True, text=True, timeout=60)
-    return proc.returncode == 0
+    """Whether the grammar reads *path* without an error node.
+
+    A run that could not load the grammar is asked again rather than counted as
+    a refusal: what it reports is nothing about the program, and reporting it as
+    a disagreement between the grammar and the compiler would send a reader
+    looking at a file that is perfectly all right.
+    """
+    for last in (False, True):
+        proc = subprocess.run([TREE_SITTER, "parse", "--quiet", str(path)],
+                              cwd=GRAMMAR, capture_output=True, text=True,
+                              timeout=60)
+        if proc.returncode == 0 or _NOT_LOADED not in proc.stderr:
+            return proc.returncode == 0
+        if last:
+            raise AssertionError("".join((
+                "tree-sitter could not load the grammar: ", proc.stderr.strip())))
+    raise AssertionError("unreachable")
 
 
 def compiler_parses(path: Path, tmp_path: Path) -> bool:
@@ -105,9 +127,12 @@ def test_the_generated_parser_is_current() -> None:
 
 def test_every_highlight_query_is_valid() -> None:
     """A query naming a node the grammar does not have is silently no highlight."""
-    proc = subprocess.run(
-        [TREE_SITTER, "query", "queries/highlights.scm",
-         str(ROOT / "tests" / "language" / "exit0" / "exit0.pl4g")],
-        cwd=GRAMMAR, capture_output=True, text=True, timeout=60)
+    for last in (False, True):
+        proc = subprocess.run(
+            [TREE_SITTER, "query", "queries/highlights.scm",
+             str(ROOT / "tests" / "language" / "exit0" / "exit0.pl4g")],
+            cwd=GRAMMAR, capture_output=True, text=True, timeout=60)
+        if proc.returncode == 0 or _NOT_LOADED not in proc.stderr or last:
+            break
     assert proc.returncode == 0, proc.stdout + proc.stderr
     assert "@comment" not in proc.stderr

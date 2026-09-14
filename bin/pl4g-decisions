@@ -188,13 +188,24 @@ def build_library() -> Path | None:
     newest = max(p.stat().st_mtime for p in sources)
     if library.exists() and library.stat().st_mtime >= newest:
         return library
-    command = ["cc", "-shared", "-fPIC", "-O2", "-o", str(library),
+    # Built beside it and moved into place, never written where it is read
+    # from: two of these may run at once -- a test suite over many cores is
+    # where that was noticed -- and one of them loading what the other is half
+    # way through writing is a failure nobody could read.  A rename is the one
+    # operation that cannot be seen half done.
+    beside = library.with_name("".join((library.name, ".", str(os.getpid()))))
+    command = ["cc", "-shared", "-fPIC", "-O2", "-o", str(beside),
                "-I", str(GRAMMAR / "src"), *[str(p) for p in sources]]
     try:
         proc = subprocess.run(command, capture_output=True, text=True, timeout=120)
+        if proc.returncode != 0:
+            beside.unlink(missing_ok=True)
+            return None
+        os.replace(beside, library)
     except OSError:
+        beside.unlink(missing_ok=True)
         return None
-    return library if proc.returncode == 0 else None
+    return library
 
 
 def paint(text: str, spans: list[tuple[int, int, str]] | None) -> list[str]:

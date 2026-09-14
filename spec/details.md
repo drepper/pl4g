@@ -450,6 +450,30 @@ what an editor colours are the same thing and cannot drift apart.  Everything th
 that only wants to read a log, and none of it being there is not an error: the source is shown without colour, which is what a pipe
 gets anyway.
 
+Running the tests
+-----------------
+
+`python -m pytest tests` runs everything, and `-n auto` runs it over every core: about two and a half minutes becomes about seven
+seconds on a machine with sixty-four of them, which is the difference between running the suite after each change and running it
+when it occurs to you.  Nothing in the suite depends on order or shares a file between tests -- each language test compiles to a
+path made of its own name, its optimization level and its target -- so what parallelism needed was not a change to the tests.
+
+What it needed was two races outside them, both of the same shape: a shared library written where it is read from.
+
+- **`tree-sitter` builds the grammar into a shared library** on first use, and again whenever the generated parser is newer --
+  which it is every time the grammar changes.  Dozens of processes arriving at once find it half written.  A session fixture in
+  `tests/conftest.py` has one process do it under a file lock while the rest wait; the lock is a file because the processes that
+  have to agree are separate interpreters that know nothing about one another.  The file it warms with is a program of *this*
+  language, since which grammar gets built is decided by what the file is.
+- **`pl4g-decisions` builds its own copy** for highlighting, and compiled it straight to the path it loads from.  It now compiles
+  beside it and renames, a rename being the one operation that cannot be seen half done.  That is worth having whatever the tests
+  do: two people running it at once is not a strange thing.
+
+And one thing in a test: `grammar_parses` read a non-zero exit from `tree-sitter` as "the grammar refuses this program", which is
+also what it returns when it could not load the grammar at all.  Those are different answers and only one of them is about the
+program, so the second is now told apart, asked again, and reported as itself if it persists -- a reader sent to look at a
+perfectly good file is worse than a slow test.
+
 The Grammar
 -----------
 

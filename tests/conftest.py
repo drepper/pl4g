@@ -6,6 +6,7 @@ apart.  Those tests drive the compiler only through its command line, so they
 will still be valid once the final compiler replaces this one.
 """
 
+import fcntl
 import platform
 import shutil
 import subprocess
@@ -144,6 +145,47 @@ def parse_directives(text: str) -> Expectations:
                 case "xfail":
                     result.xfail = value
     return result
+
+
+
+@pytest.fixture(scope="session", autouse=True)
+def grammar_is_built() -> None:
+    """Have the grammar's parser built before anything tries to parse with it.
+
+    `tree-sitter parse` compiles the grammar into a shared library the first
+    time it is asked to, and again whenever the generated parser is newer --
+    which it is, every time the grammar changes.  Run the suite over many cores
+    and dozens of processes arrive at that at once; what they get is a library
+    half written, reported as a file that suddenly does not parse or as a
+    language that cannot be loaded.
+
+    So one process does it and the rest wait.  The lock is a file rather than
+    anything pytest provides, because the processes that have to agree are
+    separate interpreters that know nothing about one another -- which is what
+    `-n auto` makes them.
+    """
+    if not shutil.which("tree-sitter"):
+        return
+    grammar = ROOT / "tree-sitter-pl4g"
+    if not (grammar / "src" / "parser.c").exists():
+        return
+    lock = ROOT / ".pytest_cache" / "grammar-build.lock"
+    lock.parent.mkdir(parents=True, exist_ok=True)
+    # A program of this language and not just any file: which grammar gets
+    # built is decided by what the file is, so asking it to parse something
+    # else builds something else and leaves this one to be raced for after all.
+    warm = lock.with_name("grammar-build.pl4g")
+    warm.write_text("fn nothing():\n    ()\n", encoding="utf-8")
+    with open(lock, "w", encoding="utf-8") as handle:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+        try:
+            subprocess.run(["tree-sitter", "parse", "--quiet", str(warm)],
+                           cwd=grammar, capture_output=True, timeout=300,
+                           check=False)
+        except (OSError, subprocess.SubprocessError):
+            # Whatever is wrong with it is the grammar tests' to report; this
+            # only exists so that they do not all find it out at once.
+            pass
 
 
 def run_compiler(args: Sequence[str]) -> subprocess.CompletedProcess[str]:
