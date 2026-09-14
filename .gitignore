@@ -7,3 +7,7 @@ __pycache__/
 # Loose programs in the root are scratch; the real ones live in
 # examples/ and tests/language/.
 /*.pl4g
+# And so is anything one of them was compiled to, which has no suffix at all
+# and so could otherwise be committed by a careless `git add -A`.
+/a.out
+/[a-z]
