@@ -267,6 +267,12 @@ To Do List for the pypl4g compiler
     three values named in `target.py` so that choosing between them is a constant rather than a change to the writer.  It is zero
     today, which is not "unset" -- it says the base integer set and the soft-float convention, which is what is emitted.
 
+[ ] stop `let d: u8⟦⟧ = ⟦1u8, 2u8⟧` inside a function from crashing the compiler.  `_array_written` settles the type before any
+    code is made and so calls `_one_type` with no builder; every other way of reaching it is refused earlier, and this one is not.
+    What it should do is the question behind the crash: the writing makes a `u8⟦2⟧`, so either the fixed array decays to the
+    dynamic one the way it does when it is handed to a parameter, or the mismatch is reported.  Found while spreading an array,
+    which needed a dynamic one to refuse; a parameter gives one, so nothing depends on this.
+
 
 Optimizations
 -------------

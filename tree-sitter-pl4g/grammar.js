@@ -574,7 +574,7 @@ module.exports = grammar({
     // Several values travelling as one, written between angle brackets rather
     // than parentheses so that a tuple of one thing is still a tuple and not
     // the thing with brackets round it.
-    tuple_literal: $ => seq('\u3008', sepBy1(',', $._expression), '\u3009'),
+    tuple_literal: $ => seq('\u3008', sepBy1(',', $._spreadable), '\u3009'),
 
     // `\u2e28a, b\u2e29` is a set and `\u2e28k: v\u2e29` a dictionary; which of the two a
     // collection is is decided by its first entry, and one written with nothing
@@ -617,13 +617,16 @@ module.exports = grammar({
 
     call_expression: $ => prec(10, seq(
       field('function', $._non_comparison),
-      '(', sepBy(',', field('argument', choice($._expression, $.spread_argument))), ')',
+      '(', sepBy(',', field('argument', $._spreadable)), ')',
     )),
 
-    // A tuple handed over as several arguments rather than as one.  It is a rule
-    // of the argument list rather than an expression, because nowhere else has
-    // room for a thing that stands for several.
-    spread_argument: $ => seq('\u2042', field('tuple', $._expression)),
+    // A tuple or a fixed-size array standing for several of the things around it
+    // rather than for one.  It is a rule of the two lists that admit it -- a
+    // call's arguments and a tuple's members -- rather than an expression,
+    // because nowhere that wants exactly one value has room for it.
+    _spreadable: $ => choice($._expression, $.spread),
+
+    spread: $ => seq('\u2042', field('several', $._expression)),
 
     // Something named through the module it belongs to, which binds tighter
     // than any operator: `a.b & c` is `(a.b) & c`.

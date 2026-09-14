@@ -387,14 +387,17 @@ def _heap(module: Module) -> GlobalVar:
 
 
 @dataclass(frozen=True, slots=True)
-class _Argument:
-    """One argument a call hands over.
+class _Piece:
+    """One of the values a list of written things comes to.
 
-    `value` is what it already came to, which is so for a member of a tuple
-    handed over as several arguments and for nothing else: every other argument
-    waits to be lowered until it is known which parameter it is going to, since
-    a literal with no suffix takes its type from there.  `written` is where it
-    was written either way, which is what a diagnostic points at.
+    A call's arguments are such a list and a tuple's members are another, and
+    both admit `\N{ASTERISM}` in front of one of them, so both are expanded here.
+
+    `value` is what it already came to, which is so for something the asterism
+    took apart and for nothing else: every other piece waits to be lowered until
+    it is known what type is wanted of it, since a literal with no suffix takes
+    its type from there.  `written` is where it was written either way, which is
+    what a diagnostic points at.
     """
 
     written: "ast.Expr"
@@ -1835,15 +1838,30 @@ class Checker:
 
     def _lower_tuple(self, builder: IRBuilder, expr: ast.TupleLit,
                      expected: Type | None) -> Value:
-        """Lower `〈a, b〉`: several values made into one."""
+        """Lower `〈a, b〉`: several values made into one.
+
+        A member written after `⁂` stands for several members rather than
+        one, which is what joining two tuples is written with and is the same
+        expansion a call's arguments get, done by the same code.  What it
+        expands into is members like any other, so a tuple made this way is a
+        tuple made the other way and nothing downstream knows the difference.
+        """
+        pieces = self._pieces_of(builder, expr.members)
+        if pieces is None:
+            return UndefConst(ERROR)
+        if not pieces:
+            # Everything written was spread, and all of it was empty.  A tuple
+            # of no members is not a type this language has.
+            self._diags.emit(D.LANG_SPREAD_NOTHING_LEFT, expr.span)
+            return UndefConst(ERROR)
         wanted = expected.members if isinstance(expected, TupleType) \
-            and len(expected.members) == len(expr.members) else None
-        values = [self._lower_into(builder, written,
-                                   wanted[index] if wanted is not None else ERROR,
-                                   written.span)
-                  if wanted is not None
-                  else self._lower_expr(builder, written, None)
-                  for index, written in enumerate(expr.members)]
+            and len(expected.members) == len(pieces) else None
+        values = [one.value if one.value is not None
+                  else (self._lower_into(builder, one.written, wanted[index],
+                                         one.written.span)
+                        if wanted is not None
+                        else self._lower_expr(builder, one.written, None))
+                  for index, one in enumerate(pieces)]
         types = [self._value_type_of(value) for value in values]
         if any(ty is ERROR for ty in types):
             return UndefConst(ERROR)
@@ -4392,7 +4410,7 @@ class Checker:
         # is counted or checked: how many it becomes is read off its type, so by
         # the time the arguments are matched against the parameters there is
         # nothing left to say that they were not all written out.
-        given = self._handed_over(builder, expr.args)
+        given = self._pieces_of(builder, expr.args)
         if given is None:
             return UndefConst(ERROR)
         if len(given) != len(wanted):
@@ -4426,37 +4444,84 @@ class Checker:
             return UndefConst(ERROR)
         return answer
 
-    def _handed_over(self, builder: IRBuilder, written: "Sequence[ast.Expr]"
-                     ) -> "list[_Argument] | None":
-        """The arguments a call hands over, with every tuple spread into its own.
+    def _pieces_of(self, builder: IRBuilder, written: "Sequence[ast.Expr]"
+                   ) -> "list[_Piece] | None":
+        """What a list of written things comes to, with every spread taken apart.
 
-        A tuple is several values travelling as one, and the asterism is what
-        undoes that, so a spread argument is lowered here and taken apart at
-        once: how many arguments it becomes is its type's business and is known
-        before anything is matched against a parameter.
+        A tuple is several values travelling as one and a fixed array is several
+        held one after another; the asterism is what undoes either, so a spread
+        piece is lowered here and taken apart at once.  How many pieces it
+        becomes is its type's business and is known before anything is matched
+        against a parameter or a member.
 
-        An argument that is not spread is left as it was written, because what
-        type is wanted of it is not known until it is paired with a parameter --
-        a literal with no suffix takes its type from there.
+        A piece that is not spread is left as it was written, because what type
+        is wanted of it is not known until it is paired with the thing it is
+        going to -- a literal with no suffix takes its type from there.
         """
-        found: list[_Argument] = []
+        found: list[_Piece] = []
         for one in written:
             if not isinstance(one, ast.Spread):
-                found.append(_Argument(written=one))
+                found.append(_Piece(written=one))
                 continue
-            value = self._lower_expr(builder, one.operand, None)
-            ty = self._value_type_of(value)
-            if ty is ERROR:
+            taken = self._taken_one_each(builder, one)
+            if taken is None:
                 return None
-            if not isinstance(ty, TupleType):
-                self._diags.emit(D.LANG_SPREAD_NOT_A_TUPLE, one.operand.span,
-                                 found=ty.render())
-                return None
-            found.extend(
-                _Argument(written=one.operand,
-                          value=builder.extract(value, at, member, one.span))
-                for at, member in enumerate(ty.members))
+            found.extend(_Piece(written=one.operand, value=value)
+                         for value in taken)
         return found
+
+    def _taken_one_each(self, builder: IRBuilder, spread: ast.Spread
+                        ) -> "list[Value] | None":
+        """The values `\N{ASTERISM}x` stands for, one each, or nothing where it stands
+        for no such list.
+
+        Two types are several values the compiler can count: a tuple, whose
+        members its type names one by one, and an array whose type says its
+        length.  A tuple is taken apart where it is, since its members are
+        already held separately; an array is read, since its elements are one
+        run in memory, and the reads are the ones writing the indices out would
+        have produced.
+
+        An array of more than one dimension gives its outermost dimension, which
+        is the same rule `foreach` follows over one: what an array of tables is
+        several of, is tables.
+        """
+        value = self._lower_expr(builder, spread.operand, None)
+        ty = self._value_type_of(value)
+        if ty is ERROR:
+            return None
+        if isinstance(ty, TupleType):
+            return [builder.extract(value, at, member, spread.span)
+                    for at, member in enumerate(ty.members)]
+        if not isinstance(ty, ArrayType):
+            self._diags.emit(D.LANG_SPREAD_NOT_SEVERAL, spread.operand.span,
+                             found=ty.render())
+            return None
+        if not ty.fixed:
+            # The length is beside the elements rather than in the type, so it
+            # is a thing the program works out and this is a thing the compiler
+            # writes down.
+            self._diags.emit(D.LANG_SPREAD_NOT_FIXED, spread.operand.span,
+                             found=ty.render())
+            return None
+        start, lengths = self._shape_of(builder, value, ty, spread.span)
+        along = ty.shape[0]
+        assert along is not None
+        row = 1
+        for rest in ty.shape[1:]:
+            assert rest is not None
+            row *= rest
+        taken: list[Value] = []
+        for at in range(along):
+            offset = builder.int_const(U64, at * row)
+            taken.append(
+                builder.load(self._element_place(builder, start, ty.element,
+                                                 offset, spread.span),
+                             spread.span)
+                if ty.rank == 1
+                else self._row_at(builder, start, ty, lengths, offset, 1,
+                                  spread.span))
+        return taken
 
     def _callee(self, expr: ast.Expr) -> Function | None:
         """The function a call names, or nothing where it does not name one."""

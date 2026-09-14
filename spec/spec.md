@@ -263,18 +263,44 @@ function's count, each argument must have its parameter's type, and a tuple of t
 of arguments, because that is what it is.  A generator writing a call therefore need not know how a tuple it is passing along was
 put together.
 
-**The operand must be a tuple.**  Anything else is one argument already, so there is nothing for the glyph to do.  And `⁂`
-stands among the arguments of a call and nowhere else: several things standing where one is written is a thing only an argument
-list has room for, so the glyph is not an expression and `let q = ⁂p` is not a program.
+**An array whose type says its length is spread as well**, and for the reason a tuple is: it too is several values travelling as
+one, with how many of them there are written in the type.
 
-Nothing is read from memory for any of this.  A tuple is its members held separately, so spreading one decides which registers
-the call is handed rather than taking anything apart.
+```
+fn ends(top: u8⟦3⟧, bottom: u8⟦3⟧) → u8:
+    top⟦0⟧ + bottom⟦2⟧
+
+let v: u8⟦3⟧ = ⟦10u8, 19u8, 20u8⟧
+three(⁂v)                          ※ the same call as three(v⟦0⟧, v⟦1⟧, v⟦2⟧)
+
+let m: u8⟦2,3⟧ = ⟦⟦1u8, 2u8, 3u8⟧, ⟦4u8, 5u8, 6u8⟧⟧
+ends(⁂m)                           ※ a table is several rows
+```
+
+**An array of more than one dimension gives its outermost dimension**, which is the rule `foreach` already follows over one: what
+a table is several of, is rows.  A row is a run of elements rather than a copy of them, so this costs the arithmetic on the place
+and nothing else.
+
+**An array whose type does not say its length may not be spread.**  It carries its length beside its elements, so how many it
+holds is a thing the program works out while it runs, and what the glyph expands into is written into the program being compiled.
+This is the one place the two kinds of array part company at the surface, and the type says which is which.
+
+**What is spread must be one of those two.**  Anything else is one value already and stays one, however much it holds; a
+dictionary and a set hold as many things as they turn out to hold, which is exactly what a type that counts does not do.
+
+**The glyph stands in the two lists this language has and nowhere else**: a call's arguments, and the members of a tuple.
+Several things standing where one is written is a thing only a list has room for, so `⁂` is not an expression and `let q = ⁂p`
+is not a program.
+
+Nothing is read from memory for a tuple, and nothing is copied for an array.  A tuple is its members held separately, so
+spreading one decides which registers the call is handed; an array's elements are read where they lie, and the reads are the ones
+writing the indices out would have produced.
 
 Compare Python, whose `*args` this is, and which needs the mechanism at runtime because its calls are variadic; JavaScript's
 `...`, which spreads any iterable and so is equally a runtime matter; C++'s parameter packs, which expand while compiling as
 these do but belong to templates rather than to calls; and Lisp's `apply`, which takes the list as its last argument and is a
-function rather than a syntax.  This is the compile-time half only: what is spread is a tuple, whose length and member types the
-type already says, so the expansion happens in the checker and the generated code shows no trace of it.
+function rather than a syntax.  This is the compile-time half only: what is spread is a type that counts, so the expansion
+happens in the checker and the generated code shows no trace of it.
 
 #### Arithmetic
 
@@ -965,6 +991,28 @@ out and threw away without saying so.  Only a tuple can be taken apart that way 
 
 Each name of an assignment is assigned as it would be on its own, so a name that is not a variable, or one nothing may change, is
 reported where it is written.
+
+##### Making one out of others
+
+`⁂` stands among a tuple's members as it stands among a call's arguments, and means the same thing: what follows it is several
+values, and they stand there one each.  That is how one tuple is joined to another and how one is extended.
+
+```
+let pair: 〈u8, u8〉 = 〈1u8, 2u8〉
+let wide: 〈u8, u16〉 = 〈3u8, 4u16〉
+
+〈⁂pair, ⁂wide〉              ※ 〈u8, u8, u8, u16〉
+〈9u8, ⁂pair, 9u8〉           ※ 〈u8, u8, u8, u8〉
+```
+
+What may be spread is what may be spread into a call -- a tuple, or an array whose type says its length -- and for the same
+reasons, which the Calls section gives.  What it expands into are members like any other: a tuple made this way has the type it
+would have had written out, and nothing that reads it can tell which way it was made.  None of it costs an instruction, a tuple
+being its members held separately.
+
+**A tuple still has at least one member.**  Spreading an array of no elements is the one way to arrive at none, and it is
+reported (4466) rather than admitted: there is no tuple of nothing, and what a spread leaves obeys the rule that what is written
+obeys.
 
 ##### Naming one member
 

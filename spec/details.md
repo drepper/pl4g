@@ -815,25 +815,44 @@ nothing of its own: the tuple is made and the binding that already existed takes
 A tuple handed over as several arguments
 ---------------------------------------
 
-`⁂t` among a call's arguments is expanded in the checker, before the call is counted or typed.  `_handed_over` walks what was
-written and answers a list of `_Argument`, one per argument the call actually hands over: an ordinary argument contributes itself
-and nothing more, and a spread one is lowered once and contributes one `extract` per member of its type.
+`⁂x` is expanded in the checker, before anything is counted or typed.  `_pieces_of` walks a written list and answers a list of
+`_Piece`, one per value the list actually comes to: an ordinary entry contributes itself and nothing more, and a spread one is
+lowered once by `_taken_one_each` and contributes one value per thing its type counts.
 
-Lowering the operand *once* is the point of the `_Argument` record.  An argument is normally lowered where the call needs it, so
-that it is lowered exactly once; a spread operand has to be lowered earlier, because how many arguments there are is a question
-about its type.  The record therefore carries the expression for an ordinary argument and the already-lowered value for a spread
-member, and `_lower_call` lowers what has not been lowered yet.  Writing `⁂f()` calls `f` once.
+**Two lists admit it**, and the same code serves both: a call's arguments, and a tuple's members.  That is the whole of the
+tuple case -- `_lower_tuple` calls `_pieces_of` and then does what it always did -- and it is why the parser has one
+`_parse_spreadable` that both `_parse_call` and `_parse_tuple` use, and the grammar one `_spreadable` rule that
+`call_expression` and `tuple_literal` both name.
 
-Everything after the expansion sees a list of arguments and does not know how it was written.  The arity check, the per-argument
-type check, the conversion of an unsuffixed literal to its parameter's type and the register assignment all run on that list, so a
-spread call and the call written out are the same call in the IR, and no diagnostic had to learn about the glyph.  Two are new,
-and both are about the glyph itself rather than about the call: the operand is not a tuple (4464), and the glyph stands where no
-argument list is (3031).
+**Two types are several values the compiler can count.**  A tuple's members are already held separately, so it is taken apart
+with one `extract` each.  A fixed array's elements are one run in memory, so they are read: `_shape_of` gives where they start,
+and each element is a `load` through `_element_place` -- the instructions writing the indices out would have produced.  An array
+of rank greater than one gives its outermost dimension through `_row_at`, which is arithmetic on the place and no copy, and
+matches the rule `foreach` follows.  An array whose type does not say its length is refused (4465): the expansion is written into
+the program being compiled and the length is not known until it runs.
 
-**The second of those is the parser's and not the checker's.**  `⁂` is admitted only in front of an argument, which is what the
-tree-sitter grammar says too -- a `spread_argument` rule that only `call_expression` names.  The first implementation made it an
-expression and refused it in `_lower_expr`; that put a rule in the checker the grammar could simply enforce, and it made the two
-grammars disagree about what an expression is.  The diagnostic moved to the parser and changed number with it.
+Lowering the operand *once* is the point of the `_Piece` record.  An entry is normally lowered where it is wanted, so that it is
+lowered exactly once; a spread operand has to be lowered earlier, because how many pieces there are is a question about its type.
+The record therefore carries the expression for an ordinary entry and the already-lowered value for a spread piece, and the
+caller lowers what has not been lowered yet.  Writing `⁂f()` calls `f` once.
+
+Everything after the expansion sees a plain list and does not know how it was written.  The arity check, the per-argument type
+check, the conversion of an unsuffixed literal to its parameter's type and the register assignment all run on that list, so a
+spread call and the call written out are the same call in the IR; a tuple made with a spread has the type it would have had
+written out.  No existing diagnostic had to learn about the glyph.  The four that are new are about the glyph itself: what
+follows it is one value (4464), an array whose length is not in its type (4465), a tuple left with no members (4466), and the
+glyph standing where no list is (3031).
+
+**Evaluation order is the one thing the expansion moves.**  A spread operand is lowered in the first pass and an ordinary entry
+in the second, so in `f(g(), ⁂h())` the call to `h` is made before the call to `g`.  Running the two together would mean lowering
+an ordinary entry before it is known what type is wanted of it, which an unsuffixed literal will not have; doing the counting
+without lowering would mean a way of asking an expression its type before lowering it, which this checker does not have.  It is
+recorded in [TODO-language.md](../TODO-language.md), the language not yet having said what order arguments are worked out in.
+
+**The last of those is the parser's and not the checker's.**  `⁂` is admitted only in front of an entry of one of the two lists,
+which is what the tree-sitter grammar says too.  The first implementation made it an expression and refused it in `_lower_expr`;
+that put a rule in the checker the grammar could simply enforce, and it made the two grammars disagree about what an expression
+is.  The diagnostic moved to the parser and changed number with it.
 
 Calling conventions
 -------------------

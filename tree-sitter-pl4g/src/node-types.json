@@ -555,7 +555,7 @@
             "named": true
           },
           {
-            "type": "spread_argument",
+            "type": "spread",
             "named": true
           },
           {
@@ -3657,10 +3657,10 @@
     }
   },
   {
-    "type": "spread_argument",
+    "type": "spread",
     "named": true,
     "fields": {
-      "tuple": {
+      "several": {
         "multiple": false,
         "required": true,
         "types": [
@@ -3953,6 +3953,10 @@
         },
         {
           "type": "set_literal",
+          "named": true
+        },
+        {
+          "type": "spread",
           "named": true
         },
         {

@@ -1123,9 +1123,9 @@
       "number": 3031,
       "name": "LANG_SYNTAX_SPREAD_OUTSIDE_A_CALL",
       "severity": "error",
-      "message": "'\u2042' stands among the arguments of a call and nowhere else",
+      "message": "'\u2042' stands among the arguments of a call or the members of a tuple, and nowhere else",
       "args": [],
-      "cause": "The asterism says that several things stand where one is written, which is a thing only an argument list has room for.  Somewhere else it would have to mean something else, and there is nothing for it to mean -- so it is not an expression, and what follows it is not an operand.",
+      "cause": "The asterism says that several things stand where one is written, which is a thing only a list of things has room for.  An argument list is one and a tuple's members are another; somewhere else exactly one value is wanted, so the glyph would have to mean something else and there is nothing for it to mean -- it is not an expression, and what follows it is not an operand.",
       "spec": {
         "document": "spec/spec.md",
         "section": "The Language / Expressions / Calls",
@@ -3602,9 +3602,9 @@
     },
     {
       "number": 4464,
-      "name": "LANG_SPREAD_NOT_A_TUPLE",
+      "name": "LANG_SPREAD_NOT_SEVERAL",
       "severity": "error",
-      "message": "'{found}' is one argument, and this hands over several",
+      "message": "'{found}' is one value, and '\u2042' stands for several",
       "args": [
         {
           "name": "found",
@@ -3612,11 +3612,49 @@
           "description": "the type of what was written"
         }
       ],
-      "cause": "A tuple is several values travelling as one, and handing it over this way is what undoes that, so how many arguments it becomes is read off its type.  Anything else is one value: an array holds several, but it is still one value and the language has no way to say that a call takes as many arguments as something turns out to hold.",
+      "cause": "The asterism undoes something that travels as one value and is several, and there are two such things: a tuple, whose members the type names one by one, and an array whose length the type says.  Anything else is one value and stays one, however much it holds.",
       "spec": {
         "document": "spec/spec.md",
         "section": "The Language / Expressions / Calls",
-        "requirement": "What follows the asterism in a call is of a tuple type."
+        "requirement": "What follows the asterism is of a tuple type or of a fixed-size array type."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4465,
+      "name": "LANG_SPREAD_NOT_FIXED",
+      "severity": "error",
+      "message": "how many values '{found}' stands for is not in its type",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type of what was written"
+        }
+      ],
+      "cause": "An array whose type does not say its length carries the length beside the elements, so how many values it holds is a thing the program works out while it runs.  What the asterism expands into is written into the program being compiled -- how many arguments a call hands over, how many members a tuple has -- so it has to be known before the program runs, and only a type that says its length knows it.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Calls",
+        "requirement": "An array following the asterism is of a type that says its length."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4466,
+      "name": "LANG_SPREAD_NOTHING_LEFT",
+      "severity": "error",
+      "message": "nothing is left here to make a tuple of",
+      "args": [],
+      "cause": "A tuple is several values travelling as one, and there is no tuple of none: the brackets always hold at least one member, which is what the parser requires of a tuple written out.  An array of no elements spread into a tuple leaves none, and what it leaves has to obey the same rule as what is written.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Tuples",
+        "requirement": "A tuple has at least one member, after any spread is expanded."
       },
       "since": "0.1",
       "default_enabled": true,

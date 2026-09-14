@@ -2799,7 +2799,7 @@
           "members": [
             {
               "type": "SYMBOL",
-              "name": "_expression"
+              "name": "_spreadable"
             },
             {
               "type": "REPEAT",
@@ -2812,7 +2812,7 @@
                   },
                   {
                     "type": "SYMBOL",
-                    "name": "_expression"
+                    "name": "_spreadable"
                   }
                 ]
               }
@@ -3157,17 +3157,8 @@
                     "type": "FIELD",
                     "name": "argument",
                     "content": {
-                      "type": "CHOICE",
-                      "members": [
-                        {
-                          "type": "SYMBOL",
-                          "name": "_expression"
-                        },
-                        {
-                          "type": "SYMBOL",
-                          "name": "spread_argument"
-                        }
-                      ]
+                      "type": "SYMBOL",
+                      "name": "_spreadable"
                     }
                   },
                   {
@@ -3183,17 +3174,8 @@
                           "type": "FIELD",
                           "name": "argument",
                           "content": {
-                            "type": "CHOICE",
-                            "members": [
-                              {
-                                "type": "SYMBOL",
-                                "name": "_expression"
-                              },
-                              {
-                                "type": "SYMBOL",
-                                "name": "spread_argument"
-                              }
-                            ]
+                            "type": "SYMBOL",
+                            "name": "_spreadable"
                           }
                         }
                       ]
@@ -3213,7 +3195,20 @@
         ]
       }
     },
-    "spread_argument": {
+    "_spreadable": {
+      "type": "CHOICE",
+      "members": [
+        {
+          "type": "SYMBOL",
+          "name": "_expression"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "spread"
+        }
+      ]
+    },
+    "spread": {
       "type": "SEQ",
       "members": [
         {
@@ -3222,7 +3217,7 @@
         },
         {
           "type": "FIELD",
-          "name": "tuple",
+          "name": "several",
           "content": {
             "type": "SYMBOL",
             "name": "_expression"

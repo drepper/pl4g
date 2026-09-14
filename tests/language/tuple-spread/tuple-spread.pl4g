@@ -1,0 +1,31 @@
+※ pl4g-test: compile=ok run=native,qemu exit=42 diag=none
+
+※ A tuple's members are a list of values exactly as a call's arguments are, so
+※ the asterism stands among them too: that is how one tuple is joined to another
+※ and how one is extended, neither of which the language could otherwise write
+※ at all.
+※
+※ What a spread member expands into are members like any other.  A tuple made
+※ this way is the same tuple as the one written out, with the same type, so
+※ nothing that reads it knows the difference -- and, a tuple being its members
+※ held separately, none of it costs an instruction.
+
+@[startup]
+fn main() → u8:
+    let pair: 〈u8, u8〉 = 〈1u8, 2u8〉
+    ※ one tuple joined to another, and each member keeps its own type
+    let wide: 〈u8, u16〉 = 〈3u8, 4u16〉
+    let joined: 〈u8, u8, u8, u16〉 = 〈⁂pair, ⁂wide〉
+    ※ a tuple extended, with members written before the spread and after it
+    let around: 〈u8, u8, u8, u8〉 = 〈9u8, ⁂pair, 9u8〉
+    ※ a fixed array spreads here as well, for the reason it does in a call
+    let v: u8⟦2⟧ = ⟦5u8, 6u8⟧
+    let read: 〈u8, u8〉 = 〈⁂v〉
+    let from_joined: u8 = joined⟦0⟧ + joined⟦1⟧ + joined⟦2⟧
+    let from_around: u8 = around⟦0⟧ + around⟦3⟧
+    let from_read: u8 = read⟦0⟧ + read⟦1⟧
+    ※ 1 + 2 + 3 + 9 + 9 + 5 + 6 = 35, and the u16 member says the rest
+    if joined⟦3⟧ = 4u16:
+        from_joined + from_around + from_read + 7u8
+    else:
+        0u8

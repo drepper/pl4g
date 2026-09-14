@@ -2775,6 +2775,47 @@ which nothing yet needs.
 
 ---
 
+## 2026-09-14T14:00+02:00 — language
+
+**What else the asterism spreads**
+
+The two things the entry above left open, both now done: a fixed-size array spreads into a call, and a spread stands among a
+tuple's members.
+
+**An array spreads when its type says its length, and not otherwise.**  The asterism undoes something that travels as one value
+and is several, and the compiler has to be able to count the several while compiling -- what it expands into is written into the
+program.  A tuple's type names its members one by one; a fixed array's type says how many there are; a dynamic array's does not,
+and carries the length beside the elements instead (4465).  That line is exactly the fixed/dynamic line the language already
+draws, so no new concept was needed to say where the glyph stops.  Rejected: making the dynamic case work by generating a call
+per possible length, and making it work by passing a count -- the first is code proportional to a bound nothing states, and the
+second is a variadic call, which this language does not have.
+
+**A table spreads into its rows**, not into its elements, matching `foreach` over a multi-dimensional array.  An array of rank
+two is several rows in the same sense a tuple is several members, and a row is a run of elements, so the expansion is arithmetic
+on the place and no copy.  The alternative -- flattening to elements -- would make `⁂` the one place in the language where
+row-major order is visible to a reader, and would make the rank of what is spread something the reader has to know to count the
+arguments.
+
+**A tuple's members are the language's other list, so they admit the glyph too.**  This is what joins one tuple to another and
+what extends one, neither of which could otherwise be written at all: `〈⁂a, ⁂b〉`.  It cost a rule rather than a mechanism --
+`_pieces_of` already existed for calls, `_parse_spreadable` is what both lists parse their entries with, and the grammar names
+one `_spreadable` rule from both places.  What a spread leaves are members like any other, so a tuple made this way has the type
+it would have had written out.
+
+**A tuple still has at least one member.**  Spreading an array of no elements is the one way to arrive at none, and it is
+refused (4466) rather than admitted.  Rejected: a zero-member tuple type, which would be a type no program can write down --
+`〈〉` is not a tuple literal -- reachable only through a spread, and which would have to answer what taking it apart means.
+
+Compare: Python, where `*` spreads any iterable and `f(*[])` is simply a call with no arguments, because the count is a runtime
+matter throughout; JavaScript, the same; C++, where a parameter pack of length zero is ordinary and `std::tuple<>` exists, the
+language having decided the other way on the empty case; and D, whose static arrays auto-expand in a call with no glyph at all --
+again the closest design and again not taken, for the reason the entry above gives.
+
+What is left open, and is in [TODO-language.md](../TODO-language.md): what order a call's arguments are worked out in, which the
+language has not said and which the expansion makes visible.
+
+---
+
 ---
 
 Open questions

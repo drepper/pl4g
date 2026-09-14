@@ -1,0 +1,12 @@
+※ pl4g-test: compile=error diag=4466
+
+※ A tuple is several values travelling as one, and there is no tuple of none:
+※ the brackets always hold at least one member, which the parser requires of a
+※ tuple written out.  An array of no elements spread into a tuple leaves none,
+※ and what a spread leaves obeys the same rule as what is written.
+
+@[startup]
+fn main() → u8:
+    let empty: u8⟦0⟧ = ⟦⟧
+    let nothing: 〈u8〉 = 〈⁂empty〉
+    nothing⟦0⟧

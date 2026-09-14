@@ -440,12 +440,20 @@ To Do List for the PL4g language
     ABIs already do with a two-word answer.  The argument mapping now counts a register out of the list its kind comes from
     rather than by position, which was already wrong for a floating-point argument standing beside an integer one.
 
-[ ] consider letting `⁂` spread a fixed-size array.  Its length is in its type exactly as a tuple's is, so the expansion is the
-    same one, and the members all having one type means the call it expands into is one every parameter of that type accepts.  A
-    dynamic array cannot: its length is a thing the program knows and not a thing the type says.
+[x] let `⁂` spread a fixed-size array.  Done: its length is in its type exactly as a tuple's is, so the expansion is the same
+    one, done by the same code, with the elements read where they lie rather than taken apart.  An array of rank greater than one
+    gives its outermost dimension, which is what `foreach` over one already does.  A dynamic array cannot and is refused (4465):
+    its length is a thing the program works out and not a thing the type says.
 
-[ ] consider `〈⁂a, ⁂b〉`, spreading into a tuple literal rather than into a call, which is how two tuples are joined and how one
-    is extended.  It costs nothing at runtime for the reason the call case does not, and nothing yet needs it.
+[x] `〈⁂a, ⁂b〉`, spreading into a tuple literal rather than into a call.  Done: it is how two tuples are joined and how one is
+    extended, it costs nothing at runtime for the reason the call case does not, and it cost a parser rule rather than a
+    mechanism.  A tuple still has at least one member, so spreading an array of no elements into one is refused (4466).
+
+[ ] say what order a call's arguments are worked out in.  Nothing has needed it: the only things that can be noticed are a call
+    and an arithmetic check that stops the program, so the order shows only in which of two failures is reported.  The asterism
+    makes it visible -- a spread operand is lowered before an ordinary argument written to its left, because how many arguments
+    there are has to be known before an ordinary one can be paired with a parameter.  Left to right is the answer to write down,
+    and writing it down means giving the checker a way to ask an expression its type before lowering it.
 
 
 Runtime

@@ -1132,21 +1132,37 @@ class Parser:
         args: list[ast.Expr] = []
         if not self._check(TokKind.RPAREN):
             while True:
-                mark = self._accept(TokKind.SPREAD)
-                written = self._parse_expression()
-                args.append(written if mark is None else ast.Spread(
-                    span=mark.span.to(written.span), operand=written))
+                args.append(self._parse_spreadable())
                 if self._accept(TokKind.COMMA) is None:
                     break
         end = self._expect(TokKind.RPAREN, D.LANG_SYNTAX_EXPECTED_CLOSING_PAREN).span
         return ast.Call(span=callee.span.to(end), callee=callee, args=tuple(args))
 
+    def _parse_spreadable(self) -> ast.Expr:
+        """Parse one entry of a list that admits `\N{ASTERISM}` in front of it.
+
+        The two such lists are a call's arguments and a tuple's members.  What
+        the glyph marks is not an expression -- nowhere that wants exactly one
+        value accepts it -- so it is a rule of the list rather than of the
+        expression grammar, and this is the one place that rule lives.
+        """
+        mark = self._accept(TokKind.SPREAD)
+        written = self._parse_expression()
+        if mark is None:
+            return written
+        return ast.Spread(span=mark.span.to(written.span), operand=written)
+
     def _parse_tuple(self) -> ast.Expr:
-        """Parse ``\N{LEFT ANGLE BRACKET}a, b\N{RIGHT ANGLE BRACKET}``."""
+        """Parse ``\N{LEFT ANGLE BRACKET}a, b\N{RIGHT ANGLE BRACKET}``.
+
+        A member written after `\N{ASTERISM}` stands for several members rather than
+        one, exactly as an argument does: a list of values is what the glyph
+        wants, and a tuple's members are the other list this language has.
+        """
         start = self._expect(TokKind.TUPLE_OPEN).span
-        members = [self._parse_expression()]
+        members = [self._parse_spreadable()]
         while self._accept(TokKind.COMMA) is not None:
-            members.append(self._parse_expression())
+            members.append(self._parse_spreadable())
         end = self._expect(TokKind.TUPLE_CLOSE,
                            D.LANG_SYNTAX_EXPECTED_CLOSING_TUPLE).span
         return ast.TupleLit(span=start.to(end), members=tuple(members))

@@ -1,0 +1,28 @@
+※ pl4g-test: compile=ok run=native,qemu exit=42 diag=none
+
+※ An array whose type says how long it is may be spread the way a tuple is.
+※ The two are the same kind of thing to the asterism: several values travelling
+※ as one, with how many of them there are written in the type.  What differs is
+※ only where the values are -- a tuple's members are held separately and are
+※ taken apart where they stand, an array's elements are one run and are read --
+※ and the reads are the ones writing the indices out would have produced.
+※
+※ An array of more than one dimension gives its outermost dimension, which is
+※ the rule `foreach` already follows over one: what a table is several of, is
+※ rows.  A row is a run of elements, so naming one is arithmetic and no copy.
+
+fn three(a: u8, b: u8, c: u8) → u8:
+    a + b + c
+
+fn ends(top: u8⟦3⟧, bottom: u8⟦3⟧) → u8:
+    top⟦0⟧ + bottom⟦2⟧
+
+@[startup]
+fn main() → u8:
+    let v: u8⟦3⟧ = ⟦10u8, 19u8, 20u8⟧
+    ※ every element an argument of its own
+    let whole: u8 = three(⁂v)
+    ※ a table spreads into its rows, each an array in its own right
+    let m: u8⟦2,3⟧ = ⟦⟦1u8, 2u8, 3u8⟧, ⟦4u8, 5u8, 6u8⟧⟧
+    ※ 49 - (1 + 6) = 42
+    whole - ends(⁂m)

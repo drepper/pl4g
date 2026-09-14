@@ -104,7 +104,9 @@ GROUPS: tuple[Group, ...] = (
            "if-statement": "a chain of conditions, and one with no else",
            "tuple-values": "a tuple answered with, and two taken apart",
            "tuple-element": "members of a tuple named by where they stand",
-           "call-spread": "three calls handed a tuple's members as arguments"}),
+           "call-spread": "three calls handed a tuple's members as arguments",
+           "call-spread-an-array": "an array and a table spread into two calls",
+           "tuple-spread": "four tuples made out of others' members"}),
     Group("Types",
           "Definitions the program writes.  These move when the parser, the "
           "name resolution or the layout does.",

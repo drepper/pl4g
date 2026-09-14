@@ -1,0 +1,18 @@
+※ pl4g-test: compile=error diag=4465
+
+※ An array whose type does not say its length carries the length beside the
+※ elements, so how many it holds is a thing the program works out while it runs.
+※ What the asterism expands into is written into the program being compiled --
+※ how many arguments a call hands over -- so it has to be known before the
+※ program runs, and only a type that says its length knows it.
+
+fn two(a: u8, b: u8) → u8:
+    a + b
+
+fn spread_them(xs: u8⟦⟧) → u8:
+    two(⁂xs)
+
+@[startup]
+fn main() → u8:
+    let v: u8⟦2⟧ = ⟦1u8, 2u8⟧
+    spread_them(v)
