@@ -196,6 +196,10 @@
     {
       "hash": "53908ab",
       "subject": "✨ Reach a place through an address held in a register"
+    },
+    {
+      "hash": "9ffbf29",
+      "subject": "✨ An allocator: a bump pointer over mapped chunks"
     }
   ],
   "times": {
@@ -3339,6 +3343,132 @@
       "tuple-values": [
         3.466,
         87.15555799426511
+      ]
+    },
+    "9ffbf29": {
+      "exit0": [
+        1.1920000000000002,
+        81.03116101119667
+      ],
+      "global-variable": [
+        1.181,
+        81.50317298714072
+      ],
+      "assign-widths": [
+        1.629,
+        76.37553103268147
+      ],
+      "many-values-at-once": [
+        1.864,
+        76.66742097353563
+      ],
+      "unreached-function": [
+        1.66,
+        82.46070396853611
+      ],
+      "export-visibility": [
+        1.53,
+        78.17618298577145
+      ],
+      "digit-separators": [
+        1.722,
+        78.71963200159371
+      ],
+      "boolean-values": [
+        1.339,
+        75.71104099042714
+      ],
+      "bitwise-operators": [
+        1.699,
+        77.98472401918843
+      ],
+      "bitwise-precedence": [
+        1.347,
+        76.18070795433596
+      ],
+      "spill-to-the-frame": [
+        6.957,
+        87.18092198250815
+      ],
+      "boolean-in-memory": [
+        1.669,
+        86.02642395999283
+      ],
+      "comparison-operators": [
+        2.269,
+        78.48931400803849
+      ],
+      "logic-operators": [
+        2.3660000000000005,
+        78.86249601142481
+      ],
+      "logic-short-circuit": [
+        2.174,
+        78.29127600416541
+      ],
+      "saturating-precedence": [
+        1.79,
+        81.32576500065625
+      ],
+      "arithmetic-operators": [
+        1.967,
+        83.51509197382256
+      ],
+      "semicolon-separates-statements": [
+        1.725,
+        76.57372998073697
+      ],
+      "call-nested": [
+        2.5210000000000004,
+        84.05787899391726
+      ],
+      "arithmetic-division": [
+        2.388,
+        85.65409202128649
+      ],
+      "shift-operators": [
+        2.112,
+        79.18330002576113
+      ],
+      "float-arithmetic": [
+        5.83,
+        83.20564602036029
+      ],
+      "float-approximate": [
+        8.979999999999999,
+        89.99763196334243
+      ],
+      "result-type": [
+        3.5609999999999995,
+        83.23480898980051
+      ],
+      "type-definitions": [
+        1.2890000000000001,
+        79.7490410041064
+      ],
+      "result-as-an-argument": [
+        9.466,
+        89.8183030076325
+      ],
+      "match-a-result": [
+        3.8,
+        80.65834996523336
+      ],
+      "enum-values": [
+        3.49,
+        82.52162497956306
+      ],
+      "enum-flag": [
+        3.423,
+        83.13593099592254
+      ],
+      "if-statement": [
+        2.8720000000000003,
+        78.85494496440515
+      ],
+      "tuple-values": [
+        3.3770000000000002,
+        84.72861896734685
       ]
     }
   }
