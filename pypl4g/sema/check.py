@@ -142,6 +142,39 @@ def found_name(prefix: str, base: str) -> str:
     return ".".join((prefix, base)) if prefix else base
 
 
+def _assigned_in(block: "ast.Block") -> list[str]:
+    """Every name assigned anywhere in *block*, in the order they appear.
+
+    A definition is not an assignment: it binds a new name, which the block it
+    is in owns and nothing outside it can be standing for.  What is looked
+    through is everything that holds statements -- a nested loop, the arms of
+    an `if` or a `match` -- because a name assigned there is assigned by this
+    loop just the same.
+    """
+    found: list[str] = []
+    _collect_assigned(block, found)
+    return found
+
+
+def _collect_assigned(block: "ast.Block", into: list[str]) -> None:
+    """Add to *into* every name *block* assigns, looking through nested bodies."""
+    for stmt in block.stmts:
+        match stmt:
+            case ast.AssignStmt():
+                into.append(stmt.name)
+                into.extend(name for name, _ in stmt.more)
+            case ast.While():
+                _collect_assigned(stmt.body, into)
+            case ast.ExprStmt(value=ast.If() as asked):
+                for arm in asked.arms:
+                    _collect_assigned(arm.body, into)
+            case ast.ExprStmt(value=ast.Match() as matched):
+                for arm in matched.arms:
+                    _collect_assigned(arm.body, into)
+            case _:
+                pass
+
+
 def _says_its_type(expr: ast.Expr) -> bool:
     """Whether an expression says on its own what type it has.
 
@@ -1600,6 +1633,8 @@ class Checker:
                     builder.ret(result, stmt.span)
             case ast.EntryAssign():
                 self._lower_entry_assign(builder, stmt)
+            case ast.While():
+                self._lower_while(builder, stmt, func)
             case ast.EmptyStmt():
                 # Nothing to lower.  What it does is be a statement, so that a
                 # body ending in a semicolon ends in one that produces no value.
@@ -1849,6 +1884,99 @@ class Checker:
             return self._run_arms(builder, stmt, func, plan, wanted, produces)
         return self._run_arms(builder, stmt, func, plan, wanted, produces,
                               otherwise=otherwise)
+
+    # -- loops -----------------------------------------------------------------
+
+    def _lower_while(self, builder: IRBuilder, stmt: ast.While,
+                     func: Function) -> None:
+        """Check and lower a `while`, which is a branch backwards.
+
+            before:  br loop(v₁ … vₙ, mem)
+            loop(p₁ … pₙ, mem):  the condition; condbr → body, done
+            body:    its statements, then br loop(v₁′ … vₙ′, mem′)
+            done:    what follows, reading the loop's parameters
+
+        The names a turn may change are the loop's parameters, so that the next
+        turn reads what the last one left and what follows the loop reads the
+        same.  Which names those are is asked of the body before anything is
+        lowered, because the parameters have to exist before the condition --
+        which may itself read one -- is lowered against them.  That is the one
+        thing a loop cannot do the way `if` and `match` do it, which look at
+        what the arms turned out to change afterwards.
+
+        Nothing travels on the conditional branch.  What the block after the
+        loop reads are the loop's own parameters, which it dominates: the only
+        way out of the loop is the test.
+        """
+        if builder.block is None:
+            return
+        carried = self._loop_locals(stmt.body)
+        header = builder.new_block("loop")
+        body = builder.new_block("body")
+        after = builder.new_block("done")
+        builder.br(header,
+                   (*(local.value for local in carried), builder.memory()),
+                   stmt.span)
+        builder.position_at(header)
+        params = [header.add_param(self._value_type_of(local.value), local.name)
+                  for local in carried]
+        token = header.add_param(MEM, "mem")
+        for local, param in zip(carried, params):
+            local.value = param
+            local.value_span = stmt.span
+            local.read = False
+        builder.set_memory(token)
+        # Lowered with nothing expected of it, so that a condition of the wrong
+        # type is reported once, as a condition.
+        condition = self._lower_expr(builder, stmt.condition, None)
+        found = self._value_type_of(condition)
+        if found is not BOOL:
+            if found is not ERROR:
+                self._diags.emit(D.LANG_LOOP_CONDITION_NOT_BOOLEAN,
+                                 stmt.condition.span, found=found.render())
+            condition = UndefConst(BOOL)
+        builder.condbr(condition, body, after, span=stmt.span)
+        outer_carried = self._carried
+        # A name the loop carries is read by the next turn, so replacing the
+        # value it stands for is not throwing that value away.
+        self._carried = outer_carried | {id(local) for local in carried}
+        builder.position_at(body)
+        self._push_scope()
+        self._lower_block(builder, stmt.body, func, as_result=False)
+        self._pop_scope()
+        self._carried = outer_carried
+        if not builder.is_terminated and builder.block is not None:
+            builder.br(header,
+                       (*(local.value for local in carried), builder.memory()),
+                       stmt.span)
+            # The branch backwards reads every value it hands over, which is
+            # what keeps a counter a loop counts down from being reported as a
+            # value nothing reads: the next turn is what reads it, and this is
+            # the reading.
+            for local in carried:
+                local.read = True
+        builder.position_at(after)
+        for local, param in zip(carried, params):
+            local.value = param
+            local.value_span = stmt.span
+        builder.set_memory(token)
+
+    def _loop_locals(self, body: ast.Block) -> list[_Local]:
+        """The names in scope that a turn of the loop may change.
+
+        Asked of the syntax rather than of what the lowering turns out to do,
+        because the answer is wanted before the body is lowered.  Over-counting
+        would cost a parameter the allocator then coalesces away; under-counting
+        would be wrong, so what is collected is every assignment anywhere in the
+        body, including inside a nested loop or the arms of an `if`.  A
+        definition binds a new name and is not one of these.
+        """
+        found: dict[int, _Local] = {}
+        for name in _assigned_in(body):
+            local = self._find_local(name)
+            if local is not None:
+                found.setdefault(id(local), local)
+        return list(found.values())
 
     # -- match -----------------------------------------------------------------
 

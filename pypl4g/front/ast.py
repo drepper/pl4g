@@ -462,6 +462,20 @@ class ModuleImport(Node):
 
 
 @dataclass(frozen=True, slots=True)
+class While(Stmt):
+    """``while COND BODY``: the body runs again for as long as the condition holds.
+
+    A statement and not an expression, unlike `if` and `match`.  Those produce
+    a value because every way through them produces one; a loop has a way
+    through that runs the body no times at all, and there is nothing for that
+    way to produce.
+    """
+
+    condition: Expr
+    body: Block
+
+
+@dataclass(frozen=True, slots=True)
 class Block(Node):
     """A sequence of statements in one of the two notations."""
 

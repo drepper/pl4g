@@ -2339,6 +2339,44 @@ that the decision is not made twice.
 
 ---
 
+## 2026-09-14T14:00+02:00 — language and compiler
+
+**`while`, and what a loop costs a compiler that never had one**
+
+Decided on the user's direction: the language gets both a general loop and an iteration over something.  This is the first half.
+
+**A loop is a statement and not an expression**, which is where it parts from `if` and `match`.  Those produce a value because
+every way through them produces one; a loop has a way through that runs the body no times at all, and there is nothing for that
+way to produce.  Rust's `loop` *is* an expression, producing what a `break` hands it -- which is exactly the construct this does
+not have, and the entry in the list says so.
+
+**The condition has to be a truth value** (4437), like `if`'s.  C treats any scalar as a condition, which is why `while (n)`
+counts down there; that is the same mistake `if (x = 0)` is, and the language already refuses the one.
+
+**A name a turn changes is the loop's own parameter.**  The value one turn leaves is the value the next turn reads, and the value
+the last turn leaves is what follows the loop reads.  That is the rule `if` already follows for a name its arms assign, said of a
+body that runs more than once instead of one of several bodies that run once -- so the representation needed nothing new for it.
+
+Which names those are is asked of the *syntax* before anything is lowered, which is the one thing a loop cannot do the way `if`
+does it.  `if` looks at what the arms turned out to change; a loop's parameters have to exist before the condition is lowered,
+because the condition reads them.  Over-counting costs a parameter the allocator coalesces away; under-counting would be wrong, so
+what is collected is every assignment anywhere in the body including nested ones.
+
+**The branch that starts the next turn reads every value it carries.**  That is what keeps the unread-value rule from reporting
+every counter a loop counts down: the next turn is what reads it, and the branch is the reading.
+
+**What it cost was in the backend, not in the syntax.**  Three things assumed control only falls through, and two of them were
+latent defects already.  Liveness read off the layout rather than the graph; a branch's arguments were emitted as a sequence of
+moves and a block handed its own parameters back rearranged was refused; the peephole that rewrites a move of zero read "the flags
+are dead" as "this is the last block laid out"; and the prologue goes at the top of the first block, which a back edge to that
+block would run once a turn.  All four are in the entry before this one.
+
+**Grammar: a loop appears in two places.**  One written with a colon takes its own line ending with it, as `match` and `if` do;
+one written with braces ends where the brace does and the line ends after it like any other.  The compiler's parser has one rule
+and asks what the statement is; the grammar has to say both, because a line ending is a token there.
+
+---
+
 ---
 
 Open questions

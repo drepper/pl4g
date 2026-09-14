@@ -251,6 +251,7 @@ module.exports = grammar({
         // stays a child of it, which is what an editor wants to fold.
         $.match_statement,
         $.if_statement,
+        $.while_statement,
       ),
     )),
 
@@ -289,6 +290,14 @@ module.exports = grammar({
 
     if_statement: $ => prec(2, $.if_expression),
 
+    // `while` runs its body again for as long as the condition holds.  Its
+    // condition stands on its own for the reason an `if`'s does, and it is a
+    // statement outright: a loop has a way through that runs the body no times
+    // at all, and there is nothing for that way to produce.
+    while_statement: $ => seq(
+      'while', field('condition', $._expression), field('body', $._block),
+    ),
+
     // What follows a semicolon may be written or may be left out, and leaving
     // it out is the empty statement.  It has no node of its own: there is
     // nothing in the text to give one to, and what matters about it is only
@@ -303,6 +312,10 @@ module.exports = grammar({
       $.variable_statement,
       $.assignment,
       $.return_statement,
+      // A loop written with braces ends where the brace does, and the line it
+      // stands on ends after it like any other; one written with a colon takes
+      // that line ending with it and is read by the rule above instead.
+      $.while_statement,
       $.expression_statement,
     ),
 

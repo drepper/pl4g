@@ -2988,6 +2988,28 @@
       "option": null
     },
     {
+      "number": 4437,
+      "name": "LANG_LOOP_CONDITION_NOT_BOOLEAN",
+      "severity": "error",
+      "message": "the condition of a 'while' is a truth value, not '{found}'",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type of what was written"
+        }
+      ],
+      "cause": "A condition asks a question, and a question is answered by a truth value.  A number is not one: C treats any scalar as a condition, which is why `while (n)` counts down in C and means nothing here.  Where the question is whether a number has reached zero, `n \u2260 0u8` asks it.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Statements / while",
+        "requirement": "The condition of a `while` is of type `bool`."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 5001,
       "name": "LANG_FUNCDEF_RETURN_UNREACHABLE",
       "severity": "warning",

@@ -1222,6 +1222,10 @@
               {
                 "type": "SYMBOL",
                 "name": "if_statement"
+              },
+              {
+                "type": "SYMBOL",
+                "name": "while_statement"
               }
             ]
           }
@@ -1458,6 +1462,31 @@
         "name": "if_expression"
       }
     },
+    "while_statement": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "STRING",
+          "value": "while"
+        },
+        {
+          "type": "FIELD",
+          "name": "condition",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_expression"
+          }
+        },
+        {
+          "type": "FIELD",
+          "name": "body",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_block"
+          }
+        }
+      ]
+    },
     "_statement_run": {
       "type": "SEQ",
       "members": [
@@ -1526,6 +1555,10 @@
         {
           "type": "SYMBOL",
           "name": "return_statement"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "while_statement"
         },
         {
           "type": "SYMBOL",

@@ -1,0 +1,18 @@
+※ pl4g-test: compile=ok run=native,qemu exit=12 diag=none
+
+※ A loop inside a loop, with the inner one written in the other notation.  A
+※ name the inner loop changes is one the outer loop carries too, which is what
+※ says the two are not separate questions.
+※
+※ The body of a loop is a scope like any other, so the inner loop's counter is
+※ defined afresh on every turn of the outer one.
+
+@[startup]
+fn main() → u8:
+    let total: mut u8 = 0u8
+    let i: mut u8 = 0u8
+    while i < 4u8:
+        let j: mut u8 = 0u8
+        while j < 3u8 { total ← total + 1u8; j ← j + 1u8 }
+        i ← i + 1u8
+    total

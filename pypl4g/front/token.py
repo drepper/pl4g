@@ -168,6 +168,7 @@ class TokKind(StrEnum):
     KW_IF = "'if'"
     KW_ELIF = "'elif'"
     KW_ELSE = "'else'"
+    KW_WHILE = "'while'"
     KW_TRUE = "'true'"
     KW_FALSE = "'false'"
     KW_IMPORT = "'import'"
@@ -267,6 +268,7 @@ KEYWORDS: Final[dict[str, TokKind]] = {
     "if": TokKind.KW_IF,
     "elif": TokKind.KW_ELIF,
     "else": TokKind.KW_ELSE,
+    "while": TokKind.KW_WHILE,
     "true": TokKind.KW_TRUE,
     "false": TokKind.KW_FALSE,
     "import": TokKind.KW_IMPORT,

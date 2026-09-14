@@ -772,6 +772,8 @@ class Parser:
         if self._check(TokKind.KW_IF):
             asked = self._parse_if()
             return ast.ExprStmt(span=asked.span, value=asked)
+        if self._check(TokKind.KW_WHILE):
+            return self._parse_while()
         if self._check(TokKind.KW_RETURN):
             start = self._advance().span
             if self._check(TokKind.NEWLINE) or self._check(TokKind.SEMICOLON) \
@@ -797,6 +799,18 @@ class Parser:
         return ast.AssignStmt(span=first.span.to(value.span), name=first.name,
                               name_span=first.span, value=value,
                               more=tuple(more))
+
+    def _parse_while(self) -> ast.While:
+        """Parse ``while COND BODY``.
+
+        The condition stands on its own, with no parentheses around it, for the
+        reason `if`'s does: what ends it is the body, which begins with a colon
+        or a brace, and neither can be part of an expression.
+        """
+        start = self._expect(TokKind.KW_WHILE).span
+        condition = self._parse_expression()
+        body = self._parse_body()
+        return ast.While(span=start.to(body.span), condition=condition, body=body)
 
     def _parse_if(self) -> ast.If:
         """Parse ``if COND BODY`` with its `elif`s and its `else`.
@@ -1085,9 +1099,12 @@ def _ends_with_a_block(stmt: ast.Stmt) -> bool:
 
     Such a statement swallows the end of its own last line in the layout
     notation -- the dedent comes after that newline, not before -- so the block
-    it stands in must not ask for one after it.  `match` is the first of these
-    and `if` will be the next.
+    it stands in must not ask for one after it.  A loop is one outright; the
+    other two are expressions, so what is asked of a statement is what it ends
+    with.
     """
+    if isinstance(stmt, ast.While):
+        return True
     return _trailing_match(getattr(stmt, "value", None))
 
 

@@ -1,0 +1,13 @@
+※ pl4g-test: compile=error diag=4437
+
+※ A condition asks a question, and a question is answered by a truth value.  A
+※ number is not one: C treats any scalar as a condition, which is why `while
+※ (n)` counts down in C and means nothing here.  Where the question is whether
+※ a number has reached zero, `n ≠ 0u8` asks it.
+
+@[startup]
+fn main() → u8:
+    let n: mut u8 = 3u8
+    while n:
+        n ← n - 1u8
+    n

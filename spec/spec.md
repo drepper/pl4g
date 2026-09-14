@@ -1111,6 +1111,47 @@ constructor; here an alternative is named by its type, which is what removes the
 can be taken apart.  Swift's `switch` is also exhaustive; C's `switch` is not, and falls through besides, which is the pair of
 mistakes every language since has fixed.  Zig writes `switch` with `else` as the catch-all; this has none, deliberately.
 
+#### while
+
+`while` runs its body again for as long as the condition holds.
+
+```
+let total: mut u8 = 0u8
+let n: mut u8 = 5u8
+while n > 0u8:
+    total ← total + n
+    n ← n - 1u8
+```
+
+**The condition stands on its own.**  There are no parentheses around it, for the reason an `if`'s has none: what ends it is the
+body, which begins with a colon or a brace, and neither can be part of an expression.
+
+**The condition is of type `bool`** (4437).  A number is not a condition: C treats any scalar as one, which is why `while (n)`
+counts down there and means nothing here.  Where the question is whether a number has reached zero, `n ≠ 0u8` asks it.
+
+**The body is a statement list**, written in either notation, exactly as a function's body or an arm of an `if` is.
+
+**A loop is a statement and not an expression**, which is where it differs from `if` and `match`.  Those produce a value because
+every way through them produces one; a loop has a way through that runs the body no times at all, and there is nothing for that
+way to produce.
+
+**A name a turn changes is the same name on the next turn.**  The value one turn leaves is the value the next turn reads, and the
+value the last turn leaves is what follows the loop reads.  That is what makes a loop able to count anything, and it is the same
+rule an `if` follows for a name its arms assign -- said of a body that runs more than once rather than of one of several bodies
+that run once.
+
+The unread-value rule says nothing about such a name while the loop is being checked, for the same reason it says nothing inside
+the arms of an `if`: whether an earlier value survives is a question about paths, and that rule is a statement about a straight
+line of code.  The branch that starts the next turn reads every value it carries, so a counter a loop counts down is not a value
+nothing reads.
+
+**The body is a scope**, so a name defined in it is defined afresh on every turn and is gone after the loop.
+
+Compare: C, C++, Go, Rust, Zig and Odin all have `while` (Go spells it `for`, Rust also has `loop`), and all but C and C++ insist
+the condition is a truth value.  Rust's `loop` is an expression, producing what a `break` hands it; there is no `break` here yet,
+and until there is, a loop has nothing to produce.  Python's `while` has an `else`, which runs when the loop ended by its
+condition rather than by a `break`; with no `break` the two cannot differ, so there is nothing for one to mean.
+
 ### Names the compiler provides
 
 A name beginning with `⎕` (U+2395 APL FUNCTIONAL SYMBOL QUAD) belongs to the compiler.  A program may read and assign the ones

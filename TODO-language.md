@@ -51,15 +51,23 @@ To Do List for the PL4g language
     stops the program, and still open for a table that cannot grow.  And which arena a collection lives in, which is what makes
     it safe to give an arena back: the allocator is a type, and a value that lives in one names it.
 
-[?] there is no repetition.  A function body cannot loop: there is no `while`, no `for` and no recursion that terminates by
-    anything the compiler checks.  Branches and block parameters carry it already, and `if` and `match` show the shape a
-    construct with bodies takes here.
-    Question: does a language written by generators need a general loop at all, or is iteration over something enough?  A
-    generator emitting a counted loop can emit whatever the language gives it, so the question is what reads best in the output
-    and what the optimizer can say most about -- a counted loop whose bounds are written down is one an implementation can
-    reason about, where a general `while` is not.  Considered: `while COND:` with the same block rules as `if`; `for NAME in
-    RANGE:`, which wants a range type and an iteration protocol; and tail recursion made to terminate, which needs nothing new
-    in the syntax and a guarantee in the compiler.
+[x] there is no repetition.  Answered by the user: both a general `while` and an iteration over something, which is `foreach`.
+    `while COND:` is done -- a statement, not an expression, with the same block rules as `if` and a condition that has to be a
+    truth value (4437).  A name a turn changes is the loop's own parameter, so the value one turn leaves is the value the next
+    one reads.  What it cost was in the backend rather than in the syntax: liveness that follows the graph, and a branch's
+    arguments passed as a parallel copy.
+
+[ ] `foreach`, iterators and ranges.  `foreach` shares `let`'s syntax: one or more names, optional types, an equal sign, an
+    expression, and then a statement list.  The expression has to be convertible to an **iterator**, which is a new concept: a
+    value with a `next` answering the next element or a failure, represented internally as a result type that does not surface.
+    The loop ends where there is no value, and the names are bound to what there was.  The only source of iterators for now is a
+    **range**, `NUM1…NUM2` or `NUM1…NUM2…NUM3`, which mean what Python's `range` means with two or three arguments.  `while` is
+    to take the same form as a second spelling: `while var : [TYPE] = EXPR` over an iterator, beside `while EXPR` over a
+    condition.
+
+[ ] leaving a loop early.  There is no `break` and no `continue`, and no `loop` that answers with what a `break` hands it.  A
+    loop is a statement for that reason: with nothing that leaves it early, every way out is the condition, and a construct whose
+    only way out produces nothing produces nothing.  Rust's `loop` is the shape to compare against if `break` arrives.
 
 [ ] add floating-point types `f16` and `bfloat`, optional if there is no hardware support.
     `f32` and `f64` are done: a value can be written, held, passed, returned, computed with and compared, and the hardware's

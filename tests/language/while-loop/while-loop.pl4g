@@ -1,0 +1,24 @@
+※ pl4g-test: compile=ok run=native,qemu exit=15 diag=none
+
+※ `while` runs its body again for as long as the condition holds.  The
+※ condition stands on its own -- there are no parentheses around it, because
+※ nothing needs them: what ends it is the body, which begins with a colon or a
+※ brace, and neither can be part of an expression.
+※
+※ It is a statement and not an expression, unlike `if` and `match`.  Those
+※ produce a value because every way through them produces one; a loop has a way
+※ through that runs the body no times at all, and there is nothing for that way
+※ to produce.
+※
+※ A name a turn changes is the same name on the next turn, which is what makes
+※ a loop able to count anything: the value a turn leaves is the value the next
+※ turn reads, and the value the last turn leaves is what follows the loop reads.
+
+@[startup]
+fn main() → u8:
+    let total: mut u8 = 0u8
+    let n: mut u8 = 5u8
+    while n > 0u8:
+        total ← total + n
+        n ← n - 1u8
+    total

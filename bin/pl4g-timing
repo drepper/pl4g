@@ -106,6 +106,12 @@ GROUPS: tuple[Group, ...] = (
           {"type-definitions": "eight definitions in all three notations",
            "enum-values": "two enumerations, and three matches over them",
            "enum-flag": "a flag enumeration, its operators and three matches"}),
+    Group("Loops",
+          "A branch backwards, which is what makes liveness a question about "
+          "the graph rather than about the layout.  These move when the "
+          "register allocator or the branch lowering does.",
+          {"while-loop": "one loop, carrying two values",
+           "while-loop-nested": "a loop inside a loop, in both notations"}),
 )
 
 #: How many times each sample is compiled.  The best is kept.
