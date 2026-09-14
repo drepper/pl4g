@@ -1,14 +1,11 @@
-※ pl4g-test: compile=fail
-※ pl4g-test: expect-diag 9902 IMPL_UNIMPLEMENTED_FEATURE
+※ pl4g-test: compile=ok run=native,qemu exit=42 diag=none
 
-※ Sets and dictionaries: written, typed and checked, and not yet built.  A
-※ collection is a table somewhere in memory, and there is nowhere for one to
-※ be -- the compiler emits no allocator and the language has no loop for a
-※ lookup to walk.  Both are questions in the to-do lists, so what is here is
-※ everything up to the point where those are answered.
+※ Sets and dictionaries: written, typed, built and looked in.  A collection is
+※ a hash table somewhere in an arena, and what a program passes around is where
+※ that table is and nothing else.
 ※
-※ `⸨a, b⸩` is a set and `⸨k: v⸩` a dictionary; which of the two a collection
-※ is is decided by its first entry.  A type is written the same way: `⸨T⸩` and
+※ `⸨a, b⸩` is a set and `⸨k: v⸩` a dictionary; which of the two a collection is
+※ is decided by its first entry.  A type is written the same way: `⸨T⸩` and
 ※ `⸨K: V⸩`, so that a type and a value of it look alike.
 
 enum Key { a ; b ; c }
@@ -25,12 +22,12 @@ fn kept(d: ⸨Key: u8⸩, k: Key) → u8:
 @[startup]
 fn main() → u8:
     let s: ⸨u8⸩ = ⸨1u8, 2u8, 3u8⸩
-    let d: ⸨Key: u8⸩ = ⸨Key.a: 1u8, Key.b: 2u8⸩
-    ※ the four a set answers, written with the characters a number's bits use
-    let joined: ⸨u8⸩ = s | ⸨4u8⸩
-    let both: ⸨u8⸩ = s & ⸨1u8⸩
-    let either: ⸨u8⸩ = s ^ ⸨1u8⸩
-    let without: ⸨u8⸩ = s - ⸨1u8⸩
-    ※ and an entry of a dictionary is assigned to where one is read
-    d⸨Key.c⸩ ← 42u8
-    0u8
+    let d: mut ⸨Key: u8⸩ = ⸨Key.a: 1u8, Key.b: 2u8⸩
+    ※ an entry of a dictionary is assigned to where one is read
+    d⸨Key.c⸩ ← 39u8
+    let total: mut u8 = kept(d, Key.a) + kept(d, Key.c)
+    if holds(s, 2u8):
+        total ← total + 2u8
+    if holds(s, 9u8):
+        total ← total + 100u8
+    total

@@ -114,6 +114,10 @@ _FLOAT_OPERATIONS: Final[dict[BinOp, "Op"]] = {
 _OPERATIONS: Final[dict[BinOp, "Op"]] = {
     BinOp.ADD: ops.PLUS, BinOp.SUB: ops.MINUS, BinOp.MUL: ops.TIMES,
     BinOp.AND: ops.AND, BinOp.OR: ops.OR, BinOp.XOR: ops.XOR,
+    # The wrapping three are the same instructions with nothing asked
+    # afterwards about what they came to.
+    BinOp.WRAP_ADD: ops.PLUS, BinOp.WRAP_SUB: ops.MINUS,
+    BinOp.WRAP_MUL: ops.TIMES,
 }
 
 #: The same for the operations that take one operand.
@@ -687,8 +691,8 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
     from ...ir.function import Function as _Function
     from ...ir.mangle import symbol_name
     from ...ir.module import GlobalVar
-    from ...ir.types import (BOOL, BoolType, FloatType, IntType, MEM,
-                             PtrType, ResultType, VOID)
+    from ...ir.types import (BOOL, BoolType, DictType, EnumType, FloatType,
+                             IntType, MEM, PtrType, ResultType, SetType, VOID)
     from ...ir.inst import (CastInst, CastKind, ExtractInst, FailedInst,
                             TupleInst, UnwrapInst, WrapInst)
     from ...ir.value import FloatConst, UndefConst
@@ -1034,7 +1038,8 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
                                     inst.span)
                         asm.ret(inst.span)
                         continue
-                    if not isinstance(ty, (IntType, BoolType)):
+                    if not isinstance(ty, (IntType, BoolType, EnumType,
+                                           PtrType, SetType, DictType)):
                         raise UnsupportedOperation("".join((
                             "returning a value of type '", ty.render(), "'")), span)
                     result = _result_register(ty, cconv, registers)
@@ -1280,6 +1285,33 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
                     # in the register, and this says to go on reading them as
                     # something else.
                     held[id(inst)] = operands.register_of(inst.operands[0], span)
+                case CastInst() if inst.kind in (CastKind.ZEXT, CastKind.SEXT):
+                    # A value of a narrow type is already in a register the
+                    # whole width of a word, extended the way its own type says;
+                    # this reads the part of it that is the value and extends it
+                    # the way the cast says instead.
+                    destination = _new_value(
+                        inst.ty, registers,
+                        hint=(_result_register(inst.ty, cconv, registers)
+                              if inst is returned else None))
+                    held[id(inst)] = destination
+                    asm.widen(destination,
+                              operands.in_register(inst.operands[0], inst.span),
+                              _width_of(inst.operands[0].ty),
+                              inst.kind is CastKind.SEXT, inst.span)
+                case CastInst() if inst.kind is CastKind.TRUNC:
+                    # Narrowing is the same instruction: what it takes is the
+                    # low part, and what it leaves is that part extended the way
+                    # the narrower type says, which is the invariant every value
+                    # in a register keeps.
+                    destination = _new_value(
+                        inst.ty, registers,
+                        hint=(_result_register(inst.ty, cconv, registers)
+                              if inst is returned else None))
+                    held[id(inst)] = destination
+                    asm.widen(destination,
+                              operands.in_register(inst.operands[0], inst.span),
+                              _width_of(inst.ty), _is_signed(inst.ty), inst.span)
                 case CastInst() if inst.kind is CastKind.FEXT:
                     destination = _new_value(
                         inst.ty, registers,

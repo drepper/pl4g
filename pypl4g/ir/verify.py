@@ -18,7 +18,8 @@ from .inst import (AddressInst, BinaryInst, BinOp, BlockTarget, CastInst,
                    LoadInst, RetInst, StoreInst, Terminator, UnaryInst,
                    UnwrapInst, WrapInst)
 from .module import GlobalVar, Module
-from .types import BOOL, IntType, MEM, PtrType, ResultType, TupleType, VOID
+from .types import (BOOL, BoolType, DictType, EnumType, IntType, MEM,
+                    PtrType, ResultType, SetType, TupleType, Type, VOID)
 from .value import Const, IntConst, Value
 
 
@@ -169,14 +170,25 @@ class Verifier:
                 elif not isinstance(inst.operands[1].ty, IntType):
                     self._fail(where, "".join((
                         "moving an address by ", inst.operands[1].ty.render())))
+            case CastInst() if inst.kind in (CastKind.ZEXT, CastKind.SEXT,
+                                             CastKind.TRUNC):
+                # Between things a register holds as a whole number, which is
+                # what "wider" and "narrower" are about.  A truth value and a
+                # value of an enumeration are among them: both are a number in
+                # a register, whatever the language says they mean.
+                if not (_counts(inst.ty) and _counts(inst.operands[0].ty)):
+                    self._fail(where, "".join((
+                        "'", inst.opcode, "' between ",
+                        inst.operands[0].ty.render(), " and ", inst.ty.render())))
             case CastInst() if inst.kind is CastKind.BITCAST:
-                # The same bits read as another type.  Only an address for now:
-                # an integer read as a floating-point number is the same
-                # question asked of two different register banks, and answering
-                # it wants a rule about where the bits are, not only that they
-                # are the same ones.
-                if not (isinstance(inst.ty, PtrType)
-                        and isinstance(inst.operands[0].ty, PtrType)):
+                # The same bits read as another type.  Only an address for now
+                # -- and a collection is one, being where its table is: an
+                # integer read as a floating-point number is the same question
+                # asked of two different register banks, and answering it wants
+                # a rule about where the bits are, not only that they are the
+                # same ones.
+                if not (_is_an_address(inst.ty)
+                        and _is_an_address(inst.operands[0].ty)):
                     self._fail(where, "".join((
                         "reading ", inst.operands[0].ty.render(), " as ",
                         inst.ty.render(), ", which is not the same kind of thing")))
@@ -380,6 +392,21 @@ class Verifier:
                     for target in inst.successors():
                         for arg in target.args:
                             check_use(block, index, arg)
+
+
+def _is_an_address(ty: Type) -> bool:
+    """Whether a value of *ty* is an address as far as a register is concerned.
+
+    A collection is one: what a program passes around is where its table is, and
+    nothing else.
+    """
+    return isinstance(ty, (PtrType, SetType, DictType))
+
+
+def _counts(ty: Type) -> bool:
+    """Whether a value of *ty* is a whole number as far as a register is
+    concerned, which is what a widening or a narrowing is between."""
+    return isinstance(ty, (IntType, BoolType, EnumType))
 
 
 def verify(module: Module) -> None:

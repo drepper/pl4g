@@ -267,16 +267,26 @@ class TupleLit(Expr):
 
 @dataclass(frozen=True, slots=True)
 class SetLit(Expr):
-    """`\N{LEFT DOUBLE PARENTHESIS}a, b, c\N{RIGHT DOUBLE PARENTHESIS}`: a set written down."""
+    """`\N{LEFT DOUBLE PARENTHESIS}a, b, c\N{RIGHT DOUBLE PARENTHESIS}`: a set written down.
+
+    `arena` is the name written after `in`, where one was: which allocator the
+    table comes out of.  Nothing there means the one the compiler provides.
+    """
 
     elements: tuple[Expr, ...]
+    arena: "NameRef | None" = None
 
 
 @dataclass(frozen=True, slots=True)
 class DictLit(Expr):
-    """`\N{LEFT DOUBLE PARENTHESIS}k: v, k: v\N{RIGHT DOUBLE PARENTHESIS}`: a dictionary written down."""
+    """`\N{LEFT DOUBLE PARENTHESIS}k: v, k: v\N{RIGHT DOUBLE PARENTHESIS}`: a dictionary written down.
+
+    `arena` is the name written after `in`, where one was: which allocator the
+    table comes out of.  Nothing there means the one the compiler provides.
+    """
 
     entries: tuple[tuple[Expr, Expr], ...]
+    arena: "NameRef | None" = None
 
 
 @dataclass(frozen=True, slots=True)

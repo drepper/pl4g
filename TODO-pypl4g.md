@@ -132,21 +132,26 @@ To Do List for the pypl4g compiler
     allocation that cannot be met goes through `__pl4g_abort` like an arithmetic fault.  It is emitted only where something
     declares one of its entry points.
 
-[ ] give an allocator a spelling in the language.  The runtime above has no way to be named from a program: there is a type for
-    an arena in the representation and nothing in the syntax, because the thing that would allocate -- a collection, a `mut str`
-    -- is not generated yet.  What it wants, and what the instruction that asked for the allocator asked for: a built-in `arena`
-    type, a compiler-provided default arena, a way to make and give back another, and a common interface stated once so that a
-    second allocator is a table entry.  The type-safety it is for is that a value names the arena it lives in, so that one from an
-    arena that has been given back cannot be stored where one from another is expected.  This waits on the collections, which
-    wait on the loops.
+[x] give an allocator a spelling in the language.  Done: `arena` is a type, `⎕arena` is what a variable of it starts out holding,
+    `⎕heap` is the one the compiler provides, and `in` says which arena a collection comes out of.  A program makes as many as it
+    wants, and a collection made out of two others comes out of the same arena the first of them did.
+
+[ ] give an arena back from a program.  The runtime has `__pl4g_release` and the language has no way to call it, so nothing a
+    program writes can give an arena back -- which is why nothing a program writes can yet be left pointing into one that went.
+    What it needs is a way to write the call, and, before that, the rule that makes it safe: a value that lives in an arena has to
+    say so in its type, so that one from an arena that has been given back cannot be stored where one from another is expected.
+    Today `in` says where a collection went and is no part of its type, and this entry is what would change that.
+
+[ ] hash a value that is not one word.  Done for everything that can be a key today -- an integer, a truth value, an enumeration
+    -- by one multiplication, because all of them fit in a word.  A string or a product would want a hash over its bytes, emitted
+    per type, which is what the entry about a wider key in TODO-language.md waits on.
 
 [ ] an allocator that gives memory back.  An arena frees nothing until the whole of it goes, which is right for a compiler and
     wrong for a program that runs for a long time.  A size-class allocator is the thing every language ends up with; what it needs
     first is a program that runs long enough for the difference to show.
 
-[ ] hash a value.  A set and a dictionary want one function per key type, emitted rather than called: a multiply-and-shift for an
-    integer or an enumeration, the value itself for a truth value.  It is a handful of instructions and none of it is new; what it
-    waits on is something to hash *for*.
+[x] hash a value.  Done: Fibonacci hashing, one multiplication with the high bits folded down, generated once rather than per key
+    type -- every key is one word, so there is nothing per type to generate.
 
 [ ] hold a value whose type is a product or a sum.  Both are refused today (8501): a product is every one of its fields at once
     and a sum is one variant and a tag, and neither is a thing a register holds.  What they want is a place in memory, an address

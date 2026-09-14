@@ -38,18 +38,28 @@ To Do List for the PL4g language
     A key is a type `=` answers exactly -- integers, `bool`, enumerations -- and floating point is refused.  Nothing builds one:
     see the entry below.
 
-[ ] build a set and a dictionary at run time.  Refused today (9902).  It needs two things the compiler does not have, and neither
-    is about collections: a **heap** for the table to be in, which the compiler now emits, and a **loop** for a lookup to
-    walk, which is the open question below.  The design, so that it is not done twice: open addressing with linear probing, a
-    power-of-two capacity, growth at about seven eighths full, a tombstone for a key taken out, and a hash emitted per key type --
-    a multiply-and-shift for an integer or an enumeration, the value itself for a truth value.  The table is a block holding the
-    capacity, the count and the entries; the handle a program passes around is where that block is and how many entries are in it,
-    which is the two words `pypl4g/ir/layout.py` already gives one.
-    Two questions ride on it.  Whether a collection is copied when it is assigned or shared, which Python answers with sharing and
-    a reference count and which this language has no reference count for.  And what happens when the table cannot grow, given that
-    an allocation that fails is not obviously a fallible operation the way a read is -- answered for the allocator itself, which
-    stops the program, and still open for a table that cannot grow.  And which arena a collection lives in, which is what makes
-    it safe to give an arena back: the allocator is a type, and a value that lives in one names it.
+[x] build a set and a dictionary at run time.  Done: open addressing with linear probing, a power-of-two capacity, growth at
+    three quarters full, and Fibonacci hashing -- one multiplication, with the high bits folded down.  The table is a block that
+    never moves, holding the arena it came out of, the mask, the count, the stride and where the entries are; the entries are a
+    separate allocation so that growing does not move the block.  A collection is where its block is and nothing else, which is
+    one word.  The three operations are generated as functions of the representation, which is the first thing the compiler
+    generates for itself.
+    A collection names the arena it comes out of, with `in`, and `⎕heap` is what one that says nothing comes out of.  A collection
+    is shared and not copied when it is assigned: it is a handle, and copying it is what a `copy` written out would be for.
+
+[ ] take a key out of a collection.  There are two states an entry has and not three, because nothing takes one out: a probe
+    therefore stops at the first empty entry.  Taking one out needs a third state -- given up -- that a probe walks past and an
+    insertion may use, and a count of those so that a table full of them is rebuilt rather than grown.  What it also needs is a
+    spelling, and there is none: Python writes `del d[k]` and `s.discard(x)`, and this language has no statement that removes
+    anything from anything.
+
+[ ] a dictionary whose value is of any type.  Refused today (4445): an entry is words and what goes in one has to fit in one.
+    What it needs is the entry stride to be computed per instantiation from the layout of the value, which the table already
+    carries as a field, and a copy of that many bytes where a word is copied now.  The key's restriction is separate and stays:
+    one word is what lets one table serve every instantiation.
+
+[ ] a collection at the top level.  Refused today (9902), because a table is built by running code and a variable at the top level
+    is bytes in the image.  The module already has constructors; what this needs is for the front end to emit one.
 
 [x] there is no repetition.  Answered by the user: both a general `while` and an iteration over something, which is `foreach`.
     `while COND:` is done -- a statement, not an expression, with the same block rules as `if` and a condition that has to be a

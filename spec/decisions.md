@@ -2428,6 +2428,64 @@ type and a place in memory; Rust needs that because its ranges are iterators lik
 
 ---
 
+## 2026-09-14T19:00+02:00 — language, compiler and runtime
+
+**Sets and dictionaries, and the arena they live in**
+
+The last of the four pieces.  Everything it needed -- a place to put a table, and a loop for a probe to walk -- landed in the three
+entries above, and what is left here is the table itself and the spelling for where it goes.
+
+**Open addressing with linear probing**, a power-of-two capacity, and growth at three quarters full.  Every entry is in the block
+rather than in a chain hanging off it, so a lookup touches one cache line where a chain would touch one per link.  Python, Rust,
+Go and Swift all do this; separate chaining is what the older implementations did and what they moved away from.
+
+**Fibonacci hashing**: the key multiplied by the closest odd number to two to the sixty-fourth over the golden ratio, with the high
+bits folded down.  One multiplication, no table, and it is what Knuth describes.  The multiplication wraps, which no program of the
+language may write -- the specification says arithmetic is checked -- and which the compiler's own code may: a hash is defined on
+the bits, and there is nothing about an overflow here to report to anyone.  Three wrapping operations were added to the
+representation for it and are reachable from nowhere else.
+
+**The three operations are generated as functions of the representation**, which nothing in the compiler did before: the entry
+point and the allocator are written as instructions for each target.  The reason to generate these is that they have loops,
+several live values and arithmetic that wants a register allocator -- exactly what the compiler already does for a program.  It is
+also a test of the compiler on its own output, and it found nothing, which is the answer worth having.
+
+**Every key and every value is one word.**  That is what lets one table serve every instantiation: there is no code per key type at
+all.  For a key it is also the rule -- what may be a key is an integer, a truth value or an enumeration, and all of them fit.  For
+a value it is a restriction (4445) rather than a decision, and the to-do list says what lifting it needs.
+
+**Two states for an entry and not three**, because nothing takes a key out of a collection yet: a probe therefore stops at the
+first empty entry and there is no given-up state to walk past.  The entry in the list says what removal would need, and notes that
+the language has no statement that removes anything from anything.
+
+**The table block never moves and the entries are a separate allocation.**  A collection is where its block is, so a table that
+grew under a name would otherwise leave every other name for it pointing at the old entries.
+
+**A collection is one word and not two.**  How much it holds and how much room it has are in the table rather than beside it, so
+that two names for one collection see one answer.  The two-word handle the layout used to say was a design from before there was a
+table.
+
+**The four set operators answer with a table of their own** and change neither operand, which is what an operator does everywhere
+else in the language.  All four are two walks at most of one generated function that takes the keys of one table that the other
+does or does not have: four copies of a probe loop would be four places for one defect to live.
+
+**An arena is a type, and `in` says which one a collection comes out of.**  Zig makes every allocator a value and every allocation
+name one, which is where this comes from; Odin puts it in an implicit `context`, so that a line that makes a collection does not
+say where it goes; Rust parameterises the collection's type by its allocator.  This sits with Zig and Rust, and stops short of
+Rust: the arena is no part of the collection's *type*, so a value from an arena that has been given back is not yet refused where
+one from another is expected.  Nothing can give an arena back from a program yet, so nothing can go wrong; the entry in the list
+is what would close it, and it is the type-safety the instruction asked for stated as what is still owed.
+
+**`⎕arena` is what a variable of type `arena` starts out holding**, and there is nothing else to write there (4444).  An arena is a
+place and not a value: what is written says what the place starts out holding, and three zero words is an arena that has asked the
+system for nothing yet.
+
+**A collection made out of two others comes out of the same arena the first of them did**, read off the table at run time rather
+than decided while compiling.  It keeps an answer where its operands are, which is the only rule that does not need the arena to
+be in the type.
+
+---
+
 ---
 
 Open questions

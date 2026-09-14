@@ -558,14 +558,21 @@ module.exports = grammar({
     // `\u2e28a, b\u2e29` is a set and `\u2e28k: v\u2e29` a dictionary; which of the two a
     // collection is is decided by its first entry, and one written with nothing
     // in it is neither until the type it is wanted as says which.
-    set_literal: $ => seq('\u2e28', sepBy(',', $._expression), '\u2e29'),
+    set_literal: $ => seq('\u2e28', sepBy(',', $._expression), '\u2e29',
+                          optional($._in_arena)),
 
     dictionary_literal: $ => seq(
       '\u2e28',
       sepBy1(',', seq(field('key', $._expression), ':',
                       field('value', $._expression))),
       '\u2e29',
+      optional($._in_arena),
     ),
+
+    // Which allocator a collection comes out of.  A name and not an
+    // expression: what goes here is a place the allocator keeps its state in,
+    // and a place is named rather than computed.
+    _in_arena: $ => seq('in', field('arena', $.identifier)),
 
     // Whether a set holds a key, or what a dictionary has for one.  It binds
     // as tightly as a call does, and to whatever stands immediately before it.

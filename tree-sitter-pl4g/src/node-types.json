@@ -761,6 +761,16 @@
     "type": "dictionary_literal",
     "named": true,
     "fields": {
+      "arena": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      },
       "key": {
         "multiple": true,
         "required": true,
@@ -2988,7 +2998,18 @@
   {
     "type": "set_literal",
     "named": true,
-    "fields": {},
+    "fields": {
+      "arena": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      }
+    },
     "children": {
       "multiple": true,
       "required": false,
@@ -4047,6 +4068,10 @@
   },
   {
     "type": "import",
+    "named": false
+  },
+  {
+    "type": "in",
     "named": false
   },
   {

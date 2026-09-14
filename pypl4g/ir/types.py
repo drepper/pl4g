@@ -367,11 +367,23 @@ F32: Final[FloatType] = FloatType(32)
 F64: Final[FloatType] = FloatType(64)
 
 #: The types the language names directly, in the order they are documented.
+#: What the allocator's own record holds: the first byte not yet handed out,
+#: one past the end of the chunk it is in, and the head of the chunk list.  It
+#: is a type the language names, because an arena is a thing a program makes
+#: and gives to a collection, and it is a record rather than anything of the
+#: compiler's own so that its layout is computed the way every layout is.
+ARENA_NAME: Final[str] = "arena"
+
+ARENA: Final[ProductType] = ProductType(
+    (("next", U64), ("limit", U64), ("chunk", U64)), name=ARENA_NAME)
+
+
 BUILTIN_TYPES: Final[dict[str, Type]] = {
     "i8": I8, "i16": I16, "i32": I32, "i64": I64,
     "u8": U8, "u16": U16, "u32": U32, "u64": U64,
     "f32": F32, "f64": F64,
     "bool": BOOL, "void": VOID,
+    ARENA_NAME: ARENA,
 }
 
 

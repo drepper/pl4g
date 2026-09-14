@@ -46,6 +46,16 @@ class BinOp(Enum):
     SAT_SUB = "sat.sub"
     SAT_MUL = "sat.mul"
 
+    #: The three that answer with the low bits of what the arithmetic came to,
+    #: whatever it came to.  No program of the language can write one: the
+    #: specification says arithmetic is checked, and an answer that does not fit
+    #: stops the program.  What they are for is the code the compiler generates
+    #: for itself, where a hash is defined on the bits and there is nothing
+    #: about an overflow to report to anyone.
+    WRAP_ADD = "wrap.add"
+    WRAP_SUB = "wrap.sub"
+    WRAP_MUL = "wrap.mul"
+
 
 class UnOp(Enum):
     """The unary operations."""

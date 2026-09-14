@@ -1111,7 +1111,9 @@ class Parser:
         start = self._expect(TokKind.SET_OPEN).span
         if self._check(TokKind.SET_CLOSE):
             end = self._advance().span
-            return ast.SetLit(span=start.to(end), elements=())
+            where = self._parse_arena()
+            return ast.SetLit(span=start.to(where.span if where is not None else end),
+                              elements=(), arena=where)
         first = self._parse_expression()
         if self._accept(TokKind.COLON) is None:
             elements = [first]
@@ -1119,7 +1121,10 @@ class Parser:
                 elements.append(self._parse_expression())
             end = self._expect(TokKind.SET_CLOSE,
                                D.LANG_SYNTAX_EXPECTED_CLOSING_SET).span
-            return ast.SetLit(span=start.to(end), elements=tuple(elements))
+            where = self._parse_arena()
+            return ast.SetLit(
+                span=start.to(where.span if where is not None else end),
+                elements=tuple(elements), arena=where)
         entries = [(first, self._parse_expression())]
         while self._accept(TokKind.COMMA) is not None:
             key = self._parse_expression()
@@ -1127,7 +1132,21 @@ class Parser:
             entries.append((key, self._parse_expression()))
         end = self._expect(TokKind.SET_CLOSE,
                            D.LANG_SYNTAX_EXPECTED_CLOSING_SET).span
-        return ast.DictLit(span=start.to(end), entries=tuple(entries))
+        where = self._parse_arena()
+        return ast.DictLit(span=start.to(where.span if where is not None else end),
+                           entries=tuple(entries), arena=where)
+
+    def _parse_arena(self) -> "ast.NameRef | None":
+        """Parse ``'in' NAME`` where one was written: which allocator to use.
+
+        A name and not an expression.  What goes here is a place the allocator
+        keeps its state in, and a place is named rather than computed -- the
+        same reason the left of an assignment is a name.
+        """
+        if self._accept(TokKind.KW_IN) is None:
+            return None
+        written = self._expect(TokKind.IDENT)
+        return ast.NameRef(span=written.span, name=written.text)
 
     def _parse_atom(self) -> ast.Expr:
         """Parse an expression with nothing binding it to what is around it."""

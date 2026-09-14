@@ -1,0 +1,27 @@
+※ pl4g-test: compile=ok run=native,qemu exit=3 diag=none
+
+※ A collection comes out of an allocator, and `in` says which.  An **arena** is
+※ a bump pointer over a list of chunks: an allocation out of one is an addition
+※ and a comparison, and giving the arena back gives back everything that came
+※ out of it at once.
+※
+※ A program makes as many arenas as it wants.  `⎕arena` is what a variable of
+※ type `arena` starts out holding -- an arena that has asked the system for
+※ nothing yet -- and `⎕heap` is the one the compiler provides, which anything
+※ that says no other one comes out of.
+※
+※ A collection made out of two others comes out of the same arena the first of
+※ them did, which is what keeps an answer where its operands are.
+
+let scratch: mut arena = ⎕arena
+
+@[startup]
+fn main() → u8:
+    let a: ⸨u8⸩ = ⸨1u8, 2u8⸩ in scratch
+    let b: ⸨u8⸩ = ⸨2u8, 3u8⸩ in ⎕heap
+    let joined: ⸨u8⸩ = a | b
+    let total: mut u8 = 0u8
+    foreach i = 0u8…5u8:
+        if joined⸨i⸩:
+            total ← total + 1u8
+    total

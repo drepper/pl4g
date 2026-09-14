@@ -74,6 +74,12 @@ SET_CLOSE_GLYPH: Final[str] = "\N{RIGHT DOUBLE PARENTHESIS}"
 #: question of how far it can look ahead.
 RANGE_GLYPH: Final[str] = "\N{HORIZONTAL ELLIPSIS}"
 
+#: The arena the compiler provides, which everything that allocates and says no
+#: other one comes out of, and the name that stands for an arena with nothing in
+#: it yet -- what a program writes to make one of its own.
+HEAP_NAME: Final[str] = "\N{APL FUNCTIONAL SYMBOL QUAD}heap"
+EMPTY_ARENA_NAME: Final[str] = "\N{APL FUNCTIONAL SYMBOL QUAD}arena"
+
 #: What a `match` arm that takes every alternative left is written with.  It is
 #: a name no definition may have, so nothing a program writes can be mistaken
 #: for it; every language with pattern matching spells it this way.
@@ -176,6 +182,7 @@ class TokKind(StrEnum):
     KW_ELSE = "'else'"
     KW_WHILE = "'while'"
     KW_FOREACH = "'foreach'"
+    KW_IN = "'in'"
     KW_TRUE = "'true'"
     KW_FALSE = "'false'"
     KW_IMPORT = "'import'"
@@ -279,6 +286,7 @@ KEYWORDS: Final[dict[str, TokKind]] = {
     "else": TokKind.KW_ELSE,
     "while": TokKind.KW_WHILE,
     "foreach": TokKind.KW_FOREACH,
+    "in": TokKind.KW_IN,
     "true": TokKind.KW_TRUE,
     "false": TokKind.KW_FALSE,
     "import": TokKind.KW_IMPORT,

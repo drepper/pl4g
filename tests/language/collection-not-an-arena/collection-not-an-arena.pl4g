@@ -1,0 +1,14 @@
+※ pl4g-test: compile=error diag=4446
+
+※ What follows `in` is the allocator a collection comes out of, which is a
+※ variable of type `arena`.  Anything else keeps no allocator's state.
+
+let counter: mut u8 = 0u8
+
+@[startup]
+fn main() → u8:
+    let s: ⸨u8⸩ = ⸨1u8⸩ in counter
+    if s⸨1u8⸩:
+        1u8
+    else:
+        0u8

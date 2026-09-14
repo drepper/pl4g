@@ -49,10 +49,12 @@ def size_of(ty: Type, layout: DataLayout) -> int:
                 total += size_of(member, layout)
             return _align_up(total, align_of(ty, layout))
         case SetType() | DictType():
-            # A handle: where the table is, and how many entries are in it.
-            # The table itself is elsewhere and is not part of the value, which
-            # is what lets one be passed and answered with like any other.
-            return 2 * layout.pointer_size
+            # A handle, which is where the table is and nothing else: how many
+            # entries it has and how much room it has for them are in the table
+            # rather than beside it, so that two names for one collection see
+            # one answer.  The table is elsewhere and is not part of the value,
+            # which is what lets one be passed and answered with like any other.
+            return layout.pointer_size
         case PtrType():
             return layout.pointer_size
         case VoidType():

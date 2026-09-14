@@ -938,6 +938,35 @@ Because a tuple is one register per member, a tuple answered with has to fit in 
 each of these targets, counted per kind -- and one that does not is refused rather than silently put somewhere else.  A tuple of
 two is therefore always fine, and a tuple of three integers is not yet.
 
+#### Arenas
+
+An **arena** is where a program's memory comes from.  It is a type like any other, and a program makes as many as it wants:
+
+```
+let scratch: mut arena = ⎕arena
+```
+
+`⎕arena` is what a variable of that type starts out holding, and there is nothing else to write there (4444): an arena is a place
+the allocator keeps its state in, not a value a program computes, and what is written says only that the place starts out holding
+an arena that has asked the system for nothing yet.
+
+**`⎕heap` is the arena the compiler provides**, which everything that allocates and says no other one comes out of.
+
+**An arena is a bump pointer over a list of chunks.**  An allocation out of one is an addition and a comparison; where the current
+chunk has no room, the arena asks the system for another and links it on.  Nothing is given back on its own, and a whole arena is
+given back at once -- which is the whole of what makes an arena safe for storage with a known lifetime, and the whole of what makes
+it wrong for a program that runs for a long time.  A second allocator will implement the same three operations, and the language
+will name it the same way.
+
+**An allocation that cannot be met stops the program.**  Answering with a result would put a `?` on every value a program builds
+rather than computes, and there is nothing a program could usefully do at that point that the system will not do better by
+refusing to start it.
+
+Compare: Zig, where every allocator is a value and every allocation names one, which is where this arrangement comes from; Odin,
+where the allocator is in an implicit `context` and a collection does not say which it uses; Rust, where a collection is
+parameterised by its allocator in its type; C and Go, where there is one heap and nothing says so.  This sits with Zig and Rust:
+a program should be able to read where a value lives off the line that makes it.
+
 #### Sets and dictionaries
 
 A **set** holds keys and says nothing about them beyond whether it holds them.  A **dictionary** says what each of its keys stands
@@ -999,11 +1028,33 @@ with a set holding that key.
 `=` and `≠` compare two sets, or two dictionaries, for holding the same thing.  Ordering is not defined on them: Python reads `<=`
 as "is part of", and here ordering is about which of two comes first, which neither does.
 
+##### Where one lives
+
+A collection is a table in an **arena**, and `in` says which:
+
+```
+let a: ⸨u8⸩ = ⸨1u8, 2u8⸩ in scratch
+let b: ⸨u8⸩ = ⸨2u8, 3u8⸩
+```
+
+What follows `in` is a variable of type `arena` (4446), and it is a name rather than an expression: what goes there is a place the
+allocator keeps its state in, and a place is named rather than computed, for the same reason the left of an assignment is a name.
+A collection written with no `in` comes out of `⎕heap`, the arena the compiler provides.
+
+A collection made out of two others comes out of the same arena the first of them did, which is what keeps an answer where its
+operands are.
+
 ##### What one costs
 
-The compiler decides this and the language says only what follows.  A value of a set or a dictionary type is a **handle** -- where
-the table is, and how many entries are in it -- which is two words; the table itself is elsewhere and is no part of the value,
-which is what lets a collection be passed to a function and answered with like anything else.
+The compiler decides this and the language says only what follows.  A value of a set or a dictionary type is where its table is
+and nothing else, which is one word: how much it holds and how much room it has for more are in the table rather than beside it,
+so that two names for one collection see one answer.  The table is elsewhere and is no part of the value, which is what lets a
+collection be passed to a function and answered with like anything else.
+
+A dictionary's value has to fit in a word (4445), which is the same restriction its key has for a duller reason: an entry is
+words, and what goes in one has to fit in one.
+
+Nothing takes a key out of a collection yet, so what is put in stays in.
 
 Compare: Python, whose semantics these are and whose `{}` and `set()` this replaces with one pair of brackets and a rule about the
 first entry; Go, whose maps are built in and which has no set; Rust, where both are library types and neither has syntax.  A

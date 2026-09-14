@@ -1,0 +1,19 @@
+※ pl4g-test: compile=ok run=native,qemu exit=106 diag=none
+
+※ A table that fills up past three quarters is given twice as much room and
+※ everything in it is put in the new room, which is what keeps a lookup taking
+※ the same time however much the table holds.  Forty entries starting from room
+※ for eight is four doublings.
+※
+※ A key that is not there answers with the error half of a result, which is what
+※ `??` reads: `d⸨200u8⸩ ?? 1u8` is one, and every key that is there is itself.
+
+@[startup]
+fn main() → u8:
+    let d: mut ⸨u8: u8⸩ = ⸨⸩
+    foreach i = 0u8…40u8:
+        d⸨i⸩ ← i
+    let total: mut u8 = 0u8
+    foreach k = 0u8…40u8…7u8:
+        total ← total + (d⸨k⸩ ?? 0u8)
+    total + (d⸨200u8⸩ ?? 1u8)

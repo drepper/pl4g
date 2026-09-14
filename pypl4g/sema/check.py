@@ -12,14 +12,18 @@ from typing import Callable, Final, Sequence
 from ..diag import ids as D
 from ..diag.engine import DiagEngine, Expectation
 from ..front import ast
-from ..front.token import (BOTTOM_GLYPH, BUILTIN_GLYPH, TOLERANCE_DEFAULT,
+from ..front.token import (BOTTOM_GLYPH, BUILTIN_GLYPH, EMPTY_ARENA_NAME,
+                          HEAP_NAME, TOLERANCE_DEFAULT,
                           TOLERANCE_NAME, WILDCARD_NAME)
 from ..ir.builder import IRBuilder
 from ..ir.inst import BinOp, CastKind, CmpPred, Instruction, UnOp
+from . import tables
 from ..ir.function import (BasicBlock, FuncAttrs, Function, InlineHint,
                            Linkage, SpecialKind)
 from ..ir.module import GlobalVar, Module
-from ..ir.types import (BOOL, BUILTIN_TYPES, DictType, ERROR, EnumType, F64,
+from ..ir.types import (ARENA, BOOL, BUILTIN_TYPES, DictType, ERROR, EnumType,
+                        U64,
+                        F64,
                         FloatType, IntType, MEM, ProductType, ResultType,
                         SetType, SumType, TupleType, Type, VOID)
 from .modules import (ImportCycle, LoadedModule, ModuleNotFound, ModuleRegistry,
@@ -331,6 +335,9 @@ _UNARY_OPS: Final[dict[ast.UnaryOp, UnOp]] = {
 #: one in the image says whose it is.
 TOLERANCE_SYMBOL: Final[str] = "__pl4g_tolerance"
 
+#: And the one the arena the compiler provides carries.
+HEAP_SYMBOL: Final[str] = "__pl4g_heap"
+
 
 def _tolerance(module: Module) -> GlobalVar:
     """The variable the approximate comparisons read, made once per module.
@@ -352,6 +359,22 @@ def _tolerance(module: Module) -> GlobalVar:
         ptr_type=module.types.ptr_type(F64, mutable=True),
         initializer=module.float_const(F64, TOLERANCE_DEFAULT),
         linkage=Linkage.INTERNAL), key=TOLERANCE_NAME)
+
+
+def _heap(module: Module) -> GlobalVar:
+    """The arena the compiler provides, made once per module.
+
+    It starts as three zero words, which is an arena that has asked the system
+    for nothing yet: the first allocation out of it is what asks.  A program
+    that allocates nowhere carries neither it nor the allocator.
+    """
+    found = module.globals.get(HEAP_NAME)
+    if isinstance(found, GlobalVar):
+        return found
+    return module.add_global(GlobalVar(
+        name=HEAP_SYMBOL, value_type=ARENA,
+        ptr_type=module.types.ptr_type(ARENA, mutable=True),
+        initializer=None, linkage=Linkage.INTERNAL), key=HEAP_NAME)
 
 
 class Checker:
@@ -485,6 +508,9 @@ class Checker:
         found = self._top.get(name)
         if found is None and name == TOLERANCE_NAME:
             found = _tolerance(self._module)
+            self._top[name] = found
+        if found is None and name == HEAP_NAME:
+            found = _heap(self._module)
             self._top[name] = found
         return found
 
@@ -725,6 +751,17 @@ class Checker:
 
     def _constant_value(self, node: ast.VarDef, ty: Type) -> Value | None:
         """The value a top-level variable is given, which must be a constant."""
+        if ty is ARENA:
+            # An arena of one's own.  There is exactly one thing to write here,
+            # and it stands for three zero words -- an arena that has asked the
+            # system for nothing yet.  It is not a constant of a type the way
+            # every other initializer is: an arena is a place and never a value,
+            # so what is written says what the place starts out holding.
+            if not (isinstance(node.value, ast.NameRef)
+                    and node.value.name == EMPTY_ARENA_NAME):
+                self._diags.emit(D.LANG_ARENA_STARTS_EMPTY, node.value.span,
+                                 name=EMPTY_ARENA_NAME)
+            return None
         if ty is ERROR:
             # The type was already reported; saying anything about the value it
             # was given would be a second message about the same mistake.
@@ -1750,9 +1787,127 @@ class Checker:
         if expected is not None and expected is not ty:
             self._report_mismatch(expr.span, ty, expected)
             return UndefConst(ERROR)
-        self._diags.emit(D.IMPL_UNIMPLEMENTED_FEATURE, expr.span,
-                         feature="a set or a dictionary")
-        return UndefConst(ty)
+        if isinstance(ty, DictType) and not _can_be_a_key(ty.value):
+            # The same restriction the key has, and for a duller reason: an
+            # entry is words, and what goes in one has to fit in one.  The
+            # to-do list says what a value of any type would need.
+            self._diags.emit(D.LANG_COLLECTION_VALUE_TOO_LARGE, expr.span,
+                             found=ty.value.render())
+            return UndefConst(ERROR)
+        return self._build_collection(builder, expr, ty,
+                                      self._arena_named(expr.arena))
+
+    def _arena_named(self, written: "ast.NameRef | None") -> "GlobalVar | None":
+        """Which allocator a collection was told to come out of.
+
+        Nothing where none was named, which is what says to use the one the
+        compiler provides.  A name that is not an arena is reported here rather
+        than where the table is made, because what is wrong with it is what it
+        is and not what it is being used for.
+        """
+        if written is None:
+            return None
+        found = self._provided(written.name)
+        if not (isinstance(found, GlobalVar) and found.value_type is ARENA):
+            self._diags.emit(D.LANG_NOT_AN_ARENA, written.span,
+                             name=written.name)
+            return None
+        return found
+
+    def _build_collection(self, builder: IRBuilder,
+                          expr: "ast.SetLit | ast.DictLit",
+                          ty: "SetType | DictType",
+                          arena: "GlobalVar | None" = None) -> Value:
+        """Make the table a collection is, and put what was written down in it.
+
+        The entries are put in one at a time through the same call an assignment
+        uses, so a collection written with a key twice holds it once -- which is
+        what a set is, and what Python answers for a dictionary written that way.
+        """
+        table = self._new_table(builder, ty, expr.span, arena)
+        written = (tuple((e, None) for e in expr.elements)
+                   if isinstance(expr, ast.SetLit) else expr.entries)
+        for key, value in written:
+            key_ty = ty.element if isinstance(ty, SetType) else ty.key
+            place = self._put_key(builder, table,
+                                  self._lower_into(builder, key, key_ty, key.span),
+                                  expr.span)
+            if value is not None and isinstance(ty, DictType):
+                builder.store(self._value_place(builder, place, ty.value),
+                              self._lower_into(builder, value, ty.value,
+                                               value.span), expr.span)
+        return table
+
+    def _new_table(self, builder: IRBuilder, ty: "SetType | DictType",
+                   span: Span, arena: "GlobalVar | None" = None,
+                   comes_from: "Value | None" = None) -> Value:
+        """Make an empty table of the shape *ty* calls for.
+
+        Out of the arena the program named, or out of the one another table came
+        from, or -- where it said nothing -- out of the one the compiler
+        provides.  Which of the three it was is settled here so that everything
+        that makes a table asks the same question once.
+        """
+        tables.ensure_runtime(self._module)
+        if comes_from is not None:
+            place = tables.arena_of(builder, comes_from)
+        else:
+            found = arena if arena is not None else self._provided(HEAP_NAME)
+            assert isinstance(found, GlobalVar)
+            place = builder.address(found, span)
+        stride = tables.SET_STRIDE if isinstance(ty, SetType) else tables.DICT_STRIDE
+        made = builder.call(self._module.functions[tables.NEW_SYMBOL],
+                            (place, builder.int_const(U64, stride)),
+                            tables.table_type(self._module), span)
+        return builder.cast(CastKind.BITCAST, made, ty, span)
+
+    def _as_word(self, builder: IRBuilder, key: Value, span: Span) -> Value:
+        """A key as the word a table holds it as.
+
+        Every key is a whole number as far as a register is concerned -- a truth
+        value and a value of an enumeration are both one -- and a table holds
+        one word, so what a key is stored and compared as is that word.  The
+        widening says which, so that two keys that are the same number are the
+        same word however narrow their type is.
+        """
+        ty = self._value_type_of(key)
+        if ty is U64:
+            return key
+        return builder.cast(CastKind.ZEXT, key, U64, span)
+
+    def _put_key(self, builder: IRBuilder, table: Value, key: Value,
+                 span: Span) -> Value:
+        """The entry for *key*, made if the table did not have it."""
+        tables.ensure_runtime(self._module)
+        return builder.call(
+            self._module.functions[tables.PUT_SYMBOL],
+            (builder.cast(CastKind.BITCAST, table,
+                          tables.table_type(self._module), span),
+             self._as_word(builder, key, span)),
+            tables.table_type(self._module), span)
+
+    def _find_key(self, builder: IRBuilder, table: Value, key: Value,
+                  span: Span) -> Value:
+        """The entry the key is in, or the one it would go in."""
+        tables.ensure_runtime(self._module)
+        return builder.call(
+            self._module.functions[tables.SLOT_SYMBOL],
+            (builder.cast(CastKind.BITCAST, table,
+                          tables.table_type(self._module), span),
+             self._as_word(builder, key, span)),
+            tables.table_type(self._module), span)
+
+    def _is_live(self, builder: IRBuilder, place: Value, span: Span) -> Value:
+        """Whether an entry holds a key rather than standing empty."""
+        return builder.compare(CmpPred.EQ, builder.load(place, span),
+                               builder.int_const(U64, tables.LIVE), span)
+
+    def _value_place(self, builder: IRBuilder, place: Value, ty: Type) -> Value:
+        """Where in an entry the value belonging to its key is."""
+        word = builder.binary(BinOp.ADD, place,
+                              builder.int_const(U64, tables.VALUE_AT))
+        return builder.cast(CastKind.BITCAST, word,
+                            self._module.types.ptr_type(ty, mutable=True))
 
     def _one_type(self, builder: IRBuilder, written: "Sequence[ast.Expr]",
                   wanted: Type | None) -> Type:
@@ -1805,7 +1960,21 @@ class Checker:
         if expected is not None and expected is not answer:
             self._report_mismatch(expr.span, answer, expected)
             return UndefConst(ERROR)
-        return UndefConst(answer)
+        place = self._find_key(builder, base, key, expr.span)
+        if isinstance(ty, SetType):
+            return self._is_live(builder, place, expr.span)
+        # The value is read whether the entry holds a key or not: an entry of
+        # the table is a place either way, and what a table that has not been
+        # written holds is zero.  Reading it unasked is what keeps this to one
+        # branch fewer than it looks like it needs -- the truth value beside the
+        # answer is what says whether the answer means anything, and that is
+        # asked of the entry's own first word rather than worked out from the
+        # other question, which would be a truth value turned round.
+        missing = builder.compare(CmpPred.NE, builder.load(place, expr.span),
+                                  builder.int_const(U64, tables.LIVE), expr.span)
+        return builder.wrap(
+            builder.load(self._value_place(builder, place, ty.value), expr.span),
+            missing, answer, expr.span)
 
     def _lower_entry_assign(self, builder: IRBuilder, stmt: ast.EntryAssign) -> None:
         """Check `d⸨k⸩ ← v`, which puts a value under a key."""
@@ -1817,8 +1986,13 @@ class Checker:
             self._diags.emit(D.LANG_ENTRY_ASSIGN_NOT_A_DICT, stmt.base.span,
                              found=ty.render())
             return
-        self._lower_expr(builder, stmt.key, ty.key)
-        self._lower_into(builder, stmt.value, ty.value, stmt.span)
+        key = self._lower_expr(builder, stmt.key, ty.key)
+        value = self._lower_into(builder, stmt.value, ty.value, stmt.span)
+        if self._value_type_of(key) is ERROR or self._value_type_of(value) is ERROR:
+            return
+        place = self._put_key(builder, base, key, stmt.span)
+        builder.store(self._value_place(builder, place, ty.value), value,
+                      stmt.span)
 
     # -- if --------------------------------------------------------------------
 
@@ -3094,6 +3268,46 @@ class Checker:
         """
         return builder.binary(BinOp.XOR, value, builder.bool_const(True), span)
 
+    #: What each operator a set answers comes to, as walks of the two tables:
+    #: which table is walked, which is asked about, and what is wanted of the
+    #: answer.  Every one of them makes a table of its own rather than changing
+    #: either operand, which is what an operator does everywhere else here.
+    _SET_WALKS: "Final[dict[ast.BinaryOp, tuple[tuple[bool, int], ...]]]" = {
+        ast.BinaryOp.BIT_OR: ((True, tables.WANT_EITHER),
+                              (False, tables.WANT_EITHER)),
+        ast.BinaryOp.BIT_AND: ((True, tables.WANT_PRESENT),),
+        ast.BinaryOp.BIT_XOR: ((True, tables.WANT_ABSENT),
+                               (False, tables.WANT_ABSENT)),
+        ast.BinaryOp.SUBTRACT: ((True, tables.WANT_ABSENT),),
+    }
+
+    def _lower_set_operation(self, builder: IRBuilder, op: ast.BinaryOp,
+                             ty: SetType, left: Value, right: Value,
+                             span: Span) -> Value:
+        """What one of the four operators a set answers comes to.
+
+        A table of its own, filled by walking one or both operands.  Neither
+        operand is changed: an operator answers with a value everywhere else in
+        the language, and a set is no different for being a place in memory.
+        """
+        tables.ensure_runtime(self._module)
+        table_ptr = tables.table_type(self._module)
+        as_table = {
+            True: builder.cast(CastKind.BITCAST, left, table_ptr, span),
+            False: builder.cast(CastKind.BITCAST, right, table_ptr, span),
+        }
+        # Out of the same arena the left operand came from, which is what keeps
+        # an answer where its operands are: a collection made in one arena and
+        # combined with another's would otherwise land wherever the compiler
+        # happened to put it.
+        out = self._new_table(builder, ty, span, comes_from=as_table[True])
+        select = self._module.functions[tables.SELECT_SYMBOL]
+        into = builder.cast(CastKind.BITCAST, out, table_ptr, span)
+        for first, want in self._SET_WALKS[op]:
+            builder.call(select, (into, as_table[first], as_table[not first],
+                                  builder.int_const(U64, want)), VOID, span)
+        return out
+
     def _comparable(self, span: Span, op: ast.BinaryOp, ty: Type) -> Type:
         """*ty* itself where it may stand on one side of *op*, and ERROR else.
 
@@ -3162,6 +3376,9 @@ class Checker:
             return UndefConst(ERROR)
         if self._answer_is_already_known(expr, ty, left, right):
             return UndefConst(ERROR)
+        if isinstance(ty, SetType):
+            return self._lower_set_operation(builder, expr.op, ty, left, right,
+                                             expr.span)
         if expr.op in _SHIFTS:
             if expr.op in (ast.BinaryOp.ROTATE_LEFT, ast.BinaryOp.ROTATE_RIGHT) \
                     and isinstance(ty, IntType) and ty.signed:

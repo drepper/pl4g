@@ -3151,6 +3151,72 @@
       "option": null
     },
     {
+      "number": 4444,
+      "name": "LANG_ARENA_STARTS_EMPTY",
+      "severity": "error",
+      "message": "an arena starts out empty, which is written '{name}'",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the name that stands for an empty arena"
+        }
+      ],
+      "cause": "An arena is a place the allocator keeps its own state in, not a value a program computes.  There is one thing to write where its value would go, and what it says is that the place starts out holding an arena that has asked the system for nothing yet.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Arenas",
+        "requirement": "A variable of type `arena` is given the value that stands for an empty one."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4445,
+      "name": "LANG_COLLECTION_VALUE_TOO_LARGE",
+      "severity": "error",
+      "message": "a dictionary holds a value that fits in a word, not '{found}'",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type written as the value"
+        }
+      ],
+      "cause": "An entry of a table is words, and what goes in one has to fit in one.  That is the same restriction a key has, for a duller reason: a key has it so that one table serves every instantiation, and a value has it because nothing yet copies a value of any size into a place.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Sets and dictionaries",
+        "requirement": "A dictionary's value fits in a word."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4446,
+      "name": "LANG_NOT_AN_ARENA",
+      "severity": "error",
+      "message": "'{name}' is not an arena",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the name written after 'in'"
+        }
+      ],
+      "cause": "What follows `in` is the allocator a collection comes out of, which is a variable of type `arena`.  Anything else names something that keeps no allocator's state, and there is nothing for a table to be put in.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Arenas",
+        "requirement": "What follows `in` is a variable of type `arena`."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 5001,
       "name": "LANG_FUNCDEF_RETURN_UNREACHABLE",
       "severity": "warning",
