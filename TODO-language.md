@@ -39,15 +39,17 @@ To Do List for the PL4g language
     see the entry below.
 
 [ ] build a set and a dictionary at run time.  Refused today (9902).  It needs two things the compiler does not have, and neither
-    is about collections: a **heap** for the table to be in, which is the open question below, and a **loop** for a lookup to
-    walk, which is the other open question.  The design, so that it is not done twice: open addressing with linear probing, a
+    is about collections: a **heap** for the table to be in, which the compiler now emits, and a **loop** for a lookup to
+    walk, which is the open question below.  The design, so that it is not done twice: open addressing with linear probing, a
     power-of-two capacity, growth at about seven eighths full, a tombstone for a key taken out, and a hash emitted per key type --
     a multiply-and-shift for an integer or an enumeration, the value itself for a truth value.  The table is a block holding the
     capacity, the count and the entries; the handle a program passes around is where that block is and how many entries are in it,
     which is the two words `pypl4g/ir/layout.py` already gives one.
     Two questions ride on it.  Whether a collection is copied when it is assigned or shared, which Python answers with sharing and
     a reference count and which this language has no reference count for.  And what happens when the table cannot grow, given that
-    an allocation that fails is not obviously a fallible operation the way a read is -- the same question the string entry asks.
+    an allocation that fails is not obviously a fallible operation the way a read is -- answered for the allocator itself, which
+    stops the program, and still open for a table that cannot grow.  And which arena a collection lives in, which is what makes
+    it safe to give an arena back: the allocator is a type, and a value that lives in one names it.
 
 [?] there is no repetition.  A function body cannot loop: there is no `while`, no `for` and no recursion that terminates by
     anything the compiler checks.  Branches and block parameters carry it already, and `if` and `match` show the shape a
@@ -233,12 +235,12 @@ To Do List for the PL4g language
     The immutable half now has the product type it was waiting for -- a pair of an address and a length -- and waits on the two
     things that type still lacks: a way to write a value of one, and a pointer, which nothing in the language yet is.  Literals
     already lex and `.rodata` already exists.  The `mut` half waits on the allocator below.
-    Question: a `mut str` can be resized, so it needs a heap, and the specification forbids depending on any system runtime -- so
-    the allocator is the compiler's to emit.  Which?  A `mmap`-backed bump allocator that never frees is a page of code and is
-    enough for a program that builds strings and exits; a real size-class allocator is a great deal more and is the thing every
-    later feature will also want; using the system `malloc` is out by the no-runtime rule.  A second question: what happens when
-    an allocation fails, given that the language routes errors through sum types but a string being appended to is not obviously a
-    fallible operation the way a read is.  Small-string optimization is an implementation choice underneath whichever answer.
+    Both questions are answered.  The heap is a `mmap`-backed bump allocator over a list of chunks -- GNU's obstacks -- and the
+    compiler emits it; a size-class allocator is the thing every later feature will also want and is in the compiler's list, but
+    it waits on a program that runs long enough for the difference to show.  An allocation that cannot be met stops the program
+    through the same path an arithmetic fault takes, rather than answering with a result: a result would put a `?` on every value
+    a program builds rather than computes.  What is left for the `mut` half is the spelling -- naming which arena a value lives in
+    -- which is the entry below.  Small-string optimization is an implementation choice underneath either answer.
 
 [x] Implement boolean values.  Only the values `true` and `false` are defined.  Assigning any other value is an error.  Done and
     tested in both directions; a constant `bool` goes in `.rodata` and a `mut` one beside the variables, like any other value.

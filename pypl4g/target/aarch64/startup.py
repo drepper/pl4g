@@ -16,7 +16,8 @@ from ...mc import ops
 from ...mc.asmbuilder import Assembler
 from ..callconv import CallConvDesc
 from . import ops as a64ops
-from .regs import X8, X19, X29, X30, XZR
+from ..allocator import AllocatorRegs, SyscallABI
+from .regs import X0, X1, X8, X19, X29, X30, XZR, reg
 
 #: The number of the Linux system call that ends the whole process.  The number
 #: differs from the one x86-64 uses, which is why it belongs to the backend.
@@ -107,3 +108,22 @@ def emit_abort(asm: Assembler, cconv: CallConvDesc) -> None:
     asm.op(a64ops.SUPERVISOR_CALL)
     asm.op(ops.TRAP)
     asm.end_function()
+
+
+#: The numbers of the two system calls the allocator makes, and what a call
+#: looks like here: the number in the register the kernel reads it from, the
+#: arguments in the first six of the convention's, and the answer back in the
+#: first of them.
+NR_MMAP: Final[int] = 222
+NR_MUNMAP: Final[int] = 215
+
+SYSCALLS: Final[SyscallABI] = SyscallABI(
+    mmap=NR_MMAP, munmap=NR_MUNMAP, number=SYSCALL_NUMBER_REG,
+    arguments=tuple(reg("".join(("x", str(n)))) for n in range(6)),
+    answer=X0, enter=lambda asm: asm.op(a64ops.SUPERVISOR_CALL))
+
+#: Where the allocator's own arguments arrive and its answer goes, and two
+#: registers a caller does not expect back.
+ALLOCATOR_REGS: Final[AllocatorRegs] = AllocatorRegs(
+    arena=X0, size=X1, answer=X0,
+    scratch=(reg("x9"), reg("x10"), reg("x11")))

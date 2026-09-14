@@ -108,11 +108,24 @@ To Do List for the pypl4g compiler
     `alloca` stub went, since storage a program allocates comes from an allocator and an allocator answers with an address like
     any other.  Adding to an address deliberately does not take the checked path the same operator takes on two numbers.
 
-[ ] emit an allocator.  Nothing in the compiler can put a value in memory that was not there when the program started, and three
-    features now wait on it: a `mut str`, a set and a dictionary.  The choice is written in TODO-language.md and is the user's;
-    what belongs here is what the compiler has to emit once it is made -- a `brk` or `mmap` system call, since the specification
-    forbids depending on any system runtime, and a fault path for an allocation that cannot be met, which the existing
-    `__pl4g_abort` already gives a shape for.
+[x] emit an allocator.  Done: `pypl4g/target/allocator.py` emits a bump allocator over a list of `mmap`ed chunks -- GNU's
+    obstacks -- written once and parameterised by a small per-target record saying the numbers of the two system calls, which
+    registers they take and which instruction enters the kernel.  An arena is three words, so a program makes as many as it
+    wants; an allocation is an addition and a comparison; a whole arena is given back at once and a chunk never on its own.  An
+    allocation that cannot be met goes through `__pl4g_abort` like an arithmetic fault.  It is emitted only where something
+    declares one of its entry points.
+
+[ ] give an allocator a spelling in the language.  The runtime above has no way to be named from a program: there is a type for
+    an arena in the representation and nothing in the syntax, because the thing that would allocate -- a collection, a `mut str`
+    -- is not generated yet.  What it wants, and what the instruction that asked for the allocator asked for: a built-in `arena`
+    type, a compiler-provided default arena, a way to make and give back another, and a common interface stated once so that a
+    second allocator is a table entry.  The type-safety it is for is that a value names the arena it lives in, so that one from an
+    arena that has been given back cannot be stored where one from another is expected.  This waits on the collections, which
+    wait on the loops.
+
+[ ] an allocator that gives memory back.  An arena frees nothing until the whole of it goes, which is right for a compiler and
+    wrong for a program that runs for a long time.  A size-class allocator is the thing every language ends up with; what it needs
+    first is a program that runs long enough for the difference to show.
 
 [ ] hash a value.  A set and a dictionary want one function per key type, emitted rather than called: a multiply-and-shift for an
     integer or an enumeration, the value itself for a truth value.  It is a handful of instructions and none of it is new; what it

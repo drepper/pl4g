@@ -16,7 +16,8 @@ from ...mc import ops
 from ...mc.asmbuilder import Assembler
 from ..callconv import CallConvDesc
 from . import ops as rvops
-from .regs import A7, FP, RA, S1, ZERO
+from ..allocator import AllocatorRegs, SyscallABI
+from .regs import A0, A1, A7, FP, RA, S1, ZERO, reg
 
 #: The number of the Linux system call that ends the whole process.  It is the
 #: number the architectures that came after x86-64 share.
@@ -102,3 +103,22 @@ def emit_abort(asm: Assembler, cconv: CallConvDesc) -> None:
     asm.op(rvops.ENVIRONMENT_CALL)
     asm.op(ops.TRAP)
     asm.end_function()
+
+
+#: The numbers of the two system calls the allocator makes, and what a call
+#: looks like here: the number in the register the kernel reads it from, the
+#: arguments in the first six of the convention's, and the answer back in the
+#: first of them.
+NR_MMAP: Final[int] = 222
+NR_MUNMAP: Final[int] = 215
+
+SYSCALLS: Final[SyscallABI] = SyscallABI(
+    mmap=NR_MMAP, munmap=NR_MUNMAP, number=A7,
+    arguments=tuple(reg("".join(("a", str(n)))) for n in range(6)),
+    answer=A0, enter=lambda asm: asm.op(rvops.ENVIRONMENT_CALL))
+
+#: Where the allocator's own arguments arrive and its answer goes, and two
+#: registers a caller does not expect back.
+ALLOCATOR_REGS: Final[AllocatorRegs] = AllocatorRegs(
+    arena=A0, size=A1, answer=A0,
+    scratch=(reg("t0"), reg("t1"), reg("t2")))

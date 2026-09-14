@@ -686,6 +686,45 @@ given a register of its own rather than the destination's, which also shortens t
 two halves are independent and no such rule is needed.
 
 
+The allocator
+-------------
+
+Nothing a program builds can outlive the function that built it until something asks the system for memory, and the runtime the
+compiler emits is what asks.  It is written once for all three architectures: what differs between them is the number of a system
+call, which registers its arguments go in and which instruction enters the kernel, and that much is a small record each backend
+fills in.
+
+**The shape is GNU's obstacks: a bump pointer over a list of chunks.**  An arena is three words -- the first byte not yet handed
+out, one past the end of the current chunk, and the head of the chunk list -- so an allocation is an addition and a comparison.
+Where the current chunk is too small, a path that does not come back here asks the system for another and links it on.  A chunk is
+never given back on its own and a whole arena is given back at once, which is the only granularity this allocator has.
+
+That is the cheapest allocator there is and it is the right first one.  A compiler builds a great deal that lives exactly as long
+as the compilation, and nothing in the language yet says that one value outlives another, so nothing yet can ask for the finer
+answer.  What it is not is a general-purpose allocator: an arena that frees nothing will not do for a program that runs for a long
+time, and the to-do list says so.
+
+**There are as many arenas as a program makes.**  An arena is three words and nothing else, so one is a value like any other: an
+allocation names the arena it comes out of, and giving that arena back gives back everything that came out of it.  That is the
+whole of what makes an arena safe for storage with a known lifetime, and it is why the allocator is a *type* rather than a place
+the compiler knows about.
+
+**Allocations start on sixteen bytes**, which is the strictest alignment any value of the language wants.  Asking the question
+once, here, is cheaper than carrying an alignment through every allocation and it costs at most fifteen bytes an allocation.
+
+**An allocation that cannot be met stops the program**, through the same `__pl4g_abort` an arithmetic fault goes through.
+Answering with a result instead would put a `?` on every value a program builds rather than computes, and there is nothing a
+program could usefully do at that point that the system will not do better by refusing to start it.
+
+Three things have to survive the system call that asks for a chunk -- which arena, how much was asked for, and how much was mapped
+-- and none of them can stay in a register: the call's own arguments take every register a caller does not expect back, and the
+instruction that enters the kernel destroys two more on one of the three architectures.  So they go on the stack, which is the one
+place in the compiler where code written here rather than lowered from the representation needs a frame of its own.
+
+The allocator is emitted where something calls it and nowhere else: a module that declares one of its entry points gets the body,
+and a program that never allocates carries none of it.
+
+
 Expectations
 ------------
 

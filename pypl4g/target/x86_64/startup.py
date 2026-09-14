@@ -17,7 +17,8 @@ from ...mc import ops
 from ...mc.asmbuilder import Assembler
 from ..callconv import CallConvDesc
 from . import ops as x86ops
-from .regs import EAX, EBP, EDI, INFO
+from ..allocator import AllocatorRegs, SyscallABI
+from .regs import EAX, EBP, EDI, INFO, RAX, RCX, RDI, RDX, RSI, reg
 
 #: The number of the Linux system call that ends the whole process.
 NR_EXIT_GROUP: Final[int] = 231
@@ -98,3 +99,24 @@ def emit_abort(asm: Assembler, cconv: CallConvDesc) -> None:
     asm.op(x86ops.SYSCALL)
     asm.op(ops.TRAP)
     asm.end_function()
+
+
+#: The numbers of the two system calls the allocator makes, and what a call
+#: looks like here: the number in the accumulator, the arguments in the
+#: registers the kernel names -- which are the convention's first three and then
+#: three the convention does not use in that order -- and the answer back in the
+#: accumulator.  The instruction destroys two further registers, which is why
+#: the allocator keeps nothing in one across it.
+NR_MMAP: Final[int] = 9
+NR_MUNMAP: Final[int] = 11
+
+SYSCALLS: Final[SyscallABI] = SyscallABI(
+    mmap=NR_MMAP, munmap=NR_MUNMAP, number=EAX,
+    arguments=(RDI, RSI, RDX, reg("r10"), reg("r8"), reg("r9")),
+    answer=RAX, enter=lambda asm: asm.op(x86ops.SYSCALL))
+
+#: Where the allocator's own arguments arrive and its answer goes, and two
+#: registers a caller does not expect back.
+ALLOCATOR_REGS: Final[AllocatorRegs] = AllocatorRegs(
+    arena=RDI, size=RSI, answer=RAX,
+    scratch=(RDX, RCX, reg("r11")))

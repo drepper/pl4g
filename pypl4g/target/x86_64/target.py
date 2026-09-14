@@ -14,6 +14,7 @@ from ...mc.reg import RegisterInfo
 from ...mc.regalloc import RegisterPressureError
 from ...mc.streamer import MCStreamer
 from ...ir.layout import DataLayout
+from ..allocator import OUT_OF_MEMORY, emit_allocator, wanted_by
 from ..faults import Messages
 from ..pool import Constants
 from ..globals import emit_globals
@@ -24,7 +25,8 @@ from .isel import UnsupportedOperation, X86Selector, lower_function
 from .opcodes import X86_INSTRS
 from .peephole import passes_for
 from .regs import GPR, INFO, VEC
-from .startup import ENTRY_SYMBOL, emit_abort, emit_start
+from .startup import (ALLOCATOR_REGS, ABORT_SYMBOL, ENTRY_SYMBOL,
+                      SYSCALLS, emit_abort, emit_start)
 
 
 #: EM_X86_64, loaded at the address a fixed-address executable conventionally
@@ -113,6 +115,11 @@ class X86_64Target:
                 return
         if module.startup is None:
             return
+        if wanted_by(module):
+            # The allocator is emitted where something calls it and nowhere
+            # else, so a program that never allocates carries none of it.
+            emit_allocator(asm, SYSCALLS, ALLOCATOR_REGS, ABORT_SYMBOL,
+                           messages.symbol(OUT_OF_MEMORY))
         if messages.wanted:
             emit_abort(asm, lookup_cconv(module.startup.cconv))
         emit_start(asm, module, lookup_cconv(module.startup.cconv))

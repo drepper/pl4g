@@ -631,6 +631,40 @@ class Assembler:
         """A reference to the block called *label*."""
         return MCSymRef(SymExpr(self._streamer.symbol(label)), RelocKind.PCREL)
 
+
+    def tail_jump(self, target: str, span: Span = INVALID_SPAN) -> None:
+        """Go to another function, which returns in this one's place.
+
+        Unlike `jump` this records no successor: what it names is not a block of
+        this function, and the graph this function's own passes walk would be
+        wrong to have it in.  Control does not come back here.
+        """
+        self._emit(self._selector.select_jump(self.symref(target), span))
+
+    def frame(self, size: int, span: Span = INVALID_SPAN) -> None:
+        """Make room for *size* bytes on the stack, and give it back with
+        `unframe`.
+
+        For code written here rather than lowered from the representation: the
+        runtime, which works in physical registers and so has no allocator to
+        ask for a slot.  A function that uses this must give the room back on
+        every path it leaves by.
+        """
+        self._emit(self._selector.select_frame(size, span))
+
+    def unframe(self, size: int, span: Span = INVALID_SPAN) -> None:
+        """Give back the room `frame` made."""
+        self._emit(self._selector.select_unframe(size, span))
+
+    def put_aside(self, slot: int, source: Reg, span: Span = INVALID_SPAN) -> None:
+        """Write *source* into the room `frame` made, at *slot* bytes into it."""
+        self._emit(self._selector.select_spill(slot, source, span))
+
+    def take_back(self, destination: Reg, slot: int,
+                  span: Span = INVALID_SPAN) -> None:
+        """Read what `put_aside` wrote at *slot* back into *destination*."""
+        self._emit(self._selector.select_reload(destination, slot, span))
+
     def ret(self, span: Span = INVALID_SPAN) -> None:
         """Return from the current function."""
         self._emit(self._selector.select_return(span))

@@ -14,6 +14,7 @@ from ...mc.reg import RegisterInfo
 from ...mc.regalloc import RegisterPressureError
 from ...mc.streamer import MCStreamer
 from ...ir.layout import DataLayout
+from ..allocator import OUT_OF_MEMORY, emit_allocator, wanted_by
 from ..faults import Messages
 from ..pool import Constants
 from ..globals import emit_globals
@@ -24,7 +25,8 @@ from .fixups import apply_fixup
 from .isel import RVSelector, UnsupportedOperation, lower_function
 from .opcodes import PAD_BYTE, RISCV_INSTRS
 from .regs import FPR, GPR, INFO
-from .startup import ENTRY_SYMBOL, emit_abort, emit_start
+from .startup import (ALLOCATOR_REGS, ABORT_SYMBOL, ENTRY_SYMBOL,
+                      SYSCALLS, emit_abort, emit_start)
 
 #: What the header's flag word says on this architecture.  The low bit says the
 #: code uses the compressed encoding, the two above it say which floating-point
@@ -117,6 +119,11 @@ class RISCV64Target:
                 return
         if module.startup is None:
             return
+        if wanted_by(module):
+            # The allocator is emitted where something calls it and nowhere
+            # else, so a program that never allocates carries none of it.
+            emit_allocator(asm, SYSCALLS, ALLOCATOR_REGS, ABORT_SYMBOL,
+                           messages.symbol(OUT_OF_MEMORY))
         if messages.wanted:
             emit_abort(asm, lookup_cconv(module.startup.cconv))
         emit_start(asm, module, lookup_cconv(module.startup.cconv))

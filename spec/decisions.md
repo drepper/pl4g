@@ -2296,6 +2296,49 @@ already did.
 
 ---
 
+## 2026-09-14T11:00+02:00 — compiler and runtime
+
+**A bump allocator over mapped chunks, emitted once for three architectures**
+
+The second of the four pieces.  Two questions in `TODO-language.md` are answered by it.
+
+**Which allocator: a bump pointer over a list of chunks, which is GNU's obstacks.**  An arena is three words -- the first byte not
+yet handed out, one past the end of the current chunk, and the head of the list -- so an allocation is an addition and a
+comparison.  The alternatives were a size-class allocator, which is what C's `malloc`, Rust's default and Go's runtime all are and
+is what a long-running program wants, and the system's own `malloc`, which the specification's no-runtime rule rules out.  An
+arena is what Zig calls an `ArenaAllocator` and Odin a `virtual.Arena`, and both offer it as one allocator among several rather
+than as the only one.  It is the right *first* one here because a compiler builds a great deal that lives exactly as long as the
+compilation, and because nothing in the language yet says that one value outlives another -- so nothing yet can ask for the finer
+answer.  The finer answer is in the compiler's list.
+
+**An allocation that cannot be met stops the program**, through the same `__pl4g_abort` an arithmetic fault goes through.  Rust
+aborts, Zig answers with an error, C answers with a null pointer and Go stops.  Answering with a result would put a `?` on every
+value a program builds rather than computes, which is the cost Zig pays and pays deliberately; here there is nothing a program
+could usefully do at that point that the system will not do better by refusing to start it, and the language already has one fault
+path that says what went wrong before it stops.
+
+**There are as many arenas as a program makes.**  An arena is three words and nothing else, so one is a value like any other, and
+giving an arena back gives back everything that came out of it.  That is what the instruction asked for by "multiple
+instantiations can exist", and it is what makes an arena safe for storage with a known lifetime.  The interface the second
+allocator will implement is stated in the specification as three entry points: allocate from it, give it back, and make another.
+
+**It is written once and parameterised by a small record per target.**  What differs between the three is the number of a system
+call, which registers its arguments go in, and which instruction enters the kernel.  Everything else -- the arithmetic, the
+comparison, the branch, the stores -- goes through the same builder every lowered function goes through, which is what makes the
+runtime a test of the assembler as well as a part of the image.
+
+**The runtime needed a stack of its own.**  Three things must survive the call that asks for a chunk, and none can stay in a
+register: the call's own arguments take every register a caller does not expect back, and the instruction that enters the kernel
+destroys two more on x86-64.  The assembler grew `frame`, `unframe`, `put_aside` and `take_back` for code written there rather
+than lowered from the representation -- the four the register allocator already used, said out loud.
+
+**What is not done, and why.**  The allocator has no spelling in the language.  A type for an arena, a compiler-provided default
+one, and a way to make another are all useless until something allocates, and the things that would -- a set, a dictionary, a
+`mut str` -- are blocked on the loops rather than on this.  The entry in the compiler's list says what that spelling is to be, so
+that the decision is not made twice.
+
+---
+
 ---
 
 Open questions

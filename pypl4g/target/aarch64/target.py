@@ -14,6 +14,7 @@ from ...mc.reg import RegisterInfo
 from ...mc.regalloc import RegisterPressureError
 from ...mc.streamer import MCStreamer
 from ...ir.layout import DataLayout
+from ..allocator import OUT_OF_MEMORY, emit_allocator, wanted_by
 from ..faults import Messages
 from ..pool import Constants
 from ..globals import emit_globals
@@ -24,7 +25,8 @@ from .fixups import apply_fixup
 from .isel import A64Selector, UnsupportedOperation, lower_function
 from .opcodes import AARCH64_INSTRS, PAD_BYTE
 from .regs import GPR, INFO, VEC
-from .startup import ENTRY_SYMBOL, emit_abort, emit_start
+from .startup import (ALLOCATOR_REGS, ABORT_SYMBOL, ENTRY_SYMBOL,
+                      SYSCALLS, emit_abort, emit_start)
 
 #: EM_AARCH64.  The page size is the largest a kernel may be configured with, so
 #: that one image loads whatever the running kernel chose; the congruence the
@@ -104,6 +106,11 @@ class AArch64Target:
                 return
         if module.startup is None:
             return
+        if wanted_by(module):
+            # The allocator is emitted where something calls it and nowhere
+            # else, so a program that never allocates carries none of it.
+            emit_allocator(asm, SYSCALLS, ALLOCATOR_REGS, ABORT_SYMBOL,
+                           messages.symbol(OUT_OF_MEMORY))
         if messages.wanted:
             emit_abort(asm, lookup_cconv(module.startup.cconv))
         emit_start(asm, module, lookup_cconv(module.startup.cconv))
