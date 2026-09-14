@@ -601,6 +601,26 @@ with a result says it succeeded -- `fn share(a: u8, b: u8) → u8?` ending in `(
 no other way to write one.  The reverse is not admitted: a result where a plain value is wanted is refused, since accepting it
 would be dropping the error silently.
 
+**The written type reaches what was written.**  Where a result is wanted, something that can only ever *be* an answer -- a
+literal, the two sides of an operator, the members of anything written out -- is asked for the answer's type, and the result is
+made around it.  So a literal with no suffix may be written wherever a result is wanted, taking the answer's type exactly as it
+would anywhere else:
+
+```
+let named: u8? = 1                  ※ a definition
+changed ← 1                         ※ an assignment
+let added: u8? = 1 + 2              ※ both sides of an operator
+take(8)                             ※ an argument, where the parameter is 'u8?'
+fn give() → u8?: 4                  ※ what a function answers with
+let asked: u8? = if c { 5 } else { give() }
+let looked: u8? = while §x c:
+    break §x 6                      ※ what a loop comes to
+```
+
+This is one rule and it holds in every one of those places, including the ones nobody has tried: what is wanted travels down to
+what was written, and only something that could itself have been a result -- a call, a name, a loop, an `if` whose arms are
+results -- is measured against the result type rather than against its answer.
+
 The answer type may not be `void` (4222): a result of nothing is a truth value written as though it were more, and the language
 admits one spelling per meaning.
 

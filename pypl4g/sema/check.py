@@ -1899,7 +1899,8 @@ class Checker:
         expands into is members like any other, so a tuple made this way is a
         tuple made the other way and nothing downstream knows the difference.
         """
-        wanted = expected.members if isinstance(expected, TupleType) else None
+        aim = self._aiming_at(expected)
+        wanted = aim.members if isinstance(aim, TupleType) else None
         values = self._one_by_one(builder, expr.members, wanted)
         if values is None:
             return UndefConst(ERROR)
@@ -1912,7 +1913,7 @@ class Checker:
         if any(ty is ERROR for ty in types):
             return UndefConst(ERROR)
         ty = self._module.types.tuple_type(types)
-        if expected is not None and expected is not ty:
+        if not self._accepts(expected, ty):
             self._report_mismatch(expr.span, ty, expected)
             return UndefConst(ERROR)
         return builder.make_tuple(values, ty, expr.span)
@@ -1983,7 +1984,8 @@ class Checker:
         type it says -- which is what lets a literal with no suffix stand as an
         element.
         """
-        wanted = expected if isinstance(expected, ArrayType) else None
+        aim = self._aiming_at(expected)
+        wanted = aim if isinstance(aim, ArrayType) else None
         if wanted is not None and wanted.fixed:
             if len(expr.elements) != wanted.shape[0]:
                 self._diags.emit(D.LANG_ARRAY_WRONG_LENGTH, expr.span,
@@ -2249,13 +2251,13 @@ class Checker:
             row = self._row_at(builder, start, ty, lengths, offset,
                                len(expr.indices), expr.span)
             found_ty = self._value_type_of(row)
-            if expected is not None and expected is not found_ty:
+            if not self._accepts(expected, found_ty):
                 self._report_mismatch(expr.span, found_ty, expected)
             return row
         value = builder.load(
             self._element_place(builder, start, ty.element, offset, expr.span),
             expr.span)
-        if expected is not None and expected is not ty.element:
+        if not self._accepts(expected, ty.element):
             self._report_mismatch(expr.span, ty.element, expected)
         return value
 
@@ -2291,7 +2293,7 @@ class Checker:
                              index=str(at), count=len(ty.members))
             return UndefConst(ERROR)
         member = ty.members[at]
-        if expected is not None and expected is not member:
+        if not self._accepts(expected, member):
             self._report_mismatch(expr.span, member, expected)
         return builder.extract(base, at, member, expr.span)
 
@@ -2373,7 +2375,7 @@ class Checker:
         made = builder.make_tuple(
             (self._element_place(builder, start, ty.element, first, span),
              builder.binary(BinOp.WRAP_SUB, end, first, span)), answer, span)
-        if expected is not None and expected is not answer:
+        if not self._accepts(expected, answer):
             self._report_mismatch(span, answer, expected)
         return made
 
@@ -2430,11 +2432,12 @@ class Checker:
         # Nothing written is nothing to work out, and a table with nothing in
         # it is still a table.
         ready = _Entries(keys=[], values=[], wanted_key=None, wanted_value=None)
+        aim = self._aiming_at(expected)
         if empty:
-            if not isinstance(expected, (SetType, DictType)):
+            if not isinstance(aim, (SetType, DictType)):
                 self._diags.emit(D.LANG_COLLECTION_EMPTY_UNKNOWN, expr.span)
                 return UndefConst(ERROR)
-            ty: Type = expected
+            ty: Type = aim
         else:
             written = (tuple((one, None) for one in expr.elements)
                        if isinstance(expr, ast.SetLit) else expr.entries)
@@ -2456,7 +2459,7 @@ class Checker:
                 if held is ERROR:
                     return UndefConst(ERROR)
                 ty = self._module.types.dict_type(keys, held)
-        if expected is not None and expected is not ty:
+        if not self._accepts(expected, ty):
             self._report_mismatch(expr.span, ty, expected)
             return UndefConst(ERROR)
         if isinstance(ty, DictType) and not _can_be_a_key(ty.value):
@@ -2651,9 +2654,10 @@ class Checker:
         what `_same_type` starts from rather than as what each entry is lowered
         into, and one message says it either way.
         """
-        wanted_key = expected.element if isinstance(expected, SetType) else \
-            expected.key if isinstance(expected, DictType) else None
-        wanted_value = expected.value if isinstance(expected, DictType) else None
+        aim = self._aiming_at(expected)
+        wanted_key = aim.element if isinstance(aim, SetType) else \
+            aim.key if isinstance(aim, DictType) else None
+        wanted_value = aim.value if isinstance(aim, DictType) else None
         keys: list[Value] = []
         values: list[Value] = []
         outer = self._initializing, self._assigning
@@ -2691,7 +2695,7 @@ class Checker:
             return UndefConst(ERROR)
         answer: Type = (BOOL if isinstance(ty, SetType)
                         else self._module.types.result_type(ty.value))
-        if expected is not None and expected is not answer:
+        if not self._accepts(expected, answer):
             self._report_mismatch(expr.span, answer, expected)
             return UndefConst(ERROR)
         place = self._find_key(builder, base, key, expr.span)
@@ -3108,7 +3112,10 @@ class Checker:
         found.handed_at = found.handed_at or stmt.span
         outer = self._as_the_loops_value()
         try:
-            value = self._lower_expr(builder, stmt.value, found.handing)
+            value = self._lower_into(builder, stmt.value, found.handing,
+                                     stmt.value.span) \
+                if found.handing is not None \
+                else self._lower_expr(builder, stmt.value, None)
             ty = self._value_type_of(value)
             if ty is ERROR:
                 return None
@@ -3168,19 +3175,17 @@ class Checker:
                           ) -> "Type | None":
         """What a `break` hands over, where the loop's own type already says.
 
-        A loop with an `else` arm comes to what the two ways agree on, so what
-        a `break` hands over is what the loop is being used as.  One without
-        comes to a result, the failure being the way that ran the body out, so
-        what a `break` hands over is that result's answer.
+        A loop with an `else` arm comes to what the two ways agree on; one
+        without comes to a result whose failure is the way that ran the body
+        out.  Either way what a `break` hands over is an answer and never a
+        result of its own, so what is wanted of it is what `_aiming_at` says --
+        and where the loop has no `else` arm, the result is made at the `break`
+        rather than around the loop.
 
         Nothing where nothing says -- the loop standing where no type is wanted
         of it -- and the first `break` settles it then.
         """
-        if not produces or expected is None:
-            return None
-        if stmt.alternative is not None:
-            return expected
-        return expected.ok if isinstance(expected, ResultType) else None
+        return self._aiming_at(expected) if produces else None
 
     def _loop_answer(self, builder: IRBuilder, stmt: "ast.While | ast.ForEach",
                      func: Function, one: "_Loop | None",
@@ -3253,7 +3258,7 @@ class Checker:
         if answer is None:
             return UndefConst(VOID)
         value = after.add_param(answer, "answer")
-        if expected is not None and expected is not answer:
+        if not self._accepts(expected, answer):
             self._report_mismatch(stmt.span, answer, expected)
             return UndefConst(ERROR)
         return value
@@ -4126,7 +4131,7 @@ class Checker:
                     return UndefConst(ERROR)
                 return builder.float_const(ty, expr.value)
             case ast.BoolLit():
-                if expected is not None and expected is not BOOL:
+                if not self._accepts(expected, BOOL):
                     self._report_mismatch(expr.span, BOOL, expected)
                     # The mistake is reported; carrying on with a truth value
                     # would have whatever reads it report the same thing again.
@@ -4201,7 +4206,7 @@ class Checker:
         what lets `count = 1u8` and `1u8 = count` mean the same thing, the same
         way the bitwise operators do it.
         """
-        if expected is not None and expected is not BOOL:
+        if not self._accepts(expected, BOOL):
             self._report_mismatch(expr.span, BOOL, expected)
             return UndefConst(ERROR)
         context = self._hint_of(expr.left) or self._hint_of(expr.right)
@@ -4253,7 +4258,7 @@ class Checker:
         exactly.  Doing it that way round rather than widening both operands
         first is one instruction instead of two and gives the same answer.
         """
-        if expected is not None and expected is not BOOL:
+        if not self._accepts(expected, BOOL):
             self._report_mismatch(expr.span, BOOL, expected)
             return UndefConst(ERROR)
         context = self._hint_of(expr.left) or self._hint_of(expr.right)
@@ -4310,7 +4315,7 @@ class Checker:
         with one rather than a complement: complementing one gives every bit but
         the lowest as well.
         """
-        if expected is not None and expected is not BOOL:
+        if not self._accepts(expected, BOOL):
             self._report_mismatch(expr.span, BOOL, expected)
             return UndefConst(ERROR)
         outer, self._operand_of = self._operand_of, expr.op.value
@@ -4356,7 +4361,7 @@ class Checker:
                              found=(answering.render() if answering is not None
                                     else VOID.render()))
             return UndefConst(ERROR)
-        if expected is not None and expected is not ty.ok:
+        if not self._accepts(expected, ty.ok):
             self._report_mismatch(expr.span, ty.ok, expected)
             return UndefConst(ERROR)
         leaving = builder.new_block("leaving")
@@ -4394,7 +4399,7 @@ class Checker:
             self._diags.emit(D.LANG_TYPE_NOT_A_RESULT, expr.left.span,
                              operator=expr.op.value, found=ty.render())
             return UndefConst(ERROR)
-        if expected is not None and expected is not ty.ok:
+        if not self._accepts(expected, ty.ok):
             self._report_mismatch(expr.span, ty.ok, expected)
             return UndefConst(ERROR)
         instead = builder.new_block("instead")
@@ -4435,7 +4440,7 @@ class Checker:
             rest:       br joined(right)
             joined(p):  p
         """
-        if expected is not None and expected is not BOOL:
+        if not self._accepts(expected, BOOL):
             self._report_mismatch(expr.span, BOOL, expected)
             return UndefConst(ERROR)
         outer, self._operand_of = self._operand_of, expr.op.value
@@ -4578,7 +4583,8 @@ class Checker:
         what lets a literal without a suffix stand on either side of one that
         has a type, which a rule that only looked leftwards would not allow.
         """
-        context = expected if expected is not None else self._hint_of(expr)
+        context = self._aiming_at(expected) if expected is not None \
+            else self._hint_of(expr)
         outer, self._operand_of = self._operand_of, expr.op.value
         try:
             left = self._lower_expr(builder, expr.left, context)
@@ -4763,7 +4769,7 @@ class Checker:
     def _lower_not(self, builder: IRBuilder, expr: ast.Unary,
                    expected: Type | None) -> Value:
         """Lower `¬`, which answers the opposite of what its operand says."""
-        if expected is not None and expected is not BOOL:
+        if not self._accepts(expected, BOOL):
             self._report_mismatch(expr.span, BOOL, expected)
             return UndefConst(ERROR)
         outer, self._operand_of = self._operand_of, expr.op.value
@@ -4829,6 +4835,7 @@ class Checker:
     def _float_literal_type(self, expr: ast.FloatLit,
                             expected: Type | None) -> "FloatType | None":
         """The type a floating-point literal has, from its suffix or its place."""
+        expected = self._aiming_at(expected)
         named = BUILTIN_TYPES.get(expr.type_name) if expr.type_name is not None else None
         if named is not None and expected is not None and named is not expected:
             self._report_mismatch(expr.span, named, expected)
@@ -4852,6 +4859,7 @@ class Checker:
         both are present they must agree, and where neither is the literal is an
         untyped value, which this compiler does not have yet.
         """
+        expected = self._aiming_at(expected)
         named = BUILTIN_TYPES.get(expr.type_name) if expr.type_name is not None else None
         if named is not None and expected is not None and named is not expected:
             self._report_mismatch(expr.span, named, expected)
@@ -4903,7 +4911,7 @@ class Checker:
             # asks for one.
             self._diags.emit(D.LANG_CALL_HAS_NO_VALUE, expr.span, name=func.name)
             return UndefConst(ERROR)
-        if expected is not None and answer.ty is not expected:
+        if not self._accepts(expected, answer.ty):
             self._report_mismatch(expr.span, answer.ty, expected)
             return UndefConst(ERROR)
         return answer
@@ -5079,7 +5087,7 @@ class Checker:
                                         held, ref.span)
             else:
                 resolved = builder.load(resolved, ref.span)
-        if expected is not None and resolved.ty != expected:
+        if not self._accepts(expected, resolved.ty):
             self._report_mismatch(ref.span, resolved.ty, expected)
         return resolved
 
@@ -5107,7 +5115,12 @@ class Checker:
             return self._spread(builder, expr, expected, span)
         if not isinstance(expected, ResultType):
             return self._lower_expr(builder, expr, expected)
-        value = self._lower_expr(builder, expr, None)
+        # The whole type goes down, not nothing and not the answer alone:
+        # something that can only be an answer asks `_aiming_at` for the
+        # answer's type, and something that may be either is measured against
+        # both by `_accepts`.  Handing nothing down was what kept a literal
+        # with no suffix from standing here.
+        value = self._lower_expr(builder, expr, expected)
         found = self._value_type_of(value)
         if found is expected or found is ERROR:
             return value
@@ -5150,6 +5163,34 @@ class Checker:
         if value.ty is expected or value.ty is ERROR:
             return value
         return UndefConst(ERROR)
+
+    def _aiming_at(self, expected: "Type | None") -> "Type | None":
+        """What is wanted of something that cannot itself be a result.
+
+        A result is an answer and the fact of whether there is one.  Something
+        that is only ever an answer -- a literal, an operator's two sides, the
+        members of anything written out -- is that answer, so where one stands
+        and a result is wanted, what is wanted of *it* is the answer's type and
+        the result is made around it afterwards.
+
+        That is what carries a written type all the way down: `let q: u8? = 1`
+        wants a `u8?`, the literal is asked for a `u8`, and the answer is made
+        into one.
+        """
+        return expected.ok if isinstance(expected, ResultType) else expected
+
+    def _accepts(self, expected: "Type | None", found: Type) -> bool:
+        """Whether a value of *found* stands where *expected* is wanted.
+
+        Its own type does, and so does the answer type of a result: a value
+        that is an answer stands where the answer and the fact of having one
+        are wanted, and `_lower_into` is what makes the one into the other.
+        """
+        if expected is None or found is ERROR or expected is ERROR:
+            return True
+        if found is expected:
+            return True
+        return isinstance(expected, ResultType) and found is expected.ok
 
     def _report_mismatch(self, span: Span, found: Type, expected: Type) -> None:
         """Report a type that does not match what the context requires.

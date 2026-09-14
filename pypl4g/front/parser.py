@@ -1155,8 +1155,17 @@ class Parser:
         Both of these bind tighter than any operator, and to whatever stands
         immediately before them: `a.b(c)` calls `a.b`, and `f(x) + 1` adds to
         what the call answered with.
+
+        Nothing is written after something that ends with a block of its own.
+        An `if`, a `match` and a loop all end where their body ends, and in the
+        layout notation that is a place with no line ending after it -- so the
+        `(` beginning the next statement would otherwise be read as a call on
+        what the block came to.  Nobody writes a call that way, and anybody who
+        wanted one would write the brackets.
         """
         found = self._parse_atom()
+        if _trailing_match(found):
+            return found
         while True:
             if self._check(TokKind.DOT):
                 self._advance()

@@ -542,3 +542,25 @@ def test_a_boolean_constant_is_read_only_and_a_mutable_one_is_not(tmp_path) -> N
     assert parsed.data[rodata.sh_offset] == 1, "true is not one in the image"
     assert parsed.data[data.sh_offset] == 0, "false is not zero in the image"
 
+
+
+def test_the_memory_chain_starts_in_the_entry_block(compile_source,  # noqa: ANN001
+                                                    tmp_path) -> None:  # noqa: ANN001
+    """`mem.start` goes where the function begins, not where memory is first asked for.
+
+    It says nothing and depends on nothing, so where it belongs is the top of the
+    entry block.  Asked for inside an arm of an `if` and left there, it would be a
+    value the other arm does not reach -- and every later use of memory, the branch
+    into a loop among them, would be reading something that does not dominate it.
+    """
+    proc, output = compile_source(
+        "@[startup]\nfn main() \N{RIGHTWARDS ARROW} u8:\n"
+        "    let k: u8 = if true { 5u8 } else { 6u8 }\n"
+        "    let a: u8? = while \N{SECTION SIGN}x true:\n"
+        "        break \N{SECTION SIGN}x 1u8\n"
+        "    k + (a ?? 0u8)\n",
+        "--emit=ir", "-O0")
+    assert proc.returncode == 0, describe(proc)
+    text = output.read_text(encoding="utf-8")
+    entry = text.split("block0:", 1)[1].split("\n\n", 1)[0]
+    assert "mem.start" in entry, text

@@ -132,9 +132,17 @@ class IRBuilder:
 
         A function that never touches memory has none; the first load is what
         starts the chain, and a store will later extend it.
+
+        The start of the chain goes at the top of the entry block and not where
+        it was first asked for.  It says nothing and depends on nothing -- it is
+        where the chain begins, which is where the function begins -- and asking
+        for it inside an arm of an `if` would otherwise leave every later use of
+        memory reading a value that arm does not reach.
         """
         if self._memory is None:
-            self._memory = self._append(MemStartInst())
+            start = MemStartInst()
+            self._func.entry.insts.insert(0, start)
+            self._memory = start  # type: ignore[assignment]
         return self._memory
 
     def set_memory(self, token: Value) -> None:

@@ -456,11 +456,11 @@ To Do List for the PL4g language
 [x] make the two ways out of a loop distinguishable, as Python's `while ... else` does.  Done: the `else` arm runs where the loop
     ran out and not where a `break` left it, and gives that way's value.
 
-[ ] let a `break` hand over an unsuffixed literal where the loop's type is written but the loop has no `else` arm.
-    `let v: u8? = while §a c: break §a 1` does not work, because `_lower_into` lowers into a result type with nothing expected --
-    so that a plain `u8` may be wrapped into a `u8?` -- and the loop never learns that `u8` is wanted.  With an `else` arm it
-    works, the expected type being plain.  The fix is for the result path to tell what it would accept rather than expect
-    nothing, which is a change to how every result-typed initializer is checked and not only a loop's.
+[x] let a `break` hand over an unsuffixed literal where the loop's type is written but the loop has no `else` arm.  Done, and
+    it was general: the result path handed nothing down, so an unsuffixed literal failed in every position a result is wanted --
+    a definition, an assignment, an argument, what a function answers with, an `if`'s arms, and what a loop comes to.  What is
+    wanted now travels down whole, with `_aiming_at` answering it for things that can only be an answer and `_accepts` for the
+    checks.
 
 [x] say what order a call's arguments are worked out in.  Done, and said of everything rather than of arguments: a call's
     arguments, a tuple's members, an array's elements, a collection's entries and an operator's two sides are all worked out in

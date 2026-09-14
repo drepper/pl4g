@@ -1,0 +1,44 @@
+※ pl4g-test: compile=ok run=native,qemu exit=42 diag=none
+
+※ A result is an answer and the fact of whether there is one, so a value that is
+※ only ever an answer stands where a result is wanted and the result is made
+※ around it.  That is the rule; what it is worth is that the written type
+※ reaches all the way down to what was written.
+※
+※ A literal with no suffix is the thing that shows it.  It takes its type from
+※ its surroundings, so wherever the surroundings are a result type it takes the
+※ answer's type -- and everywhere a result is wanted is a place this has to
+※ work, not only the ones anybody happened to try.
+
+fn take(v: u8?) → u8:
+    v ?? 0u8
+
+fn give() → u8?:
+    ※ answered with from a function whose answer is a result
+    4
+
+@[startup]
+fn main() → u8:
+    ※ given to a name whose type is written
+    let named: u8? = 1
+    ※ assigned to one
+    let changed: mut u8? = 1
+    let before: u8 = changed ?? 0u8
+    changed ← 1
+    ※ worked out by an operator, whose two sides are answers and not results
+    let added: u8? = 1 + 2
+    ※ the arms of an `if`, one of them a result already and the other not
+    let asked: u8? = if true { 5 } else { give() }
+    ※ what a loop comes to, where the loop has no `else` arm
+    let looked: u8? = while §looking true:
+        break §looking 6
+    ※ and where it has one
+    let arm: u8? = while §quiet false:
+        break §quiet 0
+    else:
+        7
+    ※ handed to a call as an argument
+    let early: u8 = take(8) + (named ?? 0u8) + before + (changed ?? 0u8)
+    let late: u8 = (added ?? 0u8) + (asked ?? 0u8) + (looked ?? 0u8)
+    ※ 8+1+1+1 + 3+5+6 + 7 + 4 + 6 = 42
+    early + late + (arm ?? 0u8) + (give() ?? 0u8) + 6u8

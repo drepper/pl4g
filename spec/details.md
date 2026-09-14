@@ -872,6 +872,32 @@ which is what the tree-sitter grammar says too.  The first implementation made i
 that put a rule in the checker the grammar could simply enforce, and it made the two grammars disagree about what an expression
 is.  The diagnostic moved to the parser and changed number with it.
 
+What is wanted, travelling down
+-------------------------------
+
+`_lower_expr` takes what is wanted of an expression, and where that is a result type two rules decide what each expression does
+with it:
+
+- **`_aiming_at`** answers the result's answer type, and is what something that can only ever be an answer asks: a literal,
+  an operator's two sides, the members of a tuple or an array or a collection, what a `break` hands over.  None of those can be a
+  result of its own, so where one stands and a result is wanted, what is wanted of *it* is the answer.
+- **`_accepts`** is what every check asks instead of comparing types directly.  A value of the result type stands, and so does
+  one of its answer type -- `_lower_into` is what makes the second into the first.
+
+Before this, `_lower_into` handed *nothing* down when a result was wanted, so that a plain value could come back and be wrapped.
+That worked for everything with a type of its own and failed for the one thing that has none: a literal with no suffix, in every
+position a result is wanted -- a definition, an assignment, an argument, what a function answers with, an `if`'s arms, what a
+loop comes to.  Handing the whole type down and splitting the question in two is what fixed all of them at once.
+
+**`mem.start` goes at the top of the entry block.**  It was appended wherever memory was first asked for, which could be inside
+an arm of an `if`; every later use of memory then read a value that arm does not reach, and the branch into a loop written after
+such an `if` failed the verifier's dominance check.  It says nothing and depends on nothing -- it is where the chain begins,
+which is where the function begins.
+
+**A block expression takes no postfix.**  An `if`, a `match` and a loop end where their body ends, and in the layout notation
+that is a place with no line ending after it, so the `(` beginning the next statement was read as a call on what the block came
+to.  `_parse_primary` stops at such an expression instead.
+
 Leaving a loop and repeating it
 -------------------------------
 

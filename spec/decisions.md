@@ -2946,6 +2946,48 @@ prove to themselves that every path through the loop assigned it.
 
 ---
 
+## 2026-09-14T22:00+02:00 — language
+
+**The written type reaches what was written**
+
+Decided on the user's direction: an unsuffixed value works in a `break` of a loop with no `else` arm, and in every place like it.
+
+**The bug was one bug, and it was general.**  `_lower_into` handed *nothing* down when a result type was wanted, so that a plain
+`T` could come back and be wrapped into `T?`.  That worked for everything with a type of its own and failed for the one thing that
+has none -- a literal with no suffix -- in every position a result is wanted: a definition, an assignment, an argument, what a
+function answers with, the arms of an `if`, and what a loop comes to.  The loop break was where it was noticed; fixing only the
+loop break would have left the other six.
+
+**The rule is split in two, and that is what made it general.**  `_aiming_at` says what is wanted of something that can only ever
+*be* an answer -- a literal, an operator's two sides, the members of anything written out -- which is the answer's type, the result
+being made around it.  `_accepts` says what a check will take -- the result type, or its answer type.  Everything that chose a
+type from the context now asks the first, and everything that compared types now asks the second.
+
+**Rejected: deciding per expression whether it can produce a result**, by looking at its syntax.  A call can, an operator usually
+cannot -- except that `÷` and `%` answer with results, so even that much is wrong, and a rule that must be right about every
+expression kind is one that will be wrong about the next one added.  The two predicates need to know nothing about expression
+kinds: one is asked by things that construct values, the other by things that check them.
+
+**Rejected: a `Wanted` record carrying "this type or its answer"**, threaded through `_lower_expr`.  It is the same information
+the result type already carries, and it would have touched every signature in the checker to say what two four-line predicates
+say.
+
+Two defects came out with it, both older than this change and both found by writing a test that used the feature in every
+position at once.  **`mem.start` was planted wherever memory was first asked for**, which could be inside an arm of an `if`; every
+later use then read a value that arm does not reach, so an `if` followed by a loop failed the verifier outright.  It now goes at
+the top of the entry block, which is where the chain begins.  And **a block expression took a postfix**: an `if`, a `match` or a
+loop in the layout notation ends with no line ending after it, so a following statement beginning with `(` was read as a call on
+what the block came to.
+
+Compare: Zig's error unions `!T`, which accept a plain `T` as the success and propagate the expected type into the expression the
+same way -- this is Zig's answer; C++'s `std::expected<T, E>`, which converts implicitly from `T`, and where the equivalent
+question is answered by overload resolution rather than by a rule about what is wanted; Rust, which requires `Ok(x)` and so never
+has the question, at the cost of a constructor at every success; and Haskell, whose bidirectional type checking is the general
+form of "what is wanted travels down", with inference filling in what neither side says -- which this language deliberately does
+not have, every literal without a suffix needing a context that gives it a type.
+
+---
+
 ---
 
 Open questions
