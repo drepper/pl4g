@@ -24,6 +24,7 @@ from ..allocator import OUT_OF_MEMORY, emit_allocator, wanted_by
 from ..faults import Messages
 from ..pool import Constants
 from ..globals import emit_globals
+from ..vectors import Vectors, settle as settle_vectors
 from ..target import ImageDefaults
 from .abi import CC_PL4G, lookup as lookup_cconv
 from . import levels
@@ -99,6 +100,17 @@ class X86_64Target:
                          allocation_order=CC_PL4G.orders(GPR.name, VEC.name),
                          callee_saved=CC_PL4G.callee_saved)
 
+    @property
+    def vectors(self) -> Vectors:
+        """What this machine can do to a run of elements at once.
+
+        Nothing yet.  The registers are there and so is the register file that
+        describes them; what is not there is the instructions, so every run is
+        still done an element at a time -- which is what the program means, and
+        is why saying "nothing" is a complete answer rather than a gap.
+        """
+        return Vectors()
+
     def generate(self, module: Module, asm: Assembler, diags: DiagEngine,
                  opt_level: int, sources: SourceManager | None = None) -> None:
         """Generate the whole image for *module*.
@@ -110,7 +122,13 @@ class X86_64Target:
         del opt_level
         messages = Messages()
         constants = Constants()
-        emit_globals(asm, module, DataLayout(pointer_size=self.pointer_bits // 8))
+        layout = DataLayout(pointer_size=self.pointer_bits // 8)
+        # What the front end asked of a whole run of elements at once, brought
+        # down to what this machine has -- which is done to the program before a
+        # single instruction is chosen, so that everything below sees only
+        # operations it can emit.
+        settle_vectors(module, self.vectors, layout)
+        emit_globals(asm, module, layout)
         asm.section(".text", executable=True,
                     alignment=self.image_defaults().text_alignment)
         # What each function turned out to destroy, so that a call to one saves

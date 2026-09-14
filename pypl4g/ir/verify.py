@@ -13,8 +13,8 @@ from typing import Iterable
 from ..diag.engine import InternalError
 from .function import BasicBlock, Function, SpecialKind
 from .mangle import symbol_name
-from .inst import (AddressInst, AssertInst, BinaryInst, BinOp, BlockTarget,
-                   CastInst, FrameInst,
+from .inst import (AddressInst, AnyLaneInst, AssertInst, BinaryInst, BinOp,
+                   BlockTarget, CastInst, FrameInst, SplatInst,
                    CastKind, CmpInst,
                    ExtractInst, FailedInst,
                    Instruction, TupleInst,
@@ -22,8 +22,8 @@ from .inst import (AddressInst, AssertInst, BinaryInst, BinOp, BlockTarget,
                    UnwrapInst, WrapInst)
 from .module import GlobalVar, Module
 from .types import (ArrayType, BOOL, BoolType, DictType, EnumType, IntType,
-                    MEM, PtrType, ResultType, SetType, TupleType, Type, VOID,
-                    parts_of)
+                    MEM, PtrType, ResultType, SetType, TupleType, Type,
+                    VecType, VOID, parts_of)
 from .value import Const, IntConst, Value
 
 
@@ -284,6 +284,38 @@ class Verifier:
             case CmpInst():
                 if inst.operands[0].ty != inst.operands[1].ty:
                     self._fail(where, "comparison of operands of different types")
+                elif isinstance(inst.ty, VecType):
+                    # A comparison of two vectors answers one truth value per
+                    # lane, which is a vector of as many lanes as it was asked
+                    # about and of truth values whatever they were.
+                    compared = inst.operands[0].ty
+                    if not (isinstance(compared, VecType)
+                            and compared.lanes == inst.ty.lanes
+                            and inst.ty.element is BOOL):
+                        self._fail(where, "".join((
+                            "comparing ", compared.render(), " answering ",
+                            inst.ty.render())))
+                elif inst.ty is not BOOL:
+                    self._fail(where, "".join((
+                        "a comparison answering ", inst.ty.render())))
+            case SplatInst():
+                if not isinstance(inst.ty, VecType):
+                    self._fail(where, "".join((
+                        "spreading a value over ", inst.ty.render(),
+                        ", which has no lanes")))
+                elif inst.operands[0].ty != inst.ty.element:
+                    self._fail(where, "".join((
+                        "spreading ", inst.operands[0].ty.render(), " over ",
+                        inst.ty.render())))
+            case AnyLaneInst():
+                asked = inst.operands[0].ty
+                if not (isinstance(asked, VecType) and asked.element is BOOL):
+                    self._fail(where, "".join((
+                        "asking whether any lane of ", asked.render(),
+                        " is true, which holds no truth values")))
+                elif inst.ty is not BOOL:
+                    self._fail(where, "".join((
+                        "whether any lane is true read as ", inst.ty.render())))
             case StoreInst():
                 if len(inst.operands) != 3:
                     self._fail(where, "a store takes a token, an address and a value")

@@ -207,6 +207,49 @@ class CmpInst(Instruction):
         return "".join(("icmp.", self.pred.value))
 
 
+class SplatInst(Instruction):
+    """One value in every lane of a vector.
+
+    What an operator's side that is not an array becomes where the other side
+    is: `v + 10u8` adds ten to every element, and this is the ten, said once for
+    all of them.
+    """
+
+    __slots__ = ()
+
+    def __init__(self, value: Value, target: Type,
+                 span: Span = INVALID_SPAN) -> None:
+        super().__init__(target, (value,), span)
+
+    @property
+    def opcode(self) -> str:
+        """The mnemonic used in the textual form."""
+        return "splat"
+
+
+class AnyLaneInst(Instruction):
+    """Whether any lane of a vector of truth values is true.
+
+    This is how a check over a whole vector is asked: the check is made in every
+    lane at once and answers a lane apiece, and what the branch wants is the one
+    question "did any of them". Nothing in the language writes one -- it is what
+    a backend needs to keep a vector operation's meaning the same as the
+    element-by-element one it stands for, which stops where the first element
+    goes past the end of its type.
+    """
+
+    __slots__ = ()
+
+    def __init__(self, value: Value, result_ty: Type,
+                 span: Span = INVALID_SPAN) -> None:
+        super().__init__(result_ty, (value,), span)
+
+    @property
+    def opcode(self) -> str:
+        """The mnemonic used in the textual form."""
+        return "anylane"
+
+
 class WrapInst(Instruction):
     """A value, and whether it is the answer, as one value of a result type.
 

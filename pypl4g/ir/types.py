@@ -313,6 +313,36 @@ class ArrayType(Type):
 
 
 @dataclass(frozen=True, slots=True)
+class VecType(Type):
+    """Several values of one type held as one value, side by side.
+
+    This is what an array becomes where an operation is done to every element of
+    it at once: a value of one is a whole register on a machine that has such
+    registers, and the operation on it is one instruction.  It is never a type
+    the language can write down.  The front end makes one where an operator
+    reaches every element of a run, and a backend that cannot do the operation
+    to a whole one takes it apart again -- so the meaning of a program does not
+    depend on what the machine can do, only how many instructions it takes.
+
+    In memory it is exactly the run of elements it came from: packed, in order,
+    and aligned no more than they are, since what it reads is an array that was
+    laid out without knowing this would read it.
+    """
+
+    element: Type
+    lanes: int
+
+    def render(self) -> str:
+        """The name of this type in the textual form of the IR."""
+        return "".join((self.element.render(), "\N{MULTIPLICATION SIGN}",
+                        str(self.lanes)))
+
+    def mangled(self) -> str:
+        """The normalized name of this type, for use inside a symbol name."""
+        return "".join(("vec<", self.element.mangled(), ",", str(self.lanes), ">"))
+
+
+@dataclass(frozen=True, slots=True)
 class SetType(Type):
     """A set: the keys it holds, and nothing said about them beyond membership."""
 
@@ -458,6 +488,7 @@ class TypeContext:
         self._results: dict[tuple[Type, Type | None], ResultType] = {}
         self._tuples: dict[tuple[Type, ...], TupleType] = {}
         self._arrays: dict[tuple[Type, tuple[int | None, ...]], ArrayType] = {}
+        self._vectors: dict[tuple[Type, int], VecType] = {}
         self._sets: dict[Type, SetType] = {}
         self._dicts: dict[tuple[Type, Type], DictType] = {}
         self._pointers: dict[tuple[Type, bool], PtrType] = {}
@@ -495,6 +526,15 @@ class TypeContext:
         if found is None:
             found = ArrayType(element, tuple(shape))
             self._arrays[key] = found
+        return found
+
+    def vec_type(self, element: Type, lanes: int) -> VecType:
+        """Return the vector type of *lanes* values of *element*."""
+        key = (element, lanes)
+        found = self._vectors.get(key)
+        if found is None:
+            found = VecType(element, lanes)
+            self._vectors[key] = found
         return found
 
     def set_type(self, element: Type) -> SetType:

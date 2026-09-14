@@ -1,0 +1,47 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ An operator written over an array asks the same question of every element, so
+※ it is asked of the whole run at once where the machine can and an element at a
+※ time where it cannot -- and the answer is the same either way, which is what
+※ this holds.
+※
+※ The lengths are chosen to land on either side of a register's worth.  Four
+※ bytes is the smallest piece worth taking; sixteen is a whole register on every
+※ machine here; nineteen is a whole one and three left over; three is shorter
+※ than the smallest piece and goes an element at a time wherever it is compiled.
+※ Every one of them has to answer the same.
+
+fn total(v: u8⟦3⟧) → u8:
+    v⟦0⟧ + v⟦1⟧ + v⟦2⟧
+
+@[startup]
+fn main() → u8:
+    ※ Shorter than the smallest piece.
+    let three: u8⟦3⟧ = ⟦1u8, 2u8, 3u8⟧
+    let raised: u8⟦3⟧ = three + 10u8
+    ※ Exactly the smallest piece.
+    let four: u32⟦4⟧ = ⟦1u32, 2u32, 3u32, 4u32⟧
+    let doubled: u32⟦4⟧ = four + four
+    ※ A whole register on every machine here, and one more than one.
+    let sixteen: u8⟦16⟧ = ⟦1u8, 1u8, 1u8, 1u8, 1u8, 1u8, 1u8, 1u8, 1u8, 1u8, 1u8, 1u8, 1u8, 1u8, 1u8, 1u8⟧
+    let twice: u8⟦16⟧ = sixteen + sixteen
+    let nineteen: u16⟦19⟧ = ⟦1u16, 2u16, 3u16, 4u16, 5u16, 6u16, 7u16, 8u16, 9u16, 10u16, 11u16, 12u16, 13u16, 14u16, 15u16, 16u16, 17u16, 18u16, 19u16⟧
+    let less: u16⟦19⟧ = nineteen - 1u16
+    ※ A comparison answers a truth value for each element.
+    let over: bool⟦19⟧ = nineteen > 9u16
+    ※ And the bitwise operators, which never fault.
+    let bits: u8⟦16⟧ = ~sixteen & 3u8
+    if total(raised) ≠ 36u8:
+        1u8
+    elif doubled⟦0⟧ ≠ 2u32 ∨ doubled⟦3⟧ ≠ 8u32:
+        2u8
+    elif twice⟦0⟧ ≠ 2u8 ∨ twice⟦15⟧ ≠ 2u8:
+        3u8
+    elif less⟦0⟧ ≠ 0u16 ∨ less⟦16⟧ ≠ 16u16 ∨ less⟦18⟧ ≠ 18u16:
+        4u8
+    elif over⟦8⟧ ∨ ¬over⟦9⟧ ∨ ¬over⟦18⟧:
+        5u8
+    elif bits⟦0⟧ ≠ 2u8 ∨ bits⟦15⟧ ≠ 2u8:
+        6u8
+    else:
+        0u8

@@ -24,6 +24,7 @@ from ..allocator import OUT_OF_MEMORY, emit_allocator, wanted_by
 from ..faults import Messages
 from ..pool import Constants
 from ..globals import emit_globals
+from ..vectors import Vectors, settle as settle_vectors
 from ..target import ImageDefaults
 from .abi import CC_PL4G, lookup as lookup_cconv
 from .encoder import EncodingError, encode
@@ -91,13 +92,30 @@ class RISCV64Target:
                          allocation_order=CC_PL4G.orders(GPR.name, FPR.name),
                          callee_saved=CC_PL4G.callee_saved)
 
+    @property
+    def vectors(self) -> Vectors:
+        """What this machine can do to a run of elements at once.
+
+        Nothing.  The vector extension is not in the base this compiler builds
+        for and there is no level to ask for it with, so a run is done an
+        element at a time -- which is what the program means, and is the whole
+        of what this target has to say about it.
+        """
+        return Vectors()
+
     def generate(self, module: Module, asm: Assembler, diags: DiagEngine,
                  opt_level: int, sources: SourceManager | None = None) -> None:
         """Generate the whole image for *module*."""
         del opt_level
         messages = Messages()
         constants = Constants()
-        emit_globals(asm, module, DataLayout(pointer_size=self.pointer_bits // 8))
+        layout = DataLayout(pointer_size=self.pointer_bits // 8)
+        # What the front end asked of a whole run of elements at once, brought
+        # down to what this machine has -- which is done to the program before a
+        # single instruction is chosen, so that everything below sees only
+        # operations it can emit.
+        settle_vectors(module, self.vectors, layout)
+        emit_globals(asm, module, layout)
         asm.section(".text", executable=True,
                     alignment=IMAGE_DEFAULTS.text_alignment)
         # What each function turned out to destroy, so that a call to one saves

@@ -11,15 +11,15 @@ from ..source.location import INVALID_SPAN, Span
 from .function import BasicBlock, Function
 from typing import Sequence
 
-from .inst import (AddressInst, AssertInst, CallInst, BinaryInst, BinOp,
-                   BlockTarget, BrInst, FrameInst,
+from .inst import (AddressInst, AnyLaneInst, AssertInst, CallInst, BinaryInst,
+                   BinOp, BlockTarget, BrInst, FrameInst, SplatInst,
                    CastInst, CastKind,
                    CmpInst, CmpPred, CondBrInst, Instruction, LoadInst, MemStartInst,
                    ExtractInst, FailedInst, RetInst, StoreInst, Terminator,
                    TupleInst, UnaryInst, UnOp,
                    UnreachableInst, UnwrapInst, WrapInst)
 from .module import Module
-from .types import FloatType, BOOL, IntType, PtrType, Type
+from .types import FloatType, BOOL, IntType, PtrType, Type, VecType
 from .value import Value
 
 
@@ -116,8 +116,26 @@ class IRBuilder:
 
     def compare(self, pred: CmpPred, lhs: Value, rhs: Value,
                 span: Span = INVALID_SPAN) -> Value:
-        """Append a comparison."""
-        return self._append(CmpInst(pred, lhs, rhs, BOOL, span))
+        """Append a comparison.
+
+        What it answers with follows what is compared: one truth value for two
+        ordinary values, and one per lane for two vectors -- which is what makes
+        a comparison written over an array answer an array of truth values with
+        nothing else asked.
+        """
+        answer: Type = BOOL
+        if isinstance(lhs.ty, VecType):
+            answer = self._module.types.vec_type(BOOL, lhs.ty.lanes)
+        return self._append(CmpInst(pred, lhs, rhs, answer, span))
+
+    def splat(self, value: Value, target: Type,
+              span: Span = INVALID_SPAN) -> Value:
+        """Append the putting of one value in every lane of a vector."""
+        return self._append(SplatInst(value, target, span))
+
+    def any_lane(self, value: Value, span: Span = INVALID_SPAN) -> Value:
+        """Append the asking of whether any lane of *value* is true."""
+        return self._append(AnyLaneInst(value, BOOL, span))
 
     def call(self, callee: object, args: Sequence[Value], result_ty: Type,
              span: Span = INVALID_SPAN) -> Value:

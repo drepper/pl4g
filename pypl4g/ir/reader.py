@@ -13,14 +13,14 @@ from typing import Sequence
 from .function import (DEFAULT_CCONV, BasicBlock, FuncAttrs, Function,
                        InlineHint, Linkage,
                        SpecialKind)
-from .inst import (AddressInst, BinaryInst, BinOp, BlockTarget, BrInst, CastInst,
-                   CastKind,
+from .inst import (AddressInst, AnyLaneInst, BinaryInst, BinOp, BlockTarget,
+                   BrInst, CastInst, CastKind, SplatInst,
                    CmpInst, CmpPred, CondBrInst, LoadInst, MemStartInst, RetInst,
                    StoreInst, UnaryInst, UnOp, UnreachableInst)
 from .module import GlobalVar, Module
 from .printer import IR_VERSION
 from .types import (BOOL, BUILTIN_TYPES, MEM, PtrType, Type, TypeContext, U64,
-                    VOID)
+                    VecType, VOID)
 from .value import Value
 
 
@@ -49,6 +49,14 @@ def _parse_type(text: str, types: TypeContext, line_number: int) -> Type:
         mutable = inner.startswith("mut ")
         return types.ptr_type(_parse_type(inner.removeprefix("mut "), types, line_number),
                               mutable=mutable)
+    lanes_at = text.rfind("\N{MULTIPLICATION SIGN}")
+    if lanes_at > 0:
+        count = text[lanes_at + 1:]
+        if not count.isdigit():
+            raise IRSyntaxError(line_number, "".join((
+                "'", text, "' says '", count, "' lanes")))
+        return types.vec_type(_parse_type(text[:lanes_at], types, line_number),
+                              int(count))
     found = BUILTIN_TYPES.get(text)
     if found is None:
         raise IRSyntaxError(line_number, "".join(("unknown type '", text, "'")))
@@ -289,13 +297,24 @@ class _FunctionReader:
             return block.append(UnaryInst(_UNOPS[head], self._value(parts[0], ty, number)))
         if head in _CASTS:
             return block.append(CastInst(_CASTS[head], self._value(parts[0], ty, number), ty))
+        if head == "splat":
+            if not isinstance(ty, VecType):
+                raise IRSyntaxError(number, "".join((
+                    "spreading a value over '", ty.render(), "'")))
+            return block.append(SplatInst(self._value(parts[0], ty.element, number), ty))
+        if head == "anylane":
+            return block.append(AnyLaneInst(self._value(parts[0], None, number), ty))
         if head.startswith("icmp."):
             pred = _PREDS.get(head[len("icmp."):])
             if pred is None:
                 raise IRSyntaxError(number, "".join(("unknown predicate in '", opcode, "'")))
             lhs = self._value(parts[0], ty, number)
             rhs = self._value(parts[1], ty, number)
-            return block.append(CmpInst(pred, lhs, rhs, BOOL))
+            # A comparison of vectors answers a lane apiece; of anything else,
+            # one truth value.
+            answer = (self._module.types.vec_type(BOOL, ty.lanes)
+                      if isinstance(ty, VecType) else BOOL)
+            return block.append(CmpInst(pred, lhs, rhs, answer))
         raise IRSyntaxError(number, "".join(("unknown instruction '", opcode, "'")))
 
 

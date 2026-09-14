@@ -315,6 +315,10 @@ To Do List for the pypl4g compiler
     which is false for the trapping one, so a trapping addition took the branch written for a subtraction -- and the widest signed
     and unsigned sums did not notice they had gone past.  Every such test now names the ordinary operation the two are built from.
 
+[ ] let the grammar read an array literal that goes over more than one line.  The compiler reads one -- a bracket is not a
+    place a line ends, so the layout rule lets it continue -- and `tree-sitter-pl4g` does not, which the agreement test catches
+    the moment a program in the suite is written that way.  Found while writing one; the program was put on one line instead.
+
 [ ] report a tuple holding an array.  `〈⟦1u8, 2u8⟧〉` reaches the code generator and fails there (9901, "making a 〈u8⟦2⟧〉, which
     is one value and not several"), so what a reader is told is an internal error about a program the front end accepted.  Either
     an array is a thing a tuple may hold, in which case `parts_of` has to say what its parts are, or it is not and the checker

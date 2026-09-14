@@ -33,7 +33,7 @@ from ..ir.types import (ARENA, ArrayType, BOOL, BoolType, BUILTIN_TYPES,
                         U64,
                         F64,
                         FloatType, IntType, MEM, ProductType, ResultType,
-                        SetType, SumType, TupleType, Type, VOID)
+                        SetType, SumType, TupleType, Type, VecType, VOID)
 from .modules import (ImportCycle, LoadedModule, ModuleNotFound, ModuleRegistry,
                       base_name)
 from ..ir.value import (Const, EnumConst, FloatConst, IntConst, UndefConst,
@@ -328,6 +328,34 @@ _APPROXIMATE: Final[dict[ast.BinaryOp, tuple[bool, bool, CmpPred]]] = {
 #: floating-point value that is a question worth warning about.
 _EXACT_ON_FLOATS: Final[frozenset[ast.BinaryOp]] = frozenset((
     ast.BinaryOp.EQUAL, ast.BinaryOp.NOT_EQUAL))
+
+#: The operators that can be asked of a whole run of elements at once.  Every
+#: one of them is the same question of each element and of none of the others,
+#: so asking it of all of them together answers what asking it of each would --
+#: which is what a machine with registers holding several values does in one
+#: instruction.
+#:
+#: Dividing is not among them, and neither is taking a remainder: those two are
+#: the operations with no answer for some pairs, so what they answer is a result
+#: rather than a number, and a result of a run would have to say which element
+#: had none.  Neither is either of the two that do not work out both sides:
+#: which side is worked out is what they are about, and over a run there is no
+#: such thing as which side.
+_ALL_AT_ONCE: Final[frozenset[ast.BinaryOp]] = frozenset((
+    ast.BinaryOp.BIT_AND, ast.BinaryOp.BIT_OR, ast.BinaryOp.BIT_XOR,
+    ast.BinaryOp.ADD, ast.BinaryOp.SUBTRACT, ast.BinaryOp.MULTIPLY,
+    ast.BinaryOp.SAT_ADD, ast.BinaryOp.SAT_SUB, ast.BinaryOp.SAT_MUL,
+    ast.BinaryOp.EQUAL, ast.BinaryOp.NOT_EQUAL,
+    ast.BinaryOp.LESS, ast.BinaryOp.GREATER,
+    ast.BinaryOp.LESS_EQUAL, ast.BinaryOp.GREATER_EQUAL,
+    ast.BinaryOp.LOGIC_AND, ast.BinaryOp.LOGIC_OR, ast.BinaryOp.LOGIC_XOR,
+    ast.BinaryOp.LOGIC_NAND, ast.BinaryOp.LOGIC_NOR,
+    ast.BinaryOp.SHIFT_LEFT, ast.BinaryOp.SHIFT_RIGHT,
+    ast.BinaryOp.ROTATE_LEFT, ast.BinaryOp.ROTATE_RIGHT))
+
+#: The same, written before their operand.
+_ALL_AT_ONCE_UNARY: Final[frozenset[ast.UnaryOp]] = frozenset((
+    ast.UnaryOp.LOGIC_NOT, ast.UnaryOp.BIT_NOT))
 
 _BINARY_OPS: Final[dict[ast.BinaryOp, BinOp]] = {
     ast.BinaryOp.BIT_AND: BinOp.AND,
@@ -4903,7 +4931,10 @@ class Checker:
         zero, and complementing it would set every other bit of the register as
         well.
         """
-        return builder.binary(BinOp.XOR, value, builder.bool_const(True), span)
+        one: Value = builder.bool_const(True)
+        if isinstance(value.ty, VecType):
+            one = builder.splat(one, value.ty, span)
+        return builder.binary(BinOp.XOR, value, one, span)
 
     #: What each operator a set answers comes to, as walks of the two tables:
     #: which table is walked, which is asked about, and what is wanted of the
@@ -5179,8 +5210,11 @@ class Checker:
                                      expected)
         if walked is not None:
             return walked
-        ty = self._value_type_of(operand)
-        if ty is ERROR:
+        # What the operator is defined on is never a run of values, so the
+        # question is asked of what a run of them is a run of -- which is the
+        # value's own type where it is not one.
+        ty = self._scalar_of(self._value_type_of(operand))
+        if ty is ERROR or ty is None:
             return UndefConst(ERROR)
         flagged = isinstance(ty, EnumType) and ty.flag
         if not isinstance(ty, IntType) and not flagged:
@@ -5365,7 +5399,7 @@ class Checker:
         standing beside it, which is why it is asked of the context and not only
         of the value.
         """
-        while isinstance(ty, ArrayType):
+        while isinstance(ty, (ArrayType, VecType)):
             ty = ty.element
         return ty
 
@@ -5395,6 +5429,9 @@ class Checker:
         if shape is None:
             return UndefConst(ERROR)
         names = [name for name, _ in given]
+        if self._all_at_once(expr, wanted, shape):
+            return self._run_at_a_time(builder, expr, names, values, wanted,
+                                       shape, expected)
         total = 1
         for along in shape:
             total *= along
@@ -5418,6 +5455,124 @@ class Checker:
             self._report_mismatch(expr.span, answer, expected)
             return UndefConst(ERROR)
         return held
+
+    def _all_at_once(self, expr: ast.Expr, wanted: Sequence[Type],
+                     shape: tuple[int, ...]) -> bool:
+        """Whether the innermost run can be asked the operator all at once.
+
+        Decided before anything is lowered, because it has to be: the answer
+        settles which instructions are written, and a path taken halfway and
+        abandoned would leave the ones already written behind.  Everything it
+        rests on is known without lowering -- which operator was written, what
+        the operands turned out to be of, and how long the run is.
+
+        Three things have to hold.  The operator has to be one that asks the
+        same question of each element and of nothing else.  Every operand has to
+        have come to the same type, since two that did not are a mistake the
+        element-by-element path reports and this one would build nonsense out
+        of.  And the run has to be longer than one, a run of one being an
+        element with extra words around it.
+        """
+        if shape[-1] < 2 or not all(ty is wanted[0] for ty in wanted):
+            return False
+        # A truth value and a whole number are what a lane holds.  A floating
+        # point number is not yet: what says one went past the end of its type
+        # is not a comparison but a question about the number itself, and asking
+        # that of a lane apiece is its own piece of work.
+        if not isinstance(wanted[0], (IntType, BoolType)):
+            return False
+        match expr:
+            case ast.Binary():
+                return expr.op in _ALL_AT_ONCE
+            case ast.Unary():
+                return expr.op in _ALL_AT_ONCE_UNARY
+            case _:
+                return False
+
+    def _run_at_a_time(self, builder: IRBuilder, expr: ast.Expr,
+                       names: Sequence[str], values: Sequence[Value],
+                       wanted: Sequence[Type], shape: tuple[int, ...],
+                       expected: Type | None) -> Value:
+        """Apply the operator to the innermost run of elements all at once.
+
+        The last dimension is the one whose elements are next to each other, so
+        it is the one a machine can read as a single value and work on as one.
+        Every dimension outside it is walked as it always was, and what happens
+        at the bottom of that walk is one operation rather than as many as the
+        run is long.
+
+        The operator is lowered again with the runs standing where the operands
+        were written, exactly as the element-by-element path lowers it with the
+        elements -- so every check it makes is still made by the code that makes
+        it, and asking a run rather than an element changes only how many values
+        the answer covers.
+        """
+        lanes = shape[-1]
+        outer = shape[:-1]
+        total = 1
+        for along in outer:
+            total *= along
+        made: list[Value] = []
+        for at in range(total):
+            taken: dict[str, object] = {}
+            for name, value, want in zip(names, values, wanted):
+                taken[name] = _Ready(
+                    span=expr.span,
+                    value=self._run_or_one(builder, value, want,
+                                           _spread_out(at, outer), lanes,
+                                           expr.span))
+            made.append(self._lower_expr(builder, replace(expr, **taken), None))
+        held = self._value_type_of(made[0])
+        assert isinstance(held, VecType)
+        answer = self._module.types.array_type(held.element, shape)
+        place = builder.frame(answer, expr.span)
+        for at, one in enumerate(made):
+            builder.store(
+                self._run_place(builder, place, held, at * lanes, expr.span),
+                one, expr.span)
+        found = builder.cast(CastKind.BITCAST, place, answer, expr.span)
+        if not self._accepts(expected, answer):
+            self._report_mismatch(expr.span, answer, expected)
+            return UndefConst(ERROR)
+        return found
+
+    def _run_or_one(self, builder: IRBuilder, value: Value, want: Type,
+                    index: tuple[int, ...], lanes: int, span: Span) -> Value:
+        """One operand of a run-at-a-time operation, as a value of *lanes* lanes.
+
+        An operand being walked comes down to a run of neighbours, which is read
+        as one value: the elements of an array are laid out one after another
+        with nothing between them, so the bytes a run occupies are the bytes a
+        value of that many lanes occupies, and reading them as one is reading
+        exactly the elements.
+
+        An operand not being walked is one value used at every turn, so it goes
+        in every lane.
+        """
+        picked = value
+        for along in index:
+            ty = self._value_type_of(picked)
+            if ty is want or not isinstance(ty, ArrayType):
+                break
+            picked = self._one_of(builder, picked, want, along, span)
+        held = self._module.types.vec_type(want, lanes)
+        ty = self._value_type_of(picked)
+        if ty is want or not isinstance(ty, ArrayType):
+            return builder.splat(picked, held, span)
+        start, _ = self._shape_of(builder, picked, ty, span)
+        return builder.load(
+            builder.cast(CastKind.BITCAST, start,
+                         self._module.types.ptr_type(held, mutable=True), span),
+            span)
+
+    def _run_place(self, builder: IRBuilder, base: Value, held: VecType,
+                   at: int, span: Span) -> Value:
+        """Where the run that starts at the *at*-th element is, read as one value."""
+        return builder.cast(
+            CastKind.BITCAST,
+            self._element_place(builder, base, held.element,
+                                builder.int_const(U64, at), span),
+            self._module.types.ptr_type(held, mutable=True), span)
 
     def _shape_walked(self, values: Sequence[Value], wanted: Sequence[Type],
                       span: Span) -> tuple[int, ...] | None:

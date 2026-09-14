@@ -15,7 +15,7 @@ from typing import Final
 from .types import (ArrayType, BoolType, DictType, EnumType, FloatType,
                     IntType, MemType,
                     ProductType, PtrType, SetType, TupleType,
-                    ResultType, SumType, Type, VoidType)
+                    ResultType, SumType, Type, VecType, VoidType)
 
 
 class NoLayoutError(Exception):
@@ -66,6 +66,11 @@ def size_of(ty: Type, layout: DataLayout) -> int:
                 total = _align_up(total, align_of(member, layout))
                 total += size_of(member, layout)
             return _align_up(total, align_of(ty, layout))
+        case VecType():
+            # Its lanes and nothing else, packed as the run of elements it was
+            # read out of is packed -- which is what makes reading a whole one
+            # the same bytes as reading each of them.
+            return ty.lanes * stride_of(ty.element, layout)
         case ArrayType() if ty.fixed:
             # Its elements and nothing else, which is what "the type carries
             # everything" means: how many there are is in the type, so no room
@@ -127,6 +132,11 @@ def align_of(ty: Type, layout: DataLayout) -> int:
             return align_of(ty.holder, layout)
         case TupleType():
             return max((align_of(m, layout) for m in ty.members), default=1)
+        case VecType():
+            # No more than one lane asks for.  What it reads is an array that
+            # was laid out before anything knew a whole one would be read at
+            # once, so the read has to be one that does not care.
+            return align_of(ty.element, layout)
         case ArrayType() if ty.fixed:
             # An array starts where its first element would, so the system's
             # rule is that it is aligned as one element is.  Where nothing
