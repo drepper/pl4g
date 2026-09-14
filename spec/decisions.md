@@ -2664,6 +2664,33 @@ body what the search found, and the shape has nowhere to put it.  Making it a ca
 
 ---
 
+## 2026-09-15T12:00+02:00 — language
+
+**A member of a tuple is named the way an element of an array is**
+
+Decided on the user's direction: the array's brackets, and one dimension is all a tuple ever needs.
+
+**One shape for one question.**  `t⟦0⟧` and `a⟦0⟧` both ask for a place among several, and a language that spelled them
+differently would be asking a reader to learn two shapes for one idea.  Rust and Swift write `t.0`, which needs a rule saying a
+number may stand where a field name does; C++ writes `std::get<0>(t)`, because a function's result type may not depend on an
+ordinary argument; Python writes `t[0]`, which is this, and can afford an ordinary index only because its tuples are not typed by
+member.
+
+**The index is one number written down, and that is what a tuple is.**  The members are of whatever types they were written with,
+so which one is wanted decides the type of the expression; an index the program worked out would leave that type to be settled
+while the program runs, which no type here is.  Saying so as a diagnostic rather than as a syntax rule is deliberate: the
+restriction is a consequence of the type system and reads better stated as one.
+
+**A member is read and not assigned to.**  A tuple is registers, not room in memory.  Assigning to one would mean binding the name
+to a tuple made of the others and the new value -- which the language can already be told to do by writing that out -- so making
+`←` a second way of saying it is a question about what assignment means, and the same question a whole row of an array asks.  Both
+are in the list, to be answered together.
+
+**Nothing is read from memory.**  Naming a member is `extract`, which lowers to nothing at all: the member is already in a
+register of its own, and this says which one to go on using.
+
+---
+
 ---
 
 Open questions

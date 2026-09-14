@@ -926,6 +926,33 @@ out and threw away without saying so.  Only a tuple can be taken apart that way 
 Each name of an assignment is assigned as it would be on its own, so a name that is not a variable, or one nothing may change, is
 reported where it is written.
 
+##### Naming one member
+
+`t⟦0⟧` is the member at that place, counting from nought -- the same brackets an array is looked in with, because what is being
+asked for is a place among several and the language does not have two shapes for one question.
+
+```
+let pair: 〈u8, u16〉 = both(7u8, 300u16)
+let low: u8 = pair⟦0⟧
+let high: u16 = pair⟦1⟧
+```
+
+**The index is one number written down** (4460), and that is what a tuple is rather than a rule chosen for it: the members are of
+whatever types they were written with, so which one is wanted decides what type the whole expression has, and a type this language
+settles while the program runs is a type it does not have.  There is one index for the same reason an array of one dimension takes
+one -- a tuple is a run of members and not a shape -- and whether it names a member is known while compiling (4461).
+
+**A member is read, not assigned to** (4462).  A tuple is a value and not a place: its members are registers, not room in memory
+that something else could be pointing at.  Assigning to one would mean binding the name to a tuple made of the others and the new
+value, which is what writing that out does.
+
+Taking a tuple apart with names is still the way to have all of it at once, and is what a generated program will mostly write:
+`t⟦0⟧` is for where one member is wanted and the others are not.
+
+Compare: Rust's `t.0` and Swift's `t.0`, which spell the index as a field name and so need a rule saying a number may be one;
+C++'s `std::get<0>(t)`, which spells it as a type argument because a function's result type may not depend on an ordinary one;
+Python's `t[0]`, which is this, and which can be an ordinary index only because its tuples are not typed by member.
+
 Compare: C++'s `auto [a, b]` and `std::tie`, which this follows in what it does and not in how it is written -- there is no second
 pair of brackets around the names, the comma being enough to say that several names are being bound.  Python and Go write the same
 thing the same way.  Rust writes `let (a, b)`, keeping the brackets so that a pattern looks like the value it matches, which

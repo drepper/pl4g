@@ -103,6 +103,11 @@ To Do List for the PL4g language
     `T⟦3⟧` and costs one multiplication and no copy.  Writing still wants an index per dimension: what an assignment
     writes is one element, and copying a whole row is not what it means anywhere else.
 
+[ ] assign to one member of a tuple.  Refused (4462), because a tuple is registers and not a place.  What it would mean is binding
+    the name to a tuple made of the other members and the new value, which the language can already be told to do by writing that
+    out; whether `←` should be a second way of saying it is a question about assignment rather than about tuples, and the same
+    question the entry above asks about a row.
+
 [ ] assign a whole row, or a whole array.  `m⟦0⟧ ← r` is refused (4457) and would be a copy of as many elements as the row
     holds.  Nothing in the language copies one aggregate into another yet, and the first thing that does should settle it for
     products and arrays together rather than for arrays alone.

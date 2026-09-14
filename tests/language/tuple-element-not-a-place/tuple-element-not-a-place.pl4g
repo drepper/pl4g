@@ -1,0 +1,11 @@
+※ pl4g-test: compile=error diag=4462
+
+※ A tuple is a value and not a place: its members are registers, not room in
+※ memory.  Assigning to one would mean binding the name to a tuple made of the
+※ others and the new value, which is what writing that out does.
+
+@[startup]
+fn main() → u8:
+    let p: mut 〈u8, u8〉 = 〈1u8, 2u8〉
+    p⟦0⟧ ← 9u8
+    p⟦0⟧

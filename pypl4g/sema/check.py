@@ -2005,18 +2005,6 @@ class Checker:
             builder.binary(BinOp.WRAP_MUL, index,
                            builder.int_const(U64, stride), span), span)
 
-    def _array_of(self, builder: IRBuilder, expr: ast.Expr,
-                  span: Span) -> "tuple[Value, ArrayType] | None":
-        """Lower what is being indexed, and say what array it turned out to be."""
-        base = self._lower_expr(builder, expr, None)
-        ty = self._value_type_of(base)
-        if ty is ERROR:
-            return None
-        if not isinstance(ty, ArrayType):
-            self._diags.emit(D.LANG_ARRAY_NOT_AN_ARRAY, span, found=ty.render())
-            return None
-        return base, ty
-
     def _shape_of(self, builder: IRBuilder, base: Value, ty: ArrayType,
                   span: Span) -> "tuple[Value, list[Value]]":
         """Where the elements of an array are, and how many along each dimension.
@@ -2129,11 +2117,24 @@ class Checker:
 
     def _lower_element(self, builder: IRBuilder, expr: ast.Element,
                        expected: Type | None) -> Value:
-        """Lower `a\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}i\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}`, one element, or `a\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}i\N{HORIZONTAL ELLIPSIS}j\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}`, a run of them."""
-        found = self._array_of(builder, expr.base, expr.base.span)
-        if found is None:
+        """Lower `a\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}i\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}`, one element, or `a\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}i\N{HORIZONTAL ELLIPSIS}j\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}`, a run of them.
+
+        A tuple is looked in the same way, and for the same reason the brackets
+        are the array's: what is being asked for is a place among several, and
+        the language should not have two shapes for one question.  What differs
+        is what the index may be, and that follows from what a tuple is rather
+        than from any choice made here -- see `_lower_tuple_member`.
+        """
+        base = self._lower_expr(builder, expr.base, None)
+        ty = self._value_type_of(base)
+        if ty is ERROR:
             return UndefConst(ERROR)
-        base, ty = found
+        if isinstance(ty, TupleType):
+            return self._lower_tuple_member(builder, expr, base, ty, expected)
+        if not isinstance(ty, ArrayType):
+            self._diags.emit(D.LANG_ARRAY_NOT_AN_ARRAY, expr.base.span,
+                             found=ty.render())
+            return UndefConst(ERROR)
         if any(isinstance(one, ast.Range) for one in expr.indices):
             return self._lower_slice(builder, expr, base, ty, expected)
         start, lengths = self._shape_of(builder, base, ty, expr.span)
@@ -2154,6 +2155,36 @@ class Checker:
         if expected is not None and expected is not ty.element:
             self._report_mismatch(expr.span, ty.element, expected)
         return value
+
+    def _lower_tuple_member(self, builder: IRBuilder, expr: ast.Element,
+                            base: Value, ty: TupleType,
+                            expected: Type | None) -> Value:
+        """Lower `t\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}i\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}`: one member of a tuple, named by where it stands.
+
+        **The index is one number written down** (4460).  That is not a
+        restriction chosen here but what a tuple is: its members are of whatever
+        types they were written with, so which one is wanted decides what type
+        the whole expression has, and a type this language settles while the
+        program runs is a type it does not have.  There is one index for the
+        same reason an array of one dimension takes one: a tuple is a run of
+        members and not a shape.
+
+        Nothing is read from memory.  A tuple is its members in registers, so
+        naming one is saying which register to go on using.
+        """
+        if len(expr.indices) != 1 or not isinstance(expr.indices[0], ast.IntLit) \
+                or expr.indices[0].type_name is not None:
+            self._diags.emit(D.LANG_TUPLE_INDEX_NOT_WRITTEN_DOWN, expr.span)
+            return UndefConst(ERROR)
+        at = expr.indices[0].value
+        if not 0 <= at < len(ty.members):
+            self._diags.emit(D.LANG_TUPLE_INDEX_OUTSIDE, expr.indices[0].span,
+                             index=str(at), count=len(ty.members))
+            return UndefConst(ERROR)
+        member = ty.members[at]
+        if expected is not None and expected is not member:
+            self._report_mismatch(expr.span, member, expected)
+        return builder.extract(base, at, member, expr.span)
 
     def _lower_slice(self, builder: IRBuilder, expr: ast.Element, base: Value,
                      ty: ArrayType, expected: Type | None) -> Value:
@@ -2209,10 +2240,21 @@ class Checker:
     def _lower_element_assign(self, builder: IRBuilder,
                               stmt: ast.ElementAssign) -> None:
         """Lower `a\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}i\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET} \N{LEFTWARDS ARROW} v`, which puts a value at one place."""
-        found = self._array_of(builder, stmt.base, stmt.base.span)
-        if found is None:
+        base = self._lower_expr(builder, stmt.base, None)
+        ty = self._value_type_of(base)
+        if ty is ERROR:
             return
-        base, ty = found
+        if isinstance(ty, TupleType):
+            # A tuple is a value and not a place: its members are registers, not
+            # room in memory.  Assigning to one would mean binding the name to a
+            # tuple made of the others and the new value, which is what writing
+            # that out does.
+            self._diags.emit(D.LANG_TUPLE_ELEMENT_NOT_A_PLACE, stmt.span)
+            return
+        if not isinstance(ty, ArrayType):
+            self._diags.emit(D.LANG_ARRAY_NOT_AN_ARRAY, stmt.base.span,
+                             found=ty.render())
+            return
         if len(stmt.indices) != ty.rank:
             # Every index, because what is assigned is one element.  Assigning a
             # whole row would be copying one array into another, which nothing

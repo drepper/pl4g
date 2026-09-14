@@ -100,7 +100,8 @@ GROUPS: tuple[Group, ...] = (
            "result-as-an-argument": "results passed and answered with, both kinds",
            "match-a-result": "three matches, one of them carrying a name past",
            "if-statement": "a chain of conditions, and one with no else",
-           "tuple-values": "a tuple answered with, and two taken apart"}),
+           "tuple-values": "a tuple answered with, and two taken apart",
+           "tuple-element": "members of a tuple named by where they stand"}),
     Group("Types",
           "Definitions the program writes.  These move when the parser, the "
           "name resolution or the layout does.",

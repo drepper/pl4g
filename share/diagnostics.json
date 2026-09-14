@@ -3276,7 +3276,7 @@
           "description": "the type of what was written"
         }
       ],
-      "cause": "Square brackets after a value ask for one of its elements, which only an array has.  A set or a dictionary is looked in with `\u2e28` and `\u2e29` instead, because it is found by its key and an array by its place.",
+      "cause": "Square brackets after a value ask for one of its elements, which an array and a tuple have and nothing else does.  A set or a dictionary is looked in with `\u2e28` and `\u2e29` instead, because it is found by its key and the other two by their place.",
       "spec": {
         "document": "spec/spec.md",
         "section": "The Language / Types / Arrays",
@@ -3498,6 +3498,65 @@
         "document": "spec/spec.md",
         "section": "The Language / Types / Arrays",
         "requirement": "Only an array of one dimension is sliced."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4460,
+      "name": "LANG_TUPLE_INDEX_NOT_WRITTEN_DOWN",
+      "severity": "error",
+      "message": "which member of a tuple is wanted is one number written down",
+      "args": [],
+      "cause": "The members of a tuple are of whatever types they were written with, so which one is wanted decides what type the whole expression has -- and that has to be known while compiling.  An index the program works out would leave the type of the expression to be decided while it runs, which no type in this language is.  There is one index for the same reason: a tuple is a run of members and not a shape.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Tuples",
+        "requirement": "A member of a tuple is named by one integer literal."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4461,
+      "name": "LANG_TUPLE_INDEX_OUTSIDE",
+      "severity": "error",
+      "message": "'{index}' is outside a tuple of {count}",
+      "args": [
+        {
+          "name": "index",
+          "type": "string",
+          "description": "the index written"
+        },
+        {
+          "name": "count",
+          "type": "number",
+          "description": "how many members the tuple has"
+        }
+      ],
+      "cause": "How many members a tuple has is part of its type and the index is written down, so whether it names one of them is known while compiling.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Tuples",
+        "requirement": "The index of a member is checked against the tuple's type."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4462,
+      "name": "LANG_TUPLE_ELEMENT_NOT_A_PLACE",
+      "severity": "error",
+      "message": "a member of a tuple is read, not assigned to",
+      "args": [],
+      "cause": "A tuple is a value and not a place: its members are registers, not room in memory that something else could be pointing at.  Assigning to one would mean binding the name to a tuple made of the others and the new value, which is what writing that out does; until the language says an assignment may mean that, it says nothing about it.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Tuples",
+        "requirement": "A member of a tuple is not assigned to."
       },
       "since": "0.1",
       "default_enabled": true,

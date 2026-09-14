@@ -1,0 +1,26 @@
+※ pl4g-test: compile=ok run=native,qemu exit=42 diag=none
+
+※ A member of a tuple is named by where it stands, with the same brackets an
+※ array is looked in with: what is being asked for is a place among several, and
+※ the language does not have two shapes for one question.
+※
+※ The index is one number written down.  That is not a rule chosen for tuples
+※ but what a tuple is: its members are of whatever types they were written with,
+※ so which one is wanted decides what type the whole expression has -- and a
+※ type this language settles while the program runs is a type it does not have.
+※
+※ Nothing is read from memory.  A tuple is its members in registers, so naming
+※ one says which register to go on using.
+
+fn both(x: u8, y: u16) → 〈u8, u16〉:
+    〈x, y〉
+
+@[startup]
+fn main() → u8:
+    let pair: 〈u8, u16〉 = both(7u8, 300u16)
+    let low: u8 = pair⟦0⟧
+    ※ each index gives a value of its own member's type
+    if pair⟦1⟧ = 300u16:
+        low + 35u8
+    else:
+        0u8
