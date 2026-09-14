@@ -1064,9 +1064,9 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
             """A register of the full width, for a value with no name of its own."""
             return registers.new_virtual(GPR, 64)
 
-        def run_scratch(self) -> VirtReg:
+        def run_scratch(self, bits: int) -> VirtReg:
             """A register holding a whole run, for one with no name of its own."""
-            return registers.new_virtual(VEC, _FLOAT_REGISTER_BITS)
+            return registers.new_virtual(VEC, bits)
 
     operands = _Operands()
 
@@ -1201,7 +1201,7 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                                 symbol_of(inst.operands[0]), inst.span)
                 case LoadInst() if isinstance(inst.ty, VecType):
                     address = inst.operands[1]
-                    bits = _run_bits(inst.ty)
+                    bits = _run_covers(inst.ty)
                     destination = _new_value(inst.ty, registers)
                     held[id(inst)] = destination
                     asm.run_move(destination,
@@ -1210,11 +1210,11 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                 case StoreInst() if isinstance(inst.operands[2].ty, VecType):
                     written = inst.operands[2]
                     assert isinstance(written.ty, VecType)
-                    bits = _run_bits(written.ty)
-                    asm.run_store(place_of(inst.operands[1], span, size_bits=bits),
+                    asm.run_store(place_of(inst.operands[1], span,
+                                           size_bits=_run_covers(written.ty)),
                                   MCReg(operands.register_of(written, inst.span),
-                                        bits=128),
-                                  bits, inst.span)
+                                        bits=_run_bits(written.ty)),
+                                  _run_covers(written.ty), inst.span)
                 case SplatInst():
                     assert isinstance(inst.ty, VecType)
                     destination = _new_value(inst.ty, registers)
@@ -1273,8 +1273,8 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                     asm.run_ones(ones, inst.span)
                     asm.run_op(ops.XOR, destination,
                                operands.value(inst.operands[0], inst.span),
-                               MCReg(ones, bits=128), _width_of(inst.ty.element),
-                               inst.span)
+                               MCReg(ones, bits=_run_bits(inst.ty)),
+                               _width_of(inst.ty.element), inst.span)
                 case LoadInst() if isinstance(inst.ty, ResultType):
                     address = inst.operands[1]
                     answer = inst.ty.ok
@@ -1895,7 +1895,13 @@ def _new_value(ty: Type, registers: RegisterInfo,
         # of one yet, so this is where saying so belongs.
         raise UnsupportedOperation("".join((
             "a value of type '", ty.render(), "'")), None)
-    if isinstance(ty, (FloatType, VecType)):
+    if isinstance(ty, VecType):
+        # As wide as the run it holds, brought up to the narrowest of these
+        # registers there is: a run shorter than one is held in a whole one with
+        # what is beyond it clear, and a longer one wants a wider register where
+        # the machine has one.
+        return registers.new_virtual(VEC, _run_bits(ty), hint=hint)
+    if isinstance(ty, FloatType):
         # A floating-point value and a whole run of elements both belong to the
         # other kind of register, and the allocator asks a value which kind it
         # wants rather than assuming.  A run takes the whole register whatever
@@ -1930,9 +1936,20 @@ def _returned_value(func: Function) -> object:
                 return inst.operands[0]
     return None
 
-def _run_bits(ty: VecType) -> int:
+def _run_covers(ty: VecType) -> int:
     """How many bits of memory a whole run of elements occupies."""
     return ty.lanes * stride_of(ty.element, _LAYOUT) * 8
+
+
+def _run_bits(ty: VecType) -> int:
+    """How wide a register holding this run is.
+
+    The bytes it covers, brought up to the narrowest of these registers there
+    is: a run shorter than one is still held in a whole one, with what is beyond
+    it clear.
+    """
+    return max(_FLOAT_REGISTER_BITS,
+               ty.lanes * stride_of(ty.element, _LAYOUT) * 8)
 
 
 def _width_of(ty: Type) -> int:

@@ -203,6 +203,59 @@ def _emit_rel(out: bytearray, fixups: list[MCFixup], operand: MCOperand, bits: i
     out += bytes(bits // 8)
 
 
+#: What the `pp` field of a VEX prefix says, by the prefix byte it stands for.
+#: A row that names no mandatory prefix has none, which is zero.
+_VEX_PP: Final[dict[int | None, int]] = {None: 0, 0x66: 1, 0xF3: 2, 0xF2: 3}
+
+
+def _emit_vex(out: bytearray, desc: X86InstDesc, operands: Sequence[MCOperand],
+              span: Span | None) -> None:
+    """Emit the VEX prefix for one instruction.
+
+    Everything in it is already in the row: which opcode map the opcode is in,
+    which prefix byte selects the instruction, and whether the operand size bit
+    is set.  What it adds to a REX prefix is two things -- a third register
+    operand named in `vvvv`, and the width of the vector registers in `L` -- so
+    a three-operand form needs no move before it and the same row serves the
+    sixteen-byte and the thirty-two-byte width by the one field.
+
+    Every one of R, X, B and `vvvv` is stored turned round, which is what makes
+    a prefix naming none of the extended registers come out as the two-byte
+    form rather than as a run of set bits.
+    """
+    if desc.vex is None:
+        raise EncodingError("a VEX row that says nothing about its prefix", span)
+    w = 1 if desc.opsize is OpSize.REXW else 0
+    r = x = b = 0
+    if desc.reg_op is not None:
+        r = _reg_of(operands[desc.reg_op], span).enc >> 3
+    if desc.rm_op is not None:
+        rm = operands[desc.rm_op]
+        if isinstance(rm, MCReg):
+            b = _physical(rm.reg, span).enc >> 3
+        elif isinstance(rm, MCMem):
+            if rm.base is not None:
+                b = _physical(rm.base, span).enc >> 3
+            if rm.index is not None:
+                x = _physical(rm.index, span).enc >> 3
+    named = 0
+    if desc.vex.vvvv_op is not None:
+        named = _reg_of(operands[desc.vex.vvvv_op], span).enc
+    length = 1 if desc.vex.length == 256 else 0
+    pp = _VEX_PP.get(desc.mandatory_prefix)
+    if pp is None:
+        raise EncodingError("a VEX row whose mandatory prefix has no pp field", span)
+    last = ((~named & 0xF) << 3) | (length << 2) | pp
+    if x == 0 and b == 0 and w == 0 and desc.map is OpMap.M0F:
+        # The two-byte form, which says only what it has to.
+        out.append(0xC5)
+        out.append(((~r & 1) << 7) | last)
+        return
+    out.append(0xC4)
+    out.append(((~r & 1) << 7) | ((~x & 1) << 6) | ((~b & 1) << 5) | desc.map.value)
+    out.append((w << 7) | last)
+
+
 def encode(inst: MCInst) -> tuple[bytes, list[MCFixup]]:
     """Encode one instruction into bytes and the fixups it leaves behind."""
     desc = inst.desc
@@ -213,15 +266,19 @@ def encode(inst: MCInst) -> tuple[bytes, list[MCFixup]]:
     fixups: list[MCFixup] = []
 
     # -- phase 1: the legacy prefixes ------------------------------------------
+    # A VEX prefix carries both of these in fields of its own, so they are not
+    # emitted beside it: the mandatory prefix becomes `pp` and the operand size
+    # becomes `W`.
     mem = _mem_operand(desc, operands)
     if mem is not None and mem.seg is not None:
         out.append(SEGMENT_PREFIX[mem.seg.name])
     if "lock" in inst.prefixes:
         out.append(0xF0)
-    if desc.mandatory_prefix is not None:
-        out.append(desc.mandatory_prefix)
-    elif desc.opsize is OpSize.P66:
-        out.append(0x66)
+    if desc.enc is EncKind.LEGACY:
+        if desc.mandatory_prefix is not None:
+            out.append(desc.mandatory_prefix)
+        elif desc.opsize is OpSize.P66:
+            out.append(0x66)
 
     # -- phase 2: the prefix carrying the register extensions ------------------
     if desc.enc is EncKind.LEGACY:
@@ -229,12 +286,17 @@ def encode(inst: MCInst) -> tuple[bytes, list[MCFixup]]:
         if needed:
             _check_high_byte(operands, span)
             out.append(0x40 | (w << 3) | (r << 2) | (x << 1) | b)
+    elif desc.enc is EncKind.VEX:
+        _emit_vex(out, desc, operands, span)
     else:
         raise EncodingError("".join((
             "the ", desc.enc.value, " encodings are not emitted yet")), span)
 
     # -- phase 3: the opcode map escape and the opcode -------------------------
-    out += _MAP_BYTES[desc.map]
+    # A VEX prefix says which map the opcode is in, so the escape bytes that
+    # would have said it are not emitted either.
+    if desc.enc is EncKind.LEGACY:
+        out += _MAP_BYTES[desc.map]
     opcode = desc.opcode
     if desc.plus_reg:
         if desc.reg_op is None:

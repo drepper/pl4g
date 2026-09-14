@@ -164,3 +164,38 @@ def test_a_wider_element_holds_fewer_lanes() -> None:
     # registers: neither holds anything.
     assert able.lanes_at_once(U8, LAYOUT, 0) == 0
     assert Vectors().lanes_at_once(U8, LAYOUT, 64) == 0
+
+
+def test_the_level_says_how_wide_a_run_register_is() -> None:
+    """Which x86-64 level a program is built for is what says how many elements
+    go in one register, and nothing else about a run depends on it."""
+    from pypl4g.target.x86_64.target import X86_64Target
+
+    target = X86_64Target()
+    widths = {}
+    for level in ("v1", "v2", "v3", "v4"):
+        target.use_mclevel(level)
+        widths[level] = target.vectors.bits
+    assert widths == {"v1": 128, "v2": 128, "v3": 256, "v4": 256}
+    # The operations are the same at every level: the wider forms are the same
+    # operations over more lanes.
+    target.use_mclevel("v1")
+    narrow = target.vectors
+    target.use_mclevel("v4")
+    assert target.vectors.binary == narrow.binary
+    assert target.vectors.unary == narrow.unary
+
+
+def test_a_wider_register_holds_a_longer_run_in_one_piece() -> None:
+    """Thirty-two bytes is two pieces at the older levels and one at the newer."""
+    module = read_module(RUNS.replace("\N{MULTIPLICATION SIGN}4",
+                                      "\N{MULTIPLICATION SIGN}32"))
+    settle(module, Vectors(bits=128, binary={BinOp.ADD: 64}), LAYOUT)
+    verify(module)
+    assert len(_additions(_instructions(module))) == 2
+
+    module = read_module(RUNS.replace("\N{MULTIPLICATION SIGN}4",
+                                      "\N{MULTIPLICATION SIGN}32"))
+    settle(module, Vectors(bits=256, binary={BinOp.ADD: 64}), LAYOUT)
+    verify(module)
+    assert len(_additions(_instructions(module))) == 1

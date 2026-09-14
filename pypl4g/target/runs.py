@@ -63,8 +63,8 @@ class Scratch(Protocol):
         """An ordinary register, for the gathered bits."""
         ...
 
-    def run_scratch(self) -> Reg:
-        """A register holding a whole run, for a value worked out on the way."""
+    def run_scratch(self, bits: int) -> Reg:
+        """A register of *bits* holding a run, for a value worked out on the way."""
         ...
 
 
@@ -80,9 +80,10 @@ def lower_trapping(asm: Assembler, op: BinOp, ty: VecType, left: MCOperand,
     lane = ty.element
     if not isinstance(lane, IntType):
         raise Unsupported("arithmetic over a run of something that is not an integer")
+    held = _run_bits(ty, layout)
     asm.run_op(_PLAIN[op], destination, left, right, lane.bits, span)
-    answer = MCReg(destination, bits=asm.run_bits)
-    bad = _went_past(asm, op, lane, left, right, answer, scratch, span)
+    answer = MCReg(destination, bits=held)
+    bad = _went_past(asm, op, lane, left, right, answer, held, scratch, span)
     # Only the lanes the run covers are asked about: what is beyond it is not
     # the program's, and may well have gone past where none of the program's
     # elements did.
@@ -99,49 +100,60 @@ def lower_trapping(asm: Assembler, op: BinOp, ty: VecType, left: MCOperand,
 
 
 def _went_past(asm: Assembler, op: BinOp, lane: IntType, left: MCOperand,
-               right: MCOperand, answer: MCOperand, scratch: Scratch,
-               span: Span) -> MCReg:
+               right: MCOperand, answer: MCOperand, held: int,
+               scratch: Scratch, span: Span) -> MCReg:
     """A run whose every lane's top bit says whether that lane went past."""
     if lane.signed:
         first, second = ((left, answer), (right, answer)) \
             if _PLAIN[op] is ops.PLUS else ((left, right), (left, answer))
-        return _both(asm, ops.XOR, ops.AND, lane, first, second, scratch, span)
-    ones = scratch.run_scratch()
+        return _both(asm, ops.XOR, ops.AND, lane, first, second, held, scratch,
+                     span)
+    ones = scratch.run_scratch(held)
     asm.run_ones(ones, span)
-    whole = MCReg(ones, bits=asm.run_bits)
+    whole = MCReg(ones, bits=held)
     if _PLAIN[op] is ops.PLUS:
         # The carry out of the top bit: both operands had it, or one of them had
         # it and the answer did not.
-        not_answer = _op(asm, ops.XOR, lane, answer, whole, scratch, span)
-        carried = _op(asm, ops.AND, lane, left, right, scratch, span)
-        either = _op(asm, ops.OR, lane, left, right, scratch, span)
-        lost = _op(asm, ops.AND, lane, either, not_answer, scratch, span)
-        return _op(asm, ops.OR, lane, carried, lost, scratch, span)
+        not_answer = _op(asm, ops.XOR, lane, answer, whole, held, scratch, span)
+        carried = _op(asm, ops.AND, lane, left, right, held, scratch, span)
+        either = _op(asm, ops.OR, lane, left, right, held, scratch, span)
+        lost = _op(asm, ops.AND, lane, either, not_answer, held, scratch, span)
+        return _op(asm, ops.OR, lane, carried, lost, held, scratch, span)
     # The borrow into the top bit: the left did not have it and the right did,
     # or the two agreed about it and the answer has it.
-    not_left = _op(asm, ops.XOR, lane, left, whole, scratch, span)
-    taken = _op(asm, ops.AND, lane, not_left, right, scratch, span)
-    differ = _op(asm, ops.XOR, lane, left, right, scratch, span)
-    alike = _op(asm, ops.XOR, lane, differ, whole, scratch, span)
-    borrowed = _op(asm, ops.AND, lane, alike, answer, scratch, span)
-    return _op(asm, ops.OR, lane, taken, borrowed, scratch, span)
+    not_left = _op(asm, ops.XOR, lane, left, whole, held, scratch, span)
+    taken = _op(asm, ops.AND, lane, not_left, right, held, scratch, span)
+    differ = _op(asm, ops.XOR, lane, left, right, held, scratch, span)
+    alike = _op(asm, ops.XOR, lane, differ, whole, held, scratch, span)
+    borrowed = _op(asm, ops.AND, lane, alike, answer, held, scratch, span)
+    return _op(asm, ops.OR, lane, taken, borrowed, held, scratch, span)
 
 
 def _both(asm: Assembler, inner: ops.Op, outer: ops.Op, lane: IntType,
           first: tuple[MCOperand, MCOperand], second: tuple[MCOperand, MCOperand],
-          scratch: Scratch, span: Span) -> MCReg:
+          held: int, scratch: Scratch, span: Span) -> MCReg:
     """*outer* of *inner* applied to each pair, which is both signed questions."""
-    one = _op(asm, inner, lane, first[0], first[1], scratch, span)
-    other = _op(asm, inner, lane, second[0], second[1], scratch, span)
-    return _op(asm, outer, lane, one, other, scratch, span)
+    one = _op(asm, inner, lane, first[0], first[1], held, scratch, span)
+    other = _op(asm, inner, lane, second[0], second[1], held, scratch, span)
+    return _op(asm, outer, lane, one, other, held, scratch, span)
 
 
 def _op(asm: Assembler, what: ops.Op, lane: IntType, left: MCOperand,
-        right: MCOperand, scratch: Scratch, span: Span) -> MCReg:
+        right: MCOperand, held: int, scratch: Scratch, span: Span) -> MCReg:
     """One operation over a whole run, into a register of its own."""
-    into = scratch.run_scratch()
+    into = scratch.run_scratch(held)
     asm.run_op(what, into, left, right, lane.bits, span)
-    return MCReg(into, bits=asm.run_bits)
+    return MCReg(into, bits=held)
+
+
+def _run_bits(ty: VecType, layout: DataLayout) -> int:
+    """How wide a register holding this run is.
+
+    The bytes it covers, brought up to the narrowest of these registers there
+    is: a run shorter than one is still held in a whole one, with what is beyond
+    it clear.
+    """
+    return max(128, ty.lanes * stride_of(ty.element, layout) * 8)
 
 
 def top_bytes(stride: int, lanes: int, bits: int) -> int:

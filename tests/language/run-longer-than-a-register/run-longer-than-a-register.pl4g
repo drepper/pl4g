@@ -1,0 +1,24 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ A run longer than one register, which is the case the piece-at-a-time part of
+※ the lowering is for.  Thirty-two bytes is one register on a machine built for
+※ the newer levels and two on one built for the older, and seventeen is one and
+※ a byte on the first and one and a byte on the second -- so between them these
+※ two cover a whole register, more than one, and a tail of odd length.
+
+let wide: u8⟦32⟧ = ⟦1u8, 2u8, 3u8, 4u8, 5u8, 6u8, 7u8, 1u8, 2u8, 3u8, 4u8, 5u8, 6u8, 7u8, 1u8, 2u8, 3u8, 4u8, 5u8, 6u8, 7u8, 1u8, 2u8, 3u8, 4u8, 5u8, 6u8, 7u8, 1u8, 2u8, 3u8, 4u8⟧
+let odd: u8⟦17⟧ = ⟦1u8, 2u8, 3u8, 4u8, 5u8, 1u8, 2u8, 3u8, 4u8, 5u8, 1u8, 2u8, 3u8, 4u8, 5u8, 1u8, 2u8⟧
+
+@[startup]
+fn main() → u8:
+    let up: u8⟦32⟧ = wide + 100u8
+    let masked: u8⟦17⟧ = odd & 3u8
+    let down: u8⟦17⟧ = odd - 1u8
+    if up⟦0⟧ ≠ 101u8 ∨ up⟦31⟧ ≠ 104u8:
+        1u8
+    elif masked⟦0⟧ ≠ 1u8 ∨ masked⟦16⟧ ≠ 2u8:
+        2u8
+    elif down⟦0⟧ ≠ 0u8 ∨ down⟦16⟧ ≠ 1u8:
+        3u8
+    else:
+        0u8

@@ -11,7 +11,7 @@ from __future__ import annotations
 from typing import Final
 
 from ...mc.desc import InstFlags, OperandKind, OperandRole, OperandSpec
-from .desc import ModRMUse, OpMap, OpSize, X86InstDesc
+from .desc import EncKind, ModRMUse, OpMap, OpSize, VexInfo, X86InstDesc
 from .regs import (CALLER_SAVED, EFLAGS, GPR, R11, RAX, RBX, RCX, RDX,
                    VEC)
 
@@ -57,6 +57,18 @@ def _xm(bits: int = 64) -> OperandSpec:
                        mem_bits=bits)
 
 
+def _y() -> OperandSpec:
+    """One of the vector registers, named at the wider width the newer levels
+    give it."""
+    return OperandSpec(OperandKind.REG, rclass=VEC, bits=256)
+
+
+def _ym() -> OperandSpec:
+    """The same, or thirty-two bytes of memory."""
+    return OperandSpec(OperandKind.REG | OperandKind.MEM, rclass=VEC, bits=256,
+                       mem_bits=256)
+
+
 def _mem(bits: int | None = None) -> OperandSpec:
     """A memory operand, of any width or of the one named."""
     return OperandSpec(OperandKind.MEM, bits=bits)
@@ -68,6 +80,11 @@ _ACCUMULATE: Final[tuple[OperandRole, ...]] = (OperandRole.DEF_USE, OperandRole.
 
 #: A comparison writes only the flags, which it declares separately.
 _READS_BOTH: Final[tuple[OperandRole, ...]] = (OperandRole.USE, OperandRole.USE)
+
+#: The newer forms name their destination separately from both of their
+#: sources, so the value the destination held before is not wanted.
+_THREE_OPERAND: Final[tuple[OperandRole, ...]] = (
+    OperandRole.DEF, OperandRole.USE, OperandRole.USE)
 
 
 X86_INSTRS: Final[tuple[X86InstDesc, ...]] = (
@@ -700,6 +717,160 @@ X86_INSTRS: Final[tuple[X86InstDesc, ...]] = (
                 mandatory_prefix=0x66, modrm=ModRMUse.REG_RM,
                 reg_op=0, rm_op=1, imm_op=2, imm_bits=8, est_size=5,
                 roles=(OperandRole.DEF, OperandRole.USE, OperandRole.USE)),
+    # -- the same, thirty-two bytes at a time -----------------------------------
+    # These are AVX2, which the architecture's third level includes.  They are
+    # the same operations over twice as many lanes, with two differences that
+    # come from the prefix rather than from the operation: the destination is
+    # named separately from both sources, so nothing has to be moved into place
+    # first, and the width is a field rather than a different opcode.
+    #
+    # The mnemonics are the ones the narrow forms have.  Which of the two a row
+    # is, is said by how wide its registers are, and that is what the table
+    # matches on -- so the lowering asks for "and" and gets whichever it has
+    # registers for.
+    #
+    # vmovdqu ymm, ymm/m256              VEX.256.F3.0F 6F /r
+    X86InstDesc("movdqu", (_y(), _ym()), opcode=0x6F, map=OpMap.M0F,
+                enc=EncKind.VEX, mandatory_prefix=0xF3, modrm=ModRMUse.REG_RM,
+                reg_op=0, rm_op=1, vex=VexInfo(length=256), est_size=5,
+                roles=(OperandRole.DEF, OperandRole.USE)),
+    # vmovdqu m256, ymm                  VEX.256.F3.0F 7F /r
+    X86InstDesc("movdqu", (_mem(256), _y()), opcode=0x7F, map=OpMap.M0F,
+                enc=EncKind.VEX, mandatory_prefix=0xF3, modrm=ModRMUse.REG_RM,
+                reg_op=1, rm_op=0, vex=VexInfo(length=256), est_size=5,
+                roles=_READS_BOTH),
+    # vpmovmskb r32, ymm                 VEX.256.66.0F D7 /r
+    X86InstDesc("pmovmskb", (_r(32), _y()), opcode=0xD7, map=OpMap.M0F,
+                enc=EncKind.VEX, mandatory_prefix=0x66, modrm=ModRMUse.REG_RM,
+                reg_op=0, rm_op=1, vex=VexInfo(length=256), est_size=5,
+                roles=(OperandRole.DEF, OperandRole.USE)),
+    # The bitwise three and the comparison that sets every bit.
+    X86InstDesc("pand", (_y(), _y(), _ym()), opcode=0xDB, map=OpMap.M0F,
+                enc=EncKind.VEX, mandatory_prefix=0x66,
+                modrm=ModRMUse.REG_RM, reg_op=0, rm_op=2,
+                vex=VexInfo(length=256, vvvv_op=1), est_size=5,
+                roles=_THREE_OPERAND),
+    X86InstDesc("por", (_y(), _y(), _ym()), opcode=0xEB, map=OpMap.M0F,
+                enc=EncKind.VEX, mandatory_prefix=0x66,
+                modrm=ModRMUse.REG_RM, reg_op=0, rm_op=2,
+                vex=VexInfo(length=256, vvvv_op=1), est_size=5,
+                roles=_THREE_OPERAND),
+    X86InstDesc("pxor", (_y(), _y(), _ym()), opcode=0xEF, map=OpMap.M0F,
+                enc=EncKind.VEX, mandatory_prefix=0x66,
+                modrm=ModRMUse.REG_RM, reg_op=0, rm_op=2,
+                vex=VexInfo(length=256, vvvv_op=1), est_size=5,
+                roles=_THREE_OPERAND),
+    X86InstDesc("pcmpeqd", (_y(), _y(), _ym()), opcode=0x76, map=OpMap.M0F,
+                enc=EncKind.VEX, mandatory_prefix=0x66,
+                modrm=ModRMUse.REG_RM, reg_op=0, rm_op=2,
+                vex=VexInfo(length=256, vvvv_op=1), est_size=5,
+                roles=_THREE_OPERAND),
+    # The arithmetic, one per lane width.
+    X86InstDesc("paddb", (_y(), _y(), _ym()), opcode=0xFC, map=OpMap.M0F,
+                enc=EncKind.VEX, mandatory_prefix=0x66,
+                modrm=ModRMUse.REG_RM, reg_op=0, rm_op=2,
+                vex=VexInfo(length=256, vvvv_op=1), est_size=5,
+                roles=_THREE_OPERAND),
+    X86InstDesc("paddw", (_y(), _y(), _ym()), opcode=0xFD, map=OpMap.M0F,
+                enc=EncKind.VEX, mandatory_prefix=0x66,
+                modrm=ModRMUse.REG_RM, reg_op=0, rm_op=2,
+                vex=VexInfo(length=256, vvvv_op=1), est_size=5,
+                roles=_THREE_OPERAND),
+    X86InstDesc("paddd", (_y(), _y(), _ym()), opcode=0xFE, map=OpMap.M0F,
+                enc=EncKind.VEX, mandatory_prefix=0x66,
+                modrm=ModRMUse.REG_RM, reg_op=0, rm_op=2,
+                vex=VexInfo(length=256, vvvv_op=1), est_size=5,
+                roles=_THREE_OPERAND),
+    X86InstDesc("paddq", (_y(), _y(), _ym()), opcode=0xD4, map=OpMap.M0F,
+                enc=EncKind.VEX, mandatory_prefix=0x66,
+                modrm=ModRMUse.REG_RM, reg_op=0, rm_op=2,
+                vex=VexInfo(length=256, vvvv_op=1), est_size=5,
+                roles=_THREE_OPERAND),
+    X86InstDesc("psubb", (_y(), _y(), _ym()), opcode=0xF8, map=OpMap.M0F,
+                enc=EncKind.VEX, mandatory_prefix=0x66,
+                modrm=ModRMUse.REG_RM, reg_op=0, rm_op=2,
+                vex=VexInfo(length=256, vvvv_op=1), est_size=5,
+                roles=_THREE_OPERAND),
+    X86InstDesc("psubw", (_y(), _y(), _ym()), opcode=0xF9, map=OpMap.M0F,
+                enc=EncKind.VEX, mandatory_prefix=0x66,
+                modrm=ModRMUse.REG_RM, reg_op=0, rm_op=2,
+                vex=VexInfo(length=256, vvvv_op=1), est_size=5,
+                roles=_THREE_OPERAND),
+    X86InstDesc("psubd", (_y(), _y(), _ym()), opcode=0xFA, map=OpMap.M0F,
+                enc=EncKind.VEX, mandatory_prefix=0x66,
+                modrm=ModRMUse.REG_RM, reg_op=0, rm_op=2,
+                vex=VexInfo(length=256, vvvv_op=1), est_size=5,
+                roles=_THREE_OPERAND),
+    X86InstDesc("psubq", (_y(), _y(), _ym()), opcode=0xFB, map=OpMap.M0F,
+                enc=EncKind.VEX, mandatory_prefix=0x66,
+                modrm=ModRMUse.REG_RM, reg_op=0, rm_op=2,
+                vex=VexInfo(length=256, vvvv_op=1), est_size=5,
+                roles=_THREE_OPERAND),
+    # And the saturating forms the two narrow widths have.
+    X86InstDesc("paddusb", (_y(), _y(), _ym()), opcode=0xDC, map=OpMap.M0F,
+                enc=EncKind.VEX, mandatory_prefix=0x66,
+                modrm=ModRMUse.REG_RM, reg_op=0, rm_op=2,
+                vex=VexInfo(length=256, vvvv_op=1), est_size=5,
+                roles=_THREE_OPERAND),
+    X86InstDesc("paddusw", (_y(), _y(), _ym()), opcode=0xDD, map=OpMap.M0F,
+                enc=EncKind.VEX, mandatory_prefix=0x66,
+                modrm=ModRMUse.REG_RM, reg_op=0, rm_op=2,
+                vex=VexInfo(length=256, vvvv_op=1), est_size=5,
+                roles=_THREE_OPERAND),
+    X86InstDesc("psubusb", (_y(), _y(), _ym()), opcode=0xD8, map=OpMap.M0F,
+                enc=EncKind.VEX, mandatory_prefix=0x66,
+                modrm=ModRMUse.REG_RM, reg_op=0, rm_op=2,
+                vex=VexInfo(length=256, vvvv_op=1), est_size=5,
+                roles=_THREE_OPERAND),
+    X86InstDesc("psubusw", (_y(), _y(), _ym()), opcode=0xD9, map=OpMap.M0F,
+                enc=EncKind.VEX, mandatory_prefix=0x66,
+                modrm=ModRMUse.REG_RM, reg_op=0, rm_op=2,
+                vex=VexInfo(length=256, vvvv_op=1), est_size=5,
+                roles=_THREE_OPERAND),
+    X86InstDesc("paddsb", (_y(), _y(), _ym()), opcode=0xEC, map=OpMap.M0F,
+                enc=EncKind.VEX, mandatory_prefix=0x66,
+                modrm=ModRMUse.REG_RM, reg_op=0, rm_op=2,
+                vex=VexInfo(length=256, vvvv_op=1), est_size=5,
+                roles=_THREE_OPERAND),
+    X86InstDesc("paddsw", (_y(), _y(), _ym()), opcode=0xED, map=OpMap.M0F,
+                enc=EncKind.VEX, mandatory_prefix=0x66,
+                modrm=ModRMUse.REG_RM, reg_op=0, rm_op=2,
+                vex=VexInfo(length=256, vvvv_op=1), est_size=5,
+                roles=_THREE_OPERAND),
+    X86InstDesc("psubsb", (_y(), _y(), _ym()), opcode=0xE8, map=OpMap.M0F,
+                enc=EncKind.VEX, mandatory_prefix=0x66,
+                modrm=ModRMUse.REG_RM, reg_op=0, rm_op=2,
+                vex=VexInfo(length=256, vvvv_op=1), est_size=5,
+                roles=_THREE_OPERAND),
+    X86InstDesc("psubsw", (_y(), _y(), _ym()), opcode=0xE9, map=OpMap.M0F,
+                enc=EncKind.VEX, mandatory_prefix=0x66,
+                modrm=ModRMUse.REG_RM, reg_op=0, rm_op=2,
+                vex=VexInfo(length=256, vvvv_op=1), est_size=5,
+                roles=_THREE_OPERAND),
+    # vpbroadcastb/w/d/q ymm, xmm        VEX.256.66.0F38.W0 78/79/58/59 /r
+    # One value in every lane, in one instruction: the value goes into the low
+    # lane of a narrow register first, which is the only way to get an ordinary
+    # register's value into one of these at all.
+    X86InstDesc("pbroadcastb", (_y(), _x()), opcode=0x78, map=OpMap.M0F38,
+                enc=EncKind.VEX, mandatory_prefix=0x66,
+                modrm=ModRMUse.REG_RM, reg_op=0, rm_op=1,
+                vex=VexInfo(length=256), est_size=6,
+                roles=(OperandRole.DEF, OperandRole.USE)),
+    X86InstDesc("pbroadcastw", (_y(), _x()), opcode=0x79, map=OpMap.M0F38,
+                enc=EncKind.VEX, mandatory_prefix=0x66,
+                modrm=ModRMUse.REG_RM, reg_op=0, rm_op=1,
+                vex=VexInfo(length=256), est_size=6,
+                roles=(OperandRole.DEF, OperandRole.USE)),
+    X86InstDesc("pbroadcastd", (_y(), _x()), opcode=0x58, map=OpMap.M0F38,
+                enc=EncKind.VEX, mandatory_prefix=0x66,
+                modrm=ModRMUse.REG_RM, reg_op=0, rm_op=1,
+                vex=VexInfo(length=256), est_size=6,
+                roles=(OperandRole.DEF, OperandRole.USE)),
+    X86InstDesc("pbroadcastq", (_y(), _x()), opcode=0x59, map=OpMap.M0F38,
+                enc=EncKind.VEX, mandatory_prefix=0x66,
+                modrm=ModRMUse.REG_RM, reg_op=0, rm_op=1,
+                vex=VexInfo(length=256), est_size=6,
+                roles=(OperandRole.DEF, OperandRole.USE)),
     # cvtss2sd xmm, xmm/m32              F3 0F 5A /r
     X86InstDesc("cvtss2sd", (_x(), _xm(32)), opcode=0x5A, map=OpMap.M0F,
                 mandatory_prefix=0xF3, modrm=ModRMUse.REG_RM,

@@ -105,11 +105,15 @@ class X86_64Target:
     def vectors(self) -> Vectors:
         """What this machine can do to a run of elements at once.
 
-        Sixteen bytes at a time, at every level: the SSE2 integer instructions
-        are part of what "x86-64" means, so this is what the oldest machine the
-        architecture defines can do and there is no level to ask for it with.
-        The wider registers the newer levels add are not used yet.
+        How wide is the level's to say, which is the whole point of naming a
+        level: sixteen bytes on the two older ones, where the SSE2 integer
+        instructions are what "x86-64" means and every processor has them, and
+        thirty-two on the two newer ones, where AVX2 is part of what the level
+        promises and a program built for it has already said at its own entry
+        point that the processor has it.
 
+        Which operations is not the level's to say -- the newer forms are the
+        same operations over more lanes -- so the rest of this is one answer.
         The bitwise three at every lane width, since a register of bits is the
         same answer however it is divided into lanes.  Adding and subtracting at
         every lane width too, each with the check that says whether any lane went
@@ -120,7 +124,7 @@ class X86_64Target:
         """
         every = 64
         return Vectors(
-            bits=128,
+            bits=256 if self._mclevel in levels.WIDE else 128,
             binary={BinOp.AND: every, BinOp.OR: every, BinOp.XOR: every,
                     BinOp.ADD: every, BinOp.SUB: every,
                     BinOp.SAT_ADD: 16, BinOp.SAT_SUB: 16},

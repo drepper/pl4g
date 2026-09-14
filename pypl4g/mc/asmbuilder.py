@@ -217,9 +217,6 @@ class InstructionSelector(Protocol):
         nearest value the lane's type can hold rather than going past it."""
         ...
 
-    #: How many bits one of this target's run registers holds; zero where it has
-    #: none.
-    run_bits: int = 0
 
     def select_run_splat(self, dst: Reg, src: MCOperand, bits: int,
                          span: Span) -> Sequence[MCInst]:
@@ -783,11 +780,6 @@ class Assembler:
         """Add or subtract every lane, stopping at the end of the lane's type."""
         self._emit(self._selector.select_run_saturating(
             dst, left, right, adding, signed, bits, span))
-
-    @property
-    def run_bits(self) -> int:
-        """How many bits one of this target's run registers holds."""
-        return getattr(self._selector, "run_bits", 0)
 
     def run_splat(self, dst: Reg, src: MCOperand, bits: int,
                   span: Span = INVALID_SPAN) -> None:

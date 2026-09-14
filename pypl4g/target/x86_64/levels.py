@@ -85,6 +85,13 @@ _ADDED: Final[dict[str, tuple[Requirement, ...]]] = {
 #: The levels, oldest first, which is the order one contains another in.
 NAMES: Final[tuple[str, ...]] = ("v1", "v2", "v3", "v4")
 
+#: The levels whose processors hold a run of elements in a register twice as
+#: wide.  AVX2 is what a run is done with there -- the same operations over
+#: twice as many lanes -- and it is part of what `v3` promises, so a program
+#: built for one of these has already said at its own entry point that the
+#: processor has it.  The wider registers again that `v4` adds are not used yet.
+WIDE: Final[frozenset[str]] = frozenset(("v3", "v4"))
+
 #: What a program is built for unless it says otherwise.  The newest, because a
 #: program that will not run says so the moment it is started, while one built
 #: for the oldest machine quietly leaves everything on the table -- and which of

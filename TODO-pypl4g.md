@@ -319,6 +319,24 @@ To Do List for the pypl4g compiler
     place a line ends, so the layout rule lets it continue -- and `tree-sitter-pl4g` does not, which the agreement test catches
     the moment a program in the suite is written that way.  Found while writing one; the program was put on one line instead.
 
+[ ] use the widest registers the newest level has for a run of elements.  `v4` promises AVX-512, whose registers are
+    sixty-four bytes; what is emitted for it today is AVX2's thirty-two, which `v3` already promises.  Two things are in the
+    way and both are real work rather than more rows: the EVEX prefix, which the encoder refuses where it emits VEX, and the
+    mask registers -- there is no `vpmovmskb` for the widest registers, so "did any lane go past" is asked there with
+    `vptestmb` into a mask register and `kortestq`, which is a third way of asking a question this already asks two ways.
+
+[ ] emit `vzeroupper` where a function that used the wider registers calls one that may not have.  Mixing the wider forms with
+    the narrower ones costs a state transition on several processors; nothing is wrong without it, which is why this is a
+    to-do and not a defect.  The splat is where the two meet today: a value goes into the low half with the narrow move and is
+    then spread with the wide one.
+
+[ ] do a run of floating-point numbers at once.  The instructions are there and the check is not: what says a floating-point
+    answer went past is not a comparison but a question about the number itself, and asking that of a lane apiece is its own
+    piece of work.  The front end refuses to make a run of them until it is done.
+
+[ ] multiply a run at once.  Seeing that a product went past wants the upper half of it, which none of these machines gives at
+    every lane width -- the same reason the narrow scalar arithmetic leaves multiplication to the widening path.
+
 [ ] report a tuple holding an array.  `〈⟦1u8, 2u8⟧〉` reaches the code generator and fails there (9901, "making a 〈u8⟦2⟧〉, which
     is one value and not several"), so what a reader is told is an internal error about a program the front end accepted.  Either
     an array is a thing a tuple may hold, in which case `parts_of` has to say what its parts are, or it is not and the checker

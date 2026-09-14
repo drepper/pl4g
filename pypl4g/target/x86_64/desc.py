@@ -58,7 +58,17 @@ class ModRMUse(Enum):
 
 @dataclass(frozen=True, slots=True)
 class VexInfo:
-    """Reserved: the extra fields a VEX or EVEX encoding needs."""
+    """The extra fields a VEX or EVEX encoding needs.
+
+    *length* is how wide the vector registers the instruction names are, which
+    is the one field that makes the sixteen-byte and the thirty-two-byte form of
+    an instruction the same row with one number changed.
+
+    *vvvv_op* names the operand that goes in the prefix's own register field,
+    which is what makes these forms take three operands and need no move before
+    them.  The other two fields are for what EVEX adds and nothing reads them
+    yet.
+    """
 
     length: int = 128
     vvvv_op: int | None = None
