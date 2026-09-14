@@ -1222,6 +1222,64 @@ let a: u8⟦6⟧ = ⟦1u8, 2u8, 4u8, 8u8, 16u8, 32u8⟧
 total(a, 6u8)
 ```
 
+**A shape may be stated in part.**  `u8⟦,3⟧` is however many rows of three columns and `u8⟦2,⟧` is two rows of however many;
+each dimension says or does not say for itself.  What makes that worth having is what picking rows out of a table produces --
+however many were picked, each still as wide as the table was -- which is a type of exactly that shape and nothing else.
+
+A value of such a type carries a count for every dimension, the stated ones included, so that what a value of an array type *is*
+does not depend on how much of its shape the type says.  **What may be let go of is a length, never a length for a different
+one**: a `u8⟦2,3⟧` stands where `u8⟦,3⟧` or `u8⟦,⟧` is wanted and does not stand where `u8⟦,4⟧` is.
+
+##### Picking with a mask
+
+**An array indexed by an array of truth values is picked from**: the things the mask says true, in the order they were in.
+
+```
+let v: u8⟦4⟧ = ⟦10u8, 20u8, 30u8, 40u8⟧
+
+v⟦⟦false, true, false, true⟧⟧    ※ u8⟦⟧, holding 20 and 40
+v⟦v > 25u8⟧                      ※ u8⟦⟧, holding 30 and 40
+```
+
+The second is the shape a mask usually arrives in: a comparison walked over an array answers with exactly one truth value per
+element, which is what a mask is.
+
+**How many were picked is not known while compiling**, so what picking answers with is an array whose first dimension the type
+does not state.
+
+**The mask's shape is the array's leading dimensions**, as many of them as it has (4484), and what is picked keeps the dimensions
+the mask said nothing about:
+
+```
+let m: u8⟦3,2⟧ = ⟦⟦1u8, 2u8⟧, ⟦3u8, 4u8⟧, ⟦5u8, 6u8⟧⟧
+
+m⟦⟦true, false, true⟧⟧           ※ u8⟦,2⟧: rows, each still two columns wide
+m⟦some⟧                          ※ u8⟦⟧ for a bool⟦3,2⟧: elements, keeping no shape
+```
+
+**Assigning through a mask writes one value to everything it picked** and to nothing else -- whole rows where the mask picks
+rows, by the same rule:
+
+```
+v⟦v > 25u8⟧ ← 1u8                ※ 10, 20, 1, 1
+m⟦⟦false, true, false⟧⟧ ← 9u8    ※ the middle row, both of it
+```
+
+**The array picked from states its shape** (4485).  What picking answers with is held in room enough for everything that could
+have been picked, and room enough for that is what the shape says; where the type does not say it, the room would have to be
+taken while the program runs, which is an allocation and a change to something that outlives the call.
+
+**Nothing branches, either way.**  Picking writes each thing where the count has got to and then advances the count by the mask,
+so a thing that was not picked is written where the next one writes over it -- which is sound because the room is this call's own.
+Assigning writes every element either the old value or the new one, chosen with the mask spread across the width of the element,
+so that no instruction depends on what the mask holds.
+
+Compare: NumPy's boolean indexing, which this is -- `v[v > 25]` reads and `v[v > 25] = 1` writes, with the same rule that the
+mask's shape is the array's leading dimensions; APL's compress `/`, which is the same operation with a much older spelling and
+which threads over an axis chosen by the operator rather than by the mask's rank; MATLAB's logical indexing, likewise; and
+Fortran's `PACK` and `WHERE`, which separate the two halves into a function and a statement where this has one spelling doing
+both, on the grounds that what is written on the left of `←` and what is read on the right should not need different names.
+
 ##### Reading, writing and slicing
 
 `a⟦i⟧` is the element at `i`, counting from nought, and `a⟦i⟧ ← v` puts a value there.  The index is a whole number of any integer

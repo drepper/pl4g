@@ -3250,6 +3250,50 @@ defensible now.
 
 ---
 
+## 2026-09-15T12:00+02:00 — language
+
+**Picking with a mask**
+
+Decided on the user's direction: an array indexed by an array of truth values is picked from; the selection may be assigned to;
+picking answers with an array that may be smaller; and for a table the mask may pick rows or elements according to its own shape.
+
+**A shape may be stated in part**, which this required and which the language had explicitly forbidden (4456, now gone).  The
+rule said an array carries its whole shape in the type or none of it, and the reason given was that half of each would be "a
+second kind of array for a case nothing has asked for".  Picking rows is that case: what it answers with is however many rows,
+each as wide as the table was, which is `u8⟦,3⟧` and is not expressible any other way.  The representation already allowed it --
+a shape is a tuple of "how many, or nothing", and a value carries a count per dimension either way -- so what changed was one
+refusal and one check: a length may be let go of, never exchanged for a different length.
+
+**Which of indexing and picking was meant is never a question about how it was written.**  An array of numbers indexes and an
+array of truth values picks.  Rejected: a glyph of its own for picking.  The types already say it, and a second spelling for
+"look in this array" is the thing this language avoids.
+
+**The mask's shape decides how much it picks**, rather than an operator or an axis number saying so.  A mask of one dimension over
+a table picks rows and one of two picks elements, which is NumPy's rule and is the one that needs nothing written down: the shape
+of the thing you already have is the shape of the question you are asking.  APL's compress and Fortran's `PACK` both take the
+axis as a separate thing to say.
+
+**Reading and writing are one spelling.**  `v⟦m⟧` on the right picks and on the left writes, which is what NumPy does and what
+Fortran deliberately does not -- `PACK` is a function and `WHERE` is a statement there.  What is written on the left of `←` and
+what is read on the right should not need different names.
+
+**The room is the whole array's and is this call's own.**  No more can be picked than there were, so a `frame` of the array's own
+size is enough, and nothing is allocated -- which keeps picking pure and is why the array picked from has to state its shape
+(4485).  Rejected: allocating the exact size from an arena, which would have made every pick impure and every picking function
+`@[impure]`, for room that is given back when the call ends anyway.
+
+**Neither half branches.**  Picking writes each thing where the count has got to and advances the count by the mask, so a thing
+that was not picked is written where the next one writes over it; assigning spreads the mask to all ones or all zeros across the
+element's width and writes `(old & ~m) | (v & m)` to everything.  Both cost the same whatever the mask holds, which is worth
+having for its own sake and is what makes the written-out form reasonable.  The spread wants an integer, so an array of
+floating-point elements is refused for now.
+
+Compare, beyond the above: MATLAB's logical indexing, which is this; Julia's, likewise, with the same "a mask is what a
+comparison over an array gives you" idiom that makes this read well here too; and C, C++, Rust and Go, where none of it exists
+and the loop is written out by hand each time.
+
+---
+
 ---
 
 Open questions

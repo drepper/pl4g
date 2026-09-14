@@ -1078,6 +1078,37 @@ The rule that makes this easy to keep: **a function that answers what type somet
 `_one_type` takes an `into` list, `_array_written` answers the elements beside the type, and `_entries_written` answers an
 `_Entries`.  Anything that asks a type and throws the value away will lower it a second time somewhere.
 
+Picking with a mask
+-------------------
+
+An array indexed by an array of truth values is picked from rather than indexed, and which of the two was meant is never a
+question about how it was written: an array of numbers indexes and an array of truth values picks.  `_mask_written` lowers the one
+index and looks at its type, and the reading and the writing then go to `_lower_picked` and `_assign_picked`.
+
+**The answer's room is the whole array's and is taken as a `frame`.**  No more can be picked than there were, so the size is known
+even though the count is not -- which is why the array picked from has to state its shape (4485) and why nothing is allocated.
+What comes back is the ordinary dynamic-array value: the place, the count, and the lengths the mask said nothing about.
+
+**Neither half branches**, and that is the same idea twice.  Picking writes each thing at the count and then advances the count by
+the mask, widened from a truth value to a number: a thing that was not picked is written where the next one writes over it, which
+is sound because the room is this call's own.  Assigning spreads the mask across the whole width of the element -- nought less the
+truth value, so all ones or all zeros -- and writes `(old & ~m) | (v & m)` to every element, which is the old value or the new one
+and costs the same either way.
+
+**Both are written out, one element at a time**, for the reason the listable walk is: the shape is known, the count is not, and a
+loop wants an index worked out while the program runs.  What it costs is code proportional to the array, which is the honest price
+of the simplest thing that is correct.
+
+**The spread trick wants an integer**, so an array of floating-point elements is refused for now (9902) rather than written with
+branches.  Nothing else in the language needs a select instruction; adding one would make this shorter and would make a `match`
+over two constants shorter as well.
+
+**A shape stated in part** is what picking rows produces -- `u8⟦,3⟧` -- and is what the rule against half-told shapes had
+forbidden.  The representation already allowed it: `ArrayType.shape` is a tuple of "how many, or nothing", `parts_of` gives a
+count per dimension whether the type states it or not, and `_shape_of` reads them all from the value.  What had to change was the
+resolution refusing it, and the decay checking that a length let go of is not a length changed: `_lets_go_of` says a dimension the
+wanted type states must be the one it states.
+
 Walking an array
 ----------------
 

@@ -25,7 +25,8 @@ from ..ir.function import (DEFAULT_CCONV, SYSTEM_CCONV, BasicBlock, FuncAttrs,
                            InlineHint,
                            Linkage, SpecialKind)
 from ..ir.module import GlobalVar, Module
-from ..ir.types import (ARENA, ArrayType, BOOL, BUILTIN_TYPES, DictType,
+from ..ir.types import (ARENA, ArrayType, BOOL, BoolType, BUILTIN_TYPES,
+                        DictType,
                         ERROR, EnumType,
                         U64,
                         F64,
@@ -184,6 +185,21 @@ def _collect_assigned(block: "ast.Block", into: list[str]) -> None:
                     _collect_assigned(arm.body, into)
             case _:
                 pass
+
+
+def _lets_go_of(found: ArrayType, wanted: ArrayType) -> bool:
+    """Whether an array of *found* stands where one of *wanted* is asked for.
+
+    A dimension the wanted type does not state takes whatever the one it is
+    given has; a dimension it does state has to be the one it states, and a
+    dimension neither states is already the same question.  So what may be let
+    go of is a length, never a length for a different length -- a table of three
+    columns is not a table of four however little either says about its rows.
+    """
+    if found.element is not wanted.element or found.rank != wanted.rank:
+        return False
+    return all(theirs is None or theirs == ours
+               for ours, theirs in zip(found.shape, wanted.shape))
 
 
 def _spread_out(at: int, shape: "tuple[int, ...]") -> "tuple[int, ...]":
@@ -1676,13 +1692,12 @@ class Checker:
                 self._diags.emit(D.LANG_ARRAY_LENGTH_NOT_A_NUMBER, written.span)
                 return ERROR
             shape.append(written.value)
-        if any(a is None for a in shape) and any(a is not None for a in shape):
-            # An array either carries its shape in the type or carries the whole
-            # of it beside the elements.  Half of each would mean a value whose
-            # parts depend on which half, which is a second kind of array for a
-            # case nothing has asked for.
-            self._diags.emit(D.LANG_ARRAY_SHAPE_IS_HALF_TOLD, ref.span)
-            return ERROR
+        # A dimension the type states and one it does not may stand side by
+        # side.  What makes that worth having is what selecting rows of a table
+        # produces: however many rows were picked, each still as wide as the
+        # table was, which is `i32⟦,3⟧` and nothing else.  A value of such a type
+        # carries a count for every dimension, the stated ones included, so that
+        # what it is, is one thing however much of its shape the type says.
         return self._module.types.array_type(element, shape)
 
     def _collection_type(self, ref: ast.CollectionTypeRef) -> Type:
@@ -2307,6 +2322,9 @@ class Checker:
             return UndefConst(ERROR)
         if any(isinstance(one, ast.Range) for one in expr.indices):
             return self._lower_slice(builder, expr, base, ty, expected)
+        mask = self._mask_written(builder, expr)
+        if mask is not None:
+            return self._lower_picked(builder, expr, base, ty, mask, expected)
         start, lengths = self._shape_of(builder, base, ty, expr.span)
         offset = self._offset_of(builder, expr.indices, ty, lengths, expr.span)
         if offset is None:
@@ -2325,6 +2343,191 @@ class Checker:
         if not self._accepts(expected, ty.element):
             self._report_mismatch(expr.span, ty.element, expected)
         return value
+
+    def _mask_written(self, builder: IRBuilder,
+                      expr: ast.Element) -> "Value | None":
+        """The mask an array is being picked with, or nothing where it is not.
+
+        One index and an array of truth values is what says so, and nothing else
+        is: an array of numbers indexes and an array of truth values picks, and
+        which of the two was meant is never a question about how it was written.
+        Lowered here rather than where an index is, since what is wanted of it is
+        not a number.
+        """
+        if len(expr.indices) != 1:
+            return None
+        written = expr.indices[0]
+        if isinstance(written, ast.Range):
+            return None
+        mark = len(self._diags.entries) if hasattr(self._diags, "entries") else None
+        value = self._on_its_own(builder, written)
+        ty = self._value_type_of(value)
+        if isinstance(ty, ArrayType) and ty.element is BOOL:
+            return value
+        # Not a mask, so it was an index; what it is, is asked again where an
+        # index is asked, which is where the message about it belongs.
+        del mark
+        return None
+
+    def _lower_picked(self, builder: IRBuilder, expr: ast.Element, base: Value,
+                      ty: ArrayType, mask: Value,
+                      expected: "Type | None") -> Value:
+        """Lower `a⟦m⟧` where *m* is a mask: the things it picked, in order.
+
+        The mask has one truth value for each thing it could pick, so its shape
+        is the array's leading dimensions -- as many of them as it has.  One
+        dimension over a table picks rows and two picks elements, and what is
+        picked keeps whatever dimensions the mask said nothing about: rows of a
+        table of three columns are still three columns wide.
+
+        **How many were picked is not known while compiling**, so the answer's
+        first dimension is one the type does not state.  What *is* known is that
+        it cannot be more than there were, so the room is the whole array's and
+        is taken once, here, as this call's own -- no allocation, and nothing
+        that outlives the call.
+
+        **Nothing branches.**  Each thing is copied to where the count has got
+        to and the count is then advanced by the mask, which is one where it
+        picked and zero where it did not; a thing that was not picked is written
+        where the next one will be written over it.  Writing into room of this
+        call's own is what makes that sound, and it is why the loop is the same
+        loop whatever the mask turns out to hold.
+        """
+        held = self._value_type_of(mask)
+        assert isinstance(held, ArrayType)
+        if not ty.fixed:
+            self._diags.emit(D.LANG_MASK_NEEDS_A_STATED_SHAPE, expr.base.span,
+                             found=ty.render())
+            return UndefConst(ERROR)
+        if not held.fixed or held.rank > ty.rank \
+                or held.shape[:held.rank] != ty.shape[:held.rank]:
+            self._diags.emit(D.LANG_MASK_WRONG_SHAPE, expr.indices[0].span,
+                             found=held.render(), wanted=ty.render())
+            return UndefConst(ERROR)
+        kept = ty.shape[held.rank:]
+        answer = self._module.types.array_type(ty.element, (None, *kept))
+        row = 1
+        for along in kept:
+            assert along is not None
+            row *= along
+        picks = 1
+        for along in ty.shape[:held.rank]:
+            assert along is not None
+            picks *= along
+        start, _ = self._shape_of(builder, base, ty, expr.span)
+        marks, _ = self._shape_of(builder, mask, held, expr.span)
+        place = builder.frame(ty, expr.span)
+        count: Value = builder.int_const(U64, 0)
+        for at in range(picks):
+            where = builder.binary(BinOp.WRAP_MUL, count,
+                                   builder.int_const(U64, row), expr.span)
+            for inside in range(row):
+                taken = builder.load(
+                    self._element_place(builder, start, ty.element,
+                                        builder.int_const(U64, at * row + inside),
+                                        expr.span), expr.span)
+                builder.store(
+                    self._element_place(
+                        builder, place, ty.element,
+                        builder.binary(BinOp.WRAP_ADD, where,
+                                       builder.int_const(U64, inside), expr.span),
+                        expr.span),
+                    taken, expr.span)
+            picked = builder.load(
+                self._element_place(builder, marks, BOOL,
+                                    builder.int_const(U64, at), expr.span),
+                expr.span)
+            count = builder.binary(
+                BinOp.WRAP_ADD, count,
+                builder.cast(CastKind.ZEXT, picked, U64, expr.span), expr.span)
+        made = builder.make_tuple(
+            (builder.cast(CastKind.BITCAST, place,
+                          self._module.types.ptr_type(ty.element, mutable=True),
+                          expr.span),
+             count, *(builder.int_const(U64, along) for along in kept)),
+            answer, expr.span)
+        if not self._accepts(expected, answer):
+            self._report_mismatch(expr.span, answer, expected)
+            return UndefConst(ERROR)
+        return made
+
+    def _assign_picked(self, builder: IRBuilder, stmt: ast.ElementAssign,
+                       base: Value, ty: ArrayType, mask: Value) -> None:
+        """Lower `a⟦m⟧ ← v`: write *v* where the mask picked, and nowhere else.
+
+        The mask's shape is the array's leading dimensions, as it is for
+        picking, and one value goes to every element the mask picked -- which is
+        what makes a mask of a table's rows write whole rows.
+
+        **Nothing branches.**  What is written to each element is the old value
+        where the mask did not pick it and the new one where it did, chosen with
+        the mask spread across the whole width of the element: all ones where it
+        picked and all zeros where it did not, so that `(old & ~m) | (v & m)` is
+        one or the other and no instruction depends on which.  Every element is
+        written either way, which for a place this program already owns is a
+        write of what was already there.
+        """
+        held = self._value_type_of(mask)
+        assert isinstance(held, ArrayType)
+        if not ty.fixed:
+            self._diags.emit(D.LANG_MASK_NEEDS_A_STATED_SHAPE, stmt.base.span,
+                             found=ty.render())
+            return
+        if not held.fixed or held.rank > ty.rank \
+                or held.shape[:held.rank] != ty.shape[:held.rank]:
+            self._diags.emit(D.LANG_MASK_WRONG_SHAPE, stmt.indices[0].span,
+                             found=held.render(), wanted=ty.render())
+            return
+        if not isinstance(ty.element, (IntType, BoolType)):
+            self._diags.emit(D.IMPL_UNIMPLEMENTED_FEATURE, stmt.span,
+                             feature="".join((
+                                 "writing through a mask into an array of '",
+                                 ty.element.render(), "'")))
+            return
+        start, lengths = self._shape_of(builder, base, ty, stmt.span)
+        if not self._made_here(start):
+            self._an_effect(D.LANG_PURE_WRITES_ELSEWHERE, stmt.span)
+        marks, _ = self._shape_of(builder, mask, held, stmt.span)
+        value = self._lower_into(builder, stmt.value, ty.element, stmt.span)
+        if self._value_type_of(value) is ERROR:
+            return
+        row = 1
+        for along in ty.shape[held.rank:]:
+            assert along is not None
+            row *= along
+        picks = 1
+        for along in ty.shape[:held.rank]:
+            assert along is not None
+            picks *= along
+        for at in range(picks):
+            picked = builder.load(
+                self._element_place(builder, marks, BOOL,
+                                    builder.int_const(U64, at), stmt.span),
+                stmt.span)
+            # All ones where it picked and all zeros where it did not, in the
+            # element's own width: nought less what the truth value is.
+            spread = builder.binary(
+                BinOp.WRAP_SUB, self._zero_of(builder, ty.element, stmt.span),
+                builder.cast(CastKind.ZEXT, picked, ty.element, stmt.span),
+                stmt.span)
+            chosen = builder.binary(BinOp.AND, value, spread, stmt.span)
+            for inside in range(row):
+                where = self._element_place(
+                    builder, start, ty.element,
+                    builder.int_const(U64, at * row + inside), stmt.span)
+                old = builder.load(where, stmt.span)
+                builder.store(where, builder.binary(
+                    BinOp.OR,
+                    builder.binary(BinOp.AND, old,
+                                   builder.unary(UnOp.NOT, spread, stmt.span),
+                                   stmt.span),
+                    chosen, stmt.span), stmt.span)
+
+    def _zero_of(self, builder: IRBuilder, ty: Type, span: Span) -> Value:
+        """Nought of a type, which for a truth value is the false one."""
+        if isinstance(ty, BoolType):
+            return builder.bool_const(False)
+        return builder.int_const(ty, 0)
 
     def _lower_tuple_member(self, builder: IRBuilder, expr: ast.Element,
                             base: Value, ty: TupleType,
@@ -2461,6 +2664,10 @@ class Checker:
         if not isinstance(ty, ArrayType):
             self._diags.emit(D.LANG_ARRAY_NOT_AN_ARRAY, stmt.base.span,
                              found=ty.render())
+            return
+        mask = self._mask_written(builder, stmt)
+        if mask is not None:
+            self._assign_picked(builder, stmt, base, ty, mask)
             return
         if len(stmt.indices) != ty.rank:
             # Every index, because what is assigned is one element.  Assigning a
@@ -5604,9 +5811,7 @@ class Checker:
         found = self._value_type_of(value)
         if found is expected or found is ERROR:
             return value
-        if isinstance(found, ArrayType) and found.fixed \
-                and found.element is expected.element \
-                and found.rank == expected.rank:
+        if isinstance(found, ArrayType) and _lets_go_of(found, expected):
             start, lengths = self._shape_of(builder, value, found, span)
             return builder.make_tuple((start, *lengths), expected, span)
         self._report_mismatch(span, found, expected)

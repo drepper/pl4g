@@ -485,6 +485,14 @@ To Do List for the PL4g language
     operand.  No attribute, an operator being no definition and every one that would be marked being marked.  `and` and `or` are
     not walked and could not be, which side is worked out being what they are about.
 
+[ ] pick out of an array whose type does not say its shape.  Refused today (4485): what picking answers with is held in room
+    enough for all of it, and that is what the shape says.  It wants the room taken while the program runs, which is the same
+    allocation a dynamic array wants and would make picking impure.
+
+[ ] write through a mask into an array of floating-point elements.  Refused today: the mask is spread to all ones or all zeros
+    and combined with bitwise operations, which wants an integer.  A select instruction in the representation would do it for
+    every element type at once, and would shorten a `match` over two constants as well.
+
 [ ] walk an array whose type does not say its length.  Refused today (4482): the answer's shape is the shape walked, and the room
     for it is taken before the calls are written.  It wants what a dynamic array wants anyway -- storage worked out while the
     program runs -- and the calls in a loop rather than written out, which is the same piece of work.

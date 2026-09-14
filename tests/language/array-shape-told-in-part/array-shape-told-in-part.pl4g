@@ -1,0 +1,28 @@
+※ pl4g-test: compile=ok run=native,qemu exit=42 diag=none
+
+※ A dimension the type states and one it does not may stand side by side:
+※ `u8⟦,3⟧` is however many rows of three columns, and `u8⟦2,⟧` is two rows of
+※ however many.  What makes that worth having is what picking rows out of a
+※ table produces -- however many were picked, each still as wide as the table
+※ was -- which is a type of exactly that shape and nothing else.
+※
+※ A value of such a type carries a count for every dimension, the stated ones
+※ included, so that what it is, is one thing however much of its shape the type
+※ says.  What may be let go of is a length, never a length for a different
+※ length: a table of three columns is not a table of four, however little
+※ either says about its rows.
+
+fn wide(rows: u8⟦,3⟧) → u8:
+    rows⟦0,0⟧ + rows⟦1,2⟧
+
+fn loose(m: u8⟦,⟧) → u8:
+    m⟦1,1⟧
+
+fn tall(m: u8⟦2,⟧) → u8:
+    m⟦1,0⟧
+
+@[startup]
+fn main() → u8:
+    let m: u8⟦2,3⟧ = ⟦⟦1u8, 2u8, 3u8⟧, ⟦4u8, 5u8, 6u8⟧⟧
+    ※ 7 + 5 + 4, and the rest written out
+    wide(m) + loose(m) + tall(m) + 26u8

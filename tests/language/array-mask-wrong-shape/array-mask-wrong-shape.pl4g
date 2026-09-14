@@ -1,0 +1,13 @@
+※ pl4g-test: compile=error diag=4484
+
+※ A mask says, of each thing it could pick, whether to pick it -- so it has one
+※ truth value for each, and its shape is the array's first dimensions, as many
+※ of them as it has.  A shape that is neither leaves things it says nothing
+※ about, or says something about things that are not there.
+
+@[startup]
+fn main() → u8:
+    let v: u8⟦4⟧ = ⟦1u8, 2u8, 3u8, 4u8⟧
+    let want: bool⟦3⟧ = ⟦true, false, true⟧
+    let got: u8⟦⟧ = v⟦want⟧
+    got⟦0⟧

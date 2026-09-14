@@ -126,6 +126,8 @@ GROUPS: tuple[Group, ...] = (
            "array-global": "an array at the top level, read three times",
            "array-table": "a table, a cube, and one of no stated shape",
            "array-row": "a row taken out of a table, and passed on",
+           "array-masked-pick": "four picks, by rows and by elements",
+           "array-masked-write": "four writes through a mask, one of them by rows",
            "listable-over-an-array": "four walks, one of them over a table twice",
            "listable-operators": "ten operators walked, and a table against a column"}),
     Group("Loops",

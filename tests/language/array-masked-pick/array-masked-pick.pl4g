@@ -1,0 +1,38 @@
+※ pl4g-test: compile=ok run=native,qemu exit=42 diag=none
+
+※ An array indexed by an array of truth values is picked from rather than
+※ indexed: the things the mask says true, in the order they were in.  How many
+※ that is, is not known while compiling, so what it answers with is an array
+※ whose first dimension the type does not state.
+※
+※ The mask has one truth value for each thing it could pick, so its shape is the
+※ array's leading dimensions -- as many of them as it has.  A mask of one
+※ dimension over a table picks rows, and what is picked keeps the dimensions the
+※ mask said nothing about: rows of a table three columns wide are `u8⟦,3⟧`.  A
+※ mask of two picks elements, which keeps nothing and gives `u8⟦⟧`.
+※
+※ The room the answer is in is this call's own and is the whole array's, which
+※ is what is known: no more can be picked than there were.  Nothing is
+※ allocated, and nothing branches -- each thing is written where the count has
+※ got to and the count is advanced by the mask, so a thing that was not picked
+※ is written where the next one writes over it.
+
+@[startup]
+fn main() → u8:
+    let v: u8⟦4⟧ = ⟦10u8, 20u8, 30u8, 40u8⟧
+    let want: bool⟦4⟧ = ⟦false, true, false, true⟧
+    let picked: u8⟦⟧ = v⟦want⟧
+    ※ a mask is the natural shape of a comparison walked over an array
+    let big: u8⟦⟧ = v⟦v > 25u8⟧
+    ※ rows of a table, each still as wide as the table was
+    let m: u8⟦3,2⟧ = ⟦⟦1u8, 2u8⟧, ⟦3u8, 4u8⟧, ⟦5u8, 6u8⟧⟧
+    let ends: bool⟦3⟧ = ⟦true, false, true⟧
+    let rows: u8⟦,2⟧ = m⟦ends⟧
+    ※ and elements of one, which keeps no shape at all
+    let some: bool⟦3,2⟧ = ⟦⟦true, false⟧, ⟦false, true⟧, ⟦true, false⟧⟧
+    let flat: u8⟦⟧ = m⟦some⟧
+    let ones: u8 = picked⟦0⟧ + picked⟦1⟧ + big⟦0⟧ + big⟦1⟧
+    let twos: u8 = rows⟦0,0⟧ + rows⟦0,1⟧ + rows⟦1,0⟧ + rows⟦1,1⟧
+    let threes: u8 = flat⟦0⟧ + flat⟦1⟧ + flat⟦2⟧
+    ※ (20+40) + (30+40) - (1+2+5+6) - (1+4+5) - 64 = 42
+    ones - twos - threes - 64u8

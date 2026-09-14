@@ -1,0 +1,34 @@
+※ pl4g-test: compile=ok run=native,qemu exit=42 diag=none
+
+※ Assigning through a mask writes one value to every element the mask picked
+※ and to nothing else.  A mask of a table's rows writes whole rows, by the same
+※ rule that makes a mask of them pick whole rows.
+※
+※ Nothing branches here either.  What is written to each element is the old
+※ value where the mask did not pick it and the new one where it did, chosen with
+※ the mask spread across the whole width of the element -- all ones where it
+※ picked and all zeros where it did not -- so that no instruction depends on
+※ which.  Every element is written either way, which for a place the program
+※ already owns is a write of what was already there.
+
+@[startup]
+fn main() → u8:
+    let v: mut u8⟦4⟧ = ⟦10u8, 20u8, 30u8, 40u8⟧
+    let want: bool⟦4⟧ = ⟦false, true, false, true⟧
+    v⟦want⟧ ← 1u8
+    ※ a mask worked out on the spot, over the array being written
+    let w: mut u8⟦4⟧ = ⟦10u8, 20u8, 30u8, 40u8⟧
+    w⟦w > 25u8⟧ ← 1u8
+    ※ whole rows of a table
+    let m: mut u8⟦3,2⟧ = ⟦⟦1u8, 2u8⟧, ⟦3u8, 4u8⟧, ⟦5u8, 6u8⟧⟧
+    let middle: bool⟦3⟧ = ⟦false, true, false⟧
+    m⟦middle⟧ ← 9u8
+    ※ and an array of truth values, whose elements are one bit wide
+    let b: mut bool⟦3⟧ = ⟦false, false, false⟧
+    b⟦⟦true, false, true⟧⟧ ← true
+    let counted: u8 = v⟦0⟧ + v⟦1⟧ + w⟦2⟧ + w⟦3⟧ + m⟦1,0⟧ + m⟦1,1⟧ + m⟦2,1⟧
+    if b⟦0⟧ ∧ ¬b⟦1⟧ ∧ b⟦2⟧:
+        ※ 10 + 1 + 1 + 1 + 9 + 9 + 6 = 37
+        counted + 5u8
+    else:
+        0u8

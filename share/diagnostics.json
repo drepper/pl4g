@@ -3531,22 +3531,6 @@
       "option": null
     },
     {
-      "number": 4456,
-      "name": "LANG_ARRAY_SHAPE_IS_HALF_TOLD",
-      "severity": "error",
-      "message": "an array says how many along every dimension or along none",
-      "args": [],
-      "cause": "An array either carries its shape in the type, and then needs no room beyond its elements, or carries the whole of it beside the elements.  Half of each would be a value whose parts depend on which half is which, which is a second kind of array for a case nothing has asked for.",
-      "spec": {
-        "document": "spec/spec.md",
-        "section": "The Language / Types / Arrays",
-        "requirement": "Every dimension of an array type states its size, or none does."
-      },
-      "since": "0.1",
-      "default_enabled": true,
-      "option": null
-    },
-    {
       "number": 4457,
       "name": "LANG_ARRAY_WRONG_RANK",
       "severity": "error",
@@ -4100,6 +4084,55 @@
         "document": "spec/spec.md",
         "section": "The Language / File Structure / Function Definition",
         "requirement": "A function marked '@[listable]' takes at least one argument."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4484,
+      "name": "LANG_MASK_WRONG_SHAPE",
+      "severity": "error",
+      "message": "a mask of '{found}' does not pick out of '{wanted}'",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type of the mask"
+        },
+        {
+          "name": "wanted",
+          "type": "string",
+          "description": "the type of the array being picked from"
+        }
+      ],
+      "cause": "A mask says, of each thing it could pick, whether to pick it -- so it has one truth value for each, and its shape is the array's first dimensions, as many of them as it has.  A mask of one dimension over a table picks rows; a mask of two picks elements.  A shape that is neither leaves things it says nothing about, or says something about things that are not there.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Arrays",
+        "requirement": "A mask's shape is the leading dimensions of the array it picks from."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4485,
+      "name": "LANG_MASK_NEEDS_A_STATED_SHAPE",
+      "severity": "error",
+      "message": "picking out of '{found}' needs a shape the type states",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type of the array being picked from"
+        }
+      ],
+      "cause": "What picking answers with is however many were picked, held in room enough for all of them -- and room enough for all of them is what the shape says.  Where the type does not say it, the room would have to be taken while the program runs, which is an allocation and a change to something that outlives the call.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Arrays",
+        "requirement": "An array picked from states its shape."
       },
       "since": "0.1",
       "default_enabled": true,

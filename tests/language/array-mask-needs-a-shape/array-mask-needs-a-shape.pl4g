@@ -1,0 +1,15 @@
+※ pl4g-test: compile=error diag=4485
+
+※ What picking answers with is however many were picked, held in room enough for
+※ all of them -- and room enough for all of them is what the shape says.  Where
+※ the type does not say it, the room would have to be taken while the program
+※ runs, which is an allocation and a change to something that outlives the call.
+
+fn picked(xs: u8⟦⟧, want: bool⟦4⟧) → u8:
+    let got: u8⟦⟧ = xs⟦want⟧
+    got⟦0⟧
+
+@[startup]
+fn main() → u8:
+    let v: u8⟦4⟧ = ⟦1u8, 2u8, 3u8, 4u8⟧
+    picked(v, ⟦true, false, false, false⟧)
