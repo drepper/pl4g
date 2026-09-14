@@ -38,7 +38,8 @@
     "collection-syntax": "a set and a dictionary, read and written",
     "collection-operators": "all four set operators, over two sets",
     "collection-grows": "forty entries, which is four doublings",
-    "collection-arena": "two arenas, and a set out of each"
+    "collection-arena": "two arenas, and a set out of each",
+    "cdecl-attribute": "two conventions in one program, called both ways"
   },
   "commits": [
     {
@@ -224,6 +225,10 @@
     {
       "hash": "c374354",
       "subject": "✨ Sets and dictionaries, and the arena they live in"
+    },
+    {
+      "hash": "9e55aab",
+      "subject": "✨ A calling convention per function, and `@[cdecl]` for the system's"
     }
   ],
   "times": {
@@ -4053,6 +4058,168 @@
       "collection-arena": [
         17.112000000000002,
         104.058655037079
+      ]
+    },
+    "9e55aab": {
+      "exit0": [
+        1.17,
+        89.08547298051417
+      ],
+      "global-variable": [
+        1.396,
+        91.70561103383079
+      ],
+      "assign-widths": [
+        2.009,
+        91.78815601626411
+      ],
+      "many-values-at-once": [
+        2.157,
+        88.37510296143591
+      ],
+      "unreached-function": [
+        1.7550000000000001,
+        89.96855397708714
+      ],
+      "export-visibility": [
+        1.881,
+        92.65427099307999
+      ],
+      "digit-separators": [
+        2.062,
+        96.85783600434661
+      ],
+      "boolean-values": [
+        1.52,
+        88.69516395498067
+      ],
+      "bitwise-operators": [
+        1.8589999999999998,
+        89.85518297413364
+      ],
+      "bitwise-precedence": [
+        1.604,
+        89.51537101529539
+      ],
+      "spill-to-the-frame": [
+        7.9510000000000005,
+        97.44128497550264
+      ],
+      "boolean-in-memory": [
+        1.669,
+        91.62240696605295
+      ],
+      "comparison-operators": [
+        2.811,
+        92.81787800136954
+      ],
+      "logic-operators": [
+        2.92,
+        93.59594999114051
+      ],
+      "logic-short-circuit": [
+        2.757,
+        92.26050798315555
+      ],
+      "saturating-precedence": [
+        1.92,
+        87.98692701384425
+      ],
+      "arithmetic-operators": [
+        2.068,
+        89.1894199885428
+      ],
+      "semicolon-separates-statements": [
+        2.341,
+        97.61958400486037
+      ],
+      "call-nested": [
+        2.808,
+        92.40752999903634
+      ],
+      "arithmetic-division": [
+        2.78,
+        93.7763029942289
+      ],
+      "shift-operators": [
+        2.7600000000000002,
+        94.91288498975337
+      ],
+      "float-arithmetic": [
+        8.438,
+        100.25833098916337
+      ],
+      "float-approximate": [
+        13.081999999999999,
+        104.26461900351569
+      ],
+      "result-type": [
+        4.515,
+        96.83802595827729
+      ],
+      "type-definitions": [
+        1.5670000000000002,
+        89.73248797701672
+      ],
+      "result-as-an-argument": [
+        11.527000000000001,
+        102.00074600288644
+      ],
+      "match-a-result": [
+        5.014,
+        97.48825605493039
+      ],
+      "enum-values": [
+        4.332000000000001,
+        94.83095200266689
+      ],
+      "enum-flag": [
+        4.321,
+        93.30738498829305
+      ],
+      "if-statement": [
+        3.6479999999999997,
+        95.4676810069941
+      ],
+      "tuple-values": [
+        3.78,
+        94.19251995859668
+      ],
+      "while-loop": [
+        2.434,
+        91.63412399357185
+      ],
+      "while-loop-nested": [
+        3.129,
+        92.17361698392779
+      ],
+      "foreach-over-a-range": [
+        2.4410000000000003,
+        92.11196401156485
+      ],
+      "foreach-range-step": [
+        3.824,
+        93.14688399899751
+      ],
+      "collection-syntax": [
+        21.367,
+        113.0068629863672
+      ],
+      "collection-operators": [
+        31.125999999999998,
+        121.71637802384794
+      ],
+      "collection-grows": [
+        18.674,
+        112.02639498515055
+      ],
+      "collection-arena": [
+        22.868,
+        113.24851698009297
+      ],
+      "cdecl-attribute": [
+        3.671,
+        95.73822899255902
       ]
     }
   }
