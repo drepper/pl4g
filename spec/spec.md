@@ -1346,7 +1346,7 @@ shown as an example of a shape; they are four separate examples and not four lis
 ```
 @[startup]
 @[test(build), inline]
-@[abi("sysv64", variadic=false)]
+@[cdecl(variadic=false)]
 @[align(64), section(name=".hot")]
 ```
 
@@ -1366,6 +1366,38 @@ it says the type, and says it whatever the value later becomes.
 Each attribute declares the kinds of object it accepts and the parameters it takes, so the compiler checks the number, the order,
 the names and the kinds of the arguments.  An attribute name the compiler does not know is an error, never an ignored annotation:
 a misspelling must not be able to silently drop a property the program depends on.
+
+##### Calling Conventions
+
+**A function follows the language's own convention, `pl4g`, unless it says otherwise.**  The specification says in so many words
+that the convention need not match the system's and that it may differ between the functions of one compilation, so it does: which
+registers carry the arguments, which carry the answer, and which a function hands back as it found them are the compiler's to
+choose, and it chooses them per function.
+
+```
+@[cdecl]
+fn write(fd: i32, buf: u64, n: u64) → i64:
+    …
+```
+
+**`@[cdecl]` says the function follows the one this system uses**, whatever this architecture calls it, and that it keeps its plain
+name.  Both halves are the same request: the point of asking for the system's convention is to be called by, or to call, something
+that has never heard of this language, and such a thing cannot be expected to know how a name is mangled either.
+`@[cdecl(variadic=true)]` says a variadic one.
+
+**A call is placed by the convention of the function being called.**  Which register an argument goes in is the callee's to say,
+not the caller's, so a program may hold both kinds of function and call each the way it expects.
+
+**What `pl4g` is, is the compiler's business and may change**, which is what makes this worth having: a convention the language
+does not describe is one the compiler can improve without any program being rewritten.  What it is today, on every target, is a
+convention whose argument registers begin where the answer comes back, so that a function answering with what it was given has the
+value where it has to be already.  `fn f(p: u8) → u8: p` is one instruction: `ret`.
+
+Compare: C, where the ABI is the platform's and a compiler may not touch it; C++, where the same holds and the name is mangled so
+that overloads can coexist; Go, which changed its own convention from the stack to registers in 1.17 precisely because nothing
+outside the toolchain depended on it; Rust, whose `extern "C"` is this `@[cdecl]` and whose default `extern "Rust"` is explicitly
+unspecified for the same reason.  This language is emitted by generators and compiled whole, so the freedom Go and Rust reserve is
+the ordinary case here and the system's convention is the exception asked for by name.
 
 ##### Exporting and Being Visible
 
@@ -1740,8 +1772,8 @@ there is nothing to undo.  Compare C++, whose encoding compresses a name to the 
 it; Rust and Swift, which encode similarly; Go, which writes a readable name but leaves the types out of it; and C, which uses the
 bare name and so cannot tell two functions apart at all.
 
-The bare name is used in one case: a function that declares a foreign calling convention keeps it.  The point of declaring one is
-to be reachable from a world that has never heard of this language, and that world knows the function by the name it was given.
+The bare name is used in one case: a function marked `@[cdecl]` keeps it.  The point of asking for the system's convention is to
+be reachable from a world that has never heard of this language, and that world knows the function by the name it was given.
 
 Because the result type is part of the name, two functions that differ only in what they return are different names.  Nothing
 depends on that yet; it is what would let a result take part in choosing between functions of one name, which is not specified.

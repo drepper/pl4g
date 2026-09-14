@@ -181,9 +181,14 @@ def registers_of(operand: MCOperand) -> list[tuple[Reg, bool]]:
 
 
 def defs_and_uses(inst: MCInst) -> tuple[list[Reg], list[Reg]]:
-    """The registers an instruction writes and the registers it reads."""
-    defs: list[Reg] = list(inst.desc.implicit_defs)
-    uses: list[Reg] = list(inst.desc.implicit_uses)
+    """The registers an instruction writes and the registers it reads.
+
+    What a call destroys is on the instruction rather than in its row, because
+    it is the callee's to say; to everything that asks what is written, the two
+    are one answer.
+    """
+    defs: list[Reg] = [*inst.desc.implicit_defs, *inst.clobbers]
+    uses: list[Reg] = [*inst.desc.implicit_uses, *inst.reads]
     for index, operand in enumerate(inst.operands):
         role = inst.desc.role_of(index)
         for reg, writable in registers_of(operand):
@@ -315,10 +320,61 @@ class LinearScan:
         virtual: list[LiveRange] = []
         physical: list[LiveRange] = []
         for key, reg in seen.items():
-            found = LiveRange(reg=reg, start=first[key], end=last[key])
-            (virtual if isinstance(reg, VirtReg) else physical).append(found)
+            if isinstance(reg, VirtReg):
+                virtual.append(LiveRange(reg=reg, start=first[key], end=last[key]))
+                continue
+            physical.extend(self._physical_ranges(function, flows, reg, key))
         virtual.sort(key=lambda r: (r.start, r.end))
         return virtual, physical
+
+    def _physical_ranges(self, function: MachineFunction,
+                         flows: "Sequence[BlockFlow]", reg: Reg,
+                         key: int) -> list[LiveRange]:
+        """Every stretch over which a physical register is holding something.
+
+        Several stretches and not one, which is what a virtual register gets.
+        A physical register is written where a convention says it is -- an
+        argument into the register the callee reads it from, an answer into the
+        register the caller reads it from -- and between one such write and the
+        read that takes the value away it holds nothing.  A hull over all of
+        them would say it was busy the whole time, and a value that could have
+        had it would be sent somewhere else; the code that comes out is a move
+        into a register and a move straight back out of it.
+
+        Within a block the stretch runs from a write to the last read before the
+        next write; at the edges of a block it is what the graph says is live
+        coming in and going out.  Nothing is lost by splitting it: every read of
+        the register is a point the stretch holding that value covers.
+        """
+        found: list[LiveRange] = []
+        for block, flow in zip(function.blocks, flows):
+            if flow.empty:
+                continue
+            start = flow.entry_point if key in flow.live_in else None
+            reached = start
+            for at, inst in enumerate(block.insts):
+                position = flow.first + at
+                defs, uses = defs_and_uses(inst)
+                reads = any(self._key(r) == key for r in uses)
+                writes = any(self._key(r) == key for r in defs)
+                if reads:
+                    if start is None:
+                        start = position * 2
+                    reached = position * 2
+                if writes:
+                    if not reads:
+                        # What it held before this is gone, and what it holds
+                        # from here is another value.
+                        if start is not None and reached is not None:
+                            found.append(LiveRange(reg=reg, start=start,
+                                                   end=reached))
+                        start = position * 2 + 1
+                    reached = position * 2 + 1
+            if key in flow.live_out:
+                reached = flow.exit_point
+            if start is not None and reached is not None:
+                found.append(LiveRange(reg=reg, start=start, end=reached))
+        return found
 
     def _flow(self, function: MachineFunction
               ) -> tuple[list[BlockFlow], dict[int, Reg]]:

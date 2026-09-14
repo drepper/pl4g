@@ -3,7 +3,7 @@ module "assign-is-the-result.pl4g" triple "x86_64-linux-none"
 
 let @counter: mut u8 internal = 1
 
-fn @main() → u8 internal cconv(pl4g.v0) special(startup) {
+fn @main() → u8 internal cconv(pl4g) special(startup) {
 block0:
   %0 = mem.start
   %1 = store.u8 %0, @counter, 42

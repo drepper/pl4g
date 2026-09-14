@@ -1,6 +1,6 @@
 """The calling conventions the RISC-V backend knows.
 
-``pl4g.v0`` is the language's own convention, shaped like the standard one for
+``pl4g`` is the language's own convention, shaped like the standard one for
 now.  The return address lives in a register the callee is free to overwrite,
 which is why a function that calls anything must save it -- a difference from
 the other two backends worth stating where the convention is described rather
@@ -34,8 +34,8 @@ _FLOAT_ORDER = tuple(reg("".join(("f", str(n)))).unit
                      for n in (*range(10, 18), *range(0, 8), *range(28, 32),
                                8, 9, *range(18, 28)))
 
-CC_PL4G_V0: Final[CallConvDesc] = CallConvDesc(
-    name="pl4g.v0",
+CC_PL4G: Final[CallConvDesc] = CallConvDesc(
+    name="pl4g",
     int_arg_regs=_ARG_REGS,
     int_ret_regs=(reg("a0"), reg("a1")),
     float_arg_regs=_FLOAT_ARGS,
@@ -65,14 +65,14 @@ CC_LP64: Final[CallConvDesc] = CallConvDesc(
 )
 
 CONVENTIONS: Final[dict[str, CallConvDesc]] = {
-    CC_PL4G_V0.name: CC_PL4G_V0,
+    CC_PL4G.name: CC_PL4G,
     CC_LP64.name: CC_LP64,
-    # A foreign function declared to follow "the system's" convention gets this
-    # architecture's one.
-    "sysv": CC_LP64,
+    # What a program writes when it means "the one this system uses", without
+    # having to know what this architecture calls it.
+    "cdecl": CC_LP64,
 }
 
 
 def lookup(name: str) -> CallConvDesc:
     """Return the convention called *name*, falling back to the language's own."""
-    return CONVENTIONS.get(name, CC_PL4G_V0)
+    return CONVENTIONS.get(name, CC_PL4G)

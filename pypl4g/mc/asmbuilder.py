@@ -261,12 +261,17 @@ class Assembler:
         #: What the allocator may give out.  Either the units of the one class
         #: a target has values in, or a mapping from the name of a class to its
         #: units where a target has more than one.
-        self._allocation_order: "tuple[RegUnit, ...] | dict[str, tuple[RegUnit, ...]]" = (
+        #: What a function that says nothing of its own gets, and what the one
+        #: being built now uses.  A function states its own where it begins,
+        #: since the convention is the function's and not the image's.
+        self._default_order: "tuple[RegUnit, ...] | dict[str, tuple[RegUnit, ...]]" = (
             {name: tuple(units) for name, units in allocation_order.items()}
             if isinstance(allocation_order, Mapping) else tuple(allocation_order))
+        self._order = self._default_order
         #: The units a function must hand back as it found them.  The
         #: convention says which, since that is what a convention is about.
-        self._callee_saved = frozenset(callee_saved or ())
+        self._default_kept = frozenset(callee_saved or ())
+        self._kept = self._default_kept
         #: What the allocator decided, for each function, in the order the
         #: functions were built.  The debugging dump reads it; nothing else does.
         self.assignments: list["Assignment"] = []
@@ -320,14 +325,37 @@ class Assembler:
     # -- functions -------------------------------------------------------------
 
     def begin_function(self, name: str, *, exported: bool = False,
-                       padding: int = 0) -> MachineFunction:
-        """Start building the function *name*."""
+                       padding: int = 0,
+                       allocation_order: "Sequence[RegUnit] | Mapping[str, Sequence[RegUnit]] | None" = None,
+                       callee_saved: "frozenset[RegUnit] | None" = None) -> MachineFunction:
+        """Start building the function *name*.
+
+        Which registers may be given out and which have to be handed back as
+        they were found are the *function's* and not the image's: the
+        specification says a convention may differ between the functions of one
+        compilation, so a function that follows another one says so here.  What
+        was given when the builder was made is what a function that says nothing
+        gets.
+        """
         assert self._function is None
         function = MachineFunction(name=name, exported=exported, padding=padding)
         self._function = function
+        self._order = (self._settled_order(allocation_order)
+                       if allocation_order is not None else self._default_order)
+        self._kept = (frozenset(callee_saved) if callee_saved is not None
+                      else self._default_kept)
         self._block = function.add_block("".join((".L", name, "_entry")))
         self.functions.append(function)
         return function
+
+    @staticmethod
+    def _settled_order(
+            given: "Sequence[RegUnit] | Mapping[str, Sequence[RegUnit]]"
+    ) -> "tuple[RegUnit, ...] | dict[str, tuple[RegUnit, ...]]":
+        """An allocation order in the form the allocator wants it."""
+        if isinstance(given, Mapping):
+            return {name: tuple(units) for name, units in given.items()}
+        return tuple(given)
 
     def reserve_label(self, hint: str) -> str:
         """A label no other block in this function has.
@@ -392,11 +420,11 @@ class Assembler:
         leaving the encoder to fail somewhere further down with less to say.
         """
         if function.virtual_registers():
-            if self._registers is None or not self._allocation_order:
+            if self._registers is None or not self._order:
                 raise RegisterAssignmentError(function.name,
                                               len(function.virtual_registers()))
             self.assignments.append(
-                allocate(function, self._registers, self._allocation_order,
+                allocate(function, self._registers, self._order,
                          self._selector))
         pending = function.virtual_registers()
         if pending:
@@ -448,6 +476,8 @@ class Assembler:
         for index, register in enumerate(kept):
             opening.extend(self._selector.select_spill(
                 size + link + 8 * index, register, INVALID_SPAN))
+        function.preserved = frozenset(reg.unit for reg in kept
+                                       if isinstance(reg, PhysReg))
         entry = function.blocks[0]
         entry.insts = [*opening, *entry.insts]
         for block in function.blocks:
@@ -470,7 +500,7 @@ class Assembler:
         register put there by anything else -- a fixed operand, a helper -- is
         counted too.
         """
-        if not self._callee_saved or self._registers is None:
+        if not self._kept or self._registers is None:
             return []
         used: set[RegUnit] = set()
         for block in function.blocks:
@@ -486,13 +516,13 @@ class Assembler:
         # saving two of them saves them in a settled order rather than in
         # whatever order a set came out in.
         preferred: list[RegUnit] = []
-        if isinstance(self._allocation_order, dict):
-            for units in self._allocation_order.values():
+        if isinstance(self._order, dict):
+            for units in self._order.values():
                 preferred.extend(units)
         else:
-            preferred.extend(self._allocation_order)
+            preferred.extend(self._order)
         order = {unit: index for index, unit in enumerate(preferred)}
-        wanted = sorted(used & self._callee_saved,
+        wanted = sorted(used & self._kept,
                         key=lambda unit: order.get(unit, len(order)))
         return [self._registers.view(unit, 64) for unit in wanted]
 
@@ -540,10 +570,26 @@ class Assembler:
         operands = tuple(self.imm(s) if isinstance(s, int) else s for s in sources)
         self._emit(self._selector.select_op(op, dst, operands, span))
 
-    def call(self, target: MCOperand | str, span: Span = INVALID_SPAN) -> None:
-        """Call *target*, named either directly or by symbol name."""
+    def call(self, target: MCOperand | str, span: Span = INVALID_SPAN,
+             clobbers: "Sequence[Reg]" = (),
+             reads: "Sequence[Reg]" = ()) -> None:
+        """Call *target*, named either directly or by symbol name.
+
+        *clobbers* is what the callee destroys and *reads* the registers the
+        arguments were put in.  Both are given here rather than stated in the
+        instruction's row because both are the callee's to say: two functions of
+        one compilation may follow different conventions, a function that
+        destroys little is one a caller has to save little around, and a
+        register holding an argument would look dead from the moment it was
+        written if nothing said the call wanted it.
+        """
         operand = self.symref(target) if isinstance(target, str) else target
-        self._emit(self._selector.select_call(operand, span))
+        selected = list(self._selector.select_call(operand, span))
+        for inst in selected:
+            if InstFlags.CALL in inst.desc.flags:
+                inst.clobbers = tuple(clobbers)
+                inst.reads = tuple(reads)
+        self._emit(selected)
 
     def jump(self, target: str, span: Span = INVALID_SPAN) -> None:
         """Transfer control to the block called *target*."""
@@ -690,6 +736,16 @@ class Assembler:
         """Read what `put_aside` wrote at *slot* back into *destination*."""
         self._emit(self._selector.select_reload(destination, slot, span))
 
-    def ret(self, span: Span = INVALID_SPAN) -> None:
-        """Return from the current function."""
-        self._emit(self._selector.select_return(span))
+    def ret(self, span: Span = INVALID_SPAN,
+            reads: "Sequence[Reg]" = ()) -> None:
+        """Return from the current function.
+
+        *reads* is the registers the answer was put in, for the same reason a
+        call names the ones its arguments were put in: what says a register
+        written just before this is still wanted is this instruction.
+        """
+        selected = list(self._selector.select_return(span))
+        for inst in selected:
+            if InstFlags.RETURN in inst.desc.flags:
+                inst.reads = tuple(reads)
+        self._emit(selected)

@@ -1,0 +1,31 @@
+※ pl4g-test: compile=ok run=native,qemu exit=42 diag=none
+
+※ A function follows the language's own calling convention -- `pl4g` -- unless
+※ it says otherwise, and the specification says in so many words that the
+※ convention need not match the system's and may differ between the functions
+※ of one compilation.  `@[cdecl]` is how a function says otherwise: it follows
+※ the one this system uses, and keeps its plain name, because the point of
+※ asking for it is to be called by something that has never heard of this
+※ language.
+※
+※ The two are called through their own conventions from one place here, which
+※ is the thing that has to work: which register an argument goes in is what the
+※ function being called says, and not what the caller follows.
+
+@[cdecl]
+fn system_way(a: u8, b: u8) → u8:
+    a | b
+
+fn our_way(a: u8, b: u8) → u8:
+    a | b
+
+@[cdecl]
+fn asks_ours(a: u8, b: u8) → u8:
+    our_way(a, b)
+
+fn asks_theirs(a: u8, b: u8) → u8:
+    system_way(a, b)
+
+@[startup]
+fn main() → u8:
+    asks_ours(32u8, 8u8) | asks_theirs(2u8, 0u8)

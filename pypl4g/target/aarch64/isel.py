@@ -5,7 +5,7 @@ what this architecture's instructions already are, so there is no lowering step
 of the kind x86-64 needs.
 """
 
-from typing import TYPE_CHECKING, Final, Sequence
+from typing import TYPE_CHECKING, Final, Mapping, Sequence
 
 from ...mc import ops
 from ...mc.asmbuilder import InstructionSelector
@@ -17,7 +17,8 @@ from ...ir.inst import BinOp, UnOp
 from ...mc.reg import PhysReg, Reg, VirtReg
 from ...mc.operand import SymExpr
 from ...source.location import Span
-from ..branches import (CONDITIONS, UnsupportedBranch, folded_into_branch,
+from ..branches import (CONDITIONS, Move, UnsupportedBranch,
+                        folded_into_branch, sequenced,
                         labels_of,
                         lower_branch, lower_comparison)
 from ..faults import Messages, describe
@@ -30,6 +31,8 @@ from ..saturate import (DIVISION, NAMES, SATURATING, TRAPPING, Unsupported,
                         SHIFTS, lower_division_result, lower_saturating,
                         lower_shift, lower_trapping)
 from . import ops as a64ops
+from ...ir.function import SYSTEM_CCONV
+from .abi import lookup as lookup_cconv
 from .startup import ABORT_SYMBOL
 from .opcodes import AARCH64_INSTRS
 from .regs import GPR, INFO, SP, VEC, X30
@@ -704,7 +707,9 @@ class A64Selector(InstructionSelector):
 def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
                    registers: "RegisterInfo", messages: "Messages | None" = None,
                    sources: "SourceManager | None" = None,
-                   constants: "Constants | None" = None) -> None:
+                   constants: "Constants | None" = None,
+                   known_clobbers: "Mapping[str, frozenset[RegUnit]] | None" = None
+                   ) -> None:
     """Build the machine form of one IR function."""
     from ...ir.inst import (AddressInst, BinaryInst, BrInst, CallInst, CmpInst,
                             CondBrInst,
@@ -721,8 +726,14 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
     from ...ir.layout import encode_float
     from ..globals import symbol_of
 
+    # The convention is the function's and not the image's: which registers may
+    # be given out and which have to be handed back as they were found are two
+    # of the things a convention settles, and the specification lets two
+    # functions of one compilation settle them differently.
     asm.begin_function(symbol_name(func),
-                       exported=func.linkage.value == "visible")
+                       exported=func.linkage.value == "visible",
+                       allocation_order=cconv.orders(GPR.name, VEC.name),
+                       callee_saved=cconv.callee_saved)
     #: Where each value the function computes is held.  A value gets a register
     #: of its own and the allocator decides which; nothing here knows or cares.
     held: dict[int, VirtReg] = {}
@@ -865,7 +876,10 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
                 raise UnsupportedOperation(
                     "an operation that can fault, with nowhere to report it", None)
             symbol = messages.symbol(self.text)
-            first, second = cconv.int_arg_regs[:2]
+            # The runtime is written as instructions rather than lowered, so it
+            # follows one settled convention whatever the function reporting the
+            # fault follows.
+            first, second = lookup_cconv(SYSTEM_CCONV).int_arg_regs[:2]
             asm.address(first, symbol, span)
             asm.loadreg(second, asm.imm(len(self.text.encode("utf-8")), 32,
                                         signed=False), span)
@@ -1029,20 +1043,22 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
                                 "answering with '", ty.render(),
                                 "', which wants more registers than the "
                                 "convention answers in")), span) from many
-                        for at, (part, place) in enumerate(zip(pieces, places)):
-                            asm.loadreg(_as_argument(place, part, registers),
+                        answering = [_as_argument(place, part, registers)
+                                     for part, place in zip(pieces, places)]
+                        for at, into in enumerate(answering):
+                            asm.loadreg(into,
                                         MCReg(operands.part_of(value, at, span)),
                                         inst.span)
-                        asm.ret(inst.span)
+                        asm.ret(inst.span, answering)
                         continue
                     if isinstance(ty, FloatType):
                         # A floating-point value goes back in a register of its
                         # own kind, and a constant one is read out of the image
                         # first, which is what the operand helper does.
-                        asm.loadreg(_result_register(ty, cconv, registers),
-                                    operands.in_register(value, inst.span),
+                        answer = _result_register(ty, cconv, registers)
+                        asm.loadreg(answer, operands.in_register(value, inst.span),
                                     inst.span)
-                        asm.ret(inst.span)
+                        asm.ret(inst.span, (answer,))
                         continue
                     if not isinstance(ty, (IntType, BoolType, EnumType,
                                            PtrType, SetType, DictType)):
@@ -1056,7 +1072,7 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
                     else:
                         asm.loadreg(result, MCReg(_value_of(value, held, span)),
                                     inst.span)
-                    asm.ret(inst.span)
+                    asm.ret(inst.span, (result,))
                 case BinaryInst() if _is_floating(inst.ty):
                     answer = inst.ty.ok if isinstance(inst.ty, ResultType) \
                         else inst.ty
@@ -1356,37 +1372,49 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
                         raise UnsupportedOperation(
                             "a call through something that is not a named function",
                             span)
+                    # A call is placed by the *callee's* convention and not by
+                    # this function's.  Which register an argument goes in is
+                    # what the function being called says, and the specification
+                    # lets two functions of one compilation say different
+                    # things.
+                    theirs = lookup_cconv(callee.cconv)
                     try:
                         going = argument_places(
-                            cconv, [a.ty for a in inst.operands])
+                            theirs, [a.ty for a in inst.operands])
                     except TooManyArguments as many:
                         raise UnsupportedOperation(
                             "a call with more arguments than the convention passes "
                             "in registers", span) from many
-                    # The arguments go into the registers the convention names,
-                    # in order.  Each is moved as late as it can be: everything
-                    # the call needs is read before any of them is written, so
-                    # one argument cannot be overwritten by another being put in
-                    # place -- which is only true while every argument is a
-                    # value the function already holds.
+                    # The arguments are a parallel copy, for the reason a
+                    # branch's are: a value may already be in the register
+                    # another argument is being moved into, which is likelier
+                    # the more a convention's argument registers are ones the
+                    # allocator prefers.
+                    handed: list[Move] = []
                     for position, argument in enumerate(inst.operands):
                         pieces = parts_of(argument.ty)
                         if len(pieces) > 1:
                             for at, (part, place) in enumerate(
                                     zip(pieces, going[position])):
-                                asm.loadreg(
-                                    _as_argument(place, part, registers),
-                                    MCReg(operands.part_of(argument, at, span)),
-                                    inst.span)
+                                handed.append(Move(
+                                    into=_as_argument(place, part, registers),
+                                    source=MCReg(operands.part_of(argument, at,
+                                                                  span))))
                             continue
-                        asm.loadreg(
-                            _as_argument(going[position][0], argument.ty, registers),
-                            operands.value(argument, inst.span), inst.span)
-                    asm.call(symbol_name(callee), inst.span)
+                        handed.append(Move(
+                            into=_as_argument(going[position][0], argument.ty,
+                                              registers),
+                            source=operands.value(argument, inst.span)))
+                    for move in sequenced(handed, asm.temporary):
+                        asm.loadreg(move.into, move.source, inst.span)
+                    asm.call(symbol_name(callee), inst.span,
+                             _destroyed_by(callee, theirs, registers,
+                                           known_clobbers),
+                             reads=[move.into for move in handed])
                     if len(parts_of(inst.ty)) > 1:
                         pieces = parts_of(inst.ty)
                         try:
-                            places = result_places(cconv, inst.ty)
+                            places = result_places(theirs, inst.ty)
                         except TooManyArguments as many:
                             raise UnsupportedOperation("".join((
                                 "a call answering with '", inst.ty.render(),
@@ -1402,13 +1430,19 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
                         held[id(inst)] = taken[0]
                         extra[id(inst)] = taken[1:]
                     elif inst.ty is not VOID:
+                        # Wanted where this function answers if that is what
+                        # becomes of it, and otherwise where the call left it:
+                        # either way the hint is a register the value is
+                        # already in or about to be wanted in, so the move
+                        # usually turns into one of a register to itself.
                         destination = _new_value(
                             inst.ty, registers,
-                            hint=(_result_register(inst.ty, cconv, registers)
-                                  if inst is returned else None))
+                            hint=_result_register(
+                                inst.ty, cconv if inst is returned else theirs,
+                                registers))
                         held[id(inst)] = destination
                         asm.loadreg(destination,
-                                    MCReg(_result_register(inst.ty, cconv,
+                                    MCReg(_result_register(inst.ty, theirs,
                                                            registers)),
                                     inst.span)
                 case UnreachableInst():
@@ -1482,6 +1516,26 @@ def _result_register(ty: "Type", cconv: "CallConvDesc",
 #: names is a view of it at the width of the value, so the whole is what the
 #: value's own register is.
 _FLOAT_REGISTER_BITS: Final[int] = 128
+
+
+def _destroyed_by(callee: "Function", cconv: "CallConvDesc",
+                  registers: "RegisterInfo",
+                  known: "Mapping[str, frozenset[RegUnit]] | None"
+                  ) -> "list[PhysReg]":
+    """Which registers a call to *callee* destroys.
+
+    What the callee turned out to destroy where that has been worked out, and
+    everything its convention allows it to destroy where it has not -- a
+    declaration of a function defined elsewhere, or one this compilation has
+    not reached yet.  The difference is a save and a reload at every call, which
+    is why it is worth asking rather than assuming.
+    """
+    from ...ir.mangle import symbol_name
+
+    units = None if known is None else known.get(symbol_name(callee))
+    if units is None:
+        units = cconv.caller_saved
+    return [registers.widest(unit) for unit in units]
 
 
 def _new_value(ty: "Type", registers: "RegisterInfo",

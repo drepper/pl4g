@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass, field
 from enum import Enum, StrEnum
-from typing import Mapping, Sequence
+from typing import Final, Mapping, Sequence
 
 from ..source.location import INVALID_SPAN, Span
 from .inst import Instruction, Terminator
@@ -98,6 +98,17 @@ class BasicBlock:
         return inst
 
 
+#: What a function follows where it asks for nothing else: the language's own
+#: convention, which each backend describes for itself.  It is a name and not a
+#: description, because what the name stands for is the target's to say.
+DEFAULT_CCONV: Final[str] = "pl4g"
+
+#: And what a function that asks for the system's follows.  It is a name rather
+#: than an architecture's own, so that a program saying "call me the way this
+#: system does" need not know what this system calls it.
+SYSTEM_CCONV: Final[str] = "cdecl"
+
+
 @dataclass(slots=True, eq=False)
 class Function:
     """A function, or -- with no blocks -- the declaration of a foreign one."""
@@ -109,7 +120,7 @@ class Function:
     #: Name of the calling convention, resolved through the target.  Per
     #: function, because the specification lets conventions differ between
     #: functions of one compilation.
-    cconv: str = "pl4g.v0"
+    cconv: str = DEFAULT_CCONV
     blocks: list[BasicBlock] = field(default_factory=list)
     span: Span = INVALID_SPAN
     source_path: str = ""

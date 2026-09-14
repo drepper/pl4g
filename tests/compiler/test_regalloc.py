@@ -12,13 +12,13 @@ from pypl4g.mc.operand import MCImm, MCMem, MCOperand, MCReg
 from pypl4g.mc.regalloc import (LinearScan, RegisterPressureError, allocate,
                                 defs_and_uses)
 from pypl4g.mc.reg import PhysReg, VirtReg
-from pypl4g.target.x86_64.abi import CC_PL4G_V0
+from pypl4g.target.x86_64.abi import CC_PL4G
 from pypl4g.target.x86_64.isel import X86Selector
 from pypl4g.target.x86_64.opcodes import X86_INSTRS
 from pypl4g.target.x86_64.regs import GPR, INFO, reg
 
 TABLE = InstrTable(X86_INSTRS)
-ORDER = CC_PL4G_V0.allocation_order
+ORDER = CC_PL4G.allocation_order
 #: What the allocator asks how to reach the frame.
 SELECTOR = X86Selector(TABLE)
 
@@ -404,7 +404,7 @@ def test_the_two_kinds_do_not_take_registers_from_each_other() -> None:
     from pypl4g.mc.regalloc import Assignment, LiveRange
     from pypl4g.target.x86_64.regs import VEC
 
-    orders = {GPR.name: list(CC_PL4G_V0.allocation_order)[:1],
+    orders = {GPR.name: list(CC_PL4G.allocation_order)[:1],
               VEC.name: INFO.members_of(VEC)[:1]}
     scan = LinearScan(INFO, orders, SELECTOR)
     whole = INFO.new_virtual(GPR, 64)

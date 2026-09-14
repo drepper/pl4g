@@ -551,8 +551,11 @@ X86_INSTRS: Final[tuple[X86InstDesc, ...]] = (
     # convention this target has calling the same registers caller-saved, and
     # the entry in the to-do list says what to do when one does not.
     # call rel32                         E8 cd
+    # What a call destroys is the *callee's* to say and is carried on the
+    # instruction rather than stated here; the link register, which the
+    # instruction itself writes, is not.
     X86InstDesc("call", (_rel(32),), opcode=0xE8, rel_op=0, rel_bits=32,
-                implicit_defs=CALLER_SAVED, flags=InstFlags.CALL, est_size=5),
+                flags=InstFlags.CALL, est_size=5),
     # ret                                C3
     X86InstDesc("ret", (), opcode=0xC3, flags=InstFlags.TERMINATOR | InstFlags.RETURN, est_size=1),
     # syscall                            0F 05

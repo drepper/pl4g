@@ -1,10 +1,15 @@
 """The calling conventions the x86-64 backend knows.
 
-``pl4g.v0`` is the language's own convention.  It is deliberately shaped like the
-system's for now, which costs nothing and makes generated code readable in a
-debugger; the specification leaves the compiler free to change it, and the fact
-that it is a value rather than a hard-coded rule is what will make that change
-local.
+``pl4g`` is the language's own convention and the one every function has that
+does not ask for another.  It is *not* shaped like the system's, and the
+specification says in so many words that it need not be: what a function does
+with its arguments is the compiler's business as long as every caller agrees,
+and the caller is always this compiler.
+
+``sysv64`` is the system's, and ``cdecl`` is the name a program writes for it
+without having to know what this architecture calls it.  A function marked
+`@[cdecl]` gets that one and keeps its plain name, because the point of asking
+for it is to be called by something that has never heard of this language.
 """
 
 from typing import Final
@@ -31,9 +36,18 @@ _ALLOCATION_ORDER = tuple(reg(n).unit for n in (
     "rax", "rcx", "rdx", "rsi", "rdi", "r8", "r9", "r10", "r11",
     "rbx", "r12", "r13", "r14", "r15"))
 
-CC_PL4G_V0: Final[CallConvDesc] = CallConvDesc(
-    name="pl4g.v0",
-    int_arg_regs=(RDI, RSI, RDX, RCX, reg("r8"), reg("r9")),
+#: Where the language's own convention passes its arguments.  It begins at the
+#: registers an answer comes back in, which the system's convention does not:
+#: a function that answers with what it was given -- which is a great deal of
+#: what a generated program's small functions do -- then has the value in the
+#: right register already and is a bare `ret`, and its caller has no move to
+#: make either.  The rest follow in the order the allocator prefers them, so
+#: that an argument is usually already where it is wanted.
+_PL4G_ARGS = (RAX, RDX, RCX, RSI, RDI, reg("r8"), reg("r9"), reg("r10"))
+
+CC_PL4G: Final[CallConvDesc] = CallConvDesc(
+    name="pl4g",
+    int_arg_regs=_PL4G_ARGS,
     int_ret_regs=(RAX, RDX),
     float_arg_regs=_FLOAT_ARGS,
     float_ret_regs=(reg("xmm0"),),
@@ -46,7 +60,7 @@ CC_PL4G_V0: Final[CallConvDesc] = CallConvDesc(
 )
 
 CC_SYSV: Final[CallConvDesc] = CallConvDesc(
-    name="sysv",
+    name="sysv64",
     int_arg_regs=(RDI, RSI, RDX, RCX, reg("r8"), reg("r9")),
     int_ret_regs=(RAX, RDX),
     float_arg_regs=_FLOAT_ARGS,
@@ -60,11 +74,14 @@ CC_SYSV: Final[CallConvDesc] = CallConvDesc(
 )
 
 CONVENTIONS: Final[dict[str, CallConvDesc]] = {
-    CC_PL4G_V0.name: CC_PL4G_V0,
+    CC_PL4G.name: CC_PL4G,
     CC_SYSV.name: CC_SYSV,
+    # What a program writes when it means "the one this system uses", without
+    # having to know what this architecture calls it.
+    "cdecl": CC_SYSV,
 }
 
 
 def lookup(name: str) -> CallConvDesc:
     """Return the convention called *name*, falling back to the language's own."""
-    return CONVENTIONS.get(name, CC_PL4G_V0)
+    return CONVENTIONS.get(name, CC_PL4G)

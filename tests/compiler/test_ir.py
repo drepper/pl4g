@@ -15,7 +15,7 @@ from pypl4g.ir.verify import verify
 EXIT0 = """; pl4g-ir 1
 module "exit0.pl4g" triple "x86_64-linux-none"
 
-fn @main() \N{RIGHTWARDS ARROW} u8 internal cconv(pl4g.v0) special(startup) {
+fn @main() \N{RIGHTWARDS ARROW} u8 internal cconv(pl4g) special(startup) {
 block0:
   ret.u8 0
 }
@@ -24,7 +24,7 @@ block0:
 BLOCK_PARAMS = """; pl4g-ir 1
 module "absdiff.pl4g" triple "x86_64-linux-none"
 
-fn @absdiff(i32, i32) \N{RIGHTWARDS ARROW} i32 internal cconv(pl4g.v0) {
+fn @absdiff(i32, i32) \N{RIGHTWARDS ARROW} i32 internal cconv(pl4g) {
 block0(%0: i32, %1: i32):
   %2 = icmp.slt.i32 %0, %1
   condbr %2, block1(%1, %0), block1(%0, %1)
@@ -40,7 +40,7 @@ module "places.pl4g" triple "x86_64-linux-none"
 
 let @v: mut u64 internal = 0
 
-fn @main() \N{RIGHTWARDS ARROW} u8 internal cconv(pl4g.v0) special(startup) {
+fn @main() \N{RIGHTWARDS ARROW} u8 internal cconv(pl4g) special(startup) {
 block0:
   %0 = mem.start
   %1 = address.ptr<mut u64> @v

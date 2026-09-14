@@ -18,7 +18,9 @@ from ..front.token import (BOTTOM_GLYPH, BUILTIN_GLYPH, EMPTY_ARENA_NAME,
 from ..ir.builder import IRBuilder
 from ..ir.inst import BinOp, CastKind, CmpPred, Instruction, UnOp
 from . import tables
-from ..ir.function import (BasicBlock, FuncAttrs, Function, InlineHint,
+from ..ir.function import (DEFAULT_CCONV, SYSTEM_CCONV, BasicBlock, FuncAttrs,
+                           Function,
+                           InlineHint,
                            Linkage, SpecialKind)
 from ..ir.module import GlobalVar, Module
 from ..ir.types import (ARENA, BOOL, BUILTIN_TYPES, DictType, ERROR, EnumType,
@@ -993,7 +995,8 @@ class Checker:
                             ty=self._module.types.func_type(params, ret),
                             attrs=func_attrs, linkage=linkage,
                             exported=self._is_export(attrs),
-                            cconv="sysv" if func_attrs.abi is not None else "pl4g.v0",
+                            cconv=(func_attrs.abi if func_attrs.abi is not None
+                                   else DEFAULT_CCONV),
                             span=node.span, source_path=path)
             self._module.add_function(func, key=self._key(node.name))
             self._top[node.name] = func
@@ -1207,6 +1210,13 @@ class Checker:
                 case "inline":
                     inline = (InlineHint.NEVER if attr.as_str("mode") == "never"
                               else InlineHint.ALWAYS)
+                case "cdecl":
+                    # The one every program that means to be called from
+                    # elsewhere writes.  It says "the one this system uses"
+                    # without the program having to know what this architecture
+                    # calls it, which is what each backend answers for.
+                    abi = SYSTEM_CCONV
+                    extra["variadic"] = attr.as_bool("variadic")
                 case "abi":
                     abi = attr.as_str("name")
                     extra["variadic"] = attr.as_bool("variadic")

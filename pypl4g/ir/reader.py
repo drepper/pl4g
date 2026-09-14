@@ -8,7 +8,8 @@ spans, and a persistent form would be a packed binary one instead.
 
 from typing import Sequence
 
-from .function import (BasicBlock, FuncAttrs, Function, InlineHint, Linkage,
+from .function import (DEFAULT_CCONV, BasicBlock, FuncAttrs, Function,
+                       InlineHint, Linkage,
                        SpecialKind)
 from .inst import (AddressInst, BinaryInst, BinOp, BlockTarget, BrInst, CastInst,
                    CastKind,
@@ -122,7 +123,7 @@ class _FunctionReader:
         ret = _parse_type(words[0], self._module.types, 0)
         attrs = FuncAttrs()
         linkage = Linkage.INTERNAL
-        cconv = "pl4g.v0"
+        cconv = DEFAULT_CCONV
         special: SpecialKind | None = None
         priority: int | None = None
         abi: str | None = None

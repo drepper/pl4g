@@ -632,7 +632,10 @@ AARCH64_INSTRS: Final[tuple[A64InstDesc, ...]] = (
     A64InstDesc("bl", (_sym(),), template=0x94000000,
                 fields=(Field(FieldKind.RELOCATION, 0, 0, 26, shift=2, signed=True,
                               reloc=BRANCH26),),
-                implicit_defs=(X30, *CALLER_SAVED), flags=InstFlags.CALL,
+    # What a call destroys is the *callee's* to say and is carried on the
+    # instruction rather than stated here; the link register, which the
+    # instruction itself writes, is not.
+                implicit_defs=(X30,), flags=InstFlags.CALL,
                 est_size=INSTRUCTION_SIZE),
     # ret   (returns through the link register)
     A64InstDesc("ret", (), template=0xD65F03C0, implicit_uses=(X30,),

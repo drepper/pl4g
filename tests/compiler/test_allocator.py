@@ -15,7 +15,8 @@ from conftest import check_conformance, compiler_targets, describe, runner_for
 from pypl4g.diag.engine import collecting_engine
 from pypl4g.elf.layout import ImageKind
 from pypl4g.elf.writer import ImageSettings, write_image
-from pypl4g.ir.function import FuncAttrs, Function, Linkage, SpecialKind
+from pypl4g.ir.function import (SYSTEM_CCONV, FuncAttrs, Function, Linkage,
+                                SpecialKind)
 from pypl4g.ir.inst import (AddressInst, BinaryInst, BinOp, CallInst,
                             LoadInst, MemStartInst, RetInst, StoreInst)
 from pypl4g.ir.module import GlobalVar, Module
@@ -52,9 +53,15 @@ class Program:
         self.heap_address = self.block.append(AddressInst(self.heap))
 
     def _runtime(self, name: str, params: tuple, result) -> Function:  # noqa: ANN001
-        """Declare one of the entry points the backend supplies."""
+        """Declare one of the entry points the backend supplies.
+
+        It follows the system's convention, which is what hand-written code
+        follows: it names its registers outright rather than being handed them
+        by a compiler that could have chosen otherwise.
+        """
         func = Function(name, self.module.types.func_type(params, result),
-                        FuncAttrs(abi="pl4g.runtime"), linkage=Linkage.VISIBLE)
+                        FuncAttrs(abi=SYSTEM_CCONV), cconv=SYSTEM_CCONV,
+                        linkage=Linkage.VISIBLE)
         self.module.add_function(func)
         return func
 

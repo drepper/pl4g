@@ -1,6 +1,6 @@
 """The calling conventions the AArch64 backend knows.
 
-``pl4g.v0`` is the language's own convention.  It is shaped like the standard
+``pl4g`` is the language's own convention.  It is shaped like the standard
 one for now, which costs nothing and keeps generated code readable in a
 debugger; the specification leaves the compiler free to change it, and the fact
 that it is a value rather than a rule is what will make that change local.
@@ -29,8 +29,8 @@ _FLOAT_ARGS = tuple(reg("".join(("d", str(n)))) for n in range(8))
 _FLOAT_ORDER = tuple(reg("".join(("d", str(n)))).unit
                      for n in (*range(0, 8), *range(16, 32), *range(8, 16)))
 
-CC_PL4G_V0: Final[CallConvDesc] = CallConvDesc(
-    name="pl4g.v0",
+CC_PL4G: Final[CallConvDesc] = CallConvDesc(
+    name="pl4g",
     int_arg_regs=_ARG_REGS,
     int_ret_regs=(reg("x0"), reg("x1")),
     float_arg_regs=_FLOAT_ARGS,
@@ -60,14 +60,14 @@ CC_AAPCS64: Final[CallConvDesc] = CallConvDesc(
 )
 
 CONVENTIONS: Final[dict[str, CallConvDesc]] = {
-    CC_PL4G_V0.name: CC_PL4G_V0,
+    CC_PL4G.name: CC_PL4G,
     CC_AAPCS64.name: CC_AAPCS64,
-    # A foreign function declared to follow "the system's" convention gets this
-    # architecture's one.
-    "sysv": CC_AAPCS64,
+    # What a program writes when it means "the one this system uses", without
+    # having to know what this architecture calls it.
+    "cdecl": CC_AAPCS64,
 }
 
 
 def lookup(name: str) -> CallConvDesc:
     """Return the convention called *name*, falling back to the language's own."""
-    return CONVENTIONS.get(name, CC_PL4G_V0)
+    return CONVENTIONS.get(name, CC_PL4G)

@@ -91,6 +91,7 @@ GROUPS: tuple[Group, ...] = (
            "saturating-precedence": "a sum and a product that saturate",
            "arithmetic-operators": "a sum and a product that check and can fault",
            "call-nested": "four calls, two of them nested",
+           "cdecl-attribute": "two conventions in one program, called both ways",
            "arithmetic-division": "a division and a remainder, each checked twice",
            "shift-operators": "two shifts, each with its distance checked",
            "float-arithmetic": "ten floating-point answers, each asserted",

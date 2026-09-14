@@ -2486,6 +2486,58 @@ be in the type.
 
 ---
 
+## 2026-09-14T22:00+02:00 — language and compiler
+
+**A convention per function, and the one the system uses asked for by name**
+
+Decided on the user's direction.  The specification has said since the first page that the calling conventions need not match the
+system's and may differ between the functions of one compilation; nothing had taken it up.
+
+**`pl4g` is the language's own convention and the default; `@[cdecl]` asks for the system's.**  The attribute says "the one this
+system uses" rather than naming one, so a program need not know what an architecture calls its own; `@[abi("name")]` is still
+there for naming a particular one, and `cdecl` is a name it accepts.  A `@[cdecl]` function also keeps its plain name, because both
+halves are the same request: the point of asking is to be reachable from a world that has never heard of this language, and that
+world knows neither the convention nor the mangling.
+
+Compare: Rust's `extern "C"`, which is this, and whose default `extern "Rust"` is explicitly unspecified for exactly the reason
+the specification gives here; Go, which changed its own convention from the stack to registers in 1.17 because nothing outside the
+toolchain depended on it; C and C++, where the ABI is the platform's and a compiler may not touch it.
+
+**A call is placed by the callee's convention and not the caller's.**  That was a latent defect rather than a change: with one
+convention in the program the two were the same, and the first program with two would have been miscompiled.
+
+**`pl4g`'s argument registers begin where its answer comes back.**  On x86-64 that is `rax` then `rdx` where the system's begins at
+`rdi`.  A function that answers with what it was given -- a great deal of what a generated program's small functions are -- then
+has the value where it has to be already.  `fn f(p: u8) → u8: p` is a bare `ret`, and its caller has no move to make either.
+
+Getting there needed two more things, and both are worth more than the convention that exposed them:
+
+**A call's arguments are a parallel copy**, for the reason a branch's are.  A value may already be in the register another argument
+is being moved into, and that is likelier the more a convention's argument registers are ones the allocator prefers -- which this
+one's now are.  The sequencer written for the loops does it.
+
+**A physical register's live range is several stretches and not one.**  A virtual register is a value and gets a hull; a physical
+register is written wherever a convention says it is and holds nothing between one such write and the read that takes the value
+away.  A hull said it was busy the whole time, so the value that could have had it was sent elsewhere -- a move into a register and
+a move straight back out.  Splitting it is what makes the identity function one instruction rather than three.  It also exposed
+that nothing said a call *reads* the registers its arguments went into: the hull had been hiding that, and without it an argument
+register looked dead from the moment it was written.
+
+**What a call destroys is asked of the callee, not of its convention.**  A convention can only say what a function is allowed to
+destroy; a small one destroys far less, and the difference is a save and a reload at every call.  Measured on a program holding
+five values across a call to a function that writes two registers: fifteen instructions and no frame, against twenty-eight with a
+forty-byte frame and five save-and-restore pairs.
+
+What that answer is worth depends on the order the functions are generated in, since a callee generated after its caller is one the
+caller could not ask.  Sorting by the call graph is what makes it always exact, and it is what an inliner would want as well; both
+are in the to-do list, as the instruction asked.
+
+**The runtime keeps the system's convention.**  It is written as instructions rather than lowered, so it names its registers
+outright; a convention the compiler chose for it would have to be read back out of the assembly.  That is a rule worth stating
+rather than a workaround: hand-written code has a settled convention, and everything the compiler generates may have its own.
+
+---
+
 ---
 
 Open questions

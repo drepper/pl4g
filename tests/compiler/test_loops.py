@@ -25,7 +25,7 @@ from pypl4g.ir.verify import verify
 from pypl4g.mc.operand import MCImm, MCReg
 from pypl4g.mc.reg import RegisterInfo
 from pypl4g.mc.streamer import MCStreamer
-from pypl4g.target.branches import _Move, _sequenced
+from pypl4g.target.branches import Move, sequenced
 from pypl4g.target.registry import lookup as lookup_target
 
 
@@ -289,8 +289,8 @@ def _ends_up_right(wanted: list, ordered: list) -> bool:
 def test_a_chain_of_moves_is_put_in_order() -> None:
     """``a from b`` and ``b from c`` have to happen in that order."""
     a, b, c = _register(), _register(), _register()
-    wanted = [_Move(into=b, source=MCReg(c)), _Move(into=a, source=MCReg(b))]
-    ordered = _sequenced(wanted, _spares())
+    wanted = [Move(into=b, source=MCReg(c)), Move(into=a, source=MCReg(b))]
+    ordered = sequenced(wanted, _spares())
     assert [m.into for m in ordered] == [a, b]
     assert _ends_up_right(wanted, ordered)
 
@@ -298,14 +298,14 @@ def test_a_chain_of_moves_is_put_in_order() -> None:
 def test_a_move_of_a_register_to_itself_goes() -> None:
     """A parameter handed its own value is no move, and no cycle either."""
     a = _register()
-    assert _sequenced([_Move(into=a, source=MCReg(a))], _spares()) == []
+    assert sequenced([Move(into=a, source=MCReg(a))], _spares()) == []
 
 
 def test_two_moves_that_exchange_need_one_spare() -> None:
     """The cycle a loop carrying two values makes on every turn."""
     a, b = _register(), _register()
-    wanted = [_Move(into=a, source=MCReg(b)), _Move(into=b, source=MCReg(a))]
-    ordered = _sequenced(wanted, _spares())
+    wanted = [Move(into=a, source=MCReg(b)), Move(into=b, source=MCReg(a))]
+    ordered = sequenced(wanted, _spares())
     assert len(ordered) == 3, "one held aside, and then the two"
     assert _ends_up_right(wanted, ordered)
 
@@ -313,9 +313,9 @@ def test_two_moves_that_exchange_need_one_spare() -> None:
 def test_a_cycle_of_three_needs_one_spare() -> None:
     """However long the cycle, one register held aside makes it a chain."""
     a, b, c = _register(), _register(), _register()
-    wanted = [_Move(into=a, source=MCReg(b)), _Move(into=b, source=MCReg(c)),
-              _Move(into=c, source=MCReg(a))]
-    ordered = _sequenced(wanted, _spares())
+    wanted = [Move(into=a, source=MCReg(b)), Move(into=b, source=MCReg(c)),
+              Move(into=c, source=MCReg(a))]
+    ordered = sequenced(wanted, _spares())
     assert len(ordered) == 4, "one held aside, and then the three"
     assert _ends_up_right(wanted, ordered)
 
@@ -323,8 +323,8 @@ def test_a_cycle_of_three_needs_one_spare() -> None:
 def test_a_constant_never_holds_anything_up() -> None:
     """Nothing reads a number, so a move of one is ready from the start."""
     a, b = _register(), _register()
-    wanted = [_Move(into=a, source=MCReg(b)), _Move(into=b, source=MCImm(7, 32))]
-    ordered = _sequenced(wanted, _spares())
+    wanted = [Move(into=a, source=MCReg(b)), Move(into=b, source=MCImm(7, 32))]
+    ordered = sequenced(wanted, _spares())
     assert [m.into for m in ordered] == [a, b]
     assert _ends_up_right(wanted, ordered)
 

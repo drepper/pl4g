@@ -36,7 +36,7 @@ about an overflow here to report to anyone.
 from typing import Final
 
 from ..ir.builder import IRBuilder
-from ..ir.function import FuncAttrs, Function, Linkage
+from ..ir.function import SYSTEM_CCONV, FuncAttrs, Function, Linkage
 from ..ir.inst import BinOp, CastKind, CmpPred
 from ..ir.module import Module
 from ..ir.types import ARENA, MEM, PtrType, Type, U8, U64, VOID
@@ -106,13 +106,20 @@ PUT_SYMBOL: Final[str] = "__pl4g_table_put"
 
 def _declared(module: Module, name: str, params: tuple[Type, ...],
               result: Type) -> Function:
-    """The declaration of a function the backend supplies, made once."""
+    """The declaration of a function the backend supplies, made once.
+
+    It follows the system's convention, because it is written as instructions
+    rather than lowered: hand-written code names its registers outright, so it
+    has one settled convention rather than whatever the compiler would have
+    chosen for it.
+    """
     found = module.functions.get(name)
     if isinstance(found, Function):
         return found
     return module.add_function(Function(
         name, module.types.func_type(params, result),
-        FuncAttrs(abi="pl4g.runtime"), linkage=Linkage.VISIBLE))
+        FuncAttrs(abi=SYSTEM_CCONV), cconv=SYSTEM_CCONV,
+        linkage=Linkage.VISIBLE))
 
 
 def _generated(module: Module, name: str, params: tuple[Type, ...],

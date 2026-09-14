@@ -4,6 +4,8 @@ from typing import Final
 
 from ...diag import ids as D
 from ...diag.engine import DiagEngine
+from ...ir.function import SYSTEM_CCONV
+from ...ir.mangle import symbol_name
 from ...ir.module import Module
 from ...mc.asmbuilder import Assembler
 from ...source.manager import SourceManager
@@ -12,6 +14,8 @@ from ...mc.fixup import FixupApplier, MCFixup
 from ...mc.inst import MCInst
 from ...mc.reg import RegisterInfo
 from ...mc.regalloc import RegisterPressureError
+from ...mc.machine import clobbered_units
+from ...mc.reg import RegUnit
 from ...mc.streamer import MCStreamer
 from ...ir.layout import DataLayout
 from ..allocator import OUT_OF_MEMORY, emit_allocator, wanted_by
@@ -19,7 +23,7 @@ from ..faults import Messages
 from ..pool import Constants
 from ..globals import emit_globals
 from ..target import ImageDefaults
-from .abi import CC_PL4G_V0, lookup as lookup_cconv
+from .abi import CC_PL4G, lookup as lookup_cconv
 from .encoder import EncodingError, encode
 from .fixups import apply_fixup
 from .isel import A64Selector, UnsupportedOperation, lower_function
@@ -69,8 +73,8 @@ class AArch64Target:
         return Assembler(self.selector(streamer), streamer,
                          function_alignment=IMAGE_DEFAULTS.function_alignment,
                          pad_byte=PAD_BYTE, registers=self.registers,
-                         allocation_order=CC_PL4G_V0.orders(GPR.name, VEC.name),
-                         callee_saved=CC_PL4G_V0.callee_saved)
+                         allocation_order=CC_PL4G.orders(GPR.name, VEC.name),
+                         callee_saved=CC_PL4G.callee_saved)
 
     def generate(self, module: Module, asm: Assembler, diags: DiagEngine,
                  opt_level: int, sources: "SourceManager | None" = None) -> None:
@@ -81,12 +85,19 @@ class AArch64Target:
         emit_globals(asm, module, DataLayout(pointer_size=self.pointer_bits // 8))
         asm.section(".text", executable=True,
                     alignment=IMAGE_DEFAULTS.text_alignment)
+        # What each function turned out to destroy, so that a call to one saves
+        # only what it has to.  A function is asked after it is built, so a
+        # callee built before its caller is one the caller knows about and one
+        # built after is not -- which is why the to-do list wants the functions
+        # sorted by the call graph.
+        clobbers: dict[str, frozenset[RegUnit]] = {}
         for func in module.functions.values():
             if func.is_declaration:
                 continue
             try:
                 lower_function(asm, func, lookup_cconv(func.cconv), self.registers,
-                               messages, sources, constants)
+                               messages, sources, constants, clobbers)
+                clobbers[symbol_name(func)] = clobbered_units(asm.functions[-1])
             except UnsupportedOperation as exc:
                 diags.emit(D.IMPL_BACKEND_UNSUPPORTED,
                            exc.span if exc.span is not None else func.span,
@@ -112,7 +123,10 @@ class AArch64Target:
             emit_allocator(asm, SYSCALLS, ALLOCATOR_REGS, ABORT_SYMBOL,
                            messages.symbol(OUT_OF_MEMORY))
         if messages.wanted:
-            emit_abort(asm, lookup_cconv(module.startup.cconv))
+            # The runtime follows the system's convention whatever the
+            # function that faults follows: it is written as instructions,
+            # and hand-written code names its registers outright.
+            emit_abort(asm, lookup_cconv(SYSTEM_CCONV))
         emit_start(asm, module, lookup_cconv(module.startup.cconv))
         messages.emit(asm)
         constants.emit(asm)

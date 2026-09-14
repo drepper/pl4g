@@ -60,6 +60,32 @@ To Do List for the pypl4g compiler
     broken by holding one register in a fresh virtual one.  The hazard is asked of the registers and not of the values, which is
     what makes a branch reading a parameter's register through an `extract` come out right.
 
+[ ] generate the functions in the order the call graph gives.  What a call destroys is asked of the callee once it has been
+    generated, so a callee generated before its caller is one the caller knows about and one generated after is not -- and the
+    order today is the order the module holds them, which is the order they were written in.  Sorting by the call graph, callees
+    first, makes the answer always the exact one.  What it needs: the graph, which is a walk over every `CallInst`; a topological
+    order of it; and an answer for a cycle, where the usual one is to give every function of the cycle its convention's whole
+    caller-saved set and settle for that.
+
+[ ] use the same ordering to decide what to inline.  A callee generated before its caller is one whose size, and whether it calls
+    anything, and which registers it wants, are all known where the decision would be made -- which is most of what an inliner
+    needs and all of what a cheap one needs.  The two entries are one piece of work: the ordering is what both want.
+
+[ ] a bespoke convention per function rather than one for all of them.  Today `pl4g` is one convention, shaped so that the common
+    small function costs nothing; the specification allows a different one per function, which would mean parameters placed where
+    the body wants them and the callee-saved set narrowed to what each function actually keeps.  The second half of that is
+    already done by another route -- a call destroys what the callee turned out to destroy -- and the first half wants the
+    ordering above, since a caller has to know what its callee chose.
+
+[ ] split a virtual register's live range the way a physical one's is split.  A physical register is written wherever a convention
+    says it is and holds nothing between a write and the read that takes the value away, so its range is several stretches.  A
+    virtual register still gets one hull, which is right for a value with one definition and wrong for one the spill rewrite
+    redefines; the hull is conservative, so this is a missed register rather than a defect.
+
+[ ] report a calling convention no backend knows.  `@[abi("name")]` takes any string and an unrecognised one quietly means the
+    language's own convention with an unmangled name, which is two surprises at once.  The check wants the front end to be able to
+    ask the target what it knows, which nothing there can do yet.
+
 [ ] weigh a loop when choosing what to spill.  The victim is the range that reaches furthest, which in a loop is systematically
     the value the loop carries -- the worst possible choice, since its reload runs every turn.  The standard answer is a weight by
     loop depth, and the block flow the liveness already builds is what it needs.

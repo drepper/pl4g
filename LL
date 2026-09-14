@@ -1,0 +1,9 @@
+{
+  "format_version": 2,
+  "compiler": "pypl4g 0.1",
+  "directory": "/home/drepper/devel/pl4g",
+  "inputs": [
+    "u.pl4g"
+  ],
+  "decisions": []
+}

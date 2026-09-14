@@ -158,6 +158,22 @@ class RegisterInfo:
                 return reg
         raise KeyError("".join((unit.canonical, " has no ", str(bits), "-bit view")))
 
+    def widest(self, unit: RegUnit) -> PhysReg:
+        """The widest view onto *unit* there is.
+
+        For naming a whole register where what is meant is the storage rather
+        than any particular width of it -- saying that a call destroys one, for
+        instance, where what it destroys is all of it.
+        """
+        found: PhysReg | None = None
+        for reg in self.registers.values():
+            if reg.unit is unit and reg.byte_off == 0 \
+                    and (found is None or reg.bits > found.bits):
+                found = reg
+        if found is None:
+            raise KeyError("".join((unit.canonical, " has no view at all")))
+        return found
+
     def members_of(self, cls: RegClass) -> list[RegUnit]:
         """Every storage location of the class *cls*."""
         return [u for u in self.units.values() if u.cls is cls]

@@ -212,7 +212,7 @@ def carried_values(target: BlockTarget) -> list[tuple[BlockParam, object]]:
 
 
 @dataclass(frozen=True, slots=True)
-class _Move:
+class Move:
     """One register a branch writes, and what it writes there."""
 
     into: Reg
@@ -224,8 +224,8 @@ def _reads(source: MCOperand, reg: Reg) -> bool:
     return any(interferes(named, reg) for named, _ in registers_of(source))
 
 
-def _sequenced(moves: Sequence[_Move],
-               spare: "Callable[[Reg], Reg]") -> list[_Move]:
+def sequenced(moves: Sequence[Move],
+               spare: "Callable[[Reg], Reg]") -> list[Move]:
     """The same moves in an order in which none reads what another has written.
 
     A move is ready when no move still to be made reads the register it writes.
@@ -241,8 +241,8 @@ def _sequenced(moves: Sequence[_Move],
     """
     # A parameter handed its own value is no move at all, and leaving it in
     # would make the loop below invent a spare to break a cycle of one.
-    pending = [move for move in moves if not _reads_only(move)]
-    ordered: list[_Move] = []
+    pending = [move for move in moves if not _holds_it_already(move)]
+    ordered: list[Move] = []
     while pending:
         ready = [move for move in pending
                  if not any(other is not move and _reads(other.source, move.into)
@@ -256,21 +256,21 @@ def _sequenced(moves: Sequence[_Move],
         # Break one link by holding a copy of what it reads.
         stuck = pending[0]
         held = spare(stuck.into)
-        ordered.append(_Move(into=held, source=MCReg(stuck.into)))
-        pending = [_Move(into=move.into, source=MCReg(held))
+        ordered.append(Move(into=held, source=MCReg(stuck.into)))
+        pending = [Move(into=move.into, source=MCReg(held))
                    if move is not stuck and _reads(move.source, stuck.into)
                    else move
                    for move in pending]
     return ordered
 
 
-def _reads_only(move: _Move) -> bool:
+def _holds_it_already(move: Move) -> bool:
     """Whether a move puts a register back where it already is."""
     return isinstance(move.source, MCReg) and interferes(move.source.reg, move.into)
 
 
 def _moves_of(target: BlockTarget, operands: Operands,
-              span: Span) -> list[_Move]:
+              span: Span) -> list[Move]:
     """Every register a branch writes and what it writes there.
 
     Built whole before anything is emitted, because asking for a value can emit
@@ -282,15 +282,15 @@ def _moves_of(target: BlockTarget, operands: Operands,
     A value of several parts is that many moves, because a cycle may run
     through one part of a value and not another.
     """
-    moves: list[_Move] = []
+    moves: list[Move] = []
     for param, argument in carried_values(target):
         pieces = parts_of(param.ty)
         if len(pieces) == 1:
-            moves.append(_Move(into=operands.destination(param),
+            moves.append(Move(into=operands.destination(param),
                                source=operands.value(argument, span)))
             continue
         for index in range(len(pieces)):
-            moves.append(_Move(
+            moves.append(Move(
                 into=operands.part_of(param, index, span),
                 source=MCReg(operands.part_of(argument, index, span))))
     return moves
@@ -307,14 +307,14 @@ def _pass_arguments(asm: Assembler, target: BlockTarget, operands: Operands,
     its own to hold them.
 
     They are all made at once and none may read a register another has already
-    written, which `_sequenced` is what settles.  The spare a cycle needs is a
+    written, which `sequenced` is what settles.  The spare a cycle needs is a
     fresh virtual register: this runs before anything has been given a physical
     one, so there is always another to be had and no architecture needs an
     instruction that exchanges two.
     """
     if not target.args:
         return
-    for move in _sequenced(_moves_of(target, operands, span), asm.temporary):
+    for move in sequenced(_moves_of(target, operands, span), asm.temporary):
         asm.loadreg(move.into, move.source, span)
 
 

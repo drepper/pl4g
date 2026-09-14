@@ -3,7 +3,7 @@ module "global-variable.pl4g" triple "x86_64-linux-none"
 
 let @counter: u8 internal = 42
 
-fn @main() → u8 internal cconv(pl4g.v0) special(startup) {
+fn @main() → u8 internal cconv(pl4g) special(startup) {
 block0:
   %0 = mem.start
   %1 = load.u8 %0, @counter

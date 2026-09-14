@@ -404,7 +404,10 @@ RISCV_INSTRS: Final[tuple[RVInstDesc, ...]] = (
     # the entry in the to-do list says what to do when one does not.
     RVInstDesc("jal", (_sym(),), template=0x000000EF,
                fields=(Field(FieldKind.RELOCATION, 0, 12, 20, reloc=JAL),),
-               implicit_defs=(RA, *CALLER_SAVED), flags=InstFlags.CALL,
+    # What a call destroys is the *callee's* to say and is carried on the
+    # instruction rather than stated here; the link register, which the
+    # instruction itself writes, is not.
+               implicit_defs=(RA,), flags=InstFlags.CALL,
                est_size=INSTRUCTION_SIZE),
     # ret                is  jalr zero, ra, 0
     RVInstDesc("ret", (), template=0x00008067, implicit_uses=(RA,),

@@ -11,7 +11,7 @@ from typing import Sequence
 
 from .desc import InstFlags
 from .inst import MCInst
-from .reg import PhysReg, Reg, VirtReg
+from .reg import PhysReg, Reg, RegUnit, VirtReg
 
 
 class MalformedGraph(Exception):
@@ -84,6 +84,10 @@ class MachineFunction:
     exported: bool = False
     #: Reserved growth slack to emit after the function, for in-place patching.
     padding: int = 0
+    #: The units this function hands back as it found them, which is what it
+    #: saved and restored around itself.  Filled in when the frame is made,
+    #: which is the pass that decides it.
+    preserved: frozenset[RegUnit] = field(default_factory=frozenset)
 
     def add_block(self, label: str | None = None) -> MachineBasicBlock:
         """Append a new block and return it."""
@@ -159,6 +163,29 @@ class MachineFunction:
                 if isinstance(reg, VirtReg):
                     found[reg.ident] = reg
         return list(found.values())
+
+
+def clobbered_units(function: MachineFunction) -> frozenset[RegUnit]:
+    """Every unit a finished function writes and does not put back.
+
+    What a caller wants to know: a register not in here still holds what it held
+    before the call, so nothing has to be saved around one.  It is asked of the
+    finished code rather than of the convention, which can only say what a
+    function is *allowed* to destroy -- a small function destroys a great deal
+    less than that, and the difference is a save and a reload at every call.
+
+    Read after the frame has been made, so that a register the function saved
+    and restored is not counted: it was written, and it was put back.
+    """
+    from .regalloc import defs_and_uses
+
+    found: set[RegUnit] = set()
+    for block in function.blocks:
+        for inst in block.insts:
+            for reg in defs_and_uses(inst)[0]:
+                if isinstance(reg, PhysReg):
+                    found.add(reg.unit)
+    return frozenset(found) - function.preserved
 
 
 def physical_only(registers: Sequence[Reg]) -> bool:
