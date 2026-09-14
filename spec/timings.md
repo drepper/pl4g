@@ -96,6 +96,7 @@ the parser does, and they are the floor everything else is measured against.
 | `a86ce70` | 1.20 | 2.21 | 2.03 | 1.72 |
 | `037c8c8` | 1.22 | 2.05 | 1.93 | 1.65 |
 | `ce9a789` | 1.31 | 2.43 | 2.23 | 1.74 |
+| `df6ee64` | 1.31 | 2.29 | 2.20 | 1.75 |
 
 ### Variables and memory
 
@@ -170,6 +171,7 @@ backend do.
 | `a86ce70` | 1.52 | 1.99 | 1.86 |
 | `037c8c8` | 1.41 | 1.95 | 1.74 |
 | `ce9a789` | 1.52 | 2.23 | 1.90 |
+| `df6ee64` | 1.50 | 2.23 | 1.84 |
 
 ### Register pressure
 
@@ -244,6 +246,7 @@ and they are the only ones that reach the frame.
 | `a86ce70` | 2.51 | 8.12 |
 | `037c8c8` | 2.44 | 8.20 |
 | `ce9a789` | 2.53 | 8.37 |
+| `df6ee64` | 2.52 | 8.39 |
 
 ### What is left out
 
@@ -318,6 +321,7 @@ decision log does.
 | `a86ce70` | 1.90 | 2.13 |
 | `037c8c8` | 1.84 | 2.02 |
 | `ce9a789` | 2.06 | 2.14 |
+| `df6ee64` | 2.07 | 2.12 |
 
 ### Expressions (1 of 3)
 
@@ -392,6 +396,7 @@ optimizer does.
 | `a86ce70` | 2.08 | 1.73 | 3.07 | 3.12 | 3.08 | 2.00 | 2.38 | 3.02 | 3.42 | 5.69 | 2.95 | 3.98 | 3.47 | 3.19 |
 | `037c8c8` | 1.99 | 1.66 | 3.00 | 3.10 | 2.96 | 1.93 | 2.26 | 2.93 | 3.18 | 5.53 | 2.92 | 3.73 | 3.48 | 2.86 |
 | `ce9a789` | 2.20 | 1.77 | 3.21 | 3.28 | 3.24 | 2.29 | 2.44 | 3.23 | 3.30 | 5.74 | 2.40 | 3.85 | 3.55 | 3.05 |
+| `df6ee64` | 2.21 | 1.76 | 3.13 | 3.32 | 3.30 | 2.18 | 2.37 | 3.05 | 3.32 | 5.76 | 2.39 | 3.85 | 3.58 | 3.05 |
 
 ### Expressions (2 of 3)
 
@@ -463,6 +468,7 @@ optimizer does.
 | `a86ce70` | 3.07 | 7.78 | 11.97 | 4.40 | 9.75 | 9.90 | 4.94 | 3.69 | 3.75 | 3.64 | 9.41 | 4.86 | 8.91 | 7.14 |
 | `037c8c8` | 2.61 | 7.35 | 11.62 | 4.21 | 9.70 | 9.70 | 4.75 | 3.63 | 3.65 | 3.45 | 9.03 | 4.80 | 8.74 | 7.09 |
 | `ce9a789` | 2.70 | 6.43 | 10.19 | 4.54 | 9.09 | 10.22 | 4.99 | 3.94 | 3.80 | 3.57 | 9.36 | 5.00 | 8.98 | 7.29 |
+| `df6ee64` | 2.68 | 6.33 | 10.15 | 4.51 | 9.14 | 10.24 | 4.98 | 4.03 | 4.12 | 3.60 | 9.30 | 5.09 | 8.97 | 7.36 |
 
 ### Expressions (3 of 3)
 
@@ -534,6 +540,7 @@ optimizer does.
 | `a86ce70` | 5.46 | 6.54 | 4.35 |
 | `037c8c8` | 5.24 | 6.41 | 4.18 |
 | `ce9a789` | 5.50 | 6.72 | 4.36 |
+| `df6ee64` | 5.44 | 6.73 | 4.38 |
 
 ### Types
 
@@ -607,6 +614,7 @@ Definitions the program writes.  These move when the parser, the name resolution
 | `a86ce70` | 1.64 | 4.49 | 4.55 | 4.70 | 5.85 | 3.01 | 6.80 | 5.66 |
 | `037c8c8` | 1.54 | 4.44 | 4.53 | 4.75 | 5.71 | 2.95 | 6.69 | 5.53 |
 | `ce9a789` | 1.71 | 4.62 | 4.62 | 4.88 | 5.98 | 3.10 | 7.01 | 5.79 |
+| `df6ee64` | 1.62 | 4.56 | 4.58 | 4.90 | 5.89 | 3.08 | 7.03 | 5.78 |
 
 ### Loops
 
@@ -681,6 +689,7 @@ These move when the register allocator or the branch lowering does.
 | `a86ce70` | 2.66 | 3.38 | 2.54 | 4.03 | 2.89 | 4.52 | 4.36 | 4.04 | 5.41 | 4.58 | 7.91 | 26.30 |
 | `037c8c8` | 2.60 | 3.20 | 2.47 | 3.85 | 2.85 | 4.41 | 4.25 | 3.88 | 5.13 | 4.46 | 7.81 | 25.29 |
 | `ce9a789` | 2.75 | 3.38 | 2.72 | 4.05 | 3.02 | 4.81 | 4.44 | 4.10 | 5.43 | 4.72 | 8.26 | 26.25 |
+| `df6ee64` | 3.00 | 3.44 | 2.63 | 3.99 | 3.05 | 4.84 | 4.34 | 4.09 | 5.41 | 4.67 | 8.22 | 26.57 |
 
 ### Collections
 
@@ -755,6 +764,7 @@ changes, and they are the only samples that carry code the compiler wrote for it
 | `a86ce70` | 17.75 | 23.98 | 15.80 | 18.34 |
 | `037c8c8` | 17.53 | 23.61 | 15.50 | 18.20 |
 | `ce9a789` | 18.45 | 24.76 | 16.39 | 18.93 |
+| `df6ee64` | 18.41 | 24.67 | 16.34 | 19.20 |
 
 Process
 -------
@@ -833,6 +843,7 @@ worth showing here, and every figure is in the JSON beside this file.
 | `a86ce70` | 88 | 122 |
 | `037c8c8` | 89 | 115 |
 | `ce9a789` | 90 | 118 |
+| `df6ee64` | 89 | 116 |
 
 What each row is:
 
@@ -902,6 +913,7 @@ What each row is:
 - `a86ce70` -- ✨ A function changes nothing unless it says it may
 - `037c8c8` -- 🔥 A scratch binary that was never meant to be committed
 - `ce9a789` -- 🐛 A call the program did not want goes at every level
+- `df6ee64` -- 🔥 A scratch log file, and a root that says what belongs in it
 
 What each program exercises:
 
