@@ -32,7 +32,9 @@
     "if-statement": "a chain of conditions, and one with no else",
     "tuple-values": "a tuple answered with, and two taken apart",
     "while-loop": "one loop, carrying two values",
-    "while-loop-nested": "a loop inside a loop, in both notations"
+    "while-loop-nested": "a loop inside a loop, in both notations",
+    "foreach-over-a-range": "a loop over a range, counting up by one",
+    "foreach-range-step": "three ranges, one of them counting down"
   },
   "commits": [
     {
@@ -210,6 +212,10 @@
     {
       "hash": "f067535",
       "subject": "✨ `while`"
+    },
+    {
+      "hash": "bbf4758",
+      "subject": "✨ `foreach`, iterators and ranges"
     }
   ],
   "times": {
@@ -3739,6 +3745,148 @@
       "while-loop-nested": [
         3.422,
         90.72353498777375
+      ]
+    },
+    "bbf4758": {
+      "exit0": [
+        1.1139999999999999,
+        87.35169895226136
+      ],
+      "global-variable": [
+        1.323,
+        88.84972502710298
+      ],
+      "assign-widths": [
+        1.8479999999999999,
+        88.44271197449416
+      ],
+      "many-values-at-once": [
+        2.173,
+        90.51469300175086
+      ],
+      "unreached-function": [
+        1.6229999999999998,
+        88.26146798674017
+      ],
+      "export-visibility": [
+        1.6980000000000002,
+        86.84752898989245
+      ],
+      "digit-separators": [
+        1.8150000000000002,
+        90.40469798492268
+      ],
+      "boolean-values": [
+        1.584,
+        88.73779699206352
+      ],
+      "bitwise-operators": [
+        1.8239999999999998,
+        89.10653198836371
+      ],
+      "bitwise-precedence": [
+        1.5219999999999998,
+        88.29524897737429
+      ],
+      "spill-to-the-frame": [
+        7.478,
+        95.34489997895434
+      ],
+      "boolean-in-memory": [
+        1.546,
+        85.68223298061639
+      ],
+      "comparison-operators": [
+        2.552,
+        88.74468703288585
+      ],
+      "logic-operators": [
+        2.6519999999999997,
+        87.50955603318289
+      ],
+      "logic-short-circuit": [
+        2.5799999999999996,
+        89.60525295697153
+      ],
+      "saturating-precedence": [
+        1.769,
+        91.39401698485017
+      ],
+      "arithmetic-operators": [
+        2.073,
+        90.98137594992295
+      ],
+      "semicolon-separates-statements": [
+        2.002,
+        89.93532997556031
+      ],
+      "call-nested": [
+        2.779,
+        90.14060901245102
+      ],
+      "arithmetic-division": [
+        2.493,
+        89.66721600154415
+      ],
+      "shift-operators": [
+        2.532,
+        91.18716599186882
+      ],
+      "float-arithmetic": [
+        6.811999999999999,
+        94.67980795307085
+      ],
+      "float-approximate": [
+        10.187000000000001,
+        99.47925800224766
+      ],
+      "result-type": [
+        4.162,
+        93.72086299117655
+      ],
+      "type-definitions": [
+        1.431,
+        87.67169999191537
+      ],
+      "result-as-an-argument": [
+        11.086,
+        98.95168401999399
+      ],
+      "match-a-result": [
+        4.489,
+        88.25560903642327
+      ],
+      "enum-values": [
+        4.103,
+        91.51453903177753
+      ],
+      "enum-flag": [
+        4.056,
+        89.3291259999387
+      ],
+      "if-statement": [
+        3.238,
+        88.2746980059892
+      ],
+      "tuple-values": [
+        3.499,
+        88.55191600741819
+      ],
+      "while-loop": [
+        2.427,
+        87.89587701903656
+      ],
+      "while-loop-nested": [
+        3.433,
+        89.85409804154187
+      ],
+      "foreach-over-a-range": [
+        2.308,
+        89.6797240129672
+      ],
+      "foreach-range-step": [
+        3.6279999999999997,
+        91.76598797785118
       ]
     }
   }
