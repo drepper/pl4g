@@ -113,6 +113,10 @@ class RegisterInfo:
     registers: dict[str, PhysReg] = field(default_factory=dict)
     _next_class_index: int = 0
     _next_virtual: int = 0
+    #: The widest view of each unit, worked out once.  The answer cannot change
+    #: while a compilation runs, and asking it is a walk over every register
+    #: there is.
+    _widest: dict[int, PhysReg] = field(default_factory=dict)
 
     def add_class(self, name: str, full_bits: int, allocatable: bool = True) -> RegClass:
         """Register a new class of registers."""
@@ -165,13 +169,16 @@ class RegisterInfo:
         than any particular width of it -- saying that a call destroys one, for
         instance, where what it destroys is all of it.
         """
-        found: PhysReg | None = None
+        found = self._widest.get(id(unit))
+        if found is not None:
+            return found
         for reg in self.registers.values():
             if reg.unit is unit and reg.byte_off == 0 \
                     and (found is None or reg.bits > found.bits):
                 found = reg
         if found is None:
             raise KeyError("".join((unit.canonical, " has no view at all")))
+        self._widest[id(unit)] = found
         return found
 
     def members_of(self, cls: RegClass) -> list[RegUnit]:

@@ -317,63 +317,63 @@ class LinearScan:
                 touch(key, flow.entry_point)
             for key in flow.live_out:
                 touch(key, flow.exit_point)
-        virtual: list[LiveRange] = []
-        physical: list[LiveRange] = []
-        for key, reg in seen.items():
-            if isinstance(reg, VirtReg):
-                virtual.append(LiveRange(reg=reg, start=first[key], end=last[key]))
-                continue
-            physical.extend(self._physical_ranges(function, flows, reg, key))
+        virtual = [LiveRange(reg=reg, start=first[key], end=last[key])
+                   for key, reg in seen.items() if isinstance(reg, VirtReg)]
+        physical = self._physical_ranges(function, flows, seen)
         virtual.sort(key=lambda r: (r.start, r.end))
         return virtual, physical
 
     def _physical_ranges(self, function: MachineFunction,
-                         flows: "Sequence[BlockFlow]", reg: Reg,
-                         key: int) -> list[LiveRange]:
-        """Every stretch over which a physical register is holding something.
+                         flows: "Sequence[BlockFlow]",
+                         seen: "Mapping[int, Reg]") -> list[LiveRange]:
+        """Every stretch over which each physical register is holding something.
 
-        Several stretches and not one, which is what a virtual register gets.
-        A physical register is written where a convention says it is -- an
-        argument into the register the callee reads it from, an answer into the
-        register the caller reads it from -- and between one such write and the
-        read that takes the value away it holds nothing.  A hull over all of
-        them would say it was busy the whole time, and a value that could have
-        had it would be sent somewhere else; the code that comes out is a move
-        into a register and a move straight back out of it.
+        Several stretches per register and not one, which is what a virtual
+        register gets.  A physical register is written where a convention says
+        it is -- an argument into the register the callee reads it from, an
+        answer into the register the caller reads it from -- and between one
+        such write and the read that takes the value away it holds nothing.  A
+        hull over all of them would say it was busy the whole time, and a value
+        that could have had it would be sent somewhere else; the code that comes
+        out is a move into a register and a move straight back out of it.
 
         Within a block the stretch runs from a write to the last read before the
         next write; at the edges of a block it is what the graph says is live
-        coming in and going out.  Nothing is lost by splitting it: every read of
+        coming in and going out.  Nothing is lost by splitting: every read of
         the register is a point the stretch holding that value covers.
         """
+        physical = {key: reg for key, reg in seen.items()
+                    if not isinstance(reg, VirtReg)}
         found: list[LiveRange] = []
         for block, flow in zip(function.blocks, flows):
             if flow.empty:
                 continue
-            start = flow.entry_point if key in flow.live_in else None
-            reached = start
+            start: dict[int, int] = {}
+            reached: dict[int, int] = {}
+            for key in flow.live_in:
+                if key in physical:
+                    start[key] = reached[key] = flow.entry_point
             for at, inst in enumerate(block.insts):
                 position = flow.first + at
                 defs, uses = defs_and_uses(inst)
-                reads = any(self._key(r) == key for r in uses)
-                writes = any(self._key(r) == key for r in defs)
-                if reads:
-                    if start is None:
-                        start = position * 2
-                    reached = position * 2
-                if writes:
-                    if not reads:
+                read = {self._key(r) for r in uses if not isinstance(r, VirtReg)}
+                written = {self._key(r) for r in defs if not isinstance(r, VirtReg)}
+                for key in read:
+                    start.setdefault(key, position * 2)
+                    reached[key] = position * 2
+                for key in written:
+                    if key not in read:
                         # What it held before this is gone, and what it holds
                         # from here is another value.
-                        if start is not None and reached is not None:
-                            found.append(LiveRange(reg=reg, start=start,
-                                                   end=reached))
-                        start = position * 2 + 1
-                    reached = position * 2 + 1
-            if key in flow.live_out:
-                reached = flow.exit_point
-            if start is not None and reached is not None:
-                found.append(LiveRange(reg=reg, start=start, end=reached))
+                        if key in start:
+                            found.append(LiveRange(reg=physical[key],
+                                                   start=start[key],
+                                                   end=reached[key]))
+                        start[key] = position * 2 + 1
+                    reached[key] = position * 2 + 1
+            for key, began in start.items():
+                end = (flow.exit_point if key in flow.live_out else reached[key])
+                found.append(LiveRange(reg=physical[key], start=began, end=end))
         return found
 
     def _flow(self, function: MachineFunction
