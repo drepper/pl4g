@@ -71,6 +71,7 @@ the parser does, and they are the floor everything else is measured against.
 | `bbf4758` | 1.11 | 2.00 | 1.82 | 1.58 |
 | `c374354` | 1.14 | 1.94 | 1.87 | 1.52 |
 | `9e55aab` | 1.17 | 2.34 | 2.06 | 1.52 |
+| `9958f2d` | 1.12 | 2.03 | 1.86 | 1.51 |
 
 ### Variables and memory
 
@@ -126,6 +127,7 @@ backend do.
 | `bbf4758` | 1.32 | 1.85 | 1.55 |
 | `c374354` | 1.34 | 1.88 | 1.59 |
 | `9e55aab` | 1.40 | 2.01 | 1.67 |
+| `9958f2d` | 1.39 | 1.95 | 1.61 |
 
 ### Register pressure
 
@@ -181,6 +183,7 @@ and they are the only ones that reach the frame.
 | `bbf4758` | 2.17 | 7.48 |
 | `c374354` | 2.17 | 7.56 |
 | `9e55aab` | 2.16 | 7.95 |
+| `9958f2d` | 2.17 | 7.81 |
 
 ### What is left out
 
@@ -236,6 +239,7 @@ decision log does.
 | `bbf4758` | 1.62 | 1.70 |
 | `c374354` | 1.83 | 1.74 |
 | `9e55aab` | 1.76 | 1.88 |
+| `9958f2d` | 1.70 | 1.78 |
 
 ### Expressions
 
@@ -291,6 +295,7 @@ optimizer does.
 | `bbf4758` | 1.82 | 1.52 | 2.55 | 2.65 | 2.58 | 1.77 | 2.07 | 2.78 |  | 2.49 | 2.53 | 6.81 | 10.19 | 4.16 | 11.09 | 4.49 | 3.24 | 3.50 |
 | `c374354` | 1.85 | 1.61 | 2.63 | 2.68 | 2.58 | 1.80 | 2.08 | 2.73 |  | 2.48 | 2.40 | 6.71 | 10.31 | 4.11 | 11.06 | 4.59 | 3.53 | 3.71 |
 | `9e55aab` | 1.86 | 1.60 | 2.81 | 2.92 | 2.76 | 1.92 | 2.07 | 2.81 | 3.67 | 2.78 | 2.76 | 8.44 | 13.08 | 4.51 | 11.53 | 5.01 | 3.65 | 3.78 |
+| `9958f2d` | 1.81 | 1.58 | 2.62 | 2.76 | 2.57 | 1.92 | 2.04 | 2.91 | 3.24 | 2.87 | 2.68 | 7.11 | 11.05 | 3.98 | 9.42 | 4.56 | 3.36 | 3.32 |
 
 ### Types
 
@@ -345,6 +350,7 @@ Definitions the program writes.  These move when the parser, the name resolution
 | `bbf4758` | 1.43 | 4.10 | 4.06 |
 | `c374354` | 1.43 | 4.09 | 4.18 |
 | `9e55aab` | 1.57 | 4.33 | 4.32 |
+| `9958f2d` | 1.46 | 4.07 | 4.05 |
 
 ### Loops
 
@@ -400,6 +406,7 @@ These move when the register allocator or the branch lowering does.
 | `bbf4758` | 2.43 | 3.43 | 2.31 | 3.63 |
 | `c374354` | 2.53 | 3.50 | 2.32 | 3.75 |
 | `9e55aab` | 2.43 | 3.13 | 2.44 | 3.82 |
+| `9958f2d` | 2.28 | 2.89 | 2.20 | 3.59 |
 
 ### Collections
 
@@ -455,6 +462,7 @@ changes, and they are the only samples that carry code the compiler wrote for it
 | `bbf4758` |  |  |  |  |
 | `c374354` | 15.99 | 21.05 | 14.84 | 17.11 |
 | `9e55aab` | 21.37 | 31.13 | 18.67 | 22.87 |
+| `9958f2d` | 16.38 | 22.10 | 14.52 | 17.13 |
 
 Process
 -------
@@ -514,6 +522,7 @@ worth showing here, and every figure is in the JSON beside this file.
 | `bbf4758` | 86 | 99 |
 | `c374354` | 88 | 108 |
 | `9e55aab` | 88 | 122 |
+| `9958f2d` | 87 | 108 |
 
 What each row is:
 
@@ -564,6 +573,7 @@ What each row is:
 - `bbf4758` -- ✨ `foreach`, iterators and ranges
 - `c374354` -- ✨ Sets and dictionaries, and the arena they live in
 - `9e55aab` -- ✨ A calling convention per function, and `@[cdecl]` for the system's
+- `9958f2d` -- ⚡ Work out every physical register's stretches in one walk
 
 What each program exercises:
 
