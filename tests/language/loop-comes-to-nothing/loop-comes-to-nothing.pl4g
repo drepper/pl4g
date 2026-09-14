@@ -1,0 +1,12 @@
+※ pl4g-test: compile=error diag=4472
+
+※ Something reads what the loop comes to, and nothing in it produces one: no
+※ `break` hands a value over and there is no `else` arm that gives one.  A loop
+※ is a statement until something in it says otherwise.
+
+@[startup]
+fn main() → u8:
+    let found: u8? = while §counting true:
+        let n: u8 = 1u8
+        n + 1u8
+    found ?? 0u8

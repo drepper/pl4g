@@ -1,0 +1,11 @@
+※ pl4g-test: compile=error diag=4471
+
+※ The loop stands where a statement stands, so what it comes to is read by
+※ nothing and a value handed over here would be worked out and thrown away.  A
+※ loop whose value is wanted is written where one is wanted.
+
+@[startup]
+fn main() → u8:
+    while §counting true:
+        break §counting 5u8
+    0u8

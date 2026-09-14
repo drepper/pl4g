@@ -1,0 +1,33 @@
+※ pl4g-test: compile=ok run=native,qemu exit=42 diag=none
+
+※ An `else` arm is what runs where the loop ran out rather than being left by a
+※ `break`.  It is what that way through the loop comes to, so a loop with one
+※ comes to a plain value rather than a result: both ways give something, and
+※ there is nothing left for a failure to mean.
+※
+※ Which is the whole of the rule: a loop comes to what every way out of it
+※ gives, and where one of the ways gives nothing, that is what the result says.
+
+fn root_of(square: u8) → u8:
+    foreach §looking i = 0u8…10u8:
+        if i × i = square:
+            break §looking i
+    else:
+        99u8
+
+@[startup]
+fn main() → u8:
+    let n: mut u8 = 0u8
+    ※ a `while` takes one too, and its else arm runs when the condition stops
+    let counted: u8 = while §counting n < 10u8:
+        n ← n + 1u8
+        if n = 6u8:
+            break §counting n × 7u8
+    else:
+        1u8
+    ※ 42 where the break was taken; the arm gives 1 where it was not
+    let ran_out: u8 = while §quiet false:
+        break §quiet 0u8
+    else:
+        0u8
+    counted - root_of(49u8) + ran_out + 7u8

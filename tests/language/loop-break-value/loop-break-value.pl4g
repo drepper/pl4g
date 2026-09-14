@@ -1,0 +1,21 @@
+※ pl4g-test: compile=ok run=native,qemu exit=105 diag=none
+
+※ A `break` may hand a value over, and a loop that is left that way is an
+※ expression: what it comes to is what the `break` handed it.
+※
+※ A loop has a way through that no `break` took -- the one where the condition
+※ stopped holding, or the values ran out -- and that way has nothing to hand
+※ over.  So a loop with no `else` arm comes to a *result*: the answer where a
+※ `break` gave one, and the fact that there is none where the loop simply
+※ ended.  That is the same shape a division gives, and it is read the same way.
+
+fn root_of(square: u8) → u8:
+    let found: u8? = foreach §looking i = 0u8…10u8:
+        if i × i = square:
+            break §looking i
+    found ?? 99u8
+
+@[startup]
+fn main() → u8:
+    ※ 6, and 99 for a number that is no square
+    root_of(36u8) + root_of(7u8)

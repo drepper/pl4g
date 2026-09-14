@@ -807,10 +807,12 @@ class Parser:
             asked = self._parse_if()
             return ast.ExprStmt(span=asked.span, value=asked)
         if self._check(TokKind.KW_WHILE):
-            return self._parse_while()
+            looped = self._parse_while()
+            return ast.ExprStmt(span=looped.span, value=looped)
         if self._check(TokKind.KW_FOREACH):
             start = self._advance().span
-            return self._parse_iteration(start, "foreach", self._parse_label())
+            walked = self._parse_iteration(start, "foreach", self._parse_label())
+            return ast.ExprStmt(span=walked.span, value=walked)
         if self._check(TokKind.KW_BREAK) or self._check(TokKind.KW_CONTINUE):
             return self._parse_jump()
         if self._check(TokKind.KW_RETURN):
@@ -852,8 +854,23 @@ class Parser:
             return self._parse_iteration(start, "while", label)
         condition = self._parse_expression()
         body = self._parse_body()
-        return ast.While(span=start.to(body.span), condition=condition,
-                         body=body, label=label)
+        otherwise = self._parse_otherwise()
+        return ast.While(span=start.to((otherwise or body).span),
+                         condition=condition, body=body, label=label,
+                         alternative=otherwise)
+
+    def _parse_otherwise(self) -> "ast.Block | None":
+        """Parse a loop's `else` arm, which is where the loop ran out.
+
+        It is found the way an `if`'s is: the keyword after the body, the
+        layout notation having ended the body before it.  What it is for is
+        the way through the loop that no `break` took, which is the way that
+        would otherwise have no value to give.
+        """
+        if not self._check(TokKind.KW_ELSE):
+            return None
+        self._advance()
+        return self._parse_body()
 
     def _parse_label(self) -> "ast.Label | None":
         """Parse `\N{SECTION SIGN}name` where a loop may be given one.
@@ -885,9 +902,24 @@ class Parser:
                              keyword=keyword.text)
             raise _Bail()
         span = keyword.span.to(label.span)
-        if keyword.kind is TokKind.KW_BREAK:
-            return ast.Break(span=span, label=label)
-        return ast.Continue(span=span, label=label)
+        if keyword.kind is not TokKind.KW_BREAK:
+            return ast.Continue(span=span, label=label)
+        handed: "ast.Expr | None" = None
+        if not self._ends_a_statement():
+            handed = self._parse_expression()
+            span = span.to(handed.span)
+        return ast.Break(span=span, label=label, value=handed)
+
+    def _ends_a_statement(self) -> bool:
+        """Whether what comes next ends the statement rather than continuing it.
+
+        `break \N{SECTION SIGN}name` may be followed by what the loop comes to, and may
+        equally be followed by nothing, so what is written next is the question
+        of which was meant.
+        """
+        return self._check(TokKind.NEWLINE) or self._check(TokKind.SEMICOLON) \
+            or self._check(TokKind.RBRACE) or self._check(TokKind.DEDENT) \
+            or self._check(TokKind.EOF)
 
     def _binds_a_value(self) -> bool:
         """Whether what follows `while` is a binding rather than a condition.
@@ -929,10 +961,12 @@ class Parser:
             raise _Bail()
         iterable = self._parse_expression()
         body = self._parse_body()
-        return ast.ForEach(span=start.to(body.span), name=name_token.text,
+        otherwise = self._parse_otherwise()
+        return ast.ForEach(span=start.to((otherwise or body).span),
+                           name=name_token.text,
                            name_span=name_token.span, type=declared,
                            iterable=iterable, body=body, more=tuple(more),
-                           keyword=keyword, label=label)
+                           keyword=keyword, label=label, alternative=otherwise)
 
     def _parse_if(self) -> ast.If:
         """Parse ``if COND BODY`` with its `elif`s and its `else`.
@@ -1313,6 +1347,12 @@ class Parser:
                 return self._parse_match()
             case TokKind.KW_IF:
                 return self._parse_if()
+            case TokKind.KW_WHILE:
+                return self._parse_while()
+            case TokKind.KW_FOREACH:
+                start = self._advance().span
+                return self._parse_iteration(start, "foreach",
+                                             self._parse_label())
             case TokKind.IDENT:
                 self._advance()
                 return ast.NameRef(span=token.span, name=token.text)
@@ -1331,15 +1371,13 @@ def _ends_with_a_block(stmt: ast.Stmt) -> bool:
     other two are expressions, so what is asked of a statement is what it ends
     with.
     """
-    if isinstance(stmt, (ast.While, ast.ForEach)):
-        return True
     return _trailing_match(getattr(stmt, "value", None))
 
 
 def _trailing_match(expr: "ast.Expr | None") -> bool:
     """Whether something with a block of its own ends an expression."""
     while True:
-        if isinstance(expr, (ast.Match, ast.If)):
+        if isinstance(expr, (ast.Match, ast.If, ast.While, ast.ForEach)):
             return True
         if isinstance(expr, ast.Binary):
             expr = expr.right

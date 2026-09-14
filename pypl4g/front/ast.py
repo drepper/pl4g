@@ -541,12 +541,15 @@ class Range(Expr):
 
 
 @dataclass(frozen=True, slots=True)
-class ForEach(Stmt):
+class ForEach(Expr):
     """``foreach NAMES [: TYPE] = EXPR BODY``: a turn for each value there is.
 
     `while` written with a binding instead of a condition is the same thing,
     and reaches here; which keyword was written is kept for what a message has
     to say and for nothing else.
+
+    An expression, because a `break` may hand a value over -- and a statement
+    wherever nothing wants the value, which is what an `if` already is.
     """
 
     name: str
@@ -560,22 +563,26 @@ class ForEach(Stmt):
     keyword: str = "foreach"
     #: What `break` and `continue` call this loop, where it was given a name.
     label: "Label | None" = None
+    #: What runs where the loop ran out rather than being left by a `break`.
+    alternative: "Block | None" = None
 
 
 @dataclass(frozen=True, slots=True)
-class While(Stmt):
+class While(Expr):
     """``while COND BODY``: the body runs again for as long as the condition holds.
 
-    A statement and not an expression, unlike `if` and `match`.  Those produce
-    a value because every way through them produces one; a loop has a way
-    through that runs the body no times at all, and there is nothing for that
-    way to produce.
+    An expression, as `if` and `match` are, because a `break` may hand a value
+    over.  What the way through that runs the body no times at all produces is
+    the `else` arm's value where there is one, and a failure where there is
+    none -- which is why a loop with no `else` answers with a result.
     """
 
     condition: Expr
     body: Block
     #: What `break` and `continue` call this loop, where it was given a name.
     label: "Label | None" = None
+    #: What runs where the condition stopped holding rather than a `break`.
+    alternative: "Block | None" = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -592,9 +599,15 @@ class Label(Node):
 
 @dataclass(frozen=True, slots=True)
 class Break(Stmt):
-    """`break §name`: leave the loop of that name, which must be one we are in."""
+    """`break §name [VALUE]`: leave the loop of that name, which we must be in.
+
+    The value is what the loop comes to where it is left this way.  Every
+    `break` naming one loop hands over a value of one type, or none of them
+    does and the loop comes to nothing.
+    """
 
     label: Label
+    value: "Expr | None" = None
 
 
 @dataclass(frozen=True, slots=True)

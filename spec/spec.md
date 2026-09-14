@@ -1520,9 +1520,9 @@ counts down there and means nothing here.  Where the question is whether a numbe
 
 **The body is a statement list**, written in either notation, exactly as a function's body or an arm of an `if` is.
 
-**A loop is a statement and not an expression**, which is where it differs from `if` and `match`.  Those produce a value because
-every way through them produces one; a loop has a way through that runs the body no times at all, and there is nothing for that
-way to produce.
+**A loop is an expression where something reads what it comes to**, and a statement everywhere else -- which is what an `if` is
+too.  What it comes to is what a `break` hands it; the section on leaving a loop says how, and what the way through that runs the
+body no times at all comes to.
 
 **A name a turn changes is the same name on the next turn.**  The value one turn leaves is the value the next turn reads, and the
 value the last turn leaves is what follows the loop reads.  That is what makes a loop able to count anything, and it is the same
@@ -1537,9 +1537,7 @@ nothing reads.
 **The body is a scope**, so a name defined in it is defined afresh on every turn and is gone after the loop.
 
 Compare: C, C++, Go, Rust, Zig and Odin all have `while` (Go spells it `for`, Rust also has `loop`), and all but C and C++ insist
-the condition is a truth value.  Rust's `loop` is an expression, producing what a `break` hands it; a `break` here hands nothing
-over, so a loop still produces nothing.  Python's `while` has an `else`, which runs when the loop ended by its condition rather
-than by a `break`; nothing here distinguishes the two ways out, and a program that wants to can set a name before the `break`.
+the condition is a truth value.
 
 #### Leaving a loop and repeating it
 
@@ -1588,12 +1586,64 @@ condition again.  For a `while` there is no step, so its next turn is its condit
 **A name the loop carries is handed over where the jump stands.**  The block a loop ends at is reached from the test and from
 every `break`, so what follows the loop reads what the way actually taken left there -- not what the last turn began with.
 
+##### What a loop comes to
+
+**`break` may hand a value over**, and a loop something reads is an expression:
+
+```
+fn root_of(square: u8) → u8:
+    let found: u8? = foreach §looking i = 0u8…10u8:
+        if i × i = square:
+            break §looking i
+    found ?? 99u8
+```
+
+**A loop has a way through that no `break` took** -- the condition stopped holding, or the values ran out -- and that way has
+nothing to hand over.  So **a loop with no `else` arm comes to a result**: the answer where a `break` gave one, and the fact that
+there is none where the loop simply ended.  That is the same shape a division gives and is read the same way, with `??`, `?` or a
+`match`.
+
+**An `else` arm is what the ran-out way comes to**, and a loop with one comes to a plain value:
+
+```
+foreach §looking i = 0u8…10u8:
+    if i × i = square:
+        break §looking i
+else:
+    99u8
+```
+
+The arm runs where the loop ran out and not where a `break` left it, which is Python's `while ... else` -- the difference being
+that here it gives the value that way through has, rather than merely running.  Where the loop's value is read the arm gives one,
+and where it is not the arm is a run of statements like any other body.
+
+**Everything a loop may come to is of one type** (4473): every `break` naming it, and its `else` arm.  The block the loop ends at
+is reached down all of those ways and reads one thing, so there is one type for that thing to have; nothing is widened to make
+two of them meet.  What the type is, is what the loop is being used as where that says, and otherwise what the first thing to give
+one gave.
+
+**A `break` hands a value over exactly where the loop's value is read.**  Where it is read, every `break` in the loop hands one
+over (4470) -- a way out with nothing to give would leave the block after the loop reading a value that was never handed to it --
+and something in the loop has to give one at all (4472).  Where it is not read, a value handed over here would be worked out and
+thrown away, so writing one is reported (4471) rather than quietly dropped.
+
+**A value handed over costs nothing beyond itself.**  It travels the way the names the loop carries travel, as one more thing the
+block after the loop takes; a loop with no `else` arm makes the result where the `break` is and the failure where the test leaves,
+which is two instructions in the two places rather than anything on the path round.
+
 Compare: Java, JavaScript, Go, Perl and Odin, all of which allow a label and all of which make it optional, so that the common
-case is the one that changes meaning when a loop is inserted; Rust, whose `'label` needs a marker for the same grammatical reason
-this does, and whose `break 'label value` makes a loop produce something -- a thing worth having and a separate decision, since it
-makes a loop an expression; Ada, whose `exit Outer when ...` names the loop and which is the closest to this in spirit; C and C++,
-which have no label at all and reach for `goto` instead; and Python, which has neither a label nor `goto`, and where leaving two
-loops means a flag or a function.
+case is the one that changes meaning when a loop is inserted; Ada, whose `exit Outer when ...` names the loop and which is the
+closest to this in spirit for the jump itself; C and C++, which have no label at all and reach for `goto` instead; and Python,
+which has neither a label nor `goto`, and where leaving two loops means a flag or a function.
+
+On the value: **Rust** is where `break 'label value` comes from, and it is the same idea -- with the difference that Rust gives
+it only to `loop`, whose body has no way of ending on its own, so the question of what the ran-out way produces never arises.
+Here it arises for every loop, and the answer is the `else` arm or a result.  **Python**'s `while ... else` is where the arm comes
+from, and there it only runs; giving it the value of that way through is what makes the two features one feature instead of two.
+**Zig** writes `for (xs) |x| { ... } else value`, which is this, and reaches it from the same place -- an `else` that had to mean
+something when the loop is an expression.  **Kotlin** and **Scala** make most things expressions but leave loops out, so a search
+over two dimensions goes back to a variable set before the loop.  **Common Lisp**'s `loop ... finally (return v)` and its
+`return-from` do all of it and more, in a sublanguage of its own.
 
 ### Names the compiler provides
 

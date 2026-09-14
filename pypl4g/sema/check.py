@@ -171,8 +171,10 @@ def _collect_assigned(block: "ast.Block", into: list[str]) -> None:
             case ast.AssignStmt():
                 into.append(stmt.name)
                 into.extend(name for name, _ in stmt.more)
-            case ast.While() | ast.ForEach():
-                _collect_assigned(stmt.body, into)
+            case ast.ExprStmt(value=(ast.While() | ast.ForEach()) as looped):
+                _collect_assigned(looped.body, into)
+                if looped.alternative is not None:
+                    _collect_assigned(looped.alternative, into)
             case ast.ExprStmt(value=ast.If() as asked):
                 for arm in asked.arms:
                     _collect_assigned(arm.body, into)
@@ -407,6 +409,22 @@ class _Loop:
     carried: "list[_Local]"
     state: "tuple[Value, ...]"
     step: "Callable[[IRBuilder, tuple[Value, ...]], tuple[Value, ...]] | None"
+    #: Whether something wants what the loop comes to, which is what decides
+    #: whether a `break` may hand a value over and whether it must.
+    answers: bool = False
+    #: Whether a handed-over value is made into a result before it travels,
+    #: which it is where the loop has no `else` arm: the way through that ran
+    #: the body out has nothing to hand over, and that is the failure.
+    wraps: bool = False
+    #: What type a `break` hands over, where one says: what was asked of the
+    #: loop before anything was lowered, or what the first `break` turned out
+    #: to hand over.  Every later one has to agree with it.
+    handing: "Type | None" = None
+    #: Where the first `break` that handed something over was written, for
+    #: pointing at it beside one that did not.
+    handed_at: "Span | None" = None
+    #: Where the first `break` that handed nothing over was written.
+    bare_at: "Span | None" = None
     #: Whether anything named the label, for reporting one nothing did.
     named: bool = False
 
@@ -484,6 +502,11 @@ class Checker:
         #: arms, and about which the unread-value rule therefore says nothing
         #: while the arms are being checked.
         self._carried: set[int] = set()
+        #: Whether what is being lowered is what a loop comes to, which is
+        #: what a `break` hands over and what an `else` arm gives.  A mismatch
+        #: there is about the loop rather than about whatever the loop stands
+        #: in, so it is said as one.
+        self._leaving: bool = False
         #: The labelled loops this statement is inside, innermost last, which
         #: is what `break` and `continue` look their label up in.
         self._loops: list[_Loop] = []
@@ -1827,10 +1850,6 @@ class Checker:
                 self._lower_entry_assign(builder, stmt)
             case ast.ElementAssign():
                 self._lower_element_assign(builder, stmt)
-            case ast.While():
-                self._lower_while(builder, stmt, func)
-            case ast.ForEach():
-                self._lower_foreach(builder, stmt, func)
             case ast.Break():
                 self._lower_break(builder, stmt)
             case ast.Continue():
@@ -1850,6 +1869,12 @@ class Checker:
                     # An `if` written as a statement of its own produces no
                     # value, and needs no `else` for that reason.
                     self._lower_if(builder, stmt.value, func, None, False)
+                elif isinstance(stmt.value, ast.While):
+                    # A loop written as a statement of its own produces no
+                    # value either, so no `break` in it need hand one over.
+                    self._lower_while(builder, stmt.value, func, None, False)
+                elif isinstance(stmt.value, ast.ForEach):
+                    self._lower_foreach(builder, stmt.value, func, None, False)
                 elif isinstance(stmt.value, ast.Match):
                     # A `match` written as a statement of its own produces no
                     # value, and its arms are runs of statements like any other
@@ -2772,8 +2797,8 @@ class Checker:
 
     # -- loops -----------------------------------------------------------------
 
-    def _lower_while(self, builder: IRBuilder, stmt: ast.While,
-                     func: Function) -> None:
+    def _lower_while(self, builder: IRBuilder, stmt: ast.While, func: Function,
+                     expected: "Type | None", produces: bool) -> Value:
         """Check and lower a `while`, which is a branch backwards.
 
             before:  br loop(v₁ … vₙ, mem)
@@ -2789,14 +2814,19 @@ class Checker:
         thing a loop cannot do the way `if` and `match` do it, which look at
         what the arms turned out to change afterwards.
 
-        Nothing travels on the conditional branch.  What the block after the
-        loop reads are the loop's own parameters, which it dominates: the only
-        way out of the loop is the test.
+        Nothing travels on the conditional branch, so where the block after the
+        loop has to be handed anything the way out of the test hands it from a
+        block of its own.
+
+        What the loop comes to, where anything wants it, is what a `break`
+        handed over -- and, down the way that ran the body out, what the `else`
+        arm came to or a failure where there is no `else` arm.
         """
         if builder.block is None:
-            return
+            return UndefConst(ERROR)
         label = self._label_of(stmt.label)
-        carried = self._loop_locals(stmt.body)
+        handing = self._wanted_of_a_loop(stmt, expected, produces)
+        carried = self._loop_locals(stmt.body, stmt.alternative)
         header = builder.new_block("loop")
         body = builder.new_block("body")
         # A loop with a name is a loop something may leave, and where the
@@ -2805,7 +2835,7 @@ class Checker:
         # every place a statement can be written, and the answer to it is worth
         # less than the jump it would save: a loop nothing leaves has a name
         # nothing names, and that is reported rather than optimized.
-        leaves = label is not None
+        leaves = label is not None or stmt.alternative is not None or produces
         leave = builder.new_block("leave") if leaves else None
         after = builder.new_block("done")
         builder.br(header,
@@ -2815,7 +2845,8 @@ class Checker:
         params = [header.add_param(self._value_type_of(local.value), local.name)
                   for local in carried]
         token = header.add_param(MEM, "mem")
-        ways = self._exit_params(after, carried, params) if leaves else None
+        ways, exit_token = self._exit_params(after, carried, params) \
+            if leaves else (None, token)
         for local, param in zip(carried, params):
             local.value = param
             local.value_span = stmt.span
@@ -2832,19 +2863,16 @@ class Checker:
             condition = UndefConst(BOOL)
         builder.condbr(condition, body, leave if leave is not None else after,
                        span=stmt.span)
-        if leave is not None:
-            # A conditional branch carries nothing, so the way out of the test
-            # hands the names over from a block of its own -- the one place the
-            # loop's own parameters are what the exit reads.
-            builder.position_at(leave)
-            builder.br(after, (*params, builder.memory()), stmt.span)
+        ran_out = builder.memory()
         outer_carried = self._carried
         # A name the loop carries is read by the next turn, so replacing the
         # value it stands for is not throwing that value away.
         self._carried = outer_carried | {id(local) for local in carried}
         builder.position_at(body)
         self._push_scope()
-        self._begin_loop(label, header, after, carried, (), None)
+        one = self._begin_loop(label, header, after, carried, (), None,
+                               produces, produces and stmt.alternative is None,
+                               handing)
         self._lower_block(builder, stmt.body, func, as_result=False)
         self._end_loop(label)
         self._pop_scope()
@@ -2859,14 +2887,13 @@ class Checker:
             # the reading.
             for local in carried:
                 local.read = True
-        builder.position_at(after)
-        for local, param in zip(carried, ways if ways is not None else params):
-            local.value = param
-            local.value_span = stmt.span
-        builder.set_memory(after.params[-1] if ways is not None else token)
+        return self._loop_answer(builder, stmt, func, one, leave, after,
+                                 carried, params, token, exit_token, ran_out,
+                                 ways, expected, produces)
 
     def _lower_foreach(self, builder: IRBuilder, stmt: ast.ForEach,
-                       func: Function) -> None:
+                       func: Function, expected: "Type | None",
+                       produces: bool) -> Value:
         """Check and lower a `foreach`, and `while` written with a binding.
 
         An **iterator** is a value with a `next` answering the next element or a
@@ -2892,7 +2919,7 @@ class Checker:
         the loop and read from where it was left.
         """
         if builder.block is None:
-            return
+            return UndefConst(ERROR)
         found = self._iteration_over(builder, stmt)
         if found is None:
             # Bound to nothing that means anything, so that a later mention of
@@ -2903,9 +2930,10 @@ class Checker:
             self._bind_local(stmt.name, UndefConst(ERROR), stmt.name_span)
             self._lower_block(builder, stmt.body, func, as_result=False)
             self._pop_scope()
-            return
+            return UndefConst(ERROR)
         label = self._label_of(stmt.label)
-        carried = self._loop_locals(stmt.body)
+        handing = self._wanted_of_a_loop(stmt, expected, produces)
+        carried = self._loop_locals(stmt.body, stmt.alternative)
         header = builder.new_block("loop")
         body = builder.new_block("body")
         # A loop with a name is a loop something may leave, and where the
@@ -2914,7 +2942,7 @@ class Checker:
         # every place a statement can be written, and the answer to it is worth
         # less than the jump it would save: a loop nothing leaves has a name
         # nothing names, and that is reported rather than optimized.
-        leaves = label is not None
+        leaves = label is not None or stmt.alternative is not None or produces
         leave = builder.new_block("leave") if leaves else None
         after = builder.new_block("done")
         builder.br(header,
@@ -2926,7 +2954,8 @@ class Checker:
         params = [header.add_param(self._value_type_of(local.value), local.name)
                   for local in carried]
         token = header.add_param(MEM, "mem")
-        ways = self._exit_params(after, carried, params) if leaves else None
+        ways, exit_token = self._exit_params(after, carried, params) \
+            if leaves else (None, token)
         for local, param in zip(carried, params):
             local.value = param
             local.value_span = stmt.span
@@ -2934,15 +2963,15 @@ class Checker:
         builder.set_memory(token)
         builder.condbr(found.more(builder, state), body,
                        leave if leave is not None else after, span=stmt.span)
-        if leave is not None:
-            builder.position_at(leave)
-            builder.br(after, (*params, builder.memory()), stmt.span)
+        ran_out = builder.memory()
         outer_carried = self._carried
         self._carried = outer_carried | {id(local) for local in carried}
         builder.position_at(body)
         self._push_scope()
         self._bind_turn(builder, stmt, found.take(builder, state))
-        self._begin_loop(label, header, after, carried, state, found.step)
+        one = self._begin_loop(label, header, after, carried, state, found.step,
+                               produces, produces and stmt.alternative is None,
+                               handing)
         self._lower_block(builder, stmt.body, func, as_result=False)
         self._end_loop(label)
         self._pop_scope()
@@ -2954,11 +2983,9 @@ class Checker:
                         builder.memory()), stmt.span)
             for local in carried:
                 local.read = True
-        builder.position_at(after)
-        for local, param in zip(carried, ways if ways is not None else params):
-            local.value = param
-            local.value_span = stmt.span
-        builder.set_memory(after.params[-1] if ways is not None else token)
+        return self._loop_answer(builder, stmt, func, one, leave, after,
+                                 carried, params, token, exit_token, ran_out,
+                                 ways, expected, produces)
 
     # -- naming a loop, and leaving or repeating it ----------------------------
 
@@ -2985,25 +3012,29 @@ class Checker:
     def _begin_loop(self, label: "ast.Label | None", header: BasicBlock,
                     after: BasicBlock, carried: "list[_Local]",
                     state: "tuple[Value, ...]",
-                    step: "Callable[[IRBuilder, tuple[Value, ...]], tuple[Value, ...]] | None"
-                    ) -> None:
+                    step: "Callable[[IRBuilder, tuple[Value, ...]], tuple[Value, ...]] | None",
+                    answers: bool, wraps: bool, handing: "Type | None"
+                    ) -> "_Loop | None":
         """Put a loop's name up for the length of its body."""
         if label is None:
-            return
-        self._loops.append(_Loop(label=label.name, span=label.span,
-                                 header=header, after=after, carried=carried,
-                                 state=state, step=step))
+            return None
+        one = _Loop(label=label.name, span=label.span, header=header,
+                    after=after, carried=carried, state=state, step=step,
+                    answers=answers, wraps=wraps, handing=handing)
+        self._loops.append(one)
+        return one
 
-    def _end_loop(self, label: "ast.Label | None") -> None:
+    def _end_loop(self, label: "ast.Label | None") -> "_Loop | None":
         """Take it down again, and report a name nothing named."""
         if label is None:
-            return
+            return None
         one = self._loops.pop()
         if not one.named:
             self._diags.emit(D.LANG_LOOP_LABEL_UNUSED, one.span, name=one.label)
+        return one
 
     def _exit_params(self, after: BasicBlock, carried: "list[_Local]",
-                     params: "list[Value]") -> "list[Value]":
+                     params: "list[Value]") -> "tuple[list[Value], Value]":
         """Give the block after a loop the names every way out of it hands over.
 
         Where nothing leaves the loop early the test is the only way out, so
@@ -3011,11 +3042,17 @@ class Checker:
         its own -- which is what it had before there was a `break`.  Where
         something does, the values differ by which way was taken, so they are
         handed over and the block takes them.
+
+        What the loop comes to is not among them.  Whether there is such a thing
+        is not known until the body has been read, so that parameter is added
+        afterwards and stands last; the branches that hand it over are written
+        before it exists, which is allowed because a branch records what it
+        hands over and a block records what it takes, and the two are matched
+        when the function is done.
         """
         ways = [after.add_param(self._value_type_of(param), local.name)
                 for local, param in zip(carried, params)]
-        after.add_param(MEM, "mem")
-        return ways
+        return ways, after.add_param(MEM, "mem")
 
     def _find_loop(self, label: ast.Label) -> "_Loop | None":
         """The loop a jump names, or nothing where it names none."""
@@ -3027,20 +3064,66 @@ class Checker:
         return None
 
     def _lower_break(self, builder: IRBuilder, stmt: ast.Break) -> None:
-        """Lower `break §name`: go to where the loop of that name ends.
+        """Lower `break §name [VALUE]`: go to where the loop of that name ends.
 
         What it hands over are the names the loop carries, as they stand here:
         the block after the loop is reached two ways now, and what it reads has
-        to be right down both of them.
+        to be right down both of them.  Where the loop is an expression it hands
+        over one thing more, which is what the loop comes to.
         """
         found = self._find_loop(stmt.label)
         if found is None or builder.block is None:
             return
+        handed = self._handed_over(builder, stmt, found)
+        carried = tuple(local.value for local in found.carried)
         builder.br(found.after,
-                   (*(local.value for local in found.carried),
-                    builder.memory()), stmt.span)
+                   (*carried, builder.memory()) if handed is None
+                   else (*carried, builder.memory(), handed), stmt.span)
         for local in found.carried:
             local.read = True
+
+    def _handed_over(self, builder: IRBuilder, stmt: ast.Break,
+                     found: "_Loop") -> "Value | None":
+        """What a `break` hands the loop, or nothing where it hands it nothing.
+
+        Every `break` naming one loop agrees with every other about what it
+        hands over: that a value is handed at all, and what type it is.  The
+        first one to say either is what the rest are held to, unless the loop
+        itself already said -- which it does wherever what the loop is being
+        used as is known before its body is read.
+
+        Where the loop has no `else` arm the value becomes a result here, since
+        the way that runs the body out is the way that has none.
+        """
+        if stmt.value is None:
+            found.bare_at = found.bare_at or stmt.span
+            if found.answers:
+                self._diags.emit(D.LANG_LOOP_BREAK_HANDS_NOTHING, stmt.span)
+            return None
+        if not found.answers:
+            # The loop stands where nothing reads what it comes to, so there is
+            # nowhere for this to go.
+            self._diags.emit(D.LANG_LOOP_VALUE_UNUSED, stmt.value.span)
+            return None
+        found.handed_at = found.handed_at or stmt.span
+        outer = self._as_the_loops_value()
+        try:
+            value = self._lower_expr(builder, stmt.value, found.handing)
+            ty = self._value_type_of(value)
+            if ty is ERROR:
+                return None
+            if found.handing is None:
+                found.handing = ty
+            elif ty is not found.handing:
+                self._report_mismatch(stmt.value.span, ty, found.handing)
+                return None
+        finally:
+            self._as_it_was(outer)
+        if not found.wraps:
+            return value
+        return builder.wrap(value, builder.bool_const(False),
+                            self._module.types.result_type(found.handing),
+                            stmt.span)
 
     def _lower_continue(self, builder: IRBuilder, stmt: ast.Continue) -> None:
         """Lower `continue §name`: begin the next turn of the loop of that name.
@@ -3060,6 +3143,137 @@ class Checker:
                     builder.memory()), stmt.span)
         for local in found.carried:
             local.read = True
+
+    def _as_the_loops_value(self) -> tuple:
+        """Say that what is lowered next is what the loop comes to.
+
+        A mismatch there is about the loop and not about whatever the loop
+        stands in, so every other context is put aside for as long as it lasts:
+        without that, a `break` in a definition's initializer would report a
+        type that does not match as a mistake about the definition.
+        """
+        outer = (self._operand_of, self._initializing, self._assigning,
+                 self._handing_over, self._leaving)
+        (self._operand_of, self._initializing, self._assigning,
+         self._handing_over, self._leaving) = None, None, None, None, True
+        return outer
+
+    def _as_it_was(self, outer: tuple) -> None:
+        """Put back what `_as_the_loops_value` set aside."""
+        (self._operand_of, self._initializing, self._assigning,
+         self._handing_over, self._leaving) = outer
+
+    def _wanted_of_a_loop(self, stmt: "ast.While | ast.ForEach",
+                          expected: "Type | None", produces: bool
+                          ) -> "Type | None":
+        """What a `break` hands over, where the loop's own type already says.
+
+        A loop with an `else` arm comes to what the two ways agree on, so what
+        a `break` hands over is what the loop is being used as.  One without
+        comes to a result, the failure being the way that ran the body out, so
+        what a `break` hands over is that result's answer.
+
+        Nothing where nothing says -- the loop standing where no type is wanted
+        of it -- and the first `break` settles it then.
+        """
+        if not produces or expected is None:
+            return None
+        if stmt.alternative is not None:
+            return expected
+        return expected.ok if isinstance(expected, ResultType) else None
+
+    def _loop_answer(self, builder: IRBuilder, stmt: "ast.While | ast.ForEach",
+                     func: Function, one: "_Loop | None",
+                     leave: "BasicBlock | None", after: BasicBlock,
+                     carried: "list[_Local]", params: "list[Value]",
+                     token: Value, exit_token: Value, ran_out: Value,
+                     ways: "list[Value] | None", expected: "Type | None",
+                     produces: bool) -> Value:
+        """Fill the way out of the test, and answer what the loop comes to.
+
+        The way out of the test is the way that ran the body out: it hands over
+        the loop's own parameters, and the `else` arm is what runs down it.
+        Where the loop is an expression it hands over one thing more -- what the
+        `else` arm came to, or the failure that says the loop was never left by
+        a `break`.
+
+        The block after the loop takes what it is handed, so the parameter that
+        carries the value is added here, once it is known there is one.  It
+        stands last, after the memory, because that is the order the branches
+        that were written before it hand things over in.
+        """
+        handing = one.handing if one is not None else None
+        otherwise: "Value | None" = None
+        if leave is not None:
+            builder.position_at(leave)
+            builder.set_memory(ran_out)
+            for local, param in zip(carried, params):
+                local.value = param
+                local.value_span = stmt.span
+            if stmt.alternative is not None:
+                self._push_scope()
+                outer = self._as_the_loops_value()
+                try:
+                    otherwise = self._lower_block(
+                        builder, stmt.alternative, func, as_result=False,
+                        wanted=handing, produces=produces)
+                finally:
+                    self._as_it_was(outer)
+                self._pop_scope()
+                if otherwise is not None:
+                    found = self._value_type_of(otherwise)
+                    if found is ERROR:
+                        otherwise = None
+                    elif handing is None:
+                        handing = found
+                    elif found is not handing:
+                        self._report_mismatch(stmt.alternative.span, found,
+                                              handing)
+                        otherwise = None
+        if produces and handing is None:
+            # Nothing hands anything over and no `else` arm gives anything, so
+            # there is no value here to be the loop's.
+            self._diags.emit(D.LANG_LOOP_COMES_TO_NOTHING, stmt.span)
+            self._settle_after(builder, carried, ways, params, after,
+                               exit_token, token, stmt, leave, None)
+            return UndefConst(ERROR)
+        answer: "Type | None" = None
+        if produces:
+            assert handing is not None
+            answer = handing if stmt.alternative is not None \
+                else self._module.types.result_type(handing)
+        given: "Value | None" = None
+        if answer is not None:
+            given = otherwise if stmt.alternative is not None else builder.wrap(
+                UndefConst(handing), builder.bool_const(True), answer, stmt.span)
+            if given is None:
+                given = UndefConst(answer)
+        self._settle_after(builder, carried, ways, params, after, exit_token,
+                           token, stmt, leave, given)
+        if answer is None:
+            return UndefConst(VOID)
+        value = after.add_param(answer, "answer")
+        if expected is not None and expected is not answer:
+            self._report_mismatch(stmt.span, answer, expected)
+            return UndefConst(ERROR)
+        return value
+
+    def _settle_after(self, builder: IRBuilder, carried: "list[_Local]",
+                      ways: "list[Value] | None", params: "list[Value]",
+                      after: BasicBlock, exit_token: Value, token: Value,
+                      stmt: "ast.While | ast.ForEach",
+                      leave: "BasicBlock | None", given: "Value | None") -> None:
+        """Branch out of the test and stand in the block the loop ends at."""
+        if leave is not None:
+            handed = tuple(local.value for local in carried)
+            builder.br(after,
+                       (*handed, builder.memory()) if given is None
+                       else (*handed, builder.memory(), given), stmt.span)
+        builder.position_at(after)
+        for local, param in zip(carried, ways if ways is not None else params):
+            local.value = param
+            local.value_span = stmt.span
+        builder.set_memory(exit_token if ways is not None else token)
 
     def _bind_turn(self, builder: IRBuilder, stmt: ast.ForEach,
                    value: Value) -> None:
@@ -3282,7 +3496,8 @@ class Checker:
             return None, True
         return distance, given > 0
 
-    def _loop_locals(self, body: ast.Block) -> list[_Local]:
+    def _loop_locals(self, body: ast.Block,
+                     alternative: "ast.Block | None" = None) -> list[_Local]:
         """The names in scope that a turn of the loop may change.
 
         Asked of the syntax rather than of what the lowering turns out to do,
@@ -3291,9 +3506,17 @@ class Checker:
         would be wrong, so what is collected is every assignment anywhere in the
         body, including inside a nested loop or the arms of an `if`.  A
         definition binds a new name and is not one of these.
+
+        The `else` arm counts too, though it runs once and outside the loop:
+        what follows the loop is reached both through it and through a `break`,
+        so a name it changes is a name the two ways disagree about, which is the
+        same reason the body's are counted.
         """
         found: dict[int, _Local] = {}
-        for name in _assigned_in(body):
+        names = list(_assigned_in(body))
+        if alternative is not None:
+            names.extend(_assigned_in(alternative))
+        for name in names:
             local = self._find_local(name)
             if local is not None:
                 found.setdefault(id(local), local)
@@ -3932,6 +4155,12 @@ class Checker:
             case ast.If():
                 return self._lower_if(builder, expr, builder.function, expected,
                                       True)
+            case ast.While():
+                return self._lower_while(builder, expr, builder.function,
+                                         expected, True)
+            case ast.ForEach():
+                return self._lower_foreach(builder, expr, builder.function,
+                                           expected, True)
             case ast.Match():
                 return self._lower_match(builder, expr, builder.function,
                                          expected, True)
@@ -4930,6 +5159,10 @@ class Checker:
         value reaches would add nothing.
         """
         if found is ERROR or expected is ERROR:
+            return
+        if self._leaving:
+            self._diags.emit(D.LANG_LOOP_VALUE_MISMATCH, span,
+                             found=found.render(), expected=expected.render())
             return
         if self._operand_of is not None:
             # Two different mistakes: an operand of a kind the operator has no

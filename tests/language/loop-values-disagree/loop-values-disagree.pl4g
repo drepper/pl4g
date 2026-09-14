@@ -1,0 +1,14 @@
+※ pl4g-test: compile=error diag=4473
+
+※ A loop comes to one type, whichever way it was left: the block after it is
+※ reached down every one of those ways and reads one thing.  So every `break`
+※ in a loop and its `else` arm all give that one type, and nothing is widened
+※ to make two of them meet.
+
+@[startup]
+fn main() → u8:
+    let found: u8 = while §counting true:
+        break §counting 1u8
+    else:
+        2u16
+    found

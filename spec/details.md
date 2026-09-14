@@ -889,6 +889,28 @@ be handed over.
 own -- `leave` -- holding one unconditional branch that hands the header's parameters to the block after.  That is the one place
 the loop's own parameters are what the exit reads.
 
+**What the loop comes to is one more thing the exit takes**, added to that block after the body has been read rather than
+before it.  Whether there is such a value, and what type it has, is not known until the breaks have been seen -- the loop's own
+type says only where something already wanted one -- so the parameter cannot exist when the first `break` branches.  It does not
+have to: a branch records what it hands over and a block records what it takes, and the two are matched when the function is
+done.  The parameter therefore stands last, after the memory, which is the order the branches written before it hand things over
+in.
+
+**A loop with no `else` arm answers with a result**, and the two halves of that are made in the two places they belong: the
+`break` wraps what it hands over into the result, and the way out of the test hands over the failure.  Nothing is done on the path
+round the loop, and nothing is done in the block after it.
+
+**The `else` arm is what the way out of the test runs**, so it is lowered into the `leave` block -- which is why that block is
+filled after the body rather than immediately after the conditional branch.  The memory the arm starts from is therefore captured
+before the body is lowered, the builder's own having moved on by then.  The arm is outside the loop, so it is lowered after the
+loop's name has been taken down: a `break` in it would name a loop that has ended.  A name it assigns is one of the names the loop
+carries, for the reason the body's are -- what follows the loop is reached through the arm as well as through a `break`, and the
+two ways have to agree.
+
+**A mismatch in what a loop comes to is said as one.**  `_as_the_loops_value` puts every other context aside while a `break`'s
+value or the `else` arm is lowered, so a loop in a definition's initializer reports a `break` of the wrong type as a mistake about
+the loop rather than about the definition.  That is the same mechanism `_operand_of` and `_handing_over` already are.
+
 **Whether a body holds a `break` is not asked.**  A labelled loop gets the exit parameters and the `leave` block whether or not
 anything jumps, because the question is about every place a statement can be written -- inside an `if` used as a value, inside a
 `match` arm, inside a nested loop -- and getting it wrong means branching to a block with no parameters, which the verifier would

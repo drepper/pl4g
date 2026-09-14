@@ -449,13 +449,18 @@ To Do List for the PL4g language
     extended, it costs nothing at runtime for the reason the call case does not, and it cost a parser rule rather than a
     mechanism.  A tuple still has at least one member, so spreading an array of no elements into one is refused (4466).
 
-[ ] consider letting a `break` hand a value over, as Rust's `break 'label value` does, which would make a loop an expression.
-    What stops it today is the way through that runs the body no times at all: that way reaches the block after the loop without
-    passing a `break`, so it would have to produce something too -- a value written on the loop, or a rule that a loop producing
-    a value is one whose condition is a constant truth.  Nothing needs it yet; `break` after an assignment says the same thing.
+[x] let a `break` hand a value over, making a loop an expression.  Done, and with it the `else` arm, the two being one decision:
+    the way through that runs the body no times at all is what the arm gives a value to, and a loop with no arm comes to a result
+    whose failure is that way.  Everything a loop may come to is of one type, checked across every `break` and the arm.
 
-[ ] consider whether the two ways out of a loop should be distinguishable, as Python's `while ... else` makes them.  A program
-    that wants to can set a name before the `break` and read it after, which is what the construct saves one line of.
+[x] make the two ways out of a loop distinguishable, as Python's `while ... else` does.  Done: the `else` arm runs where the loop
+    ran out and not where a `break` left it, and gives that way's value.
+
+[ ] let a `break` hand over an unsuffixed literal where the loop's type is written but the loop has no `else` arm.
+    `let v: u8? = while §a c: break §a 1` does not work, because `_lower_into` lowers into a result type with nothing expected --
+    so that a plain `u8` may be wrapped into a `u8?` -- and the loop never learns that `u8` is wanted.  With an `else` arm it
+    works, the expected type being plain.  The fix is for the result path to tell what it would accept rather than expect
+    nothing, which is a change to how every result-typed initializer is checked and not only a loop's.
 
 [x] say what order a call's arguments are worked out in.  Done, and said of everything rather than of arguments: a call's
     arguments, a tuple's members, an array's elements, a collection's entries and an operator's two sides are all worked out in

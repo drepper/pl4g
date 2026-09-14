@@ -3765,6 +3765,81 @@
       "option": "unused-label"
     },
     {
+      "number": 4470,
+      "name": "LANG_LOOP_BREAK_HANDS_NOTHING",
+      "severity": "error",
+      "message": "this 'break' hands nothing over, and what the loop comes to is read",
+      "args": [],
+      "cause": "Something reads what the loop comes to, so every way out of it has to give something: a 'break' that hands nothing over is a way out with nothing to give.  Either hand a value over here, or nothing should be reading what the loop comes to.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Statements / Loops",
+        "requirement": "Where a loop's value is read, every 'break' in it hands a value over."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4471,
+      "name": "LANG_LOOP_VALUE_UNUSED",
+      "severity": "error",
+      "message": "nothing reads what this loop comes to, so there is nowhere for this to go",
+      "args": [],
+      "cause": "The loop stands where a statement stands, so what it comes to is read by nothing and a value handed over here would be worked out and thrown away.  A loop whose value is wanted is written where one is wanted -- given to a name, handed to a call, or answered with.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Statements / Loops",
+        "requirement": "A 'break' hands a value over only where the loop's own value is read."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4472,
+      "name": "LANG_LOOP_COMES_TO_NOTHING",
+      "severity": "error",
+      "message": "nothing in this loop gives it a value to come to",
+      "args": [],
+      "cause": "Something reads what the loop comes to, and nothing in it produces one: no 'break' hands a value over, and there is no 'else' arm that gives one.  A loop is a statement until something in it says otherwise, which is what a 'break' with a value says.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Statements / Loops",
+        "requirement": "A loop whose value is read has a 'break' that hands a value over, or an 'else' arm that gives one."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4473,
+      "name": "LANG_LOOP_VALUE_MISMATCH",
+      "severity": "error",
+      "message": "'{found}' is given here, and the loop comes to '{expected}'",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type of what was written"
+        },
+        {
+          "name": "expected",
+          "type": "string",
+          "description": "what the loop comes to"
+        }
+      ],
+      "cause": "A loop comes to one type, whichever way it was left, so every 'break' in it and its 'else' arm all give that one type -- the block after the loop is reached down all of those ways and reads one thing.  What the type is, is what the loop is being used as where that says, and otherwise what the first thing to give one gave.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Statements / Loops",
+        "requirement": "Everything a loop may come to is of one type."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 5001,
       "name": "LANG_STMT_UNREACHABLE",
       "severity": "warning",

@@ -1,0 +1,23 @@
+※ pl4g-test: compile=ok run=native,qemu exit=42 diag=none
+
+※ What a `break` hands over goes to the loop it names, not to the loop it
+※ stands in -- which is the same rule the jump itself follows, and is what
+※ makes a search of two dimensions one expression.
+※
+※ Every way a loop can be left gives one type: every `break` naming it and its
+※ `else` arm alike.  The block the loop ends at is reached down all of those
+※ ways and reads one thing, so there is one type for that thing to have.
+
+fn cell_where(product: u8) → u8:
+    foreach §rows r = 1u8…5u8:
+        foreach c = 1u8…5u8:
+            if r × c = product:
+                ※ hands the outer loop its value from inside the inner one
+                break §rows r × 10u8 + c
+    else:
+        0u8
+
+@[startup]
+fn main() → u8:
+    ※ 2 × 3 is the first pair found, so 23; and nothing makes 29
+    cell_where(6u8) + cell_where(29u8) + 19u8

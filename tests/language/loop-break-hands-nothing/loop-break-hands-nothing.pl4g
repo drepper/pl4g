@@ -1,0 +1,13 @@
+※ pl4g-test: compile=error diag=4470
+
+※ Something reads what the loop comes to, so every way out of it has to give
+※ something.  A `break` that hands nothing over is a way out with nothing to
+※ give, and there is no value for the block after the loop to read down it.
+
+@[startup]
+fn main() → u8:
+    let found: u8? = while §counting true:
+        if true:
+            break §counting
+        break §counting 2u8
+    found ?? 0u8

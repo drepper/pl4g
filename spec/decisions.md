@@ -2904,6 +2904,48 @@ available here, where arithmetic can stop the program.
 
 ---
 
+## 2026-09-14T20:00+02:00 — language
+
+**What a loop comes to**
+
+Decided on the user's direction: a `break` may hand a value over, which makes a loop an expression; a loop may take an `else`
+arm; otherwise what it comes to is a result; and everything it may come to is of one type.
+
+**The `else` arm and the result are one decision, not two.**  A loop has a way through that no `break` took, and that way has to
+give something for the loop to be an expression.  The `else` arm is that way's value where one is written, and a failure where
+none is -- so `T?` with no arm and `T` with one.  That is why Python's `while ... else`, which only runs, and Rust's `break value`,
+which only applies to the loop that cannot end on its own, are halves of the same thing: joining them is what makes a loop an
+expression for *every* loop rather than for the one shape whose ran-out way does not exist.
+
+**Rejected: making a loop produce a value only where its condition is a constant truth**, which is Rust's answer by construction
+-- `loop` has no other way out, so `break` is the only way and the value is unconditional.  It would have avoided the result type
+entirely, and it would have meant that adding a condition to a loop silently changes what it comes to, which is the same class of
+edit the required labels exist to protect.
+
+**Rejected: a value written on the loop for the ran-out way**, `while c: ... otherwise 0u8`.  It is the `else` arm with less in
+it: the arm can compute the value, which is what a search that has to report how far it got needs.
+
+**A `break` hands a value over exactly where the loop's value is read**, and that is checked both ways.  Where it is read, every
+`break` hands one over (4470) and something has to give one at all (4472); where it is not, writing one is an error (4471)
+rather than a value quietly worked out and dropped.  The alternative -- letting a loop produce a value nothing reads -- would have
+made `break §a f()` mean something different depending on where the loop stood, which is the kind of thing this language reports.
+
+**One type for everything the loop may come to** was the user's requirement, and it is also what the shape demands: the block the
+loop ends at is reached down every `break` and down the ran-out way, and it reads one value.  Where the loop is being used as
+something the type is that; otherwise the first `break` to give a value settles it and the rest are held to it (4473).
+
+**A loop became an expression node**, as `if` and `match` already are, with a statement loop being an expression statement --
+so one mechanism serves both and `_lower_stmt` treats it exactly as it treats an `if`.
+
+Compare, beyond Rust and Python above: Zig's `for (xs) |x| { ... } else value`, which is this design, reached from the same place
+-- an `else` that had to mean something once the loop was an expression; Kotlin and Scala, which make most things expressions and
+leave loops out, so a search over two dimensions goes back to a variable set before the loop; Common Lisp's `loop ... finally
+(return v)` with `return-from`, which does all of this and much more in a sublanguage of its own; and Ada, Go, Java and C, where
+a loop is a statement outright and the value travels in a variable the loop assigns -- which works, and which makes the reader
+prove to themselves that every path through the loop assigned it.
+
+---
+
 ---
 
 Open questions

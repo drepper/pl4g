@@ -289,7 +289,9 @@ module.exports = grammar({
     // Higher than the ordinary readings, for the same reason the line that
     // ends with one is: a line ending here is a line that ended.
     _block_expression: $ => prec(1, choice($.match_expression,
-                                           $.if_expression)),
+                                           $.if_expression,
+                                           $.while_statement,
+                                           $.foreach_statement)),
 
     // The three statements a block expression can end, written as rules of
     // their own so that aliasing one keeps the shape it would have had: an
@@ -328,7 +330,13 @@ module.exports = grammar({
     while_statement: $ => seq(
       'while', optional(field('label', $.label)),
       field('condition', $._expression), field('body', $._block),
+      optional(field('alternative', $.loop_else)),
     ),
+
+    // Where the loop ran out rather than being left by a `break`.  It is what
+    // that way through the loop comes to, which is why a loop without one
+    // comes to a result: the way that ran out has nothing to give.
+    loop_else: $ => seq('else', $._block),
 
     // What a loop is called, so that `break` and `continue` can say which one
     // they mean.  It stands between the keyword and what the loop runs on,
@@ -348,6 +356,7 @@ module.exports = grammar({
             $._binding_names, $._binding_type),
       ),
       '=', field('iterable', $._expression), field('body', $._block),
+      optional(field('alternative', $.loop_else)),
     ),
 
     _binding_names: $ => seq(field('name', $.identifier),
@@ -382,7 +391,8 @@ module.exports = grammar({
     // Both name the loop they mean every time.  A jump with no label would mean
     // the loop nearest to it, which is a thing that changes when a loop is put
     // around it.
-    break_statement: $ => seq('break', field('label', $.label)),
+    break_statement: $ => seq('break', field('label', $.label),
+                              optional(field('value', $._expression))),
 
     continue_statement: $ => seq('continue', field('label', $.label)),
 
