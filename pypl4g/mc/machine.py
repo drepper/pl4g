@@ -43,9 +43,12 @@ class MachineBasicBlock:
 class FrameInfo:
     """The stack a function uses for what it could not keep in registers.
 
-    A slot is the width of the widest register rather than of the value in it:
-    a frame of a few slots costs nothing to make larger, and one size means one
-    rule about alignment instead of one per width.
+    A register spilled here gets a slot the width of the widest register rather
+    than of the value in it: a frame of a few slots costs nothing to make larger,
+    and one size means one rule about alignment instead of one per width.  Not
+    everything here is a register, though -- an array whose type says how many
+    elements it has lives here too, and is as wide as its elements make it --
+    so what the frame counts is bytes.
     """
 
     #: How wide one slot is, which is also what it is aligned to.
@@ -53,22 +56,35 @@ class FrameInfo:
     #: What the stack pointer must be a multiple of, which every architecture
     #: has an opinion about and two of them enforce.
     alignment: int = 16
+    #: How much of the frame has been given out, in bytes.
+    taken: int = 0
+    #: How many one-register slots were given out, which is what says how many
+    #: values had to be spilled.
     slots: int = 0
 
-    def allocate(self) -> int:
-        """Take a slot and return its offset from the stack pointer."""
-        offset = self.slots * self.slot_size
-        self.slots += 1
+    def reserve(self, size: int, alignment: int) -> int:
+        """Take *size* bytes of the frame and answer where they begin.
+
+        An offset once given out never moves, which is what lets the lowering
+        take room before the allocator knows whether it will need any.
+        """
+        self.taken = (self.taken + alignment - 1) // alignment * alignment
+        offset = self.taken
+        self.taken += size
         return offset
+
+    def allocate(self) -> int:
+        """Take a slot for one register and return its offset."""
+        self.slots += 1
+        return self.reserve(self.slot_size, self.slot_size)
 
     @property
     def size(self) -> int:
-        """How far the stack pointer moves, which is nothing where no slot was
+        """How far the stack pointer moves, which is nothing where nothing was
         taken: a function that needed no stack does not make a frame."""
-        raw = self.slots * self.slot_size
-        if raw == 0:
+        if self.taken == 0:
             return 0
-        return (raw + self.alignment - 1) // self.alignment * self.alignment
+        return (self.taken + self.alignment - 1) // self.alignment * self.alignment
 
 
 @dataclass(slots=True, eq=False)

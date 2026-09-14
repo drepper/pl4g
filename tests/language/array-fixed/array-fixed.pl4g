@@ -1,0 +1,22 @@
+※ pl4g-test: compile=ok run=native,qemu exit=60 diag=none
+
+※ An array holds several values of one type, one after another.  Its type is
+※ written after what it holds -- `u8⟦4⟧` is four of them -- because that is the
+※ order it is read in: four of these, not an array of four whose elements are
+※ these.
+※
+※ A type that says how many carries everything about the array but the elements
+※ themselves, so a value of one needs no room beyond theirs.  What a value of
+※ such a type *is*, is where the elements are.
+※
+※ An element is read and written with the same brackets the type is written
+※ with, so that a type, a value of it and a lookup in it all look alike.
+
+@[startup]
+fn main() → u8:
+    let a: mut u8⟦4⟧ = ⟦10u8, 20u8, 30u8, 40u8⟧
+    a⟦0⟧ ← 5u8
+    ※ an index written down is checked while compiling, and one worked out
+    ※ while the program runs is checked while it runs
+    let at: u8 = 2u8
+    a⟦0⟧ + a⟦1⟧ + a⟦at⟧ + a⟦3⟧ - 35u8

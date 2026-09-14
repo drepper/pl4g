@@ -1,0 +1,13 @@
+※ pl4g-test: compile=error diag=4454
+
+※ What a value of an array type is, is where its elements are, and the elements
+※ of an array a function made are in that function's own room -- gone by the
+※ time the caller reads them.  A slice of something that outlives the call would
+※ be safe, and there is no way yet to say that one does.
+
+fn four() → u8⟦4⟧:
+    ⟦1u8, 2u8, 4u8, 8u8⟧
+
+@[startup]
+fn main() → u8:
+    0u8

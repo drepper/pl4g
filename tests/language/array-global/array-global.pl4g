@@ -1,0 +1,11 @@
+※ pl4g-test: compile=ok run=native,qemu exit=21 diag=none
+
+※ A variable of an array type at the top level holds the elements themselves,
+※ which are bytes in the image like any other variable's value.  Every element
+※ has to be one the compiler knows, for the same reason.
+
+let table: u8⟦5⟧ = ⟦1u8, 2u8, 4u8, 8u8, 16u8⟧
+
+@[startup]
+fn main() → u8:
+    table⟦0⟧ + table⟦2⟧ + table⟦4⟧

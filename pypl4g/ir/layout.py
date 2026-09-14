@@ -10,7 +10,8 @@ width of a pointer is the target's business and not the type's.
 from dataclasses import dataclass
 from typing import Final
 
-from .types import (BoolType, DictType, EnumType, FloatType, IntType, MemType,
+from .types import (ArrayType, BoolType, DictType, EnumType, FloatType,
+                    IntType, MemType,
                     ProductType, PtrType, SetType, TupleType,
                     ResultType, SumType, Type, VoidType)
 
@@ -30,6 +31,21 @@ class DataLayout:
     pointer_size: int
     #: Every target so far stores the low-order byte first.
     little_endian: bool = True
+    #: Whether what is laid out has to match what the system's own compilers
+    #: would produce.  The specification leaves the compiler free to lay things
+    #: out as it likes as long as everything in one image agrees, and a
+    #: definition that has to be reachable from a world that has never heard of
+    #: this language gives that freedom up.  Everything the language has so far
+    #: is laid out the same either way but one: an array takes a wider
+    #: alignment where nothing outside is reading it.
+    system: bool = False
+
+
+#: How large an array has to be before it is worth aligning wider than its
+#: elements ask for.  Two words: at that size a copy or a comparison of the
+#: whole of it is worth doing a word at a time, and a word at a time wants the
+#: first word aligned.
+WIDE_ENOUGH: Final[int] = 16
 
 
 def size_of(ty: Type, layout: DataLayout) -> int:
@@ -48,6 +64,15 @@ def size_of(ty: Type, layout: DataLayout) -> int:
                 total = _align_up(total, align_of(member, layout))
                 total += size_of(member, layout)
             return _align_up(total, align_of(ty, layout))
+        case ArrayType() if ty.length is not None:
+            # Its elements and nothing else, which is what "the type carries
+            # everything" means: how many there are is in the type, so no room
+            # is spent saying it again.
+            return ty.length * stride_of(ty.element, layout)
+        case ArrayType():
+            # Where the elements are and how many there are, which is what an
+            # array whose type does not say has to carry with it.
+            return 2 * layout.pointer_size
         case SetType() | DictType():
             # A handle, which is where the table is and nothing else: how many
             # entries it has and how much room it has for them are in the table
@@ -96,6 +121,19 @@ def align_of(ty: Type, layout: DataLayout) -> int:
             return align_of(ty.holder, layout)
         case TupleType():
             return max((align_of(m, layout) for m in ty.members), default=1)
+        case ArrayType() if ty.length is not None:
+            # An array starts where its first element would, so the system's
+            # rule is that it is aligned as one element is.  Where nothing
+            # outside is reading it, one large enough to be worth reading a word
+            # at a time is put where a word can be read: the freedom the
+            # specification gives is worth nothing until it is used for
+            # something, and this is the smallest something that pays.
+            plain = align_of(ty.element, layout)
+            if layout.system or size_of(ty, layout) < WIDE_ENOUGH:
+                return plain
+            return max(plain, WIDE_ENOUGH)
+        case ArrayType():
+            return layout.pointer_size
         case SetType() | DictType():
             return layout.pointer_size
         case PtrType():
@@ -118,6 +156,17 @@ def align_of(ty: Type, layout: DataLayout) -> int:
 #: fifty-six variants, and a type with more of them than that is a type whose
 #: definition is the thing to look at.
 _TAG_SIZE: Final[int] = 1
+
+
+def stride_of(ty: Type, layout: DataLayout) -> int:
+    """How far apart two values of *ty* are where they follow one another.
+
+    Its size brought up to its alignment, which is what puts the second one
+    where a value of that type may start.  For everything the language has so
+    far the two are already the same; a product type whose last field is narrow
+    is the first that will not be.
+    """
+    return _align_up(size_of(ty, layout), align_of(ty, layout))
 
 
 def offsets_of(ty: ProductType, layout: DataLayout) -> tuple[int, ...]:

@@ -1,0 +1,26 @@
+※ pl4g-test: compile=ok run=native,qemu exit=30 diag=none
+
+※ An array whose type does not say how long it is, `u8⟦⟧`, is where its elements
+※ are and how many there are.  It owns nothing: the elements are an array's, or
+※ part of one.
+※
+※ `a⟦i…j⟧` takes a run of them, from one place up to another -- the same
+※ half-open convention a range has everywhere else, so that the count is the
+※ difference between the ends.
+※
+※ An array whose type says how long it is stands where one that does not is
+※ wanted: the elements are where they were and how many there are is what its
+※ type said.  That goes one way only, since nothing that has lost its count can
+※ promise to have four.
+
+fn total(xs: u8⟦⟧, n: u8) → u8:
+    let sum: mut u8 = 0u8
+    foreach i = 0u8…n:
+        sum ← sum + xs⟦i⟧
+    sum
+
+@[startup]
+fn main() → u8:
+    let a: u8⟦6⟧ = ⟦1u8, 2u8, 4u8, 8u8, 16u8, 32u8⟧
+    ※ four of them, starting at one
+    total(a⟦1…5⟧, 4u8)

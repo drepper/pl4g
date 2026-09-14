@@ -1,0 +1,10 @@
+※ pl4g-test: compile=error diag=4450
+
+※ The type says how many elements there are and the index is written down, so
+※ whether it is one of them is known while compiling.  A program that must fail
+※ whenever it is started is one that need not be started.
+
+@[startup]
+fn main() → u8:
+    let a: u8⟦4⟧ = ⟦1u8, 2u8, 4u8, 8u8⟧
+    a⟦9⟧

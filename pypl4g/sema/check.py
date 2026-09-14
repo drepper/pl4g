@@ -6,7 +6,7 @@ compilation be parallelized and what makes a forward reference legal.
 """
 
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Callable, Final, Sequence
 
 from ..diag import ids as D
@@ -16,6 +16,7 @@ from ..front.token import (BOTTOM_GLYPH, BUILTIN_GLYPH, EMPTY_ARENA_NAME,
                           HEAP_NAME, TOLERANCE_DEFAULT,
                           TOLERANCE_NAME, WILDCARD_NAME)
 from ..ir.builder import IRBuilder
+from ..ir.layout import DataLayout, stride_of
 from ..ir.inst import BinOp, CastKind, CmpPred, Instruction, UnOp
 from . import tables
 from ..ir.function import (DEFAULT_CCONV, SYSTEM_CCONV, BasicBlock, FuncAttrs,
@@ -23,7 +24,8 @@ from ..ir.function import (DEFAULT_CCONV, SYSTEM_CCONV, BasicBlock, FuncAttrs,
                            InlineHint,
                            Linkage, SpecialKind)
 from ..ir.module import GlobalVar, Module
-from ..ir.types import (ARENA, BOOL, BUILTIN_TYPES, DictType, ERROR, EnumType,
+from ..ir.types import (ARENA, ArrayType, BOOL, BUILTIN_TYPES, DictType,
+                        ERROR, EnumType,
                         U64,
                         F64,
                         FloatType, IntType, MEM, ProductType, ResultType,
@@ -335,6 +337,11 @@ _UNARY_OPS: Final[dict[ast.UnaryOp, UnOp]] = {
 #: What the tolerance is called in the image.  The name a program writes it by
 #: is not a name an assembler or a debugger would take, so the two differ; the
 #: one in the image says whose it is.
+#: What memory looks like.  Every target this compiler has is an eight-byte
+#: pointer, and the one thing the front end needs a layout for is how far apart
+#: two elements of an array are.
+_LAYOUT: Final[DataLayout] = DataLayout(pointer_size=8)
+
 TOLERANCE_SYMBOL: Final[str] = "__pl4g_tolerance"
 
 #: And the one the arena the compiler provides carries.
@@ -570,13 +577,18 @@ class Checker:
             # it raises is settled now, since there will be no later chance.
             self._settle_expecting(expectation, pairs)
             return
+        if isinstance(ty, ArrayType) and ty.length is None:
+            self._diags.emit(D.LANG_ARRAY_NO_LENGTH_AT_TOP, node.span,
+                             found=ty.render())
+            ty = ERROR
         if ty is None:
             ty = ERROR
         var = self._module.add_global(GlobalVar(
             name=node.name, value_type=ty,
             ptr_type=self._module.types.ptr_type(ty, mutable=node.mutable),
             initializer=initializer, linkage=linkage, span=node.span,
-            exported=self._is_export(attrs)),
+            exported=self._is_export(attrs),
+            system_layout=any(a.name == "cdecl" for a in attrs)),
             key=self._key(node.name))
         self._top[node.name] = var
         self._owned.append(var)
@@ -806,6 +818,24 @@ class Checker:
                 if named is not None and named is not ty:
                     return self._wrong_initializer(node, ty, named.render())
                 return self._module.float_const(ty, node.value.value)
+            case ast.ArrayLit() if isinstance(ty, ArrayType):
+                # Every element has to be one the compiler knows, which is what
+                # a variable at the top level is: bytes in the image and not
+                # something a program works out.
+                if ty.length is not None and ty.length != len(node.value.elements):
+                    self._diags.emit(D.LANG_ARRAY_WRONG_LENGTH, node.value.span,
+                                     given=len(node.value.elements),
+                                     wanted=ty.length)
+                    return None
+                held: list[Const] = []
+                for written in node.value.elements:
+                    found = self._constant_value(
+                        replace(node, value=written), ty.element)
+                    if not isinstance(found, Const):
+                        return None
+                    held.append(found)
+                return self._module.array_const(
+                    self._module.types.array_type(ty.element, len(held)), held)
             case ast.Member():
                 # A value of an enumeration is written `TYPE.NAME` and is known
                 # while compiling, so it is a constant like any literal.
@@ -1447,12 +1477,34 @@ class Checker:
         """Resolve a type written down, collection or name."""
         if isinstance(ref, ast.CollectionTypeRef):
             return self._collection_type(ref)
+        if isinstance(ref, ast.ArrayTypeRef):
+            return self._array_type(ref)
         if isinstance(ref, ast.TupleTypeRef):
             members = [self._resolve_type(m) for m in ref.members]
             if any(m is ERROR for m in members):
                 return ERROR
             return self._module.types.tuple_type(members)
         return self._named_type(ref)
+
+    def _array_type(self, ref: ast.ArrayTypeRef) -> Type:
+        """Resolve `T\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}N\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}` or `T\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}`.
+
+        How many elements there are is part of the type, so it is a number the
+        compiler can read and not an expression the program works out: a type
+        that depended on a value would be a different language.
+        """
+        element = self._resolve_type(ref.element)
+        if element is ERROR:
+            return ERROR
+        if element is VOID:
+            self._diags.emit(D.LANG_ARRAY_ELEMENT_IS_NOTHING, ref.span)
+            return ERROR
+        if ref.length is None:
+            return self._module.types.array_type(element)
+        if not isinstance(ref.length, ast.IntLit) or ref.length.value < 0:
+            self._diags.emit(D.LANG_ARRAY_LENGTH_NOT_A_NUMBER, ref.length.span)
+            return ERROR
+        return self._module.types.array_type(element, ref.length.value)
 
     def _collection_type(self, ref: ast.CollectionTypeRef) -> Type:
         """Resolve `⸨T⸩` or `⸨K: V⸩`, checking that the key can be one."""
@@ -1680,6 +1732,8 @@ class Checker:
                     builder.ret(result, stmt.span)
             case ast.EntryAssign():
                 self._lower_entry_assign(builder, stmt)
+            case ast.ElementAssign():
+                self._lower_element_assign(builder, stmt)
             case ast.While():
                 self._lower_while(builder, stmt, func)
             case ast.ForEach():
@@ -1751,6 +1805,213 @@ class Checker:
         return list(ty.members)
 
     # -- sets and dictionaries --------------------------------------------------
+
+    # -- arrays ------------------------------------------------------------
+
+    def _lower_array(self, builder: IRBuilder, expr: ast.ArrayLit,
+                     expected: Type | None) -> Value:
+        """Lower `\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}a, b, c\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}`: several values of one type, written down.
+
+        The elements go into room this function holds for as long as it runs,
+        and what the expression comes to is where that room is -- which is what
+        a value of an array type is.  A frame and not an arena: an array whose
+        type says how long it is lasts exactly as long as the name does, and an
+        arena that never frees would leak one for every turn of a loop.
+        """
+        wanted = expected if isinstance(expected, ArrayType) else None
+        element = self._one_type(
+            builder, expr.elements,
+            wanted.element if wanted is not None else None)
+        if element is ERROR:
+            return UndefConst(ERROR)
+        if wanted is not None and wanted.length is not None \
+                and wanted.length != len(expr.elements):
+            self._diags.emit(D.LANG_ARRAY_WRONG_LENGTH, expr.span,
+                             given=len(expr.elements), wanted=wanted.length)
+            return UndefConst(ERROR)
+        ty = self._module.types.array_type(element, len(expr.elements))
+        place = builder.frame(ty, expr.span)
+        for index, written in enumerate(expr.elements):
+            builder.store(self._element_place(builder, place, element,
+                                              builder.int_const(U64, index),
+                                              expr.span),
+                          self._lower_into(builder, written, element,
+                                           written.span), expr.span)
+        return builder.cast(CastKind.BITCAST, place, ty, expr.span)
+
+    def _on_its_own(self, builder: IRBuilder, written: ast.Expr) -> Value:
+        """Lower an index, which belongs to no operator and no assignment.
+
+        It stands between brackets and says which element is wanted, and is no
+        part of whatever is being done with that element; lowering it with the
+        surrounding context still in force would have a mistake in it reported
+        as a mistake about the operator around it.
+
+        A literal with no suffix is a count and is read as one, which is the
+        only place an index takes a type from something other than itself.  An
+        index of any integer type is accepted, so nothing else is expected of
+        it: which type a program counts in is the program's business.
+        """
+        outer = (self._operand_of, self._initializing, self._assigning,
+                 self._handing_over)
+        (self._operand_of, self._initializing, self._assigning,
+         self._handing_over) = None, None, None, None
+        try:
+            bare = isinstance(written, ast.IntLit) and written.type_name is None
+            return self._lower_expr(builder, written, U64 if bare else None)
+        finally:
+            (self._operand_of, self._initializing, self._assigning,
+             self._handing_over) = outer
+
+    def _element_place(self, builder: IRBuilder, base: Value, element: Type,
+                       index: Value, span: Span) -> Value:
+        """Where the element at *index* is, given where the first one is."""
+        start = builder.cast(CastKind.BITCAST, base,
+                             self._module.types.ptr_type(element, mutable=True),
+                             span)
+        stride = stride_of(element, _LAYOUT)
+        return builder.binary(
+            BinOp.ADD, start,
+            builder.binary(BinOp.WRAP_MUL, index,
+                           builder.int_const(U64, stride), span), span)
+
+    def _array_of(self, builder: IRBuilder, expr: ast.Expr,
+                  span: Span) -> "tuple[Value, ArrayType] | None":
+        """Lower what is being indexed, and say what array it turned out to be."""
+        base = self._lower_expr(builder, expr, None)
+        ty = self._value_type_of(base)
+        if ty is ERROR:
+            return None
+        if not isinstance(ty, ArrayType):
+            self._diags.emit(D.LANG_ARRAY_NOT_AN_ARRAY, span, found=ty.render())
+            return None
+        return base, ty
+
+    def _counted_from(self, builder: IRBuilder, base: Value,
+                      ty: ArrayType, span: Span) -> "tuple[Value, Value]":
+        """Where the elements of an array are, and how many there are.
+
+        One question asked of both kinds: a type that says how long it is
+        carries the length nowhere, and one that does not carries it beside the
+        place.
+        """
+        pointer = self._module.types.ptr_type(ty.element, mutable=True)
+        if ty.length is not None:
+            return (builder.cast(CastKind.BITCAST, base, pointer, span),
+                    builder.int_const(U64, ty.length))
+        return (builder.extract(base, 0, pointer, span),
+                builder.extract(base, 1, U64, span))
+
+    def _checked_index(self, builder: IRBuilder, written: ast.Expr,
+                       ty: ArrayType, length: Value, span: Span) -> "Value | None":
+        """Lower an index and see to it that it is one the array has.
+
+        Where both the index and the length are written down the answer is known
+        while compiling and a program that could only fail is refused.  Where
+        either is not, the check is one comparison and a branch that does not
+        come back, which is the same shape an addition that does not fit has.
+        """
+        index = self._on_its_own(builder, written)
+        found = self._value_type_of(index)
+        if found is ERROR:
+            return None
+        if not isinstance(found, IntType):
+            self._diags.emit(D.LANG_ARRAY_INDEX_NOT_A_NUMBER, written.span,
+                             found=found.render())
+            return None
+        if isinstance(written, ast.IntLit) and ty.length is not None:
+            if not 0 <= written.value < ty.length:
+                self._diags.emit(D.LANG_ARRAY_INDEX_OUTSIDE, written.span,
+                                 index=str(written.value), length=ty.length)
+                return None
+            return builder.int_const(U64, written.value)
+        wide = (index if found is U64
+                else builder.cast(CastKind.ZEXT if not found.signed
+                                  else CastKind.SEXT, index, U64, span))
+        builder.check(builder.compare(CmpPred.ULT, wide, length, span),
+                      "an index outside its array", span)
+        return wide
+
+    def _lower_element(self, builder: IRBuilder, expr: ast.Element,
+                       expected: Type | None) -> Value:
+        """Lower `a\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}i\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}`, one element, or `a\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}i\N{HORIZONTAL ELLIPSIS}j\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}`, a run of them."""
+        found = self._array_of(builder, expr.base, expr.base.span)
+        if found is None:
+            return UndefConst(ERROR)
+        base, ty = found
+        if isinstance(expr.index, ast.Range):
+            return self._lower_slice(builder, expr.index, base, ty, expected,
+                                     expr.span)
+        start, length = self._counted_from(builder, base, ty, expr.span)
+        index = self._checked_index(builder, expr.index, ty, length, expr.span)
+        if index is None:
+            return UndefConst(ERROR)
+        value = builder.load(
+            self._element_place(builder, start, ty.element, index, expr.span),
+            expr.span)
+        if expected is not None and expected is not ty.element:
+            self._report_mismatch(expr.span, ty.element, expected)
+        return value
+
+    def _lower_slice(self, builder: IRBuilder, written: ast.Range, base: Value,
+                     ty: ArrayType, expected: Type | None, span: Span) -> Value:
+        """Lower `a\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}i\N{HORIZONTAL ELLIPSIS}j\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}`: the elements from one place up to another.
+
+        What comes out is an array whose type does not say how long it is, which
+        is where the elements are and how many there are -- and the elements are
+        the ones it was taken from, not a copy of them.  A range with a step
+        would ask for every other element, which is not something a place and a
+        count can say; that is refused rather than given a meaning.
+        """
+        if written.step is not None:
+            self._diags.emit(D.LANG_ARRAY_SLICE_HAS_A_STEP, written.step.span)
+            return UndefConst(ERROR)
+        start, length = self._counted_from(builder, base, ty, span)
+        first = self._checked_index(builder, written.start, ty, length, span)
+        if first is None:
+            return UndefConst(ERROR)
+        # The end may be the length itself, which is one past the last element
+        # and so not an index; it is checked against the length and not below it.
+        last = self._on_its_own(builder, written.stop)
+        reaching = self._value_type_of(last)
+        if reaching is ERROR:
+            return UndefConst(ERROR)
+        if not isinstance(reaching, IntType):
+            self._diags.emit(D.LANG_ARRAY_INDEX_NOT_A_NUMBER, written.stop.span,
+                             found=reaching.render())
+            return UndefConst(ERROR)
+        end = (last if reaching is U64
+               else builder.cast(CastKind.ZEXT if not reaching.signed
+                                 else CastKind.SEXT, last, U64, span))
+        builder.check(builder.compare(CmpPred.ULE, end, length, span),
+                      "a slice reaching past the end of its array", span)
+        builder.check(builder.compare(CmpPred.ULE, first, end, span),
+                      "a slice that ends before it begins", span)
+        answer = self._module.types.array_type(ty.element)
+        made = builder.make_tuple(
+            (self._element_place(builder, start, ty.element, first, span),
+             builder.binary(BinOp.WRAP_SUB, end, first, span)), answer, span)
+        if expected is not None and expected is not answer:
+            self._report_mismatch(span, answer, expected)
+        return made
+
+    def _lower_element_assign(self, builder: IRBuilder,
+                              stmt: ast.ElementAssign) -> None:
+        """Lower `a\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}i\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET} \N{LEFTWARDS ARROW} v`, which puts a value at one place."""
+        found = self._array_of(builder, stmt.base, stmt.base.span)
+        if found is None:
+            return
+        base, ty = found
+        start, length = self._counted_from(builder, base, ty, stmt.span)
+        index = self._checked_index(builder, stmt.index, ty, length, stmt.span)
+        if index is None:
+            return
+        value = self._lower_into(builder, stmt.value, ty.element, stmt.span)
+        if self._value_type_of(value) is ERROR:
+            return
+        builder.store(
+            self._element_place(builder, start, ty.element, index, stmt.span),
+            value, stmt.span)
 
     def _lower_collection(self, builder: IRBuilder,
                           expr: "ast.SetLit | ast.DictLit",
@@ -2871,7 +3132,17 @@ class Checker:
         if isinstance(ref, ast.TypeRef) and ref.name == "void" and not ref.result:
             self._diags.emit(D.LANG_TYPE_NOTHING_IS_NOT_WRITTEN, ref.span)
             return VOID
-        return self._resolve_type(ref)
+        found = self._resolve_type(ref)
+        if isinstance(found, ArrayType):
+            # What a value of an array type is, is where its elements are, and
+            # the elements of an array a function made are in that function's
+            # own room -- gone by the time the caller reads them.  A slice of
+            # something that outlives the call would be safe, and there is no
+            # way yet to say that one does.
+            self._diags.emit(D.LANG_ARRAY_ANSWERED_WITH, ref.span,
+                             found=found.render())
+            return ERROR
+        return found
 
     def _lower_return(self, builder: IRBuilder, stmt: ast.ReturnStmt,
                       func: Function) -> None:
@@ -2929,6 +3200,10 @@ class Checker:
                 return self._lower_name(builder, expr, expected)
             case ast.TupleLit():
                 return self._lower_tuple(builder, expr, expected)
+            case ast.ArrayLit():
+                return self._lower_array(builder, expr, expected)
+            case ast.Element():
+                return self._lower_element(builder, expr, expected)
             case ast.Range():
                 # A range is a source of values for a loop and not a value.
                 # Giving it a name would make it one, with a type and a place in
@@ -3743,7 +4018,16 @@ class Checker:
         if isinstance(resolved, GlobalVar) and resolved.value_type is ERROR:
             return UndefConst(ERROR)
         if isinstance(resolved, GlobalVar):
-            resolved = builder.load(resolved, ref.span)
+            held = resolved.value_type
+            if isinstance(held, ArrayType) and held.length is not None:
+                # What a value of an array type *is*, is where the elements are:
+                # how many there are is in the type, so there is nothing else to
+                # carry and nothing to read out of memory.
+                resolved = builder.cast(CastKind.BITCAST,
+                                        builder.address(resolved, ref.span),
+                                        held, ref.span)
+            else:
+                resolved = builder.load(resolved, ref.span)
         if expected is not None and resolved.ty != expected:
             self._report_mismatch(ref.span, resolved.ty, expected)
         return resolved
@@ -3752,15 +4036,24 @@ class Checker:
                     span: Span) -> Value:
         """Lower *expr* where a value of *expected* is wanted.
 
-        It differs from lowering with an expectation in one case: where a result
-        is wanted, an expression that answers with the result's answer type is
-        the *successful* result, and is wrapped as one.  That is the only way a
-        program writes a successful result, there being no syntax for one --
-        which is Zig's arrangement for its error unions and C++'s for
+        It differs from lowering with an expectation in two cases.  Where a
+        result is wanted, an expression that answers with the result's answer
+        type is the *successful* result, and is wrapped as one.  That is the
+        only way a program writes a successful result, there being no syntax for
+        one -- which is Zig's arrangement for its error unions and C++'s for
         `std::expected`, and not Rust's, where `Ok(x)` is written out.  Rust can
         ask for it because its `Ok` is an ordinary constructor; here it would be
         a piece of syntax existing for one purpose.
+
+        And where an array whose type does not say how long it is, is wanted, an
+        array whose type does say is one: the elements are where they were and
+        how many there are is what the type it came from said.  That goes one
+        way only.  A function taking `T\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}` takes an array of any length, and one
+        taking `T\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}4\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}` takes four, which nothing that has lost its count can
+        promise.
         """
+        if isinstance(expected, ArrayType) and expected.length is None:
+            return self._spread(builder, expr, expected, span)
         if not isinstance(expected, ResultType):
             return self._lower_expr(builder, expr, expected)
         value = self._lower_expr(builder, expr, None)
@@ -3769,6 +4062,20 @@ class Checker:
             return value
         if found is expected.ok:
             return builder.wrap(value, builder.bool_const(False), expected, span)
+        self._report_mismatch(span, found, expected)
+        return UndefConst(ERROR)
+
+    def _spread(self, builder: IRBuilder, expr: ast.Expr, expected: ArrayType,
+                span: Span) -> Value:
+        """Lower *expr* where an array of no stated length is wanted."""
+        value = self._lower_expr(builder, expr, None)
+        found = self._value_type_of(value)
+        if found is expected or found is ERROR:
+            return value
+        if isinstance(found, ArrayType) and found.length is not None \
+                and found.element is expected.element:
+            start, length = self._counted_from(builder, value, found, span)
+            return builder.make_tuple((start, length), expected, span)
         self._report_mismatch(span, found, expected)
         return UndefConst(ERROR)
 

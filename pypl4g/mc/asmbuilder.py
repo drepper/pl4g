@@ -690,6 +690,20 @@ class Assembler:
         return MCSymRef(SymExpr(self._streamer.symbol(label)), RelocKind.PCREL)
 
 
+    def frame_slot(self, size: int, alignment: int) -> int:
+        """Take *size* bytes of this function's frame and answer where they are.
+
+        For storage a function has of its own -- an array whose type says how
+        many elements it has, to begin with.  It lasts exactly as long as the
+        call, which is what makes the frame the right place for it and an arena
+        that never frees the wrong one.
+
+        The offset is from the stack pointer as the function leaves it, which is
+        where the register allocator's own slots are measured from too.
+        """
+        assert self._function is not None
+        return self._function.frame.reserve(size, alignment)
+
     def temporary(self, like: Reg) -> Reg:
         """A register of the same kind and width as *like*, holding nothing yet.
 

@@ -721,6 +721,49 @@ given a register of its own rather than the destination's, which also shortens t
 two halves are independent and no such rule is needed.
 
 
+Arrays
+------
+
+**What a value of an array type is, is where its elements are.**  A type that says how many carries everything about the array but
+the elements themselves, so there is nothing else for a value of one to hold; the backend treats it as an address, and the
+representation says so by letting a fixed-length array type stand where a pointer does in a `bitcast`.
+
+**A type that does not say how many is two parts**: where the elements are and how many there are.  That is the same machinery a
+result and a tuple already use -- `parts_of` answers with two types, and everything that places a value asks `parts_of` rather than
+knowing the shapes -- so it needed no new mechanism, only the generalization of two rules in the verifier from "a tuple" to
+"anything of several parts".
+
+**Where the elements are depends on the array.**  A variable at the top level holds them itself.  One inside a function holds them
+in the function's frame, which is what the `frame` instruction reserves: it answers with where the room is, and the room lasts
+exactly as long as the call.
+
+That reverses a decision: the earlier `alloca` was deleted with the note that storage whose address is taken comes from an arena.
+That is right for a collection, which outlives the statement that built it and whose lifetime the program manages; it is wrong for
+an array whose length is in its type, which lasts exactly as long as the name does and which an arena that never frees would leak
+once a turn.  Both kinds of storage exist because there are two questions.
+
+The frame hands out **bytes** rather than slots for this reason.  A spilled register still takes a slot the width of the widest
+register; an array takes as much as its elements make it, aligned as its type asks.  Offsets once given out never move, which is
+what lets the lowering take room before the allocator knows whether it will need any.
+
+**Every read and every write is checked**, and the check is an instruction of its own.  What it tests is not about the read it
+guards -- an index is compared against a length, and neither is part of the load -- so it is not a flag on the load the way the
+overflow check is a property of an addition.  It lowers to a comparison and a branch that does not come back, through the same
+fault path an addition that does not fit uses.
+
+**Where both the index and the length are written down there is no check at all**, and a program whose index is outside is refused
+rather than compiled into one that always fails.
+
+**Layout is where the specification's freedom about data first shows.**  A variable marked `@[cdecl]` is laid out the way the
+system's own compilers would; every other one is laid out whichever way is better.  What that buys today is one thing: an array
+large enough to be worth reading a word at a time is aligned so that a word can be read.  What it deliberately does not touch is
+the stride, since that is what an index is multiplied by and the front end works it out without knowing which layout the variable
+ended up with.
+
+**A global named only by having its address taken counts as named.**  The pass that drops what nothing reaches used to ask only
+which variables are read and written, which is every variable a load or a store names; an array is named by neither, since what a
+value of one is, is its address.
+
 Calling conventions
 -------------------
 

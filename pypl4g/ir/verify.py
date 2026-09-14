@@ -11,15 +11,17 @@ from typing import Iterable
 from ..diag.engine import InternalError
 from .function import BasicBlock, Function, SpecialKind
 from .mangle import symbol_name
-from .inst import (AddressInst, BinaryInst, BinOp, BlockTarget, CastInst,
+from .inst import (AddressInst, AssertInst, BinaryInst, BinOp, BlockTarget,
+                   CastInst, FrameInst,
                    CastKind, CmpInst,
                    ExtractInst, FailedInst,
                    Instruction, TupleInst,
                    LoadInst, RetInst, StoreInst, Terminator, UnaryInst,
                    UnwrapInst, WrapInst)
 from .module import GlobalVar, Module
-from .types import (BOOL, BoolType, DictType, EnumType, IntType, MEM,
-                    PtrType, ResultType, SetType, TupleType, Type, VOID)
+from .types import (ArrayType, BOOL, BoolType, DictType, EnumType, IntType,
+                    MEM, PtrType, ResultType, SetType, TupleType, Type, VOID,
+                    parts_of)
 from .value import Const, IntConst, Value
 
 
@@ -192,6 +194,16 @@ class Verifier:
                     self._fail(where, "".join((
                         "reading ", inst.operands[0].ty.render(), " as ",
                         inst.ty.render(), ", which is not the same kind of thing")))
+            case FrameInst():
+                if inst.ty != PtrType(inst.held, mutable=True):
+                    self._fail(where, "".join((
+                        "room for a ", inst.held.render(), " read as ",
+                        inst.ty.render())))
+            case AssertInst():
+                if inst.operands[0].ty is not BOOL:
+                    self._fail(where, "".join((
+                        "a check of ", inst.operands[0].ty.render(),
+                        ", which is not a truth value")))
             case AddressInst():
                 if not isinstance(inst.operands[0].ty, PtrType):
                     self._fail(where, "the address of something that is not a place")
@@ -211,30 +223,41 @@ class Verifier:
                     self._fail(where, "".join(("'", inst.opcode,
                                                "' result type differs from its operands")))
             case TupleInst():
-                if not isinstance(inst.ty, TupleType):
-                    self._fail(where, "making something that is not a tuple")
-                elif len(inst.operands) != len(inst.ty.members):
+                # Anything of several parts, and not only a tuple: what the
+                # parts of a type are is one question with one answer, and a
+                # tuple is merely the shape that has as many as it was written
+                # with.  An array whose type does not say how long it is has
+                # two, and is made the same way.
+                pieces = parts_of(inst.ty)
+                if len(pieces) < 2:
+                    self._fail(where, "".join((
+                        "making a ", inst.ty.render(),
+                        ", which is one value and not several")))
+                elif len(inst.operands) != len(pieces):
                     self._fail(where, "".join((
                         "making a ", inst.ty.render(), " out of ",
                         str(len(inst.operands)), " values")))
                 else:
                     for index, (value, member) in enumerate(
-                            zip(inst.operands, inst.ty.members)):
+                            zip(inst.operands, pieces)):
                         if value.ty != member:
                             self._fail(where, "".join((
                                 "the value at ", str(index), " of a ",
                                 inst.ty.render(), " is ", value.ty.render())))
             case ExtractInst():
-                inner = inst.operands[0].ty
-                if not isinstance(inner, TupleType):
-                    self._fail(where, "taking a value out of something that is "
-                                      "not a tuple")
-                elif not 0 <= inst.index < len(inner.members):
+                inner = parts_of(inst.operands[0].ty)
+                if len(inner) < 2:
                     self._fail(where, "".join((
-                        inner.render(), " has no value at ", str(inst.index))))
-                elif inst.ty != inner.members[inst.index]:
+                        "taking a value out of ", inst.operands[0].ty.render(),
+                        ", which is one value and not several")))
+                elif not 0 <= inst.index < len(inner):
                     self._fail(where, "".join((
-                        "taking ", inst.ty.render(), " out of ", inner.render())))
+                        inst.operands[0].ty.render(), " has no value at ",
+                        str(inst.index))))
+                elif inst.ty != inner[inst.index]:
+                    self._fail(where, "".join((
+                        "taking ", inst.ty.render(), " out of ",
+                        inst.operands[0].ty.render())))
             case WrapInst():
                 if not isinstance(inst.ty, ResultType):
                     self._fail(where, "making something that is not a result")
@@ -398,9 +421,12 @@ def _is_an_address(ty: Type) -> bool:
     """Whether a value of *ty* is an address as far as a register is concerned.
 
     A collection is one: what a program passes around is where its table is, and
-    nothing else.
+    nothing else.  So is an array whose type says how many elements it has: what
+    a value of one *is*, is where the elements are, since how many there are is
+    in the type and there is nothing else to carry.
     """
-    return isinstance(ty, (PtrType, SetType, DictType))
+    return isinstance(ty, (PtrType, SetType, DictType)) or (
+        isinstance(ty, ArrayType) and ty.length is not None)
 
 
 def _counts(ty: Type) -> bool:

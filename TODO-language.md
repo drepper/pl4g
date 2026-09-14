@@ -91,6 +91,31 @@ To Do List for the PL4g language
     loop is a statement for that reason: with nothing that leaves it early, every way out is the condition, and a construct whose
     only way out produces nothing produces nothing.  Rust's `loop` is the shape to compare against if `break` arrives.
 
+[x] add support for arrays.  Done: `T⟦N⟧` says how many elements there are and carries nothing but them; `T⟦⟧` is
+    where they are and how many there are, and a `T⟦N⟧` stands where one is wanted.  `a⟦i⟧` reads an element and
+    `a⟦i…j⟧` a run of them; every access is checked, while compiling where both ends are written down and while
+    running where either is not.  A variable at the top level holds its elements itself and one inside a function holds them in the
+    frame.  A variable marked `@[cdecl]` is laid out the way the system would and every other one whichever way is better.
+
+[ ] an array that can grow.  A `T⟦⟧` is a place and a count and owns nothing, so there is nothing to grow: appending
+    wants a third thing beside them -- how much room there is -- and an arena to ask for more from, which is what Go's slice header
+    carries and what this one deliberately does not while no operation appends.  What it needs first is the operation: there is no
+    syntax for appending to anything, and inventing one for arrays alone would be inventing it twice.
+
+[ ] say where the elements of an array live, so that one can be answered with.  Refused today (4454): the elements of an array a
+    function made are in that function's own room.  A slice of something that outlives the call is safe and the language cannot say
+    so.  Rust says it with a lifetime, Zig by leaving it to the programmer, Go by putting everything a slice can point at on a
+    collected heap.  The arena is the shape of an answer here -- a value could name the arena its elements are in, which is what the
+    entry about giving an arena back already wants for collections -- and the two should be answered together.
+
+[ ] iterate over an array.  `foreach x = a:` is what a program will want and there is no way to write it: an iterator is a value
+    with a `next`, an array is a place and a count, and nothing yet turns the second into the first.  It wants what the entry about
+    letting a program write an iterator wants, and an array is the first thing that would use it.
+
+[ ] a small-array optimization.  A `T⟦⟧` of a few small elements could hold them in the two words it already takes rather
+    than pointing at them, the way a small string can.  It costs a check on every read, and it pays only once something allocates
+    the elements -- which is the entry about growing.  Worth measuring when there is something to measure.
+
 [ ] add floating-point types `f16` and `bfloat`, optional if there is no hardware support.
     `f32` and `f64` are done: a value can be written, held, passed, returned, computed with and compared, and the hardware's
     floating point is assumed on all three targets with the requirement recorded in the binary -- on RISC-V the header's flag word

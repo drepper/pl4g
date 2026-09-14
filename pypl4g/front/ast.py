@@ -113,7 +113,19 @@ class CollectionTypeRef(Node):
     value: "TypeExpr | None" = None
 
 
-type TypeExpr = TypeRef | CollectionTypeRef | TupleTypeRef
+@dataclass(frozen=True, slots=True)
+class ArrayTypeRef(Node):
+    """`T\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}N\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}`, several values of one type, or `T\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}`, as many as there turn out to be.
+
+    `length` is what was written between the brackets, and is nothing where
+    nothing was: the type then says what the elements are and not how many.
+    """
+
+    element: "TypeExpr"
+    length: "Expr | None" = None
+
+
+type TypeExpr = TypeRef | CollectionTypeRef | TupleTypeRef | ArrayTypeRef
 
 
 @dataclass(frozen=True, slots=True)
@@ -290,6 +302,25 @@ class DictLit(Expr):
 
 
 @dataclass(frozen=True, slots=True)
+class ArrayLit(Expr):
+    """`\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}a, b, c\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}`: an array written down."""
+
+    elements: tuple[Expr, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class Element(Expr):
+    """`a\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}i\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}`: one element of an array, or `a\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}i\N{HORIZONTAL ELLIPSIS}j\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}`, a run of them.
+
+    Which of the two it is, is what stands between the brackets: a range there
+    asks for a run and anything else for one element.
+    """
+
+    base: Expr
+    index: Expr
+
+
+@dataclass(frozen=True, slots=True)
 class Index(Expr):
     """`c\N{LEFT DOUBLE PARENTHESIS}k\N{RIGHT DOUBLE PARENTHESIS}`: whether a set holds a key, or what a dictionary has for one."""
 
@@ -441,6 +472,15 @@ class AssignStmt(Stmt):
     value: Expr
     #: The names after the first, where the assignment takes a tuple apart.
     more: tuple[tuple[str, Span], ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class ElementAssign(Stmt):
+    """`a\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}i\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET} \N{LEFTWARDS ARROW} v`: what an array holds at one place, changed."""
+
+    base: Expr
+    index: Expr
+    value: Expr
 
 
 @dataclass(frozen=True, slots=True)

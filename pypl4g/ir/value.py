@@ -7,7 +7,8 @@ constants of the same type are two references, and treating them as equal would
 break every use list.
 """
 
-from .types import BoolType, EnumType, FloatType, IntType, ResultType, Type
+from .types import (ArrayType, BoolType, EnumType, FloatType, IntType,
+                    ResultType, Type)
 
 
 class Value:
@@ -91,6 +92,21 @@ class EnumConst(Const):
         """The number it is stored as."""
         assert isinstance(self.ty, EnumType)
         return self.ty.values[self.index]
+
+
+class ArrayConst(Const):
+    """An array every element of which is known while compiling.
+
+    What a variable of an array type starts out holding, which is the one place
+    an array is a constant: everywhere else it is a place, and a place is
+    something the program has rather than something it knows.
+    """
+
+    __slots__ = ("elements",)
+
+    def __init__(self, ty: "ArrayType", elements: "tuple[Const, ...]") -> None:
+        super().__init__(ty)
+        self.elements = elements
 
 
 class ResultConst(Const):

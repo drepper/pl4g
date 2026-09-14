@@ -134,6 +134,11 @@ class DropUnreached:
         anyone should have written it is a question for the semantic analysis to
         report, not one to settle by quietly deleting the variable.
 
+        So does being named at all, which is what asking the operands is for: an
+        address taken of a variable is a use of it even where nothing has yet
+        read through that address, and an array is named exactly that way --
+        what a value of one is, is where its elements are.
+
         A function whose body is elsewhere may name anything, so one of those
         keeps every variable.  None exists yet, which is why this is a guard
         rather than a mechanism.
@@ -144,7 +149,7 @@ class DropUnreached:
                 return {id(var) for var in module.globals.values()}
             for block in func.blocks:
                 for inst in block.insts:
-                    for place in (*inst.reads(), *inst.writes()):
+                    for place in (*inst.operands, *inst.reads(), *inst.writes()):
                         if isinstance(place, GlobalVar):
                             named.add(id(place))
         return named

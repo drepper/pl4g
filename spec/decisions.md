@@ -2538,6 +2538,57 @@ rather than a workaround: hand-written code has a settled convention, and everyt
 
 ---
 
+## 2026-09-15T02:00+02:00 — language and compiler
+
+**Arrays, fixed and dynamic**
+
+Decided on the user's direction: `T⟦N⟧` carries everything in the type and needs no memory but its elements; `T⟦⟧` carries what it
+needs beside the elements; `a⟦i⟧` reads one and `a⟦i…j⟧` a run of them.
+
+**The length goes after the element type.**  `u8⟦4⟧`, read as four of these.  C writes `T a[4]`, putting half the type on each side
+of the name, and Go, Rust and Zig all moved it to one side; they put it in front (`[4]T`, `[T; 4]`), which reads as "an array of
+four whose elements are these".  After is the order the language already writes `TYPE?` in and reads the way the value is indexed.
+
+**White square brackets.**  The plain ones stay free for whatever wants them next, and the double parenthesis is the collection's:
+a collection is found by its key and an array by its place.  No ASCII substitute, because `a[[i]][[j]]` would end in four brackets
+no reader could group by eye.
+
+**What a value of a fixed-length array is, is where its elements are.**  The type says how many, so there is nothing else to
+carry, and the backend treats such a value as an address.  A dynamic one is two parts, which is the machinery a result and a tuple
+already had; the verifier's rules about making and taking apart a value of several parts were generalized from "a tuple" to
+"anything `parts_of` says has parts", which is what that function's docstring had claimed all along.
+
+**A dynamic array is a place and a count, and owns nothing.**  Go's slice header carries a capacity besides, because Go has
+`append`; this language has no operation that appends to anything, so a capacity would be a word nothing reads.  That is the entry
+in the list, and it is the same entry as "let a program say where the elements live", because appending needs an arena to ask.
+
+**The elements of a local array live in the frame.**  That reverses the note left when `alloca` was deleted -- that storage whose
+address is taken comes from an arena.  The note is right for a collection, whose lifetime the program manages; it is wrong for an
+array whose length is in its type, which lasts exactly as long as the name and which an arena that never frees would leak once a
+turn.  Both kinds exist because there are two questions.
+
+**Every access is checked**, and the check is an instruction of its own rather than a property of the read.  What it tests is an
+index against a length, and neither is part of the load.  Where both are written down the answer is known while compiling and the
+program is refused; C checks nothing, Go and Rust and Zig all check at run time and none of them refuses the constant case at
+compile time as a matter of course.
+
+**A function does not answer with an array type, and a variable at the top level of `T⟦⟧` is refused.**  Both are the same
+gap: the language cannot say where a value's elements live, so it cannot tell a slice of a parameter -- which is safe -- from a
+slice of a frame, which is not.  Refusing both is the conservative answer and the list says what lifting it needs.
+
+**Layout is where the specification's freedom about data first shows.**  An array variable marked `@[cdecl]` is laid out the way
+the system's own compilers would; every other one is laid out whichever way is better.  The freedom is used for one thing today --
+an array worth reading a word at a time is aligned so that a word can be read -- and deliberately not for the stride, which is what
+an index is multiplied by and which the front end works out without knowing which layout a variable ended up with.  `@[cdecl]`
+therefore now applies to a variable as well as to a function, which reads well: it is one attribute saying "this is for a world
+that has never heard of this language" about whichever kind of definition it is on.
+
+**A defect found on the way**: the pass that drops what nothing reaches asked only which variables are read and written.  An array
+is named by neither, since what a value of one is, is its address; a global array would have been dropped out from under the
+program that used it.
+
+---
+
 ---
 
 Open questions

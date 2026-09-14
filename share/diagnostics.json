@@ -1104,6 +1104,22 @@
       "option": null
     },
     {
+      "number": 3030,
+      "name": "LANG_SYNTAX_EXPECTED_CLOSING_ARRAY",
+      "severity": "error",
+      "message": "expected '\u27e7'",
+      "args": [],
+      "cause": "An array, the type of one and a lookup in one are all written between `\u27e6` and `\u27e7`, and the closing one is missing here.  What is usually behind it is a comma left out between two elements.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Arrays",
+        "requirement": "An array is closed with `\u27e7`."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 3201,
       "name": "LANG_ATTR_UNKNOWN",
       "severity": "error",
@@ -3211,6 +3227,196 @@
         "document": "spec/spec.md",
         "section": "The Language / Types / Arenas",
         "requirement": "What follows `in` is a variable of type `arena`."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4447,
+      "name": "LANG_ARRAY_LENGTH_NOT_A_NUMBER",
+      "severity": "error",
+      "message": "how many elements an array has is a number written down",
+      "args": [],
+      "cause": "How many elements an array has is part of its type, so it is something the compiler reads rather than something the program works out.  A type that depended on a value would be a different language, and the one that leaves the brackets empty is what says the count is not in the type at all.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Arrays",
+        "requirement": "The length of a fixed-size array is a literal."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4448,
+      "name": "LANG_ARRAY_ELEMENT_IS_NOTHING",
+      "severity": "error",
+      "message": "an array of 'void' holds nothing, however many of it there are",
+      "args": [],
+      "cause": "`void` is the type of an expression that produces no value.  However many of them an array held, reading one would give nothing back and writing one would write nothing.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Arrays",
+        "requirement": "The element type of an array is not `void`."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4449,
+      "name": "LANG_ARRAY_NOT_AN_ARRAY",
+      "severity": "error",
+      "message": "'{found}' has no elements to look one up in",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type of what was written"
+        }
+      ],
+      "cause": "Square brackets after a value ask for one of its elements, which only an array has.  A set or a dictionary is looked in with `\u2e28` and `\u2e29` instead, because it is found by its key and an array by its place.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Arrays",
+        "requirement": "Only an array is indexed."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4450,
+      "name": "LANG_ARRAY_INDEX_OUTSIDE",
+      "severity": "error",
+      "message": "'{index}' is outside an array of {length}",
+      "args": [
+        {
+          "name": "index",
+          "type": "string",
+          "description": "the index written"
+        },
+        {
+          "name": "length",
+          "type": "number",
+          "description": "how many elements the array has"
+        }
+      ],
+      "cause": "The type says how many elements there are and the index is written down, so whether it is one of them is known while compiling.  A program that must fail whenever it is started is one that need not be started.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Arrays",
+        "requirement": "An index written down is checked against the length in the type."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4451,
+      "name": "LANG_ARRAY_INDEX_NOT_A_NUMBER",
+      "severity": "error",
+      "message": "an array is indexed by a whole number, not by '{found}'",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type of what was written"
+        }
+      ],
+      "cause": "Which element is wanted is a count from the start, and only a whole number is one.  A signed one is accepted and checked like any other: an index below zero is outside the array, and the check says so.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Arrays",
+        "requirement": "An index is of an integer type."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4452,
+      "name": "LANG_ARRAY_WRONG_LENGTH",
+      "severity": "error",
+      "message": "{given} elements written where an array of {wanted} is wanted",
+      "args": [
+        {
+          "name": "given",
+          "type": "number",
+          "description": "how many were written"
+        },
+        {
+          "name": "wanted",
+          "type": "number",
+          "description": "how many the type says"
+        }
+      ],
+      "cause": "How many elements an array has is part of its type, so an array written with a different number is an array of a different type.  Nothing is padded out and nothing is dropped: either would be the compiler deciding what the program meant.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Arrays",
+        "requirement": "An array written down has as many elements as its type says."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4453,
+      "name": "LANG_ARRAY_SLICE_HAS_A_STEP",
+      "severity": "error",
+      "message": "a run of elements is taken with two ends and no step",
+      "args": [],
+      "cause": "What a slice is, is where its elements are and how many there are.  Every other element is not something a place and a count can say, so a step there would have to mean something else; it is refused rather than given a meaning.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Arrays",
+        "requirement": "A slice is written with two ends."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4454,
+      "name": "LANG_ARRAY_ANSWERED_WITH",
+      "severity": "error",
+      "message": "a function does not answer with '{found}'",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the array type written"
+        }
+      ],
+      "cause": "What a value of an array type is, is where its elements are, and the elements of an array a function made are in that function's own room -- which is gone by the time the caller reads them.  A slice of something that outlives the call would be safe, and the language has no way yet to say that one does; until it has, nothing is answered with.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Arrays",
+        "requirement": "A function does not answer with an array type."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4455,
+      "name": "LANG_ARRAY_NO_LENGTH_AT_TOP",
+      "severity": "error",
+      "message": "a variable of '{found}' at the top level has nothing to point at",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the array type written"
+        }
+      ],
+      "cause": "An array whose type does not say how long it is, is where its elements are and how many there are; it owns nothing.  A variable at the top level is bytes in the image, and there is nothing for those bytes to point at before the program runs.  Writing the length in the type gives the variable the elements themselves.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Arrays",
+        "requirement": "A variable at the top level of an array type states its length."
       },
       "since": "0.1",
       "default_enabled": true,

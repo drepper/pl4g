@@ -357,6 +357,62 @@ class AddressInst(Instruction):
         return "address"
 
 
+class FrameInst(Instruction):
+    """Storage of this function's own, which lasts exactly as long as the call.
+
+    An array whose type says how many elements it has is the first thing that
+    wants it: the elements have to be somewhere, that somewhere lasts as long as
+    the name does, and an arena that never frees would leak one per call.  What
+    it answers with is where the storage is.
+
+    Nothing outside the function can be given this address, because nothing in
+    the language yet hands an address anywhere: a value of an array type may be
+    read and written through, taken apart and sliced, and that is all.
+    """
+
+    __slots__ = ("held",)
+
+    def __init__(self, held: Type, result_ty: Type,
+                 span: Span = INVALID_SPAN) -> None:
+        super().__init__(result_ty, (), span)
+        self.held = held
+
+    @property
+    def opcode(self) -> str:
+        """The mnemonic used in the textual form."""
+        return "frame"
+
+
+class AssertInst(Instruction):
+    """Stops the program where what it is given is false, saying what was wanted.
+
+    The same thing an addition that does not fit does, and through the same
+    path: the message is built whole while compiling and what runs at the moment
+    it fails is a write and a trap.  What makes this an instruction of its own
+    rather than a flag on something else is that what it checks is not about the
+    operation it guards -- an index is checked against a length, and neither is
+    part of the read it belongs to.
+    """
+
+    __slots__ = ("what",)
+
+    def __init__(self, condition: Value, what: str,
+                 span: Span = INVALID_SPAN) -> None:
+        super().__init__(VOID, (condition,), span)
+        self.what = what
+
+    @property
+    def has_effects(self) -> bool:
+        """Whether the program goes on is what it decides, so it is never
+        dropped for having no result."""
+        return True
+
+    @property
+    def opcode(self) -> str:
+        """The mnemonic used in the textual form."""
+        return "assert"
+
+
 class MemStartInst(Instruction):
     """The state of memory where a function begins.
 

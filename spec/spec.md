@@ -688,6 +688,9 @@ The six approximate comparisons have none for the first rule's sake as much as t
 characters that says "approximate" without being read as something else, and `~=` or `=~` would be a spelling to learn rather than
 one to see.
 
+`⟦` and `⟧` have none: `[[` and `]]` would each be two characters and so pass the first rule, and they fail the second -- an
+array of arrays is written `a⟦i⟧⟦j⟧`, whose substituted form would end in four brackets that no reader could group by eye.
+
 `…` has none, and the reason is the second rule rather than the first: `...` is three characters and so passes, but it is three
 copies of the character a member access is written with, and telling `a...b` from `a . ..b` would be a question of how far the
 lexer can look ahead rather than of what the characters are.  One character is one token, which is what a range is.
@@ -937,6 +940,92 @@ product of the same members would be.
 Because a tuple is one register per member, a tuple answered with has to fit in the registers the convention answers in -- two on
 each of these targets, counted per kind -- and one that does not is refused rather than silently put somewhere else.  A tuple of
 two is therefore always fine, and a tuple of three integers is not yet.
+
+#### Arrays
+
+An **array** holds several values of one type, one after another.
+
+```
+let a: u8⟦4⟧ = ⟦10u8, 20u8, 30u8, 40u8⟧
+let n: u8 = a⟦2⟧
+a⟦0⟧ ← 5u8
+```
+
+`⟦` and `⟧` are U+27E6 and U+27E7, the white square brackets.  The plain ones are left free for whatever wants them next, and the
+double parenthesis is the collection's: a collection is found by its key and an array by its place, which are different questions
+however alike they read.  A type, a value of one and a lookup in one are written with the same brackets, as a collection's are.
+
+**The type is written after what it holds.**  `u8⟦4⟧` is four of them, which is the order it is read in: four of these, not an
+array of four whose elements are these.  More than one may follow -- `u8⟦4⟧⟦3⟧` is three arrays of four.
+
+##### Fixed and dynamic
+
+**`T⟦N⟧` says how many elements there are**, and carries everything about the array but the elements themselves.  A value of one
+needs no room beyond theirs, and what a value of one *is*, is where the elements are.  `N` is a number written down (4447): how
+many elements there are is part of the type, so it is something the compiler reads rather than something the program works out.
+
+**`T⟦⟧` does not**, and is where the elements are together with how many there are.  It owns nothing: the elements are an array's,
+or part of one.
+
+**A `T⟦N⟧` stands where a `T⟦⟧` is wanted**, which is how an array is passed to something that takes any length.  That goes one
+way only: a `T⟦4⟧` promises four, and nothing that has lost its count can promise that.
+
+```
+fn total(xs: u8⟦⟧, n: u8) → u8: …
+
+let a: u8⟦6⟧ = ⟦1u8, 2u8, 4u8, 8u8, 16u8, 32u8⟧
+total(a, 6u8)
+```
+
+##### Reading, writing and slicing
+
+`a⟦i⟧` is the element at `i`, counting from nought, and `a⟦i⟧ ← v` puts a value there.  The index is a whole number of any integer
+type (4451); a literal with no suffix is read as a count, which is the only place an index takes its type from anything but
+itself.
+
+**Every read and every write is checked.**  Where both the index and the length are written down, the answer is known while
+compiling and a program that could only fail is refused (4450).  Where either is not, the check is one comparison and a branch that
+does not come back -- the same shape an addition that does not fit has, and reported the same way: the message says what was wanted
+and where, and the program stops.
+
+`a⟦i…j⟧` is the elements from `i` up to but not including `j`, which is a `T⟦⟧`.  It is the same half-open convention a range has
+everywhere else, so the count is the difference between the ends.  A step there is refused (4453): what a slice is, is a place and
+a count, and every other element is not something a place and a count can say.
+
+##### Where the elements are
+
+A variable at the top level of type `T⟦N⟧` holds them itself, as bytes in the image.  One inside a function holds them in the
+function's own room, which lasts exactly as long as the call.
+
+Two things follow from that, and both are refusals the language will lift when it can say where something lives:
+
+- **A function does not answer with an array type** (4454).  The elements of an array a function made are in that function's own
+  room, which is gone by the time the caller reads them.  A slice of something that outlives the call would be safe, and there is
+  no way yet to say that one does.
+- **A variable at the top level of type `T⟦⟧` is refused** (4455).  It owns nothing, and there is nothing for it to point at
+  before the program runs.
+
+##### What one occupies
+
+The specification says the compiler decides data layout, and that a definition which has to be reachable from a world that has
+never heard of this language gives that freedom up.  **An array variable marked `@[cdecl]` is laid out the way the system's own
+compilers would lay it out**; every other one is laid out whichever way is better.
+
+```
+@[cdecl, visible]
+let shared: u8⟦24⟧ = ⟦…⟧      ※ aligned as one element is, which is what C says
+
+let ours: u8⟦24⟧ = ⟦…⟧        ※ aligned as this compiler likes
+```
+
+What the freedom is used for today is one thing: an array large enough to be worth reading a word at a time is put where a word can
+be read.  How far apart two elements are is *not* among the things that may differ, and that is deliberate -- it is what an index
+is multiplied by, so a freedom there would have to be told to everything that indexes.
+
+Compare: C, whose arrays decay to a pointer and lose their length, which is where a great many of its defects come from; Go, whose
+`[4]T` and `[]T` are exactly this pair and which this follows; Rust's `[T; 4]` and `&[T]`, the same pair with a lifetime on the
+second; Zig's `[4]T` and `[]T`.  What none of them writes is the length after the element type; C writes `T a[4]`, which puts part
+of the type on the left of the name and part on the right, and every language since has moved it to one side.
 
 #### Arenas
 

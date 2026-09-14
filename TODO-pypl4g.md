@@ -60,6 +60,17 @@ To Do List for the pypl4g compiler
     broken by holding one register in a fresh virtual one.  The hazard is asked of the registers and not of the values, which is
     what makes a branch reading a parameter's register through an `extract` come out right.
 
+[ ] let a bracketed value span more than one line in the grammar.  The compiler accepts it -- the lexer gives out no line ending
+    inside brackets -- and the grammar does not, so `⸨1u8,` on one line and `2u8⸩` on the next parses here and shows as an
+    error in an editor.  It is older than the arrays that turned it up: a set or a dictionary written that way has always had it.
+    What it wants is the external scanner to swallow a line ending where none of the three tokens it produces is wanted, which is
+    where the compiler's own lexer settles the same question.
+
+[ ] hold a value of a product or a sum type.  Still refused (8501), and arrays have now shown what the answer looks like: a place,
+    an address to reach it by, and room in the frame where the value is a function's own.  What is left that an array did not need
+    is a convention for passing one to a function and answering with one, which on all three targets means small aggregates in
+    registers and large ones behind a pointer.
+
 [ ] generate the functions in the order the call graph gives.  What a call destroys is asked of the callee once it has been
     generated, so a callee generated before its caller is one the caller knows about and one generated after is not -- and the
     order today is the order the module holds them, which is the order they were written in.  Sorting by the call graph, callees

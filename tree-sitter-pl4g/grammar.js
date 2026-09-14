@@ -177,7 +177,16 @@ module.exports = grammar({
     // A type is a name, and after it the mark that says a value of it may not
     // be there: `TYPE?` is a result whose error carries nothing, `TYPE?ERROR`
     // one whose error is a value of its own.
-    type: $ => choice(
+    // An array is written after what it holds -- `i32\u27e64\u27e7` -- and more than
+    // one may follow, which is an array of arrays.  The element type comes
+    // first because that is the order it is read in: four of these, not an
+    // array of four whose elements are these.
+    type: $ => seq($._plain_type, repeat($._array_suffix)),
+
+    _array_suffix: $ => seq('\u27e6', optional(field('length', $._expression)),
+                            '\u27e7'),
+
+    _plain_type: $ => choice(
       seq(
         field('module', optional(seq($.identifier, '.'))),
         $.identifier,
@@ -395,10 +404,11 @@ module.exports = grammar({
       field('value', $._expression),
     ),
 
-    // What may stand on the left is a place: a name, or an entry of a
-    // dictionary written the way one is read.
+    // What may stand on the left is a place: a name, an entry of a dictionary
+    // or an element of an array, each written the way one is read.
     assignment: $ => seq(
-      field('target', choice($.identifier, $.index_expression)),
+      field('target', choice($.identifier, $.index_expression,
+                             $.element_expression)),
       // Targets next to each other take a tuple apart, one name per member.
       repeat(seq(',', field('target', $.identifier))),
       '←', field('value', $._expression),
@@ -459,6 +469,8 @@ module.exports = grammar({
 
     // Everything an expression can be except a range.
     _non_range: $ => choice(
+      $.array_literal,
+      $.element_expression,
       $.match_expression,
       $.if_expression,
       $.tuple_literal,
@@ -558,6 +570,18 @@ module.exports = grammar({
     // `\u2e28a, b\u2e29` is a set and `\u2e28k: v\u2e29` a dictionary; which of the two a
     // collection is is decided by its first entry, and one written with nothing
     // in it is neither until the type it is wanted as says which.
+    // An array written down, and a lookup in one.  The same brackets: a type,
+    // a value of it and a lookup in it all look alike, as a collection's do.
+    array_literal: $ => seq('\u27e6', sepBy(',', $._expression), '\u27e7'),
+
+    // Which element is wanted, or -- where a range stands there -- which run
+    // of them.  It binds as tightly as a call does, and to whatever stands
+    // immediately before it.
+    element_expression: $ => prec(10, seq(
+      field('array', $._non_comparison),
+      '\u27e6', field('index', $._expression), '\u27e7',
+    )),
+
     set_literal: $ => seq('\u2e28', sepBy(',', $._expression), '\u2e29',
                           optional($._in_arena)),
 

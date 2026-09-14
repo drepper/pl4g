@@ -68,6 +68,14 @@ TUPLE_CLOSE_GLYPH: Final[str] = "\N{RIGHT ANGLE BRACKET}"
 SET_OPEN_GLYPH: Final[str] = "\N{LEFT DOUBLE PARENTHESIS}"
 SET_CLOSE_GLYPH: Final[str] = "\N{RIGHT DOUBLE PARENTHESIS}"
 
+#: What encloses an array: its type, a value of one written down, and a lookup
+#: in one.  A white square bracket rather than the plain one, which an index
+#: into something else may yet want, and rather than the double parenthesis a
+#: collection uses -- an array is found by its place and a collection by its
+#: key, and the two are different questions however alike they read.
+ARRAY_OPEN_GLYPH: Final[str] = "\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}"
+ARRAY_CLOSE_GLYPH: Final[str] = "\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}"
+
 #: What separates the ends of a range from each other.  One character and not
 #: three dots: a range is one thing, and spelling it out of three copies of the
 #: character a member access is written with would make the lexer's job a
@@ -220,6 +228,9 @@ class TokKind(StrEnum):
 
     SET_OPEN = "'\N{LEFT DOUBLE PARENTHESIS}'"
     SET_CLOSE = "'\N{RIGHT DOUBLE PARENTHESIS}'"
+
+    ARRAY_OPEN = "'\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}'"
+    ARRAY_CLOSE = "'\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}'"
 
     RANGE = "'\N{HORIZONTAL ELLIPSIS}'"
 

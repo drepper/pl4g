@@ -19,6 +19,7 @@ from .token import (ABOVE_NOT_ALIKE_GLYPH, ABOVE_OR_ALIKE_GLYPH, ALIKE_GLYPH,
                     COMMENT_GLYPH, FLOAT_TYPE_NAMES, GREATER_EQUAL_GLYPH,
                     INTEGER_TYPE_NAMES,
                     KEYWORDS, LESS_EQUAL_GLYPH, NAND_GLYPH, NEGATIVE_GLYPH,
+                    ARRAY_CLOSE_GLYPH, ARRAY_OPEN_GLYPH,
                     NOR_GLYPH, NOT_EQUAL_GLYPH, NOT_GLYPH, OR_GLYPH,
                     RANGE_GLYPH,
                     DIVIDE_GLYPH, ROTATE_LEFT_GLYPH, ROTATE_RIGHT_GLYPH,
@@ -80,6 +81,8 @@ _SIMPLE: Final[dict[str, TokKind]] = {
     TUPLE_CLOSE_GLYPH: TokKind.TUPLE_CLOSE,
     SET_OPEN_GLYPH: TokKind.SET_OPEN,
     SET_CLOSE_GLYPH: TokKind.SET_CLOSE,
+    ARRAY_OPEN_GLYPH: TokKind.ARRAY_OPEN,
+    ARRAY_CLOSE_GLYPH: TokKind.ARRAY_CLOSE,
     QUESTION_GLYPH: TokKind.QUESTION,
     BOTTOM_GLYPH: TokKind.BOTTOM,
     RANGE_GLYPH: TokKind.RANGE,
@@ -87,10 +90,10 @@ _SIMPLE: Final[dict[str, TokKind]] = {
 
 _OPEN: Final[frozenset[TokKind]] = frozenset(
     (TokKind.LPAREN, TokKind.LBRACKET, TokKind.LBRACE, TokKind.AT_LBRACKET,
-     TokKind.SET_OPEN, TokKind.TUPLE_OPEN))
+     TokKind.SET_OPEN, TokKind.TUPLE_OPEN, TokKind.ARRAY_OPEN))
 _CLOSE: Final[frozenset[TokKind]] = frozenset(
     (TokKind.RPAREN, TokKind.RBRACKET, TokKind.RBRACE, TokKind.SET_CLOSE,
-     TokKind.TUPLE_CLOSE))
+     TokKind.TUPLE_CLOSE, TokKind.ARRAY_CLOSE))
 
 _SIMPLE_ESCAPES: Final[dict[str, str]] = {
     "a": "\a", "b": "\b", "f": "\f", "n": "\n", "r": "\r", "t": "\t", "v": "\v",

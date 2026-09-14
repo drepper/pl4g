@@ -24,7 +24,7 @@ from ..branches import (CONDITIONS, Move, UnsupportedBranch,
 from ..faults import Messages, describe
 from ..pool import Constants
 from ..narrow import normalize
-from ...ir.layout import DataLayout, tag_offset_of
+from ...ir.layout import DataLayout, align_of, size_of, tag_offset_of
 from ...ir.types import parts_of
 from ..callconv import TooManyArguments, argument_places, result_places
 from ..saturate import (DIVISION, NAMES, SATURATING, TRAPPING, Unsupported,
@@ -132,6 +132,10 @@ _OPERATIONS: Final[dict[BinOp, "Op"]] = {
 _UNARY_OPERATIONS: Final[dict[UnOp, "Op"]] = {
     UnOp.NOT: ops.NOT, UnOp.NEG: ops.NEG,
 }
+
+
+#: Where a function's own room is measured from.
+STACK_POINTER: Final = SP
 
 
 #: What memory looks like here.  Every one of these targets has an eight-byte
@@ -713,6 +717,7 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
     """Build the machine form of one IR function."""
     from ...ir.inst import (AddressInst, BinaryInst, BrInst, CallInst, CmpInst,
                             CondBrInst,
+                            FrameInst, AssertInst,
                             LoadInst, MemStartInst, RetInst, StoreInst,
                             UnaryInst, UnreachableInst)
     from ...ir.function import Function as _Function
@@ -936,6 +941,32 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
         for inst in block.insts:
             span = inst.span if inst.span.is_valid else None
             match inst:
+                case FrameInst():
+                    # Room of this function's own.  What the value is, is where
+                    # that room is, which is the stack pointer and how far in --
+                    # and the stack pointer is where the function leaves it, so
+                    # the offset is the one the allocator's own slots use.
+                    destination = _new_value(
+                        inst.ty, registers,
+                        hint=(_result_register(inst.ty, cconv, registers)
+                              if inst is returned else None))
+                    held[id(inst)] = destination
+                    asm.op(ops.PLUS, destination, MCReg(STACK_POINTER),
+                           MCImm(asm.frame_slot(size_of(inst.held, _LAYOUT),
+                                                align_of(inst.held, _LAYOUT)),
+                                 32, signed=False),
+                           span=inst.span)
+                case AssertInst():
+                    # Where it holds, nothing; where it does not, the program
+                    # says what was wanted and stops.  The branch is written so
+                    # that failing is the case that jumps, since it is the case
+                    # that does not come back.
+                    holds = asm.reserve_label("holds")
+                    asm.branch(Condition.NE,
+                               operands.in_register(inst.operands[0], inst.span),
+                               ZERO_IMMEDIATE, holds, inst.span)
+                    _Fault(inst.what, inst.span).out_of_range(asm, span)
+                    asm.block(holds)
                 case MemStartInst():
                     # Memory is not held in a register; the token exists to
                     # order the operations that touch it, and there is nothing

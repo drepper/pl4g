@@ -420,12 +420,28 @@ class Parser:
                            body=body, attrs=attrs, doc=doc)
 
     def _parse_type_ref(self) -> "ast.TypeExpr":
-        """Parse a type, which may be a collection written the way a value is."""
+        """Parse a type, which may be a collection written the way a value is.
+
+        An array is written after what it holds -- `i32\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}4\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}` -- and more than one
+        may follow, which is an array of arrays.  The element type comes first
+        because that is the order it is read in: four of these, not an array of
+        four whose elements are these.
+        """
         if self._check(TokKind.SET_OPEN):
-            return self._parse_collection_type()
-        if self._check(TokKind.TUPLE_OPEN):
-            return self._parse_tuple_type()
-        return self._parse_named_type()
+            found: "ast.TypeExpr" = self._parse_collection_type()
+        elif self._check(TokKind.TUPLE_OPEN):
+            found = self._parse_tuple_type()
+        else:
+            found = self._parse_named_type()
+        while self._check(TokKind.ARRAY_OPEN):
+            self._advance()
+            length = (None if self._check(TokKind.ARRAY_CLOSE)
+                      else self._parse_expression())
+            end = self._expect(TokKind.ARRAY_CLOSE,
+                               D.LANG_SYNTAX_EXPECTED_CLOSING_ARRAY).span
+            found = ast.ArrayTypeRef(span=found.span.to(end), element=found,
+                                     length=length)
+        return found
 
     def _parse_tuple_type(self) -> ast.TupleTypeRef:
         """Parse ``\N{LEFT ANGLE BRACKET}TYPE, TYPE\N{RIGHT ANGLE BRACKET}``."""
@@ -963,9 +979,10 @@ class Parser:
     def _parse_assignment(self, target: ast.Expr) -> ast.Stmt:
         """Parse the rest of ``TARGET ← VALUE``.
 
-        What may stand on the left is a name, and an entry of a dictionary
-        written the way one is read.  Anything else is a value the program
-        worked out, and there is nowhere for an assignment to put anything.
+        What may stand on the left is a name, an entry of a dictionary and an
+        element of an array, each written the way one is read.  Anything else is
+        a value the program worked out, and there is nowhere for an assignment
+        to put anything.
         """
         self._expect(TokKind.ASSIGN)
         value = self._parse_expression()
@@ -975,6 +992,10 @@ class Parser:
         if isinstance(target, ast.Index):
             return ast.EntryAssign(span=target.span.to(value.span),
                                    base=target.base, key=target.key, value=value)
+        if isinstance(target, ast.Element):
+            return ast.ElementAssign(span=target.span.to(value.span),
+                                     base=target.base, index=target.index,
+                                     value=value)
         self._diags.emit(D.LANG_ASSIGN_NOT_A_PLACE, target.span)
         raise _Bail()
 
@@ -1067,6 +1088,14 @@ class Parser:
                                    D.LANG_SYNTAX_EXPECTED_CLOSING_SET).span
                 found = ast.Index(span=found.span.to(end), base=found, key=key)
                 continue
+            if self._check(TokKind.ARRAY_OPEN):
+                self._advance()
+                index = self._parse_expression()
+                end = self._expect(TokKind.ARRAY_CLOSE,
+                                   D.LANG_SYNTAX_EXPECTED_CLOSING_ARRAY).span
+                found = ast.Element(span=found.span.to(end), base=found,
+                                    index=index)
+                continue
             if self._check(TokKind.QUESTION):
                 mark = self._advance()
                 found = ast.Try(span=found.span.to(mark.span), operand=found)
@@ -1148,6 +1177,22 @@ class Parser:
         written = self._expect(TokKind.IDENT)
         return ast.NameRef(span=written.span, name=written.text)
 
+    def _parse_array(self) -> ast.ArrayLit:
+        """Parse ``\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}a, b, c\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}``: an array written down.
+
+        One written with nothing in it is written all the same; what it holds
+        is then the type it is wanted as, and how many is none.
+        """
+        start = self._expect(TokKind.ARRAY_OPEN).span
+        elements: list[ast.Expr] = []
+        if not self._check(TokKind.ARRAY_CLOSE):
+            elements.append(self._parse_expression())
+            while self._accept(TokKind.COMMA) is not None:
+                elements.append(self._parse_expression())
+        end = self._expect(TokKind.ARRAY_CLOSE,
+                           D.LANG_SYNTAX_EXPECTED_CLOSING_ARRAY).span
+        return ast.ArrayLit(span=start.to(end), elements=tuple(elements))
+
     def _parse_atom(self) -> ast.Expr:
         """Parse an expression with nothing binding it to what is around it."""
         token = self._current
@@ -1178,6 +1223,8 @@ class Parser:
                 return self._parse_tuple()
             case TokKind.SET_OPEN:
                 return self._parse_collection()
+            case TokKind.ARRAY_OPEN:
+                return self._parse_array()
             case TokKind.KW_MATCH:
                 return self._parse_match()
             case TokKind.KW_IF:

@@ -249,6 +249,38 @@ class TupleType(Type):
 
 
 @dataclass(frozen=True, slots=True)
+class ArrayType(Type):
+    """Several values of one type, one after another.
+
+    `length` is how many, where the type says; nothing where it does not.  A
+    type that says carries everything about the array but the elements
+    themselves, so a value of one needs no room beyond theirs.  A type that
+    does not is a place and a count, which is two words and says nothing about
+    where the elements are -- they may be an array's, or part of one.
+    """
+
+    element: Type
+    length: int | None = None
+
+    @property
+    def fixed(self) -> bool:
+        """Whether the type says how many elements there are."""
+        return self.length is not None
+
+    def render(self) -> str:
+        """The name of this type in the textual form of the IR."""
+        return "".join((self.element.render(),
+                        "\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}",
+                        "" if self.length is None else str(self.length),
+                        "\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}"))
+
+    def mangled(self) -> str:
+        """The normalized name of this type, for use inside a symbol name."""
+        return "".join(("array<", self.element.mangled(), ",",
+                        "" if self.length is None else str(self.length), ">"))
+
+
+@dataclass(frozen=True, slots=True)
 class SetType(Type):
     """A set: the keys it holds, and nothing said about them beyond membership."""
 
@@ -393,6 +425,7 @@ class TypeContext:
     def __init__(self) -> None:
         self._results: dict[tuple[Type, Type | None], ResultType] = {}
         self._tuples: dict[tuple[Type, ...], TupleType] = {}
+        self._arrays: dict[tuple[Type, int | None], ArrayType] = {}
         self._sets: dict[Type, SetType] = {}
         self._dicts: dict[tuple[Type, Type], DictType] = {}
         self._pointers: dict[tuple[Type, bool], PtrType] = {}
@@ -420,6 +453,15 @@ class TypeContext:
         if found is None:
             found = TupleType(key)
             self._tuples[key] = found
+        return found
+
+    def array_type(self, element: Type, length: "int | None" = None) -> ArrayType:
+        """Return the array type over *element*, of *length* where one is known."""
+        key = (element, length)
+        found = self._arrays.get(key)
+        if found is None:
+            found = ArrayType(element, length)
+            self._arrays[key] = found
         return found
 
     def set_type(self, element: Type) -> SetType:
@@ -479,16 +521,39 @@ class TypeContext:
         return BUILTIN_TYPES.get(name)
 
 
+#: The pointer types the parts of a dynamic array are made of, kept so that two
+#: asks for one answer with the same type.  `parts_of` has no type context to
+#: ask, and a fresh one each time would be a type that compares equal to the
+#: interned one and is not it.
+_ELEMENT_POINTERS: "dict[Type, PtrType]" = {}
+
+
+def _pointer_to(element: Type) -> PtrType:
+    """The type of an address of an element, made once per element type."""
+    found = _ELEMENT_POINTERS.get(element)
+    if found is None:
+        found = PtrType(element, mutable=True)
+        _ELEMENT_POINTERS[element] = found
+    return found
+
+
 def parts_of(ty: Type) -> tuple[Type, ...]:
     """What a value of *ty* is, where it is more than one value travelling as one.
 
     A result is its answer and the truth value beside it; a tuple is its
-    members; anything else is itself.  Everything that has to say where such a
-    value goes -- a register, an argument, an answer -- asks this rather than
-    knowing the shapes, so a shape added later is added here.
+    members; an array whose type does not say how many elements it has is where
+    they are and how many there are; anything else is itself.  Everything that
+    has to say where such a value goes -- a register, an argument, an answer --
+    asks this rather than knowing the shapes, so a shape added later is added
+    here.
+
+    An array whose type *does* say how many is not among them: it is its
+    elements and nothing else, which is a place in memory and never a register.
     """
     if isinstance(ty, ResultType):
         return (ty.ok, BOOL)
     if isinstance(ty, TupleType):
         return ty.members
+    if isinstance(ty, ArrayType) and ty.length is None:
+        return (_pointer_to(ty.element), U64)
     return (ty,)

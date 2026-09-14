@@ -1,0 +1,11 @@
+※ pl4g-test: compile=error diag=4455
+
+※ An array whose type does not say how long it is owns nothing, and a variable
+※ at the top level is bytes in the image: there is nothing for those bytes to
+※ point at before the program runs.
+
+let s: u8⟦⟧ = ⟦1u8, 2u8⟧
+
+@[startup]
+fn main() → u8:
+    0u8

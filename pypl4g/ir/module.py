@@ -5,11 +5,11 @@ from dataclasses import dataclass, field
 from ..source.location import INVALID_SPAN, Span
 from .decisions import DecisionLog
 from .function import Function, Linkage
-from .types import (BoolType, EnumType, FloatType, IntType, MEM, PtrType,
-                    ResultType, Type,
+from .types import (ArrayType, BoolType, EnumType, FloatType, IntType, MEM,
+                    PtrType, ResultType, Type,
                     TypeContext)
-from .value import (BoolConst, Const, EnumConst, FloatConst, IntConst,
-                    ResultConst, Value)
+from .value import (ArrayConst, BoolConst, Const, EnumConst, FloatConst,
+                    IntConst, ResultConst, Value)
 
 
 class GlobalVar(Value):
@@ -22,13 +22,13 @@ class GlobalVar(Value):
     """
 
     __slots__ = ("name", "value_type", "linkage", "initializer", "span", "module",
-                 "exported")
+                 "exported", "system_layout")
 
     def __init__(self, name: str, value_type: Type, ptr_type: Type,
                  initializer: Value | None = None,
                  linkage: Linkage = Linkage.INTERNAL,
                  span: Span = INVALID_SPAN, module: str = "",
-                 exported: bool = False) -> None:
+                 exported: bool = False, system_layout: bool = False) -> None:
         super().__init__(ptr_type, name)
         self.name = name
         #: The type of what the variable holds, not of the variable itself.
@@ -41,6 +41,11 @@ class GlobalVar(Value):
         #: Whether a file importing this module may name it, which is a
         #: different question from whether the image offers the symbol.
         self.exported = exported
+        #: Whether it has to be laid out the way the system's own compilers
+        #: would lay it out.  The specification leaves the compiler free
+        #: otherwise, and a definition something outside the image reads gives
+        #: that freedom up.
+        self.system_layout = system_layout
 
     @property
     def mutable(self) -> bool:
@@ -83,6 +88,8 @@ class Module:
     _int_consts: dict[tuple[int, bool, int], IntConst] = field(default_factory=dict)
     _float_consts: dict[tuple[int, bytes], FloatConst] = field(default_factory=dict)
     _bool_consts: dict[bool, BoolConst] = field(default_factory=dict)
+    _array_consts: dict[tuple[int, tuple[int, ...]], ArrayConst] = field(
+        default_factory=dict, repr=False)
     _result_consts: dict[tuple[int, int, bool], ResultConst] = field(
         default_factory=dict)
     _enum_consts: dict[tuple[int, int], EnumConst] = field(default_factory=dict)
@@ -147,6 +154,16 @@ class Module:
         if found is None:
             found = ResultConst(ty, answer, failed)
             self._result_consts[key] = found
+        return found
+
+    def array_const(self, ty: ArrayType,
+                    elements: "Sequence[Const]") -> ArrayConst:
+        """Return the interned array constant with these elements."""
+        key = (id(ty), tuple(id(e) for e in elements))
+        found = self._array_consts.get(key)
+        if found is None:
+            found = ArrayConst(ty, tuple(elements))
+            self._array_consts[key] = found
         return found
 
     def bool_const(self, ty: BoolType, value: bool) -> BoolConst:
