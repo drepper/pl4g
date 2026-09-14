@@ -1,0 +1,9 @@
+※ pl4g-test: compile=error diag=4463
+
+※ A tuple is a run of members and not a shape, so there is one place to name and
+※ one index to name it with.  An array is what takes one index per dimension.
+
+@[startup]
+fn main() → u8:
+    let p: 〈u8, u8〉 = 〈1u8, 2u8〉
+    p⟦0,1⟧

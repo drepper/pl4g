@@ -937,10 +937,28 @@ let low: u8 = pair⟦0⟧
 let high: u16 = pair⟦1⟧
 ```
 
-**The index is one number written down** (4460), and that is what a tuple is rather than a rule chosen for it: the members are of
-whatever types they were written with, so which one is wanted decides what type the whole expression has, and a type this language
-settles while the program runs is a type it does not have.  There is one index for the same reason an array of one dimension takes
-one -- a tuple is a run of members and not a shape -- and whether it names a member is known while compiling (4461).
+**The index has to be known while compiling** (4460).  That is mandatory, and it is what a tuple is rather than a rule chosen for
+it: the members are of whatever types they were written with, so **which member is wanted decides what type the expression has**.
+A type this language settles while the program runs is a type it does not have, so the index is settled before it runs or the
+program is refused.
+
+What counts as known:
+
+| Written | Known |
+|---|---|
+| `t⟦0⟧`, `t⟦0u8⟧` | a literal, with or without a suffix |
+| `t⟦FIRST⟧` | a name bound at the top level to something that cannot change and holds a whole number |
+| `t⟦at⟧` for a local `at` | no -- what it stands for is the value an expression produced |
+| `t⟦1 + 1⟧` | no -- a constant to a reader, and not yet to this compiler |
+
+A name bound at the top level to a number that cannot change *is* that number, and a program that troubled to give it one should not
+have to write the number again.  A name bound inside a function is not one even where nothing assigns to it: what it stands for is
+the value an expression produced, and whether that expression could have been worked out while compiling is a question about the
+expression rather than about the name.  Nothing worked out is one yet, and the to-do list says what asking earlier would need.
+
+There is **one index** (4463), for the same reason an array of one dimension takes one: a tuple is a run of members and not a
+shape.  Whether the index names a member is known while compiling too (4461), since how many members a tuple has is part of its
+type.
 
 **A member is read, not assigned to** (4462).  A tuple is a value and not a place: its members are registers, not room in memory
 that something else could be pointing at.  Assigning to one would mean binding the name to a tuple made of the others and the new

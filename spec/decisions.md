@@ -2676,10 +2676,21 @@ number may stand where a field name does; C++ writes `std::get<0>(t)`, because a
 ordinary argument; Python writes `t[0]`, which is this, and can afford an ordinary index only because its tuples are not typed by
 member.
 
-**The index is one number written down, and that is what a tuple is.**  The members are of whatever types they were written with,
-so which one is wanted decides the type of the expression; an index the program worked out would leave that type to be settled
-while the program runs, which no type here is.  Saying so as a diagnostic rather than as a syntax rule is deliberate: the
+**The index must be known while compiling, and that is what a tuple is.**  The members are of whatever types they were written
+with, so which one is wanted decides the type of the expression; an index the program worked out would leave that type to be
+settled while the program runs, which no type here is.  Saying so as a diagnostic rather than as a syntax rule is deliberate: the
 restriction is a consequence of the type system and reads better stated as one.
+
+What counts as known is a literal, with or without a suffix, and a name bound at the top level to a number that cannot change --
+such a name *is* that number, and a program that troubled to give it one should not have to write the number again.  A name bound
+inside a function is not one even where nothing assigns to it: what it stands for is the value an expression produced, and whether
+*that* could have been worked out while compiling is a question about the expression.  Nothing worked out is one yet, because this
+compiler folds after the front end has settled every type -- and settling a type is what the index is needed for.
+
+That leaves one asymmetry worth stating: an array's length may not be a name where a tuple's index may.  The difference is only
+when the question is asked -- a tuple's index is settled while a body is lowered, by which time every definition has been
+collected, and a type is resolved while they still are being.  Accepting a name there today would accept the ones written above the
+use and refuse the ones written below, which is order-dependence in a language that has none elsewhere.  Both are in the list.
 
 **A member is read and not assigned to.**  A tuple is registers, not room in memory.  Assigning to one would mean binding the name
 to a tuple made of the others and the new value -- which the language can already be told to do by writing that out -- so making

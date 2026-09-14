@@ -103,6 +103,17 @@ To Do List for the PL4g language
     `T⟦3⟧` and costs one multiplication and no copy.  Writing still wants an index per dimension: what an assignment
     writes is one element, and copying a whole row is not what it means anywhere else.
 
+[ ] work out a constant expression in the front end.  `t⟦1 + 1⟧` is refused (4460) although a reader can see what it
+    comes to: the compiler folds after the front end, by which time every type has been settled -- and settling a type is what the
+    index is needed for.  What it wants is the folding the optimizer already does, done over the syntax instead, which is a small
+    evaluator over literals and the arithmetic operators.
+
+[ ] let an array's length be a name.  `u8⟦SIZE⟧` is refused (4447) where `t⟦FIRST⟧` is accepted, and the difference is
+    only when the question is asked: a tuple's index is settled while a body is being lowered, by which time every definition has
+    been collected, and a type is resolved while they still are being.  Accepting a name there today would accept the ones written
+    above and refuse the ones written below, which is order-dependence in a language that has none elsewhere.  What it wants is the
+    constant value of every top-level variable settled in a pass of its own before any type is resolved.
+
 [ ] assign to one member of a tuple.  Refused (4462), because a tuple is registers and not a place.  What it would mean is binding
     the name to a tuple made of the other members and the new value, which the language can already be told to do by writing that
     out; whether `←` should be a second way of saying it is a question about assignment rather than about tuples, and the same

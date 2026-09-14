@@ -4,13 +4,21 @@
 ※ array is looked in with: what is being asked for is a place among several, and
 ※ the language does not have two shapes for one question.
 ※
-※ The index is one number written down.  That is not a rule chosen for tuples
-※ but what a tuple is: its members are of whatever types they were written with,
-※ so which one is wanted decides what type the whole expression has -- and a
-※ type this language settles while the program runs is a type it does not have.
+※ The index has to be known while compiling.  That is not a rule chosen for
+※ tuples but what a tuple is: its members are of whatever types they were
+※ written with, so which one is wanted decides what type the whole expression
+※ has -- and a type this language settles while the program runs is a type it
+※ does not have.
+※
+※ A literal is known, with or without a suffix, and so is a name bound at the
+※ top level to something that cannot change: such a name *is* that number.
 ※
 ※ Nothing is read from memory.  A tuple is its members in registers, so naming
 ※ one says which register to go on using.
+
+※ a name bound at the top level to something that cannot change is a number
+※ the compiler knows, so it may say which member is wanted
+let FIRST: u8 = 0u8
 
 fn both(x: u8, y: u16) → 〈u8, u16〉:
     〈x, y〉
@@ -18,9 +26,10 @@ fn both(x: u8, y: u16) → 〈u8, u16〉:
 @[startup]
 fn main() → u8:
     let pair: 〈u8, u16〉 = both(7u8, 300u16)
-    let low: u8 = pair⟦0⟧
+    ※ a bare literal, a literal with a suffix, and a name that cannot change
+    let low: u8 = pair⟦0⟧ + pair⟦0u8⟧ + pair⟦FIRST⟧
     ※ each index gives a value of its own member's type
     if pair⟦1⟧ = 300u16:
-        low + 35u8
+        low + 21u8
     else:
         0u8

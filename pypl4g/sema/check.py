@@ -2161,22 +2161,28 @@ class Checker:
                             expected: Type | None) -> Value:
         """Lower `t\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}i\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}`: one member of a tuple, named by where it stands.
 
-        **The index is one number written down** (4460).  That is not a
+        **The index has to be known while compiling** (4460).  That is not a
         restriction chosen here but what a tuple is: its members are of whatever
         types they were written with, so which one is wanted decides what type
         the whole expression has, and a type this language settles while the
-        program runs is a type it does not have.  There is one index for the
-        same reason an array of one dimension takes one: a tuple is a run of
-        members and not a shape.
+        program runs is a type it does not have.  `_constant_number` says what
+        counts as known.
+
+        **There is one index** (4463), for the same reason an array of one
+        dimension takes one: a tuple is a run of members and not a shape.
 
         Nothing is read from memory.  A tuple is its members in registers, so
         naming one is saying which register to go on using.
         """
-        if len(expr.indices) != 1 or not isinstance(expr.indices[0], ast.IntLit) \
-                or expr.indices[0].type_name is not None:
-            self._diags.emit(D.LANG_TUPLE_INDEX_NOT_WRITTEN_DOWN, expr.span)
+        if len(expr.indices) != 1:
+            self._diags.emit(D.LANG_TUPLE_ONE_INDEX, expr.span,
+                             given=len(expr.indices))
             return UndefConst(ERROR)
-        at = expr.indices[0].value
+        at = self._constant_number(expr.indices[0])
+        if at is None:
+            self._diags.emit(D.LANG_TUPLE_INDEX_NOT_CONSTANT,
+                             expr.indices[0].span)
+            return UndefConst(ERROR)
         if not 0 <= at < len(ty.members):
             self._diags.emit(D.LANG_TUPLE_INDEX_OUTSIDE, expr.indices[0].span,
                              index=str(at), count=len(ty.members))
@@ -2185,6 +2191,37 @@ class Checker:
         if expected is not None and expected is not member:
             self._report_mismatch(expr.span, member, expected)
         return builder.extract(base, at, member, expr.span)
+
+    def _constant_number(self, expr: ast.Expr) -> "int | None":
+        """The whole number an expression stands for while compiling, or nothing.
+
+        A literal is one, with or without a suffix.  A name is one where it was
+        bound at the top level to something that cannot change and whose value is
+        a whole number: such a name *is* that number, and a program that troubled
+        to give it one should not have to write the number again wherever the
+        compiler has to know it.
+
+        A name bound inside a function is not one, even where nothing assigns to
+        it.  What it stands for is the value an expression produced, and whether
+        that expression could have been worked out while compiling is a question
+        about the expression rather than about the name.
+
+        Nothing computed is one yet.  `1 + 1` is a constant to a reader and not
+        to this compiler: folding happens after the front end, by which time
+        every type has been settled -- and settling a type is what this is for.
+        The to-do list says what asking earlier would need.
+        """
+        if isinstance(expr, ast.IntLit):
+            return expr.value
+        if not isinstance(expr, ast.NameRef):
+            return None
+        if self._find_local(expr.name) is not None:
+            return None
+        found = self._top.get(expr.name)
+        if not isinstance(found, GlobalVar) or found.mutable:
+            return None
+        return (found.initializer.value
+                if isinstance(found.initializer, IntConst) else None)
 
     def _lower_slice(self, builder: IRBuilder, expr: ast.Element, base: Value,
                      ty: ArrayType, expected: Type | None) -> Value:

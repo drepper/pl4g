@@ -3238,7 +3238,7 @@
       "severity": "error",
       "message": "how many elements an array has is a number written down",
       "args": [],
-      "cause": "How many elements an array has is part of its type, so it is something the compiler reads rather than something the program works out.  A type that depended on a value would be a different language, and the one that leaves the brackets empty is what says the count is not in the type at all.",
+      "cause": "How many elements an array has is part of its type, so it is something the compiler reads rather than something the program works out.  A type that depended on a value would be a different language, and the one that leaves the brackets empty is what says the count is not in the type at all.  A name bound to a constant is not accepted here, although one is accepted where a member of a tuple is named: a type is resolved while the definitions are still being collected, so a name would be one the compiler had reached and not one it had not.",
       "spec": {
         "document": "spec/spec.md",
         "section": "The Language / Types / Arrays",
@@ -3505,15 +3505,15 @@
     },
     {
       "number": 4460,
-      "name": "LANG_TUPLE_INDEX_NOT_WRITTEN_DOWN",
+      "name": "LANG_TUPLE_INDEX_NOT_CONSTANT",
       "severity": "error",
-      "message": "which member of a tuple is wanted is one number written down",
+      "message": "which member of a tuple is wanted has to be known while compiling",
       "args": [],
-      "cause": "The members of a tuple are of whatever types they were written with, so which one is wanted decides what type the whole expression has -- and that has to be known while compiling.  An index the program works out would leave the type of the expression to be decided while it runs, which no type in this language is.  There is one index for the same reason: a tuple is a run of members and not a shape.",
+      "cause": "The members of a tuple are of whatever types they were written with, so which one is wanted decides what type the whole expression has.  A type this language settles while a program runs is a type it does not have, so the index has to be a number the compiler knows: a literal, or a name bound at the top level to one that cannot change.  Nothing worked out is one yet -- `1 + 1` is a constant to a reader and not to this compiler, which folds after the front end has already settled every type.",
       "spec": {
         "document": "spec/spec.md",
         "section": "The Language / Types / Tuples",
-        "requirement": "A member of a tuple is named by one integer literal."
+        "requirement": "The index naming a member of a tuple is a constant known while compiling."
       },
       "since": "0.1",
       "default_enabled": true,
@@ -3557,6 +3557,28 @@
         "document": "spec/spec.md",
         "section": "The Language / Types / Tuples",
         "requirement": "A member of a tuple is not assigned to."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4463,
+      "name": "LANG_TUPLE_ONE_INDEX",
+      "severity": "error",
+      "message": "a tuple is looked in with one index, and {given} are written",
+      "args": [
+        {
+          "name": "given",
+          "type": "number",
+          "description": "how many were written"
+        }
+      ],
+      "cause": "A tuple is a run of members and not a shape, so there is one place to name and one index to name it with.  An array is what takes one index per dimension.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Tuples",
+        "requirement": "A member of a tuple is named by one index."
       },
       "since": "0.1",
       "default_enabled": true,

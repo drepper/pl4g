@@ -1,0 +1,13 @@
+※ pl4g-test: compile=error diag=4460
+
+※ Which member is wanted decides what type the expression has, so it has to be
+※ known while compiling.  A name bound inside a function is not: what it stands
+※ for is the value an expression produced, and whether that expression could
+※ have been worked out while compiling is a question about the expression rather
+※ than about the name.
+
+@[startup]
+fn main() → u8:
+    let p: 〈u8, u8〉 = 〈1u8, 2u8〉
+    let at: u8 = 1u8
+    p⟦at⟧
