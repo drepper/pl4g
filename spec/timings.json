@@ -30,7 +30,9 @@
     "enum-values": "two enumerations, and three matches over them",
     "enum-flag": "a flag enumeration, its operators and three matches",
     "if-statement": "a chain of conditions, and one with no else",
-    "tuple-values": "a tuple answered with, and two taken apart"
+    "tuple-values": "a tuple answered with, and two taken apart",
+    "while-loop": "one loop, carrying two values",
+    "while-loop-nested": "a loop inside a loop, in both notations"
   },
   "commits": [
     {
@@ -204,6 +206,10 @@
     {
       "hash": "603f175",
       "subject": "✨ A branch backwards: liveness over the graph, and a parallel copy"
+    },
+    {
+      "hash": "f067535",
+      "subject": "✨ `while`"
     }
   ],
   "times": {
@@ -3599,6 +3605,140 @@
       "tuple-values": [
         3.167,
         78.32069596042857
+      ]
+    },
+    "f067535": {
+      "exit0": [
+        1.108,
+        87.04334299545735
+      ],
+      "global-variable": [
+        1.2670000000000001,
+        85.57054598350078
+      ],
+      "assign-widths": [
+        1.7940000000000003,
+        84.8970030201599
+      ],
+      "many-values-at-once": [
+        2.077,
+        87.6891550142318
+      ],
+      "unreached-function": [
+        1.598,
+        84.8975540138781
+      ],
+      "export-visibility": [
+        1.667,
+        84.91378801409155
+      ],
+      "digit-separators": [
+        1.776,
+        87.2367339907214
+      ],
+      "boolean-values": [
+        1.466,
+        87.30150101473555
+      ],
+      "bitwise-operators": [
+        1.7489999999999999,
+        86.41878300113603
+      ],
+      "bitwise-precedence": [
+        1.487,
+        84.27415596088395
+      ],
+      "spill-to-the-frame": [
+        7.437,
+        93.1226399843581
+      ],
+      "boolean-in-memory": [
+        1.544,
+        86.44279901636764
+      ],
+      "comparison-operators": [
+        2.533,
+        86.48959000129253
+      ],
+      "logic-operators": [
+        2.667,
+        89.24350398592651
+      ],
+      "logic-short-circuit": [
+        2.488,
+        86.43456699792296
+      ],
+      "saturating-precedence": [
+        1.727,
+        89.00848898338154
+      ],
+      "arithmetic-operators": [
+        2.0589999999999997,
+        87.489002966322
+      ],
+      "semicolon-separates-statements": [
+        2.067,
+        91.44076000666246
+      ],
+      "call-nested": [
+        2.858,
+        93.11400802107528
+      ],
+      "arithmetic-division": [
+        2.57,
+        92.80753100756556
+      ],
+      "shift-operators": [
+        2.5010000000000003,
+        90.58514703065157
+      ],
+      "float-arithmetic": [
+        6.651999999999999,
+        92.82621904276311
+      ],
+      "float-approximate": [
+        10.133000000000001,
+        94.802993000485
+      ],
+      "result-type": [
+        3.9869999999999997,
+        88.33563304506242
+      ],
+      "type-definitions": [
+        1.3870000000000002,
+        85.75327805010602
+      ],
+      "result-as-an-argument": [
+        10.929,
+        98.06468995520845
+      ],
+      "match-a-result": [
+        4.474,
+        88.06349302176386
+      ],
+      "enum-values": [
+        4.05,
+        88.02439400460571
+      ],
+      "enum-flag": [
+        3.994,
+        89.64694599853829
+      ],
+      "if-statement": [
+        3.225,
+        85.5724960565567
+      ],
+      "tuple-values": [
+        3.498,
+        87.12804602691904
+      ],
+      "while-loop": [
+        2.3930000000000002,
+        87.25012897048146
+      ],
+      "while-loop-nested": [
+        3.422,
+        90.72353498777375
       ]
     }
   }

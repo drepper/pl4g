@@ -67,6 +67,7 @@ the parser does, and they are the floor everything else is measured against.
 | `53908ab` | 1.18 | 2.03 | 1.84 | 1.56 |
 | `9ffbf29` | 1.19 | 1.73 | 1.72 | 1.34 |
 | `603f175` | 1.03 | 1.77 | 1.62 | 1.40 |
+| `f067535` | 1.11 | 2.07 | 1.78 | 1.47 |
 
 ### Variables and memory
 
@@ -118,6 +119,7 @@ backend do.
 | `53908ab` | 1.38 | 1.89 | 1.64 |
 | `9ffbf29` | 1.18 | 1.63 | 1.67 |
 | `603f175` | 1.17 | 1.66 | 1.44 |
+| `f067535` | 1.27 | 1.79 | 1.54 |
 
 ### Register pressure
 
@@ -169,6 +171,7 @@ and they are the only ones that reach the frame.
 | `53908ab` | 2.30 | 7.47 |
 | `9ffbf29` | 1.86 | 6.96 |
 | `603f175` | 1.90 | 6.77 |
+| `f067535` | 2.08 | 7.44 |
 
 ### What is left out
 
@@ -220,6 +223,7 @@ decision log does.
 | `53908ab` | 1.67 | 1.77 |
 | `9ffbf29` | 1.66 | 1.53 |
 | `603f175` | 1.49 | 1.55 |
+| `f067535` | 1.60 | 1.67 |
 
 ### Expressions
 
@@ -271,6 +275,7 @@ optimizer does.
 | `53908ab` | 1.85 | 1.57 | 2.60 | 2.66 | 2.48 | 1.80 | 2.25 | 2.72 | 2.44 | 2.42 | 6.42 | 9.88 | 3.81 | 10.11 | 4.30 | 3.22 | 3.47 |
 | `9ffbf29` | 1.70 | 1.35 | 2.27 | 2.37 | 2.17 | 1.79 | 1.97 | 2.52 | 2.39 | 2.11 | 5.83 | 8.98 | 3.56 | 9.47 | 3.80 | 2.87 | 3.38 |
 | `603f175` | 1.79 | 1.75 | 2.36 | 2.39 | 2.28 | 1.72 | 2.22 | 2.45 | 2.21 | 2.18 | 6.08 | 9.33 | 3.61 | 10.21 | 4.08 | 3.03 | 3.17 |
+| `f067535` | 1.75 | 1.49 | 2.53 | 2.67 | 2.49 | 1.73 | 2.06 | 2.86 | 2.57 | 2.50 | 6.65 | 10.13 | 3.99 | 10.93 | 4.47 | 3.23 | 3.50 |
 
 ### Types
 
@@ -321,6 +326,59 @@ Definitions the program writes.  These move when the parser, the name resolution
 | `53908ab` | 1.50 | 3.81 | 3.87 |
 | `9ffbf29` | 1.29 | 3.49 | 3.42 |
 | `603f175` | 1.29 | 3.75 | 3.94 |
+| `f067535` | 1.39 | 4.05 | 3.99 |
+
+### Loops
+
+A branch backwards, which is what makes liveness a question about the graph rather than about the layout.
+These move when the register allocator or the branch lowering does.
+
+| commit | while-loop | while-loop-nested |
+|---|---|---|
+| `eee64a3` |  |  |
+| `af657ad` |  |  |
+| `2f564cb` |  |  |
+| `37dbb28` |  |  |
+| `1c4ae78` |  |  |
+| `f391839` |  |  |
+| `04c20c9` |  |  |
+| `3020cf6` |  |  |
+| `9bcaf84` |  |  |
+| `40c35bb` |  |  |
+| `9437d8a` |  |  |
+| `d0c8cf5` |  |  |
+| `73ce857` |  |  |
+| `ed1c028` |  |  |
+| `1269bd5` |  |  |
+| `db0b436` |  |  |
+| `25bb4e0` |  |  |
+| `baf1f3c` |  |  |
+| `74ac227` |  |  |
+| `c0f29f2` |  |  |
+| `5c3aec4` |  |  |
+| `f7ba2fc` |  |  |
+| `3e9eb27` |  |  |
+| `0990c74` |  |  |
+| `05d8da1` |  |  |
+| `03887ff` |  |  |
+| `87c066b` |  |  |
+| `ca395a6` |  |  |
+| `230b8a7` |  |  |
+| `5706c5f` |  |  |
+| `41f13c3` |  |  |
+| `e7fb804` |  |  |
+| `d0caa00` |  |  |
+| `df0bfc5` |  |  |
+| `af86f5d` |  |  |
+| `7de9bb1` |  |  |
+| `08bdd97` |  |  |
+| `3ef3db4` |  |  |
+| `90846b5` |  |  |
+| `e927edf` |  |  |
+| `53908ab` |  |  |
+| `9ffbf29` |  |  |
+| `603f175` |  |  |
+| `f067535` | 2.39 | 3.42 |
 
 Process
 -------
@@ -376,6 +434,7 @@ worth showing here, and every figure is in the JSON beside this file.
 | `53908ab` | 82 | 94 |
 | `9ffbf29` | 76 | 90 |
 | `603f175` | 77 | 98 |
+| `f067535` | 84 | 98 |
 
 What each row is:
 
@@ -422,6 +481,7 @@ What each row is:
 - `53908ab` -- ✨ Reach a place through an address held in a register
 - `9ffbf29` -- ✨ An allocator: a bump pointer over mapped chunks
 - `603f175` -- ✨ A branch backwards: liveness over the graph, and a parallel copy
+- `f067535` -- ✨ `while`
 
 What each program exercises:
 
@@ -456,3 +516,5 @@ What each program exercises:
 - `type-definitions` -- eight definitions in all three notations
 - `enum-values` -- two enumerations, and three matches over them
 - `enum-flag` -- a flag enumeration, its operators and three matches
+- `while-loop` -- one loop, carrying two values
+- `while-loop-nested` -- a loop inside a loop, in both notations
