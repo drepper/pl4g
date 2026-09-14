@@ -1837,6 +1837,24 @@ that has never heard of this language, and such a thing cannot be expected to kn
 **A call is placed by the convention of the function being called.**  Which register an argument goes in is the callee's to say,
 not the caller's, so a program may hold both kinds of function and call each the way it expects.
 
+**How a function hands back an answer of more than one value is the function's own choice**, and part of its convention for the
+same reason the argument registers are: what a caller has to do to receive an answer is settled by the callee and by nothing else.
+There is one choice so far and it is what every function makes:
+
+| | |
+|---|---|
+| up to two values | the registers the convention answers in |
+| more than two | storage the caller provides |
+
+Two is the number because it is what the three system ABIs answer in registers as well, so the first choice is the familiar one
+rather than an arbitrary one.  **Storage the caller provides** means what it says: the caller makes a place, hands it over, and
+reads the answer out of it when the call comes back; the callee writes the parts into it rather than answering with them.  None of
+that is written down by the program -- the place is not an argument any program can pass -- and none of it is visible in what the
+program means.  A function answering with `〈u8, u16, u8, u8, u8〉` is called and read like any other.
+
+A second choice would be a second row of that table and nothing else moved, which is the point of saying that the choice belongs
+to the function: a program that wants one will say so on the function, and every caller will follow.
+
 **What `pl4g` is, is the compiler's business and may change**, which is what makes this worth having: a convention the language
 does not describe is one the compiler can improve without any program being rewritten.  What it is today, on every target, is a
 convention whose argument registers begin where the answer comes back, so that a function answering with what it was given has the

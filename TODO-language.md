@@ -470,6 +470,12 @@ To Do List for the PL4g language
     needed was that whatever lowers one to learn its type hands the value back.
 
 
+[ ] give a program a way to choose how a function answers with more than one value.  The choice is a property of the function
+    already and there is one style, so there is nothing yet to choose between; when there is a second, an attribute beside
+    `@[cdecl]` is where it goes, and `ReturnStyle` is what it sets.
+
+[ ] say what order a call's arguments are worked out in.
+
 Runtime
 -------
 

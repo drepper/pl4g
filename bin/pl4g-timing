@@ -105,6 +105,7 @@ GROUPS: tuple[Group, ...] = (
            "if-statement": "a chain of conditions, and one with no else",
            "tuple-values": "a tuple answered with, and two taken apart",
            "tuple-element": "members of a tuple named by where they stand",
+           "tuple-answered-through-storage": "answers of three and five values, and of two",
            "call-spread": "three calls handed a tuple's members as arguments",
            "order-left-to-right": "four lists and an operator, each worked out in turn",
            "call-spread-an-array": "an array and a table spread into two calls",

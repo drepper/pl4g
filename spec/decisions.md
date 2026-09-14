@@ -2988,6 +2988,44 @@ not have, every literal without a suffix needing a context that gives it a type.
 
 ---
 
+## 2026-09-15T00:00+02:00 — language
+
+**Answering with more than the registers hold**
+
+Decided on the user's direction: how a function hands back an answer larger than one word is a property of that function; the
+first and default choice answers two values in registers and everything larger through storage the caller provides.
+
+**The choice belongs to the callee**, which is the part worth writing down.  It is part of the convention for the same reason the
+argument registers are: what a caller must do to receive an answer is settled by the function that answers, so a program may hold
+functions that answer different ways and call each the way it expects.  `ReturnStyle` is therefore a field of `Function`, beside
+`cconv`, and not a property of the target or of the convention description.
+
+**Two is the number**, because it is what the x86-64, AArch64 and RISC-V ABIs also answer in registers.  Making the first choice
+the familiar one means the obvious alternative -- "as many as the convention has return registers" -- is still available as a
+second style rather than being what the first one silently was.
+
+**The place goes last among the arguments.**  Every system ABI passes it first, and each does so because its pointer has to be in
+one known register whatever else is passed.  This convention is the compiler's own and has no such constraint, so putting the
+place last leaves every argument the program wrote in the register it already had -- which matters because a function that answers
+this way is otherwise called exactly as it was.
+
+**It is carried out by a pass, not by the three instruction selectors** -- nothing about it differs between targets, and doing it
+once is what makes the three agree by construction -- and not by the checker, because the signature it produces is not the
+signature the program wrote.  The place is not an argument any program can pass, and no rule about arguments should have to know
+that one of them is not one.
+
+Compare: C and C++ on every ABI, where an aggregate too large for registers is returned through a hidden pointer the caller
+provides -- this is that, with the pointer moved to the end; Go, which returns multiple values on the stack and is the design
+this deliberately does not copy, since it spends stack on the two-value case that fits in registers; Rust, which uses the platform
+ABI and so inherits the hidden first pointer; Swift, whose `@out` convention is the same shape with the indirection decided by the
+type's size and its witness table; and Zig, where the choice is the compiler's and undocumented, which is what this would have
+been had it not been made a named property of the function.
+
+What is left open, and is in [TODO-language.md](../TODO-language.md): the attribute that will let a program choose a style, which
+waits for there to be a second one.
+
+---
+
 ---
 
 Open questions

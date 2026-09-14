@@ -1,0 +1,37 @@
+※ pl4g-test: compile=ok run=native,qemu exit=42 diag=none
+
+※ A function says how it hands back an answer of more than one value, and the
+※ one style there is answers two of them in the registers the convention names
+※ and everything larger through storage the caller provides.  Two is what the
+※ three system ABIs answer in registers as well, which is why it is the first
+※ choice rather than an arbitrary one.
+※
+※ What "the caller provides" means: the caller makes a place of its own, hands
+※ it over as one argument more, and reads the answer out of it when the call
+※ comes back.  The callee writes the parts into it instead of returning them.
+※ None of that is written down by the program -- the pointer is not an argument
+※ any program can pass -- and none of it differs between the three targets.
+
+fn five(base: u8) → 〈u8, u16, u8, u8, u8〉:
+    〈base, 300u16, base + 1u8, base + 2u8, base + 3u8〉
+
+fn three_of_five() → 〈u8, u8, u8〉:
+    ※ a function that answers this way and calls another that does
+    let inner: 〈u8, u16, u8, u8, u8〉 = five(1u8)
+    〈inner⟦0⟧, inner⟦2⟧, inner⟦4⟧〉
+
+fn two(a: u8) → 〈u8, u8〉:
+    ※ two still travels in registers, which is what the style says
+    〈a, a + 1u8〉
+
+@[startup]
+fn main() → u8:
+    let t: 〈u8, u8, u8〉 = three_of_five()
+    let w: 〈u8, u16, u8, u8, u8〉 = five(10u8)
+    let p: 〈u8, u8〉 = two(5u8)
+    ※ a member wider than a byte keeps its own size and alignment in the place
+    if w⟦1⟧ = 300u16:
+        ※ (1+2+4) + 10 + 13 + (5+6) = 41
+        t⟦0⟧ + t⟦1⟧ + t⟦2⟧ + w⟦0⟧ + w⟦4⟧ + p⟦0⟧ + p⟦1⟧ + 1u8
+    else:
+        0u8

@@ -972,6 +972,40 @@ The rule that makes this easy to keep: **a function that answers what type somet
 `_one_type` takes an `into` list, `_array_written` answers the elements beside the type, and `_entries_written` answers an
 `_Entries`.  Anything that asks a type and throws the value away will lower it a second time somewhere.
 
+Answering with more than the registers hold
+------------------------------------------
+
+`Function.answering` is a `ReturnStyle`, and the one member there is answers up to two values in registers and everything larger
+through storage the caller provides.  It is a field of the function rather than of the target or of the convention description,
+because the specification lets conventions differ between functions and this is part of one; a second style is a second member of
+the enum, and everything that has to know asks the style rather than counting parts itself.
+
+The second half is carried out by the `largeanswers` pass, which runs first at every optimization level -- it is how a function of
+that shape is called, not an improvement to it, so the passes after it see the calls as they will be:
+
+- the function grows one parameter, a pointer to the answer, and its answer becomes `void`;
+- each `ret v` becomes one `extract` and one `store` per part, then a bare `ret`;
+- each call to it gets a `frame` of the answer's type, hands that over as one argument more, and reads the parts back out with one
+  `load` each before putting them together again with a `tuple`.
+
+**The pointer goes last.**  A hidden *first* argument is what the system ABIs do, and they do it because theirs has to be in one
+known register whatever else is passed; this convention is the compiler's own, so putting it last leaves every argument the
+program wrote in the register it already had.
+
+**It is a pass rather than three instruction selectors** because nothing about it differs between targets -- a place, some writes
+and some reads -- and doing it once is what makes the three of them agree by construction.  It is a pass rather than part of
+checking the language because the signature it produces is not the signature the program wrote: the pointer is not an argument any
+program can pass, and no rule about arguments should have to know that one of them is not one.
+
+**Two things bit while writing it, and both are the same thing.**  Finding the memory token in force may put the start of the
+chain at the top of the entry block, which moves every instruction below it along -- so the index of the instruction being
+replaced is taken *after* that, not before.  And a call that has already been rewritten answers with `void`, which is what says so:
+without that test the rewritten call is found again and handed a second place to write into.
+
+**What it does not do:** a part that is itself several values, such as a result among a tuple's members, is left alone.  Nothing
+anywhere counts registers per part recursively -- `parts_of` gives a tuple its members and stops -- so routing such an answer
+through storage would only move where it goes wrong.  Those are refused as they were before.
+
 Calling conventions
 -------------------
 

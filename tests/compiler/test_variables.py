@@ -564,3 +564,41 @@ def test_the_memory_chain_starts_in_the_entry_block(compile_source,  # noqa: ANN
     text = output.read_text(encoding="utf-8")
     entry = text.split("block0:", 1)[1].split("\n\n", 1)[0]
     assert "mem.start" in entry, text
+
+
+def test_an_answer_of_three_parts_goes_through_the_callers_storage(  # noqa: ANN001
+        compile_source, tmp_path) -> None:  # noqa: ANN001
+    """The pass gives the function a place to write into and the caller makes it.
+
+    The style is the function's own property, so what decides this is the callee
+    and nothing else: the signature grows a pointer, the answer becomes nothing,
+    and the call hands over a place it made for the purpose.
+    """
+    proc, output = compile_source(
+        "fn three() \N{RIGHTWARDS ARROW} \N{LEFT ANGLE BRACKET}u8, u8, u8\N{RIGHT ANGLE BRACKET}:\n"
+        "    \N{LEFT ANGLE BRACKET}1u8, 2u8, 3u8\N{RIGHT ANGLE BRACKET}\n\n"
+        "@[startup]\nfn main() \N{RIGHTWARDS ARROW} u8:\n"
+        "    let t: \N{LEFT ANGLE BRACKET}u8, u8, u8\N{RIGHT ANGLE BRACKET} = three()\n"
+        "    t\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}0\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}\n",
+        "--emit=ir", "-O0")
+    assert proc.returncode == 0, describe(proc)
+    text = output.read_text(encoding="utf-8")
+    assert "fn @three(ptr<mut \N{LEFT ANGLE BRACKET}u8, u8, u8\N{RIGHT ANGLE BRACKET}>) \N{RIGHTWARDS ARROW} void" in text, text
+    assert "frame.ptr<mut \N{LEFT ANGLE BRACKET}u8, u8, u8\N{RIGHT ANGLE BRACKET}>" in text, text
+    assert "ret.\N{LEFT ANGLE BRACKET}" not in text, text
+
+
+def test_an_answer_of_two_parts_stays_in_registers(compile_source,  # noqa: ANN001
+                                                   tmp_path) -> None:  # noqa: ANN001
+    """Two is what the style answers in registers, so nothing is rewritten."""
+    proc, output = compile_source(
+        "fn two() \N{RIGHTWARDS ARROW} \N{LEFT ANGLE BRACKET}u8, u8\N{RIGHT ANGLE BRACKET}:\n"
+        "    \N{LEFT ANGLE BRACKET}1u8, 2u8\N{RIGHT ANGLE BRACKET}\n\n"
+        "@[startup]\nfn main() \N{RIGHTWARDS ARROW} u8:\n"
+        "    let t: \N{LEFT ANGLE BRACKET}u8, u8\N{RIGHT ANGLE BRACKET} = two()\n"
+        "    t\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}0\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}\n",
+        "--emit=ir", "-O0")
+    assert proc.returncode == 0, describe(proc)
+    text = output.read_text(encoding="utf-8")
+    assert "fn @two() \N{RIGHTWARDS ARROW} \N{LEFT ANGLE BRACKET}u8, u8\N{RIGHT ANGLE BRACKET}" in text, text
+    assert "frame.ptr" not in text, text

@@ -273,6 +273,18 @@ To Do List for the pypl4g compiler
     is wanted, as in `⟦1u8, 2u8⟧⟦0⟧`, they say their own type and what they came to is carried to `_fill` rather than worked out
     twice, which is what keeps a call written as an element from being made twice.  The array decays as it always did.
 
+[ ] count registers per part recursively.  `parts_of` gives a tuple its members and stops, so a member that is itself several
+    values -- a result among them, `〈u8?, u8〉` -- is given one register where it needs two, and the program is refused with a
+    message about an encoding of `mov`.  It has never worked; what it wants is for everything that counts parts to flatten, which
+    is `parts_of` answering the leaves rather than the members, and for the places that read a tuple apart to follow.  The
+    `largeanswers` pass leaves such an answer alone rather than moving where it goes wrong.
+
+[ ] put a call in the memory chain.  A call has `has_effects` and so is kept, and nothing orders memory operations around it: a
+    load written after a call takes the token that was in force before it.  Nothing reorders memory operations today, so nothing
+    is wrong yet; the loads the `largeanswers` pass writes after a call are the first code that depends on it, and a scheduler
+    would be the thing that breaks them.  A callee can write a variable at the top level, so this is wanted for every call and not
+    only for those.
+
 [ ] report a tuple holding an array.  `〈⟦1u8, 2u8⟧〉` reaches the code generator and fails there (9901, "making a 〈u8⟦2⟧〉, which
     is one value and not several"), so what a reader is told is an internal error about a program the front end accepted.  Either
     an array is a thing a tuple may hold, in which case `parts_of` has to say what its parts are, or it is not and the checker

@@ -6,7 +6,7 @@ from typing import Final, Mapping, Sequence
 
 from ..source.location import INVALID_SPAN, Span
 from .inst import Instruction, Terminator
-from .types import FuncType, Type
+from .types import FuncType, Type, parts_of
 from .value import BlockParam
 
 
@@ -109,6 +109,31 @@ DEFAULT_CCONV: Final[str] = "pl4g"
 SYSTEM_CCONV: Final[str] = "cdecl"
 
 
+class ReturnStyle(Enum):
+    """How a function hands back an answer of more than one value.
+
+    There is one so far and it is the default; the point of naming it is that
+    the choice belongs to the function that answers.  A second would be a second
+    member here and nothing else moved: everything that has to know asks the
+    style, and the style answers for a type.
+
+    `TWO_IN_REGISTERS` answers up to two values in the registers the convention
+    names, and anything larger through storage the caller provides -- a place
+    handed over as one argument more, which the callee writes and the caller
+    reads.  Two is what the three system ABIs answer in registers as well, so it
+    is the first choice rather than an arbitrary one.
+    """
+
+    TWO_IN_REGISTERS = "two-in-registers"
+
+    def in_registers(self, ty: Type) -> bool:
+        """Whether an answer of *ty* travels in registers rather than storage."""
+        match self:
+            case ReturnStyle.TWO_IN_REGISTERS:
+                return len(parts_of(ty)) <= 2
+        raise AssertionError(self)
+
+
 @dataclass(slots=True, eq=False)
 class Function:
     """A function, or -- with no blocks -- the declaration of a foreign one."""
@@ -129,6 +154,11 @@ class Function:
     #: Whether a file importing this module may name it.  Not the same question
     #: as the linkage: this one is about the language, that one about the image.
     exported: bool = False
+    #: How this function hands back an answer that is more than one value.  A
+    #: property of the function that answers, as the convention it is called by
+    #: is, and for the same reason: what a caller has to do to receive the
+    #: answer is settled by the callee and by nothing else.
+    answering: ReturnStyle = ReturnStyle.TWO_IN_REGISTERS
 
     @property
     def is_declaration(self) -> bool:

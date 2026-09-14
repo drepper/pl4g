@@ -59,10 +59,14 @@ def pipeline_for(level: int) -> Sequence[str]:
     # function nothing reaches is one nothing can ever call, and keeping it
     # would put bytes in the image that no program can run.  It goes last,
     # since a pass before it can be what makes something unreachable.
+    # Answering through the caller's storage is not an optimization either: it
+    # is how a function of that shape is called, so it runs whatever was asked
+    # for, and it runs first, the passes after it seeing the calls as they will
+    # be rather than as they were written.
     if level <= 0:
-        return ("dropunreached",)
+        return ("largeanswers", "dropunreached")
     # Dead code is swept before that, since both of the others leave some.
-    return ("constfold", "simplifycfg", "dce", "dropunreached")
+    return ("largeanswers", "constfold", "simplifycfg", "dce", "dropunreached")
 
 
 def build_manager(level: int) -> PassManager:
@@ -70,12 +74,14 @@ def build_manager(level: int) -> PassManager:
     from .passes.constfold import ConstantFolding
     from .passes.dce import DeadCodeElimination
     from .passes.dropunreached import DropUnreached
+    from .passes.largeanswers import LargeAnswers
     from .passes.simplifycfg import SimplifyCFG
 
     available: dict[str, Pass] = {
         "constfold": ConstantFolding(),
         "dce": DeadCodeElimination(),
         "dropunreached": DropUnreached(),
+        "largeanswers": LargeAnswers(),
         "simplifycfg": SimplifyCFG(),
     }
     manager = PassManager()

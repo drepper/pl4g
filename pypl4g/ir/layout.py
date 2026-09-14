@@ -189,6 +189,21 @@ def offsets_of(ty: ProductType, layout: DataLayout) -> tuple[int, ...]:
     return tuple(found)
 
 
+def member_offsets_of(ty: TupleType, layout: DataLayout) -> tuple[int, ...]:
+    """Where each member of a tuple starts, in the order they were written.
+
+    The same layout `size_of` gives a tuple, said once so that whatever writes
+    the members and whatever reads them agree without either knowing the other.
+    """
+    found: list[int] = []
+    total = 0
+    for member in ty.members:
+        total = _align_up(total, align_of(member, layout))
+        found.append(total)
+        total += size_of(member, layout)
+    return tuple(found)
+
+
 def tag_offset_of(ty: SumType | ResultType, layout: DataLayout) -> int:
     """Where the tag of a sum, or the truth value of a result, starts."""
     if isinstance(ty, ResultType):
