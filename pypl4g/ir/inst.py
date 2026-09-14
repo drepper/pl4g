@@ -327,19 +327,24 @@ class CallInst(Instruction):
         return "call"
 
 
-class AllocaInst(Instruction):
-    """Reserves storage whose address is taken."""
+class AddressInst(Instruction):
+    """The address of a variable, as a value a register can hold.
 
-    __slots__ = ("allocated",)
+    A variable is already a pointer and a load or a store may name one
+    directly; this is what puts that pointer where arithmetic can reach it, so
+    that a place computed from it -- the element after this one, the field
+    beside it -- is read and written the same way any other place is.
+    """
 
-    def __init__(self, allocated: Type, result_ty: Type, span: Span = INVALID_SPAN) -> None:
-        super().__init__(result_ty, (), span)
-        self.allocated = allocated
+    __slots__ = ()
+
+    def __init__(self, var: Value, span: Span = INVALID_SPAN) -> None:
+        super().__init__(var.ty, (var,), span)
 
     @property
     def opcode(self) -> str:
         """The mnemonic used in the textual form."""
-        return "alloca"
+        return "address"
 
 
 class MemStartInst(Instruction):

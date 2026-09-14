@@ -9,7 +9,8 @@ from ..source.location import INVALID_SPAN, Span
 from .function import BasicBlock, Function
 from typing import Sequence
 
-from .inst import (CallInst, BinaryInst, BinOp, BlockTarget, BrInst, CastInst, CastKind,
+from .inst import (AddressInst, CallInst, BinaryInst, BinOp, BlockTarget, BrInst,
+                   CastInst, CastKind,
                    CmpInst, CmpPred, CondBrInst, Instruction, LoadInst, MemStartInst,
                    ExtractInst, FailedInst, RetInst, StoreInst, Terminator,
                    TupleInst, UnaryInst, UnOp,
@@ -144,6 +145,11 @@ class IRBuilder:
         answer: a parameter of the block they join at.
         """
         self._memory = token
+
+    def address(self, var: Value, span: Span = INVALID_SPAN) -> Value:
+        """Append the taking of a variable's address into a register."""
+        assert isinstance(var.ty, PtrType)
+        return self._append(AddressInst(var, span))
 
     def load(self, address: Value, span: Span = INVALID_SPAN) -> Value:
         """Append a load of whatever *address* points at."""

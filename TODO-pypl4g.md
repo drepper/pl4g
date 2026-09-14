@@ -101,6 +101,13 @@ To Do List for the pypl4g compiler
     work that position-independent code needs anyway.  Worth measuring against the chain before it is written: an enumeration with
     three values is better off with the comparisons.
 
+[x] reach a place through an address that is not a name.  Done: a load or a store whose address operand is not a variable takes
+    the address from a register, which every backend's move and store selection could already build and only the six guards above
+    them refused.  Three instructions make such an address -- `address` puts a variable's own address in a register, adding a
+    number of bytes to an address moves it, and `bitcast` reads the same bits as a pointer to something else -- and the unused
+    `alloca` stub went, since storage a program allocates comes from an allocator and an allocator answers with an address like
+    any other.  Adding to an address deliberately does not take the checked path the same operator takes on two numbers.
+
 [ ] emit an allocator.  Nothing in the compiler can put a value in memory that was not there when the program started, and three
     features now wait on it: a `mut str`, a set and a dictionary.  The choice is written in TODO-language.md and is the user's;
     what belongs here is what the compiler has to emit once it is made -- a `brk` or `mmap` system call, since the specification

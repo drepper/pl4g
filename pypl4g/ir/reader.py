@@ -10,12 +10,14 @@ from typing import Sequence
 
 from .function import (BasicBlock, FuncAttrs, Function, InlineHint, Linkage,
                        SpecialKind)
-from .inst import (BinaryInst, BinOp, BlockTarget, BrInst, CastInst, CastKind,
+from .inst import (AddressInst, BinaryInst, BinOp, BlockTarget, BrInst, CastInst,
+                   CastKind,
                    CmpInst, CmpPred, CondBrInst, LoadInst, MemStartInst, RetInst,
                    StoreInst, UnaryInst, UnOp, UnreachableInst)
 from .module import GlobalVar, Module
 from .printer import IR_VERSION
-from .types import BOOL, BUILTIN_TYPES, MEM, Type, TypeContext, VOID
+from .types import (BOOL, BUILTIN_TYPES, MEM, PtrType, Type, TypeContext, U64,
+                    VOID)
 from .value import Value
 
 
@@ -48,6 +50,24 @@ def _parse_type(text: str, types: TypeContext, line_number: int) -> Type:
     if found is None:
         raise IRSyntaxError(line_number, "".join(("unknown type '", text, "'")))
     return found
+
+
+def _split_opcode(body: str) -> tuple[str, str]:
+    """Separate an instruction's opcode from its operands.
+
+    The opcode carries a type, and a type may have a space inside it --
+    ``ptr<mut u8>`` is one -- so where the opcode ends is the first space
+    outside any brackets and not simply the first space.
+    """
+    depth = 0
+    for index, ch in enumerate(body):
+        if ch in "(<[":
+            depth += 1
+        elif ch in ")>]":
+            depth -= 1
+        elif ch == " " and depth == 0:
+            return body[:index], body[index + 1:]
+    return body, ""
 
 
 def _split_top(text: str, sep: str = ",") -> list[str]:
@@ -177,7 +197,7 @@ class _FunctionReader:
             name, _, body = body.partition("=")
             result = int(name.strip().removeprefix("%"))
             body = body.strip()
-        opcode, _, rest = body.partition(" ")
+        opcode, rest = _split_opcode(body)
         inst = self._build(block, opcode, rest.strip(), number)
         if hint is not None:
             inst.name_hint = hint
@@ -250,9 +270,14 @@ class _FunctionReader:
         head, _, type_text = opcode.rpartition(".")
         ty = _parse_type(type_text, self._module.types, number)
         parts = _split_top(rest)
+        if head == "address":
+            return block.append(AddressInst(self._value(parts[0], ty, number)))
         if head in _BINOPS:
             lhs = self._value(parts[0], ty, number)
-            rhs = self._value(parts[1], ty, number)
+            # What moves an address is a number of bytes, not another address,
+            # so the right operand of this one is read as what it says it is.
+            rhs = self._value(parts[1], U64 if isinstance(ty, PtrType) else ty,
+                              number)
             return block.append(BinaryInst(_BINOPS[head], lhs, rhs))
         if head in _UNOPS:
             return block.append(UnaryInst(_UNOPS[head], self._value(parts[0], ty, number)))

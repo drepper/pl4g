@@ -11,7 +11,9 @@ from typing import Iterable
 from ..diag.engine import InternalError
 from .function import BasicBlock, Function, SpecialKind
 from .mangle import symbol_name
-from .inst import (BinaryInst, BlockTarget, CmpInst, ExtractInst, FailedInst,
+from .inst import (AddressInst, BinaryInst, BinOp, BlockTarget, CastInst,
+                   CastKind, CmpInst,
+                   ExtractInst, FailedInst,
                    Instruction, TupleInst,
                    LoadInst, RetInst, StoreInst, Terminator, UnaryInst,
                    UnwrapInst, WrapInst)
@@ -151,6 +153,40 @@ class Verifier:
                     self._fail(where, "".join((
                         "returning ", inst.operands[0].ty.render(), " from a function returning ",
                         expected.render())))
+            case BinaryInst() if isinstance(inst.ty, PtrType):
+                # Arithmetic on an address: the place so many bytes along from
+                # the one the left names.  The two operands are deliberately
+                # not of one type -- an address is not a number, and what is
+                # added to it is not an address -- so the rule below does not
+                # apply and this one does.
+                if inst.op not in (BinOp.ADD, BinOp.SUB):
+                    self._fail(where, "".join(("'", inst.opcode,
+                                               "' applied to an address")))
+                elif inst.operands[0].ty != inst.ty:
+                    self._fail(where, "".join((
+                        "'", inst.opcode, "' answering with ", inst.ty.render(),
+                        " from ", inst.operands[0].ty.render())))
+                elif not isinstance(inst.operands[1].ty, IntType):
+                    self._fail(where, "".join((
+                        "moving an address by ", inst.operands[1].ty.render())))
+            case CastInst() if inst.kind is CastKind.BITCAST:
+                # The same bits read as another type.  Only an address for now:
+                # an integer read as a floating-point number is the same
+                # question asked of two different register banks, and answering
+                # it wants a rule about where the bits are, not only that they
+                # are the same ones.
+                if not (isinstance(inst.ty, PtrType)
+                        and isinstance(inst.operands[0].ty, PtrType)):
+                    self._fail(where, "".join((
+                        "reading ", inst.operands[0].ty.render(), " as ",
+                        inst.ty.render(), ", which is not the same kind of thing")))
+            case AddressInst():
+                if not isinstance(inst.operands[0].ty, PtrType):
+                    self._fail(where, "the address of something that is not a place")
+                elif inst.ty != inst.operands[0].ty:
+                    self._fail(where, "".join((
+                        "the address of a ", inst.operands[0].ty.render(),
+                        " read as ", inst.ty.render())))
             case BinaryInst():
                 if inst.operands[0].ty != inst.operands[1].ty:
                     self._fail(where, "".join(("'", inst.opcode,

@@ -2260,6 +2260,42 @@ a tuple from, and the rule reads better than the one it replaces: what is writte
 
 ---
 
+## 2026-09-14T09:00+02:00 — compiler
+
+**A place reached through an address in a register**
+
+The first of four pieces the heap, the loops and the collections runtime all rest on.  Nothing in the compiler could read or write
+memory that a *name* did not point at: six guards in the three backends, one per form of access, refused any address operand that
+was not a variable.  Everything below them was already right -- the verifier asks only for a pointer type and its message already
+says "a place", and every backend's move and store selection already had a base-register path -- so the change is that the
+backends now choose between a symbol reached relative to the instruction and a register holding the address, and nothing above
+them has to know which.
+
+**Three instructions make an address that is not a name.**  `address` puts a variable's own address in a register.  Adding a
+number of bytes to an address moves it.  `bitcast` reads the same bits as a pointer to something else.
+
+**Adding to an address is not the checked addition the same operator means on two numbers.**  C and C++ make pointer arithmetic
+undefined past one element beyond the end and leave it unchecked; Rust makes it `unsafe` and unchecked; Zig checks a great deal
+else but not this.  The reason to leave it unchecked here is not performance: what a number overflows into is another number, and
+so there is a nearest value to answer with and a bound to answer against, while what an address past its place names is not a
+place at all.  There is nothing to answer with.  Where a bound is known it belongs on the *type* -- a collection knows its own
+length -- and that is where the check will go.
+
+**`bitcast` is restricted to addresses.**  The enumerator had been declared and never used.  Reading an integer as a floating-point
+number is the same bits in another register bank, which wants a rule about where the bits are and not only that they are the same
+ones; that is a separate question and it is not asked yet.
+
+**The `alloca` stub went.**  It reserved storage whose address is taken, which is the stack's answer to the question; the answer
+this language is taking is an allocator, and an allocator answers with an address like any other.  Storage that outlives the
+function that made it cannot come from a frame, and everything waiting on this -- a `mut str`, a set, a dictionary -- outlives it.
+
+**One defect came out of it.**  The textual form of the representation splits an instruction's opcode from its operands at the
+first space; a type may have a space in it, and `ptr<mut u8>` is the first one that does, so a round trip of any instruction whose
+type is a writable pointer failed.  The split now stops at the first space outside brackets, which is what the operand split
+already did.
+
+---
+
 ---
 
 Open questions

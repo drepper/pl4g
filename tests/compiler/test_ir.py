@@ -35,6 +35,24 @@ block1(%3: i32, %4: i32):
 """
 
 
+PLACES = """; pl4g-ir 1
+module "places.pl4g" triple "x86_64-linux-none"
+
+let @v: mut u64 internal = 0
+
+fn @main() \N{RIGHTWARDS ARROW} u8 internal cconv(pl4g.v0) special(startup) {
+block0:
+  %0 = mem.start
+  %1 = address.ptr<mut u64> @v
+  %2 = bitcast.ptr<mut u8> %1
+  %3 = add.ptr<mut u8> %2, 3
+  %4 = store.u8 %0, %3, 9
+  %5 = load.u8 %4, %3
+  ret.u8 %5
+}
+"""
+
+
 def build_exit0() -> Module:
     """A module holding the smallest conforming program."""
     module = Module("exit0.pl4g")
@@ -72,7 +90,7 @@ def test_printing_is_canonical(build, expected: str) -> None:  # noqa: ANN001
     assert render_module(build()) == expected
 
 
-@pytest.mark.parametrize("text", [EXIT0, BLOCK_PARAMS])
+@pytest.mark.parametrize("text", [EXIT0, BLOCK_PARAMS, PLACES])
 def test_round_trip_is_a_fixed_point(text: str) -> None:
     """Reading printed IR and printing it again gives the same text."""
     assert render_module(read_module(text)) == text

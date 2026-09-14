@@ -594,6 +594,19 @@ the address of one without is a `ptr<T>`.  The verifier asks the pointer rather 
 a pointer can reach and not only for a name the source wrote down.  A local has no pointer and no place; its mutability is a
 property of the binding and appears nowhere in the representation.
 
+A place is not always a name.  A load or a store whose address is a variable names its symbol and reaches it relative to the
+instruction, as above; one whose address is anything else takes it from a register, and what place it names is settled while the
+program runs rather than while it is compiled.  Both are the same two instructions in the representation, and which of the two
+forms a backend emits follows from what the address operand *is*, so nothing above the backend has to know about the difference.
+
+Three things make an address that is not a name.  `address` puts a variable's own address in a register, which is what a place
+computed from it starts out as; adding a number of bytes to an address moves it, and is deliberately not the checked addition the
+same operator means on two numbers, because what a number overflows into is another number and what an address past its place
+names is not a place at all; and `bitcast` reads the same bits as a pointer to something else, which is how storage handed back as
+untyped bytes becomes a place of a type.  There is no instruction that reserves storage: what a program allocates comes from an
+allocator, and an allocator answers with an address like any other.
+
+
 Assigning to a local writes nothing: a local is a value, so the name is bound to a new one and the function that results is the
 same as if the final value had been written in the first place.  Where control flow arrives, a block parameter will carry the new
 value across a branch, which is what block parameters were chosen for; a local will not need memory even then.

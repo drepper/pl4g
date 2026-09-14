@@ -680,14 +680,15 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
     The bootstrap compiler generates code for as much of the language as its own
     source needs.  A construct with no rule here is reported, not ignored.
     """
-    from ...ir.inst import (BinaryInst, BrInst, CallInst, CmpInst, CondBrInst,
+    from ...ir.inst import (AddressInst, BinaryInst, BrInst, CallInst, CmpInst,
+                            CondBrInst,
                             LoadInst, MemStartInst, RetInst, StoreInst,
                             UnaryInst, UnreachableInst)
     from ...ir.function import Function as _Function
     from ...ir.mangle import symbol_name
     from ...ir.module import GlobalVar
     from ...ir.types import (BOOL, BoolType, FloatType, IntType, MEM,
-                             ResultType, VOID)
+                             PtrType, ResultType, VOID)
     from ...ir.inst import (CastInst, CastKind, ExtractInst, FailedInst,
                             TupleInst, UnwrapInst, WrapInst)
     from ...ir.value import FloatConst, UndefConst
@@ -825,6 +826,21 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
 
     operands = _Operands()
 
+    def place_of(address: object, span: "Span | None", **where: object) -> MCMem:
+        """Where in memory an address names, for a read or for a write.
+
+        A variable is named by its symbol and reached relative to the
+        instruction; any other address is a value of pointer type, held in a
+        register, and that register is the base.  How wide the access is and
+        where within the place it falls stay the caller's, because one address
+        is read and written at more than one width -- a result is two reads of
+        one place -- and because only the caller knows the type.
+        """
+        if isinstance(address, GlobalVar):
+            return asm.mem(disp_sym=SymExpr(asm.streamer.symbol(symbol_of(address))),
+                           rip_relative=True, **where)
+        return asm.mem(base=operands.register_of(address, span), **where)
+
     class _Fault:
         """What is emitted where an answer will not fit its type."""
 
@@ -899,11 +915,19 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
                     # order the operations that touch it, and there is nothing
                     # yet for it to order.
                     pass
+                case AddressInst():
+                    # The variable's address put where arithmetic can reach it.
+                    # Reading and writing through the variable itself needs no
+                    # such instruction; this is for a place computed from it.
+                    destination = _new_value(
+                        inst.ty, registers,
+                        hint=(_result_register(inst.ty, cconv, registers)
+                              if inst is returned else None))
+                    held[id(inst)] = destination
+                    asm.address(destination,
+                                symbol_of(inst.operands[0]), inst.span)
                 case LoadInst() if isinstance(inst.ty, ResultType):
                     address = inst.operands[1]
-                    if not isinstance(address, GlobalVar):
-                        raise UnsupportedOperation(
-                            "reading through an address that is not a variable", span)
                     answer = inst.ty.ok
                     destination = _new_value(
                         answer, registers,
@@ -917,20 +941,16 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
                     extra[id(inst)] = [failed]
                     # Two reads of one place: the answer where an answer goes,
                     # and the truth value where the layout puts it.
-                    place = asm.streamer.symbol(symbol_of(address))
                     asm.loadreg(destination,
-                                asm.mem(disp_sym=SymExpr(place), rip_relative=True,
-                                        size_bits=_width_of(answer),
-                                        signed=_is_signed(answer)), inst.span)
+                                place_of(address, span,
+                                         size_bits=_width_of(answer),
+                                         signed=_is_signed(answer)), inst.span)
                     asm.loadreg(failed,
-                                asm.mem(disp_sym=SymExpr(place), rip_relative=True,
-                                        disp=tag_offset_of(inst.ty, _LAYOUT),
-                                        size_bits=8, signed=False), inst.span)
+                                place_of(address, span,
+                                         disp=tag_offset_of(inst.ty, _LAYOUT),
+                                         size_bits=8, signed=False), inst.span)
                 case LoadInst():
                     address = inst.operands[1]
-                    if not isinstance(address, GlobalVar):
-                        raise UnsupportedOperation(
-                            "reading through an address that is not a variable", span)
                     destination = _new_value(
                         inst.ty, registers,
                         hint=(_result_register(inst.ty, cconv, registers)
@@ -938,31 +958,24 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
                     held[id(inst)] = destination
                     asm.loadreg(
                         destination,
-                        asm.mem(disp_sym=SymExpr(
-                                    asm.streamer.symbol(symbol_of(address))),
-                                rip_relative=True, size_bits=_width_of(inst.ty),
-                                signed=_is_signed(inst.ty)),
+                        place_of(address, span, size_bits=_width_of(inst.ty),
+                                 signed=_is_signed(inst.ty)),
                         inst.span)
                 case StoreInst():
                     address = inst.operands[1]
-                    if not isinstance(address, GlobalVar):
-                        raise UnsupportedOperation(
-                            "writing through an address that is not a variable", span)
                     written = inst.operands[2]
                     if isinstance(written.ty, ResultType):
                         # Two writes of one place, as a read of one is two.
                         answer = written.ty.ok
-                        place = asm.streamer.symbol(symbol_of(address))
                         asm.store(
-                            asm.mem(disp_sym=SymExpr(place), rip_relative=True,
-                                    size_bits=_width_of(answer),
-                                    signed=_is_signed(answer)),
+                            place_of(address, span, size_bits=_width_of(answer),
+                                     signed=_is_signed(answer)),
                             MCReg(operands.register_of(written, span),
                                   bits=_width_of(answer)), inst.span)
                         asm.store(
-                            asm.mem(disp_sym=SymExpr(place), rip_relative=True,
-                                    disp=tag_offset_of(written.ty, _LAYOUT),
-                                    size_bits=8),
+                            place_of(address, span,
+                                     disp=tag_offset_of(written.ty, _LAYOUT),
+                                     size_bits=8),
                             MCReg(operands.flag_of(written, span),
                                   bits=8), inst.span)
                         continue
@@ -971,16 +984,13 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
                         # of its own kind, and a constant one is read out of the
                         # image first, which is what the operand helper does.
                         asm.store(
-                            asm.mem(disp_sym=SymExpr(
-                                asm.streamer.symbol(symbol_of(address))),
-                                rip_relative=True,
-                                size_bits=_bits_of(written.ty)),
+                            place_of(address, span,
+                                     size_bits=_bits_of(written.ty)),
                             operands.in_register(written, inst.span), inst.span)
                         continue
-                    place = asm.mem(
-                        disp_sym=SymExpr(asm.streamer.symbol(symbol_of(address))),
-                        rip_relative=True, size_bits=_width_of(written.ty),
-                        signed=_is_signed(written.ty))
+                    place = place_of(address, span,
+                                     size_bits=_width_of(written.ty),
+                                     signed=_is_signed(written.ty))
                     constant = _number_of(written)
                     if constant is not None:
                         asm.store(place, MCImm(
@@ -1083,6 +1093,22 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
                     _Fault("".join((NAMES[inst.op], " with no number for an answer")),
                            inst.span).out_of_range(asm, inst.span)
                     asm.block(carry_on)
+                case BinaryInst() if isinstance(inst.ty, PtrType):
+                    # Arithmetic on an address does not go through the
+                    # checked path the same operator on a number does:
+                    # what a number overflows into is another number,
+                    # and what an address past its place names is not a
+                    # place, so there is nothing to answer with and no
+                    # bound to answer against.
+                    destination = _new_value(
+                        inst.ty, registers,
+                        hint=(_result_register(inst.ty, cconv, registers)
+                              if inst is returned else None))
+                    held[id(inst)] = destination
+                    asm.op(_OPERATIONS[inst.op], destination,
+                           operands.value(inst.operands[0], inst.span),
+                           operands.value(inst.operands[1], inst.span),
+                           span=inst.span)
                 case BinaryInst() if inst.op in TRAPPING:
                     destination = _new_value(
                         inst.ty, registers,
@@ -1249,6 +1275,11 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
                     # The complement of a narrow unsigned value sets the bits
                     # above it, where the value it stands for has zeroes there.
                     normalize(asm, inst.ty, destination, max(32, _width_of(inst.ty)), inst.span)
+                case CastInst() if inst.kind is CastKind.BITCAST:
+                    # Nothing to emit: the bits asked for are the bits already
+                    # in the register, and this says to go on reading them as
+                    # something else.
+                    held[id(inst)] = operands.register_of(inst.operands[0], span)
                 case CastInst() if inst.kind is CastKind.FEXT:
                     destination = _new_value(
                         inst.ty, registers,
