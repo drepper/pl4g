@@ -87,6 +87,7 @@ the parser does, and they are the floor everything else is measured against.
 | `decaf2f` | 1.12 | 2.06 | 1.95 | 1.55 |
 | `666d4b2` | 1.11 | 2.15 | 2.00 | 1.56 |
 | `b357677` | 1.14 | 2.04 | 1.94 | 1.51 |
+| `415f40d` | 1.16 | 1.99 | 1.94 | 1.71 |
 
 ### Variables and memory
 
@@ -152,6 +153,7 @@ backend do.
 | `decaf2f` | 1.31 | 2.01 | 1.64 |
 | `666d4b2` | 1.34 | 2.01 | 1.65 |
 | `b357677` | 1.35 | 1.99 | 1.61 |
+| `415f40d` | 1.36 | 1.97 | 1.68 |
 
 ### Register pressure
 
@@ -217,6 +219,7 @@ and they are the only ones that reach the frame.
 | `decaf2f` | 2.32 | 7.98 |
 | `666d4b2` | 2.32 | 7.96 |
 | `b357677` | 2.28 | 7.94 |
+| `415f40d` | 2.19 | 7.89 |
 
 ### What is left out
 
@@ -282,6 +285,7 @@ decision log does.
 | `decaf2f` | 1.79 | 1.90 |
 | `666d4b2` | 1.80 | 1.89 |
 | `b357677` | 1.79 | 1.87 |
+| `415f40d` | 1.62 | 1.82 |
 
 ### Expressions (1 of 2)
 
@@ -347,6 +351,7 @@ optimizer does.
 | `decaf2f` | 1.98 | 1.58 | 2.79 | 2.92 | 2.78 | 2.01 | 2.10 | 2.78 | 3.62 | 3.33 | 2.69 | 2.47 | 7.09 | 11.32 |
 | `666d4b2` | 2.04 | 1.58 | 2.82 | 2.90 | 2.80 | 1.95 | 2.20 | 2.95 | 3.91 | 3.58 | 2.65 | 2.54 | 6.97 | 11.33 |
 | `b357677` | 1.94 | 1.57 | 2.77 | 2.89 | 2.77 | 1.92 | 2.12 | 2.79 | 3.58 | 3.31 | 2.71 | 2.49 | 7.13 | 11.28 |
+| `415f40d` | 1.81 | 1.61 | 2.64 | 2.77 | 2.78 | 2.08 | 2.12 | 2.78 | 3.40 | 3.20 | 2.52 | 2.32 | 7.04 | 11.14 |
 
 ### Expressions (2 of 2)
 
@@ -409,6 +414,7 @@ optimizer does.
 | `decaf2f` | 4.10 | 9.40 | 4.61 | 3.46 | 3.58 | 3.36 | 4.74 |  |  |  |  |
 | `666d4b2` | 4.06 | 9.26 | 4.93 | 3.70 | 3.63 | 3.59 | 4.92 | 7.13 | 5.37 |  |  |
 | `b357677` | 4.16 | 9.40 | 4.60 | 3.47 | 3.53 | 3.26 | 4.63 | 6.79 | 5.01 | 6.15 | 4.03 |
+| `415f40d` | 4.04 | 9.27 | 4.66 | 3.35 | 3.45 | 3.12 | 4.84 | 6.88 | 5.29 | 6.25 | 4.17 |
 
 ### Types
 
@@ -473,71 +479,73 @@ Definitions the program writes.  These move when the parser, the name resolution
 | `decaf2f` | 1.47 | 4.10 | 4.14 | 4.61 | 5.48 | 2.90 | 6.55 | 5.33 |
 | `666d4b2` | 1.68 | 4.45 | 4.42 | 4.80 | 5.79 | 2.90 | 6.82 | 5.53 |
 | `b357677` | 1.42 | 4.20 | 4.18 | 4.52 | 5.52 | 2.88 | 6.51 | 5.31 |
+| `415f40d` | 1.50 | 4.13 | 4.25 | 4.55 | 5.52 | 2.69 | 6.56 | 5.37 |
 
 ### Loops
 
 A branch backwards, which is what makes liveness a question about the graph rather than about the layout.
 These move when the register allocator or the branch lowering does.
 
-| commit | while-loop | while-loop-nested | foreach-over-a-range | foreach-range-step | foreach-over-an-array | foreach-over-a-collection |
-|---|---|---|---|---|---|---|
-| `eee64a3` |  |  |  |  |  |  |
-| `af657ad` |  |  |  |  |  |  |
-| `2f564cb` |  |  |  |  |  |  |
-| `37dbb28` |  |  |  |  |  |  |
-| `1c4ae78` |  |  |  |  |  |  |
-| `f391839` |  |  |  |  |  |  |
-| `04c20c9` |  |  |  |  |  |  |
-| `3020cf6` |  |  |  |  |  |  |
-| `9bcaf84` |  |  |  |  |  |  |
-| `40c35bb` |  |  |  |  |  |  |
-| `9437d8a` |  |  |  |  |  |  |
-| `d0c8cf5` |  |  |  |  |  |  |
-| `73ce857` |  |  |  |  |  |  |
-| `ed1c028` |  |  |  |  |  |  |
-| `1269bd5` |  |  |  |  |  |  |
-| `db0b436` |  |  |  |  |  |  |
-| `25bb4e0` |  |  |  |  |  |  |
-| `baf1f3c` |  |  |  |  |  |  |
-| `74ac227` |  |  |  |  |  |  |
-| `c0f29f2` |  |  |  |  |  |  |
-| `5c3aec4` |  |  |  |  |  |  |
-| `f7ba2fc` |  |  |  |  |  |  |
-| `3e9eb27` |  |  |  |  |  |  |
-| `0990c74` |  |  |  |  |  |  |
-| `05d8da1` |  |  |  |  |  |  |
-| `03887ff` |  |  |  |  |  |  |
-| `87c066b` |  |  |  |  |  |  |
-| `ca395a6` |  |  |  |  |  |  |
-| `230b8a7` |  |  |  |  |  |  |
-| `5706c5f` |  |  |  |  |  |  |
-| `41f13c3` |  |  |  |  |  |  |
-| `e7fb804` |  |  |  |  |  |  |
-| `d0caa00` |  |  |  |  |  |  |
-| `df0bfc5` |  |  |  |  |  |  |
-| `af86f5d` |  |  |  |  |  |  |
-| `7de9bb1` |  |  |  |  |  |  |
-| `08bdd97` |  |  |  |  |  |  |
-| `3ef3db4` |  |  |  |  |  |  |
-| `90846b5` |  |  |  |  |  |  |
-| `e927edf` |  |  |  |  |  |  |
-| `53908ab` |  |  |  |  |  |  |
-| `9ffbf29` |  |  |  |  |  |  |
-| `603f175` |  |  |  |  |  |  |
-| `f067535` | 2.39 | 3.42 |  |  |  |  |
-| `bbf4758` | 2.43 | 3.43 | 2.31 | 3.63 |  |  |
-| `c374354` | 2.53 | 3.50 | 2.32 | 3.75 |  |  |
-| `9e55aab` | 2.43 | 3.13 | 2.44 | 3.82 |  |  |
-| `9958f2d` | 2.28 | 2.89 | 2.20 | 3.59 |  |  |
-| `bed0605` | 2.46 | 3.06 | 2.20 | 3.65 |  |  |
-| `beb9413` | 2.67 | 3.10 | 2.43 | 3.72 |  |  |
-| `e29a5db` | 2.55 | 3.15 | 2.33 | 3.85 | 7.57 | 23.02 |
-| `659fce3` | 2.53 | 3.13 | 2.24 | 3.75 | 7.45 | 23.11 |
-| `fa870d4` | 2.54 | 3.24 | 2.23 | 3.76 | 7.57 | 23.09 |
-| `b3271e5` | 2.46 | 3.13 | 2.26 | 3.77 | 7.71 | 22.99 |
-| `decaf2f` | 2.43 | 3.04 | 2.37 | 3.71 | 7.55 | 23.25 |
-| `666d4b2` | 2.65 | 3.33 | 2.68 | 3.95 | 7.69 | 23.62 |
-| `b357677` | 2.48 | 3.10 | 2.33 | 3.65 | 7.46 | 23.12 |
+| commit | while-loop | while-loop-nested | foreach-over-a-range | foreach-range-step | loop-break | loop-break-nested | loop-continue | foreach-over-an-array | foreach-over-a-collection |
+|---|---|---|---|---|---|---|---|---|---|
+| `eee64a3` |  |  |  |  |  |  |  |  |  |
+| `af657ad` |  |  |  |  |  |  |  |  |  |
+| `2f564cb` |  |  |  |  |  |  |  |  |  |
+| `37dbb28` |  |  |  |  |  |  |  |  |  |
+| `1c4ae78` |  |  |  |  |  |  |  |  |  |
+| `f391839` |  |  |  |  |  |  |  |  |  |
+| `04c20c9` |  |  |  |  |  |  |  |  |  |
+| `3020cf6` |  |  |  |  |  |  |  |  |  |
+| `9bcaf84` |  |  |  |  |  |  |  |  |  |
+| `40c35bb` |  |  |  |  |  |  |  |  |  |
+| `9437d8a` |  |  |  |  |  |  |  |  |  |
+| `d0c8cf5` |  |  |  |  |  |  |  |  |  |
+| `73ce857` |  |  |  |  |  |  |  |  |  |
+| `ed1c028` |  |  |  |  |  |  |  |  |  |
+| `1269bd5` |  |  |  |  |  |  |  |  |  |
+| `db0b436` |  |  |  |  |  |  |  |  |  |
+| `25bb4e0` |  |  |  |  |  |  |  |  |  |
+| `baf1f3c` |  |  |  |  |  |  |  |  |  |
+| `74ac227` |  |  |  |  |  |  |  |  |  |
+| `c0f29f2` |  |  |  |  |  |  |  |  |  |
+| `5c3aec4` |  |  |  |  |  |  |  |  |  |
+| `f7ba2fc` |  |  |  |  |  |  |  |  |  |
+| `3e9eb27` |  |  |  |  |  |  |  |  |  |
+| `0990c74` |  |  |  |  |  |  |  |  |  |
+| `05d8da1` |  |  |  |  |  |  |  |  |  |
+| `03887ff` |  |  |  |  |  |  |  |  |  |
+| `87c066b` |  |  |  |  |  |  |  |  |  |
+| `ca395a6` |  |  |  |  |  |  |  |  |  |
+| `230b8a7` |  |  |  |  |  |  |  |  |  |
+| `5706c5f` |  |  |  |  |  |  |  |  |  |
+| `41f13c3` |  |  |  |  |  |  |  |  |  |
+| `e7fb804` |  |  |  |  |  |  |  |  |  |
+| `d0caa00` |  |  |  |  |  |  |  |  |  |
+| `df0bfc5` |  |  |  |  |  |  |  |  |  |
+| `af86f5d` |  |  |  |  |  |  |  |  |  |
+| `7de9bb1` |  |  |  |  |  |  |  |  |  |
+| `08bdd97` |  |  |  |  |  |  |  |  |  |
+| `3ef3db4` |  |  |  |  |  |  |  |  |  |
+| `90846b5` |  |  |  |  |  |  |  |  |  |
+| `e927edf` |  |  |  |  |  |  |  |  |  |
+| `53908ab` |  |  |  |  |  |  |  |  |  |
+| `9ffbf29` |  |  |  |  |  |  |  |  |  |
+| `603f175` |  |  |  |  |  |  |  |  |  |
+| `f067535` | 2.39 | 3.42 |  |  |  |  |  |  |  |
+| `bbf4758` | 2.43 | 3.43 | 2.31 | 3.63 |  |  |  |  |  |
+| `c374354` | 2.53 | 3.50 | 2.32 | 3.75 |  |  |  |  |  |
+| `9e55aab` | 2.43 | 3.13 | 2.44 | 3.82 |  |  |  |  |  |
+| `9958f2d` | 2.28 | 2.89 | 2.20 | 3.59 |  |  |  |  |  |
+| `bed0605` | 2.46 | 3.06 | 2.20 | 3.65 |  |  |  |  |  |
+| `beb9413` | 2.67 | 3.10 | 2.43 | 3.72 |  |  |  |  |  |
+| `e29a5db` | 2.55 | 3.15 | 2.33 | 3.85 |  |  |  | 7.57 | 23.02 |
+| `659fce3` | 2.53 | 3.13 | 2.24 | 3.75 |  |  |  | 7.45 | 23.11 |
+| `fa870d4` | 2.54 | 3.24 | 2.23 | 3.76 |  |  |  | 7.57 | 23.09 |
+| `b3271e5` | 2.46 | 3.13 | 2.26 | 3.77 |  |  |  | 7.71 | 22.99 |
+| `decaf2f` | 2.43 | 3.04 | 2.37 | 3.71 |  |  |  | 7.55 | 23.25 |
+| `666d4b2` | 2.65 | 3.33 | 2.68 | 3.95 |  |  |  | 7.69 | 23.62 |
+| `b357677` | 2.48 | 3.10 | 2.33 | 3.65 |  |  |  | 7.46 | 23.12 |
+| `415f40d` | 2.37 | 2.91 | 2.23 | 3.69 | 2.57 | 4.20 | 4.27 | 7.45 | 23.11 |
 
 ### Collections
 
@@ -603,6 +611,7 @@ changes, and they are the only samples that carry code the compiler wrote for it
 | `decaf2f` | 16.54 | 22.83 | 14.61 | 17.46 |
 | `666d4b2` | 16.71 | 23.15 | 14.94 | 17.57 |
 | `b357677` | 16.71 | 22.64 | 14.61 | 17.47 |
+| `415f40d` | 16.56 | 22.85 | 14.71 | 17.22 |
 
 Process
 -------
@@ -672,6 +681,7 @@ worth showing here, and every figure is in the JSON beside this file.
 | `decaf2f` | 90 | 116 |
 | `666d4b2` | 90 | 120 |
 | `b357677` | 87 | 113 |
+| `415f40d` | 89 | 119 |
 
 What each row is:
 
@@ -732,6 +742,7 @@ What each row is:
 - `decaf2f` -- ✨ A tuple handed over as several arguments
 - `666d4b2` -- ✨ An array spread, and a spread among a tuple's members
 - `b357677` -- 🐛 An array written down is lowered once, and never with no builder
+- `415f40d` -- ✨ A loop with a name, left early or begun again
 
 What each program exercises:
 
@@ -783,6 +794,9 @@ What each program exercises:
 - `while-loop-nested` -- a loop inside a loop, in both notations
 - `foreach-over-a-range` -- a loop over a range, counting up by one
 - `foreach-range-step` -- three ranges, one of them counting down
+- `loop-break` -- a loop left early, and what it carries handed over
+- `loop-break-nested` -- two loops and all four jumps between them
+- `loop-continue` -- two loops each begun again from inside the body
 - `foreach-over-an-array` -- a vector, a table by rows, and a run
 - `foreach-over-a-collection` -- a set and a dictionary, walked three ways
 - `collection-syntax` -- a set and a dictionary, read and written
