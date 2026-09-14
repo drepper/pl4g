@@ -1122,12 +1122,20 @@ class Parser:
         Positional, and separated by commas, as an attribute's arguments are.
         A call with none is written with the parentheses all the same: they are
         what says a call is being made, not what carries the arguments.
+
+        An argument written after `\N{ASTERISM}` is a tuple handed over as several
+        arguments rather than as one.  It stands where an argument stands, so
+        arguments may be written before it and after it and more than one may
+        appear; what it is not is an expression, and nowhere but here takes one.
         """
         self._expect(TokKind.LPAREN)
         args: list[ast.Expr] = []
         if not self._check(TokKind.RPAREN):
             while True:
-                args.append(self._parse_expression())
+                mark = self._accept(TokKind.SPREAD)
+                written = self._parse_expression()
+                args.append(written if mark is None else ast.Spread(
+                    span=mark.span.to(written.span), operand=written))
                 if self._accept(TokKind.COMMA) is None:
                     break
         end = self._expect(TokKind.RPAREN, D.LANG_SYNTAX_EXPECTED_CLOSING_PAREN).span
@@ -1239,6 +1247,12 @@ class Parser:
                 return self._parse_collection()
             case TokKind.ARRAY_OPEN:
                 return self._parse_array()
+            case TokKind.SPREAD:
+                # Said here rather than left to "expected an expression",
+                # because what is wrong is not that the glyph is unknown but
+                # that it belongs somewhere this is not.
+                self._diags.emit(D.LANG_SYNTAX_SPREAD_OUTSIDE_A_CALL, token.span)
+                raise _Bail()
             case TokKind.KW_MATCH:
                 return self._parse_match()
             case TokKind.KW_IF:

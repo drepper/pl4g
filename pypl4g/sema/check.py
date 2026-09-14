@@ -387,6 +387,21 @@ def _heap(module: Module) -> GlobalVar:
 
 
 @dataclass(frozen=True, slots=True)
+class _Argument:
+    """One argument a call hands over.
+
+    `value` is what it already came to, which is so for a member of a tuple
+    handed over as several arguments and for nothing else: every other argument
+    waits to be lowered until it is known which parameter it is going to, since
+    a literal with no suffix takes its type from there.  `written` is where it
+    was written either way, which is what a diagnostic points at.
+    """
+
+    written: "ast.Expr"
+    value: "Value | None" = None
+
+
+@dataclass(frozen=True, slots=True)
 class _Iteration:
     """What a loop needs of the thing it takes its values from.
 
@@ -4373,16 +4388,27 @@ class Checker:
         if func is None:
             return UndefConst(ERROR)
         wanted = func.ty.params
-        if len(expr.args) != len(wanted):
+        # A tuple handed over as several arguments becomes them before anything
+        # is counted or checked: how many it becomes is read off its type, so by
+        # the time the arguments are matched against the parameters there is
+        # nothing left to say that they were not all written out.
+        given = self._handed_over(builder, expr.args)
+        if given is None:
+            return UndefConst(ERROR)
+        if len(given) != len(wanted):
             self._diags.emit(D.LANG_CALL_WRONG_ARGUMENT_COUNT, expr.span,
                              name=func.name, expected=len(wanted),
-                             found=len(expr.args))
+                             found=len(given))
             return UndefConst(ERROR)
         args: list[Value] = []
-        for position, (written, ty) in enumerate(zip(expr.args, wanted), start=1):
+        for position, (one, ty) in enumerate(zip(given, wanted), start=1):
             outer, self._handing_over = self._handing_over, (func.name, position)
             try:
-                args.append(self._lower_into(builder, written, ty, written.span))
+                args.append(one.value if one.value is not None
+                            else self._lower_into(builder, one.written, ty,
+                                                  one.written.span))
+                if one.value is not None and one.value.ty is not ty:
+                    self._report_mismatch(one.written.span, one.value.ty, ty)
             finally:
                 self._handing_over = outer
         if any(value.ty is ERROR for value in args):
@@ -4399,6 +4425,38 @@ class Checker:
             self._report_mismatch(expr.span, answer.ty, expected)
             return UndefConst(ERROR)
         return answer
+
+    def _handed_over(self, builder: IRBuilder, written: "Sequence[ast.Expr]"
+                     ) -> "list[_Argument] | None":
+        """The arguments a call hands over, with every tuple spread into its own.
+
+        A tuple is several values travelling as one, and the asterism is what
+        undoes that, so a spread argument is lowered here and taken apart at
+        once: how many arguments it becomes is its type's business and is known
+        before anything is matched against a parameter.
+
+        An argument that is not spread is left as it was written, because what
+        type is wanted of it is not known until it is paired with a parameter --
+        a literal with no suffix takes its type from there.
+        """
+        found: list[_Argument] = []
+        for one in written:
+            if not isinstance(one, ast.Spread):
+                found.append(_Argument(written=one))
+                continue
+            value = self._lower_expr(builder, one.operand, None)
+            ty = self._value_type_of(value)
+            if ty is ERROR:
+                return None
+            if not isinstance(ty, TupleType):
+                self._diags.emit(D.LANG_SPREAD_NOT_A_TUPLE, one.operand.span,
+                                 found=ty.render())
+                return None
+            found.extend(
+                _Argument(written=one.operand,
+                          value=builder.extract(value, at, member, one.span))
+                for at, member in enumerate(ty.members))
+        return found
 
     def _callee(self, expr: ast.Expr) -> Function | None:
         """The function a call names, or nothing where it does not name one."""

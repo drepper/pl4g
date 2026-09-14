@@ -812,6 +812,29 @@ would have to hand the body what it found, and there is nowhere in the shape for
 **A dictionary gives a tuple**, and two names take a tuple apart everywhere a tuple is bound.  So `foreach k, v = d:` needed
 nothing of its own: the tuple is made and the binding that already existed takes it apart.
 
+A tuple handed over as several arguments
+---------------------------------------
+
+`⁂t` among a call's arguments is expanded in the checker, before the call is counted or typed.  `_handed_over` walks what was
+written and answers a list of `_Argument`, one per argument the call actually hands over: an ordinary argument contributes itself
+and nothing more, and a spread one is lowered once and contributes one `extract` per member of its type.
+
+Lowering the operand *once* is the point of the `_Argument` record.  An argument is normally lowered where the call needs it, so
+that it is lowered exactly once; a spread operand has to be lowered earlier, because how many arguments there are is a question
+about its type.  The record therefore carries the expression for an ordinary argument and the already-lowered value for a spread
+member, and `_lower_call` lowers what has not been lowered yet.  Writing `⁂f()` calls `f` once.
+
+Everything after the expansion sees a list of arguments and does not know how it was written.  The arity check, the per-argument
+type check, the conversion of an unsuffixed literal to its parameter's type and the register assignment all run on that list, so a
+spread call and the call written out are the same call in the IR, and no diagnostic had to learn about the glyph.  Two are new,
+and both are about the glyph itself rather than about the call: the operand is not a tuple (4464), and the glyph stands where no
+argument list is (3031).
+
+**The second of those is the parser's and not the checker's.**  `⁂` is admitted only in front of an argument, which is what the
+tree-sitter grammar says too -- a `spread_argument` rule that only `call_expression` names.  The first implementation made it an
+expression and refused it in `_lower_expr`; that put a rule in the checker the grammar could simply enforce, and it made the two
+grammars disagree about what an expression is.  The diagnostic moved to the parser and changed number with it.
+
 Calling conventions
 -------------------
 

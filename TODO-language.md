@@ -440,6 +440,13 @@ To Do List for the PL4g language
     ABIs already do with a two-word answer.  The argument mapping now counts a register out of the list its kind comes from
     rather than by position, which was already wrong for a floating-point argument standing beside an integer one.
 
+[ ] consider letting `⁂` spread a fixed-size array.  Its length is in its type exactly as a tuple's is, so the expansion is the
+    same one, and the members all having one type means the call it expands into is one every parameter of that type accepts.  A
+    dynamic array cannot: its length is a thing the program knows and not a thing the type says.
+
+[ ] consider `〈⁂a, ⁂b〉`, spreading into a tuple literal rather than into a call, which is how two tuples are joined and how one
+    is extended.  It costs nothing at runtime for the reason the call case does not, and nothing yet needs it.
+
 
 Runtime
 -------

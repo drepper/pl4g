@@ -3157,8 +3157,17 @@
                     "type": "FIELD",
                     "name": "argument",
                     "content": {
-                      "type": "SYMBOL",
-                      "name": "_expression"
+                      "type": "CHOICE",
+                      "members": [
+                        {
+                          "type": "SYMBOL",
+                          "name": "_expression"
+                        },
+                        {
+                          "type": "SYMBOL",
+                          "name": "spread_argument"
+                        }
+                      ]
                     }
                   },
                   {
@@ -3174,8 +3183,17 @@
                           "type": "FIELD",
                           "name": "argument",
                           "content": {
-                            "type": "SYMBOL",
-                            "name": "_expression"
+                            "type": "CHOICE",
+                            "members": [
+                              {
+                                "type": "SYMBOL",
+                                "name": "_expression"
+                              },
+                              {
+                                "type": "SYMBOL",
+                                "name": "spread_argument"
+                              }
+                            ]
                           }
                         }
                       ]
@@ -3194,6 +3212,23 @@
           }
         ]
       }
+    },
+    "spread_argument": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "STRING",
+          "value": "⁂"
+        },
+        {
+          "type": "FIELD",
+          "name": "tuple",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_expression"
+          }
+        }
+      ]
     },
     "member_expression": {
       "type": "PREC",

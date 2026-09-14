@@ -1,0 +1,14 @@
+※ pl4g-test: compile=error diag=4464
+
+※ The asterism says that several things stand where one is written, and only a
+※ tuple is several things.  Anything else is one argument already, so there is
+※ nothing for the glyph to do and no reading of it that would be an improvement
+※ over saying so.
+
+fn one(a: u8) → u8:
+    a
+
+@[startup]
+fn main() → u8:
+    let n: u8 = 7u8
+    one(⁂n)

@@ -240,6 +240,42 @@ Compare C, C++, Java and Go, where a call is likewise the exception to the disca
 a value that is discarded is a warning unless the type says otherwise.  A rule of that kind wants a way for a function to say its
 answer must not be dropped, which this language will want too and does not have yet.
 
+**A tuple may be handed over as several arguments rather than as one**, by writing `⁂` (U+2042 ASTERISM) in front of it among the
+arguments:
+
+```
+fn three(a: u8, b: u8, c: u8) → u8:
+    a + b + c
+
+let pair: 〈u8, u8〉 = 〈1u8, 2u8〉
+three(⁂pair, 4u8)          ※ the same call as three(pair⟦0⟧, pair⟦1⟧, 4u8)
+three(4u8, ⁂pair)
+```
+
+The glyph is three asterisks arranged as one mark, which is what it says: several things stand where one is written.  Python
+spells this with the single asterisk this language leaves free for a future operator, so the meaning is borrowed and the
+character is not.
+
+**The members become ordinary arguments.**  Arguments may be written before the spread and after it, more than one tuple may be
+spread in the same call, and each contributes its members in the order they stand in.  What the call hands over is the list that
+results, and everything the previous paragraphs say applies to that list and not to what was written: the count must be the
+function's count, each argument must have its parameter's type, and a tuple of the wrong length is reported as the wrong number
+of arguments, because that is what it is.  A generator writing a call therefore need not know how a tuple it is passing along was
+put together.
+
+**The operand must be a tuple.**  Anything else is one argument already, so there is nothing for the glyph to do.  And `⁂`
+stands among the arguments of a call and nowhere else: several things standing where one is written is a thing only an argument
+list has room for, so the glyph is not an expression and `let q = ⁂p` is not a program.
+
+Nothing is read from memory for any of this.  A tuple is its members held separately, so spreading one decides which registers
+the call is handed rather than taking anything apart.
+
+Compare Python, whose `*args` this is, and which needs the mechanism at runtime because its calls are variadic; JavaScript's
+`...`, which spreads any iterable and so is equally a runtime matter; C++'s parameter packs, which expand while compiling as
+these do but belong to templates rather than to calls; and Lisp's `apply`, which takes the list as its last argument and is a
+function rather than a syntax.  This is the compile-time half only: what is spread is a tuple, whose length and member types the
+type already says, so the expansion happens in the checker and the generated code shows no trace of it.
+
 #### Arithmetic
 
 | Operator | Meaning |
@@ -694,6 +730,10 @@ array of arrays is written `a⟦i⟧⟦j⟧`, whose substituted form would end i
 `…` has none, and the reason is the second rule rather than the first: `...` is three characters and so passes, but it is three
 copies of the character a member access is written with, and telling `a...b` from `a . ..b` would be a question of how far the
 lexer can look ahead rather than of what the characters are.  One character is one token, which is what a range is.
+
+`⁂` has none, and the first rule is what decides it: `**` is the only spelling anyone would reach for, being what Python
+writes the same idea's sibling with, and it is two copies of the character multiplication deliberately left free.  Spending it
+here would spend it for the one meaning this language has already decided not to give it.
 
 Using an accepted substitute is not an error.  A warning reports it for anyone who wants their sources in canonical form; it is
 off by default, since the substitute is accepted usage and not a defect.

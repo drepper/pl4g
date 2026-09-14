@@ -1,0 +1,13 @@
+※ pl4g-test: compile=error diag=3031
+
+※ Several things stand where one is written -- which is a thing only an argument
+※ list has room for.  Anywhere else exactly one value is wanted, so the glyph
+※ would have to mean something else, and there is nothing for it to mean.  It is
+※ therefore not an expression at all, which is why the parser says this rather
+※ than the checker.
+
+@[startup]
+fn main() → u8:
+    let p: 〈u8, u8〉 = 〈1u8, 2u8〉
+    let q: 〈u8, u8〉 = ⁂p
+    q⟦0⟧

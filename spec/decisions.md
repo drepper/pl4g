@@ -2730,6 +2730,51 @@ ceremony for a thing the language could simply have allowed the reader to see.
 
 ---
 
+## 2026-09-14T12:00+02:00 — language
+
+**A tuple handed over as several arguments**
+
+Decided on the user's direction: `f(⁂t)` hands the members of `t` over as arguments, with ordinary arguments allowed before and
+after.
+
+**The glyph is `⁂` (U+2042 ASTERISM) and not `*`.**  The user asked for it by name, and the reason it is the right ask is the rule
+this language already has about ASCII characters: one spent on an operator is one no future feature can have.  `*` is spent on
+nothing here -- multiplication is `×` -- and spending it on this would be spending the last plain character that still reads as
+"multiply" to anyone arriving from another language.  The asterism is also literally the picture of what it means: three asterisks
+arranged as one mark, several things standing where one is written.
+
+**It is a rule of the argument list, not an expression.**  The parser accepts `⁂` only in front of an argument, so `let q = ⁂p` is
+a syntax error (PL4G-3031) rather than a type error.  The alternative -- making it an expression and refusing it everywhere but a
+call -- was tried first and discarded: it puts a check in the checker for something the grammar can simply not admit, and it makes
+the tree-sitter grammar and the compiler disagree about what an expression is.  Where a thing cannot occur, the grammar is the
+place to say so.
+
+**It expands before anything is counted.**  `_handed_over` in `sema/check.py` turns the written arguments into the handed-over
+list, and only then does the arity check and the per-argument type check run.  So a 3-tuple spread into a 2-parameter function is
+"takes 2 arguments, not 3" -- the complaint the call would have drawn had its arguments been written out -- and there is no second
+family of diagnostics for calls that spread.  Exactly two diagnostics are new: the operand is not a tuple (4464), and the glyph
+outside a call (3031).
+
+**It is entirely a compile-time matter.**  A tuple's length and member types are in its type, so the expansion happens in the
+checker; a tuple is its members held separately rather than a thing in memory, so the generated code shows no trace of the glyph
+and a spread call is the same code as the call written out.  This is the half of the feature that costs nothing, and it is the
+only half this language can have: nothing here is variadic, so there is no runtime shape for a spread to turn into.
+
+Compare: Python's `*args`, which this is named after and which must work at runtime because its calls are variadic -- the cost
+being that the arity error arrives when the call is made; JavaScript's `...`, which spreads any iterable and so is likewise a
+runtime matter, and which doubles as a collection-building syntax this does not; C++'s parameter packs, which expand while
+compiling as these do, but belong to templates -- a pack is a thing a declaration introduces, where a tuple is an ordinary value
+any expression may produce; Lisp's `apply`, which is a function taking the list last rather than a syntax admitting it anywhere,
+and so cannot have arguments after it; and D's tuple auto-expansion, which needs no glyph at all -- the closest design to this one
+and the one deliberately not taken, since a tuple that silently becomes several arguments makes `f(t)` and `f(a, b)` the same call
+and leaves a reader no way to see which was meant.
+
+What is left open, and is in [TODO-language.md](../TODO-language.md): spreading an array, whose length is in its type when it is
+fixed and so could expand the same way; spreading into a tuple literal, `〈⁂a, ⁂b〉`, which is how a tuple is joined to another and
+which nothing yet needs.
+
+---
+
 ---
 
 Open questions

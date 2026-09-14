@@ -68,6 +68,12 @@ TUPLE_CLOSE_GLYPH: Final[str] = "\N{RIGHT ANGLE BRACKET}"
 SET_OPEN_GLYPH: Final[str] = "\N{LEFT DOUBLE PARENTHESIS}"
 SET_CLOSE_GLYPH: Final[str] = "\N{RIGHT DOUBLE PARENTHESIS}"
 
+#: What hands a tuple over to a call as several arguments rather than as one.
+#: An asterism, which is three asterisks arranged as one mark: what it says is
+#: that several things stand where one is written, and Python spells the same
+#: thing with the one asterisk this language leaves free.
+SPREAD_GLYPH: Final[str] = "\N{ASTERISM}"
+
 #: What encloses an array: its type, a value of one written down, and a lookup
 #: in one.  A white square bracket rather than the plain one, which an index
 #: into something else may yet want, and rather than the double parenthesis a
@@ -228,6 +234,8 @@ class TokKind(StrEnum):
 
     SET_OPEN = "'\N{LEFT DOUBLE PARENTHESIS}'"
     SET_CLOSE = "'\N{RIGHT DOUBLE PARENTHESIS}'"
+
+    SPREAD = "'\N{ASTERISM}'"
 
     ARRAY_OPEN = "'\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}'"
     ARRAY_CLOSE = "'\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}'"

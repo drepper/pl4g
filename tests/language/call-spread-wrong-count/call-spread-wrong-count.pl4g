@@ -1,0 +1,15 @@
+※ pl4g-test: compile=error diag=4211
+
+※ Spreading a tuple decides how many arguments are handed over before anything
+※ counts them, so a tuple with the wrong number of members is reported as the
+※ wrong number of arguments.  That is the same complaint the call would draw if
+※ its arguments had been written out one at a time, which is the point: the
+※ glyph is a shorter way of writing them, not a different kind of call.
+
+fn two(a: u8, b: u8) → u8:
+    a + b
+
+@[startup]
+fn main() → u8:
+    let three: 〈u8, u8, u8〉 = 〈1u8, 2u8, 3u8〉
+    two(⁂three)

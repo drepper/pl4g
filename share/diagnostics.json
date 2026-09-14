@@ -1120,6 +1120,22 @@
       "option": null
     },
     {
+      "number": 3031,
+      "name": "LANG_SYNTAX_SPREAD_OUTSIDE_A_CALL",
+      "severity": "error",
+      "message": "'\u2042' stands among the arguments of a call and nowhere else",
+      "args": [],
+      "cause": "The asterism says that several things stand where one is written, which is a thing only an argument list has room for.  Somewhere else it would have to mean something else, and there is nothing for it to mean -- so it is not an expression, and what follows it is not an operand.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Calls",
+        "requirement": "The asterism stands among the arguments of a call."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 3201,
       "name": "LANG_ATTR_UNKNOWN",
       "severity": "error",
@@ -3579,6 +3595,28 @@
         "document": "spec/spec.md",
         "section": "The Language / Types / Tuples",
         "requirement": "A member of a tuple is named by one index."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4464,
+      "name": "LANG_SPREAD_NOT_A_TUPLE",
+      "severity": "error",
+      "message": "'{found}' is one argument, and this hands over several",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type of what was written"
+        }
+      ],
+      "cause": "A tuple is several values travelling as one, and handing it over this way is what undoes that, so how many arguments it becomes is read off its type.  Anything else is one value: an array holds several, but it is still one value and the language has no way to say that a call takes as many arguments as something turns out to hold.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Calls",
+        "requirement": "What follows the asterism in a call is of a tuple type."
       },
       "since": "0.1",
       "default_enabled": true,

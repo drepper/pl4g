@@ -236,6 +236,17 @@ class FloatLit(Expr):
 
 
 @dataclass(frozen=True, slots=True)
+class Spread(Expr):
+    """`\N{ASTERISM}t` among a call's arguments: the members of a tuple, one argument each.
+
+    It is an expression node only so that it can stand where an argument does;
+    it is no expression on its own and nowhere else accepts one.
+    """
+
+    operand: Expr
+
+
+@dataclass(frozen=True, slots=True)
 class Call(Expr):
     """A function called with the arguments written after its name.
 

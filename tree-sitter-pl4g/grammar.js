@@ -617,8 +617,13 @@ module.exports = grammar({
 
     call_expression: $ => prec(10, seq(
       field('function', $._non_comparison),
-      '(', sepBy(',', field('argument', $._expression)), ')',
+      '(', sepBy(',', field('argument', choice($._expression, $.spread_argument))), ')',
     )),
+
+    // A tuple handed over as several arguments rather than as one.  It is a rule
+    // of the argument list rather than an expression, because nowhere else has
+    // room for a thing that stands for several.
+    spread_argument: $ => seq('\u2042', field('tuple', $._expression)),
 
     // Something named through the module it belongs to, which binds tighter
     // than any operator: `a.b & c` is `(a.b) & c`.
