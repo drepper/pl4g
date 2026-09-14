@@ -346,6 +346,53 @@ for the other and quietly picks the code for a subtraction.  That was a real
 defect -- the widest signed and unsigned sums did not notice they had gone
 past -- and it is why every such test names the ordinary operation.
 
+**An operator over an array is one operation over a whole run of elements.**  The front end asks the question of the whole
+innermost run -- the last dimension, which is the one whose elements are next to each other -- as a single value of as many
+*lanes* as the run is long, whatever the machine it is being built for can actually do.  `u8⟦16⟧ + u8⟦16⟧` is one
+addition of sixteen lanes in the IR, on every target.  The side of the operator that is not an array becomes one value in every
+lane; every dimension outside the innermost is walked as it always was.
+
+A step in each backend then brings that down to what that machine has, and it has three answers.  **As it stands**, where there
+is a register holding the whole run and an instruction that does the operation to all of it.  **In pieces**, where the run is
+longer than a register: as many whole registers’ worth as fit, each piece being itself a run because the elements are laid
+out one after another with nothing between them.  **One element at a time**, for whatever is left over and for every operation a
+machine has no instruction for -- which is the floor under all of it, and is why a target that says it can do nothing still
+compiles every program.
+
+Each piece is a power of two elements long, so that the bytes it covers are a size one instruction reads and writes: sixteen
+bytes, or eight, or four.  Anything shorter goes an element apiece, a partial read being its own instruction on every target and
+a different one on each.  A read of fewer bytes than the register holds leaves the rest of it clear, which is what lets a run
+shorter than a register be worked on in one.
+
+**There are no flags over a run.**  A machine that adds sixteen bytes in one instruction does not write sixteen carry flags, so
+what says an answer went past the end of its type is asked of the answer, of every lane at the same time, by operations that are
+themselves one instruction over the whole run.  Four questions, one per operation and signedness, each the same formula in `and`,
+`or` and `exclusive or`: a signed sum has gone past when both operands had one sign and the answer the other, `(a ^ sum) & (b ^
+sum)`; a signed difference when the operands differed in sign and the answer differs from the left one, `(a ^ b) & (a ^ diff)`;
+an unsigned sum when the addition carried out of the top, `(a & b) | ((a | b) & ~sum)`; an unsigned difference when it borrowed
+into it, `(~a & b) | (~(a ^ b) & diff)`.  Every one leaves a value whose top bit in each lane says whether that lane went past.
+
+**The lanes beyond the run are not asked about.**  A run shorter than a register leaves the rest of it holding zero on one side
+and, where the other side is one value in every lane, that value -- so those lanes may well go past while none of the program’s
+elements does.  Restricting the question to the lanes the run covers is what makes reading a short run into a whole register safe
+rather than merely convenient, and it is asked of the target rather than worked out here: one architecture gathers a bit per byte
+and masks it, another turns each lane into every bit of itself and looks at the bytes the run covers.
+
+**Multiplying is not done to a run**, on any of them.  Seeing that a product went past wants the upper half of it, which none of
+these machines gives at every lane width -- the same reason the narrow scalar arithmetic leaves multiplication to the widening
+path.  Neither is a run of floating-point numbers: what says one of those went past is not a comparison but a question about the
+number itself.
+
+**How wide a register holding a run is, is the microarchitecture level’s to say on x86-64** and nobody’s on the other two.
+`v1` and `v2` hold sixteen bytes, which is what the SSE2 integer instructions give and what "x86-64" means; `v3` and `v4` hold
+thirty-two, AVX2 being part of what those levels promise and the program having already said at its own entry point that the
+processor has it.  AArch64 holds sixteen, the Advanced SIMD instructions being in the base this compiler builds for.  RISC-V holds
+none: its vector extension is not in that base and there is no level to ask for it with, so a run there is an element at a time
+and the program means the same thing.
+
+Which operations a machine has is stated per operation and per lane width, because it differs between them: one architecture
+saturates a byte and a halfword and not a word, the other saturates every width, and neither multiplies.
+
 **A constant wider than an instruction can carry is built rather than loaded.**  No constant pool is emitted and none is planned:
 a pool costs a relocation, a cache line and a section, where a sequence costs two to four instructions that no other value has to
 wait for.  AArch64 sets a quarter of a word at a time, and turns every bit round first where the value has more quarters of ones

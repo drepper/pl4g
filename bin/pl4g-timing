@@ -132,7 +132,11 @@ GROUPS: tuple[Group, ...] = (
            "array-masked-pick": "four picks, by rows and by elements",
            "array-masked-write": "four writes through a mask, one of them by rows",
            "listable-over-an-array": "four walks, one of them over a table twice",
-           "listable-operators": "ten operators walked, and a table against a column"}),
+           "listable-operators": "ten operators walked, and a table against a column",
+           "operators-over-a-run": "runs of four lengths, on either side of a register",
+           "run-of-each-width": "the bitwise three at every lane width",
+           "run-arithmetic": "eight runs added and subtracted, each checked",
+           "run-longer-than-a-register": "a run of two registers and one of one and a bit"}),
     Group("Loops",
           "A branch backwards, which is what makes liveness a question about "
           "the graph rather than about the layout.  These move when the "

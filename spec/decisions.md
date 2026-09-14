@@ -3374,6 +3374,66 @@ paths, and saying which widths an architecture answers for is what keeps that to
 
 ---
 
+## 2026-09-15T21:40+02:00 — compiler
+
+**An operator over an array is one operation over a whole run of elements**
+
+Decided on the user’s direction: the arithmetic, the bitwise and the logical operators are done to a whole run at once where the
+machine has registers that hold one, as wide as the machine allows, and `--mclevel` is what says which instructions it has.
+
+**The decision that shapes everything else is where the choice is made.**  The front end asks the question of the whole run --
+one addition of sixteen lanes -- and a step in each backend brings that down to what that machine has.  It is not the front end
+that asks how wide a register is, and it is not a pattern-matcher that notices a run of sixteen additions afterwards.
+
+That the front end does not ask is what keeps a program’s meaning out of the machine’s hands: the same IR is produced for all
+three targets and for every level, and a target that can do nothing still compiles it, an element at a time, which is what the
+program said in the first place.  That a pattern-matcher does not notice is the other half: the information that sixteen
+additions are the same addition is *in the program* -- it wrote one operator over one array -- and a compiler that threw it away
+in the front end and then tried to recover it in the back end would be paying twice for what it already knew.  That is what
+autovectorization is, and it is why it is unreliable in every compiler that does it.
+
+**What the language had to promise for this to be sound is that the sides do not overlap**, which it already did.  There is no
+way to spell an address in this language, so the only aliasing there can be is the kind the program wrote down: an array read and
+written in the same statement, and a slice referring into the array it came from.
+
+**A run shorter than a register is still done in one.**  A run of four bytes is a four-byte read, which leaves the rest of the
+register clear, and one operation.  The cost of that decision is that the lanes beyond the run may well "go past" -- zero minus
+the number that is in every lane does -- so the check has to be restricted to the lanes the run covers.  The alternative, doing
+short runs an element at a time, would have left nearly every array in a real program on the slow path: the arrays this language
+has are small.
+
+**The check is the part with no precedent to copy.**  A machine that adds sixteen bytes in one instruction does not write sixteen
+carry flags, and no architecture has ever pretended it could; so the four questions are asked of the answer, in `and`, `or` and
+`exclusive or`, and the one branch asks whether any lane said yes.  Every language compared with below avoids this question
+rather than answering it -- by wrapping, by leaving it undefined, or by not checking at all -- which is why the formulas here are
+written out rather than cited.
+
+**Multiplying is left out** on every target, for the reason the narrow scalar arithmetic gave: seeing that a product went past
+wants the upper half of it, which none of these machines gives at every lane width.  A run of floating-point numbers is left out
+too, the question "did this go past" being a different question there.
+
+**The width follows the level and the operations do not.**  `v3` and `v4` promise AVX2, so a run is thirty-two bytes there and
+sixteen on the older two -- and the program has already said at its own entry point that the processor has what it was built for,
+which is what makes taking the level at its word safe.  The newer forms are the same operations over more lanes, so nothing but
+the width is level-dependent, and the mnemonics are the narrow ones: which form a row is, is said by how wide its registers are.
+
+Compare: **APL, BQN and Uiua**, where every scalar function threads over arrays and the implementations vectorize because the
+language never lost the information -- which is the position this takes, and the reason the operator attribute came first;
+**C and C++**, where the loop is written out and the compiler tries to recover the fact that it is one operation, with
+`#pragma omp simd` and `restrict` existing because it often cannot -- and where signed overflow is undefined and unsigned wraps,
+so there is no check to vectorize; **Rust**, whose `std::simd` is explicit and whose ordinary arithmetic panics on overflow in
+debug builds and wraps in release, so the checked form is not the one that gets vectorized; **Zig**, whose `@Vector` is an
+explicit type in the language and whose `+` on one traps on overflow -- the closest thing to this anywhere, with the difference
+that there the program names the width and here it does not; **Go**, which neither vectorizes nor checks; **Fortran**, whose
+array expressions are the oldest form of this and whose compilers have vectorized them since before the word existed;
+**ISPC**, where the program is written as if for one lane and the compiler supplies the rest, which is this seen from the other
+side; and **Haskell**, whose `Data.Vector` fuses loops away and leaves the vectorizing to the backend.
+
+What none of them has is the combination: an operator the program wrote over an array, a width the program never names, and a
+check that every element still gets.
+
+---
+
 ---
 
 Open questions

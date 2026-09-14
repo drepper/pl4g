@@ -2297,6 +2297,17 @@ writes `∧` and `∨`, which work out both sides and say so.
 **The calls are written out**, one per element, rather than made in a loop.  That is what a shape known while compiling makes
 possible and is why one is required; a loop would be wanted where the shapes grow, and nothing about what this means would change.
 
+**How many instructions that turns into is the compiler's business and not the program's.**  An operator written over an array
+asks the same question of every element and of nothing else, so a machine with registers holding several values at once may ask
+it of a whole run of them in one instruction -- and one without such registers asks it of each element in turn.  The answer is
+the same either way, including the answer to "did this go past the end of its type": an element that would have stopped the
+program on its own stops it just the same when it was one lane of sixteen.  Nothing in the language says which happened, and a
+program cannot be written that can tell.
+
+What the compiler is allowed to assume in doing it is that **the two sides do not overlap in memory unless the program said so**.
+The only ways they can are the ones the language can spell: an array read and written in the same statement, and a slice that
+refers into the array it came from.
+
 Compare: the Wolfram Language, whose `Listable` this is, including the broadcasting of an argument that is not a list and the
 requirement that the lists walked together have the same length -- and where it goes further than here, since a Wolfram list has
 no element type and so no question of when to stop.  Here the parameter's type says when, which is what makes `total` walk a
