@@ -3976,6 +3976,82 @@
       "option": null
     },
     {
+      "number": 4481,
+      "name": "LANG_LISTABLE_SHAPES_DIFFER",
+      "severity": "error",
+      "message": "this is {found} along, and another argument being walked is {wanted}",
+      "args": [
+        {
+          "name": "found",
+          "type": "integer",
+          "description": "how many this argument has along the dimension being walked"
+        },
+        {
+          "name": "wanted",
+          "type": "integer",
+          "description": "how many the others have"
+        }
+      ],
+      "cause": "Two arguments walked together are walked in step: the first of one goes with the first of the other, and there is no first of one to go with a second the other does not have.  An argument that is not an array is not walked at all and is handed to every call, so the rule is about the ones being walked and about nothing else.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Calls",
+        "requirement": "Arguments walked together have the same number along the dimension being walked."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4482,
+      "name": "LANG_LISTABLE_CANNOT_WALK",
+      "severity": "error",
+      "message": "'{found}' cannot be walked down to the '{wanted}' this parameter takes",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type of what was handed over"
+        },
+        {
+          "name": "wanted",
+          "type": "string",
+          "description": "the type of the parameter"
+        }
+      ],
+      "cause": "Walking takes one dimension off an array at a time and stops when what is left is what the parameter takes.  Where the two never meet -- an array of a different element type, or one of a length the type does not say, whose shape the answer would have to be and is not known -- there is no walk to make.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Calls",
+        "requirement": "An argument walked has a type the walk reaches the parameter's from, and every dimension walked is one the type states."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4483,
+      "name": "LANG_LISTABLE_TAKES_NOTHING",
+      "severity": "error",
+      "message": "'{name}' takes no arguments, so there is nothing for it to be walked over",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the function"
+        }
+      ],
+      "cause": "What the attribute says is what happens when an array is handed where one element is wanted.  A function that takes nothing is a function nothing can be handed to, so the attribute says nothing about it and is more likely a mistake than a thing that was meant.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition",
+        "requirement": "A function marked '@[listable]' takes at least one argument."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 5001,
       "name": "LANG_STMT_UNREACHABLE",
       "severity": "warning",

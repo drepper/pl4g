@@ -113,6 +113,8 @@ REGISTRY: Final[Mapping[str, AttrSpec]] = {
         AttrSpec("cdecl", AttrTarget.FUNCTION | AttrTarget.VARIABLE,
                  (_param("variadic", "boolean", default=False, required=False),),
                  doc="the definition follows the system's conventions"),
+        AttrSpec("listable", AttrTarget.FUNCTION,
+                 doc="an array argument is walked and the answers make an array"),
         AttrSpec("impure", AttrTarget.FUNCTION,
                  doc="the function may change things that outlive the call"),
         AttrSpec("can_ignore", AttrTarget.FUNCTION,

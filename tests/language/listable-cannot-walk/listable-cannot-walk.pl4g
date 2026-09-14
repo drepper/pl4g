@@ -1,0 +1,19 @@
+※ pl4g-test: compile=error diag=4482
+
+※ Walking takes one dimension off an array at a time and stops when what is left
+※ is what the parameter takes.  A dimension the type does not state is one the
+※ walk cannot take off: what the answer is an array of is the shape that was
+※ walked, and a shape nobody stated is one there is no room to answer with.
+
+@[listable]
+fn doubled(n: u8) → u8:
+    n + n
+
+fn walked(xs: u8⟦⟧) → u8:
+    let d: u8⟦1⟧ = doubled(xs)
+    d⟦0⟧
+
+@[startup]
+fn main() → u8:
+    let v: u8⟦2⟧ = ⟦1u8, 2u8⟧
+    walked(v)

@@ -2168,6 +2168,66 @@ where `NAME` is a valid identifier naming the function, `ARG?` are parameter nam
 the function header is followed by a colon, a newline, and then the properly indented code.  When the function header is followed by
 a `{` it uses the explicit syntax and continues until the respective closing `}`.
 
+##### Walking an array
+
+**`@[listable]` says what it means to hand the function an array where one of its elements is wanted**: the function is called for
+each, and what the call comes to is an array of the same shape holding the answers.
+
+```
+@[listable]
+fn doubled(n: u8) → u8:
+    n + n
+
+let v: u8⟦3⟧ = ⟦1u8, 2u8, 3u8⟧
+doubled(v)                       ※ u8⟦3⟧, holding 2, 4, 6
+```
+
+**The shape is the argument's; what the answer holds is the function's.**  The two need not agree: a test over numbers walked
+over an array of them gives an array of truth values of the same shape.
+
+**An argument that is not an array is not walked** and goes to every one of those calls unchanged:
+
+```
+@[listable]
+fn added(a: u8, b: u8) → u8:
+    a + b
+
+added(v, w)                      ※ both walked, in step
+added(v, 10u8)                   ※ v walked, 10 handed to each call
+```
+
+**Arguments walked together are walked in step** (4481), so they agree about how many there are along each dimension that is
+walked -- and about nothing else.  The first of one goes with the first of the other, and there is no first of one to go with a
+second the other does not have.
+
+**The walk takes one dimension off at a time and stops, for each argument, where what is left is what its parameter takes.**  So
+one function walks a table twice and another walks it once, and which it is, is a question about the parameter:
+
+```
+let m: u8⟦2,3⟧ = ⟦⟦1u8, 2u8, 3u8⟧, ⟦4u8, 5u8, 6u8⟧⟧
+
+doubled(m)                       ※ u8⟦2,3⟧: walked down to the numbers
+total(m)                         ※ u8⟦2⟧, for `fn total(xs: u8⟦3⟧) → u8`
+```
+
+**Every dimension walked is one the type states** (4482).  What the answer is an array of is the shape that was walked, so a
+shape nobody stated is one there is no room to answer with -- an array whose type does not say its length cannot be walked, and
+neither can one the walk never reaches the parameter's type from.
+
+**A function that takes nothing may not be marked** (4483): there is nothing to hand it an array in place of.
+
+**The calls are written out**, one per element, rather than made in a loop.  That is what a shape known while compiling makes
+possible and is why one is required; a loop would be wanted where the shapes grow, and nothing about what this means would change.
+
+Compare: the Wolfram Language, whose `Listable` this is, including the broadcasting of an argument that is not a list and the
+requirement that the lists walked together have the same length -- and where it goes further than here, since a Wolfram list has
+no element type and so no question of when to stop.  Here the parameter's type says when, which is what makes `total` walk a
+table once and `doubled` walk it twice.  APL and BQN thread every scalar function over arrays by default with no attribute at all,
+their whole design being about arrays; NumPy broadcasts by rank and length with rules for extending shapes, which this does not
+do -- an argument is walked or it is not.  Julia spells it at the call, `f.(v)`, which puts the choice with the caller rather than
+with the function: the opposite decision, and a coherent one, taken the other way here because what it means to hand a function an
+array is the function's own business.
+
 ##### What a function may change
 
 **A function is pure unless it says otherwise.**  What pure means here is that calling it changes nothing a later call or a later

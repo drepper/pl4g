@@ -76,6 +76,11 @@ class FuncAttrs:
     #: may move, repeat or drop, and that is worth having by default rather than
     #: on request.
     impure: bool = False
+    #: Whether an array handed where one element is wanted is walked, the
+    #: function being called for each and the answers making an array of the
+    #: same shape.  A property of the function, since what it means to hand it
+    #: an array is the function's own business.
+    listable: bool = False
     extra: Mapping[str, AttrValue] = field(default_factory=dict)
 
 

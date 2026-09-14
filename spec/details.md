@@ -1010,6 +1010,31 @@ The rule that makes this easy to keep: **a function that answers what type somet
 `_one_type` takes an `into` list, `_array_written` answers the elements beside the type, and `_entries_written` answers an
 `_Entries`.  Anything that asks a type and throws the value away will lower it a second time somewhere.
 
+Walking an array
+----------------
+
+An array handed to a `listable` function where one of its elements is wanted is walked, and the whole of that happens in the
+checker: `_walking_shape` works out the shape and `_each_of` writes the calls out.
+
+**The shape is worked out before anything is lowered for it**, because the room the answer needs is the whole of that shape and
+is taken once, as a `frame`.  It is found by peeling: at each turn, every argument whose type is not yet its parameter's gives up
+its outermost dimension, they must agree about how many that is, and the turn stops when no argument is left over.  What falls out
+is the list of dimensions walked, which is the answer's shape, and the answer's elements are what the function answers with.
+
+**`_each_of` then walks it**, writing each answer at the place row-major puts it -- the same arithmetic an array written down
+uses, and for the same reason.  An argument already of its parameter's type is handed to every call as it stands; one that is not
+gives its element or its row, which is `_row_at` again.
+
+**The arguments are lowered with `_listing` in force**, which makes `_accepts` take an array wherever one stands.  That is what
+lets `added(v, 10)` work: the literal still asks `_aiming_at` for the parameter's type, and the array is let through.  What is
+let through permissively is then checked once, by `_walking_shape`, which is the only place that can say what is wrong with a
+*walk* rather than with an argument -- a dimension the type does not state, or two arguments that disagree.
+
+**The calls are written out rather than looped**, one per element of the shape.  A loop would need the answer's storage and the
+index to be worked out at run time, which is the same machinery a dynamic array wants; both are the same piece of work and neither
+is here.  What it costs today is code proportional to the shape, which is why a shape the type states is required and not merely
+convenient.
+
 What a function may change
 --------------------------
 

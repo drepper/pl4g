@@ -3122,6 +3122,50 @@ fact about the default: what needed it is every program that does something.
 
 ---
 
+## 2026-09-15T06:00+02:00 — language
+
+**Walking an array**
+
+Decided on the user's direction: `@[listable]`, which is the Wolfram Language's `Listable`.  An array handed where one of a
+function's elements is wanted is walked, the function is called for each, and the answer is an array of the same shape.
+
+**The attribute is on the function, not at the call.**  Julia takes the other decision -- `f.(v)` spells the walk where the call
+is written -- and it is a coherent one: it needs no attribute, and a caller may walk any function at all.  This goes the other way
+because what it means to hand a function an array is the function's own business, the same reason `@[impure]` and the return
+style are the function's: a caller that had to say it would have to know, and a generator emitting the call would have to carry
+that knowledge to every call site.
+
+**The parameter's type says when the walk stops**, which is what a language with element types can do and Wolfram cannot: a
+Wolfram list has no element type, so `Listable` walks all the way to the leaves and there is nothing else it could do.  Here
+`doubled(m)` walks a table twice and `total(m)` walks it once, and the difference is entirely in what the parameter takes.  That
+is the feature this design has that the one it is named after does not.
+
+**An argument that is not an array is handed to every call**, which is Wolfram's broadcasting and is what makes `added(v, 10u8)`
+read the way it looks.  Rejected: NumPy's rule, which extends shapes by rank and length so that an array of one row stands for
+many.  It is powerful and it is the thing people get wrong about NumPy; here an argument is walked or it is not, and the shapes
+that are walked agree exactly (4481).
+
+**Every dimension walked is one the type states** (4482).  What the answer is an array of is the shape that was walked, and the
+room for it is taken in one `frame` before the calls are written, so a length the type does not say is a length there is nowhere
+to put the answer in.  That is the same line the language already draws between the two kinds of array, arrived at again.
+
+**The calls are written out, one per element, rather than made in a loop.**  A loop wants the answer's storage and its index
+worked out while the program runs, which is the machinery a dynamic array wants; they are one piece of work and neither is here.
+What it costs is code proportional to the shape, which is the honest price of the simplest thing that is correct, and it is why a
+stated shape is required rather than merely convenient.
+
+**Operators are not listable yet**, and nothing here is in their way: an operator is not a definition, so there is nowhere to
+write the attribute.  When the language lets a program define one, the attribute goes on that definition and the mechanism is the
+one already here.  Making the built-in operators listable -- `v + w` element by element -- is a different decision and a larger
+one, since it is about the language rather than about a function, and is in [TODO-language.md](../TODO-language.md).
+
+Compare, beyond the above: APL and BQN, which thread every scalar function over arrays by default and need no attribute, their
+whole design being arrays -- a language that is about something else cannot take that default without making every function's
+meaning depend on what it is handed; and Fortran's elemental procedures, which are this exactly, declared on the procedure, with
+the conformance rule this one has.
+
+---
+
 ---
 
 Open questions

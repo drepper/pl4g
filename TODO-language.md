@@ -480,6 +480,15 @@ To Do List for the PL4g language
     say that a parameter is not shared with anything the caller can still see.  A type that said so -- the parameter is this
     call's alone -- would make such a function pure and is what C's `restrict` gestures at.
 
+[ ] decide whether the built-in operators walk arrays, so that `v + w` is element by element.  `@[listable]` says it of a
+    function and the mechanism would carry over unchanged, but an operator is not a definition and there is nowhere to write the
+    attribute; making them all walk is a decision about the language rather than about one function, and making none of them walk
+    leaves a program writing `added(v, w)` for what every array language spells `v + w`.
+
+[ ] walk an array whose type does not say its length.  Refused today (4482): the answer's shape is the shape walked, and the room
+    for it is taken before the calls are written.  It wants what a dynamic array wants anyway -- storage worked out while the
+    program runs -- and the calls in a loop rather than written out, which is the same piece of work.
+
 [ ] give a program a way to choose how a function answers with more than one value.  The choice is a property of the function
     already and there is one style, so there is nothing yet to choose between; when there is a second, an attribute beside
     `@[cdecl]` is where it goes, and `ReturnStyle` is what it sets.

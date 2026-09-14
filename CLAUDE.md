@@ -25,8 +25,8 @@ runtime), then the implementation and testing happens. Test programs are added t
 
 All decisions about the language design, internals of the compiler, or implementation details of the runtime support are to be
 confirmed with the user first. For this, provide comparisons with other implementations of languages like C, C++, D, Go, Rust,
-Odin, Zig, APL, BQN, UIUA, LISP, Scheme, Python, Haskell. All proposals/possibilities, decisions, comparisons are recorded in the
-specification document.
+Odin, Zig, APL, BQN, UIUA, LISP, Scheme, Python, Haskell, Wolfram. All proposals/possibilities, decisions, comparisons are recorded
+in the specification document.
 
 The different architectures can be tested because the QEmu infrastructure available on the host system allows executing binaries
 compiled for all the target architectures as long as they use the Linux kernel interface.

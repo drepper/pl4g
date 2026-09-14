@@ -503,6 +503,10 @@ class Checker:
         #: arms, and about which the unread-value rule therefore says nothing
         #: while the arms are being checked.
         self._carried: set[int] = set()
+        #: Whether an array stands where one of its elements is wanted, which
+        #: is so while the arguments of a call to a function marked `listable`
+        #: are lowered and nowhere else.
+        self._listing: bool = False
         #: Whether the function being lowered said it may change things that
         #: outlive the call.  Where it did not, the places that would make such
         #: a change report one instead.
@@ -1151,6 +1155,9 @@ class Checker:
                                    else DEFAULT_CCONV),
                             span=node.span, name_span=node.name_span,
                             source_path=path)
+            if func_attrs.listable and not params:
+                self._diags.emit(D.LANG_LISTABLE_TAKES_NOTHING, node.name_span,
+                                 name=node.name)
             self._module.add_function(func, key=self._key(node.name))
             self._top[node.name] = func
             self._owned.append(func)
@@ -1348,6 +1355,7 @@ class Checker:
         abi: str | None = None
         can_ignore = False
         impure = False
+        listable = False
         linkage = self._linkage_of(bound)
         extra: dict[str, int | str | bool] = {}
         for attr in bound:
@@ -1365,6 +1373,8 @@ class Checker:
                 case "inline":
                     inline = (InlineHint.NEVER if attr.as_str("mode") == "never"
                               else InlineHint.ALWAYS)
+                case "listable":
+                    listable = True
                 case "impure":
                     impure = True
                 case "can_ignore":
@@ -1387,7 +1397,7 @@ class Checker:
                     pass
         return FuncAttrs(special=special, priority=priority, inline=inline, abi=abi,
                          can_ignore=can_ignore, impure=impure,
-                         extra=extra), linkage
+                         listable=listable, extra=extra), linkage
 
     # -- types -----------------------------------------------------------------
 
@@ -4999,7 +5009,11 @@ class Checker:
         # therefore known by the time it is lowered, which is what an unsuffixed
         # literal needs, and nothing is worked out before something written to
         # its left.
-        args = self._one_by_one(builder, expr.args, wanted, func.name)
+        outer_listing, self._listing = self._listing, func.attrs.listable
+        try:
+            args = self._one_by_one(builder, expr.args, wanted, func.name)
+        finally:
+            self._listing = outer_listing
         if args is None:
             return UndefConst(ERROR)
         if len(args) != len(wanted):
@@ -5009,6 +5023,9 @@ class Checker:
             return UndefConst(ERROR)
         if any(value.ty is ERROR for value in args):
             return UndefConst(ERROR)
+        if func.attrs.listable \
+                and any(value.ty is not ty for value, ty in zip(args, wanted)):
+            return self._walked(builder, func, args, expr, expected)
         if func.attrs.impure:
             self._an_effect(D.LANG_PURE_CALLS_IMPURE, expr.span, name=func.name)
         answer = builder.call(func, args, func.ty.ret, expr.span)
@@ -5023,6 +5040,129 @@ class Checker:
             self._report_mismatch(expr.span, answer.ty, expected)
             return UndefConst(ERROR)
         return answer
+
+    def _walked(self, builder: IRBuilder, func: Function,
+                args: "list[Value]", expr: ast.Call,
+                expected: "Type | None") -> Value:
+        """Call *func* once for each element of what was handed it as an array.
+
+        An array handed where one of its elements is wanted is walked: the
+        function is called for each, and what the call comes to is an array of
+        the same shape holding the answers.  An argument that is not an array is
+        handed to every one of those calls unchanged, which is what makes
+        `scaled(v, 2u8)` mean what it looks like.
+
+        Arguments walked together are walked in step, so they agree about how
+        many there are along each dimension they are walked along -- and only
+        along those: an array of two rows walked against a plain number says
+        nothing about the number.
+
+        The walk goes one dimension at a time and stops for each argument where
+        what is left is what its parameter takes, so an array of more dimensions
+        than the parameter wants is walked as many times as it takes.  What the
+        answer is an array of is the dimensions that were walked, in order, and
+        its elements are what the function answers with.
+        """
+        shape = self._walking_shape(func, args, expr)
+        if shape is None:
+            return UndefConst(ERROR)
+        answer = self._module.types.array_type(func.ty.ret, shape)
+        place = builder.frame(answer, expr.span)
+        self._each_of(builder, func, args, shape, place, 0, expr.span)
+        made = builder.cast(CastKind.BITCAST, place, answer, expr.span)
+        if not self._accepts(expected, answer):
+            self._report_mismatch(expr.span, answer, expected)
+            return UndefConst(ERROR)
+        return made
+
+    def _walking_shape(self, func: Function, args: "Sequence[Value]",
+                       expr: ast.Call) -> "tuple[int, ...] | None":
+        """How many along each dimension the walk goes, outermost first.
+
+        Worked out before anything is lowered for it, because the room the
+        answer needs is the whole of that shape and is taken once.
+        """
+        found: list[int] = []
+        seen = [value.ty for value in args]
+        while True:
+            walked = [at for at, (ty, wanted) in enumerate(zip(seen, func.ty.params))
+                      if ty is not wanted]
+            if not walked:
+                return tuple(found)
+            along: "int | None" = None
+            for at in walked:
+                ty = seen[at]
+                if not (isinstance(ty, ArrayType) and ty.fixed):
+                    self._diags.emit(D.LANG_LISTABLE_CANNOT_WALK,
+                                     expr.args[at].span if at < len(expr.args)
+                                     else expr.span,
+                                     found=ty.render(),
+                                     wanted=func.ty.params[at].render())
+                    return None
+                if along is None:
+                    along = ty.shape[0]
+                elif along != ty.shape[0]:
+                    self._diags.emit(D.LANG_LISTABLE_SHAPES_DIFFER,
+                                     expr.args[at].span if at < len(expr.args)
+                                     else expr.span,
+                                     found=ty.shape[0], wanted=along)
+                    return None
+                seen[at] = self._one_less(ty)
+            assert along is not None
+            found.append(along)
+
+    def _one_less(self, ty: ArrayType) -> Type:
+        """What is left of an array once its outermost dimension comes off."""
+        if ty.rank == 1:
+            return ty.element
+        return self._module.types.array_type(ty.element, ty.shape[1:])
+
+    def _each_of(self, builder: IRBuilder, func: Function,
+                 args: "Sequence[Value]", shape: "tuple[int, ...]",
+                 place: Value, at: int, span: Span) -> None:
+        """Make the calls one dimension at a time, writing the answers in order.
+
+        *at* is how many answers are already behind this one, which row-major
+        makes the place this one goes: the same arithmetic an array written down
+        uses, and for the same reason.
+        """
+        if not shape:
+            answer = builder.call(func, tuple(args), func.ty.ret, span)
+            builder.store(
+                self._element_place(builder, place, func.ty.ret,
+                                    builder.int_const(U64, at), span),
+                answer, span)
+            return
+        step = 1
+        for along in shape[1:]:
+            step *= along
+        for index in range(shape[0]):
+            self._each_of(builder, func,
+                          [self._one_of(builder, value, wanted, index, span)
+                           for value, wanted in zip(args, func.ty.params)],
+                          shape[1:], place, at + index * step, span)
+
+    def _one_of(self, builder: IRBuilder, value: Value, wanted: Type,
+                index: int, span: Span) -> Value:
+        """The *index*-th of an argument being walked, or the argument itself.
+
+        An argument that is already what its parameter takes is not walked and
+        goes to every call as it stands.
+        """
+        ty = self._value_type_of(value)
+        if ty is wanted or not isinstance(ty, ArrayType):
+            return value
+        start, lengths = self._shape_of(builder, value, ty, span)
+        step = 1
+        for along in ty.shape[1:]:
+            assert along is not None
+            step *= along
+        offset = builder.int_const(U64, index * step)
+        if ty.rank == 1:
+            return builder.load(
+                self._element_place(builder, start, ty.element, offset, span),
+                span)
+        return self._row_at(builder, start, ty, lengths, offset, 1, span)
 
     def _one_by_one(self, builder: IRBuilder, written: "Sequence[ast.Expr]",
                     wanted: "Sequence[Type] | None",
@@ -5272,6 +5412,24 @@ class Checker:
             return value
         return UndefConst(ERROR)
 
+    def _walks_down_to(self, found: Type, wanted: Type) -> "int | None":
+        """How many dimensions come off *found* before it is *wanted*, or nothing.
+
+        Nothing where the two never meet, and nothing where a dimension that
+        would have to come off is one the type does not state: what the answer
+        is an array of is the shape that was walked, and a shape nobody stated
+        is one there is no room to answer with.
+        """
+        depth = 0
+        seen = found
+        while seen is not wanted:
+            if not (isinstance(seen, ArrayType) and seen.fixed):
+                return None
+            seen = seen.element if seen.rank == 1 \
+                else self._module.types.array_type(seen.element, seen.shape[1:])
+            depth += 1
+        return depth
+
     def _aiming_at(self, expected: "Type | None") -> "Type | None":
         """What is wanted of something that cannot itself be a result.
 
@@ -5297,6 +5455,14 @@ class Checker:
         if expected is None or found is ERROR or expected is ERROR:
             return True
         if found is expected:
+            return True
+        if self._listing and isinstance(found, ArrayType):
+            # An argument of a call being walked: an array stands where one of
+            # its elements does, and what the call comes to is an array of the
+            # same shape.  Whether this one can actually be walked down to what
+            # the parameter takes is asked once, of all of them together, by
+            # whatever works out the shape -- which is the only place that can
+            # say what is wrong with a walk rather than with an argument.
             return True
         return isinstance(expected, ResultType) and found is expected.ok
 

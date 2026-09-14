@@ -1,0 +1,13 @@
+※ pl4g-test: compile=error diag=4483
+
+※ What the attribute says is what happens when an array is handed where one
+※ element is wanted.  A function that takes nothing is a function nothing can be
+※ handed to, so the attribute says nothing about it.
+
+@[listable]
+fn nothing() → u8:
+    1u8
+
+@[startup]
+fn main() → u8:
+    nothing()
