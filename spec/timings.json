@@ -39,7 +39,10 @@
     "collection-operators": "all four set operators, over two sets",
     "collection-grows": "forty entries, which is four doublings",
     "collection-arena": "two arenas, and a set out of each",
-    "cdecl-attribute": "two conventions in one program, called both ways"
+    "cdecl-attribute": "two conventions in one program, called both ways",
+    "array-fixed": "an array whose type says how long it is",
+    "array-slice": "a run of elements, passed to a function",
+    "array-global": "an array at the top level, read three times"
   },
   "commits": [
     {
@@ -233,6 +236,10 @@
     {
       "hash": "9958f2d",
       "subject": "⚡ Work out every physical register's stretches in one walk"
+    },
+    {
+      "hash": "bed0605",
+      "subject": "✨ Arrays, fixed and dynamic"
     }
   ],
   "times": {
@@ -4386,6 +4393,180 @@
       "cdecl-attribute": [
         3.2390000000000003,
         90.97126696724445
+      ]
+    },
+    "bed0605": {
+      "exit0": [
+        1.0990000000000002,
+        89.40161002101377
+      ],
+      "global-variable": [
+        1.335,
+        89.31090298574418
+      ],
+      "assign-widths": [
+        1.8339999999999999,
+        92.87497395416722
+      ],
+      "many-values-at-once": [
+        2.146,
+        93.56327197747305
+      ],
+      "unreached-function": [
+        1.6830000000000003,
+        90.82668804330751
+      ],
+      "export-visibility": [
+        1.7530000000000001,
+        92.44658896932378
+      ],
+      "digit-separators": [
+        1.855,
+        92.72093197796494
+      ],
+      "boolean-values": [
+        1.5050000000000001,
+        91.30100201582536
+      ],
+      "bitwise-operators": [
+        1.8429999999999997,
+        90.5889889691025
+      ],
+      "bitwise-precedence": [
+        1.589,
+        92.10602502571419
+      ],
+      "spill-to-the-frame": [
+        7.849,
+        97.86161896772683
+      ],
+      "boolean-in-memory": [
+        1.618,
+        92.64213300775737
+      ],
+      "comparison-operators": [
+        2.785,
+        92.36645797500387
+      ],
+      "logic-operators": [
+        2.919,
+        92.25167502881959
+      ],
+      "logic-short-circuit": [
+        2.826,
+        93.00626796903089
+      ],
+      "saturating-precedence": [
+        1.827,
+        90.72143497178331
+      ],
+      "arithmetic-operators": [
+        2.05,
+        92.67275495221838
+      ],
+      "semicolon-separates-statements": [
+        1.9719999999999998,
+        90.39980999659747
+      ],
+      "call-nested": [
+        2.821,
+        95.22438101703301
+      ],
+      "arithmetic-division": [
+        2.668,
+        90.48916504252702
+      ],
+      "shift-operators": [
+        2.439,
+        90.59610601980239
+      ],
+      "float-arithmetic": [
+        6.994999999999999,
+        95.58406303403899
+      ],
+      "float-approximate": [
+        11.187000000000001,
+        98.03187201032415
+      ],
+      "result-type": [
+        3.936,
+        88.44319201307371
+      ],
+      "type-definitions": [
+        1.4200000000000002,
+        88.32917001564056
+      ],
+      "result-as-an-argument": [
+        9.238999999999999,
+        99.52908800914884
+      ],
+      "match-a-result": [
+        4.571,
+        92.1743240323849
+      ],
+      "enum-values": [
+        3.9909999999999997,
+        92.71108300890774
+      ],
+      "enum-flag": [
+        4.034,
+        89.93900596396998
+      ],
+      "if-statement": [
+        3.4720000000000004,
+        94.49390001827851
+      ],
+      "tuple-values": [
+        3.4979999999999998,
+        93.21108704898506
+      ],
+      "while-loop": [
+        2.457,
+        91.78001002874225
+      ],
+      "while-loop-nested": [
+        3.0589999999999997,
+        93.82278803968802
+      ],
+      "foreach-over-a-range": [
+        2.1999999999999997,
+        91.23046201420948
+      ],
+      "foreach-range-step": [
+        3.654,
+        91.60572796827182
+      ],
+      "collection-syntax": [
+        16.52,
+        108.67243696702644
+      ],
+      "collection-operators": [
+        22.374,
+        113.64107404369861
+      ],
+      "collection-grows": [
+        14.833,
+        108.22060605278239
+      ],
+      "collection-arena": [
+        17.454,
+        106.34069301886484
+      ],
+      "cdecl-attribute": [
+        3.343,
+        94.79678596835583
+      ],
+      "array-fixed": [
+        4.636,
+        93.83172198431566
+      ],
+      "array-slice": [
+        5.4350000000000005,
+        94.12529499968514
+      ],
+      "array-global": [
+        2.773,
+        91.89964999677613
       ]
     }
   }

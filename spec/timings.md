@@ -72,6 +72,7 @@ the parser does, and they are the floor everything else is measured against.
 | `c374354` | 1.14 | 1.94 | 1.87 | 1.52 |
 | `9e55aab` | 1.17 | 2.34 | 2.06 | 1.52 |
 | `9958f2d` | 1.12 | 2.03 | 1.86 | 1.51 |
+| `bed0605` | 1.10 | 1.97 | 1.85 | 1.51 |
 
 ### Variables and memory
 
@@ -128,6 +129,7 @@ backend do.
 | `c374354` | 1.34 | 1.88 | 1.59 |
 | `9e55aab` | 1.40 | 2.01 | 1.67 |
 | `9958f2d` | 1.39 | 1.95 | 1.61 |
+| `bed0605` | 1.33 | 1.83 | 1.62 |
 
 ### Register pressure
 
@@ -184,6 +186,7 @@ and they are the only ones that reach the frame.
 | `c374354` | 2.17 | 7.56 |
 | `9e55aab` | 2.16 | 7.95 |
 | `9958f2d` | 2.17 | 7.81 |
+| `bed0605` | 2.15 | 7.85 |
 
 ### What is left out
 
@@ -240,6 +243,7 @@ decision log does.
 | `c374354` | 1.83 | 1.74 |
 | `9e55aab` | 1.76 | 1.88 |
 | `9958f2d` | 1.70 | 1.78 |
+| `bed0605` | 1.68 | 1.75 |
 
 ### Expressions
 
@@ -296,61 +300,63 @@ optimizer does.
 | `c374354` | 1.85 | 1.61 | 2.63 | 2.68 | 2.58 | 1.80 | 2.08 | 2.73 |  | 2.48 | 2.40 | 6.71 | 10.31 | 4.11 | 11.06 | 4.59 | 3.53 | 3.71 |
 | `9e55aab` | 1.86 | 1.60 | 2.81 | 2.92 | 2.76 | 1.92 | 2.07 | 2.81 | 3.67 | 2.78 | 2.76 | 8.44 | 13.08 | 4.51 | 11.53 | 5.01 | 3.65 | 3.78 |
 | `9958f2d` | 1.81 | 1.58 | 2.62 | 2.76 | 2.57 | 1.92 | 2.04 | 2.91 | 3.24 | 2.87 | 2.68 | 7.11 | 11.05 | 3.98 | 9.42 | 4.56 | 3.36 | 3.32 |
+| `bed0605` | 1.84 | 1.59 | 2.79 | 2.92 | 2.83 | 1.83 | 2.05 | 2.82 | 3.34 | 2.67 | 2.44 | 6.99 | 11.19 | 3.94 | 9.24 | 4.57 | 3.47 | 3.50 |
 
 ### Types
 
 Definitions the program writes.  These move when the parser, the name resolution or the layout does.
 
-| commit | type-definitions | enum-values | enum-flag |
-|---|---|---|---|
-| `eee64a3` |  |  |  |
-| `af657ad` |  |  |  |
-| `2f564cb` |  |  |  |
-| `37dbb28` |  |  |  |
-| `1c4ae78` |  |  |  |
-| `f391839` |  |  |  |
-| `04c20c9` |  |  |  |
-| `3020cf6` |  |  |  |
-| `9bcaf84` |  |  |  |
-| `40c35bb` |  |  |  |
-| `9437d8a` |  |  |  |
-| `d0c8cf5` |  |  |  |
-| `73ce857` |  |  |  |
-| `ed1c028` |  |  |  |
-| `1269bd5` |  |  |  |
-| `db0b436` |  |  |  |
-| `25bb4e0` |  |  |  |
-| `baf1f3c` |  |  |  |
-| `74ac227` |  |  |  |
-| `c0f29f2` |  |  |  |
-| `5c3aec4` |  |  |  |
-| `f7ba2fc` |  |  |  |
-| `3e9eb27` |  |  |  |
-| `0990c74` |  |  |  |
-| `05d8da1` |  |  |  |
-| `03887ff` |  |  |  |
-| `87c066b` |  |  |  |
-| `ca395a6` |  |  |  |
-| `230b8a7` |  |  |  |
-| `5706c5f` | 1.42 |  |  |
-| `41f13c3` | 1.53 |  |  |
-| `e7fb804` | 1.54 |  |  |
-| `d0caa00` | 1.60 | 3.76 |  |
-| `df0bfc5` | 1.38 | 3.72 | 3.75 |
-| `af86f5d` | 1.36 | 3.70 | 3.77 |
-| `7de9bb1` | 1.39 | 3.84 | 3.87 |
-| `08bdd97` | 1.38 | 3.88 | 4.03 |
-| `3ef3db4` | 1.41 | 3.85 | 3.92 |
-| `90846b5` | 1.40 | 3.91 | 3.94 |
-| `e927edf` | 1.54 | 3.80 | 3.89 |
-| `53908ab` | 1.50 | 3.81 | 3.87 |
-| `9ffbf29` | 1.29 | 3.49 | 3.42 |
-| `603f175` | 1.29 | 3.75 | 3.94 |
-| `f067535` | 1.39 | 4.05 | 3.99 |
-| `bbf4758` | 1.43 | 4.10 | 4.06 |
-| `c374354` | 1.43 | 4.09 | 4.18 |
-| `9e55aab` | 1.57 | 4.33 | 4.32 |
-| `9958f2d` | 1.46 | 4.07 | 4.05 |
+| commit | type-definitions | enum-values | enum-flag | array-fixed | array-slice | array-global |
+|---|---|---|---|---|---|---|
+| `eee64a3` |  |  |  |  |  |  |
+| `af657ad` |  |  |  |  |  |  |
+| `2f564cb` |  |  |  |  |  |  |
+| `37dbb28` |  |  |  |  |  |  |
+| `1c4ae78` |  |  |  |  |  |  |
+| `f391839` |  |  |  |  |  |  |
+| `04c20c9` |  |  |  |  |  |  |
+| `3020cf6` |  |  |  |  |  |  |
+| `9bcaf84` |  |  |  |  |  |  |
+| `40c35bb` |  |  |  |  |  |  |
+| `9437d8a` |  |  |  |  |  |  |
+| `d0c8cf5` |  |  |  |  |  |  |
+| `73ce857` |  |  |  |  |  |  |
+| `ed1c028` |  |  |  |  |  |  |
+| `1269bd5` |  |  |  |  |  |  |
+| `db0b436` |  |  |  |  |  |  |
+| `25bb4e0` |  |  |  |  |  |  |
+| `baf1f3c` |  |  |  |  |  |  |
+| `74ac227` |  |  |  |  |  |  |
+| `c0f29f2` |  |  |  |  |  |  |
+| `5c3aec4` |  |  |  |  |  |  |
+| `f7ba2fc` |  |  |  |  |  |  |
+| `3e9eb27` |  |  |  |  |  |  |
+| `0990c74` |  |  |  |  |  |  |
+| `05d8da1` |  |  |  |  |  |  |
+| `03887ff` |  |  |  |  |  |  |
+| `87c066b` |  |  |  |  |  |  |
+| `ca395a6` |  |  |  |  |  |  |
+| `230b8a7` |  |  |  |  |  |  |
+| `5706c5f` | 1.42 |  |  |  |  |  |
+| `41f13c3` | 1.53 |  |  |  |  |  |
+| `e7fb804` | 1.54 |  |  |  |  |  |
+| `d0caa00` | 1.60 | 3.76 |  |  |  |  |
+| `df0bfc5` | 1.38 | 3.72 | 3.75 |  |  |  |
+| `af86f5d` | 1.36 | 3.70 | 3.77 |  |  |  |
+| `7de9bb1` | 1.39 | 3.84 | 3.87 |  |  |  |
+| `08bdd97` | 1.38 | 3.88 | 4.03 |  |  |  |
+| `3ef3db4` | 1.41 | 3.85 | 3.92 |  |  |  |
+| `90846b5` | 1.40 | 3.91 | 3.94 |  |  |  |
+| `e927edf` | 1.54 | 3.80 | 3.89 |  |  |  |
+| `53908ab` | 1.50 | 3.81 | 3.87 |  |  |  |
+| `9ffbf29` | 1.29 | 3.49 | 3.42 |  |  |  |
+| `603f175` | 1.29 | 3.75 | 3.94 |  |  |  |
+| `f067535` | 1.39 | 4.05 | 3.99 |  |  |  |
+| `bbf4758` | 1.43 | 4.10 | 4.06 |  |  |  |
+| `c374354` | 1.43 | 4.09 | 4.18 |  |  |  |
+| `9e55aab` | 1.57 | 4.33 | 4.32 |  |  |  |
+| `9958f2d` | 1.46 | 4.07 | 4.05 |  |  |  |
+| `bed0605` | 1.42 | 3.99 | 4.03 | 4.64 | 5.44 | 2.77 |
 
 ### Loops
 
@@ -407,6 +413,7 @@ These move when the register allocator or the branch lowering does.
 | `c374354` | 2.53 | 3.50 | 2.32 | 3.75 |
 | `9e55aab` | 2.43 | 3.13 | 2.44 | 3.82 |
 | `9958f2d` | 2.28 | 2.89 | 2.20 | 3.59 |
+| `bed0605` | 2.46 | 3.06 | 2.20 | 3.65 |
 
 ### Collections
 
@@ -463,6 +470,7 @@ changes, and they are the only samples that carry code the compiler wrote for it
 | `c374354` | 15.99 | 21.05 | 14.84 | 17.11 |
 | `9e55aab` | 21.37 | 31.13 | 18.67 | 22.87 |
 | `9958f2d` | 16.38 | 22.10 | 14.52 | 17.13 |
+| `bed0605` | 16.52 | 22.37 | 14.83 | 17.45 |
 
 Process
 -------
@@ -523,6 +531,7 @@ worth showing here, and every figure is in the JSON beside this file.
 | `c374354` | 88 | 108 |
 | `9e55aab` | 88 | 122 |
 | `9958f2d` | 87 | 108 |
+| `bed0605` | 88 | 114 |
 
 What each row is:
 
@@ -574,6 +583,7 @@ What each row is:
 - `c374354` -- ✨ Sets and dictionaries, and the arena they live in
 - `9e55aab` -- ✨ A calling convention per function, and `@[cdecl]` for the system's
 - `9958f2d` -- ⚡ Work out every physical register's stretches in one walk
+- `bed0605` -- ✨ Arrays, fixed and dynamic
 
 What each program exercises:
 
@@ -609,6 +619,9 @@ What each program exercises:
 - `type-definitions` -- eight definitions in all three notations
 - `enum-values` -- two enumerations, and three matches over them
 - `enum-flag` -- a flag enumeration, its operators and three matches
+- `array-fixed` -- an array whose type says how long it is
+- `array-slice` -- a run of elements, passed to a function
+- `array-global` -- an array at the top level, read three times
 - `while-loop` -- one loop, carrying two values
 - `while-loop-nested` -- a loop inside a loop, in both notations
 - `foreach-over-a-range` -- a loop over a range, counting up by one
