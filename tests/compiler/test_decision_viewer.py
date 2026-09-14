@@ -181,3 +181,62 @@ def test_colour_can_be_refused(compiled) -> None:  # noqa: ANN001
     by something else."""
     _, log = compiled
     assert "\033[" not in view(log, "--color=never").stdout
+
+
+def _marked(out: str, subject: str) -> "tuple[str, str]":
+    """The mark's line and the source line under it, for one subject."""
+    lines = out.split("\n")
+    for index, line in enumerate(lines):
+        if "\N{BLACK DOWN-POINTING TRIANGLE}" in line and subject in line:
+            return line, lines[index + 1]
+    raise AssertionError("".join(("no mark for ", subject, " in\n", out)))
+
+
+def test_the_mark_stands_over_the_column_the_record_gives(tmp_path: Path) -> None:
+    """A line holds several names, and the record says which one this is about.
+
+    Without the indentation the mark points at the start of the line, which for
+    a definition at the top level is the keyword and for a statement is
+    whichever indentation it happens to have.
+    """
+    source = tmp_path / "show.pl4g"
+    source.write_text("".join((
+        "fn worked_out() \N{RIGHTWARDS ARROW} u8:\n    1u8\n\n",
+        "@[startup]\nfn main() \N{RIGHTWARDS ARROW} u8:\n",
+        "    _ \N{LEFTWARDS ARROW} worked_out()\n    0u8\n")), encoding="utf-8")
+    log = tmp_path / "decisions.json"
+    proc = run_compiler(["-o", str(tmp_path / "out"),
+                         "".join(("--decision-log=", str(log))), str(source)])
+    assert proc.returncode == 0, proc.stderr
+    shown = view(log)
+    assert shown.returncode == 0, shown.stderr
+    mark, below = _marked(shown.stdout, "drop-call")
+    at = mark.index("\N{BLACK DOWN-POINTING TRIANGLE}")
+    assert below[at:at + len("worked_out")] == "worked_out", \
+        "".join(("the mark is over ", repr(below[at:at + 10]), " in\n", shown.stdout))
+
+
+def test_the_mark_counts_a_glyph_as_the_terminal_draws_it(tmp_path: Path) -> None:
+    """Standing in for the line character by character is what keeps it lined up.
+
+    A tuple's brackets are drawn two columns wide and a tab is drawn to the next
+    stop, neither of which this program has to know the width of: what it puts
+    before the mark is built out of the line itself.
+    """
+    source = tmp_path / "show.pl4g"
+    source.write_text("".join((
+        "fn worked_out() \N{RIGHTWARDS ARROW} u8:\n    1u8\n\n",
+        "@[startup]\nfn main() \N{RIGHTWARDS ARROW} u8:\n",
+        "    let t: \N{LEFT ANGLE BRACKET}u8, u8\N{RIGHT ANGLE BRACKET} = ",
+        "\N{LEFT ANGLE BRACKET}1u8, 2u8\N{RIGHT ANGLE BRACKET}\n",
+        "    _ \N{LEFTWARDS ARROW} worked_out()\n",
+        "    t\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}0",
+        "\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}\n")), encoding="utf-8")
+    log = tmp_path / "decisions.json"
+    proc = run_compiler(["-o", str(tmp_path / "out"),
+                         "".join(("--decision-log=", str(log))), str(source)])
+    assert proc.returncode == 0, proc.stderr
+    shown = view(log)
+    mark, below = _marked(shown.stdout, "drop-call")
+    at = mark.index("\N{BLACK DOWN-POINTING TRIANGLE}")
+    assert below[at:at + len("worked_out")] == "worked_out", shown.stdout

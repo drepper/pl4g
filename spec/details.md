@@ -438,6 +438,12 @@ than below, so that the line is read already knowing what became of it instead o
 and line numbers is not something anyone reads; the question a decision answers is "I wrote that, where did it go?", and it is
 answered by looking at the place it was written.  A pattern on the command line chooses which source files to show.
 
+**The mark stands over the column the record gives**, which is the name the decision is about -- worth finding in a line that
+holds several names, and in `_ ← f()` there are three things it could otherwise have been taken to mean.  What it puts before the
+mark is built out of the line itself, one blank per character and a tab for a tab, so a glyph the terminal draws two columns wide
+is stood in for twice without this program having to agree with the terminal about which glyphs those are.  The language's
+brackets for a tuple are two such.
+
 Where the output is a terminal the source is highlighted, and where it is a pipe it is not, unless `--color=always` says otherwise.
 The highlighting is done with the tree-sitter grammar in `tree-sitter-pl4g` and its own highlight queries, so what this colours and
 what an editor colours are the same thing and cannot drift apart.  Everything the highlighting needs may be absent on a machine

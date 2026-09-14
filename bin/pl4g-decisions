@@ -18,6 +18,7 @@ import fnmatch
 import json
 import os
 import sys
+import unicodedata
 import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -61,6 +62,7 @@ class Record:
     reason: str
     file: str | None
     line: int | None
+    column: int | None = None
 
 
 @dataclass(slots=True)
@@ -89,7 +91,7 @@ def read_log(path: Path) -> Log:
         where = entry.get("where") or {}
         record = Record(kind=entry["kind"], subject=entry["subject"],
                         reason=entry["reason"], file=where.get("file"),
-                        line=where.get("line"))
+                        line=where.get("line"), column=where.get("column"))
         if record.file is None or record.line is None:
             log.loose.append(record)
         else:
@@ -242,24 +244,47 @@ def show_file(name: str, path: Path, records: list[Record], spans, colour: bool,
         # already knowing what became of it.  Reading it the other way round
         # means reading the line, forming a view of it, and then being corrected.
         for record in at_line.get(number, ()):
-            print(_decision_line(record, width, colour), file=stream)
+            print(_decision_line(record, width, colour, line), file=stream)
         gutter = str(number).rjust(width)
         print("".join((GUTTER if colour else "", gutter, " │ ",
                        RESET if colour else "", line)), file=stream)
     print(file=stream)
 
 
-def _decision_line(record: Record, width: int, colour: bool) -> str:
+def _decision_line(record: Record, width: int, colour: bool, line: str) -> str:
     """One decision, written above the line it is about.
 
     The mark points down at the line, since that is the way the reader is about
-    to go.
+    to go, and it stands over the column the record gives -- which is the name
+    the decision is about, and is worth finding in a line that may hold several
+    of them.
     """
-    lead = "".join((" " * width, " │ "))
+    lead = "".join((" " * width, " │ ", _up_to(line, record.column)))
     body = "".join(("▼ ", record.kind, ": ", record.subject, " — ", record.reason))
     if not colour:
         return "".join((lead, body))
     return "".join((GUTTER, lead, RESET, DECISION, body, RESET))
+
+
+def _up_to(line: str, column: int | None) -> str:
+    """Blank standing in for what the line holds before *column*.
+
+    Built out of the line itself rather than counted, so that a tab indents the
+    mark the way it indents the source and a character the terminal draws twice
+    as wide is stood in for twice.  Counting would need this program to agree
+    with the terminal about both, and it does not have to.
+    """
+    if column is None or column <= 1:
+        return ""
+    return "".join("\t" if ch == "\t" else " " * _cells(ch)
+                   for ch in line[:column - 1])
+
+
+def _cells(ch: str) -> int:
+    """How many columns of a terminal one character takes."""
+    if unicodedata.combining(ch):
+        return 0
+    return 2 if unicodedata.east_asian_width(ch) in ("W", "F") else 1
 
 
 def main() -> int:

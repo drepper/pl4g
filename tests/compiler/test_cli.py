@@ -321,3 +321,32 @@ def test_a_call_that_is_not_made_goes_at_every_level(tmp_path: Path) -> None:
     decisions = json.loads(log.read_text(encoding="utf-8"))["decisions"]
     assert [d["subject"] for d in decisions if d["kind"] == "drop-call"] \
         == ["worked_out"], decisions
+
+
+MANY_GLYPHS = "".join((
+    "\N{REFERENCE MARK} \N{RIGHTWARDS ARROW} \N{LEFTWARDS ARROW} ",
+    "\N{SECTION SIGN} \N{HORIZONTAL ELLIPSIS} glyphs before anything\n",
+    "fn worked_out() \N{RIGHTWARDS ARROW} u8:\n    1u8\n\n",
+    "@[startup]\nfn main() \N{RIGHTWARDS ARROW} u8:\n",
+    "    \N{REFERENCE MARK} \N{RIGHTWARDS ARROW} and here too\n",
+    "    _ \N{LEFTWARDS ARROW} worked_out()\n    0u8\n"))
+
+
+def test_a_column_counts_characters_and_not_bytes(tmp_path: Path) -> None:
+    """Every glyph this language is written with is more than one byte.
+
+    A column counted in bytes would be right only for a line holding none of
+    them, which in this language is a line holding nothing much.
+    """
+    source = tmp_path / "t.pl4g"
+    source.write_text(MANY_GLYPHS, encoding="utf-8")
+    log = tmp_path / "decisions.json"
+    proc = run_compiler(["-o", str(tmp_path / "out"),
+                         "".join(("--decision-log=", str(log))), str(source)])
+    assert proc.returncode == ExitCode.SUCCESS, proc.stderr
+    decisions = json.loads(log.read_text(encoding="utf-8"))["decisions"]
+    lines = MANY_GLYPHS.split("\n")
+    for entry in decisions:
+        where = entry["where"]
+        at = lines[where["line"] - 1][where["column"] - 1:]
+        assert at.startswith("worked_out"), (entry, at)
