@@ -66,6 +66,7 @@ the parser does, and they are the floor everything else is measured against.
 | `e927edf` | 1.22 | 2.05 | 1.91 | 1.58 |
 | `53908ab` | 1.18 | 2.03 | 1.84 | 1.56 |
 | `9ffbf29` | 1.19 | 1.73 | 1.72 | 1.34 |
+| `603f175` | 1.03 | 1.77 | 1.62 | 1.40 |
 
 ### Variables and memory
 
@@ -116,6 +117,7 @@ backend do.
 | `e927edf` | 1.35 | 1.93 | 1.73 |
 | `53908ab` | 1.38 | 1.89 | 1.64 |
 | `9ffbf29` | 1.18 | 1.63 | 1.67 |
+| `603f175` | 1.17 | 1.66 | 1.44 |
 
 ### Register pressure
 
@@ -166,6 +168,7 @@ and they are the only ones that reach the frame.
 | `e927edf` | 2.29 | 7.44 |
 | `53908ab` | 2.30 | 7.47 |
 | `9ffbf29` | 1.86 | 6.96 |
+| `603f175` | 1.90 | 6.77 |
 
 ### What is left out
 
@@ -216,6 +219,7 @@ decision log does.
 | `e927edf` | 1.71 | 1.79 |
 | `53908ab` | 1.67 | 1.77 |
 | `9ffbf29` | 1.66 | 1.53 |
+| `603f175` | 1.49 | 1.55 |
 
 ### Expressions
 
@@ -266,6 +270,7 @@ optimizer does.
 | `e927edf` | 1.88 | 1.60 | 2.63 | 2.80 | 2.51 | 1.86 | 2.26 | 2.73 | 2.46 | 2.42 | 6.53 | 10.08 | 3.91 | 10.23 | 4.32 | 3.24 | 3.44 |
 | `53908ab` | 1.85 | 1.57 | 2.60 | 2.66 | 2.48 | 1.80 | 2.25 | 2.72 | 2.44 | 2.42 | 6.42 | 9.88 | 3.81 | 10.11 | 4.30 | 3.22 | 3.47 |
 | `9ffbf29` | 1.70 | 1.35 | 2.27 | 2.37 | 2.17 | 1.79 | 1.97 | 2.52 | 2.39 | 2.11 | 5.83 | 8.98 | 3.56 | 9.47 | 3.80 | 2.87 | 3.38 |
+| `603f175` | 1.79 | 1.75 | 2.36 | 2.39 | 2.28 | 1.72 | 2.22 | 2.45 | 2.21 | 2.18 | 6.08 | 9.33 | 3.61 | 10.21 | 4.08 | 3.03 | 3.17 |
 
 ### Types
 
@@ -315,6 +320,7 @@ Definitions the program writes.  These move when the parser, the name resolution
 | `e927edf` | 1.54 | 3.80 | 3.89 |
 | `53908ab` | 1.50 | 3.81 | 3.87 |
 | `9ffbf29` | 1.29 | 3.49 | 3.42 |
+| `603f175` | 1.29 | 3.75 | 3.94 |
 
 Process
 -------
@@ -369,6 +375,7 @@ worth showing here, and every figure is in the JSON beside this file.
 | `e927edf` | 82 | 94 |
 | `53908ab` | 82 | 94 |
 | `9ffbf29` | 76 | 90 |
+| `603f175` | 77 | 98 |
 
 What each row is:
 
@@ -414,6 +421,7 @@ What each row is:
 - `e927edf` -- 📝 Time the tuples too
 - `53908ab` -- ✨ Reach a place through an address held in a register
 - `9ffbf29` -- ✨ An allocator: a bump pointer over mapped chunks
+- `603f175` -- ✨ A branch backwards: liveness over the graph, and a parallel copy
 
 What each program exercises:
 

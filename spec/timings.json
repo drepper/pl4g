@@ -200,6 +200,10 @@
     {
       "hash": "9ffbf29",
       "subject": "✨ An allocator: a bump pointer over mapped chunks"
+    },
+    {
+      "hash": "603f175",
+      "subject": "✨ A branch backwards: liveness over the graph, and a parallel copy"
     }
   ],
   "times": {
@@ -3469,6 +3473,132 @@
       "tuple-values": [
         3.3770000000000002,
         84.72861896734685
+      ]
+    },
+    "603f175": {
+      "exit0": [
+        1.03,
+        78.78030696883798
+      ],
+      "global-variable": [
+        1.1670000000000003,
+        77.80793396523222
+      ],
+      "assign-widths": [
+        1.664,
+        82.35336397774518
+      ],
+      "many-values-at-once": [
+        1.9010000000000002,
+        80.18424897454679
+      ],
+      "unreached-function": [
+        1.4929999999999999,
+        81.35197596857324
+      ],
+      "export-visibility": [
+        1.546,
+        78.05802999064326
+      ],
+      "digit-separators": [
+        1.625,
+        80.11352299945429
+      ],
+      "boolean-values": [
+        1.3969999999999998,
+        81.1984859756194
+      ],
+      "bitwise-operators": [
+        1.787,
+        87.83029502956197
+      ],
+      "bitwise-precedence": [
+        1.748,
+        86.79673000006005
+      ],
+      "spill-to-the-frame": [
+        6.77,
+        82.36408000811934
+      ],
+      "boolean-in-memory": [
+        1.441,
+        77.93049904284999
+      ],
+      "comparison-operators": [
+        2.358,
+        81.97154896333814
+      ],
+      "logic-operators": [
+        2.388,
+        77.67161895753816
+      ],
+      "logic-short-circuit": [
+        2.2800000000000002,
+        80.55494801374152
+      ],
+      "saturating-precedence": [
+        1.721,
+        83.6888340418227
+      ],
+      "arithmetic-operators": [
+        2.2220000000000004,
+        84.79821198852733
+      ],
+      "semicolon-separates-statements": [
+        1.775,
+        77.33489200472832
+      ],
+      "call-nested": [
+        2.4530000000000003,
+        80.9212289750576
+      ],
+      "arithmetic-division": [
+        2.2119999999999997,
+        78.52408202597871
+      ],
+      "shift-operators": [
+        2.177,
+        78.7221789942123
+      ],
+      "float-arithmetic": [
+        6.083,
+        82.5334140099585
+      ],
+      "float-approximate": [
+        9.331,
+        86.67126100044698
+      ],
+      "result-type": [
+        3.61,
+        83.07002298533916
+      ],
+      "type-definitions": [
+        1.2919999999999998,
+        77.66113302204758
+      ],
+      "result-as-an-argument": [
+        10.214,
+        97.80460398178548
+      ],
+      "match-a-result": [
+        4.08,
+        79.79185896692798
+      ],
+      "enum-values": [
+        3.752,
+        85.17852501245216
+      ],
+      "enum-flag": [
+        3.943,
+        88.70609302539378
+      ],
+      "if-statement": [
+        3.027,
+        84.12531000794843
+      ],
+      "tuple-values": [
+        3.167,
+        78.32069596042857
       ]
     }
   }
