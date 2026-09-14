@@ -26,6 +26,7 @@ import textwrap
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Final
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -215,21 +216,42 @@ def _cell(times: dict[str, dict[str, list[float]]], head: str, name: str,
     return format(found[column], "".join((".", str(digits), "f")))
 
 
+#: The widest a table is allowed to be, counting the column that names the
+#: commit.  A group that has gathered more samples than that is written as
+#: several tables rather than as one that has to be scrolled sideways to read:
+#: a column nobody can see beside the commit it belongs to is a column nobody
+#: can read.  Samples are never removed, so every group reaches this eventually.
+WIDEST: Final[int] = 15
+
+
 def _group_table(group: Group, heads: list[str],
                  times: dict[str, dict[str, list[float]]]) -> list[str]:
-    """One group's table: a commit per row, a program per column."""
+    """One group's table: a commit per row, a program per column.
+
+    Several tables where the group has more programs than one table may hold.
+    They are numbered where there is more than one, so that a reader who has
+    found a figure can say which table it was in.
+    """
     names = [n for n in group.samples if any(n in times.get(h, {}) for h in heads)]
     if not names:
         return []
-    lines = ["".join(("### ", group.title)), "",
-             *textwrap.wrap(group.note, width=110), "",
-             "".join(("| commit | ", " | ".join(names), " |")),
-             "".join(("|---|", "---|" * len(names)))]
-    for head in heads:
-        row = ["".join(("`", head, "`"))]
-        row.extend(_cell(times, head, name, 0, 2) for name in names)
-        lines.append("".join(("| ", " | ".join(row), " |")))
-    lines.append("")
+    parts = [names[at:at + WIDEST - 1] for at in range(0, len(names), WIDEST - 1)]
+    lines: list[str] = []
+    for number, part in enumerate(parts, start=1):
+        title = (group.title if len(parts) == 1
+                 else "".join((group.title, " (", str(number), " of ",
+                               str(len(parts)), ")")))
+        lines.extend(("".join(("### ", title)), ""))
+        if number == 1:
+            lines.extend((*textwrap.wrap(group.note, width=110), ""))
+        lines.extend((
+            "".join(("| commit | ", " | ".join(part), " |")),
+            "".join(("|---|", "---|" * len(part)))))
+        for head in heads:
+            row = ["".join(("`", head, "`"))]
+            row.extend(_cell(times, head, name, 0, 2) for name in part)
+            lines.append("".join(("| ", " | ".join(row), " |")))
+        lines.append("")
     return lines
 
 
@@ -269,9 +291,15 @@ def render(data: dict[str, object]) -> str:
         "",
         "How long the compiler takes on each sample program, in milliseconds, the",
         "best of five runs.  One row per commit and one column per program: the",
-        "commits go on for ever and the programs do not, so the tables grow down",
-        "rather than across, and the programs are split into groups by what would",
-        "move them.  A blank means the sample did not exist yet at that commit.",
+        "commits go on for ever, so the tables grow down rather than across, and",
+        "the programs are split into groups by what would move them.  A blank",
+        "means the sample did not exist yet at that commit.",
+        "",
+        "A table is at most fifteen columns wide, counting the one that names the",
+        "commit; a group with more programs than that is written as several,",
+        "numbered.  Samples are never removed, so every group reaches that width",
+        "in the end -- and a column nobody can see beside the commit it belongs to",
+        "is a column nobody can read.",
         "",
         "Measured on one machine, so the numbers are worth comparing with each",
         "other and with nobody else's.  A hash ending in `+` was measured with",
