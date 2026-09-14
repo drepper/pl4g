@@ -117,7 +117,7 @@ def test_a_machine_with_nothing_does_an_element_at_a_time() -> None:
 def test_a_run_that_fits_is_left_alone() -> None:
     """A machine that can add a whole register of them adds it in one."""
     module = read_module(RUNS)
-    settle(module, Vectors(bits=128, widest=64, binary=frozenset((BinOp.ADD,))),
+    settle(module, Vectors(bits=128, binary={BinOp.ADD: 64}),
            LAYOUT)
     verify(module)
     found = _instructions(module)
@@ -129,8 +129,7 @@ def test_a_run_that_fits_is_left_alone() -> None:
 def test_an_operation_it_does_not_have_comes_apart() -> None:
     """Registers it has and this operation it has not: an element at a time."""
     module = read_module(RUNS)
-    settle(module, Vectors(bits=128, widest=64, binary=frozenset((BinOp.SUB,))),
-           LAYOUT)
+    settle(module, Vectors(bits=128, binary={BinOp.SUB: 64}), LAYOUT)
     verify(module)
     assert len(_additions(_instructions(module))) == 4
 
@@ -141,7 +140,7 @@ LONG = RUNS.replace("\N{MULTIPLICATION SIGN}4", "\N{MULTIPLICATION SIGN}19")
 def test_a_longer_run_goes_in_whole_registers_and_then_one_at_a_time() -> None:
     """Nineteen bytes in registers of sixteen: one register and three left over."""
     module = read_module(LONG)
-    settle(module, Vectors(bits=128, widest=64, binary=frozenset((BinOp.ADD,))),
+    settle(module, Vectors(bits=128, binary={BinOp.ADD: 64}),
            LAYOUT)
     verify(module)
     found = _instructions(module)
@@ -154,13 +153,14 @@ def test_a_longer_run_goes_in_whole_registers_and_then_one_at_a_time() -> None:
 
 def test_a_wider_element_holds_fewer_lanes() -> None:
     """Four bytes to a lane is four lanes to a sixteen-byte register."""
-    able = Vectors(bits=128, widest=64, binary=frozenset((BinOp.ADD,)))
-    assert able.lanes_at_once(U8, LAYOUT) == 16
-    assert able.lanes_at_once(U32, LAYOUT) == 4
-    assert able.lanes_at_once(U64, LAYOUT) == 2
-    # A lane wider than the arithmetic reaches is no lane at all.
-    narrow = Vectors(bits=128, widest=32, binary=frozenset((BinOp.ADD,)))
-    assert narrow.lanes_at_once(U64, LAYOUT) == 0
-    assert narrow.lanes_at_once(U32, LAYOUT) == 4
-    # And a machine with no such registers holds none of anything.
-    assert Vectors().lanes_at_once(U8, LAYOUT) == 0
+    able = Vectors(bits=128, binary={BinOp.ADD: 64})
+    assert able.lanes_at_once(U8, LAYOUT, 64) == 16
+    assert able.lanes_at_once(U32, LAYOUT, 64) == 4
+    assert able.lanes_at_once(U64, LAYOUT, 64) == 2
+    # A lane wider than the operation reaches is no lane at all.
+    assert able.lanes_at_once(U64, LAYOUT, 32) == 0
+    assert able.lanes_at_once(U32, LAYOUT, 32) == 4
+    # An operation it does not have at all, and a machine with no such
+    # registers: neither holds anything.
+    assert able.lanes_at_once(U8, LAYOUT, 0) == 0
+    assert Vectors().lanes_at_once(U8, LAYOUT, 64) == 0

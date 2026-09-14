@@ -1,0 +1,15 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=64 diag=none
+
+※ One element of sixteen goes past, and the program stops.  The element chosen
+※ is not the first: what a machine that adds the whole run at once has to do is
+※ notice that *some* lane went past, and one that only looked at the first would
+※ pass a test where the first is the one that does.  The fifteenth also lies
+※ beyond a run of four, which is the other thing that could go wrong -- a lane
+※ the run does not cover being asked about.
+
+let v: u8⟦16⟧ = ⟦1u8, 2u8, 3u8, 4u8, 5u8, 6u8, 7u8, 8u8, 9u8, 10u8, 11u8, 12u8, 13u8, 14u8, 250u8, 16u8⟧
+
+@[startup]
+fn main() → u8:
+    let up: u8⟦16⟧ = v + 10u8
+    up⟦0⟧

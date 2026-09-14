@@ -35,7 +35,7 @@ chain of its own beside them.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from ..ir.function import BasicBlock, Function
 from ..ir.inst import (AnyLaneInst, BinaryInst, BinOp, CastInst, CastKind,
@@ -48,7 +48,7 @@ from ..ir.value import IntConst, Value
 from ..source.location import Span
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, eq=False)
 class Vectors:
     """What one target can do to a run of elements at once.
 
@@ -56,30 +56,30 @@ class Vectors:
     which is the answer a target gives until it has any, and the answer RISC-V
     gives for as long as its vector extension is not in the base it builds for.
 
-    *widest* is how wide an element may be for there to be arithmetic on it at
-    all: a machine may hold eight bytes in a lane and have nothing that adds
-    them.
-
-    *binary* names the operations it can do to a whole register at once.  Naming
-    them one by one rather than assuming a set is what lets a target take them
-    in whatever order suits it, with everything it has not taken still
-    compiling.
+    *binary* and *unary* say, for each operation it can do to a whole register,
+    how wide one lane may be for that operation to exist -- because that differs
+    between them.  A machine may add sixteen bytes at once and have no
+    instruction that multiplies them, or saturate a byte and not a word.  An
+    operation not named at all is one it cannot do, and naming them one by one
+    rather than assuming a set is what lets a target take them in whatever order
+    suits it with everything it has not taken still compiling.
     """
 
     bits: int = 0
-    widest: int = 0
-    binary: frozenset[BinOp] = frozenset()
-    #: The unary operations it can do to a whole register at once.
-    unary: frozenset[UnOp] = frozenset()
-    #: Whether it can compare a whole register at once, answering a lane apiece.
-    compares: bool = False
+    binary: dict[BinOp, int] = field(default_factory=dict)
+    unary: dict[UnOp, int] = field(default_factory=dict)
+    #: The widest lane it can compare, answering a truth value per lane; zero
+    #: where it cannot compare a run at all.
+    compares: int = 0
 
-    def lanes_at_once(self, element: Type, layout: DataLayout) -> int:
-        """How many elements of this type fit in one of its registers."""
-        if self.bits == 0:
+    def lanes_at_once(self, element: Type, layout: DataLayout,
+                      widest: int) -> int:
+        """How many elements of this type fit in one of its registers, where an
+        operation reaching lanes of *widest* bits is what is being asked about."""
+        if self.bits == 0 or widest == 0:
             return 0
         wide = stride_of(element, layout) * 8
-        if wide == 0 or wide > self.widest:
+        if wide == 0 or wide > widest:
             return 0
         return self.bits // wide
 
@@ -226,21 +226,22 @@ class _Settler:
         # says how many fit in a register is what it reads.
         read = inst.operands[0].ty
         element = read.element if isinstance(read, VecType) else held.element
-        at_once = self._able.lanes_at_once(element, self._layout) \
-            if self._does(inst) else 0
+        at_once = self._able.lanes_at_once(element, self._layout,
+                                           self._widest(inst))
         return _pieces(held.lanes, stride_of(element, self._layout), at_once)
 
-    def _does(self, inst: Instruction) -> bool:
-        """Whether this is an operation the machine has for a whole register."""
+    def _widest(self, inst: Instruction) -> int:
+        """How wide a lane this machine reaches for this operation; zero where
+        it does not have it at all."""
         match inst:
             case BinaryInst():
-                return inst.op in self._able.binary
+                return self._able.binary.get(inst.op, 0)
             case UnaryInst():
-                return inst.op in self._able.unary
+                return self._able.unary.get(inst.op, 0)
             case CmpInst():
                 return self._able.compares
             case _:
-                return False
+                return 0
 
     def _cut(self, value: Value, lanes: int) -> list[int]:
         """How the run this value holds is cut up."""

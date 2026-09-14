@@ -188,9 +188,31 @@ class InstructionSelector(Protocol):
         ...
 
     def select_run_op(self, op: Op, dst: Reg, left: MCOperand, right: MCOperand,
-                      span: Span) -> Sequence[MCInst]:
-        """Instructions that do *op* to every lane of a run at once."""
+                      bits: int, span: Span) -> Sequence[MCInst]:
+        """Instructions that do *op* to every lane of a run at once.
+
+        *bits* is how wide one lane is, which the arithmetic needs and the
+        bitwise operations do not: a register of bits anded with another is the
+        same answer however the bits are divided into lanes.
+        """
         ...
+
+    def select_run_top_bits(self, dst: Reg, src: MCOperand,
+                            span: Span) -> Sequence[MCInst]:
+        """Instructions that gather the top bit of every byte of a run into an
+        ordinary register."""
+        ...
+
+    def select_run_saturating(self, dst: Reg, left: MCOperand, right: MCOperand,
+                              adding: bool, signed: bool, bits: int,
+                              span: Span) -> Sequence[MCInst]:
+        """Instructions that add or subtract every lane, answering with the
+        nearest value the lane's type can hold rather than going past it."""
+        ...
+
+    #: How many bits one of this target's run registers holds; zero where it has
+    #: none.
+    run_bits: int = 0
 
     def select_run_splat(self, dst: Reg, src: MCOperand, bits: int,
                          span: Span) -> Sequence[MCInst]:
@@ -737,9 +759,26 @@ class Assembler:
         self._emit(self._selector.select_run_move(place, src, bits, span))
 
     def run_op(self, op: Op, dst: Reg, left: MCOperand, right: MCOperand,
-               span: Span = INVALID_SPAN) -> None:
-        """Do *op* to every lane of a run at once."""
-        self._emit(self._selector.select_run_op(op, dst, left, right, span))
+               bits: int = 0, span: Span = INVALID_SPAN) -> None:
+        """Do *op* to every lane of *bits* bits of a run at once."""
+        self._emit(self._selector.select_run_op(op, dst, left, right, bits, span))
+
+    def run_top_bits(self, dst: Reg, src: MCOperand,
+                     span: Span = INVALID_SPAN) -> None:
+        """Gather the top bit of every byte of a run into an ordinary register."""
+        self._emit(self._selector.select_run_top_bits(dst, src, span))
+
+    def run_saturating(self, dst: Reg, left: MCOperand, right: MCOperand,
+                       adding: bool, signed: bool, bits: int,
+                       span: Span = INVALID_SPAN) -> None:
+        """Add or subtract every lane, stopping at the end of the lane's type."""
+        self._emit(self._selector.select_run_saturating(
+            dst, left, right, adding, signed, bits, span))
+
+    @property
+    def run_bits(self) -> int:
+        """How many bits one of this target's run registers holds."""
+        return getattr(self._selector, "run_bits", 0)
 
     def run_splat(self, dst: Reg, src: MCOperand, bits: int,
                   span: Span = INVALID_SPAN) -> None:

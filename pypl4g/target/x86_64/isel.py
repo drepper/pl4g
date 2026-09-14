@@ -34,6 +34,7 @@ from ..callconv import TooManyArguments, argument_places, result_places
 from ..saturate import (DIVISION, NAMES, SATURATING, TRAPPING, Unsupported,
                         SHIFTS, lower_division_result, lower_saturating,
                         lower_shift, lower_trapping)
+from ..runs import lower_trapping as lower_trapping_run
 
 if TYPE_CHECKING:
     from ...mc.reg import PhysReg
@@ -436,13 +437,23 @@ class X86Selector(InstructionSelector):
     #: in it.
     _RUN_MOVES: Final[dict[int, str]] = {32: "movd", 64: "movq", 128: "movdqu"}
 
-    #: What each operation over a whole run is called.  These are the ones whose
-    #: answer in a lane depends on that lane and on nothing else and which can
-    #: never fail, so they are the whole of the operation and there is nothing
-    #: to check afterwards.
+    #: What each operation over a whole run is called.  The bitwise three are
+    #: one instruction whatever the lanes are, a register of bits being the same
+    #: answer however it is divided; the arithmetic is one per lane width.
     _RUN_OPERATIONS: Final[dict[str, str]] = {
         ops.AND.name: "pand", ops.OR.name: "por", ops.XOR.name: "pxor",
     }
+
+    #: The arithmetic, by operation and by how wide one lane is.
+    _RUN_ARITHMETIC: Final[dict[tuple[str, int], str]] = {
+        (ops.PLUS.name, 8): "paddb", (ops.PLUS.name, 16): "paddw",
+        (ops.PLUS.name, 32): "paddd", (ops.PLUS.name, 64): "paddq",
+        (ops.MINUS.name, 8): "psubb", (ops.MINUS.name, 16): "psubw",
+        (ops.MINUS.name, 32): "psubd", (ops.MINUS.name, 64): "psubq",
+    }
+
+    #: How many bits one of these registers holds.
+    run_bits: int = 128
 
     def select_run_move(self, dst: Reg | MCMem, src: MCOperand, bits: int,
                         span: Span) -> Sequence[MCInst]:
@@ -460,16 +471,18 @@ class X86Selector(InstructionSelector):
         return (self._inst(mnemonic, (target, src), span),)
 
     def select_run_op(self, op: Op, dst: Reg, left: MCOperand, right: MCOperand,
-                      span: Span) -> Sequence[MCInst]:
+                      bits: int, span: Span) -> Sequence[MCInst]:
         """Do *op* to every lane of a run at once.
 
         Two operands here as everywhere else on this architecture, so the left
         goes into the destination first and the instruction reads the right.
         """
-        mnemonic = self._RUN_OPERATIONS.get(op.name)
+        mnemonic = self._RUN_OPERATIONS.get(op.name) \
+            or self._RUN_ARITHMETIC.get((op.name, bits))
         if mnemonic is None:
             raise UnsupportedOperation("".join((
-                "'", op.name, "' over a whole run of elements")), span)
+                "'", op.name, "' over a whole run of ", str(bits),
+                "-bit elements")), span)
         target = MCReg(dst, bits=128)
         moved: Sequence[MCInst] = ()
         if not self._same_register(dst, left):
@@ -516,6 +529,40 @@ class X86Selector(InstructionSelector):
                 operands = (target, target, MCImm(0, 8, signed=False))
             made.append(self._inst(step, operands, span))
         return (*before, *made)
+
+    #: The saturating arithmetic over a run, by whether it adds, whether the
+    #: lanes are signed, and how wide one is.  Only the two narrow widths have
+    #: these; the wider ones are still done an element at a time.
+    _RUN_SATURATING: Final[dict[tuple[bool, bool, int], str]] = {
+        (True, False, 8): "paddusb", (True, False, 16): "paddusw",
+        (False, False, 8): "psubusb", (False, False, 16): "psubusw",
+        (True, True, 8): "paddsb", (True, True, 16): "paddsw",
+        (False, True, 8): "psubsb", (False, True, 16): "psubsw",
+    }
+
+    def select_run_saturating(self, dst: Reg, left: MCOperand, right: MCOperand,
+                              adding: bool, signed: bool, bits: int,
+                              span: Span) -> Sequence[MCInst]:
+        """Add or subtract every lane, stopping at the end of the lane's type."""
+        mnemonic = self._RUN_SATURATING.get((adding, signed, bits))
+        if mnemonic is None:
+            raise UnsupportedOperation("".join((
+                "saturating arithmetic over a run of ", str(bits),
+                "-bit elements")), span)
+        moved: Sequence[MCInst] = ()
+        if not self._same_register(dst, left):
+            moved = self.select_run_move(dst, left, 128, span)
+        return (*moved, self._inst(mnemonic, (MCReg(dst, bits=128),
+                                              _named_at(right, 128)), span))
+
+    def select_run_top_bits(self, dst: Reg, src: MCOperand,
+                            span: Span) -> Sequence[MCInst]:
+        """Gather the top bit of every byte of a run into an ordinary register."""
+        if not isinstance(src, MCReg):
+            raise UnsupportedOperation(
+                "gathering the top bits of something not in a register", span)
+        return (self._inst("pmovmskb", (MCReg(dst, bits=32),
+                                        MCReg(src.reg, bits=128)), span),)
 
     def select_run_ones(self, dst: Reg, span: Span) -> Sequence[MCInst]:
         """Every bit of *dst* set.
@@ -1008,6 +1055,10 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
             """A register of the full width, for a value with no name of its own."""
             return registers.new_virtual(GPR, 64)
 
+        def run_scratch(self) -> VirtReg:
+            """A register holding a whole run, for one with no name of its own."""
+            return registers.new_virtual(VEC, _FLOAT_REGISTER_BITS)
+
     operands = _Operands()
 
     def place_of(address: object, span: Span | None, **where: object) -> MCMem:
@@ -1162,6 +1213,33 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                     asm.run_splat(destination,
                                   operands.value(inst.operands[0], inst.span),
                                   _width_of(inst.ty.element), inst.span)
+                case BinaryInst() if isinstance(inst.ty, VecType) \
+                        and inst.op in TRAPPING:
+                    destination = _new_value(inst.ty, registers)
+                    held[id(inst)] = destination
+                    try:
+                        lower_trapping_run(
+                            asm, inst.op, inst.ty,
+                            operands.value(inst.operands[0], inst.span),
+                            operands.value(inst.operands[1], inst.span),
+                            destination, operands,
+                            _Fault("".join((NAMES[inst.op], " that does not fit")),
+                                   inst.span),
+                            _LAYOUT, inst.span)
+                    except Unsupported as unsupported:
+                        raise UnsupportedOperation(unsupported.what, span) \
+                            from unsupported
+                case BinaryInst() if isinstance(inst.ty, VecType) \
+                        and inst.op in SATURATING:
+                    destination = _new_value(inst.ty, registers)
+                    held[id(inst)] = destination
+                    asm.run_saturating(
+                        destination,
+                        operands.value(inst.operands[0], inst.span),
+                        operands.value(inst.operands[1], inst.span),
+                        inst.op is BinOp.SAT_ADD,
+                        _is_signed(inst.ty.element), _width_of(inst.ty.element),
+                        inst.span)
                 case BinaryInst() if isinstance(inst.ty, VecType):
                     destination = _new_value(inst.ty, registers)
                     held[id(inst)] = destination
@@ -1172,7 +1250,7 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                     asm.run_op(operation, destination,
                                operands.value(inst.operands[0], inst.span),
                                operands.value(inst.operands[1], inst.span),
-                               inst.span)
+                               _width_of(inst.ty.element), inst.span)
                 case UnaryInst() if isinstance(inst.ty, VecType):
                     if inst.op is not UnOp.NOT:
                         raise UnsupportedOperation("".join((
@@ -1186,7 +1264,8 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                     asm.run_ones(ones, inst.span)
                     asm.run_op(ops.XOR, destination,
                                operands.value(inst.operands[0], inst.span),
-                               MCReg(ones, bits=128), inst.span)
+                               MCReg(ones, bits=128), _width_of(inst.ty.element),
+                               inst.span)
                 case LoadInst() if isinstance(inst.ty, ResultType):
                     address = inst.operands[1]
                     answer = inst.ty.ok

@@ -110,14 +110,21 @@ class X86_64Target:
         architecture defines can do and there is no level to ask for it with.
         The wider registers the newer levels add are not used yet.
 
-        The three bitwise operations are what it can do to a whole register so
-        far.  They are the ones whose answer in a lane depends on that lane
-        alone and which can never fail, so there is nothing to check afterwards
-        -- which is why they are the ones that come first.
+        The bitwise three at every lane width, since a register of bits is the
+        same answer however it is divided into lanes.  Adding and subtracting at
+        every lane width too, each with the check that says whether any lane went
+        past.  The saturating pair only at a byte and a halfword, which are the
+        widths the instructions exist for.  Multiplying is not here at all:
+        seeing that a product went past wants the upper half of it, which these
+        instructions do not give at every width.
         """
-        return Vectors(bits=128, widest=64,
-                       binary=frozenset((BinOp.AND, BinOp.OR, BinOp.XOR)),
-                       unary=frozenset((UnOp.NOT,)))
+        every = 64
+        return Vectors(
+            bits=128,
+            binary={BinOp.AND: every, BinOp.OR: every, BinOp.XOR: every,
+                    BinOp.ADD: every, BinOp.SUB: every,
+                    BinOp.SAT_ADD: 16, BinOp.SAT_SUB: 16},
+            unary={UnOp.NOT: every})
 
     def generate(self, module: Module, asm: Assembler, diags: DiagEngine,
                  opt_level: int, sources: SourceManager | None = None) -> None:

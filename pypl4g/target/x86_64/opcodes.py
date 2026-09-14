@@ -572,6 +572,85 @@ X86_INSTRS: Final[tuple[X86InstDesc, ...]] = (
                 mandatory_prefix=0x66, opsize=OpSize.REXW,
                 modrm=ModRMUse.REG_RM, reg_op=0, rm_op=1, est_size=5,
                 roles=(OperandRole.DEF, OperandRole.USE)),
+    # The arithmetic over a whole run, one instruction per lane width.  What
+    # each does to a lane it does to that lane alone: there is no carry between
+    # them, which is what makes a run of additions one addition.
+    # paddb xmm, xmm/m128                66 0F FC /r
+    X86InstDesc("paddb", (_x(), _xm(128)), opcode=0xFC, map=OpMap.M0F,
+                mandatory_prefix=0x66, modrm=ModRMUse.REG_RM,
+                reg_op=0, rm_op=1, est_size=4, roles=_ACCUMULATE),
+    # paddw xmm, xmm/m128                66 0F FD /r
+    X86InstDesc("paddw", (_x(), _xm(128)), opcode=0xFD, map=OpMap.M0F,
+                mandatory_prefix=0x66, modrm=ModRMUse.REG_RM,
+                reg_op=0, rm_op=1, est_size=4, roles=_ACCUMULATE),
+    # paddd xmm, xmm/m128                66 0F FE /r
+    X86InstDesc("paddd", (_x(), _xm(128)), opcode=0xFE, map=OpMap.M0F,
+                mandatory_prefix=0x66, modrm=ModRMUse.REG_RM,
+                reg_op=0, rm_op=1, est_size=4, roles=_ACCUMULATE),
+    # paddq xmm, xmm/m128                66 0F D4 /r
+    X86InstDesc("paddq", (_x(), _xm(128)), opcode=0xD4, map=OpMap.M0F,
+                mandatory_prefix=0x66, modrm=ModRMUse.REG_RM,
+                reg_op=0, rm_op=1, est_size=4, roles=_ACCUMULATE),
+    # psubb xmm, xmm/m128                66 0F F8 /r
+    X86InstDesc("psubb", (_x(), _xm(128)), opcode=0xF8, map=OpMap.M0F,
+                mandatory_prefix=0x66, modrm=ModRMUse.REG_RM,
+                reg_op=0, rm_op=1, est_size=4, roles=_ACCUMULATE),
+    # psubw xmm, xmm/m128                66 0F F9 /r
+    X86InstDesc("psubw", (_x(), _xm(128)), opcode=0xF9, map=OpMap.M0F,
+                mandatory_prefix=0x66, modrm=ModRMUse.REG_RM,
+                reg_op=0, rm_op=1, est_size=4, roles=_ACCUMULATE),
+    # psubd xmm, xmm/m128                66 0F FA /r
+    X86InstDesc("psubd", (_x(), _xm(128)), opcode=0xFA, map=OpMap.M0F,
+                mandatory_prefix=0x66, modrm=ModRMUse.REG_RM,
+                reg_op=0, rm_op=1, est_size=4, roles=_ACCUMULATE),
+    # psubq xmm, xmm/m128                66 0F FB /r
+    X86InstDesc("psubq", (_x(), _xm(128)), opcode=0xFB, map=OpMap.M0F,
+                mandatory_prefix=0x66, modrm=ModRMUse.REG_RM,
+                reg_op=0, rm_op=1, est_size=4, roles=_ACCUMULATE),
+    # The saturating forms, which answer with the nearest value the lane's type
+    # can hold rather than going past it.  Only the two narrow widths have them,
+    # which is why the wider ones are still done an element at a time.
+    # paddusb xmm, xmm/m128              66 0F DC /r
+    X86InstDesc("paddusb", (_x(), _xm(128)), opcode=0xDC, map=OpMap.M0F,
+                mandatory_prefix=0x66, modrm=ModRMUse.REG_RM,
+                reg_op=0, rm_op=1, est_size=4, roles=_ACCUMULATE),
+    # paddusw xmm, xmm/m128              66 0F DD /r
+    X86InstDesc("paddusw", (_x(), _xm(128)), opcode=0xDD, map=OpMap.M0F,
+                mandatory_prefix=0x66, modrm=ModRMUse.REG_RM,
+                reg_op=0, rm_op=1, est_size=4, roles=_ACCUMULATE),
+    # psubusb xmm, xmm/m128              66 0F D8 /r
+    X86InstDesc("psubusb", (_x(), _xm(128)), opcode=0xD8, map=OpMap.M0F,
+                mandatory_prefix=0x66, modrm=ModRMUse.REG_RM,
+                reg_op=0, rm_op=1, est_size=4, roles=_ACCUMULATE),
+    # psubusw xmm, xmm/m128              66 0F D9 /r
+    X86InstDesc("psubusw", (_x(), _xm(128)), opcode=0xD9, map=OpMap.M0F,
+                mandatory_prefix=0x66, modrm=ModRMUse.REG_RM,
+                reg_op=0, rm_op=1, est_size=4, roles=_ACCUMULATE),
+    # paddsb xmm, xmm/m128               66 0F EC /r
+    X86InstDesc("paddsb", (_x(), _xm(128)), opcode=0xEC, map=OpMap.M0F,
+                mandatory_prefix=0x66, modrm=ModRMUse.REG_RM,
+                reg_op=0, rm_op=1, est_size=4, roles=_ACCUMULATE),
+    # paddsw xmm, xmm/m128               66 0F ED /r
+    X86InstDesc("paddsw", (_x(), _xm(128)), opcode=0xED, map=OpMap.M0F,
+                mandatory_prefix=0x66, modrm=ModRMUse.REG_RM,
+                reg_op=0, rm_op=1, est_size=4, roles=_ACCUMULATE),
+    # psubsb xmm, xmm/m128               66 0F E8 /r
+    X86InstDesc("psubsb", (_x(), _xm(128)), opcode=0xE8, map=OpMap.M0F,
+                mandatory_prefix=0x66, modrm=ModRMUse.REG_RM,
+                reg_op=0, rm_op=1, est_size=4, roles=_ACCUMULATE),
+    # psubsw xmm, xmm/m128               66 0F E9 /r
+    X86InstDesc("psubsw", (_x(), _xm(128)), opcode=0xE9, map=OpMap.M0F,
+                mandatory_prefix=0x66, modrm=ModRMUse.REG_RM,
+                reg_op=0, rm_op=1, est_size=4, roles=_ACCUMULATE),
+    # pmovmskb r32, xmm                  66 0F D7 /r
+    # The top bit of every byte, gathered into an ordinary register.  This is
+    # how a question asked in every lane at once becomes the one question a
+    # branch asks: the lanes that went past have their top bit set, and what is
+    # wanted is whether any of them did.
+    X86InstDesc("pmovmskb", (_r(32), _x()), opcode=0xD7, map=OpMap.M0F,
+                mandatory_prefix=0x66, modrm=ModRMUse.REG_RM,
+                reg_op=0, rm_op=1, est_size=4,
+                roles=(OperandRole.DEF, OperandRole.USE)),
     # pand xmm, xmm/m128                 66 0F DB /r
     X86InstDesc("pand", (_x(), _xm(128)), opcode=0xDB, map=OpMap.M0F,
                 mandatory_prefix=0x66, modrm=ModRMUse.REG_RM,
