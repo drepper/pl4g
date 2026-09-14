@@ -1,0 +1,21 @@
+※ pl4g-test: compile=ok run=native,qemu exit=10 diag=none
+
+※ `break` leaves a loop before its own test says to.  It names the loop it
+※ means, every time: a jump with no label would mean the loop nearest to it,
+※ which is a thing that changes when a loop is put around it -- and putting a
+※ loop around something is what a program that writes this language does.
+※
+※ What the loop carries is handed over where the jump stands, not read from the
+※ loop's own parameters.  That is what makes the names right after the loop
+※ whichever way it was left: the block the loop ends at is reached from the test
+※ and from every `break`, and what it reads has to be right down all of them.
+
+@[startup]
+fn main() → u8:
+    let total: mut u8 = 0u8
+    foreach §counting i = 0u8…10u8:
+        if i = 5u8:
+            break §counting
+        total ← total + i
+    ※ 0 + 1 + 2 + 3 + 4, the turn for 5 having left instead of adding
+    total

@@ -1,0 +1,14 @@
+※ pl4g-test: compile=ok run=native,qemu exit=3 diag=4469
+
+※ A label is there to be named by a `break` or a `continue` inside the loop.
+※ Where nothing names it, it says nothing about the program; where something
+※ was meant to name it, what that something names instead is a different loop.
+※ It is a warning rather than an error because the program means what it says.
+
+@[startup]
+fn main() → u8:
+    let n: mut u8 = 0u8
+    @[expect(4469)]
+    while §counting n < 3u8:
+        n ← n + 1u8
+    n

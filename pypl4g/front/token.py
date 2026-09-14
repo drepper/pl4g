@@ -74,6 +74,12 @@ SET_CLOSE_GLYPH: Final[str] = "\N{RIGHT DOUBLE PARENTHESIS}"
 #: thing with the one asterisk this language leaves free.
 SPREAD_GLYPH: Final[str] = "\N{ASTERISM}"
 
+#: What names a loop, so that `break` and `continue` can say which one they mean.
+#: A section sign, which is what marks a named division of a text: a label names
+#: a part of a program the same way, and the glyph is free where every plain
+#: character that might have done is spent or wanted elsewhere.
+LABEL_GLYPH: Final[str] = "\N{SECTION SIGN}"
+
 #: What encloses an array: its type, a value of one written down, and a lookup
 #: in one.  A white square bracket rather than the plain one, which an index
 #: into something else may yet want, and rather than the double parenthesis a
@@ -186,6 +192,8 @@ class TokKind(StrEnum):
 
     KW_FN = "'fn'"
     KW_RETURN = "'return'"
+    KW_BREAK = "'break'"
+    KW_CONTINUE = "'continue'"
     KW_LET = "'let'"
     KW_MUT = "'mut'"
     KW_TYPE = "'type'"
@@ -236,6 +244,7 @@ class TokKind(StrEnum):
     SET_CLOSE = "'\N{RIGHT DOUBLE PARENTHESIS}'"
 
     SPREAD = "'\N{ASTERISM}'"
+    LABEL = "'\N{SECTION SIGN}'"
 
     ARRAY_OPEN = "'\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}'"
     ARRAY_CLOSE = "'\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}'"
@@ -305,6 +314,8 @@ KEYWORDS: Final[dict[str, TokKind]] = {
     "else": TokKind.KW_ELSE,
     "while": TokKind.KW_WHILE,
     "foreach": TokKind.KW_FOREACH,
+    "break": TokKind.KW_BREAK,
+    "continue": TokKind.KW_CONTINUE,
     "in": TokKind.KW_IN,
     "true": TokKind.KW_TRUE,
     "false": TokKind.KW_FALSE,

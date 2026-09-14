@@ -757,6 +757,9 @@ array of arrays is written `a⟦i⟧⟦j⟧`, whose substituted form would end i
 copies of the character a member access is written with, and telling `a...b` from `a . ..b` would be a question of how far the
 lexer can look ahead rather than of what the characters are.  One character is one token, which is what a range is.
 
+`§` has none, for the second rule's sake: the candidates are `::` and `@@`, and neither says "a name for this place" to anyone
+who has not been told.  A label is written by a generator, which has the glyph.
+
 `⁂` has none, and the first rule is what decides it: `**` is the only spelling anyone would reach for, being what Python
 writes the same idea's sibling with, and it is two copies of the character multiplication deliberately left free.  Spending it
 here would spend it for the one meaning this language has already decided not to give it.
@@ -1500,9 +1503,63 @@ nothing reads.
 **The body is a scope**, so a name defined in it is defined afresh on every turn and is gone after the loop.
 
 Compare: C, C++, Go, Rust, Zig and Odin all have `while` (Go spells it `for`, Rust also has `loop`), and all but C and C++ insist
-the condition is a truth value.  Rust's `loop` is an expression, producing what a `break` hands it; there is no `break` here yet,
-and until there is, a loop has nothing to produce.  Python's `while` has an `else`, which runs when the loop ended by its
-condition rather than by a `break`; with no `break` the two cannot differ, so there is nothing for one to mean.
+the condition is a truth value.  Rust's `loop` is an expression, producing what a `break` hands it; a `break` here hands nothing
+over, so a loop still produces nothing.  Python's `while` has an `else`, which runs when the loop ended by its condition rather
+than by a `break`; nothing here distinguishes the two ways out, and a program that wants to can set a name before the `break`.
+
+#### Leaving a loop and repeating it
+
+`break` leaves a loop before its condition says to, and `continue` begins its next turn without running the rest of the body.
+**Both name the loop they mean**, and the loop is named by writing `§` (U+00A7 SECTION SIGN) and a name after its keyword:
+
+```
+let found: mut u8 = 0u8
+foreach §rows r = 0u8…4u8:
+    foreach §cols c = 0u8…4u8:
+        if c = 0u8:
+            continue §cols        ※ the inner loop's own next turn
+        if r × c = 6u8:
+            found ← r × 10u8 + c
+            break §rows           ※ leaves both loops at once
+        if c > r:
+            break §cols           ※ leaves the inner loop only
+```
+
+**The label is written every time** (3033), on the jump and on the loop alike.  What a jump with no label means is the loop
+nearest to it, which is a thing that changes when a loop is put around it -- and putting a loop around something is what a
+program that writes this language does.  Naming the loop makes the jump say what it means rather than where it stands, and makes
+moving a body between loops either correct or reported rather than silently something else.
+
+**The glyph is what keeps a label apart from what follows it.**  `while outer x` would otherwise be a loop over a name that is
+true, and every language that puts a label here has needed a marker of some kind.  The section sign is what marks a named
+division of a text, which is what a label is; it has no ASCII substitute, `§` being the only thing that says it and every
+plain character that might have done being spent or wanted elsewhere.
+
+**The label stands between the keyword and what the loop runs on**, which is where a reader looks to see which loop this is.  It
+is written the same way on `while` in either of its spellings and on `foreach`.
+
+**A jump names a loop it is inside** (4467).  Leaving a loop that has already ended, or one that has not started, is not a thing
+that could happen, so a label that names no enclosing loop is an error rather than a jump to somewhere.
+
+**No loop carries the label of a loop it is inside** (4468).  The inner one would hide the outer, leaving nothing that could name
+the outer from within -- a name means the nearest thing it could mean.  Two loops neither of which is inside the other may share
+a label, there being no place both can be named from.
+
+**A label nothing names is reported** (4469, a warning).  It is there to be named; where nothing does, it says nothing about the
+program, and where something was meant to, what that something names instead is a different loop.
+
+**What `continue` does is what reaching the end of the body does**: the step the iterator takes where there is one, and then the
+condition again.  For a `while` there is no step, so its next turn is its condition.
+
+**A name the loop carries is handed over where the jump stands.**  The block a loop ends at is reached from the test and from
+every `break`, so what follows the loop reads what the way actually taken left there -- not what the last turn began with.
+
+Compare: Java, JavaScript, Go, Perl and Odin, all of which allow a label and all of which make it optional, so that the common
+case is the one that changes meaning when a loop is inserted; Rust, whose `'label` needs a marker for the same grammatical reason
+this does, and whose `break 'label value` makes a loop produce something -- a thing worth having and a separate decision, since it
+makes a loop an expression; Ada, whose `exit Outer when ...` names the loop and which is the closest to this in spirit; C and C++,
+which have no label at all and reach for `goto` instead; and Python, which has neither a label nor `goto`, and where leaving two
+loops means a flag or a function.
 
 ### Names the compiler provides
 
@@ -1598,6 +1655,9 @@ says what the loop is, and `while` says that the two kinds of loop are one const
 
 **The name is bound afresh on every turn** and is gone after the loop.  It is never `mut`: what it stands for is what the turn
 gave, and the next turn gives another.
+
+**A label goes after the keyword**, before the names: `foreach §rows r = 0u8…4u8:`, and likewise `while §rows r: u8 = …`.  What
+it is for is in the section on leaving a loop and repeating it, above.
 
 Compare: Python's `for x in r`, which this follows in meaning -- including `for k, v in d` taking a pair apart, which is where the
 two-name form over a dictionary comes from; Rust's `for x in r` over anything that is `IntoIterator`; Go's `for i, v := range`,

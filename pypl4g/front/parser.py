@@ -809,7 +809,10 @@ class Parser:
         if self._check(TokKind.KW_WHILE):
             return self._parse_while()
         if self._check(TokKind.KW_FOREACH):
-            return self._parse_iteration(self._advance().span, "foreach")
+            start = self._advance().span
+            return self._parse_iteration(start, "foreach", self._parse_label())
+        if self._check(TokKind.KW_BREAK) or self._check(TokKind.KW_CONTINUE):
+            return self._parse_jump()
         if self._check(TokKind.KW_RETURN):
             start = self._advance().span
             if self._check(TokKind.NEWLINE) or self._check(TokKind.SEMICOLON) \
@@ -844,11 +847,47 @@ class Parser:
         or a brace, and neither can be part of an expression.
         """
         start = self._expect(TokKind.KW_WHILE).span
+        label = self._parse_label()
         if self._binds_a_value():
-            return self._parse_iteration(start, "while")
+            return self._parse_iteration(start, "while", label)
         condition = self._parse_expression()
         body = self._parse_body()
-        return ast.While(span=start.to(body.span), condition=condition, body=body)
+        return ast.While(span=start.to(body.span), condition=condition,
+                         body=body, label=label)
+
+    def _parse_label(self) -> "ast.Label | None":
+        """Parse `\N{SECTION SIGN}name` where a loop may be given one.
+
+        It stands between the keyword and what the loop runs on, which is where
+        a reader looks to see which loop this is, and the glyph is what keeps it
+        apart from the condition: `while name` would otherwise be a loop over a
+        name that is true, and a marker is what every language that puts a label
+        here has needed.
+        """
+        mark = self._accept(TokKind.LABEL)
+        if mark is None:
+            return None
+        name = self._expect(TokKind.IDENT, D.LANG_SYNTAX_EXPECTED_LABEL_NAME)
+        return ast.Label(span=mark.span.to(name.span), name=name.text)
+
+    def _parse_jump(self) -> ast.Stmt:
+        """Parse ``break \N{SECTION SIGN}name`` or ``continue \N{SECTION SIGN}name``.
+
+        The name is written every time.  What a jump with none would mean is
+        the loop nearest to it, which is a thing that changes when a loop is
+        put around it -- and putting a loop around something is what a program
+        that writes this language does all day.
+        """
+        keyword = self._advance()
+        label = self._parse_label()
+        if label is None:
+            self._diags.emit(D.LANG_SYNTAX_JUMP_WITHOUT_A_LABEL, keyword.span,
+                             keyword=keyword.text)
+            raise _Bail()
+        span = keyword.span.to(label.span)
+        if keyword.kind is TokKind.KW_BREAK:
+            return ast.Break(span=span, label=label)
+        return ast.Continue(span=span, label=label)
 
     def _binds_a_value(self) -> bool:
         """Whether what follows `while` is a binding rather than a condition.
@@ -865,7 +904,8 @@ class Parser:
         return (self._peek().kind is TokKind.COLON
                 and self._peek(2).kind is not TokKind.NEWLINE)
 
-    def _parse_iteration(self, start: Span, keyword: str) -> ast.ForEach:
+    def _parse_iteration(self, start: Span, keyword: str,
+                         label: "ast.Label | None" = None) -> ast.ForEach:
         """Parse ``NAMES [':' [TYPE]] '=' EXPR BODY``, which is `let`'s shape.
 
         The colon and the type may both be left out where the values say what
@@ -892,7 +932,7 @@ class Parser:
         return ast.ForEach(span=start.to(body.span), name=name_token.text,
                            name_span=name_token.span, type=declared,
                            iterable=iterable, body=body, more=tuple(more),
-                           keyword=keyword)
+                           keyword=keyword, label=label)
 
     def _parse_if(self) -> ast.If:
         """Parse ``if COND BODY`` with its `elif`s and its `else`.

@@ -1,0 +1,31 @@
+※ pl4g-test: compile=ok run=native,qemu exit=23 diag=none
+
+※ The label is what makes a jump able to mean a loop other than the one it
+※ stands in.  All four jumps a pair of loops has are written here: the inner
+※ loop's own next turn, the inner loop left, and the outer loop left from
+※ inside the inner one -- the last of which no unlabelled jump could say.
+※
+※ Two loops that are not one inside the other may share a label, there being no
+※ place both could be named from; one inside the other may not, since the inner
+※ would hide the outer and leave no way to name it.
+※
+※ A name a jump hands over is the name as it stands where the jump is: `found`
+※ is assigned in the inner body, so both loops carry it, and what follows them
+※ reads what the way out of them left.
+
+@[startup]
+fn main() → u8:
+    let found: mut u8 = 0u8
+    foreach §rows r = 0u8…4u8:
+        foreach §cols c = 0u8…4u8:
+            if c = 0u8:
+                ※ the inner loop's own next turn
+                continue §cols
+            if r × c = 6u8:
+                found ← r × 10u8 + c
+                ※ leaves both loops at once
+                break §rows
+            if c > r:
+                ※ leaves the inner loop only, and the outer one carries on
+                break §cols
+    found

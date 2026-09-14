@@ -2816,6 +2816,58 @@ language has not said and which the expansion makes visible.
 
 ---
 
+## 2026-09-14T16:00+02:00 — language
+
+**Leaving a loop and repeating it, and what a loop is called**
+
+Decided on the user's direction, which set the hard part: `break` and `continue` both name the loop they mean, every time.  What
+was left to decide was how a loop comes to have a name.
+
+**The label is `§name`, written between the loop's keyword and what the loop runs on.**  Two things had to be settled: where it
+goes, and what marks it.
+
+Where it goes is where every language that has labels puts it and where a reader looks -- before the loop, not after its body.
+What marks it is forced: `while outer x` with no marker is already a loop over a name that is true, so the label and the
+condition cannot be told apart without one.  That is exactly why Rust writes `'label` where Java writes `label:`; Java gets away
+with the plain form because its condition is parenthesised, and this language's is not, for reasons the `if` section gives.
+
+The marker could not be a plain character.  `label:` is what the layout notation already uses to open a body, so `outer: while`
+would read as a block; a leading `'` is one ASCII character spent, which this language does not do; `@` belongs to attributes.
+`§` is the mark for a named division of a text, which is what a label is, and it is free.
+
+**Rejected: an attribute, `@[label(outer)]`.**  Attributes already attach to statements, and "everything said about one thing is
+written in one list" is a principle here, so this was the real alternative.  It was not taken because an attribute states a
+quality of a thing, and a label is a binding: it introduces a name that something else refers to, and nothing else in an
+attribute list does that.  It also puts the name on its own line, above the keyword, when what a reader wants to know at the
+keyword is which loop this is.
+
+**Rejected: making the label optional**, as Java, JavaScript, Go, Perl and Odin all do.  The user required it, and the reason it
+is the right requirement is what this language is for: an unlabelled jump means the loop nearest to it, so wrapping a body in a
+new loop silently changes what every jump inside it does -- and wrapping a body in a loop is an edit a generator makes.  With the
+label required, that edit either keeps meaning what it meant or is reported (4467).  The cost is that a single loop with one
+`break` must be named; the cost of the alternative is a class of silent miscompilation of generated code.
+
+**`continue` is the end of the body, not a jump to the test.**  For a `foreach` it applies the iterator's step first, which is
+what falling off the end of the body does; anything else would make `continue` skip the advance and loop forever.  For a `while`
+there is no step and the next turn is the condition.
+
+**A label is named by something inside its loop, or it is reported** (4469, a warning).  A label exists to be named; one that
+nothing names says nothing, and one that was meant to be named means something else is being named instead.
+
+**No loop carries the label of a loop it is inside** (4468), because the inner would hide the outer and leave no way to name the
+outer from within -- which is the one thing labels are for.  Two loops neither of which is inside the other may share a label.
+
+**A `break` hands nothing over, so a loop is still not an expression.**  Rust's `break 'label value` makes `loop` produce a
+value, which is worth having and is a separate decision: it would make a loop an expression, and the way through that runs the
+body no times would then have to produce something too.  It is in [TODO-language.md](../TODO-language.md).
+
+Compare, beyond the above: Ada's `exit Outer when ...`, the closest in spirit -- the loop is named and the exit says which; C and
+C++, which have no label and reach for `goto`, the construct this language does not want; Python, which has neither and where
+leaving two loops means a flag or a function; and Zig, whose `break :label` marks the label at the jump but not at the loop,
+which this does not follow because a name and its use are spelled alike here.
+
+---
+
 ---
 
 Open questions

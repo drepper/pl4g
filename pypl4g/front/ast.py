@@ -558,6 +558,8 @@ class ForEach(Stmt):
     more: tuple[tuple[str, Span], ...] = ()
     #: Which of the two spellings was written.
     keyword: str = "foreach"
+    #: What `break` and `continue` call this loop, where it was given a name.
+    label: "Label | None" = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -572,6 +574,39 @@ class While(Stmt):
 
     condition: Expr
     body: Block
+    #: What `break` and `continue` call this loop, where it was given a name.
+    label: "Label | None" = None
+
+
+@dataclass(frozen=True, slots=True)
+class Label(Node):
+    """`§name`: what a loop is called, so that a jump can say which one it means.
+
+    It is a node of its own rather than a bare string because it is written in
+    two places -- on the loop and on the jump -- and both want to be pointed at
+    by a message.
+    """
+
+    name: str
+
+
+@dataclass(frozen=True, slots=True)
+class Break(Stmt):
+    """`break §name`: leave the loop of that name, which must be one we are in."""
+
+    label: Label
+
+
+@dataclass(frozen=True, slots=True)
+class Continue(Stmt):
+    """`continue §name`: begin the next turn of the loop of that name.
+
+    What "the next turn" is, is the loop's business: for a `while` it is the
+    condition again, and for a `foreach` it is the step and then the condition,
+    which is exactly what reaching the end of the body would have done.
+    """
+
+    label: Label
 
 
 @dataclass(frozen=True, slots=True)

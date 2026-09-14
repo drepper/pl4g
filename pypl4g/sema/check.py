@@ -386,6 +386,31 @@ def _heap(module: Module) -> GlobalVar:
         initializer=None, linkage=Linkage.INTERNAL), key=HEAP_NAME)
 
 
+@dataclass(slots=True)
+class _Loop:
+    """A loop being lowered that has a name, and the two places a jump goes.
+
+    *header* is where a turn begins, so `continue` branches there with whatever
+    the next turn is to start from; *after* is where the loop ends, so `break`
+    branches there.  Both take the names the loop carries, which is why a jump
+    hands over what those names stand for where it stands rather than leaving
+    them to be read from the header.
+
+    *step* is what the header's own state has to become for there to be a next
+    turn, which is the iterator's business and is nothing for a `while`.
+    """
+
+    label: str
+    span: "Span"
+    header: "BasicBlock"
+    after: "BasicBlock"
+    carried: "list[_Local]"
+    state: "tuple[Value, ...]"
+    step: "Callable[[IRBuilder, tuple[Value, ...]], tuple[Value, ...]] | None"
+    #: Whether anything named the label, for reporting one nothing did.
+    named: bool = False
+
+
 @dataclass(frozen=True, slots=True)
 class _Piece:
     """One of the values a list of written things comes to.
@@ -463,6 +488,9 @@ class Checker:
         #: arms, and about which the unread-value rule therefore says nothing
         #: while the arms are being checked.
         self._carried: set[int] = set()
+        #: The labelled loops this statement is inside, innermost last, which
+        #: is what `break` and `continue` look their label up in.
+        self._loops: list[_Loop] = []
         #: What the function now being lowered answers with, which is what `?`
         #: has to agree with: it leaves the function carrying an error, so the
         #: function must be one that can carry it.
@@ -1696,7 +1724,7 @@ class Checker:
         for index, stmt in enumerate(block.stmts):
             is_last = index == count - 1
             if builder.is_terminated:
-                self._diags.emit(D.LANG_FUNCDEF_RETURN_UNREACHABLE, stmt.span)
+                self._diags.emit(D.LANG_STMT_UNREACHABLE, stmt.span)
                 return None
             if is_last and produces:
                 answer = self._lower_yielding(builder, stmt, func, wanted)
@@ -1807,6 +1835,10 @@ class Checker:
                 self._lower_while(builder, stmt, func)
             case ast.ForEach():
                 self._lower_foreach(builder, stmt, func)
+            case ast.Break():
+                self._lower_break(builder, stmt)
+            case ast.Continue():
+                self._lower_continue(builder, stmt)
             case ast.EmptyStmt():
                 # Nothing to lower.  What it does is be a statement, so that a
                 # body ending in a semicolon ends in one that produces no value.
@@ -2721,9 +2753,18 @@ class Checker:
         """
         if builder.block is None:
             return
+        label = self._label_of(stmt.label)
         carried = self._loop_locals(stmt.body)
         header = builder.new_block("loop")
         body = builder.new_block("body")
+        # A loop with a name is a loop something may leave, and where the
+        # exit takes what a jump hands over it has to take it before there is
+        # a jump to lower.  Which statements below hold one is a question about
+        # every place a statement can be written, and the answer to it is worth
+        # less than the jump it would save: a loop nothing leaves has a name
+        # nothing names, and that is reported rather than optimized.
+        leaves = label is not None
+        leave = builder.new_block("leave") if leaves else None
         after = builder.new_block("done")
         builder.br(header,
                    (*(local.value for local in carried), builder.memory()),
@@ -2732,6 +2773,7 @@ class Checker:
         params = [header.add_param(self._value_type_of(local.value), local.name)
                   for local in carried]
         token = header.add_param(MEM, "mem")
+        ways = self._exit_params(after, carried, params) if leaves else None
         for local, param in zip(carried, params):
             local.value = param
             local.value_span = stmt.span
@@ -2746,14 +2788,23 @@ class Checker:
                 self._diags.emit(D.LANG_LOOP_CONDITION_NOT_BOOLEAN,
                                  stmt.condition.span, found=found.render())
             condition = UndefConst(BOOL)
-        builder.condbr(condition, body, after, span=stmt.span)
+        builder.condbr(condition, body, leave if leave is not None else after,
+                       span=stmt.span)
+        if leave is not None:
+            # A conditional branch carries nothing, so the way out of the test
+            # hands the names over from a block of its own -- the one place the
+            # loop's own parameters are what the exit reads.
+            builder.position_at(leave)
+            builder.br(after, (*params, builder.memory()), stmt.span)
         outer_carried = self._carried
         # A name the loop carries is read by the next turn, so replacing the
         # value it stands for is not throwing that value away.
         self._carried = outer_carried | {id(local) for local in carried}
         builder.position_at(body)
         self._push_scope()
+        self._begin_loop(label, header, after, carried, (), None)
         self._lower_block(builder, stmt.body, func, as_result=False)
+        self._end_loop(label)
         self._pop_scope()
         self._carried = outer_carried
         if not builder.is_terminated and builder.block is not None:
@@ -2767,10 +2818,10 @@ class Checker:
             for local in carried:
                 local.read = True
         builder.position_at(after)
-        for local, param in zip(carried, params):
+        for local, param in zip(carried, ways if ways is not None else params):
             local.value = param
             local.value_span = stmt.span
-        builder.set_memory(token)
+        builder.set_memory(after.params[-1] if ways is not None else token)
 
     def _lower_foreach(self, builder: IRBuilder, stmt: ast.ForEach,
                        func: Function) -> None:
@@ -2803,15 +2854,26 @@ class Checker:
         found = self._iteration_over(builder, stmt)
         if found is None:
             # Bound to nothing that means anything, so that a later mention of
-            # the name reports nothing of its own.
+            # the name reports nothing of its own.  There is no loop to jump
+            # out of either, so the label is not put up: a jump naming it would
+            # be reported, and what it would be reported for is this.
             self._push_scope()
             self._bind_local(stmt.name, UndefConst(ERROR), stmt.name_span)
             self._lower_block(builder, stmt.body, func, as_result=False)
             self._pop_scope()
             return
+        label = self._label_of(stmt.label)
         carried = self._loop_locals(stmt.body)
         header = builder.new_block("loop")
         body = builder.new_block("body")
+        # A loop with a name is a loop something may leave, and where the
+        # exit takes what a jump hands over it has to take it before there is
+        # a jump to lower.  Which statements below hold one is a question about
+        # every place a statement can be written, and the answer to it is worth
+        # less than the jump it would save: a loop nothing leaves has a name
+        # nothing names, and that is reported rather than optimized.
+        leaves = label is not None
+        leave = builder.new_block("leave") if leaves else None
         after = builder.new_block("done")
         builder.br(header,
                    (*found.start, *(local.value for local in carried),
@@ -2822,18 +2884,25 @@ class Checker:
         params = [header.add_param(self._value_type_of(local.value), local.name)
                   for local in carried]
         token = header.add_param(MEM, "mem")
+        ways = self._exit_params(after, carried, params) if leaves else None
         for local, param in zip(carried, params):
             local.value = param
             local.value_span = stmt.span
             local.read = False
         builder.set_memory(token)
-        builder.condbr(found.more(builder, state), body, after, span=stmt.span)
+        builder.condbr(found.more(builder, state), body,
+                       leave if leave is not None else after, span=stmt.span)
+        if leave is not None:
+            builder.position_at(leave)
+            builder.br(after, (*params, builder.memory()), stmt.span)
         outer_carried = self._carried
         self._carried = outer_carried | {id(local) for local in carried}
         builder.position_at(body)
         self._push_scope()
         self._bind_turn(builder, stmt, found.take(builder, state))
+        self._begin_loop(label, header, after, carried, state, found.step)
         self._lower_block(builder, stmt.body, func, as_result=False)
+        self._end_loop(label)
         self._pop_scope()
         self._carried = outer_carried
         if not builder.is_terminated and builder.block is not None:
@@ -2844,10 +2913,111 @@ class Checker:
             for local in carried:
                 local.read = True
         builder.position_at(after)
-        for local, param in zip(carried, params):
+        for local, param in zip(carried, ways if ways is not None else params):
             local.value = param
             local.value_span = stmt.span
-        builder.set_memory(token)
+        builder.set_memory(after.params[-1] if ways is not None else token)
+
+    # -- naming a loop, and leaving or repeating it ----------------------------
+
+    def _label_of(self, label: "ast.Label | None") -> "ast.Label | None":
+        """The name a loop may take, which is the one written unless it is taken.
+
+        A loop inside one of the same name would hide it, leaving nothing that
+        could name the outer one from inside the inner; two that are not one
+        inside the other share nothing and may share a name.
+
+        A name that is taken is dropped rather than kept, and the loop is
+        lowered without one.  The program is refused either way, and lowering
+        the body is what keeps the rest of what is wrong with it from being
+        hidden behind this.
+        """
+        if label is None:
+            return None
+        if any(one.label == label.name for one in self._loops):
+            self._diags.emit(D.LANG_LOOP_LABEL_REUSED, label.span,
+                             name=label.name)
+            return None
+        return label
+
+    def _begin_loop(self, label: "ast.Label | None", header: BasicBlock,
+                    after: BasicBlock, carried: "list[_Local]",
+                    state: "tuple[Value, ...]",
+                    step: "Callable[[IRBuilder, tuple[Value, ...]], tuple[Value, ...]] | None"
+                    ) -> None:
+        """Put a loop's name up for the length of its body."""
+        if label is None:
+            return
+        self._loops.append(_Loop(label=label.name, span=label.span,
+                                 header=header, after=after, carried=carried,
+                                 state=state, step=step))
+
+    def _end_loop(self, label: "ast.Label | None") -> None:
+        """Take it down again, and report a name nothing named."""
+        if label is None:
+            return
+        one = self._loops.pop()
+        if not one.named:
+            self._diags.emit(D.LANG_LOOP_LABEL_UNUSED, one.span, name=one.label)
+
+    def _exit_params(self, after: BasicBlock, carried: "list[_Local]",
+                     params: "list[Value]") -> "list[Value]":
+        """Give the block after a loop the names every way out of it hands over.
+
+        Where nothing leaves the loop early the test is the only way out, so
+        what follows reads the loop's own parameters and the block needs none of
+        its own -- which is what it had before there was a `break`.  Where
+        something does, the values differ by which way was taken, so they are
+        handed over and the block takes them.
+        """
+        ways = [after.add_param(self._value_type_of(param), local.name)
+                for local, param in zip(carried, params)]
+        after.add_param(MEM, "mem")
+        return ways
+
+    def _find_loop(self, label: ast.Label) -> "_Loop | None":
+        """The loop a jump names, or nothing where it names none."""
+        for one in reversed(self._loops):
+            if one.label == label.name:
+                one.named = True
+                return one
+        self._diags.emit(D.LANG_LOOP_LABEL_UNKNOWN, label.span, name=label.name)
+        return None
+
+    def _lower_break(self, builder: IRBuilder, stmt: ast.Break) -> None:
+        """Lower `break §name`: go to where the loop of that name ends.
+
+        What it hands over are the names the loop carries, as they stand here:
+        the block after the loop is reached two ways now, and what it reads has
+        to be right down both of them.
+        """
+        found = self._find_loop(stmt.label)
+        if found is None or builder.block is None:
+            return
+        builder.br(found.after,
+                   (*(local.value for local in found.carried),
+                    builder.memory()), stmt.span)
+        for local in found.carried:
+            local.read = True
+
+    def _lower_continue(self, builder: IRBuilder, stmt: ast.Continue) -> None:
+        """Lower `continue §name`: begin the next turn of the loop of that name.
+
+        Which is exactly what reaching the end of the body does, so it is
+        lowered the same way -- the iterator's step where there is one, then the
+        names the loop carries, then the memory.  A `while` has no step: its
+        next turn is its condition again.
+        """
+        found = self._find_loop(stmt.label)
+        if found is None or builder.block is None:
+            return
+        moved = found.step(builder, found.state) if found.step is not None \
+            else found.state
+        builder.br(found.header,
+                   (*moved, *(local.value for local in found.carried),
+                    builder.memory()), stmt.span)
+        for local in found.carried:
+            local.read = True
 
     def _bind_turn(self, builder: IRBuilder, stmt: ast.ForEach,
                    value: Value) -> None:

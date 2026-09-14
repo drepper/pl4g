@@ -326,8 +326,15 @@ module.exports = grammar({
     // statement outright: a loop has a way through that runs the body no times
     // at all, and there is nothing for that way to produce.
     while_statement: $ => seq(
-      'while', field('condition', $._expression), field('body', $._block),
+      'while', optional(field('label', $.label)),
+      field('condition', $._expression), field('body', $._block),
     ),
+
+    // What a loop is called, so that `break` and `continue` can say which one
+    // they mean.  It stands between the keyword and what the loop runs on,
+    // where a reader looks to see which loop this is; the glyph is what keeps
+    // it apart from a condition that is a bare name.
+    label: $ => seq('\u00a7', field('name', $.identifier)),
 
     // `foreach` shares `let`'s shape: one or more names, an optional type, an
     // equal sign, and what the loop takes its values from.  `while` written
@@ -335,8 +342,10 @@ module.exports = grammar({
     // because a name on its own followed by a colon is a condition with a body.
     foreach_statement: $ => seq(
       choice(
-        seq('foreach', $._binding_names, optional($._binding_type)),
-        seq('while', $._binding_names, $._binding_type),
+        seq('foreach', optional(field('label', $.label)),
+            $._binding_names, optional($._binding_type)),
+        seq('while', optional(field('label', $.label)),
+            $._binding_names, $._binding_type),
       ),
       '=', field('iterable', $._expression), field('body', $._block),
     ),
@@ -360,6 +369,8 @@ module.exports = grammar({
       $.variable_statement,
       $.assignment,
       $.return_statement,
+      $.break_statement,
+      $.continue_statement,
       // A loop written with braces ends where the brace does, and the line it
       // stands on ends after it like any other; one written with a colon takes
       // that line ending with it and is read by the rule above instead.
@@ -367,6 +378,13 @@ module.exports = grammar({
       $.foreach_statement,
       $.expression_statement,
     ),
+
+    // Both name the loop they mean every time.  A jump with no label would mean
+    // the loop nearest to it, which is a thing that changes when a loop is put
+    // around it.
+    break_statement: $ => seq('break', field('label', $.label)),
+
+    continue_statement: $ => seq('continue', field('label', $.label)),
 
     // `match` takes a value apart.  Its arms stand where the statements of a
     // body would, in either notation, and an arm is a pattern and then a body

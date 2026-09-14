@@ -1136,6 +1136,44 @@
       "option": null
     },
     {
+      "number": 3032,
+      "name": "LANG_SYNTAX_EXPECTED_LABEL_NAME",
+      "severity": "error",
+      "message": "expected the name of a loop after '\u00a7'",
+      "args": [],
+      "cause": "The section sign says that a loop is being named, so a name is what follows it.  Nothing else can: the glyph does nothing on its own.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Statements / Loops",
+        "requirement": "A label is written '\u00a7' followed by a name."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 3033,
+      "name": "LANG_SYNTAX_JUMP_WITHOUT_A_LABEL",
+      "severity": "error",
+      "message": "'{keyword}' says which loop it means, so a label is written after it",
+      "args": [
+        {
+          "name": "keyword",
+          "type": "string",
+          "description": "the keyword that was written"
+        }
+      ],
+      "cause": "A jump with no label would mean the loop nearest to it, which is a thing that changes when a loop is put around it -- and putting a loop around something is what a program that writes this language does.  Naming the loop makes the jump say what it means rather than where it stands.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Statements / Loops",
+        "requirement": "'break' and 'continue' are each written with the label of the loop they mean."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 3201,
       "name": "LANG_ATTR_UNKNOWN",
       "severity": "error",
@@ -3661,11 +3699,77 @@
       "option": null
     },
     {
-      "number": 5001,
-      "name": "LANG_FUNCDEF_RETURN_UNREACHABLE",
+      "number": 4467,
+      "name": "LANG_LOOP_LABEL_UNKNOWN",
+      "severity": "error",
+      "message": "no loop around this one is labelled '\u00a7{name}'",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the label that was written"
+        }
+      ],
+      "cause": "A jump names the loop it means, and that loop has to be one the jump is inside: leaving a loop that has already ended, or one that has not started, is not a thing that could happen.  Either the label is misspelt, or the jump is not where it was meant to be.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Statements / Loops",
+        "requirement": "The label a jump names is the label of a loop the jump is inside."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4468,
+      "name": "LANG_LOOP_LABEL_REUSED",
+      "severity": "error",
+      "message": "a loop this one is inside is already labelled '\u00a7{name}'",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the label written twice"
+        }
+      ],
+      "cause": "Two loops one inside the other sharing a label would leave no way to name the outer one from inside the inner, a name meaning the nearest thing it could mean.  A label exists to say which loop is meant, and one that hides another says less than it appears to.  Two loops neither of which is inside the other may share a label, there being no place both can be named from.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Statements / Loops",
+        "requirement": "No loop carries the label of a loop it is inside."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4469,
+      "name": "LANG_LOOP_LABEL_UNUSED",
       "severity": "warning",
-      "message": "statements after 'return' are never executed",
-      "cause": "The function returns immediately at the 'return' statement, so the statements that follow it in the same block can never run.  This is usually leftover code, or a 'return' that was meant to be conditional.",
+      "message": "nothing in this loop names '\u00a7{name}'",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the label nothing named"
+        }
+      ],
+      "cause": "A label is there to be named by a 'break' or a 'continue' inside the loop.  Where nothing names it, it says nothing about the program and can go; where something was meant to name it, what that something names instead is a different loop.  Where it is deliberate, say so with `@[expect(4469)]`.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Statements / Loops",
+        "requirement": "A loop's label is named by something inside the loop."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": "unused-label"
+    },
+    {
+      "number": 5001,
+      "name": "LANG_STMT_UNREACHABLE",
+      "severity": "warning",
+      "message": "statements after this one are never executed",
+      "cause": "The statement before this one leaves the block it stands in -- 'return' leaves the function, 'break' leaves a loop, 'continue' begins the loop's next turn -- so nothing after it in that block can run.  This is usually leftover code, or a jump that was meant to be conditional.",
       "spec": {
         "document": "spec/spec.md",
         "section": "The Language / File Structure / Function Definition",

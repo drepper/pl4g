@@ -1,0 +1,13 @@
+※ pl4g-test: compile=error diag=4467
+
+※ A jump names the loop it means, and that loop has to be one the jump is
+※ inside: leaving a loop that has already ended is not a thing that could
+※ happen.
+
+@[startup]
+fn main() → u8:
+    let n: mut u8 = 0u8
+    while §counting n < 3u8:
+        n ← n + 1u8
+        break §waiting
+    n

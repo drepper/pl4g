@@ -1,0 +1,21 @@
+※ pl4g-test: compile=ok run=native,qemu exit=10 diag=none
+
+※ `continue` begins the loop's next turn, which is exactly what reaching the
+※ end of the body does -- so it is lowered the same way: the step the iterator
+※ takes where there is one, then the names the loop carries, then the memory.
+※ A `while` has no step; its next turn is its condition again.
+
+@[startup]
+fn main() → u8:
+    let total: mut u8 = 0u8
+    foreach §counting i = 0u8…10u8:
+        if i > 4u8:
+            continue §counting
+        total ← total + i
+    ※ 0 + 1 + 2 + 3 + 4, the later turns going straight round again
+    let stopped: mut u8 = 0u8
+    while §waiting stopped < 10u8:
+        stopped ← stopped + 1u8
+        if stopped < 9u8:
+            continue §waiting
+    total + stopped - 10u8

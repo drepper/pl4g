@@ -449,6 +449,14 @@ To Do List for the PL4g language
     extended, it costs nothing at runtime for the reason the call case does not, and it cost a parser rule rather than a
     mechanism.  A tuple still has at least one member, so spreading an array of no elements into one is refused (4466).
 
+[ ] consider letting a `break` hand a value over, as Rust's `break 'label value` does, which would make a loop an expression.
+    What stops it today is the way through that runs the body no times at all: that way reaches the block after the loop without
+    passing a `break`, so it would have to produce something too -- a value written on the loop, or a rule that a loop producing
+    a value is one whose condition is a constant truth.  Nothing needs it yet; `break` after an assignment says the same thing.
+
+[ ] consider whether the two ways out of a loop should be distinguishable, as Python's `while ... else` makes them.  A program
+    that wants to can set a name before the `break` and read it after, which is what the construct saves one line of.
+
 [ ] say what order a call's arguments are worked out in.  Nothing has needed it: the only things that can be noticed are a call
     and an arithmetic check that stops the program, so the order shows only in which of two failures is reported.  The asterism
     makes it visible -- a spread operand is lowered before an ordinary argument written to its left, because how many arguments

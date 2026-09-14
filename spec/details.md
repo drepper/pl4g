@@ -867,6 +867,33 @@ which is what the tree-sitter grammar says too.  The first implementation made i
 that put a rule in the checker the grammar could simply enforce, and it made the two grammars disagree about what an expression
 is.  The diagnostic moved to the parser and changed number with it.
 
+Leaving a loop and repeating it
+-------------------------------
+
+A labelled loop is pushed on `_loops` for the length of its body, carrying the two blocks a jump goes to -- the header and the
+block after -- together with the names the loop carries and, for a `foreach`, the state its iterator walks and the step that
+advances it.  `break` branches to the block after; `continue` branches to the header with the step applied, which is what the end
+of the body does, so the two produce the same instructions from the same pieces.
+
+**The block after a loop takes parameters once the loop has a name.**  Before there was a jump it needed none: the test was the
+only way out, the header dominated the block after, and what followed the loop simply read the header's parameters.  A `break`
+gives it a second predecessor whose names are the ones at the jump, so the values now differ by which way was taken and have to
+be handed over.
+
+**A conditional branch carries nothing**, which is what the back ends require, so the way out of the test is given a block of its
+own -- `leave` -- holding one unconditional branch that hands the header's parameters to the block after.  That is the one place
+the loop's own parameters are what the exit reads.
+
+**Whether a body holds a `break` is not asked.**  A labelled loop gets the exit parameters and the `leave` block whether or not
+anything jumps, because the question is about every place a statement can be written -- inside an `if` used as a value, inside a
+`match` arm, inside a nested loop -- and getting it wrong means branching to a block with no parameters, which the verifier would
+catch and a reader would not understand.  What it costs is one jump in a loop nothing leaves, and such a loop has a label nothing
+names, which is reported (4469) rather than optimized.
+
+**A label that is already taken is dropped rather than refused.**  `_label_of` reports 4468 and answers nothing, so the loop is
+lowered without a name and its body is checked like any other; refusing the loop outright would hide everything else wrong with
+the body behind one message.
+
 Calling conventions
 -------------------
 

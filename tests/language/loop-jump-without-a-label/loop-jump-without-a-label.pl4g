@@ -1,0 +1,12 @@
+※ pl4g-test: compile=error diag=3033
+
+※ The label is written every time.  What a jump with none would mean is the
+※ loop nearest to it, which is a thing that changes when a loop is put around
+※ it; naming the loop makes the jump say what it means rather than where it
+※ stands.
+
+@[startup]
+fn main() → u8:
+    while §counting true:
+        break
+    0u8

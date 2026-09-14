@@ -1,0 +1,13 @@
+※ pl4g-test: compile=error diag=4468
+
+※ Two loops one inside the other sharing a label would leave no way to name the
+※ outer one from inside the inner, a name meaning the nearest thing it could
+※ mean.  A label exists to say which loop is meant, and one that hides another
+※ says less than it appears to.
+
+@[startup]
+fn main() → u8:
+    while §counting true:
+        while §counting true:
+            break §counting
+    0u8
