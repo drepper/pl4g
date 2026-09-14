@@ -1,13 +1,23 @@
+# The root is where trying something out happens: a loose program, whatever it
+# was compiled to, the log it was asked to write.  None of that has a settled
+# name, and two such files were committed by a careless `git add -A` before this
+# said so -- so what the root holds is listed rather than guessed at, and
+# anything else there is ignored.  A file that belongs at the root is added
+# here, which is one line and a deliberate act.
+/*
+!/*/
+!/.gitignore
+!/CLAUDE.md
+!/TODO-language.md
+!/TODO-pypl4g.md
+!/pyproject.toml
+
+# What a build leaves, anywhere.  These come after the rule above because the
+# last one that matches is the one that holds, and the directories among them
+# are ones that rule has just let back in.
 build
 *.o
 __pycache__/
 *.pyc
 .pytest_cache/
 *.core
-# Loose programs in the root are scratch; the real ones live in
-# examples/ and tests/language/.
-/*.pl4g
-# And so is anything one of them was compiled to, which has no suffix at all
-# and so could otherwise be committed by a careless `git add -A`.
-/a.out
-/[a-z]
