@@ -229,9 +229,43 @@ the function takes -- nothing is variadic, nothing has a default -- and each has
 nothing widened to make two types meet.  A literal with no suffix takes the parameter's type, which is what lets a call be written
 with plain numbers.  Whether arguments may also be *named*, as an attribute's are, is not decided; nothing here forecloses it.
 
+**Arguments are worked out left to right**, in the order they are written.  A call is the only thing in this language that can
+be noticed happening -- it may write a variable at the top level, and it may stop the program -- so it is the only thing the
+order is visible through, and that is the reason to state it rather than to leave it: where two arguments each do something, a
+reader has to be able to say which happened.
+
+```
+f(g(), h())          ※ g runs, then h
+f(g(), ⁂pair_of())   ※ g runs, then pair_of, whose members become arguments 2 and 3
+a + b × c            ※ a is worked out first, though the multiplication groups first
+```
+
+The rule is the same everywhere a program writes several things in a row: a call's arguments, a tuple's members, an array's
+elements, a set's or a dictionary's entries -- and a dictionary's are worked out key, value, key, value, the order they are
+written in.  It is also the rule for an operator's two sides, and **precedence does not move anything**: how an expression groups
+decides what is worked out *from* what, not what is worked out first.  `a + b × c` groups as `a + (b × c)` and still works `a`
+out before `b`.
+
+**Each is worked out once.**  Writing a call as an argument, an element or an entry calls it one time, which is the other half of
+being able to say what a program does.
+
 A call binds tighter than every operator and to whatever stands immediately before it, so `a.b(c)` calls `a.b` and `f(x) + 1` adds
 to what the call answered with.  The parentheses are what say a call is being made, not what carry the arguments, so a call with
 none is written with them all the same.
+
+Compare: **C and C++ leave the order unspecified**, and C++17 still does for a call's arguments -- `f(g(), h())` may run either
+first, and the classic trap is `f(i++, i)`.  What that bought was the freedom to interleave the two, which mattered when
+registers were few; a compiler that wants the freedom now has it anyway, because it may reorder anything a reader cannot tell
+apart, and what a reader can tell apart is precisely what this rule names.  **Java, C#, JavaScript and Python** all specify left
+to right, having decided the same way and for the same reason.  **Go** specifies that function calls inside an expression are
+made left to right while leaving the rest of the operand order open.  **OCaml** famously evaluates a call's arguments *right* to
+left, which is consistent and still surprises everyone who reads it, being the opposite of the order the text is read in.
+**Scheme** leaves the order unspecified on purpose, so that a program may not depend on it at all -- a defensible answer in a
+language where most things do nothing, and not one available here, where arithmetic can stop the program.  **Rust** specifies
+left to right.
+
+The freedom C keeps is worth nothing to a language that is written by a program: a generator emits what it means, and an order
+the compiler chooses is one more thing the generator would have to avoid relying on by accident.
 
 **A call may stand as a statement of its own.**  It is the first expression in the language that does something besides produce a
 value, which is why the rule that a statement's value must be used does not apply to it.

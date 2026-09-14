@@ -457,11 +457,12 @@ To Do List for the PL4g language
 [ ] consider whether the two ways out of a loop should be distinguishable, as Python's `while ... else` makes them.  A program
     that wants to can set a name before the `break` and read it after, which is what the construct saves one line of.
 
-[ ] say what order a call's arguments are worked out in.  Nothing has needed it: the only things that can be noticed are a call
-    and an arithmetic check that stops the program, so the order shows only in which of two failures is reported.  The asterism
-    makes it visible -- a spread operand is lowered before an ordinary argument written to its left, because how many arguments
-    there are has to be known before an ordinary one can be paired with a parameter.  Left to right is the answer to write down,
-    and writing it down means giving the checker a way to ask an expression its type before lowering it.
+[x] say what order a call's arguments are worked out in.  Done, and said of everything rather than of arguments: a call's
+    arguments, a tuple's members, an array's elements, a collection's entries and an operator's two sides are all worked out in
+    the order they are written, each exactly once, and precedence moves nothing.  Two things had to be fixed to make it true --
+    a spread operand ran before an argument written to its left, and a collection's entries were each worked out twice, a
+    dictionary's keys all before its values.  Nothing was needed to ask an expression its type before lowering it; what was
+    needed was that whatever lowers one to learn its type hands the value back.
 
 
 Runtime

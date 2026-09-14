@@ -1,0 +1,49 @@
+※ pl4g-test: compile=ok run=native,qemu exit=42 diag=none
+
+※ Everything an expression is made of is worked out in the order it is written,
+※ left to right.  Nothing in the language shows this except a call, since a call
+※ is the only thing that can be noticed happening -- which is exactly why the
+※ order has to be stated rather than left to whatever the compiler finds easier.
+※
+※ `note` records the order it was called in, each call pushing a digit: the
+※ digits read left to right are the order the calls were made in.
+※
+※ The three lists a program can write are all here -- a call's arguments, a
+※ tuple's members, an array's elements -- and a tuple handed over as several
+※ arguments is worked out where it stands, not before the arguments written to
+※ its left.  A binary operator is here too, because precedence does not move
+※ anything: `a + b × c` groups the multiplication first and still works `a` out
+※ first, the order being the order of the writing and not the shape of the tree.
+
+let order: mut u8 = 0u8
+
+fn note(n: u8) → u8:
+    order ← order × 5u8 + n
+    n
+
+fn pair_of(n: u8) → 〈u8, u8〉:
+    〈note(n), note(n + 1u8)〉
+
+fn four(a: u8, b: u8, c: u8, d: u8) → u8:
+    a + b + c + d
+
+@[startup]
+fn main() → u8:
+    ※ 1, then the two the spread stands for, then 4
+    let sum: u8 = four(note(1u8), ⁂pair_of(2u8), note(4u8))
+    let arguments: u8 = order
+    order ← 0u8
+    ※ the same over a tuple's members
+    let made: 〈u8, u8, u8, u8〉 = 〈note(1u8), ⁂pair_of(2u8), note(4u8)〉
+    let members: u8 = order
+    order ← 0u8
+    ※ an array's elements, and an operator whose right side binds tighter
+    let v: u8⟦2⟧ = ⟦note(1u8), note(2u8)⟧
+    let worked: u8 = note(3u8) + v⟦0⟧ × note(4u8)
+    let elements: u8 = order
+    ※ 1,2,3,4 pushed in turn is ((1×5+2)×5+3)×5+4 = 194
+    if arguments = 194u8 ∧ members = 194u8 ∧ elements = 194u8:
+        ※ 10 + 4 + (3 + 1×4) = 21
+        sum + made⟦3⟧ + worked + 21u8
+    else:
+        0u8

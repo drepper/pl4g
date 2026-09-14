@@ -412,21 +412,17 @@ class _Loop:
 
 
 @dataclass(frozen=True, slots=True)
-class _Piece:
-    """One of the values a list of written things comes to.
+class _Entries:
+    """What a collection's entries came to, and what was wanted of them.
 
-    A call's arguments are such a list and a tuple's members are another, and
-    both admit `\N{ASTERISM}` in front of one of them, so both are expanded here.
-
-    `value` is what it already came to, which is so for something the asterism
-    took apart and for nothing else: every other piece waits to be lowered until
-    it is known what type is wanted of it, since a literal with no suffix takes
-    its type from there.  `written` is where it was written either way, which is
-    what a diagnostic points at.
+    They are lowered where they are written and put in the table afterwards, so
+    that each is worked out once and in the order it stands in.
     """
 
-    written: "ast.Expr"
-    value: "Value | None" = None
+    keys: "list[Value]"
+    values: "list[Value]"
+    wanted_key: "Type | None"
+    wanted_value: "Type | None"
 
 
 @dataclass(frozen=True, slots=True)
@@ -1878,22 +1874,15 @@ class Checker:
         expands into is members like any other, so a tuple made this way is a
         tuple made the other way and nothing downstream knows the difference.
         """
-        pieces = self._pieces_of(builder, expr.members)
-        if pieces is None:
+        wanted = expected.members if isinstance(expected, TupleType) else None
+        values = self._one_by_one(builder, expr.members, wanted)
+        if values is None:
             return UndefConst(ERROR)
-        if not pieces:
+        if not values:
             # Everything written was spread, and all of it was empty.  A tuple
             # of no members is not a type this language has.
             self._diags.emit(D.LANG_SPREAD_NOTHING_LEFT, expr.span)
             return UndefConst(ERROR)
-        wanted = expected.members if isinstance(expected, TupleType) \
-            and len(expected.members) == len(pieces) else None
-        values = [one.value if one.value is not None
-                  else (self._lower_into(builder, one.written, wanted[index],
-                                         one.written.span)
-                        if wanted is not None
-                        else self._lower_expr(builder, one.written, None))
-                  for index, one in enumerate(pieces)]
         types = [self._value_type_of(value) for value in values]
         if any(ty is ERROR for ty in types):
             return UndefConst(ERROR)
@@ -2413,35 +2402,35 @@ class Checker:
         """
         empty = (isinstance(expr, ast.SetLit) and not expr.elements) or \
             (isinstance(expr, ast.DictLit) and not expr.entries)
+        # Nothing written is nothing to work out, and a table with nothing in
+        # it is still a table.
+        ready = _Entries(keys=[], values=[], wanted_key=None, wanted_value=None)
         if empty:
             if not isinstance(expected, (SetType, DictType)):
                 self._diags.emit(D.LANG_COLLECTION_EMPTY_UNKNOWN, expr.span)
                 return UndefConst(ERROR)
             ty: Type = expected
-        elif isinstance(expr, ast.SetLit):
-            wanted = expected.element if isinstance(expected, SetType) else None
-            element = self._one_type(builder, expr.elements, wanted)
-            if element is ERROR:
-                return UndefConst(ERROR)
-            if not _can_be_a_key(element):
-                self._diags.emit(D.LANG_COLLECTION_KEY_NOT_HASHABLE,
-                                 expr.elements[0].span, found=element.render())
-                return UndefConst(ERROR)
-            ty = self._module.types.set_type(element)
         else:
-            wanted_key = expected.key if isinstance(expected, DictType) else None
-            wanted_value = expected.value if isinstance(expected, DictType) else None
-            key = self._one_type(builder, tuple(k for k, _ in expr.entries),
-                                 wanted_key)
-            value = self._one_type(builder, tuple(v for _, v in expr.entries),
-                                   wanted_value)
-            if key is ERROR or value is ERROR:
+            written = (tuple((one, None) for one in expr.elements)
+                       if isinstance(expr, ast.SetLit) else expr.entries)
+            ready = self._entries_written(builder, written, expected)
+            keys = self._same_type(ready.keys, [k.span for k, _ in written],
+                                   ready.wanted_key)
+            if keys is ERROR:
                 return UndefConst(ERROR)
-            if not _can_be_a_key(key):
+            if not _can_be_a_key(keys):
                 self._diags.emit(D.LANG_COLLECTION_KEY_NOT_HASHABLE,
-                                 expr.entries[0][0].span, found=key.render())
+                                 written[0][0].span, found=keys.render())
                 return UndefConst(ERROR)
-            ty = self._module.types.dict_type(key, value)
+            if isinstance(expr, ast.SetLit):
+                ty = self._module.types.set_type(keys)
+            else:
+                held = self._same_type(
+                    ready.values, [v.span for _, v in written if v is not None],
+                    ready.wanted_value)
+                if held is ERROR:
+                    return UndefConst(ERROR)
+                ty = self._module.types.dict_type(keys, held)
         if expected is not None and expected is not ty:
             self._report_mismatch(expr.span, ty, expected)
             return UndefConst(ERROR)
@@ -2453,7 +2442,7 @@ class Checker:
                              found=ty.value.render())
             return UndefConst(ERROR)
         return self._build_collection(builder, expr, ty,
-                                      self._arena_named(expr.arena))
+                                      self._arena_named(expr.arena), ready)
 
     def _arena_named(self, written: "ast.NameRef | None") -> "GlobalVar | None":
         """Which allocator a collection was told to come out of.
@@ -2475,25 +2464,25 @@ class Checker:
     def _build_collection(self, builder: IRBuilder,
                           expr: "ast.SetLit | ast.DictLit",
                           ty: "SetType | DictType",
-                          arena: "GlobalVar | None" = None) -> Value:
+                          arena: "GlobalVar | None",
+                          ready: "_Entries") -> Value:
         """Make the table a collection is, and put what was written down in it.
 
         The entries are put in one at a time through the same call an assignment
         uses, so a collection written with a key twice holds it once -- which is
         what a set is, and what Python answers for a dictionary written that way.
+
+        What goes in are the values the entries already came to.  They were
+        worked out where they were written, in the order they were written, and
+        working them out again here would be running them twice.
         """
         table = self._new_table(builder, ty, expr.span, arena)
-        written = (tuple((e, None) for e in expr.elements)
-                   if isinstance(expr, ast.SetLit) else expr.entries)
-        for key, value in written:
-            key_ty = ty.element if isinstance(ty, SetType) else ty.key
-            place = self._put_key(builder, table,
-                                  self._lower_into(builder, key, key_ty, key.span),
-                                  expr.span)
-            if value is not None and isinstance(ty, DictType):
+        held = iter(ready.values)
+        for at, key in enumerate(ready.keys):
+            place = self._put_key(builder, table, key, expr.span)
+            if isinstance(ty, DictType):
                 builder.store(self._value_place(builder, place, ty.value),
-                              self._lower_into(builder, value, ty.value,
-                                               value.span), expr.span)
+                              next(held), expr.span)
         return table
 
     def _new_table(self, builder: IRBuilder, ty: "SetType | DictType",
@@ -2577,17 +2566,38 @@ class Checker:
         them.  What is collected is every one of them, including any whose type
         did not agree, so that the places line up with what was written.
         """
-        found: Type | None = wanted
-        spoiled = False
-        # Nothing is expected of an entry: what it is, is what the collection
-        # is made of, and a mismatch between two of them is about the
-        # collection rather than about wherever it is being given to.
+        values = [self._lower_expr(builder, entry, None)
+                  for entry in self._nothing_expected(written)]
+        if into is not None:
+            into.extend(values)
+        return self._same_type(values, [entry.span for entry in written], wanted)
+
+    def _nothing_expected(self, written: "Sequence[ast.Expr]"
+                          ) -> "Sequence[ast.Expr]":
+        """Hand *written* back with the surrounding context put aside.
+
+        Nothing is expected of an entry: what it is, is what the collection is
+        made of, and a mismatch between two of them is about the collection
+        rather than about wherever it is being given to.
+        """
         outer = self._initializing, self._assigning
         self._initializing, self._assigning = None, None
-        for entry in written:
-            value = self._lower_expr(builder, entry, None)
-            if into is not None:
-                into.append(value)
+        try:
+            yield from written
+        finally:
+            self._initializing, self._assigning = outer
+
+    def _same_type(self, values: "Sequence[Value]", spans: "Sequence[Span]",
+                   wanted: Type | None) -> Type:
+        """The one type several values share, reporting one that does not.
+
+        Asked of values rather than of what was written, because the thing that
+        wanted to know has already lowered them: an entry is worked out once,
+        where it stands.
+        """
+        found: Type | None = wanted
+        spoiled = False
+        for value, span in zip(values, spans):
             ty = self._value_type_of(value)
             if ty is ERROR:
                 spoiled = True
@@ -2595,11 +2605,43 @@ class Checker:
             if found is None:
                 found = ty
             elif ty is not found:
-                self._diags.emit(D.LANG_COLLECTION_MIXED_ENTRIES, entry.span,
+                self._diags.emit(D.LANG_COLLECTION_MIXED_ENTRIES, span,
                                  found=ty.render(), expected=found.render())
                 spoiled = True
-        self._initializing, self._assigning = outer
         return ERROR if spoiled or found is None else found
+
+    def _entries_written(self, builder: IRBuilder,
+                         written: "Sequence[tuple[ast.Expr, ast.Expr | None]]",
+                         expected: Type | None) -> "_Entries":
+        """Lower a collection's entries, once each and in the order written.
+
+        A dictionary is written key, value, key, value, and that is the order
+        they are worked out in: the two were lowered in two passes, all the keys
+        and then all the values, which put them in an order nobody wrote.
+
+        Nothing is expected of an entry even where the collection's type is
+        written down.  What an entry is, is what the collection is made of, and
+        a disagreement between one entry and the type is the same complaint as a
+        disagreement between two entries -- so the wanted type is carried out as
+        what `_same_type` starts from rather than as what each entry is lowered
+        into, and one message says it either way.
+        """
+        wanted_key = expected.element if isinstance(expected, SetType) else \
+            expected.key if isinstance(expected, DictType) else None
+        wanted_value = expected.value if isinstance(expected, DictType) else None
+        keys: list[Value] = []
+        values: list[Value] = []
+        outer = self._initializing, self._assigning
+        self._initializing, self._assigning = None, None
+        try:
+            for key, value in written:
+                keys.append(self._lower_expr(builder, key, None))
+                if value is not None:
+                    values.append(self._lower_expr(builder, value, None))
+        finally:
+            self._initializing, self._assigning = outer
+        return _Entries(keys=keys, values=values, wanted_key=wanted_key,
+                        wanted_value=wanted_value)
 
     def _lower_index(self, builder: IRBuilder, expr: ast.Index,
                      expected: Type | None) -> Value:
@@ -4609,29 +4651,19 @@ class Checker:
         if func is None:
             return UndefConst(ERROR)
         wanted = func.ty.params
-        # A tuple handed over as several arguments becomes them before anything
-        # is counted or checked: how many it becomes is read off its type, so by
-        # the time the arguments are matched against the parameters there is
-        # nothing left to say that they were not all written out.
-        given = self._pieces_of(builder, expr.args)
-        if given is None:
+        # Left to right, one argument at a time, a tuple handed over as several
+        # becoming them where it stands.  Which parameter an argument goes to is
+        # therefore known by the time it is lowered, which is what an unsuffixed
+        # literal needs, and nothing is worked out before something written to
+        # its left.
+        args = self._one_by_one(builder, expr.args, wanted, func.name)
+        if args is None:
             return UndefConst(ERROR)
-        if len(given) != len(wanted):
+        if len(args) != len(wanted):
             self._diags.emit(D.LANG_CALL_WRONG_ARGUMENT_COUNT, expr.span,
                              name=func.name, expected=len(wanted),
-                             found=len(given))
+                             found=len(args))
             return UndefConst(ERROR)
-        args: list[Value] = []
-        for position, (one, ty) in enumerate(zip(given, wanted), start=1):
-            outer, self._handing_over = self._handing_over, (func.name, position)
-            try:
-                args.append(one.value if one.value is not None
-                            else self._lower_into(builder, one.written, ty,
-                                                  one.written.span))
-                if one.value is not None and one.value.ty is not ty:
-                    self._report_mismatch(one.written.span, one.value.ty, ty)
-            finally:
-                self._handing_over = outer
         if any(value.ty is ERROR for value in args):
             return UndefConst(ERROR)
         answer = builder.call(func, args, func.ty.ret, expr.span)
@@ -4647,31 +4679,58 @@ class Checker:
             return UndefConst(ERROR)
         return answer
 
-    def _pieces_of(self, builder: IRBuilder, written: "Sequence[ast.Expr]"
-                   ) -> "list[_Piece] | None":
-        """What a list of written things comes to, with every spread taken apart.
+    def _one_by_one(self, builder: IRBuilder, written: "Sequence[ast.Expr]",
+                    wanted: "Sequence[Type] | None",
+                    callee: "str | None" = None) -> "list[Value] | None":
+        """Lower a list of written things left to right, spreads and all.
 
-        A tuple is several values travelling as one and a fixed array is several
-        held one after another; the asterism is what undoes either, so a spread
-        piece is lowered here and taken apart at once.  How many pieces it
-        becomes is its type's business and is known before anything is matched
-        against a parameter or a member.
+        The two such lists are a call's arguments and a tuple's members.  Each
+        is lowered where it stands and in the order it was written, so that
+        nothing is worked out before something written to its left -- which is
+        what the specification says a call does, and what a reader of a call
+        that both faults and calls has to be able to rely on.
 
-        A piece that is not spread is left as it was written, because what type
-        is wanted of it is not known until it is paired with the thing it is
-        going to -- a literal with no suffix takes its type from there.
+        *wanted* is what each place is to hold, where something says: a
+        parameter's type, or a member's.  A place beyond the end of it is one
+        the list should not have had, and what is written there is lowered with
+        nothing expected so that its own mistakes are still its own; the list
+        being the wrong length is reported by the caller, which is the one that
+        knows what length it should have been.
+
+        A spread is taken apart where it stands, so its operand is lowered in
+        its turn like everything else.  What it becomes are values already, and
+        each is checked against the place it lands on rather than lowered into
+        it -- there is nothing left to lower.
         """
-        found: list[_Piece] = []
+        values: list[Value] = []
+
+        def place() -> "Type | None":
+            """What the next value is to be, where anything says."""
+            return wanted[len(values)] \
+                if wanted is not None and len(values) < len(wanted) else None
+
         for one in written:
-            if not isinstance(one, ast.Spread):
-                found.append(_Piece(written=one))
-                continue
-            taken = self._taken_one_each(builder, one)
-            if taken is None:
-                return None
-            found.extend(_Piece(written=one.operand, value=value)
-                         for value in taken)
-        return found
+            outer = self._handing_over
+            if callee is not None:
+                self._handing_over = (callee, len(values) + 1)
+            try:
+                if isinstance(one, ast.Spread):
+                    taken = self._taken_one_each(builder, one)
+                    if taken is None:
+                        return None
+                    for value in taken:
+                        ty = place()
+                        if ty is not None and value.ty is not ty:
+                            self._report_mismatch(one.operand.span, value.ty, ty)
+                        values.append(value)
+                    continue
+                ty = place()
+                values.append(self._lower_into(builder, one, ty, one.span)
+                              if ty is not None
+                              else self._lower_expr(builder, one, None))
+            finally:
+                self._handing_over = outer
+        return values
 
     def _taken_one_each(self, builder: IRBuilder, spread: ast.Spread
                         ) -> "list[Value] | None":

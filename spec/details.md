@@ -856,11 +856,16 @@ written out.  No existing diagnostic had to learn about the glyph.  The four tha
 follows it is one value (4464), an array whose length is not in its type (4465), a tuple left with no members (4466), and the
 glyph standing where no list is (3031).
 
-**Evaluation order is the one thing the expansion moves.**  A spread operand is lowered in the first pass and an ordinary entry
-in the second, so in `f(g(), ⁂h())` the call to `h` is made before the call to `g`.  Running the two together would mean lowering
-an ordinary entry before it is known what type is wanted of it, which an unsuffixed literal will not have; doing the counting
-without lowering would mean a way of asking an expression its type before lowering it, which this checker does not have.  It is
-recorded in [TODO-language.md](../TODO-language.md), the language not yet having said what order arguments are worked out in.
+**The expansion happens in the same pass that lowers.**  `_one_by_one` walks a written list once, left to right, lowering each
+entry where it stands: a spread is taken apart in its turn, and an ordinary entry is lowered into whatever the place it has
+landed on wants.  Which place that is, is known because everything to its left has already been counted, which is what lets an
+unsuffixed literal still take its parameter's type.
+
+An earlier version ran two passes -- every spread first, then everything else -- which made `f(g(), ⁂h())` call `h` before `g`.
+One pass is what the specification's left-to-right rule requires, and it needs nothing the two-pass version had: the count is not
+known before the arguments are lowered, so the arity check simply moves after them.  What that costs is that a call with the
+wrong number of arguments now lowers the ones that have a parameter, so a mismatch in one of those is reported beside the count;
+both complaints are true of the call.
 
 **The last of those is the parser's and not the checker's.**  `⁂` is admitted only in front of an entry of one of the two lists,
 which is what the tree-sitter grammar says too.  The first implementation made it an expression and refused it in `_lower_expr`;
@@ -893,6 +898,31 @@ names, which is reported (4469) rather than optimized.
 **A label that is already taken is dropped rather than refused.**  `_label_of` reports 4468 and answers nothing, so the loop is
 lowered without a name and its body is checked like any other; refusing the loop outright would hide everything else wrong with
 the body behind one message.
+
+The order things are worked out in
+----------------------------------
+
+The specification says left to right, everywhere several things are written in a row.  What makes that a claim about the compiler
+rather than an accident is that lowering happens in one walk in written order, so there is one place per construct that could
+break it, and each is written to walk once:
+
+- a call's arguments and a tuple's members, through `_one_by_one`;
+- an array's elements, through `_fill`, with what `_array_written` had to lower to learn the type carried forward rather than
+  worked out again;
+- a collection's entries, through `_entries_written`, which walks key, value, key, value and hands what it lowered to
+  `_build_collection`;
+- an operator's two sides, which `_lower_binary` lowers in that order, precedence having already decided the shape of the tree
+  and not the order the walk visits it in.
+
+Two of those were wrong before the rule was written down, and in the same way: something had to lower an expression to learn its
+type, and something else lowered it again to use it.  A collection's entries were each worked out **twice** -- once by
+`_one_type` to find what type they share, once by `_build_collection` to put them in the table -- so a call written as an entry
+was made twice; and a dictionary's keys were all worked out before any of its values, an order nobody wrote.  Both are fixed by
+lowering once and carrying the values, which is the same shape the array literal already needed.
+
+The rule that makes this easy to keep: **a function that answers what type something has must hand back what it lowered.**
+`_one_type` takes an `into` list, `_array_written` answers the elements beside the type, and `_entries_written` answers an
+`_Entries`.  Anything that asks a type and throws the value away will lower it a second time somewhere.
 
 Calling conventions
 -------------------

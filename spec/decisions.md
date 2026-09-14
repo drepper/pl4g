@@ -2868,6 +2868,42 @@ which this does not follow because a name and its use are spelled alike here.
 
 ---
 
+## 2026-09-14T18:00+02:00 — language
+
+**Everything is worked out left to right**
+
+Decided on the user's direction, and written into the specification: a call's arguments are worked out in the order they are
+written, and so is everything else a program writes several of in a row.
+
+**The rule is one rule, not a rule about calls.**  Arguments, a tuple's members, an array's elements, a set's and a dictionary's
+entries, and an operator's two sides all follow it -- a dictionary's being worked out key, value, key, value, the order they
+stand in.  Making it a rule about calls only would have left a reader asking the same question again at every other list, and
+there is no construct here that would have wanted a different answer.
+
+**Precedence does not move anything.**  `a + b × c` groups as `a + (b × c)` and still works `a` out first: how an expression
+groups decides what is worked out *from* what, and the writing decides what is worked out first.  These are two different
+questions and it is worth saying that they are, since every language that leaves the order open invites the reading that the tree
+decides it.
+
+**Each thing is worked out once**, which had to be said with the order, and was the half that was actually broken: a set's or a
+dictionary's entries were each lowered twice -- once to learn what type they shared, once to put them in the table -- so a call
+written as an entry was made twice.  The spread expansion had the ordering half wrong for calls, running a spread operand before
+an argument written to its left.
+
+**What C keeps by leaving it open is worth nothing here.**  The freedom to interleave two arguments mattered when registers were
+few; a compiler that wants it still has it, since it may reorder anything a reader cannot tell apart, and what a reader can tell
+apart is precisely what this rule names.  What the freedom costs is that a generator has to avoid relying on an order by
+accident, which is not a thing a program writing this language can be careful about -- so the language is careful instead.
+
+Compare: C and C++, unspecified, and C++17 still so for a call's arguments -- `f(i++, i)` is the classic trap; Java, C#,
+JavaScript, Python and Rust, all left to right, having decided the same way; Go, which fixes the order of the *calls* inside an
+expression and leaves the rest of the operand order open -- half of this rule, and the half that matters least here, since a call
+is not the only thing that can stop the program; OCaml, right to left, consistent and the opposite of the order the text is read
+in; and Scheme, deliberately unspecified so that no program may depend on it -- defensible where most things do nothing, and not
+available here, where arithmetic can stop the program.
+
+---
+
 ---
 
 Open questions
