@@ -4,8 +4,19 @@ version = "0.1"
 description = "Bootstrap compiler for PL4G, the Programming Language for Generators"
 requires-python = ">=3.14"
 
+[project.optional-dependencies]
+# The suite is run over every core by default, which is what `pytest-xdist`
+# does; without it `pytest` stops at the option rather than running serially,
+# so it is named here and not merely assumed.
+test = ["pytest", "pytest-xdist"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Over every core.  Two and a half minutes becomes seven seconds on a machine
+# with sixty-four of them, which is the difference between running the suite
+# after each change and running it when it occurs to you.  `-n0` on the command
+# line puts it back in one process, which is what a debugger wants.
+addopts = ["-n", "auto"]
 markers = [
     "qemu: runs the generated binary under qemu-user",
     "objdump: compares generated encodings against an external disassembler",

@@ -453,10 +453,15 @@ gets anyway.
 Running the tests
 -----------------
 
-`python -m pytest tests` runs everything, and `-n auto` runs it over every core: about two and a half minutes becomes about seven
-seconds on a machine with sixty-four of them, which is the difference between running the suite after each change and running it
-when it occurs to you.  Nothing in the suite depends on order or shares a file between tests -- each language test compiles to a
-path made of its own name, its optimization level and its target -- so what parallelism needed was not a change to the tests.
+`python -m pytest tests` runs everything, over every core: about two and a half minutes becomes about seven seconds on a machine
+with sixty-four of them, which is the difference between running the suite after each change and running it when it occurs to you.
+That is the default rather than something to remember -- `addopts` in `pyproject.toml` says `-n auto` -- and `-n0` on the command
+line puts it back in one process, which is what a debugger wants and what a test printing something wants.  `pytest-xdist` is
+therefore a dependency and is named as one: without it `pytest` stops at the option rather than quietly running serially, which is
+the right way round for a thing the suite depends on.
+
+Nothing in the suite depends on order or shares a file between tests -- each language test compiles to a path made of its own
+name, its optimization level and its target -- so what parallelism needed was not a change to the tests.
 
 What it needed was two races outside them, both of the same shape: a shared library written where it is read from.
 
