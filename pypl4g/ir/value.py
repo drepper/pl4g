@@ -7,6 +7,7 @@ constants of the same type are two references, and treating them as equal would
 break every use list.
 """
 
+from ..source.location import INVALID_SPAN, Span
 from .types import (ArrayType, BoolType, EnumType, FloatType, IntType,
                     ResultType, Type)
 
@@ -14,11 +15,15 @@ from .types import (ArrayType, BoolType, EnumType, FloatType, IntType,
 class Value:
     """Base of everything that can appear as an operand."""
 
-    __slots__ = ("ty", "name_hint")
+    __slots__ = ("ty", "name_hint", "name_span")
 
     def __init__(self, ty: Type, name_hint: str | None = None) -> None:
         self.ty = ty
         self.name_hint = name_hint
+        #: Where that name is written, so that a pass removing the value can
+        #: point at the name rather than at whatever produced it -- which is
+        #: somewhere else on the line, and sometimes on another line entirely.
+        self.name_span: Span = INVALID_SPAN
 
     def __hash__(self) -> int:
         return id(self)

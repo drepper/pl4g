@@ -36,6 +36,7 @@ from collections.abc import Iterable
 from ...ir.decisions import DecisionKind
 from ...ir.function import Function, Linkage
 from ...ir.module import GlobalVar, Module
+from ...source.location import Span
 
 
 class DropUnreached:
@@ -64,7 +65,7 @@ class DropUnreached:
                     DecisionKind.DROP_FUNCTION, func.name,
                     "nothing the program can run reaches it, and it is not "
                     "exported, so nothing outside can reach it either",
-                    func.span)
+                    _where(func.name_span, func.span))
         module.functions = functions
 
         named = self._variables_named_by(module, functions.values())
@@ -78,7 +79,7 @@ class DropUnreached:
                         DecisionKind.DROP_VARIABLE, var.name,
                         "no function that is itself reached names it, and it is "
                         "not exported",
-                        var.span)
+                        _where(var.name_span, var.span))
             module.globals = variables
         return changed
 
@@ -153,3 +154,13 @@ class DropUnreached:
                         if isinstance(place, GlobalVar):
                             named.add(id(place))
         return named
+
+
+def _where(name: Span, whole: Span) -> Span:
+    """Where a decision about a definition points: at its name, where there is one.
+
+    The whole definition begins at its first attribute or at the keyword, so a
+    reader following the log gets the line right and the column wrong -- and for
+    a definition at the top level, always column one.
+    """
+    return name if name.is_valid else whole

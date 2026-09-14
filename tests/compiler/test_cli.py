@@ -258,7 +258,10 @@ def test_a_local_that_is_dropped_is_logged(tmp_path: Path) -> None:
     decisions = json.loads(log.read_text(encoding="utf-8"))["decisions"]
     locals_ = [d for d in decisions if d["kind"] == "drop-local"]
     assert [d["subject"] for d in locals_] == ["unread"], decisions
-    assert locals_[0]["where"]["line"] == 6, locals_
+    # At the name, not at the initializer and not at the indentation: a reader
+    # following the log to a line wants to be put on the thing that went.
+    assert (locals_[0]["where"]["line"], locals_[0]["where"]["column"]) \
+        == (6, 9), locals_
 
 
 def test_nothing_is_dropped_where_nothing_asked_for_it(tmp_path: Path) -> None:
@@ -296,7 +299,10 @@ def test_a_call_that_is_not_made_reaches_the_log(tmp_path: Path) -> None:
     decisions = json.loads(log.read_text(encoding="utf-8"))["decisions"]
     calls = [d for d in decisions if d["kind"] == "drop-call"]
     assert [d["subject"] for d in calls] == ["worked_out"], decisions
-    assert calls[0]["where"]["line"] == 6, calls
+    # At the call, which is neither where the line begins nor where the
+    # statement does: `_ \N{LEFTWARDS ARROW} ` stands before it.
+    assert (calls[0]["where"]["line"], calls[0]["where"]["column"]) \
+        == (6, 9), calls
 
 
 def test_a_call_that_is_not_made_goes_at_every_level(tmp_path: Path) -> None:

@@ -23,7 +23,7 @@
       "where": {
         "file": "u.pl4g",
         "line": 11,
-        "column": 1
+        "column": 4
       }
     }
   ]

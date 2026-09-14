@@ -28,7 +28,8 @@ class GlobalVar(Value):
                  initializer: Value | None = None,
                  linkage: Linkage = Linkage.INTERNAL,
                  span: Span = INVALID_SPAN, module: str = "",
-                 exported: bool = False, system_layout: bool = False) -> None:
+                 exported: bool = False, system_layout: bool = False,
+                 name_span: Span = INVALID_SPAN) -> None:
         super().__init__(ptr_type, name)
         self.name = name
         #: The type of what the variable holds, not of the variable itself.
@@ -37,6 +38,9 @@ class GlobalVar(Value):
         #: A variable is always given a value where it is defined.
         self.initializer = initializer
         self.span = span
+        # `name_span` comes from Value, where every named thing keeps where its
+        # name is written; what is set here is the definition's own extent.
+        self.name_span = name_span if name_span.is_valid else span
         self.module = module
         #: Whether a file importing this module may name it, which is a
         #: different question from whether the image offers the symbol.

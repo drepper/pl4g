@@ -68,7 +68,8 @@ class DeadCodeElimination:
                         DecisionKind.DROP_LOCAL, inst.name_hint,
                         "".join(("nothing reads it, and computing it does nothing "
                                  "else, so it is not in ", func.name)),
-                        inst.span)
+                        inst.name_span if inst.name_span.is_valid
+                        else inst.span)
             block.insts = kept
             removed = True
         return removed

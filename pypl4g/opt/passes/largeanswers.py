@@ -77,7 +77,7 @@ class LargeAnswers:
                 "".join(("'", answers[id(func)].render(), "' is more values ",
                          "than the style answers in registers, so the caller ",
                          "provides the place")),
-                func.span)
+                func.name_span if func.name_span.is_valid else func.span)
         return True
 
     def _widen(self, module: Module, func: Function) -> None:

@@ -543,3 +543,24 @@ def test_a_call_that_is_made_is_not_recorded() -> None:
     block.append(RetInst(module.int_const(U8, 0)))
     assert not DeadCodeElimination().run(module)
     assert module.decisions.of_kind(DecisionKind.DROP_CALL) == []
+
+
+def test_a_dropped_function_is_pointed_at_by_its_name() -> None:
+    """A definition begins at its keyword, which is not what a reader looks for.
+
+    At the top level that is column one on every one of them, so a log that
+    pointed there would say nothing a reader could not have worked out.
+    """
+    from pypl4g.ir.decisions import DecisionKind
+    from pypl4g.source.location import Span
+
+    module = Module("t")
+    orphan = Function("orphan", module.types.func_type((), U8), FuncAttrs(),
+                      span=Span(0, 30), name_span=Span(3, 9))
+    orphan.add_block().append(RetInst(module.int_const(U8, 1)))
+    module.add_function(orphan)
+    _startup(module).blocks[0].append(RetInst(module.int_const(U8, 0)))
+    assert DropUnreached().run(module)
+    dropped = module.decisions.of_kind(DecisionKind.DROP_FUNCTION)
+    assert [d.span.start for d in dropped] == [3], \
+        "the log points at the definition rather than at the name"

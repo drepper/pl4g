@@ -158,6 +158,10 @@ class Function:
     cconv: str = DEFAULT_CCONV
     blocks: list[BasicBlock] = field(default_factory=list)
     span: Span = INVALID_SPAN
+    #: Where the name is written, which is what a message about the function
+    #: itself points at: the whole definition begins at its first attribute or
+    #: at the keyword, neither of which is what a reader is looking for.
+    name_span: Span = INVALID_SPAN
     source_path: str = ""
     #: The module the function belongs to, which prefixes its symbol name.
     module: str = ""

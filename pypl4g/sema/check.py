@@ -682,6 +682,7 @@ class Checker:
             name=node.name, value_type=ty,
             ptr_type=self._module.types.ptr_type(ty, mutable=node.mutable),
             initializer=initializer, linkage=linkage, span=node.span,
+            name_span=node.name_span,
             exported=self._is_export(attrs),
             system_layout=any(a.name == "cdecl" for a in attrs)),
             key=self._key(node.name))
@@ -1148,7 +1149,8 @@ class Checker:
                             exported=self._is_export(attrs),
                             cconv=(func_attrs.abi if func_attrs.abi is not None
                                    else DEFAULT_CCONV),
-                            span=node.span, source_path=path)
+                            span=node.span, name_span=node.name_span,
+                            source_path=path)
             self._module.add_function(func, key=self._key(node.name))
             self._top[node.name] = func
             self._owned.append(func)
@@ -3315,7 +3317,7 @@ class Checker:
                    value: Value) -> None:
         """Bind what a turn gave to the names the loop was written with."""
         if stmt.more:
-            self._name_value(value, stmt.name)
+            self._name_value(value, stmt.name, stmt.name_span)
             self._bind_apart(builder, stmt, value)
             return
         if stmt.name == WILDCARD_NAME:
@@ -3323,7 +3325,7 @@ class Checker:
             # runs a turn for each value there is and the value itself is not
             # wanted.  Nothing is bound, so nothing is reported as unread.
             return
-        self._name_value(value, stmt.name)
+        self._name_value(value, stmt.name, stmt.name_span)
         self._bind_local(stmt.name, value, stmt.name_span,
                          value_span=stmt.iterable.span)
 
@@ -3799,7 +3801,7 @@ class Checker:
             if arm.binds is not None:
                 name, name_span, where_span, value, answer_ty = arm.binds
                 bound = builder.unwrap(value, answer_ty, where_span)
-                self._name_value(bound, name)
+                self._name_value(bound, name, name_span)
                 self._bind_local(name, bound, name_span, value_span=where_span)
             given = self._lower_block(builder, arm.body, func, as_result=False,
                                       wanted=answer, produces=produces)
@@ -3986,7 +3988,7 @@ class Checker:
             self._bind_apart(builder, node, value)
             return
         bound = self._as_declared(value, declared)
-        self._name_value(bound, node.name)
+        self._name_value(bound, node.name, node.name_span)
         self._bind_local(node.name, bound, node.name_span, node.mutable,
                          value_span=node.span)
 
@@ -4000,7 +4002,7 @@ class Checker:
         if node.more:
             self._bind_apart(builder, node, value)
             return
-        self._name_value(value, node.name)
+        self._name_value(value, node.name, node.name_span)
         self._bind_local(node.name, value, node.name_span, node.mutable,
                          value_span=node.span)
 
@@ -4020,10 +4022,11 @@ class Checker:
                                  value_span=node.span)
                 continue
             part = builder.extract(value, index, members[index], node.span)
-            self._name_value(part, name)
+            self._name_value(part, name, where)
             self._bind_local(name, part, where, mutable, value_span=node.span)
 
-    def _name_value(self, value: Value, name: str) -> None:
+    def _name_value(self, value: Value, name: str,
+                    where: Span = INVALID_SPAN) -> None:
         """Record which local a computed value belongs to.
 
         Only an instruction is named, and only if it has no name already.  A
@@ -4033,10 +4036,14 @@ class Checker:
 
         The name is a hint and nothing reads it to decide anything.  It is what
         lets the textual form be read against the source it came from, and what
-        lets a pass that removes a value say which local went with it.
+        lets a pass that removes a value say which local went with it -- and
+        *where*, which is why the name's own span travels with it.  Pointing at
+        the instruction instead would point at the initializer, which is
+        somewhere else on the line and sometimes on another line entirely.
         """
         if isinstance(value, Instruction) and value.name_hint is None:
             value.name_hint = name
+            value.name_span = where
 
     def _lower_assignment(self, builder: IRBuilder, node: ast.AssignStmt,
                           wants_value: bool = False) -> Value | None:

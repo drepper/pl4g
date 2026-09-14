@@ -373,6 +373,13 @@ reading the log matches on; a `subject`, named as the program names it; a `reaso
 reworded; and, where the subject is written in a source file, a `where` giving the file, line and column -- being told that a
 function went without being told which one would leave the reader to find it.
 
+**`where` points at the subject's own name**, not at the construct that holds it.  A definition begins at its first attribute or
+at its keyword, which at the top level is column one on every one of them; a local's value is produced somewhere else on the line
+and sometimes on another line; and the call in `_ ← f()` begins four characters in.  A column that answered "where the line
+begins" would say nothing a reader could not have worked out, so every named thing carries the span of its name: `Value` has a
+`name_span` beside its `name_hint`, and a `Function` and a variable at the top level have one of their own.  A call needs none,
+its instruction already beginning at the callee.
+
 What is recorded today is what is left out, and one thing that is put somewhere the program did not write it:
 `drop-function` and `drop-variable` from the reachability pass, `drop-local` and `drop-call` from the dead-code sweep, and
 `answer-in-storage` from the pass that rewrites a function answering with more than the registers hold.  The first two happen at
