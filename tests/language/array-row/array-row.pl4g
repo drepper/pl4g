@@ -1,0 +1,17 @@
+※ pl4g-test: compile=ok run=native,qemu exit=41 diag=none
+
+※ Fewer indices than there are dimensions names a *row* -- everything the
+※ dimensions left over reach.  Row-major is what makes that cheap: a row is a
+※ run of elements, so naming one is arithmetic on the place and no copy at all.
+※
+※ Where the array says its shape the row says its own, and where it does not the
+※ row carries the counts that are left over.
+
+fn first(xs: u8⟦⟧) → u8:
+    xs⟦0⟧
+
+@[startup]
+fn main() → u8:
+    let m: u8⟦2,3⟧ = ⟦⟦1u8,2u8,3u8⟧,⟦10u8,20u8,30u8⟧⟧
+    let row: u8⟦3⟧ = m⟦1⟧
+    row⟦0⟧ + row⟦2⟧ + first(m⟦0⟧)

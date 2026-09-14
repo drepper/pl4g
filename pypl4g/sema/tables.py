@@ -154,6 +154,7 @@ def ensure_runtime(module: Module) -> None:
     _build_slot(module)
     _build_put(module)
     _build_select(module)
+    _build_next(module)
 
 
 # -- the pieces every one of them uses -------------------------------------------
@@ -592,3 +593,68 @@ def _build_select(module: Module) -> Function:
     done.add_param(MEM, "mem")
     builder.ret()
     return func
+
+
+# -- walking one ------------------------------------------------------------------
+
+NEXT_SYMBOL: Final[str] = "__pl4g_table_next"
+
+
+def _build_next(module: Module) -> Function:
+    """``__pl4g_table_next(table, from)``: where the next entry holding a key is.
+
+    Answered as a place in the array of entries, at or after *from*, and as one
+    past the last place where there is none -- which is the same number a walk
+    compares against to know it is done, so a caller needs no second answer for
+    "there is no next one".
+
+    A table is not walked in the order its keys were put in it.  It has no such
+    order: where a key lands is where its hash puts it, and growing the table
+    moves everything.  Python promises the order keys were added in and pays for
+    it with a second array; Go deliberately randomises its walk so that no
+    program can come to depend on an order it never promised.  This promises
+    nothing and pays nothing, and the specification says so.
+    """
+    table_ptr = table_type(module)
+    func, fresh = _generated(module, NEXT_SYMBOL, (table_ptr, U64), U64)
+    if not fresh:
+        return func
+    entry = func.add_block()
+    walk = func.add_block("walk")
+    look = func.add_block("look")
+    onward = func.add_block("onward")
+    done = func.add_block("done")
+    builder = IRBuilder(module, func)
+    builder.position_at(entry)
+    table = entry.add_param(table_ptr, "table")
+    start = entry.add_param(U64, "from")
+    capacity = builder.binary(BinOp.WRAP_ADD, _read(builder, table, MASK_FIELD),
+                              builder.int_const(U64, 1))
+    stride = _read(builder, table, STRIDE_FIELD)
+    entries = _read_address(builder, table, ENTRIES_FIELD, U64)
+    builder.br(walk, (start,))
+
+    builder.position_at(walk)
+    at = walk.add_param(U64, "at")
+    builder.condbr(builder.compare(CmpPred.UGE, at, capacity), done, look)
+
+    builder.position_at(look)
+    builder.condbr(
+        builder.compare(CmpPred.EQ,
+                        builder.load(_entry(builder, entries, at, stride)),
+                        builder.int_const(U64, LIVE)),
+        done, onward)
+
+    builder.position_at(onward)
+    builder.br(walk, (builder.binary(BinOp.WRAP_ADD, at,
+                                     builder.int_const(U64, 1)),))
+
+    builder.position_at(done)
+    builder.ret(at)
+    return func
+
+
+def entry_at(builder: IRBuilder, table: Value, at: Value) -> Value:
+    """Where the entry at one place in a table's array of entries is."""
+    return _entry(builder, _read_address(builder, table, ENTRIES_FIELD, U64), at,
+                  _read(builder, table, STRIDE_FIELD))

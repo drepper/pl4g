@@ -3455,7 +3455,7 @@
           "description": "how many dimensions the array has"
         }
       ],
-      "cause": "There is one index per dimension, in the order the shape was written in.  Fewer would name a row rather than an element, which is a thing this language does not yet take out of an array, and more would name a dimension the array does not have.",
+      "cause": "Reading from an array takes one index per dimension, which names an element, or fewer, which names a row.  More would name a dimension the array does not have.  Writing takes one per dimension and no fewer: what is written is one element, and copying a whole row is not what an assignment means anywhere else.",
       "spec": {
         "document": "spec/spec.md",
         "section": "The Language / Types / Arrays",

@@ -386,6 +386,28 @@ def _heap(module: Module) -> GlobalVar:
         initializer=None, linkage=Linkage.INTERNAL), key=HEAP_NAME)
 
 
+@dataclass(frozen=True, slots=True)
+class _Iteration:
+    """What a loop needs of the thing it takes its values from.
+
+    The three are the one thing an iterator is, taken apart into the places a
+    loop asks them: whether there is another turn, which it asks where it tests;
+    what this turn gives, which it asks in the body; and what the next turn
+    starts from, which it asks at the branch backwards.  A `next` answering a
+    result is those three said as one value, and it is what a user-written
+    iterator will answer with -- the loop built here is the loop either kind
+    wants.
+    """
+
+    #: What a turn is bound to.
+    element: Type
+    #: What the loop carries from turn to turn, as it starts out.
+    start: tuple[Value, ...]
+    more: "Callable[[IRBuilder, tuple[Value, ...]], Value]"
+    take: "Callable[[IRBuilder, tuple[Value, ...]], Value]"
+    step: "Callable[[IRBuilder, tuple[Value, ...]], tuple[Value, ...]]"
+
+
 class Checker:
     """Checks one program and lowers it into a module."""
 
@@ -2050,13 +2072,18 @@ class Checker:
     def _offset_of(self, builder: IRBuilder, written: "Sequence[ast.Expr]",
                    ty: ArrayType, lengths: "Sequence[Value]",
                    span: Span) -> "Value | None":
-        """How far into the run of elements one place is.
+        """How far into the run of elements one place is, counted in elements.
 
         Row-major: each index is added on after what is already there has been
         multiplied by the dimension it is stepping through.  For a vector that
         is the index itself, which is what it should be.
+
+        Fewer indices than there are dimensions names a *row* -- everything the
+        dimensions left over reach -- and the place it begins is that many rows
+        in, so what the indices come to is multiplied by how many elements a row
+        holds.
         """
-        if len(written) != ty.rank:
+        if len(written) > ty.rank:
             self._diags.emit(D.LANG_ARRAY_WRONG_RANK, span, given=len(written),
                              wanted=ty.rank)
             return None
@@ -2066,15 +2093,39 @@ class Checker:
                                         lengths[at], span)
             if index is None:
                 return None
-            if offset is None:
-                offset = index
-                continue
-            offset = builder.binary(
+            offset = index if offset is None else builder.binary(
                 BinOp.WRAP_ADD,
                 builder.binary(BinOp.WRAP_MUL, offset, lengths[at], span),
                 index, span)
         assert offset is not None
+        return self._by_row(builder, offset, lengths[len(written):], span)
+
+    def _by_row(self, builder: IRBuilder, offset: Value,
+                left: "Sequence[Value]", span: Span) -> Value:
+        """A count of rows turned into a count of elements."""
+        for along in left:
+            offset = builder.binary(BinOp.WRAP_MUL, offset, along, span)
         return offset
+
+    def _row_type(self, ty: ArrayType, taken: int) -> ArrayType:
+        """The type of what is left of an array once *taken* indices are given."""
+        return self._module.types.array_type(ty.element, ty.shape[taken:])
+
+    def _row_at(self, builder: IRBuilder, start: Value, ty: ArrayType,
+                lengths: "Sequence[Value]", offset: Value, taken: int,
+                span: Span) -> Value:
+        """The row an array has at a place, where not every index was given.
+
+        Row-major is what makes this cheap: a row is a run of elements, so
+        naming one is arithmetic on the place and no copy at all.  Where the
+        array it came from says its shape the row says its own; where it does
+        not, the row carries the counts that are left over.
+        """
+        place = self._element_place(builder, start, ty.element, offset, span)
+        row = self._row_type(ty, taken)
+        if row.fixed:
+            return builder.cast(CastKind.BITCAST, place, row, span)
+        return builder.make_tuple((place, *lengths[taken:]), row, span)
 
     def _lower_element(self, builder: IRBuilder, expr: ast.Element,
                        expected: Type | None) -> Value:
@@ -2089,6 +2140,14 @@ class Checker:
         offset = self._offset_of(builder, expr.indices, ty, lengths, expr.span)
         if offset is None:
             return UndefConst(ERROR)
+        if len(expr.indices) < ty.rank:
+            # Fewer indices than dimensions names a row rather than an element.
+            row = self._row_at(builder, start, ty, lengths, offset,
+                               len(expr.indices), expr.span)
+            found_ty = self._value_type_of(row)
+            if expected is not None and expected is not found_ty:
+                self._report_mismatch(expr.span, found_ty, expected)
+            return row
         value = builder.load(
             self._element_place(builder, start, ty.element, offset, expr.span),
             expr.span)
@@ -2154,6 +2213,14 @@ class Checker:
         if found is None:
             return
         base, ty = found
+        if len(stmt.indices) != ty.rank:
+            # Every index, because what is assigned is one element.  Assigning a
+            # whole row would be copying one array into another, which nothing
+            # in the language does yet and which is not what `←` means anywhere
+            # else: it binds a name or writes one place.
+            self._diags.emit(D.LANG_ARRAY_WRONG_RANK, stmt.span,
+                             given=len(stmt.indices), wanted=ty.rank)
+            return
         start, lengths = self._shape_of(builder, base, ty, stmt.span)
         offset = self._offset_of(builder, stmt.indices, ty, lengths, stmt.span)
         if offset is None:
@@ -2569,21 +2636,26 @@ class Checker:
         that is said, and it does not surface: the names are bound to what
         there was, and a loop over something with nothing in it runs no turns.
 
-        A range is the only thing that is an iterator so far, and its `next` is
-        lowered where it is asked rather than called: what it comes to is a
-        comparison against the end and an addition, which is what every language
-        that has ranges emits for one.  The shape a user-written iterator will
-        have is the same -- ask, then take what the asking gave -- so the loop
-        below is the loop either kind wants.
+        Four things are iterators, and none of them is called: each one's `next`
+        is lowered where it is asked, which for a range is a comparison and an
+        addition, for an array a comparison and a read, and for a table a walk
+        that steps past the places holding nothing.  What they have in common is
+        the shape below, so the loop is one loop:
 
-            before:  br loop(first, v₁ … vₙ, mem)
-            loop(i, p₁ … pₙ, mem):  condbr i has not passed the end → body, done
-            body:    the name stands for i; the statements; br loop(i + step, …)
+            before:  br loop(s₁ … sₖ, v₁ … vₙ, mem)
+            loop(s₁ … sₖ, p₁ … pₙ, mem):  condbr there is another → body, done
+            body:    the names stand for this one; the statements; br loop(…)
             done:    what follows
+
+        `s₁ … sₖ` is whatever the thing being iterated has to carry from one turn to
+        the next: a counter for a range and an array, a place in the entries for
+        a table.  Everything that does not change from turn to turn -- where an
+        array's elements are, how many there are -- is worked out once before
+        the loop and read from where it was left.
         """
         if builder.block is None:
             return
-        found = self._range_of(builder, stmt)
+        found = self._iteration_over(builder, stmt)
         if found is None:
             # Bound to nothing that means anything, so that a later mention of
             # the name reports nothing of its own.
@@ -2592,16 +2664,16 @@ class Checker:
             self._lower_block(builder, stmt.body, func, as_result=False)
             self._pop_scope()
             return
-        first, last, step, rising, element = found
         carried = self._loop_locals(stmt.body)
         header = builder.new_block("loop")
         body = builder.new_block("body")
         after = builder.new_block("done")
         builder.br(header,
-                   (first, *(local.value for local in carried), builder.memory()),
-                   stmt.span)
+                   (*found.start, *(local.value for local in carried),
+                    builder.memory()), stmt.span)
         builder.position_at(header)
-        index = header.add_param(element, stmt.name)
+        state = tuple(header.add_param(self._value_type_of(one), stmt.name)
+                      for one in found.start)
         params = [header.add_param(self._value_type_of(local.value), local.name)
                   for local in carried]
         token = header.add_param(MEM, "mem")
@@ -2610,40 +2682,19 @@ class Checker:
             local.value_span = stmt.span
             local.read = False
         builder.set_memory(token)
-        signed = element.signed
-        going = builder.compare(
-            (CmpPred.SLT if signed else CmpPred.ULT) if rising
-            else (CmpPred.SGT if signed else CmpPred.UGT),
-            index, last, stmt.span)
-        builder.condbr(going, body, after, span=stmt.span)
+        builder.condbr(found.more(builder, state), body, after, span=stmt.span)
         outer_carried = self._carried
         self._carried = outer_carried | {id(local) for local in carried}
         builder.position_at(body)
         self._push_scope()
-        if stmt.more:
-            self._name_value(index, stmt.name)
-            self._bind_apart(builder, stmt, index)
-        elif stmt.name == WILDCARD_NAME:
-            # The name that is not a name, as it is in a `match` arm: the loop
-            # runs a turn for each value there is and the value itself is not
-            # wanted.  Nothing is bound, so nothing is reported as unread.
-            pass
-        else:
-            self._name_value(index, stmt.name)
-            self._bind_local(stmt.name, index, stmt.name_span,
-                             value_span=stmt.iterable.span)
+        self._bind_turn(builder, stmt, found.take(builder, state))
         self._lower_block(builder, stmt.body, func, as_result=False)
         self._pop_scope()
         self._carried = outer_carried
         if not builder.is_terminated and builder.block is not None:
-            # The step saturates rather than checking, so that a range whose
-            # last turn would step past the end of its own type ends instead of
-            # faulting: what a turn past the end would be is not a value, and
-            # the comparison above is what says there is no turn.
-            moved = builder.binary(BinOp.SAT_ADD if rising else BinOp.SAT_SUB,
-                                   index, step, stmt.span)
             builder.br(header,
-                       (moved, *(local.value for local in carried),
+                       (*found.step(builder, state),
+                        *(local.value for local in carried),
                         builder.memory()), stmt.span)
             for local in carried:
                 local.read = True
@@ -2652,6 +2703,156 @@ class Checker:
             local.value = param
             local.value_span = stmt.span
         builder.set_memory(token)
+
+    def _bind_turn(self, builder: IRBuilder, stmt: ast.ForEach,
+                   value: Value) -> None:
+        """Bind what a turn gave to the names the loop was written with."""
+        if stmt.more:
+            self._name_value(value, stmt.name)
+            self._bind_apart(builder, stmt, value)
+            return
+        if stmt.name == WILDCARD_NAME:
+            # The name that is not a name, as it is in a `match` arm: the loop
+            # runs a turn for each value there is and the value itself is not
+            # wanted.  Nothing is bound, so nothing is reported as unread.
+            return
+        self._name_value(value, stmt.name)
+        self._bind_local(stmt.name, value, stmt.name_span,
+                         value_span=stmt.iterable.span)
+
+    # -- what a loop can take its values from ----------------------------------
+
+    def _iteration_over(self, builder: IRBuilder,
+                        stmt: ast.ForEach) -> "_Iteration | None":
+        """What the loop's expression turns out to be, as a thing to walk.
+
+        A range is written where it is used and has no type of its own, so it is
+        recognised before anything is lowered; everything else is a value, and
+        what it is, is its type's business.
+        """
+        if isinstance(stmt.iterable, ast.Range):
+            return self._over_a_range(builder, stmt)
+        declared = self._resolve_type(stmt.type) if stmt.type is not None else None
+        value = self._lower_expr(builder, stmt.iterable, None)
+        ty = self._value_type_of(value)
+        if ty is ERROR:
+            return None
+        found: "_Iteration | None"
+        if isinstance(ty, ArrayType):
+            found = self._over_an_array(builder, value, ty, stmt.span)
+        elif isinstance(ty, (SetType, DictType)):
+            found = self._over_a_table(builder, value, ty, stmt.span)
+        else:
+            self._diags.emit(D.LANG_LOOP_NOT_AN_ITERATOR, stmt.iterable.span,
+                             found=ty.render())
+            return None
+        if declared is not None and declared is not found.element:
+            self._report_mismatch(stmt.iterable.span, found.element, declared)
+            return None
+        return found
+
+    def _over_a_range(self, builder: IRBuilder,
+                      stmt: ast.ForEach) -> "_Iteration | None":
+        """Walk the whole numbers a range stands for."""
+        found = self._range_of(builder, stmt)
+        if found is None:
+            return None
+        first, last, step, rising, element = found
+        signed = element.signed
+        going = ((CmpPred.SLT if signed else CmpPred.ULT) if rising
+                 else (CmpPred.SGT if signed else CmpPred.UGT))
+        # The step saturates rather than checking, so that a range whose last
+        # turn would step past the end of its own type ends instead of faulting:
+        # what a turn past the end would be is not a value, and the comparison
+        # is what says there is no turn.
+        moving = BinOp.SAT_ADD if rising else BinOp.SAT_SUB
+        return _Iteration(
+            element=element, start=(first,),
+            more=lambda b, s: b.compare(going, s[0], last, stmt.span),
+            take=lambda b, s: s[0],
+            step=lambda b, s: (b.binary(moving, s[0], step, stmt.span),))
+
+    def _over_an_array(self, builder: IRBuilder, value: Value, ty: ArrayType,
+                       span: Span) -> "_Iteration":
+        """Walk an array along its outermost dimension.
+
+        A turn gives an element where the array has one dimension and a row
+        where it has more, which row-major makes a run of elements and so
+        arithmetic on the place rather than a copy.  Where the elements are and
+        how many there are do not change from turn to turn, so they are worked
+        out once here and read from where they were left.
+        """
+        start, lengths = self._shape_of(builder, value, ty, span)
+        element = ty.element if ty.rank == 1 else self._row_type(ty, 1)
+
+        def take(b: IRBuilder, s: "tuple[Value, ...]") -> Value:
+            offset = self._by_row(b, s[0], lengths[1:], span)
+            if ty.rank == 1:
+                return b.load(
+                    self._element_place(b, start, ty.element, offset, span), span)
+            return self._row_at(b, start, ty, lengths, offset, 1, span)
+
+        return _Iteration(
+            element=element, start=(builder.int_const(U64, 0),),
+            more=lambda b, s: b.compare(CmpPred.ULT, s[0], lengths[0], span),
+            take=take,
+            step=lambda b, s: (b.binary(BinOp.WRAP_ADD, s[0],
+                                        b.int_const(U64, 1), span),))
+
+    def _over_a_table(self, builder: IRBuilder, value: Value,
+                      ty: "SetType | DictType", span: Span) -> "_Iteration":
+        """Walk the keys a set holds, or the pairs a dictionary holds.
+
+        The places a table's entries are in are not all holding keys, so the
+        walk steps past the ones that are not; finding the next one is a
+        function of the runtime rather than a second loop written here, which
+        keeps the shape of this one the shape every other iterator has.
+
+        A dictionary gives a key and what it stands for, together as a tuple.
+        Two names take that apart, which is what several names next to each
+        other already do everywhere a tuple is bound -- so `foreach k, v = d:`
+        needs nothing of its own beyond the tuple.
+        """
+        tables.ensure_runtime(self._module)
+        table = builder.cast(CastKind.BITCAST, value,
+                             tables.table_type(self._module), span)
+        finder = self._module.functions[tables.NEXT_SYMBOL]
+        pointer = tables.table_type(self._module)
+        capacity = builder.binary(
+            BinOp.WRAP_ADD,
+            builder.load(builder.binary(BinOp.ADD, table,
+                                        builder.int_const(U64, tables.MASK_FIELD),
+                                        span), span),
+            builder.int_const(U64, 1), span)
+        key_ty = ty.element if isinstance(ty, SetType) else ty.key
+        element: Type = key_ty if isinstance(ty, SetType) else \
+            self._module.types.tuple_type((ty.key, ty.value))
+
+        def read(b: IRBuilder, place: Value, offset: int, held: Type) -> Value:
+            """One word of an entry, read as what it holds."""
+            return b.load(b.cast(
+                CastKind.BITCAST,
+                b.binary(BinOp.ADD, place, b.int_const(U64, offset), span),
+                self._module.types.ptr_type(held, mutable=True), span), span)
+
+        def take(b: IRBuilder, s: "tuple[Value, ...]") -> Value:
+            place = tables.entry_at(b, table, s[0])
+            key = read(b, place, tables.KEY_AT, key_ty)
+            if isinstance(ty, SetType):
+                return key
+            return b.make_tuple(
+                (key, read(b, place, tables.VALUE_AT, ty.value)), element, span)
+
+        return _Iteration(
+            element=element,
+            start=(builder.call(finder, (table, builder.int_const(U64, 0)),
+                                U64, span),),
+            more=lambda b, s: b.compare(CmpPred.ULT, s[0], capacity, span),
+            take=take,
+            step=lambda b, s: (b.call(
+                finder,
+                (table, b.binary(BinOp.WRAP_ADD, s[0], b.int_const(U64, 1), span)),
+                U64, span),))
 
     def _range_of(self, builder: IRBuilder, stmt: ast.ForEach
                   ) -> "tuple[Value, Value, Value, bool, IntType] | None":

@@ -2626,6 +2626,44 @@ list; until then a run out of a table has nothing to be.
 
 ---
 
+## 2026-09-15T09:00+02:00 — language
+
+**Four things a loop can take its values from**
+
+Decided on the user's direction: `foreach` over a set, a dictionary and an array, an array iterated over its outermost dimension,
+a dictionary giving a key and a value, and two names taking those apart the way Python's `for k, v in d` does.
+
+**The protocol is three questions, not a call.**  An iterator's `next` answers the next value or a failure; a loop asks that in
+three places, and the three places are what the lowering is built around -- is there another (where it tests), what does this turn
+give (in the body), what does the next turn start from (at the branch backwards).  Each of the four answers those three inline.
+That is not a shortcut past the protocol: a `next` answering a result *is* those three said as one value, so the loop written here
+is the loop a user-written iterator will want.
+
+**A dictionary gives a tuple, and two names take it apart.**  Nothing of its own was needed: several names next to each other take
+a tuple apart everywhere a tuple is bound, so `foreach k, v = d:` is the tuple plus a binding that already existed.  Go spells the
+same thing as two results of `range`, which is a second mechanism for one case; Python spells it as a pair taken apart, which is
+this.
+
+**Iterating an array is over the outermost dimension**, which the instruction asked for and which row-major makes cheap: a row is
+a run of elements, so a turn is arithmetic on the place and no copy.  That in turn is what made partial indexing worth having --
+`m⟦i⟧` of a `T⟦2,3⟧` is a `T⟦3⟧` -- and the refusal recorded a week ago was lifted rather than worked around, since a loop that
+could name a row while a program could not would be the compiler keeping something to itself.
+
+Writing still wants an index per dimension.  What an assignment writes is one element, and copying a whole row is not what `←`
+means anywhere else; the entry in the list says the first thing that copies one aggregate into another should settle it for
+products and arrays together.
+
+**A table has no order and none is promised.**  Where a key lands is where its hash puts it, and growing the table moves
+everything.  Python promises insertion order and pays for it with a second array; Go randomises its walk so that no program can
+come to depend on an order it never promised.  This promises nothing and pays nothing, and the specification says so -- which is
+what lets the tests add up what a walk finds rather than check what it finds first.
+
+**Finding the next entry is a function of the runtime**, not a second loop written into the lowering.  A table's entries are not
+all holding keys, so a walk has to step past the ones that are not; doing that inside "is there another" would mean handing the
+body what the search found, and the shape has nowhere to put it.  Making it a call keeps the one shape for all four.
+
+---
+
 ---
 
 Open questions

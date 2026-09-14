@@ -772,6 +772,40 @@ ended up with.
 which variables are read and written, which is every variable a load or a store names; an array is named by neither, since what a
 value of one is, is its address.
 
+What a loop takes its values from
+---------------------------------
+
+Four things are iterators and none of them is called: a range, an array, a set and a dictionary.  What they have in common is not
+a call but a *shape*, and the loop is written once around that shape:
+
+    before:  br loop(s₁ … sₖ, v₁ … vₙ, mem)
+    loop(s₁ … sₖ, p₁ … pₙ, mem):  condbr there is another → body, done
+    body:    the names stand for this one; the statements; br loop(…)
+    done:    what follows
+
+`s₁ … sₖ` is whatever the thing being iterated carries from one turn to the next.  Three questions settle the rest, and they are
+asked in the three places a loop has room for them: **is there another**, asked where the loop tests; **what does this turn
+give**, asked in the body; and **what does the next turn start from**, asked at the branch backwards.  A `next` answering a result
+is those three said as one value, which is what a user-written iterator will answer with -- so the loop built here is the loop
+either kind wants.
+
+| Iterator | carries | is there another | this turn gives | next starts from |
+|---|---|---|---|---|
+| a range | the number | it has not passed the end | the number | one step on, saturating |
+| an array | a place in it | it is short of the length | the element, or the row | one place on |
+| a table | a place in its entries | it is short of the capacity | the key, or the key and the value | the next place holding a key |
+
+Everything that does not change from turn to turn -- where an array's elements are, how many there are, where a table's entries
+are -- is worked out once before the loop and read from where it was left.  That is what keeps a turn of an array to a comparison,
+an addition and a read.
+
+**A table's walk steps past the places holding nothing**, and finding the next one is a function of the runtime rather than a
+second loop written into this one.  That is what keeps the shape above the shape of every iterator: a `more` that had to search
+would have to hand the body what it found, and there is nowhere in the shape for it to put that.
+
+**A dictionary gives a tuple**, and two names take a tuple apart everywhere a tuple is bound.  So `foreach k, v = d:` needed
+nothing of its own: the tuple is made and the binding that already existed takes it apart.
+
 Calling conventions
 -------------------
 

@@ -95,13 +95,22 @@ To Do List for the PL4g language
     either every dimension says how many or none does.  A type that says carries nothing but the elements; one that does not is
     where they are and one count per dimension, and the first stands where the second is wanted.  `a⟦i,j⟧` reads an element,
     one index per dimension in row-major order, and `a⟦i…j⟧` takes a run out of a vector; every access is checked,
-    while compiling where both ends are written down and while running where either is not.  A variable at the top level holds its
-    elements itself and one inside a function holds them in the frame.  A variable marked `@[cdecl]` is laid out the way the system
+    while compiling where both ends are written down and while running where either is not.  Fewer indices than dimensions names a
+    row.  A variable at the top level holds its elements itself and one inside a function holds them in the frame.  A variable marked `@[cdecl]` is laid out the way the system
     would and every other one whichever way is better.
 
-[ ] take a row out of a table.  `m⟦i⟧` of a `T⟦2,3⟧` is refused (4457) and would be a `T⟦3⟧`: row-major means a row is a run of
-    elements, so it costs one multiplication and no copy.  It is left out only because indexing with fewer indices than there are
-    dimensions is a rule worth writing down once rather than twice, and the entry below wants the same decision.
+[x] take a row out of a table.  Done, and iterating over the outermost dimension is what asked for it: `m⟦i⟧` of a `T⟦2,3⟧` is a
+    `T⟦3⟧` and costs one multiplication and no copy.  Writing still wants an index per dimension: what an assignment
+    writes is one element, and copying a whole row is not what it means anywhere else.
+
+[ ] assign a whole row, or a whole array.  `m⟦0⟧ ← r` is refused (4457) and would be a copy of as many elements as the row
+    holds.  Nothing in the language copies one aggregate into another yet, and the first thing that does should settle it for
+    products and arrays together rather than for arrays alone.
+
+[ ] give a collection or an array a length a program can read.  A loop can walk one and nothing can ask how many there are, which
+    a program will want the moment it wants anything but a walk.  For an array whose type says its shape the answer is in the type
+    and wants only a spelling; for one that does not, and for a table, it is a word already being carried and wants only a way to
+    name it.
 
 [ ] slice a table.  Refused (4459).  A row is a run and a column is not: its elements are a row apart.  A slice that could say so
     would carry a stride beside the place and the count, which is what NumPy does and what turns a slice into a view of any shape.
@@ -122,9 +131,11 @@ To Do List for the PL4g language
     collected heap.  The arena is the shape of an answer here -- a value could name the arena its elements are in, which is what the
     entry about giving an arena back already wants for collections -- and the two should be answered together.
 
-[ ] iterate over an array.  `foreach x = a:` is what a program will want and there is no way to write it: an iterator is a value
-    with a `next`, an array is a place and a count, and nothing yet turns the second into the first.  It wants what the entry about
-    letting a program write an iterator wants, and an array is the first thing that would use it.
+[x] iterate over an array, a set and a dictionary.  Done: four things are iterators and none of them is called.  An array gives
+    each element where it has one dimension and each row of the outermost where it has more; a set gives each key; a dictionary
+    gives a key and what it stands for as a tuple, which two names take apart.  The loop is written once around three questions --
+    is there another, what does this turn give, what does the next turn start from -- which is a `next` answering a result said in
+    the three places a loop has room for them.
 
 [ ] a small-array optimization.  A `T⟦⟧` of a few small elements could hold them in the two words it already takes rather
     than pointing at them, the way a small string can.  It costs a check on every read, and it pays only once something allocates

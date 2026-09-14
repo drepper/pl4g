@@ -977,6 +977,11 @@ entries is the array of the dimensions left.
 **There is one index per dimension** (4457), in the order the shape was written in, and **each is checked against its own
 dimension** -- `m⟦0,5⟧` of a two-by-three is outside, though it would be within the six elements there are in all.
 
+**Fewer indices names a row**: everything the dimensions left over reach.  `m⟦1⟧` of a `T⟦2,3⟧` is a `T⟦3⟧`, and row-major is what
+makes it cheap -- a row is a run of elements, so naming one is arithmetic on the place and no copy at all.  Where the array says
+its shape the row says its own, and where it does not the row carries the counts that are left over.  An assignment still wants
+every index (4457): what it writes is one element, and copying a whole row is not what `←` means anywhere else.
+
 ##### Fixed and dynamic
 
 **`T⟦N⟧` says how many elements there are**, and carries everything about the array but the elements themselves.  A value of one
@@ -1413,12 +1418,36 @@ colon before the type may be left out along with the type, where the values say 
 
 **What it takes its values from has to be an iterator** (4438).  An **iterator** is a value with a `next` answering the next value
 or a failure; the failure is what ends the loop.  The result type is how that is said, and it does not surface: the names are
-bound to what there was, and a loop over something with nothing in it runs no turns.  A range is the only thing that is an
-iterator so far, and its `next` is lowered where it is asked rather than called -- what it comes to is a comparison against the
-end and an addition.
+bound to what there was, and a loop over something with nothing in it runs no turns.
 
-**Several names take each value apart**, the way several names take a tuple apart in a definition.  A range gives out one number,
-so several names over one is refused; what this is for is an iterator whose values are tuples.
+**Four things are iterators**, and none of them is called: each one's `next` is lowered where it is asked.
+
+| Written | A turn gives |
+|---|---|
+| a range | each whole number it stands for |
+| an array of one dimension | each element |
+| an array of more | each row of the outermost dimension |
+| a set | each key it holds |
+| a dictionary | a key and what it stands for, as a tuple |
+
+```
+foreach x = a:           ※ every element of a vector
+foreach row = m:         ※ every row of a table
+foreach k = s:           ※ every key of a set
+foreach k, v = d:        ※ every key of a dictionary, and what it stands for
+```
+
+**Iterating an array is over its outermost dimension**, so a turn of a `T⟦2,3⟧` gives a `T⟦3⟧`.  Row-major is what makes that
+cheap: a row is a run of elements, so naming one is arithmetic on the place and no copy at all.  An array whose type does not say
+its shape is walked the same way, which is what lets a function take one of any length and still say what to do with each element.
+
+**A table is not walked in the order its keys were put in it**, and it has no such order: where a key lands is where its hash puts
+it, and growing the table moves everything.  Python promises the order keys were added in and pays for it with a second array; Go
+deliberately randomises its walk so that no program can come to depend on an order it never promised.  This promises nothing.
+
+**Several names take each value apart**, the way several names take a tuple apart in a definition.  That is the whole of what
+`foreach k, v = d:` is -- a dictionary gives a key and a value together as a tuple, and two names take a tuple apart everywhere
+else too, so the form needs nothing of its own.  Over something that gives one value, several names are refused.
 
 **`_` is the name that is not a name**, as it is in a `match` arm: the loop runs a turn for each value there is and the value
 itself is not wanted.  Nothing is bound, so nothing is reported as a value nothing reads.
@@ -1437,10 +1466,11 @@ says what the loop is, and `while` says that the two kinds of loop are one const
 **The name is bound afresh on every turn** and is gone after the loop.  It is never `mut`: what it stands for is what the turn
 gave, and the next turn gives another.
 
-Compare: Python's `for x in r`, which this follows in meaning; Rust's `for x in r` over anything that is `IntoIterator`; Go's
-`for i := range n`; Zig's `for (0..n) |i|`.  What none of them has is the second spelling, and what this has instead of Rust's
-trait is a single iterator protocol the compiler knows -- until a program can write one, there is nothing for a trait to abstract
-over.
+Compare: Python's `for x in r`, which this follows in meaning -- including `for k, v in d` taking a pair apart, which is where the
+two-name form over a dictionary comes from; Rust's `for x in r` over anything that is `IntoIterator`; Go's `for i, v := range`,
+which spells the pair as two results rather than as one tuple; Zig's `for (0..n) |i|`.  What none of them has is the second
+spelling, and what this has instead of Rust's trait is a single iterator protocol the compiler knows -- until a program can write
+one, there is nothing for a trait to abstract over.
 
 #### Attributes
 

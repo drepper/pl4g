@@ -110,7 +110,8 @@ GROUPS: tuple[Group, ...] = (
            "array-fixed": "an array whose type says how long it is",
            "array-slice": "a run of elements, passed to a function",
            "array-global": "an array at the top level, read three times",
-           "array-table": "a table, a cube, and one of no stated shape"}),
+           "array-table": "a table, a cube, and one of no stated shape",
+           "array-row": "a row taken out of a table, and passed on"}),
     Group("Loops",
           "A branch backwards, which is what makes liveness a question about "
           "the graph rather than about the layout.  These move when the "
@@ -118,7 +119,9 @@ GROUPS: tuple[Group, ...] = (
           {"while-loop": "one loop, carrying two values",
            "while-loop-nested": "a loop inside a loop, in both notations",
            "foreach-over-a-range": "a loop over a range, counting up by one",
-           "foreach-range-step": "three ranges, one of them counting down"}),
+           "foreach-range-step": "three ranges, one of them counting down",
+           "foreach-over-an-array": "a vector, a table by rows, and a run",
+           "foreach-over-a-collection": "a set and a dictionary, walked three ways"}),
     Group("Collections",
           "Sets and dictionaries, and the table runtime the compiler generates "
           "for them.  These move when that runtime changes, and they are the "

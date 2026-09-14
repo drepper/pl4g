@@ -1,0 +1,26 @@
+※ pl4g-test: compile=ok run=native,qemu exit=80 diag=none
+
+※ `foreach` takes its values from anything that is an iterator, and an array is
+※ one.  A turn gives an element where the array has one dimension, and a row
+※ where it has more: the iteration is over the outermost dimension, and
+※ row-major is what makes a row a run of elements and so arithmetic on the place
+※ rather than a copy.
+※
+※ An array whose type does not say its shape is walked the same way, which is
+※ what lets a function take one of any length and still say what to do with each
+※ element -- and what lets a run taken out of a vector be walked too.
+
+fn sum(xs: u8⟦⟧) → u8:
+    let n: mut u8 = 0u8
+    foreach x = xs:
+        n ← n + x
+    n
+
+@[startup]
+fn main() → u8:
+    let m: u8⟦2,3⟧ = ⟦⟦1u8,2u8,3u8⟧,⟦10u8,20u8,30u8⟧⟧
+    let total: mut u8 = 0u8
+    foreach row = m:
+        total ← total + sum(row)
+    let v: u8⟦5⟧ = ⟦1u8,2u8,4u8,8u8,16u8⟧
+    total + sum(v⟦1…4⟧)
