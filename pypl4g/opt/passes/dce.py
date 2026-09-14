@@ -16,7 +16,7 @@ cannot be overlooked here.
 
 from ...ir.decisions import DecisionKind, DecisionLog
 from ...ir.function import Function
-from ...ir.inst import Terminator
+from ...ir.inst import CallInst, Terminator
 from ...ir.module import Module
 
 
@@ -44,10 +44,12 @@ class DeadCodeElimination:
         worklist, and that is the change to make when functions are large enough
         for it to matter.
 
-        What went is recorded where it had a name.  A value with no name is an
-        intermediate of an expression and nothing the program can ask about; one
-        with a name is a local the program wrote down, and its going is a thing
-        a reader is entitled to be told.
+        What went is recorded where a reader could have asked about it.  A value
+        with a name is a local the program wrote down.  A call is the other one:
+        the program wrote the call, and a call not made is the largest thing
+        this pass does -- what the program asked for was a function to run, and
+        it does not run.  Everything else is an intermediate of an expression,
+        which nothing in the program names.
         """
         used = self._used(func)
         removed = False
@@ -57,7 +59,11 @@ class DeadCodeElimination:
                 continue
             surviving = {id(i) for i in kept}
             for inst in block.insts:
-                if inst.name_hint is not None and id(inst) not in surviving:
+                if id(inst) in surviving:
+                    continue
+                if isinstance(inst, CallInst):
+                    self._not_called(func, inst, decisions)
+                elif inst.name_hint is not None:
                     decisions.record(
                         DecisionKind.DROP_LOCAL, inst.name_hint,
                         "".join(("nothing reads it, and computing it does nothing "
@@ -66,6 +72,25 @@ class DeadCodeElimination:
             block.insts = kept
             removed = True
         return removed
+
+    def _not_called(self, func: Function, inst: CallInst,
+                    decisions: DecisionLog) -> None:
+        """Record a call the program wrote and the program does not make.
+
+        It is here because the callee said it changes nothing that outlives the
+        call, so making it and not making it are the same thing to everything
+        else -- and nothing reads what it answered.  That is a thing a reader is
+        entitled to be told, both because the program wrote the call and because
+        the attribute is what made it droppable: a reader checking whether
+        `@[impure]` is missing from a function looks here.
+        """
+        name = getattr(inst.callee, "name", None)
+        decisions.record(
+            DecisionKind.DROP_CALL, name if name is not None else "a call",
+            "".join(("nothing reads what it answers with and it changes nothing "
+                     "that outlives the call, so ", func.name, " does not make "
+                     "it")),
+            inst.span)
 
     def _used(self, func: Function) -> set[int]:
         """The identities of the values something in *func* reads.

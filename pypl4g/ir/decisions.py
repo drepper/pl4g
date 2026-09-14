@@ -32,6 +32,7 @@ class DecisionKind(StrEnum):
     DROP_FUNCTION = "drop-function"
     DROP_VARIABLE = "drop-variable"
     DROP_LOCAL = "drop-local"
+    DROP_CALL = "drop-call"
     ANSWER_IN_STORAGE = "answer-in-storage"
 
 

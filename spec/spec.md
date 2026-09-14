@@ -2213,6 +2213,10 @@ program**: an overflow inside a call nobody made cannot be reached.  That follow
 what the attribute was declared for; a program that wants the check to happen wants the answer, and reading the answer keeps the
 call.
 
+**A call that is not made is written to the decision log** (`drop-call`), naming the function and saying why.  A generator that
+emitted a call and cannot find it in the output is told where it went, and told that what let it go was the absence of
+`@[impure]` -- which is a property of a function the generator wrote and can change.
+
 More will follow from it -- a call made twice with the same arguments worked out once, a call moved out of a loop -- and none of
 it needs the language to say anything further.
 

@@ -373,11 +373,22 @@ reading the log matches on; a `subject`, named as the program names it; a `reaso
 reworded; and, where the subject is written in a source file, a `where` giving the file, line and column -- being told that a
 function went without being told which one would leave the reader to find it.
 
-What is recorded today is what is left out: `drop-function` and `drop-variable` from the reachability pass, and `drop-local` from
-the dead-code sweep.  The first two happen at every optimization level, because a function nothing can reach is code the program
-cannot run; the third happens from `-O1`, because an unoptimized build keeps what the program wrote and so decides nothing about
-it.  Recording happens whether or not the log was asked for, because a decision recorded only when someone is watching is one a
-test cannot check.
+What is recorded today is what is left out, and one thing that is put somewhere the program did not write it:
+`drop-function` and `drop-variable` from the reachability pass, `drop-local` and `drop-call` from the dead-code sweep, and
+`answer-in-storage` from the pass that rewrites a function answering with more than the registers hold.  The first two happen at
+every optimization level, because a function nothing can reach is code the program cannot run; the sweep's two happen from `-O1`,
+because an unoptimized build keeps what the program wrote and so decides nothing about it.  Recording happens whether or not the
+log was asked for, because a decision recorded only when someone is watching is one a test cannot check.
+
+**A call that is not made is the largest thing the sweep does**, which is why it is recorded even though the value it produced had
+no name: what the program asked for was a function to run, and it does not run.  The entry names the callee and says why -- nothing
+reads what it answers with, and it changes nothing that outlives the call -- because the why is a property of a function the
+reader wrote and can change.  A reader who cannot find their call in the output, and a reader wondering whether `@[impure]` is
+missing from something, are the two this is for.  A call to an impure function is never among them: it is made whoever wants its
+answer, so there is nothing to tell.
+
+Everything else the sweep removes is an intermediate of an expression, which nothing in the program names and nobody can ask
+about.
 
 A dropped local is named by the name the program gave it.  That is what the name hint on a value is for: the semantic analysis
 writes the name of a local on the instruction its definition produced, so that the textual form can be read against the source and

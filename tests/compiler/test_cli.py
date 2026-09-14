@@ -272,3 +272,28 @@ def test_nothing_is_dropped_where_nothing_asked_for_it(tmp_path: Path) -> None:
     decisions = json.loads(log.read_text(encoding="utf-8"))["decisions"]
     assert [d for d in decisions if d["kind"] == "drop-local"] == [], decisions
 
+
+
+DROPPED_CALL = "".join((
+    "fn worked_out(n: u8) \N{RIGHTWARDS ARROW} u8:\n    n + n\n\n",
+    "@[startup]\nfn main() \N{RIGHTWARDS ARROW} u8:\n",
+    "    _ \N{LEFTWARDS ARROW} worked_out(3u8)\n    0u8\n"))
+
+
+def test_a_call_that_is_not_made_reaches_the_log(tmp_path: Path) -> None:
+    """The whole way through: the attribute, the pass, and the file a reader reads.
+
+    A reader who wrote the call and cannot find it in the output is who this is
+    for, and what the entry tells them is both that it went and why -- the why
+    being a property of the function they wrote, which they can change.
+    """
+    source = tmp_path / "t.pl4g"
+    source.write_text(DROPPED_CALL, encoding="utf-8")
+    log = tmp_path / "decisions.json"
+    proc = run_compiler(["-o", str(tmp_path / "out"), "-O1",
+                         "".join(("--decision-log=", str(log))), str(source)])
+    assert proc.returncode == ExitCode.SUCCESS, proc.stderr
+    decisions = json.loads(log.read_text(encoding="utf-8"))["decisions"]
+    calls = [d for d in decisions if d["kind"] == "drop-call"]
+    assert [d["subject"] for d in calls] == ["worked_out"], decisions
+    assert calls[0]["where"]["line"] == 6, calls

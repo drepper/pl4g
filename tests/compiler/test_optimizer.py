@@ -503,3 +503,43 @@ def test_a_local_something_reads_is_not_recorded() -> None:
     assert not DeadCodeElimination().run(module)
     assert module.decisions.of_kind(DecisionKind.DROP_LOCAL) == []
 
+
+
+def test_a_call_that_is_not_made_is_recorded() -> None:
+    """A call the program wrote and the program does not make is worth telling.
+
+    It is the largest thing this pass does: what was asked for was a function to
+    run, and it does not run.  A reader wondering whether `@[impure]` is missing
+    from a function is who the entry is for.
+    """
+    from pypl4g.ir.decisions import DecisionKind
+
+    module = Module("t")
+    callee = Function("worked_out", module.types.func_type((), U8), FuncAttrs())
+    module.add_function(callee)
+    func = _startup(module)
+    block = func.entry
+    assert block is not None
+    block.append(CallInst(callee, (), U8))
+    block.append(RetInst(module.int_const(U8, 0)))
+    assert DeadCodeElimination().run(module)
+    dropped = module.decisions.of_kind(DecisionKind.DROP_CALL)
+    assert [d.subject for d in dropped] == ["worked_out"], module.decisions.entries
+    assert "changes nothing that outlives the call" in dropped[0].reason
+
+
+def test_a_call_that_is_made_is_not_recorded() -> None:
+    """A log that said calls went that did not would be worse than none."""
+    from pypl4g.ir.decisions import DecisionKind
+
+    module = Module("t")
+    callee = Function("notes", module.types.func_type((), U8),
+                      FuncAttrs(impure=True))
+    module.add_function(callee)
+    func = _startup(module)
+    block = func.entry
+    assert block is not None
+    block.append(CallInst(callee, (), U8))
+    block.append(RetInst(module.int_const(U8, 0)))
+    assert not DeadCodeElimination().run(module)
+    assert module.decisions.of_kind(DecisionKind.DROP_CALL) == []

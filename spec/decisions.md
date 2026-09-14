@@ -3102,6 +3102,11 @@ level and allocating writes it.
 dead-code elimination -- which already drops what nothing uses and what has no effects -- does the rest without being told what
 purity is.
 
+**A call that is not made is recorded in the decision log** (`drop-call`), even though the value it produced had no name and the
+sweep records only named things otherwise.  It is the largest thing that pass does -- what the program asked for was a function to
+run, and it does not run -- and the reader it is for is the generator that emitted the call and cannot find it.  The entry says
+why as well as what, because the why is the absence of `@[impure]` on a function the reader wrote and can change.
+
 **A dropped call takes its faults with it**, which is stated rather than hidden: an overflow inside a call nobody made cannot be
 reached.  It follows from the call being removable at all, and a program that wants the check wants the answer, which keeps the
 call.  The alternative -- a pure function that may still stop the program, so calls must be kept -- would have made the attribute
