@@ -28,7 +28,7 @@ from typing import Protocol, Sequence
 from ..source.location import INVALID_SPAN, Span
 from .inst import MCInst
 from .desc import InstFlags
-from .machine import MachineBasicBlock, MachineFunction
+from .machine import MachineBasicBlock, MachineFunction, MalformedGraph
 from .operand import MCImm, MCMem, MCOperand, MCReg, MCSymRef, RelocKind, SymExpr
 from .ops import Condition, Op
 from collections.abc import Mapping
@@ -353,6 +353,9 @@ class Assembler:
         function = self._function
         for machine_pass in self._machine_passes:
             machine_pass.run(function)
+        wrong = function.edges_are_complete()
+        if wrong is not None:
+            raise MalformedGraph(wrong)
         self._assign_registers(function)
         self._make_frame(function)
         self._streamer.emit_align(self._alignment, self._pad_byte)
@@ -430,6 +433,15 @@ class Assembler:
         total = size + link + 8 * len(kept)
         if total == 0:
             return
+        # The prologue goes at the top of the first block and the undo before
+        # every return, which is right exactly while nothing branches to the
+        # first block.  A back edge to it would make the stack grow by a frame
+        # a turn, silently, so the one thing that would make this wrong is
+        # refused rather than left to be found as a program that slowly dies.
+        if self._is_branch_target(function, function.blocks[0]):
+            raise MalformedGraph("".join((
+                function.name, ": control comes back to the block the frame is "
+                "made in")))
         opening = list(self._selector.select_frame(total, INVALID_SPAN))
         if link:
             opening.extend(self._selector.select_save_link(size, INVALID_SPAN))
@@ -631,6 +643,19 @@ class Assembler:
         """A reference to the block called *label*."""
         return MCSymRef(SymExpr(self._streamer.symbol(label)), RelocKind.PCREL)
 
+
+    def temporary(self, like: Reg) -> Reg:
+        """A register of the same kind and width as *like*, holding nothing yet.
+
+        For a value with no name of its own and a life of two instructions:
+        what a parallel copy needs to break a cycle.  It is virtual, which is
+        what makes it always available -- this runs before anything has been
+        given a physical register -- and so no architecture needs an
+        instruction that exchanges two registers.
+        """
+        if self._registers is None:
+            raise RegisterAssignmentError("a function with no register file", 1)
+        return self._registers.new_virtual(like.cls, like.bits)
 
     def tail_jump(self, target: str, span: Span = INVALID_SPAN) -> None:
         """Go to another function, which returns in this one's place.

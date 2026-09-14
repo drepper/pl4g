@@ -27,7 +27,8 @@ are the part that is not.  A truth value is one or zero, which is what every
 instruction producing one on these architectures produces.
 """
 
-from typing import Protocol, Sequence
+from dataclasses import dataclass
+from typing import Callable, Protocol, Sequence
 
 from ..ir.function import BasicBlock, Function
 from ..ir.inst import (BlockTarget, BrInst, CmpInst, CmpPred, CondBrInst,
@@ -37,7 +38,8 @@ from ..ir.value import BlockParam
 from ..mc.asmbuilder import Assembler
 from ..mc.operand import MCImm, MCOperand, MCReg
 from ..mc.ops import Condition
-from ..mc.reg import Reg
+from ..mc.reg import Reg, interferes
+from ..mc.regalloc import registers_of
 from ..source.location import Span
 
 class UnsupportedBranch(Exception):
@@ -180,10 +182,12 @@ def lower_branch(asm: Assembler, func: Function, labels: Sequence[str], index: i
             return True
         case CondBrInst():
             for edge in (terminator.true_target, terminator.false_target):
-                if edge.args:
+                if carried_values(edge):
                     # The moves would belong on one edge and there is no block
                     # there to put them in; splitting the edge is what that
-                    # needs, and nothing generates this shape.
+                    # needs, and nothing generates this shape.  What is counted
+                    # is the values, not the arguments: an edge carrying only a
+                    # memory token costs no instruction and needs no block.
                     raise UnsupportedBranch(
                         "a conditional branch that passes arguments", span)
             _lower_conditional(asm, func, labels, following, terminator,
@@ -193,46 +197,125 @@ def lower_branch(asm: Assembler, func: Function, labels: Sequence[str], index: i
             return False
 
 
+def carried_values(target: BlockTarget) -> list[tuple[BlockParam, object]]:
+    """The parameters a branch actually has to put something in.
+
+    A memory token is not held anywhere: it exists to order the operations that
+    touch memory, and a parameter of one says only which path's ordering holds
+    from here.  There is nothing to move for it, which is why an edge carrying
+    only one costs no instruction and is not refused.
+    """
+    block = target.block
+    assert isinstance(block, BasicBlock)
+    return [(param, arg) for param, arg in zip(block.params, target.args)
+            if param.ty is not MEM]
+
+
+@dataclass(frozen=True, slots=True)
+class _Move:
+    """One register a branch writes, and what it writes there."""
+
+    into: Reg
+    source: MCOperand
+
+
+def _reads(source: MCOperand, reg: Reg) -> bool:
+    """Whether putting something in *reg* would change what *source* names."""
+    return any(interferes(named, reg) for named, _ in registers_of(source))
+
+
+def _sequenced(moves: Sequence[_Move],
+               spare: "Callable[[Reg], Reg]") -> list[_Move]:
+    """The same moves in an order in which none reads what another has written.
+
+    A move is ready when no move still to be made reads the register it writes.
+    Where none is ready, every move left is in a cycle -- a block handed its own
+    parameters rearranged, which is what a loop carrying two values does on
+    every turn -- and one register is copied into a spare, the move reading it
+    is pointed at the spare instead, and the cycle is a chain again.
+
+    The hazard is between *registers* and not between the values of the
+    representation: taking one value out of another leaves both in one
+    register, so a branch can read a parameter's register without any parameter
+    appearing among its arguments.
+    """
+    # A parameter handed its own value is no move at all, and leaving it in
+    # would make the loop below invent a spare to break a cycle of one.
+    pending = [move for move in moves if not _reads_only(move)]
+    ordered: list[_Move] = []
+    while pending:
+        ready = [move for move in pending
+                 if not any(other is not move and _reads(other.source, move.into)
+                            for other in pending)]
+        if ready:
+            for move in ready:
+                ordered.append(move)
+                pending.remove(move)
+            continue
+        # Nothing is ready, so every move left reads a register another writes.
+        # Break one link by holding a copy of what it reads.
+        stuck = pending[0]
+        held = spare(stuck.into)
+        ordered.append(_Move(into=held, source=MCReg(stuck.into)))
+        pending = [_Move(into=move.into, source=MCReg(held))
+                   if move is not stuck and _reads(move.source, stuck.into)
+                   else move
+                   for move in pending]
+    return ordered
+
+
+def _reads_only(move: _Move) -> bool:
+    """Whether a move puts a register back where it already is."""
+    return isinstance(move.source, MCReg) and interferes(move.source.reg, move.into)
+
+
+def _moves_of(target: BlockTarget, operands: Operands,
+              span: Span) -> list[_Move]:
+    """Every register a branch writes and what it writes there.
+
+    Built whole before anything is emitted, because asking for a value can emit
+    instructions of its own -- a number too wide for an immediate, a
+    floating-point constant read out of the image -- and those belong before
+    the copy rather than in the middle of it.  What they produce is fresh and
+    is never a destination, so the copy cannot disturb it.
+
+    A value of several parts is that many moves, because a cycle may run
+    through one part of a value and not another.
+    """
+    moves: list[_Move] = []
+    for param, argument in carried_values(target):
+        pieces = parts_of(param.ty)
+        if len(pieces) == 1:
+            moves.append(_Move(into=operands.destination(param),
+                               source=operands.value(argument, span)))
+            continue
+        for index in range(len(pieces)):
+            moves.append(_Move(
+                into=operands.part_of(param, index, span),
+                source=MCReg(operands.part_of(argument, index, span))))
+    return moves
+
+
 def _pass_arguments(asm: Assembler, target: BlockTarget, operands: Operands,
                     span: Span) -> None:
     """Put a branch's arguments where the block it goes to will look for them.
 
-    A block parameter is a value like any other and lives in a register; what
-    a branch carries is the instruction to put something there.  The moves go
+    A block parameter is a value like any other and lives in a register; what a
+    branch carries is the instruction to put something there.  The moves go
     before the jump, which is where they can go because only an unconditional
     branch reaches here -- an edge of a conditional one would need a block of
     its own to hold them.
 
-    The moves are emitted in order, so a block whose parameters were rearranged
-    among themselves -- the second taking what the first held -- would read a
-    register after it had been written.  One value never can, and nothing
-    generates more than one; the case is refused rather than got wrong.
+    They are all made at once and none may read a register another has already
+    written, which `_sequenced` is what settles.  The spare a cycle needs is a
+    fresh virtual register: this runs before anything has been given a physical
+    one, so there is always another to be had and no architecture needs an
+    instruction that exchanges two.
     """
     if not target.args:
         return
-    block = target.block
-    assert isinstance(block, BasicBlock)
-    # A memory token is not held anywhere: it exists to order the operations
-    # that touch memory, and a parameter of one says only which path's ordering
-    # holds from here.  There is nothing to move for it.
-    carried = [(param, arg) for param, arg in zip(block.params, target.args)
-               if param.ty is not MEM]
-    if len(carried) > 1 and any(
-            isinstance(arg, BlockParam) and arg.block is block
-            for _, arg in carried):
-        raise UnsupportedBranch(
-            "a branch that passes a block's own parameters back to it", span)
-    for param, argument in carried:
-        pieces = parts_of(param.ty)
-        if len(pieces) == 1:
-            asm.loadreg(operands.destination(param),
-                        operands.value(argument, span), span)
-            continue
-        # A value of several parts is that many registers, and a branch that
-        # hands one over hands over every one of them.
-        for index in range(len(pieces)):
-            asm.loadreg(operands.part_of(param, index, span),
-                        MCReg(operands.part_of(argument, index, span)), span)
+    for move in _sequenced(_moves_of(target, operands, span), asm.temporary):
+        asm.loadreg(move.into, move.source, span)
 
 
 def _lower_conditional(asm: Assembler, func: Function, labels: Sequence[str],

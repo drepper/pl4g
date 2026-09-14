@@ -334,9 +334,21 @@ usually makes the move disappear, by giving the parameter and the value that rea
 That works because only an *unconditional* branch may carry arguments.  An edge of a conditional branch has nowhere to put the
 moves -- they belong on that edge and not before the test -- so splitting the edge is what carrying arguments there would need.
 Nothing generates that shape: the front end's short-circuit lowering sends the conditional branch to two blocks that carry nothing
-and lets each of them hand the answer over with a branch of its own.  A conditional branch with arguments is refused rather than
-got wrong, and so is a branch handing a block its own parameters rearranged, which would need a temporary the way any parallel
-copy does.
+and lets each of them hand the answer over with a branch of its own, and a loop's test likewise carries nothing on either edge.  A
+conditional branch with arguments is refused rather than got wrong.  What is counted is the *values* it carries and not its
+arguments: an edge carrying only a memory token costs no instruction and needs no block, since a memory token is nowhere.
+
+The moves a branch does carry are a *parallel* copy and not a sequence of moves.  A branch handing a block its own parameters back
+rearranged -- which is what a loop carrying two values does on every turn -- would have the second move read a register the first
+had already written.  So every move is built before any is emitted, and then they are put in an order in which none reads what
+another has written: a move is ready when nothing still to be made reads the register it writes, and where nothing is ready every
+move left is in a cycle, so one register is copied into a spare and the move reading it is pointed at the spare instead.  The spare
+is a fresh virtual register, which is always available because this runs before anything has been given a physical one, and which
+is why no architecture needs an instruction that exchanges two registers.
+
+The hazard is between registers and not between the values of the representation.  Taking one value out of another leaves both in
+one register, so a branch can read a parameter's register without any parameter appearing among its arguments; asking the registers
+is what makes that case come out right without anything having to know about it.
 
 Which way round a branch is written is decided where the order of the blocks is known, and not by a backend.  A two-way branch is a
 conditional branch and a jump; the jump is not needed when the block it would go to is the next one in the image, so the condition
@@ -661,6 +673,19 @@ convention is about.  The order puts the registers a call would destroy first: u
 while using a callee-saved one would cost it a save and a restore.  The stack and frame pointers are left out, and so is the
 register holding a return address where there is one, because a frame and the unwinder that will walk it need somewhere to stand.
 
+Which positions a register is live at is settled over the control-flow graph and not read off the layout: what is live leaving a
+block is what is live entering any block it reaches, and what is live entering it is what it reads before writing together with
+what it does not write and something after it wants, iterated until it stops changing.  A range is then the hull of the positions
+at which the register is live.
+
+That distinction does nothing while control only falls through, and it is the whole of what makes a loop safe.  The span between
+the first write and the last read *in layout order* stops being a superset of the live set as soon as control can come back: a
+value computed before a loop and last read in the middle of its body would have its range end there, and everything the body
+computes after that point would be free to take its register -- which the next turn then reads instead of the value.  A hull of
+live points contains every live point whichever way control reaches it, so correctness asks nothing of the block order.  Tightness
+does ask something: where a loop's blocks lie next to each other the hull is the span of the loop and nothing outside it pays, and
+where they do not the code is still right and merely spills more.
+
 Where there are not enough registers a value is spilled: given a slot in the function's frame, written there when it is computed
 and read back before each use.  The value is in memory for its whole life, and what occupies a register is a fresh one that lives
 for the single instruction reading or writing it.  Splitting a range so that a value is in a register where it is busy and in
@@ -678,7 +703,17 @@ the one whose range reaches furthest, since that is the one that would hold a re
 
 Only the allocator puts anything on the stack, so the frame is made after it has run and only where it took a slot: a function that
 needed none has no frame and no instruction saying so.  The room is given back before every return rather than at one place,
-because there is no one place -- a function may leave from more than one.
+because there is no one place -- a function may leave from more than one.  That is right exactly while nothing branches to the
+first block, and a back edge to it would make the stack grow by a frame a turn without anything saying so, which is why it is
+refused where the graph is already in hand.  The runtime is the one thing that asks for a frame outright, having no allocator to
+ask for a slot.
+
+Where control goes is recorded as the blocks are built and not derived from the instructions afterwards, because a fall-through
+edge has no instruction to derive it from.  One invariant holds it together and everything that walks the graph rests on it: a
+block whose last instruction neither leaves the function nor is a barrier reaches the block laid out after it by going on, and so
+has to name it.  It is checked on every function, which is what turns a missing edge into a compiler error rather than into a
+program that runs wrongly.  A successor naming no block of the function is a jump that stands in for a call and is left out of the
+graph; control does not come back from one.
 
 A register may say it must not be spilled, and one does: on RISC-V an address is built by two instructions of which the second
 measures from the first, so they have to stay next to each other and the register held between them cannot go to the frame.  It is

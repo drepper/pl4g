@@ -48,10 +48,27 @@ To Do List for the pypl4g compiler
     a program built to show it, that is two instructions fewer on each of the fixed-width targets and one more on x86-64, whose
     two-address form puts a move between the two reads and so blunts it.
 
+[x] follow the graph rather than the layout when saying what is live.  Done: per-block live-in and live-out settled by the
+    ordinary backward fixpoint over the machine control-flow graph, with a range then the hull of the points at which a register
+    is live.  On a graph whose every edge goes forward the ranges are exactly what the old rule gave, so nothing that compiled
+    before changed; with a branch backwards the old rule was unsound, and a value computed before a loop and last read in the
+    middle of its body had its register handed to something later in the same body.  The edges are recorded as the blocks are
+    built and checked on every function.
+
+[x] pass a branch's arguments as a parallel copy.  Done: every move is built before any is emitted, and they are put in an order
+    in which none reads what another has written; a cycle -- which is what a loop carrying two values makes on every turn -- is
+    broken by holding one register in a fresh virtual one.  The hazard is asked of the registers and not of the values, which is
+    what makes a branch reading a parameter's register through an `extract` come out right.
+
+[ ] weigh a loop when choosing what to spill.  The victim is the range that reaches furthest, which in a loop is systematically
+    the value the loop carries -- the worst possible choice, since its reload runs every turn.  The standard answer is a weight by
+    loop depth, and the block flow the liveness already builds is what it needs.
+
 [ ] keep a spilled value in a register across instructions that do not read it, where that is cheaper than reloading.  The step
     beyond the entry above, and the one that needs a cost model: the register held is one another value cannot have, so holding it
-    causes a spill somewhere else, which is exactly what the x86-64 measurement above shows in miniature.  There is nothing to base
-    such a model on until there are loops, where the count of times a load runs stops being the count of times it is written.
+    causes a spill somewhere else, which is exactly what the x86-64 measurement above shows in miniature.  Now that there are
+    loops, the count of times a load runs has stopped being the count of times it is written, so there is something to base a
+    model on.
 
 [ ] a frame larger than the immediate a stack adjustment can carry is reported rather than built in steps.  RISC-V reaches this
     first, at about two hundred and fifty slots, and AArch64 at about five hundred; x86-64 does not.  Now that a constant of any

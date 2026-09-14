@@ -5,13 +5,20 @@ says nothing about where it lives.  This decides that, and the encoders refuse a
 virtual register, so nothing can quietly skip it.
 
 The method is linear scan.  Every instruction of the function is given a
-position, each register gets the range between the first position that writes it
-and the last that reads it, and the ranges are walked in order of their start,
-holding a unit for as long as a range needs one and releasing it as soon as the
-range ends.  That is a great deal less than a colouring allocator would do, and
-it is the right amount for straight-line code, which is all the language can
-express: with no branches there is no interference graph to speak of, only an
-interval on a line.
+position, each register gets the hull of the positions at which it is live, and
+the ranges are walked in order of their start, holding a unit for as long as a
+range needs one and releasing it as soon as the range ends.  That is a great
+deal less than a colouring allocator would do, and it is the right amount here:
+what it gives up is the ability to say that two values whose spans overlap are
+never live at the same moment, which costs a register now and again and never
+costs correctness.
+
+Which positions a register is live at is settled over the control-flow graph and
+not read off the layout.  That distinction does nothing while control only falls
+through and is the whole of what makes a loop safe: the span between the first
+write and the last read in layout order stops being a superset of the live set
+as soon as control can come back, and a value last read in the middle of a loop
+would have its register handed to something later in the same loop.
 
 Where there are not enough registers, a value is spilled: given a slot in the
 function's frame, written there when it is computed and read back before each
@@ -74,6 +81,68 @@ class LiveRange:
     def covers(self, other: "LiveRange") -> bool:
         """Whether the two ranges are wanted at the same time."""
         return self.start <= other.end and other.start <= self.end
+
+
+@dataclass(slots=True)
+class BlockFlow:
+    """One block's place in the layout and in the graph, and what lives there.
+
+    The positions are the ones a range is measured in: instruction *p* reads at
+    ``2p`` and writes at ``2p+1``.  A block with no instructions has ``last``
+    one before ``first``, which is what `empty` reads.
+    """
+
+    #: Where its first and last instructions are laid out.
+    first: int
+    last: int
+    #: The blocks control can reach from it, by their place in the layout.
+    successors: tuple[int, ...]
+    #: What it reads before writing, and what it writes at all.
+    uses: set[int] = field(default_factory=set)
+    kills: set[int] = field(default_factory=set)
+    #: What is live where it begins and where it ends, once settled.
+    live_in: set[int] = field(default_factory=set)
+    live_out: set[int] = field(default_factory=set)
+
+    @property
+    def empty(self) -> bool:
+        """Whether the block holds no instruction, and so names no point."""
+        return self.last < self.first
+
+    @property
+    def entry_point(self) -> int:
+        """The point at which control arrives, which is its first read."""
+        return self.first * 2
+
+    @property
+    def exit_point(self) -> int:
+        """The point at which control leaves, which is its last write."""
+        return self.last * 2 + 1
+
+
+def _propagate(flows: Sequence[BlockFlow]) -> None:
+    """Settle what is live where each block begins and ends.
+
+    The ordinary backward fixpoint: what is live leaving a block is what is
+    live entering any block it reaches, and what is live entering it is what it
+    reads before writing together with what it does not write and something
+    after it wants.  Walking the blocks backwards makes a graph with no cycle
+    settle in one pass and one with a loop in two.
+    """
+    changed = True
+    while changed:
+        changed = False
+        for flow in reversed(flows):
+            leaving: set[int] = set()
+            for at in flow.successors:
+                leaving |= flows[at].live_in
+            if leaving != flow.live_out:
+                flow.live_out = leaving
+                changed = True
+            arriving = flow.uses | (leaving - flow.kills)
+            if arriving != flow.live_in:
+                flow.live_in = arriving
+                changed = True
 
 
 @dataclass(slots=True)
@@ -178,7 +247,7 @@ class LinearScan:
         """
         assignment = Assignment()
         for _ in range(self._widest_order + 1):
-            ranges, blocked = self._live_ranges(function.instructions())
+            ranges, blocked = self._live_ranges(function)
             assignment.ranges = ranges
             crowded = self._assign(ranges, blocked, assignment)
             if not crowded:
@@ -191,37 +260,58 @@ class LinearScan:
 
     # -- liveness --------------------------------------------------------------
 
-    def _live_ranges(self, instructions: Sequence[MCInst]
+    def _live_ranges(self, function: MachineFunction
                      ) -> tuple[list[LiveRange], list[LiveRange]]:
         """The range of every register, virtual and physical.
 
-        Positions run over the instructions in the order they are laid out.
-        That is the order control takes while it only falls through, which is
-        all there is today; the entry that adds a branch backwards has to
-        replace this with an analysis over the control-flow graph, and until
-        then a range computed this way covers every point between a write and a
-        read whichever way control reaches them.
+        A range is the hull of the points at which the register is live, and
+        liveness is settled over the control-flow graph rather than read off
+        the layout.  That distinction is the whole of what makes a loop safe:
+        the hull of the *live* points contains every one of them whichever way
+        control reaches them, while the span between the first write and the
+        last read in layout order does not once control can come back.
+
+        Correctness asks nothing of the block order.  Tightness does: where a
+        loop's blocks lie next to each other, the hull is the span of the loop
+        and nothing outside it pays, and where they do not the code is still
+        right and merely spills more.
         """
+        flows, seen = self._flow(function)
+        _propagate(flows)
         first: dict[int, int] = {}
         last: dict[int, int] = {}
-        seen: dict[int, Reg] = {}
-        for position, inst in enumerate(instructions):
+
+        def touch(key: int, point: int) -> None:
+            """Note that the register is live at *point*."""
+            found = first.get(key)
+            if found is None or point < found:
+                first[key] = point
+            found = last.get(key)
+            if found is None or point > found:
+                last[key] = point
+
+        # One instruction is two points: it reads at the first and writes at
+        # the second.  That is not a detail -- it is what lets the register a
+        # value is read from be the register the same instruction writes,
+        # which is how a move into the register a result is returned in ends
+        # up moving a register to itself and going away.
+        for position, inst in enumerate(function.instructions()):
             defs, uses = defs_and_uses(inst)
-            # One instruction is two points: it reads at the first and writes at
-            # the second.  That is not a detail -- it is what lets the register a
-            # value is read from be the register the same instruction writes,
-            # which is how a move into the register a result is returned in ends
-            # up moving a register to itself and going away.
             for reg in uses:
-                key = self._key(reg)
-                seen.setdefault(key, reg)
-                first.setdefault(key, position * 2)
-                last[key] = position * 2
+                touch(self._key(reg), position * 2)
             for reg in defs:
-                key = self._key(reg)
-                seen.setdefault(key, reg)
-                first.setdefault(key, position * 2 + 1)
-                last[key] = max(last.get(key, 0), position * 2 + 1)
+                touch(self._key(reg), position * 2 + 1)
+        # And a register live where a block begins or ends is live there even
+        # though no instruction of that block names it.  A block with nothing
+        # in it has no point to name, and skipping it opens no hole: what is
+        # live across it is live in a block on either side.
+        for flow in flows:
+            if flow.empty:
+                continue
+            for key in flow.live_in:
+                touch(key, flow.entry_point)
+            for key in flow.live_out:
+                touch(key, flow.exit_point)
         virtual: list[LiveRange] = []
         physical: list[LiveRange] = []
         for key, reg in seen.items():
@@ -229,6 +319,39 @@ class LinearScan:
             (virtual if isinstance(reg, VirtReg) else physical).append(found)
         virtual.sort(key=lambda r: (r.start, r.end))
         return virtual, physical
+
+    def _flow(self, function: MachineFunction
+              ) -> tuple[list[BlockFlow], dict[int, Reg]]:
+        """Number every instruction, resolve every edge, and say of each block
+        what it reads before it writes and what it writes at all.
+
+        Reads are counted before writes within one instruction, so that the
+        operand a two-address instruction both reads and writes counts as
+        something the block wants from outside it.
+        """
+        reachable = function.successor_indices()
+        flows: list[BlockFlow] = []
+        seen: dict[int, Reg] = {}
+        position = 0
+        for block, successors in zip(function.blocks, reachable):
+            begins = position
+            uses: set[int] = set()
+            kills: set[int] = set()
+            for inst in block.insts:
+                defs, used = defs_and_uses(inst)
+                for reg in used:
+                    key = self._key(reg)
+                    seen.setdefault(key, reg)
+                    if key not in kills:
+                        uses.add(key)
+                for reg in defs:
+                    key = self._key(reg)
+                    seen.setdefault(key, reg)
+                    kills.add(key)
+                position += 1
+            flows.append(BlockFlow(first=begins, last=position - 1,
+                                   successors=successors, uses=uses, kills=kills))
+        return flows, seen
 
     def _key(self, reg: Reg) -> int:
         """What makes two register operands the same storage.

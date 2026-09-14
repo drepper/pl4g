@@ -27,7 +27,8 @@ def _uses_flags(inst: MCInst) -> bool:
     return any(r is EFLAGS for r in inst.desc.implicit_uses)
 
 
-def flags_dead_after(block: MachineBasicBlock, index: int, ends_function: bool) -> bool:
+def flags_dead_after(block: MachineBasicBlock, index: int,
+                     leaves_function: bool) -> bool:
     """Whether the flags register is dead immediately after instruction *index*.
 
     The scan stops at the first instruction that reads the flags, which makes
@@ -36,13 +37,18 @@ def flags_dead_after(block: MachineBasicBlock, index: int, ends_function: bool) 
     function there: no calling convention keeps the flags live across a call or a
     return.  Without a cross-block liveness analysis every other case is treated
     as live, so the rewrite is skipped rather than risked.
+
+    What says control leaves is that the block reaches nothing, and not that it
+    is the last one laid out.  The two are the same only while every branch goes
+    forward: a loop whose exit was folded away ends the layout with a jump
+    backwards, and the block it jumps to may read the flags.
     """
     for later in block.insts[index + 1:]:
         if _uses_flags(later):
             return False
         if _defines_flags(later):
             return True
-    return ends_function
+    return leaves_function
 
 
 class ClearRegisterWithXor:
@@ -60,17 +66,17 @@ class ClearRegisterWithXor:
     def run(self, function: MachineFunction) -> bool:
         """Apply the rewrite wherever it is valid; report whether it fired."""
         changed = False
-        for position, block in enumerate(function.blocks):
-            ends_function = position == len(function.blocks) - 1
+        for block in function.blocks:
+            leaves_function = not block.successors
             for index, inst in enumerate(block.insts):
-                replacement = self._rewrite(block, index, inst, ends_function)
+                replacement = self._rewrite(block, index, inst, leaves_function)
                 if replacement is not None:
                     block.insts[index] = replacement
                     changed = True
         return changed
 
     def _rewrite(self, block: MachineBasicBlock, index: int, inst: MCInst,
-                 ends_function: bool) -> MCInst | None:
+                 leaves_function: bool) -> MCInst | None:
         """Return the replacement for *inst*, or ``None`` to leave it alone."""
         if inst.desc.mnemonic != "mov" or len(inst.operands) != 2:
             return None
@@ -79,7 +85,7 @@ class ClearRegisterWithXor:
             return None
         if src.value != 0 or not isinstance(dst.reg, PhysReg) or dst.reg.bits != 32:
             return None
-        if not flags_dead_after(block, index, ends_function):
+        if not flags_dead_after(block, index, leaves_function):
             return None
         operands = (dst, dst)
         return MCInst(desc=self._table.select("xor", operands), operands=operands,
