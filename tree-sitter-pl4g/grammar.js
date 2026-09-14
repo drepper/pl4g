@@ -145,8 +145,13 @@ module.exports = grammar({
     // with the compiler about what is a program.
     _return_arrow: _ => choice('→', '->'),
 
+    // `mut` stands where it stands in a definition, before the type, and says
+    // the same thing there: the name may be bound to something else later on.
+    // It is no part of the type, so two functions differing only in it are one
+    // signature.
     parameter: $ => seq(
-      field('name', $.identifier), ':', field('type', $.type),
+      field('name', $.identifier), ':', optional($.mutable),
+      field('type', $.type),
     ),
 
     variable_definition: $ => seq(

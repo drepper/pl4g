@@ -575,10 +575,16 @@ class Block(Node):
 
 @dataclass(frozen=True, slots=True)
 class Param(Node):
-    """One parameter of a function."""
+    """One parameter of a function.
+
+    `mutable` says the body may bind the name to something else.  It is no part
+    of the type: what the caller hands over is a value, and what the body does
+    with its own name for it is the body's business.
+    """
 
     name: str
     type: "TypeExpr"
+    mutable: bool = False
 
 
 @dataclass(frozen=True, slots=True)

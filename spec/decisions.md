@@ -2702,6 +2702,34 @@ register of its own, and this says which one to go on using.
 
 ---
 
+## 2026-09-15T15:00+02:00 — language
+
+**A parameter a function may change**
+
+Decided on the user's direction: `fn f(p: mut u8)`.
+
+**`mut` stands before the type**, where a definition puts it, because it says the same thing a definition's does: the name may be
+bound to something else.  Rust puts it before the name -- `fn f(mut x: i32)` -- because that is where Rust's `let` puts it; this
+language's `let` puts it after the colon, so this does too.  One rule about where `mut` goes, not two.
+
+**It is no part of the type.**  Two functions differing only in it are one signature, carry one symbol and are called the same way;
+nothing outside the function can tell, and adding it to a parameter changes no caller.  That follows from what a parameter is here
+-- a value the caller handed over and a name the body has for it -- and it is where a parameter's `mut` parts company with a
+pointer's: a `ptr<mut T>` says something about a place both sides reach, so it has to be in the type; a name is not shared.
+
+**It costs nothing.**  A parameter arrives in a register and a name bound to a new value is a register, so counting down in the
+parameter itself is what a `mut` one is for and is exactly as cheap as counting down in a local made for the purpose.
+
+**The unused-value rule starts applying at the first assignment.**  What a caller hands over is the caller's business and is exempt,
+as it always was; a value the body itself put there and nothing read is a value it need not have worked out, which is what that
+rule is about.  So the local stops calling itself a parameter the moment it is assigned to.
+
+Compare: C, where every parameter may be assigned and nothing says so, which is why a reader cannot tell a parameter that stays put
+from one that does not; Go and Zig, where none may be and a body that wants to count down makes a local of its own -- one line of
+ceremony for a thing the language could simply have allowed the reader to see.
+
+---
+
 ---
 
 Open questions

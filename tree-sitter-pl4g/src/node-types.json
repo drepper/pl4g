@@ -2968,6 +2968,16 @@
           }
         ]
       }
+    },
+    "children": {
+      "multiple": false,
+      "required": false,
+      "types": [
+        {
+          "type": "mutable",
+          "named": true
+        }
+      ]
     }
   },
   {

@@ -1650,7 +1650,7 @@ class Checker:
         for index, param in enumerate(node.params):
             value = block.add_param(func.ty.params[index], param.name)
             self._bind_local(param.name, value, node.params[index].span,
-                             is_parameter=True)
+                             param.mutable, is_parameter=True)
         assert node.body is not None
         self._lower_block(builder, node.body, func)
         self._pop_scope()
@@ -3471,6 +3471,11 @@ class Checker:
             local.value = value
             local.value_span = node.span
             local.read = wants_value
+            # What the name stands for is no longer what the caller gave, so
+            # what happens to it from here is this function's business: a value
+            # it assigned and nothing read is a value it need not have worked
+            # out, which is exactly what the rule is about.
+            local.is_parameter = False
             return value
         target = self._provided(node.name)
         if not isinstance(target, GlobalVar):

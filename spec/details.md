@@ -619,6 +619,12 @@ untyped bytes becomes a place of a type.  There is no instruction that reserves 
 allocator, and an allocator answers with an address like any other.
 
 
+A parameter is a local like any other, and `mut` on one says what it says on any other: the body may bind the name to something
+else.  It costs nothing at all -- a parameter arrives in a register, a name bound to a new value is a register, and the allocator
+gives the two the same one wherever their lives allow -- and it is no part of the function's type, so it changes neither the symbol
+nor any caller.  What a parameter's `mut` is *not* is a pointer's: a `ptr<mut T>` says something about a place both sides reach, and
+a parameter's says something about a name, which is not shared.
+
 Assigning to a local writes nothing: a local is a value, so the name is bound to a new one and the function that results is the
 same as if the final value had been written in the first place.  Where control flow arrives, a block parameter will carry the new
 value across a branch, which is what block parameters were chosen for; a local will not need memory even then.

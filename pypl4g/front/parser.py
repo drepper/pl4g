@@ -678,6 +678,10 @@ class Parser:
         while True:
             name_token = self._expect(TokKind.IDENT)
             self._expect(TokKind.COLON)
+            # `mut` stands where it stands in a definition, before the type,
+            # and says the same thing there: the name may be bound to something
+            # else later on.
+            mutable = self._accept(TokKind.KW_MUT) is not None
             written = self._parse_type_ref()
             if name_token.text in seen:
                 self._diags.emit(D.LANG_FUNCDEF_DUPLICATE_PARAMETER, name_token.span,
@@ -686,7 +690,7 @@ class Parser:
                 seen[name_token.text] = name_token.span
             params.append(ast.Param(
                 span=name_token.span.to(written.span), name=name_token.text,
-                type=written))
+                type=written, mutable=mutable))
             if self._accept(TokKind.COMMA) is None:
                 break
         return tuple(params)

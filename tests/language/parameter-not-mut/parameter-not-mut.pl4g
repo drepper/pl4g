@@ -1,0 +1,13 @@
+※ pl4g-test: compile=error diag=4004
+
+※ A parameter that does not say `mut` is what it was given and stays so, which
+※ is the rule every other name follows.  The note points at the parameter, since
+※ that is where saying otherwise would go.
+
+fn f(n: u8) → u8:
+    n ← 1u8
+    n
+
+@[startup]
+fn main() → u8:
+    f(3u8)

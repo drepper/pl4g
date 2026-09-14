@@ -1,0 +1,30 @@
+※ pl4g-test: compile=ok run=native,qemu exit=35 diag=none
+
+※ A parameter may be marked `mut`, which says the body may bind the name to
+※ something else.  `mut` stands where it stands in a definition -- before the
+※ type -- and says the same thing there.
+※
+※ It is no part of the type.  What the caller hands over is a value, and what
+※ the body does with its own name for it is the body's business: two functions
+※ differing only in `mut` are one signature, carry one symbol, and are called
+※ the same way.  That is what makes it safe to add to a function nothing else
+※ has to be told about.
+※
+※ Counting down in the parameter itself is what one is for: the value arrived
+※ in a register, and a name bound to a new value is the same register put to
+※ the same use, so nothing is copied to make room for it.
+
+fn total(n: mut u8) → u8:
+    let sum: mut u8 = 0u8
+    while n > 0u8:
+        sum ← sum + n
+        n ← n - 1u8
+    sum
+
+※ one that is not `mut` is what it was given, and stays so
+fn twice(n: u8) → u8:
+    n + n
+
+@[startup]
+fn main() → u8:
+    total(5u8) + twice(10u8)

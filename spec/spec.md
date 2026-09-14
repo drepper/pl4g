@@ -1845,6 +1845,39 @@ where `NAME` is a valid identifier naming the function, `ARG?` are parameter nam
 the function header is followed by a colon, a newline, and then the properly indented code.  When the function header is followed by
 a `{` it uses the explicit syntax and continues until the respective closing `}`.
 
+##### Parameters a function may change
+
+A parameter may be marked `mut`, which says the body may bind the name to something else.  `mut` stands where it stands in a
+definition -- before the type -- and says the same thing there.
+
+```
+fn total(n: mut u8) → u8:
+    let sum: mut u8 = 0u8
+    while n > 0u8:
+        sum ← sum + n
+        n ← n - 1u8
+    sum
+```
+
+**It is no part of the type.**  What the caller hands over is a value, and what the body does with its own name for it is the
+body's business: two functions differing only in `mut` are one signature, carry one symbol and are called the same way.  Nothing
+outside can tell, and nothing outside has to be told -- adding `mut` to a parameter changes no caller.
+
+That is where a parameter's `mut` differs from a pointer's.  A `ptr<mut T>` says something about the *place* it names, which the
+caller and the callee both reach, so it is part of the type and has to be; a parameter's says something about a name, and a name
+is not shared.
+
+A parameter that does not say `mut` is what it was given and stays so (4004), which is the rule every other name follows.
+
+**The value nothing read** is asked about a parameter from the moment the body assigns to it, and not before.  What a caller hands
+over is the caller's business; a value the body itself put there and nothing read is a value it need not have worked out, which is
+what that rule is for.
+
+Compare: C, where every parameter may be assigned and nothing says so, which is why a reader cannot tell a parameter that stays put
+from one that does not; Rust's `fn f(mut x: i32)`, which is this, with `mut` before the name rather than before the type because
+that is where Rust's `let` puts it; Go and Zig, where a parameter cannot be assigned at all and a body that wants to count down
+makes a local of its own.
+
 **A header with no arrow says the function answers with nothing.**  There is no name to write for that and writing one is refused:
 `fn prepare():` is how it is said, and `fn prepare() → void:` is not a second way of saying it.  `void` is not a type any value can
 have, so naming it where a type belongs says less than leaving the place empty.
