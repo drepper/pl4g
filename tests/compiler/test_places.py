@@ -8,6 +8,8 @@ representation directly and take it through code generation and the image
 writer -- the same path the driver takes -- and then run the result.
 """
 
+from __future__ import annotations
+
 import stat
 import subprocess
 

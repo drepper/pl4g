@@ -13,6 +13,8 @@ answer.  Nothing here checks a particular instruction sequence except where the
 sequence is the point.
 """
 
+from __future__ import annotations
+
 import pytest
 
 from conftest import compiler_targets, describe, run_compiler

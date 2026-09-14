@@ -13,6 +13,8 @@ nothing is two things -- the call, and then a return carrying nothing -- and
 that is what it becomes.  Nothing of it reaches the representation as a value.
 """
 
+from __future__ import annotations
+
 import pytest
 
 from pypl4g.ir.function import FuncAttrs, Function, SpecialKind

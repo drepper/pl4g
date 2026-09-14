@@ -31,6 +31,8 @@ A variable the image offers to the outside is a root of its own, for the reason
 such a function is: something this compilation cannot see may name it.
 """
 
+from __future__ import annotations
+
 from collections.abc import Iterable
 
 from ...ir.decisions import DecisionKind

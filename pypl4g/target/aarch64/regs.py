@@ -14,6 +14,8 @@ interference rule honest: the stack pointer does not interfere with the zero
 register.
 """
 
+from __future__ import annotations
+
 from typing import Final
 
 from ...mc.reg import PhysReg, RegClass, RegisterInfo, RegUnit

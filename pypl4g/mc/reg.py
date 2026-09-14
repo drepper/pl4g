@@ -11,6 +11,8 @@ general-purpose, extended general-purpose, vector, mask or any other kind of
 register without changing anything here.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 
 

@@ -6,6 +6,8 @@ through code generation and the image writer, the same path the driver takes,
 and then run the result on every target.
 """
 
+from __future__ import annotations
+
 import stat
 import subprocess
 

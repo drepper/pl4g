@@ -10,6 +10,8 @@ that does not answer -- which is worth being able to write, and worth not
 writing by accident.
 """
 
+from __future__ import annotations
+
 import pytest
 
 from conftest import describe, run_compiler

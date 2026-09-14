@@ -9,6 +9,8 @@ builds the representation directly and runs the result on all three targets.
 Between them the two cover the question end to end.
 """
 
+from __future__ import annotations
+
 import pytest
 
 from conftest import describe, run_compiler

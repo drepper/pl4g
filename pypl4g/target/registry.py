@@ -9,6 +9,8 @@ binary per target does not build the same binary several times under different
 names.
 """
 
+from __future__ import annotations
+
 from typing import Callable, Final
 
 from .target import Target

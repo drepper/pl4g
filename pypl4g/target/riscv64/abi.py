@@ -7,6 +7,8 @@ the other two backends worth stating where the convention is described rather
 than discovering it in code generation.
 """
 
+from __future__ import annotations
+
 from typing import Final
 
 from ..callconv import CallConvDesc

@@ -14,6 +14,8 @@ terminator.  Each instruction answers that for itself, so a shape added later
 cannot be overlooked here.
 """
 
+from __future__ import annotations
+
 from ...ir.decisions import DecisionKind, DecisionLog
 from ...ir.function import Function
 from ...ir.inst import CallInst, Terminator

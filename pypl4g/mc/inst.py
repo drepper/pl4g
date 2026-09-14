@@ -1,5 +1,7 @@
 """An instruction of the symbolic assembler."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 
 from ..source.location import INVALID_SPAN, Span
@@ -27,13 +29,13 @@ class MCInst:
     #: different things.  They are here rather than in the row for that reason,
     #: and kept apart from the row's own so that a pass asking what *this*
     #: function used does not count what something it called used.
-    clobbers: tuple["Reg", ...] = ()
+    clobbers: tuple[Reg, ...] = ()
     #: Registers this instruction reads beyond what its row says.  A call is
     #: again the one that has any: the arguments were put in registers by the
     #: instructions before it, and what says those registers are still wanted
     #: when it happens is the call itself.  Without this a register holding an
     #: argument would look dead from the moment it was written.
-    reads: tuple["Reg", ...] = ()
+    reads: tuple[Reg, ...] = ()
 
     @property
     def mnemonic(self) -> str:

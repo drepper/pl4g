@@ -7,6 +7,8 @@ a caller has to keep out of a register across a call is what the callee turned
 out to destroy rather than everything its convention allows it to.
 """
 
+from __future__ import annotations
+
 import subprocess
 
 import pytest

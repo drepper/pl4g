@@ -6,6 +6,8 @@ writer -- the same path the driver takes -- and then run the result.  That is
 what makes this a test of the backends rather than of a printer.
 """
 
+from __future__ import annotations
+
 import stat
 import subprocess
 

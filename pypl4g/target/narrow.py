@@ -25,6 +25,8 @@ outside the type, so computing it at the full width of the register and clamping
 leaves the invariant holding with nothing further to do.
 """
 
+from __future__ import annotations
+
 from typing import TYPE_CHECKING
 
 from ..mc import ops
@@ -37,7 +39,7 @@ if TYPE_CHECKING:
     from ..mc.reg import Reg
 
 
-def normalize(asm: "Assembler", ty: "Type", destination: "Reg",
+def normalize(asm: Assembler, ty: Type, destination: Reg,
               register_bits: int, span: Span) -> None:
     """Put the bits above a narrow unsigned value back to zero.
 

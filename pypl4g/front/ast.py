@@ -4,6 +4,8 @@ Nodes record the span of source they came from, so that every later stage can
 report against the text the user wrote.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from enum import Enum, StrEnum
 
@@ -97,7 +99,7 @@ class TypeRef(Node):
 class TupleTypeRef(Node):
     """`\N{LEFT ANGLE BRACKET}T, T\N{RIGHT ANGLE BRACKET}`: several values travelling as one."""
 
-    members: tuple["TypeExpr", ...]
+    members: tuple[TypeExpr, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -108,9 +110,9 @@ class CollectionTypeRef(Node):
     alike -- which is what a parameter list and a call already do.
     """
 
-    element: "TypeExpr"
+    element: TypeExpr
     #: What a key stands for, where the type is a dictionary.
-    value: "TypeExpr | None" = None
+    value: TypeExpr | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -123,8 +125,8 @@ class ArrayTypeRef(Node):
     is the rank, so `T\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}3,4\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}` is a table and `T\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET},\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}` a table of no stated shape.
     """
 
-    element: "TypeExpr"
-    shape: tuple["Expr | None", ...] = (None,)
+    element: TypeExpr
+    shape: tuple[Expr | None, ...] = (None,)
 
 
 type TypeExpr = TypeRef | CollectionTypeRef | TupleTypeRef | ArrayTypeRef
@@ -299,7 +301,7 @@ class SetLit(Expr):
     """
 
     elements: tuple[Expr, ...]
-    arena: "NameRef | None" = None
+    arena: NameRef | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -311,7 +313,7 @@ class DictLit(Expr):
     """
 
     entries: tuple[tuple[Expr, Expr], ...]
-    arena: "NameRef | None" = None
+    arena: NameRef | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -403,7 +405,7 @@ class VarDef(Stmt):
 
     name: str
     name_span: Span
-    type: "TypeExpr | None"
+    type: TypeExpr | None
     value: Expr
     #: Whether the type said the variable may be changed.
     mutable: bool = False
@@ -426,7 +428,7 @@ class Pattern(Node):
     #: The type this arm takes -- or, where what is taken apart is an
     #: enumeration, the name of one of its values.  Nothing where the arm is
     #: the error one or the wildcard.
-    type: "TypeExpr | None"
+    type: TypeExpr | None
     name: str | None = None
     name_span: Span = INVALID_SPAN
     #: Whether this arm takes every alternative no earlier arm took.
@@ -449,7 +451,7 @@ class IfArm(Node):
     holds when none of the others did.
     """
 
-    condition: "Expr | None"
+    condition: Expr | None
     body: Block
 
 
@@ -537,7 +539,7 @@ class Range(Expr):
 
     start: Expr
     stop: Expr
-    step: "Expr | None" = None
+    step: Expr | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -554,7 +556,7 @@ class ForEach(Expr):
 
     name: str
     name_span: Span
-    type: "TypeExpr | None"
+    type: TypeExpr | None
     iterable: Expr
     body: Block
     #: The names after the first, where each value is taken apart.
@@ -562,9 +564,9 @@ class ForEach(Expr):
     #: Which of the two spellings was written.
     keyword: str = "foreach"
     #: What `break` and `continue` call this loop, where it was given a name.
-    label: "Label | None" = None
+    label: Label | None = None
     #: What runs where the loop ran out rather than being left by a `break`.
-    alternative: "Block | None" = None
+    alternative: Block | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -580,9 +582,9 @@ class While(Expr):
     condition: Expr
     body: Block
     #: What `break` and `continue` call this loop, where it was given a name.
-    label: "Label | None" = None
+    label: Label | None = None
     #: What runs where the condition stopped holding rather than a `break`.
-    alternative: "Block | None" = None
+    alternative: Block | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -607,7 +609,7 @@ class Break(Stmt):
     """
 
     label: Label
-    value: "Expr | None" = None
+    value: Expr | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -642,7 +644,7 @@ class Param(Node):
     """
 
     name: str
-    type: "TypeExpr"
+    type: TypeExpr
     mutable: bool = False
 
 
@@ -655,7 +657,7 @@ class FuncDef(Node):
     params: tuple[Param, ...]
     #: What the function answers with, or nothing where it answers with
     #: nothing -- which is written by leaving the arrow off altogether.
-    ret_type: "TypeExpr | None"
+    ret_type: TypeExpr | None
     body: Block | None
     attrs: tuple[Attribute, ...] = ()
     doc: str | None = None
@@ -679,7 +681,7 @@ class Field(Node):
 
     name: str
     name_span: Span
-    type: "TypeExpr"
+    type: TypeExpr
 
 
 @dataclass(frozen=True, slots=True)
@@ -705,7 +707,7 @@ class EnumMember(Node):
 
     name: str
     name_span: Span
-    value: "IntLit | NameRef | None" = None
+    value: IntLit | NameRef | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -718,7 +720,7 @@ class EnumDef(Node):
     #: What a value of it occupies, where the definition said.  Nothing means
     #: the compiler chooses, and what it chooses is written in the
     #: specification.
-    holder: "TypeExpr | None" = None
+    holder: TypeExpr | None = None
     attrs: tuple[Attribute, ...] = ()
     doc: str | None = None
 

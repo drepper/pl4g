@@ -1,5 +1,7 @@
 """Reading source files and resolving offsets back to line and column."""
 
+from __future__ import annotations
+
 from bisect import bisect_right
 from dataclasses import dataclass, field
 from pathlib import Path

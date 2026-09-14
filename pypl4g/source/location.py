@@ -6,6 +6,8 @@ The mapping back to a file, line and column is done only when a diagnostic is
 rendered, which is the rare case.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 from typing import Final
 
@@ -32,7 +34,7 @@ class Span:
         """Whether the span refers to real source text."""
         return self.start >= 0
 
-    def to(self, other: "Span") -> "Span":
+    def to(self, other: Span) -> Span:
         """Return the smallest span covering both this span and *other*."""
         return Span(min(self.start, other.start), max(self.end, other.end))
 

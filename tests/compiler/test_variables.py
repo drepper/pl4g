@@ -1,5 +1,7 @@
 """Variables: how they are written, what their type is, and where they live."""
 
+from __future__ import annotations
+
 import subprocess
 
 import pytest

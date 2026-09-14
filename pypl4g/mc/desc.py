@@ -9,6 +9,8 @@ descriptor with the fields its own encoder needs, and everything in this module
 works on the part they have in common.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from enum import Enum, Flag, auto
 from typing import Iterable, Sequence

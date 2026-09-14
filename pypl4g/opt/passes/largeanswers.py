@@ -16,6 +16,8 @@ an argument any program can pass, and no rule about arguments should have to kno
 that one of them is not one.
 """
 
+from __future__ import annotations
+
 from dataclasses import replace
 
 from ...ir.decisions import DecisionKind, DecisionLog
@@ -126,8 +128,8 @@ class LargeAnswers:
             _splice(block, at, made)
 
     def _rewrite_calls(self, module: Module, block: BasicBlock,
-                       wanted: "dict[int, Function]",
-                       answers: "dict[int, Type]") -> None:
+                       wanted: dict[int, Function],
+                       answers: dict[int, Type]) -> None:
         """Make a place for each such call, hand it over, and read it back."""
         index = 0
         while index < len(block.insts):
@@ -164,14 +166,14 @@ class LargeAnswers:
             index += len(made)
 
 
-def _offsets(answer: Type) -> "tuple[int, ...]":
+def _offsets(answer: Type) -> tuple[int, ...]:
     """Where each part of the answer goes in the place that holds it."""
     assert isinstance(answer, TupleType), answer
     return member_offsets_of(answer, LAYOUT)
 
 
 def _at(module: Module, place: Value, part: Type, offset: int,
-        made: "list[Instruction]", span) -> Value:  # noqa: ANN001
+        made: list[Instruction], span) -> Value:  # noqa: ANN001
     """The address one part of the answer lives at, as a pointer to that part."""
     base = CastInst(CastKind.BITCAST, place,
                     module.types.ptr_type(part, mutable=True), span)
@@ -183,7 +185,7 @@ def _at(module: Module, place: Value, part: Type, offset: int,
     return moved
 
 
-def _token_before(func: "Function | None", block: BasicBlock,
+def _token_before(func: Function | None, block: BasicBlock,
                   at: int) -> Value:
     """The memory token in force just before instruction *at* of *block*.
 
@@ -209,7 +211,7 @@ def _token_before(func: "Function | None", block: BasicBlock,
     return start
 
 
-def _splice(block: BasicBlock, at: int, made: "list[Instruction]") -> None:
+def _splice(block: BasicBlock, at: int, made: list[Instruction]) -> None:
     """Put *made* where the instruction at *at* stood."""
     for one in made:
         one.parent = block

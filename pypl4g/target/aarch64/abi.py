@@ -6,6 +6,8 @@ debugger; the specification leaves the compiler free to change it, and the fact
 that it is a value rather than a rule is what will make that change local.
 """
 
+from __future__ import annotations
+
 from typing import Final
 
 from ..callconv import CallConvDesc

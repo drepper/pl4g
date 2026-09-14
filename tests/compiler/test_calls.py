@@ -11,6 +11,8 @@ Each of those is a thing that, got wrong, produces a program that runs and gives
 the wrong answer -- so each is compiled and run rather than read.
 """
 
+from __future__ import annotations
+
 import subprocess
 
 import pytest

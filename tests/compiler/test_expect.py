@@ -7,6 +7,8 @@ Rust draws the same distinction between `#[allow]` and `#[expect]`, though it
 reports the stale case as a warning rather than an error.
 """
 
+from __future__ import annotations
+
 import pytest
 
 from conftest import describe, run_compiler

@@ -1,5 +1,7 @@
 """The x86-64 backend."""
 
+from __future__ import annotations
+
 from typing import Final
 
 from ...diag import ids as D
@@ -50,7 +52,7 @@ class X86_64Target:
     #: The levels this architecture defines, oldest first, and the one a
     #: program is built for unless it says otherwise.  Everything about what
     #: they mean is in `levels`; what is here is only that this target has them.
-    mclevels: "tuple[str, ...]" = levels.NAMES
+    mclevels: tuple[str, ...] = levels.NAMES
     mclevel_default: str = levels.DEFAULT
 
     def __init__(self) -> None:
@@ -98,7 +100,7 @@ class X86_64Target:
                          callee_saved=CC_PL4G.callee_saved)
 
     def generate(self, module: Module, asm: Assembler, diags: DiagEngine,
-                 opt_level: int, sources: "SourceManager | None" = None) -> None:
+                 opt_level: int, sources: SourceManager | None = None) -> None:
         """Generate the whole image for *module*.
 
         The entry point is emitted last so that the functions it calls are

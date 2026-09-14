@@ -23,6 +23,8 @@ assigns registers -- today a check that none are left to assign -- and only then
 hands the instructions to the streamer.
 """
 
+from __future__ import annotations
+
 from typing import Protocol, Sequence
 
 from ..source.location import INVALID_SPAN, Span
@@ -246,10 +248,11 @@ class Assembler:
 
     def __init__(self, selector: InstructionSelector, streamer: MCStreamer,
                  function_alignment: int = 16, pad_byte: int = 0xCC,
-                 machine_passes: Sequence["MachinePass"] = (),
-                 registers: "RegisterInfo | None" = None,
-                 allocation_order: "Sequence[RegUnit] | Mapping[str, Sequence[RegUnit]]" = (),
-                 callee_saved: "frozenset[RegUnit] | None" = None) -> None:
+                 machine_passes: Sequence[MachinePass] = (),
+                 registers: RegisterInfo | None = None,
+                 allocation_order: (Sequence[RegUnit]
+                                    | Mapping[str, Sequence[RegUnit]]) = (),
+                 callee_saved: frozenset[RegUnit] | None = None) -> None:
         self._selector = selector
         self._streamer = streamer
         self._alignment = function_alignment
@@ -264,7 +267,7 @@ class Assembler:
         #: What a function that says nothing of its own gets, and what the one
         #: being built now uses.  A function states its own where it begins,
         #: since the convention is the function's and not the image's.
-        self._default_order: "tuple[RegUnit, ...] | dict[str, tuple[RegUnit, ...]]" = (
+        self._default_order: tuple[RegUnit, ...] | dict[str, tuple[RegUnit, ...]] = (
             {name: tuple(units) for name, units in allocation_order.items()}
             if isinstance(allocation_order, Mapping) else tuple(allocation_order))
         self._order = self._default_order
@@ -274,7 +277,7 @@ class Assembler:
         self._kept = self._default_kept
         #: What the allocator decided, for each function, in the order the
         #: functions were built.  The debugging dump reads it; nothing else does.
-        self.assignments: list["Assignment"] = []
+        self.assignments: list[Assignment] = []
         #: What padding is filled with.  It must trap rather than fall through,
         #: so each architecture names a byte of its own: a breakpoint on one, a
         #: permanently undefined word on another.
@@ -326,8 +329,11 @@ class Assembler:
 
     def begin_function(self, name: str, *, exported: bool = False,
                        padding: int = 0,
-                       allocation_order: "Sequence[RegUnit] | Mapping[str, Sequence[RegUnit]] | None" = None,
-                       callee_saved: "frozenset[RegUnit] | None" = None) -> MachineFunction:
+                       allocation_order: (Sequence[RegUnit]
+                                          | Mapping[str, Sequence[RegUnit]]
+                                          | None) = None,
+                       callee_saved: frozenset[RegUnit] | None = None,
+                       ) -> MachineFunction:
         """Start building the function *name*.
 
         Which registers may be given out and which have to be handed back as
@@ -350,8 +356,8 @@ class Assembler:
 
     @staticmethod
     def _settled_order(
-            given: "Sequence[RegUnit] | Mapping[str, Sequence[RegUnit]]"
-    ) -> "tuple[RegUnit, ...] | dict[str, tuple[RegUnit, ...]]":
+            given: Sequence[RegUnit] | Mapping[str, Sequence[RegUnit]]
+    ) -> tuple[RegUnit, ...] | dict[str, tuple[RegUnit, ...]]:
         """An allocation order in the form the allocator wants it."""
         if isinstance(given, Mapping):
             return {name: tuple(units) for name, units in given.items()}
@@ -571,8 +577,8 @@ class Assembler:
         self._emit(self._selector.select_op(op, dst, operands, span))
 
     def call(self, target: MCOperand | str, span: Span = INVALID_SPAN,
-             clobbers: "Sequence[Reg]" = (),
-             reads: "Sequence[Reg]" = ()) -> None:
+             clobbers: Sequence[Reg] = (),
+             reads: Sequence[Reg] = ()) -> None:
         """Call *target*, named either directly or by symbol name.
 
         *clobbers* is what the callee destroys and *reads* the registers the
@@ -751,7 +757,7 @@ class Assembler:
         self._emit(self._selector.select_reload(destination, slot, span))
 
     def ret(self, span: Span = INVALID_SPAN,
-            reads: "Sequence[Reg]" = ()) -> None:
+            reads: Sequence[Reg] = ()) -> None:
         """Return from the current function.
 
         *reads* is the registers the answer was put in, for the same reason a

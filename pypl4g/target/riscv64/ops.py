@@ -1,5 +1,7 @@
 """Operations that only RISC-V has."""
 
+from __future__ import annotations
+
 from typing import Final
 
 from ...mc.ops import Op, register

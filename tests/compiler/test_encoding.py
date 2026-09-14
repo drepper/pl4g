@@ -5,6 +5,8 @@ handed to an external disassembler, which must read back the instruction we
 claimed to write.  That is what makes it safe to add rows quickly.
 """
 
+from __future__ import annotations
+
 import shutil
 import subprocess
 import tempfile

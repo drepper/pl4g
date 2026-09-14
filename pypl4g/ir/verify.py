@@ -6,6 +6,8 @@ the compiler, never in the program being compiled, so it raises rather than
 emitting a user diagnostic.
 """
 
+from __future__ import annotations
+
 from typing import Iterable
 
 from ..diag.engine import InternalError

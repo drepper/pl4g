@@ -5,6 +5,8 @@ fixed-width one: a template plus the bits each operand occupies.  This module
 exists to name that shape for this architecture and to fix the width.
 """
 
+from __future__ import annotations
+
 from typing import Final
 
 from ...mc.fixedwidth import (Field, FieldKind, FixedWidthInstDesc)

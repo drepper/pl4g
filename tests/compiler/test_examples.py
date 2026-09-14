@@ -4,6 +4,8 @@ The examples are what someone reads first, so a change that breaks them should
 break the testsuite rather than be found by hand.
 """
 
+from __future__ import annotations
+
 import shutil
 import subprocess
 from pathlib import Path

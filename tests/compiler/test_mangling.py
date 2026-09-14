@@ -5,6 +5,8 @@ tests can simply state the expected string, and so can every tool that shows a
 symbol.
 """
 
+from __future__ import annotations
+
 import subprocess
 
 import pytest

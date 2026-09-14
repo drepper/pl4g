@@ -1,5 +1,7 @@
 """The RISC-V 64-bit backend."""
 
+from __future__ import annotations
+
 from typing import Final
 
 from ...diag import ids as D
@@ -90,7 +92,7 @@ class RISCV64Target:
                          callee_saved=CC_PL4G.callee_saved)
 
     def generate(self, module: Module, asm: Assembler, diags: DiagEngine,
-                 opt_level: int, sources: "SourceManager | None" = None) -> None:
+                 opt_level: int, sources: SourceManager | None = None) -> None:
         """Generate the whole image for *module*."""
         del opt_level
         messages = Messages()

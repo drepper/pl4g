@@ -5,6 +5,8 @@ severity and the message text of a diagnostic come from here and never from the
 call site, so that two implementations cannot drift apart.
 """
 
+from __future__ import annotations
+
 import json
 from dataclasses import dataclass
 from string import Formatter
@@ -187,6 +189,10 @@ def generate_ids_source(cat: Catalog) -> str:
         "Generated from ``share/diagnostics.json`` by ``bin/pl4g-gen-diag-ids``.",
         "Do not edit; change the catalog and regenerate.",
         '"""',
+        "",
+        # Every module here has it, generated or not, so that an annotation is
+        # a thing a reader reads and never a string a program evaluates.
+        "from __future__ import annotations",
         "",
         "from typing import Final",
         "",

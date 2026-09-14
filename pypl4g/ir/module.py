@@ -1,6 +1,9 @@
 """The module: everything one compilation produces."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
+from typing import Sequence
 
 from ..source.location import INVALID_SPAN, Span
 from .decisions import DecisionLog
@@ -161,7 +164,7 @@ class Module:
         return found
 
     def array_const(self, ty: ArrayType,
-                    elements: "Sequence[Const]") -> ArrayConst:
+                    elements: Sequence[Const]) -> ArrayConst:
         """Return the interned array constant with these elements."""
         key = (id(ty), tuple(id(e) for e in elements))
         found = self._array_consts.get(key)

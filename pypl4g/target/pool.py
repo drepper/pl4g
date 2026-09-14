@@ -19,6 +19,8 @@ number: the two zeroes of floating point have different bits and compare equal,
 and a program that wrote both wrote two different things.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 
 from ..mc.asmbuilder import Assembler

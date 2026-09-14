@@ -7,6 +7,8 @@ constants of the same type are two references, and treating them as equal would
 break every use list.
 """
 
+from __future__ import annotations
+
 from ..source.location import INVALID_SPAN, Span
 from .types import (ArrayType, BoolType, EnumType, FloatType, IntType,
                     ResultType, Type)
@@ -82,7 +84,7 @@ class EnumConst(Const):
 
     __slots__ = ("index",)
 
-    def __init__(self, ty: "EnumType", index: int) -> None:
+    def __init__(self, ty: EnumType, index: int) -> None:
         super().__init__(ty)
         self.index = index
 
@@ -109,7 +111,7 @@ class ArrayConst(Const):
 
     __slots__ = ("elements",)
 
-    def __init__(self, ty: "ArrayType", elements: "tuple[Const, ...]") -> None:
+    def __init__(self, ty: ArrayType, elements: tuple[Const, ...]) -> None:
         super().__init__(ty)
         self.elements = elements
 
@@ -125,7 +127,7 @@ class ResultConst(Const):
 
     __slots__ = ("answer", "failed")
 
-    def __init__(self, ty: "ResultType", answer: Const, failed: bool) -> None:
+    def __init__(self, ty: ResultType, answer: Const, failed: bool) -> None:
         super().__init__(ty)
         self.answer = answer
         self.failed = failed

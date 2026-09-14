@@ -5,6 +5,8 @@ requirement of the specification -- that code can react to the errors and
 warnings the compiler emits -- reachable from outside the compiler.
 """
 
+from __future__ import annotations
+
 import json
 from typing import Any, TextIO
 

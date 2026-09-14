@@ -5,6 +5,8 @@ here is specific to this architecture except its instruction width; what is
 specific -- the relocations and how their values are stored -- is in ``fixups``.
 """
 
+from __future__ import annotations
+
 from ...mc.fixup import MCFixup
 from ...mc.fixedwidth import EncodingError, encode as encode_fixed_width
 from ...mc.inst import MCInst

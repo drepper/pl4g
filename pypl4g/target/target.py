@@ -1,5 +1,7 @@
 """What a backend must provide."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -74,7 +76,7 @@ class Target(Protocol):
         ...
 
     def generate(self, module: Module, asm: Assembler, diags: DiagEngine,
-                 opt_level: int, sources: "SourceManager | None" = None) -> None:
+                 opt_level: int, sources: SourceManager | None = None) -> None:
         """Generate the whole image for *module* through *asm*.
 
         *sources* is what turns a span into a place a person can find, for the

@@ -5,6 +5,8 @@ block is terminated exactly once has one place to be enforced as code is
 generated rather than only when the verifier runs.
 """
 
+from __future__ import annotations
+
 from ..source.location import INVALID_SPAN, Span
 from .function import BasicBlock, Function
 from typing import Sequence
@@ -70,7 +72,7 @@ class IRBuilder:
         """An integer constant of type *ty*."""
         return self._module.int_const(ty, value)
 
-    def float_const(self, ty: "FloatType", value: float) -> Value:
+    def float_const(self, ty: FloatType, value: float) -> Value:
         """A floating-point constant of type *ty*."""
         return self._module.float_const(ty, value)
 

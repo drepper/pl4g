@@ -8,6 +8,8 @@ prefix family -- VEX, EVEX, the two-byte REX of the extended registers -- is one
 more emitter in the prefix phase plus the fields it needs here.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 from enum import Enum
 

@@ -5,6 +5,8 @@ instruction word that already holds the opcode and the registers.  Storing one
 is therefore a read, an insert and a write back, and never an overwrite.
 """
 
+from __future__ import annotations
+
 from typing import Callable, Final
 
 from ...mc.fixedwidth import insert_bits

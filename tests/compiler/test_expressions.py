@@ -1,5 +1,7 @@
 """Expressions: how they parse, what they mean, and what they compile to."""
 
+from __future__ import annotations
+
 import subprocess
 from subprocess import CompletedProcess
 

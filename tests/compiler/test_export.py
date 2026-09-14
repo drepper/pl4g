@@ -12,6 +12,8 @@ and the second is the one that still says so if something later makes the symbol
 global.
 """
 
+from __future__ import annotations
+
 import shutil
 import subprocess
 from dataclasses import dataclass

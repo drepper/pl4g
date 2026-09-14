@@ -5,6 +5,8 @@ line can be wrong maps onto a numbered diagnostic rather than onto text of some
 library's choosing.
 """
 
+from __future__ import annotations
+
 import json
 from pathlib import Path
 

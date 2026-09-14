@@ -5,6 +5,8 @@ collected first and only then is any body checked, which is what lets the whole
 compilation be parallelized and what makes a forward reference legal.
 """
 
+from __future__ import annotations
+
 import math
 from dataclasses import dataclass, field, replace
 from typing import Callable, Final, Sequence
@@ -108,8 +110,8 @@ class _ArmPlan:
     """
 
     body: ast.Block
-    block: "BasicBlock | None" = None
-    binds: "tuple[str, Span, Span, Value, Type] | None" = None
+    block: BasicBlock | None = None
+    binds: tuple[str, Span, Span, Value, Type] | None = None
 
 
 @dataclass(slots=True)
@@ -124,7 +126,7 @@ class _NamedType:
     """
 
     name: str
-    node: "ast.TypeDef | ast.EnumDef"
+    node: ast.TypeDef | ast.EnumDef
     origin: str
     exported: bool = False
     ty: Type | None = None
@@ -152,7 +154,7 @@ def found_name(prefix: str, base: str) -> str:
     return ".".join((prefix, base)) if prefix else base
 
 
-def _assigned_in(block: "ast.Block") -> list[str]:
+def _assigned_in(block: ast.Block) -> list[str]:
     """Every name assigned anywhere in *block*, in the order they appear.
 
     A definition is not an assignment: it binds a new name, which the block it
@@ -166,7 +168,7 @@ def _assigned_in(block: "ast.Block") -> list[str]:
     return found
 
 
-def _collect_assigned(block: "ast.Block", into: list[str]) -> None:
+def _collect_assigned(block: ast.Block, into: list[str]) -> None:
     """Add to *into* every name *block* assigns, looking through nested bodies."""
     for stmt in block.stmts:
         match stmt:
@@ -202,7 +204,7 @@ def _lets_go_of(found: ArrayType, wanted: ArrayType) -> bool:
                for ours, theirs in zip(found.shape, wanted.shape))
 
 
-def _spread_out(at: int, shape: "tuple[int, ...]") -> "tuple[int, ...]":
+def _spread_out(at: int, shape: tuple[int, ...]) -> tuple[int, ...]:
     """Which element of each dimension the *at*-th of the run is.
 
     Row-major, so the last dimension moves fastest -- the order an array written
@@ -448,12 +450,12 @@ class _Loop:
     """
 
     label: str
-    span: "Span"
-    header: "BasicBlock"
-    after: "BasicBlock"
-    carried: "list[_Local]"
-    state: "tuple[Value, ...]"
-    step: "Callable[[IRBuilder, tuple[Value, ...]], tuple[Value, ...]] | None"
+    span: Span
+    header: BasicBlock
+    after: BasicBlock
+    carried: list[_Local]
+    state: tuple[Value, ...]
+    step: Callable[[IRBuilder, tuple[Value, ...]], tuple[Value, ...]] | None
     #: Whether something wants what the loop comes to, which is what decides
     #: whether a `break` may hand a value over and whether it must.
     answers: bool = False
@@ -464,12 +466,12 @@ class _Loop:
     #: What type a `break` hands over, where one says: what was asked of the
     #: loop before anything was lowered, or what the first `break` turned out
     #: to hand over.  Every later one has to agree with it.
-    handing: "Type | None" = None
+    handing: Type | None = None
     #: Where the first `break` that handed something over was written, for
     #: pointing at it beside one that did not.
-    handed_at: "Span | None" = None
+    handed_at: Span | None = None
     #: Where the first `break` that handed nothing over was written.
-    bare_at: "Span | None" = None
+    bare_at: Span | None = None
     #: Whether anything named the label, for reporting one nothing did.
     named: bool = False
 
@@ -482,10 +484,10 @@ class _Entries:
     that each is worked out once and in the order it stands in.
     """
 
-    keys: "list[Value]"
-    values: "list[Value]"
-    wanted_key: "Type | None"
-    wanted_value: "Type | None"
+    keys: list[Value]
+    values: list[Value]
+    wanted_key: Type | None
+    wanted_value: Type | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -505,19 +507,19 @@ class _Iteration:
     element: Type
     #: What the loop carries from turn to turn, as it starts out.
     start: tuple[Value, ...]
-    more: "Callable[[IRBuilder, tuple[Value, ...]], Value]"
-    take: "Callable[[IRBuilder, tuple[Value, ...]], Value]"
-    step: "Callable[[IRBuilder, tuple[Value, ...]], tuple[Value, ...]]"
+    more: Callable[[IRBuilder, tuple[Value, ...]], Value]
+    take: Callable[[IRBuilder, tuple[Value, ...]], Value]
+    step: Callable[[IRBuilder, tuple[Value, ...]], tuple[Value, ...]]
 
 
 class Checker:
     """Checks one program and lowers it into a module."""
 
     def __init__(self, module: Module, diags: DiagEngine,
-                 registry: "ModuleRegistry | None" = None,
-                 path: "Path | None" = None, prefix: str = "",
-                 sources: "SourceManager | None" = None,
-                 top_level: "list[_Global] | None" = None) -> None:
+                 registry: ModuleRegistry | None = None,
+                 path: Path | None = None, prefix: str = "",
+                 sources: SourceManager | None = None,
+                 top_level: list[_Global] | None = None) -> None:
         self._module = module
         self._diags = diags
         self._defined: dict[str, tuple[Span, str]] = {}
@@ -778,7 +780,7 @@ class Checker:
         found.add_candidate(self._prefix, base_name(path))
         self._top[node.name] = found
 
-    def _read_module(self, path: Path, node: ast.ModuleImport) -> "LoadedModule | None":
+    def _read_module(self, path: Path, node: ast.ModuleImport) -> LoadedModule | None:
         """Read and check the file at *path*, returning what it holds."""
         try:
             loaded = self._registry.begin(path)
@@ -802,7 +804,7 @@ class Checker:
             self._registry.finish(path)
         return loaded
 
-    def _read_unit(self, path: Path, node: ast.ModuleImport) -> "ast.SourceUnit | None":
+    def _read_unit(self, path: Path, node: ast.ModuleImport) -> ast.SourceUnit | None:
         """Read and parse one module file."""
         from ..front.lexer import tokenize
         from ..front.parser import parse
@@ -988,8 +990,8 @@ class Checker:
 
     def _constant_elements(self, node: ast.VarDef, ty: ArrayType,
                            written: ast.ArrayLit,
-                           shape: "tuple[int | None, ...]"
-                           ) -> "list[Const] | None":
+                           shape: tuple[int | None, ...]
+                           ) -> list[Const] | None:
         """Every element of an array written down, in the order they are laid out."""
         if len(written.elements) != shape[0]:
             self._diags.emit(D.LANG_ARRAY_WRONG_LENGTH, written.span,
@@ -1013,7 +1015,7 @@ class Checker:
             held.extend(deeper)
         return held
 
-    def _enum_value_of(self, expr: ast.Member) -> "EnumConst | None":
+    def _enum_value_of(self, expr: ast.Member) -> EnumConst | None:
         """The value of an enumeration a `TYPE.NAME` names, outside a body."""
         base = expr.base
         held = self._top.get(base.name) if isinstance(base, ast.NameRef) else None
@@ -1069,7 +1071,7 @@ class Checker:
                                    asserted=attr.name == "expect"))
         return found
 
-    def _begin_expecting(self, pairs: Sequence["_Expected"]) -> Expectation | None:
+    def _begin_expecting(self, pairs: Sequence[_Expected]) -> Expectation | None:
         """Put what a construct said about its diagnostics in force."""
         if not pairs:
             return None
@@ -1083,7 +1085,7 @@ class Checker:
             self._diags.release(expectation)
 
     def _settle_expecting(self, expectation: Expectation | None,
-                          pairs: Sequence["_Expected"]) -> bool:
+                          pairs: Sequence[_Expected]) -> bool:
         """Report the assertions nothing met, and say whether what was absorbed
         prevents the construct from being compiled."""
         if expectation is None:
@@ -1447,7 +1449,7 @@ class Checker:
 
     # -- types the program defines ---------------------------------------------
 
-    def _collect_type(self, node: "ast.TypeDef | ast.EnumDef", path: str) -> None:
+    def _collect_type(self, node: ast.TypeDef | ast.EnumDef, path: str) -> None:
         """Register one type definition without working out what it is made of.
 
         The name is registered in the same namespace as everything else at the
@@ -1566,7 +1568,7 @@ class Checker:
             bit <<= 1
         return bit
 
-    def _holder_for(self, node: ast.EnumDef, numbers: Sequence[int]) -> "IntType | None":
+    def _holder_for(self, node: ast.EnumDef, numbers: Sequence[int]) -> IntType | None:
         """What holds the values: what the definition named, or the smallest
         unsigned type that holds every one of them."""
         if node.holder is None:
@@ -1657,7 +1659,7 @@ class Checker:
         held = self._top.get(ref.name)
         return self._resolved(held) if isinstance(held, _NamedType) else None
 
-    def _resolve_type(self, ref: "ast.TypeExpr") -> Type:
+    def _resolve_type(self, ref: ast.TypeExpr) -> Type:
         """Resolve a type written down, collection or name."""
         if isinstance(ref, ast.CollectionTypeRef):
             return self._collection_type(ref)
@@ -1998,8 +2000,8 @@ class Checker:
             return UndefConst(ERROR)
         return builder.make_tuple(values, ty, expr.span)
 
-    def _taken_apart(self, value: Value, names: "Sequence[tuple[str, Span]]",
-                     span: Span) -> "list[Type] | None":
+    def _taken_apart(self, value: Value, names: Sequence[tuple[str, Span]],
+                     span: Span) -> list[Type] | None:
         """The type each name of a destructuring stands for, or nothing where
         the value cannot be taken apart that way."""
         ty = self._value_type_of(value)
@@ -2050,7 +2052,7 @@ class Checker:
 
     def _array_written(self, builder: IRBuilder, expr: ast.ArrayLit,
                        expected: Type | None
-                       ) -> "tuple[ArrayType | None, list[Value] | None]":
+                       ) -> tuple[ArrayType | None, list[Value] | None]:
         """What type an array written down has, and what its elements came to.
 
         The shape comes from what it is wanted as where that says, and from how
@@ -2092,7 +2094,7 @@ class Checker:
         return self._module.types.array_type(element, shape), values
 
     def _shape_written(self, expr: ast.ArrayLit
-                       ) -> "tuple[tuple[int | None, ...], tuple[ast.Expr, ...]]":
+                       ) -> tuple[tuple[int | None, ...], tuple[ast.Expr, ...]]:
         """How deep and how wide an array written down is, and what is innermost.
 
         The first entry of each list is what says how deep the writing goes;
@@ -2114,8 +2116,8 @@ class Checker:
         return tuple(shape), inner
 
     def _fill(self, builder: IRBuilder, expr: ast.ArrayLit, ty: ArrayType,
-              place: Value, at: int, shape: "tuple[int | None, ...]",
-              ready: "Sequence[Value] | None" = None) -> bool:
+              place: Value, at: int, shape: tuple[int | None, ...],
+              ready: Sequence[Value] | None = None) -> bool:
         """Write what was written down into the run of elements, in order.
 
         *at* is how many elements are already behind it, so that a dimension
@@ -2191,7 +2193,7 @@ class Checker:
                            builder.int_const(U64, stride), span), span)
 
     def _shape_of(self, builder: IRBuilder, base: Value, ty: ArrayType,
-                  span: Span) -> "tuple[Value, list[Value]]":
+                  span: Span) -> tuple[Value, list[Value]]:
         """Where the elements of an array are, and how many along each dimension.
 
         One question asked of both kinds: a type that says its shape carries it
@@ -2206,8 +2208,8 @@ class Checker:
                  for at in range(ty.rank)])
 
     def _checked_index(self, builder: IRBuilder, written: ast.Expr,
-                       along: "int | None", length: Value,
-                       span: Span) -> "Value | None":
+                       along: int | None, length: Value,
+                       span: Span) -> Value | None:
         """Lower one index and see to it that it is one the array has.
 
         Where both the index and the dimension are written down the answer is
@@ -2242,9 +2244,9 @@ class Checker:
         return builder.cast(CastKind.SEXT if found.signed else CastKind.ZEXT,
                             value, U64, span)
 
-    def _offset_of(self, builder: IRBuilder, written: "Sequence[ast.Expr]",
-                   ty: ArrayType, lengths: "Sequence[Value]",
-                   span: Span) -> "Value | None":
+    def _offset_of(self, builder: IRBuilder, written: Sequence[ast.Expr],
+                   ty: ArrayType, lengths: Sequence[Value],
+                   span: Span) -> Value | None:
         """How far into the run of elements one place is, counted in elements.
 
         Row-major: each index is added on after what is already there has been
@@ -2274,7 +2276,7 @@ class Checker:
         return self._by_row(builder, offset, lengths[len(written):], span)
 
     def _by_row(self, builder: IRBuilder, offset: Value,
-                left: "Sequence[Value]", span: Span) -> Value:
+                left: Sequence[Value], span: Span) -> Value:
         """A count of rows turned into a count of elements."""
         for along in left:
             offset = builder.binary(BinOp.WRAP_MUL, offset, along, span)
@@ -2285,7 +2287,7 @@ class Checker:
         return self._module.types.array_type(ty.element, ty.shape[taken:])
 
     def _row_at(self, builder: IRBuilder, start: Value, ty: ArrayType,
-                lengths: "Sequence[Value]", offset: Value, taken: int,
+                lengths: Sequence[Value], offset: Value, taken: int,
                 span: Span) -> Value:
         """The row an array has at a place, where not every index was given.
 
@@ -2345,7 +2347,7 @@ class Checker:
         return value
 
     def _mask_written(self, builder: IRBuilder,
-                      expr: ast.Element) -> "Value | None":
+                      expr: ast.Element) -> Value | None:
         """The mask an array is being picked with, or nothing where it is not.
 
         One index and an array of truth values is what says so, and nothing else
@@ -2371,7 +2373,7 @@ class Checker:
 
     def _lower_picked(self, builder: IRBuilder, expr: ast.Element, base: Value,
                       ty: ArrayType, mask: Value,
-                      expected: "Type | None") -> Value:
+                      expected: Type | None) -> Value:
         """Lower `a⟦m⟧` where *m* is a mask: the things it picked, in order.
 
         The mask has one truth value for each thing it could pick, so its shape
@@ -2565,7 +2567,7 @@ class Checker:
             self._report_mismatch(expr.span, member, expected)
         return builder.extract(base, at, member, expr.span)
 
-    def _constant_number(self, expr: ast.Expr) -> "int | None":
+    def _constant_number(self, expr: ast.Expr) -> int | None:
         """The whole number an expression stands for while compiling, or nothing.
 
         A literal is one, with or without a suffix.  A name is one where it was
@@ -2691,7 +2693,7 @@ class Checker:
             value, stmt.span)
 
     def _lower_collection(self, builder: IRBuilder,
-                          expr: "ast.SetLit | ast.DictLit",
+                          expr: ast.SetLit | ast.DictLit,
                           expected: Type | None) -> Value:
         """Check a set or a dictionary written down.
 
@@ -2749,7 +2751,7 @@ class Checker:
         return self._build_collection(builder, expr, ty,
                                       self._arena_named(expr.arena), ready)
 
-    def _arena_named(self, written: "ast.NameRef | None") -> "GlobalVar | None":
+    def _arena_named(self, written: ast.NameRef | None) -> GlobalVar | None:
         """Which allocator a collection was told to come out of.
 
         Nothing where none was named, which is what says to use the one the
@@ -2767,10 +2769,10 @@ class Checker:
         return found
 
     def _build_collection(self, builder: IRBuilder,
-                          expr: "ast.SetLit | ast.DictLit",
-                          ty: "SetType | DictType",
-                          arena: "GlobalVar | None",
-                          ready: "_Entries") -> Value:
+                          expr: ast.SetLit | ast.DictLit,
+                          ty: SetType | DictType,
+                          arena: GlobalVar | None,
+                          ready: _Entries) -> Value:
         """Make the table a collection is, and put what was written down in it.
 
         The entries are put in one at a time through the same call an assignment
@@ -2790,9 +2792,9 @@ class Checker:
                               next(held), expr.span)
         return table
 
-    def _new_table(self, builder: IRBuilder, ty: "SetType | DictType",
-                   span: Span, arena: "GlobalVar | None" = None,
-                   comes_from: "Value | None" = None) -> Value:
+    def _new_table(self, builder: IRBuilder, ty: SetType | DictType,
+                   span: Span, arena: GlobalVar | None = None,
+                   comes_from: Value | None = None) -> Value:
         """Make an empty table of the shape *ty* calls for.
 
         Out of the arena the program named, or out of the one another table came
@@ -2861,9 +2863,9 @@ class Checker:
         return builder.cast(CastKind.BITCAST, word,
                             self._module.types.ptr_type(ty, mutable=True))
 
-    def _one_type(self, builder: IRBuilder, written: "Sequence[ast.Expr]",
+    def _one_type(self, builder: IRBuilder, written: Sequence[ast.Expr],
                   wanted: Type | None,
-                  into: "list[Value] | None" = None) -> Type:
+                  into: list[Value] | None = None) -> Type:
         """Lower each of *written* and give back the one type they share.
 
         *into* collects what they came to, for a caller that has to lower them
@@ -2877,8 +2879,8 @@ class Checker:
             into.extend(values)
         return self._same_type(values, [entry.span for entry in written], wanted)
 
-    def _nothing_expected(self, written: "Sequence[ast.Expr]"
-                          ) -> "Sequence[ast.Expr]":
+    def _nothing_expected(self, written: Sequence[ast.Expr]
+                          ) -> Sequence[ast.Expr]:
         """Hand *written* back with the surrounding context put aside.
 
         Nothing is expected of an entry: what it is, is what the collection is
@@ -2892,7 +2894,7 @@ class Checker:
         finally:
             self._initializing, self._assigning = outer
 
-    def _same_type(self, values: "Sequence[Value]", spans: "Sequence[Span]",
+    def _same_type(self, values: Sequence[Value], spans: Sequence[Span],
                    wanted: Type | None) -> Type:
         """The one type several values share, reporting one that does not.
 
@@ -2916,8 +2918,8 @@ class Checker:
         return ERROR if spoiled or found is None else found
 
     def _entries_written(self, builder: IRBuilder,
-                         written: "Sequence[tuple[ast.Expr, ast.Expr | None]]",
-                         expected: Type | None) -> "_Entries":
+                         written: Sequence[tuple[ast.Expr, ast.Expr | None]],
+                         expected: Type | None) -> _Entries:
         """Lower a collection's entries, once each and in the order written.
 
         A dictionary is written key, value, key, value, and that is the order
@@ -3080,7 +3082,7 @@ class Checker:
     # -- loops -----------------------------------------------------------------
 
     def _lower_while(self, builder: IRBuilder, stmt: ast.While, func: Function,
-                     expected: "Type | None", produces: bool) -> Value:
+                     expected: Type | None, produces: bool) -> Value:
         """Check and lower a `while`, which is a branch backwards.
 
             before:  br loop(v₁ … vₙ, mem)
@@ -3174,7 +3176,7 @@ class Checker:
                                  ways, expected, produces)
 
     def _lower_foreach(self, builder: IRBuilder, stmt: ast.ForEach,
-                       func: Function, expected: "Type | None",
+                       func: Function, expected: Type | None,
                        produces: bool) -> Value:
         """Check and lower a `foreach`, and `while` written with a binding.
 
@@ -3271,7 +3273,7 @@ class Checker:
 
     # -- naming a loop, and leaving or repeating it ----------------------------
 
-    def _label_of(self, label: "ast.Label | None") -> "ast.Label | None":
+    def _label_of(self, label: ast.Label | None) -> ast.Label | None:
         """The name a loop may take, which is the one written unless it is taken.
 
         A loop inside one of the same name would hide it, leaving nothing that
@@ -3291,12 +3293,13 @@ class Checker:
             return None
         return label
 
-    def _begin_loop(self, label: "ast.Label | None", header: BasicBlock,
-                    after: BasicBlock, carried: "list[_Local]",
-                    state: "tuple[Value, ...]",
-                    step: "Callable[[IRBuilder, tuple[Value, ...]], tuple[Value, ...]] | None",
-                    answers: bool, wraps: bool, handing: "Type | None"
-                    ) -> "_Loop | None":
+    def _begin_loop(self, label: ast.Label | None, header: BasicBlock,
+                    after: BasicBlock, carried: list[_Local],
+                    state: tuple[Value, ...],
+                    step: (Callable[[IRBuilder, tuple[Value, ...]],
+                                    tuple[Value, ...]] | None),
+                    answers: bool, wraps: bool, handing: Type | None
+                    ) -> _Loop | None:
         """Put a loop's name up for the length of its body."""
         if label is None:
             return None
@@ -3306,7 +3309,7 @@ class Checker:
         self._loops.append(one)
         return one
 
-    def _end_loop(self, label: "ast.Label | None") -> "_Loop | None":
+    def _end_loop(self, label: ast.Label | None) -> _Loop | None:
         """Take it down again, and report a name nothing named."""
         if label is None:
             return None
@@ -3315,8 +3318,8 @@ class Checker:
             self._diags.emit(D.LANG_LOOP_LABEL_UNUSED, one.span, name=one.label)
         return one
 
-    def _exit_params(self, after: BasicBlock, carried: "list[_Local]",
-                     params: "list[Value]") -> "tuple[list[Value], Value]":
+    def _exit_params(self, after: BasicBlock, carried: list[_Local],
+                     params: list[Value]) -> tuple[list[Value], Value]:
         """Give the block after a loop the names every way out of it hands over.
 
         Where nothing leaves the loop early the test is the only way out, so
@@ -3336,7 +3339,7 @@ class Checker:
                 for local, param in zip(carried, params)]
         return ways, after.add_param(MEM, "mem")
 
-    def _find_loop(self, label: ast.Label) -> "_Loop | None":
+    def _find_loop(self, label: ast.Label) -> _Loop | None:
         """The loop a jump names, or nothing where it names none."""
         for one in reversed(self._loops):
             if one.label == label.name:
@@ -3365,7 +3368,7 @@ class Checker:
             local.read = True
 
     def _handed_over(self, builder: IRBuilder, stmt: ast.Break,
-                     found: "_Loop") -> "Value | None":
+                     found: _Loop) -> Value | None:
         """What a `break` hands the loop, or nothing where it hands it nothing.
 
         Every `break` naming one loop agrees with every other about what it
@@ -3448,9 +3451,9 @@ class Checker:
         (self._operand_of, self._initializing, self._assigning,
          self._handing_over, self._leaving) = outer
 
-    def _wanted_of_a_loop(self, stmt: "ast.While | ast.ForEach",
-                          expected: "Type | None", produces: bool
-                          ) -> "Type | None":
+    def _wanted_of_a_loop(self, stmt: ast.While | ast.ForEach,
+                          expected: Type | None, produces: bool
+                          ) -> Type | None:
         """What a `break` hands over, where the loop's own type already says.
 
         A loop with an `else` arm comes to what the two ways agree on; one
@@ -3465,12 +3468,12 @@ class Checker:
         """
         return self._aiming_at(expected) if produces else None
 
-    def _loop_answer(self, builder: IRBuilder, stmt: "ast.While | ast.ForEach",
-                     func: Function, one: "_Loop | None",
-                     leave: "BasicBlock | None", after: BasicBlock,
-                     carried: "list[_Local]", params: "list[Value]",
+    def _loop_answer(self, builder: IRBuilder, stmt: ast.While | ast.ForEach,
+                     func: Function, one: _Loop | None,
+                     leave: BasicBlock | None, after: BasicBlock,
+                     carried: list[_Local], params: list[Value],
                      token: Value, exit_token: Value, ran_out: Value,
-                     ways: "list[Value] | None", expected: "Type | None",
+                     ways: list[Value] | None, expected: Type | None,
                      produces: bool) -> Value:
         """Fill the way out of the test, and answer what the loop comes to.
 
@@ -3486,7 +3489,7 @@ class Checker:
         that were written before it hand things over in.
         """
         handing = one.handing if one is not None else None
-        otherwise: "Value | None" = None
+        otherwise: Value | None = None
         if leave is not None:
             builder.position_at(leave)
             builder.set_memory(ran_out)
@@ -3520,12 +3523,12 @@ class Checker:
             self._settle_after(builder, carried, ways, params, after,
                                exit_token, token, stmt, leave, None)
             return UndefConst(ERROR)
-        answer: "Type | None" = None
+        answer: Type | None = None
         if produces:
             assert handing is not None
             answer = handing if stmt.alternative is not None \
                 else self._module.types.result_type(handing)
-        given: "Value | None" = None
+        given: Value | None = None
         if answer is not None:
             given = otherwise if stmt.alternative is not None else builder.wrap(
                 UndefConst(handing), builder.bool_const(True), answer, stmt.span)
@@ -3541,11 +3544,11 @@ class Checker:
             return UndefConst(ERROR)
         return value
 
-    def _settle_after(self, builder: IRBuilder, carried: "list[_Local]",
-                      ways: "list[Value] | None", params: "list[Value]",
+    def _settle_after(self, builder: IRBuilder, carried: list[_Local],
+                      ways: list[Value] | None, params: list[Value],
                       after: BasicBlock, exit_token: Value, token: Value,
-                      stmt: "ast.While | ast.ForEach",
-                      leave: "BasicBlock | None", given: "Value | None") -> None:
+                      stmt: ast.While | ast.ForEach,
+                      leave: BasicBlock | None, given: Value | None) -> None:
         """Branch out of the test and stand in the block the loop ends at."""
         if leave is not None:
             handed = tuple(local.value for local in carried)
@@ -3577,7 +3580,7 @@ class Checker:
     # -- what a loop can take its values from ----------------------------------
 
     def _iteration_over(self, builder: IRBuilder,
-                        stmt: ast.ForEach) -> "_Iteration | None":
+                        stmt: ast.ForEach) -> _Iteration | None:
         """What the loop's expression turns out to be, as a thing to walk.
 
         A range is written where it is used and has no type of its own, so it is
@@ -3591,7 +3594,7 @@ class Checker:
         ty = self._value_type_of(value)
         if ty is ERROR:
             return None
-        found: "_Iteration | None"
+        found: _Iteration | None
         if isinstance(ty, ArrayType):
             found = self._over_an_array(builder, value, ty, stmt.span)
         elif isinstance(ty, (SetType, DictType)):
@@ -3606,7 +3609,7 @@ class Checker:
         return found
 
     def _over_a_range(self, builder: IRBuilder,
-                      stmt: ast.ForEach) -> "_Iteration | None":
+                      stmt: ast.ForEach) -> _Iteration | None:
         """Walk the whole numbers a range stands for."""
         found = self._range_of(builder, stmt)
         if found is None:
@@ -3627,7 +3630,7 @@ class Checker:
             step=lambda b, s: (b.binary(moving, s[0], step, stmt.span),))
 
     def _over_an_array(self, builder: IRBuilder, value: Value, ty: ArrayType,
-                       span: Span) -> "_Iteration":
+                       span: Span) -> _Iteration:
         """Walk an array along its outermost dimension.
 
         A turn gives an element where the array has one dimension and a row
@@ -3639,7 +3642,7 @@ class Checker:
         start, lengths = self._shape_of(builder, value, ty, span)
         element = ty.element if ty.rank == 1 else self._row_type(ty, 1)
 
-        def take(b: IRBuilder, s: "tuple[Value, ...]") -> Value:
+        def take(b: IRBuilder, s: tuple[Value, ...]) -> Value:
             offset = self._by_row(b, s[0], lengths[1:], span)
             if ty.rank == 1:
                 return b.load(
@@ -3654,7 +3657,7 @@ class Checker:
                                         b.int_const(U64, 1), span),))
 
     def _over_a_table(self, builder: IRBuilder, value: Value,
-                      ty: "SetType | DictType", span: Span) -> "_Iteration":
+                      ty: SetType | DictType, span: Span) -> _Iteration:
         """Walk the keys a set holds, or the pairs a dictionary holds.
 
         The places a table's entries are in are not all holding keys, so the
@@ -3689,7 +3692,7 @@ class Checker:
                 b.binary(BinOp.ADD, place, b.int_const(U64, offset), span),
                 self._module.types.ptr_type(held, mutable=True), span), span)
 
-        def take(b: IRBuilder, s: "tuple[Value, ...]") -> Value:
+        def take(b: IRBuilder, s: tuple[Value, ...]) -> Value:
             place = tables.entry_at(b, table, s[0])
             key = read(b, place, tables.KEY_AT, key_ty)
             if isinstance(ty, SetType):
@@ -3709,7 +3712,7 @@ class Checker:
                 U64, span),))
 
     def _range_of(self, builder: IRBuilder, stmt: ast.ForEach
-                  ) -> "tuple[Value, Value, Value, bool, IntType] | None":
+                  ) -> tuple[Value, Value, Value, bool, IntType] | None:
         """What a loop's expression gives out: where it starts, where it stops,
         how far it moves, which way it runs, and of what type.
 
@@ -3751,7 +3754,7 @@ class Checker:
         return first, last, builder.int_const(element, distance), rising, element
 
     def _range_step(self, written: ast.Range,
-                    element: IntType) -> "tuple[int | None, bool]":
+                    element: IntType) -> tuple[int | None, bool]:
         """How far a range moves each turn, and whether it counts up.
 
         It is written down rather than computed.  Which way the range runs
@@ -3780,7 +3783,7 @@ class Checker:
         return distance, given > 0
 
     def _loop_locals(self, body: ast.Block,
-                     alternative: "ast.Block | None" = None) -> list[_Local]:
+                     alternative: ast.Block | None = None) -> list[_Local]:
         """The names in scope that a turn of the loop may change.
 
         Asked of the syntax rather than of what the lowering turns out to do,
@@ -3857,7 +3860,7 @@ class Checker:
         return [(variant.render(), variant, False) for _, variant in ty.variants]
 
     def _matched_arms(self, stmt: ast.Match,
-                      ty: Type) -> "list[tuple[ast.MatchArm, frozenset[int]]] | None":
+                      ty: Type) -> list[tuple[ast.MatchArm, frozenset[int]]] | None:
         """Which alternatives each arm takes, or nothing where the arms are wrong.
 
         Every alternative must be taken and none twice.  `_` takes every one no
@@ -3951,7 +3954,7 @@ class Checker:
 
     def _lower_match_on_result(self, builder: IRBuilder, stmt: ast.Match,
                                func: Function, subject: Value, ty: ResultType,
-                               taken: "list[tuple[ast.MatchArm, frozenset[int]]]",
+                               taken: list[tuple[ast.MatchArm, frozenset[int]]],
                                wanted: Type | None, produces: bool) -> Value:
         """Lower a `match` over a result, which has two alternatives.
 
@@ -3983,7 +3986,7 @@ class Checker:
 
     def _lower_match_on_enum(self, builder: IRBuilder, stmt: ast.Match,
                              func: Function, subject: Value, ty: EnumType,
-                             taken: "list[tuple[ast.MatchArm, frozenset[int]]]",
+                             taken: list[tuple[ast.MatchArm, frozenset[int]]],
                              wanted: Type | None, produces: bool) -> Value:
         """Lower a `match` over an enumeration.
 
@@ -4015,11 +4018,11 @@ class Checker:
             [_ArmPlan(body=arm.body, block=blocks[id(arm)]) for arm, _ in taken],
             wanted, produces)
 
-    def _run_arms(self, builder: IRBuilder, stmt: "ast.Match | ast.If",
+    def _run_arms(self, builder: IRBuilder, stmt: ast.Match | ast.If,
                   func: Function,
-                  plan: "Sequence[_ArmPlan]", wanted: Type | None = None,
+                  plan: Sequence[_ArmPlan], wanted: Type | None = None,
                   produces: bool = False,
-                  otherwise: "BasicBlock | None" = None) -> Value:
+                  otherwise: BasicBlock | None = None) -> Value:
         """Lower each arm into its block and join what the arms leave behind.
 
         A name bound outside the match and assigned inside one arm stands for
@@ -4149,7 +4152,7 @@ class Checker:
             return
         self._diags.emit(D.LANG_CALL_ANSWER_DROPPED, expr.span, name=func.name)
 
-    def _callee_named(self, expr: ast.Expr) -> "Function | None":
+    def _callee_named(self, expr: ast.Expr) -> Function | None:
         """The function a call names, asked of the syntax and reporting nothing.
 
         Whether the callee is a function at all is the call's own business and
@@ -4162,7 +4165,7 @@ class Checker:
         return None
 
     def _dropped(self, builder: IRBuilder, node: ast.AssignStmt,
-                 wants_value: bool) -> "Value | None":
+                 wants_value: bool) -> Value | None:
         """Lower `_ \N{LEFTWARDS ARROW} v`: work the value out and deliberately drop it.
 
         `_` is not a variable and is not defined anywhere: it is where a value
@@ -4252,7 +4255,7 @@ class Checker:
                          value_span=node.span)
 
     def _bind_apart(self, builder: IRBuilder,
-                    node: "ast.VarDef | ast.ForEach", value: Value) -> None:
+                    node: ast.VarDef | ast.ForEach, value: Value) -> None:
         """Bind each name of a definition, or of a loop, that takes a tuple apart.
 
         A loop's names are never `mut`: what they stand for is what the turn
@@ -4413,7 +4416,7 @@ class Checker:
             self._assigning = None
         return self._as_declared(value, expected)
 
-    def _return_type(self, ref: "ast.TypeExpr | None") -> Type:
+    def _return_type(self, ref: ast.TypeExpr | None) -> Type:
         """What a function answers with, from what its definition wrote.
 
         Nothing written means nothing answered with.  Writing `void` out is
@@ -4870,8 +4873,8 @@ class Checker:
         return answer
 
     def _boolean(self, builder: IRBuilder, expr: ast.Expr,
-                 op: "ast.BinaryOp | ast.UnaryOp",
-                 walked: bool = False) -> "Value | None":
+                 op: ast.BinaryOp | ast.UnaryOp,
+                 walked: bool = False) -> Value | None:
         """Lower *expr* where only a truth value will do, or report why not.
 
         Nothing else counts as one.  C's rule that any number other than zero is
@@ -4906,7 +4909,7 @@ class Checker:
     #: which table is walked, which is asked about, and what is wanted of the
     #: answer.  Every one of them makes a table of its own rather than changing
     #: either operand, which is what an operator does everywhere else here.
-    _SET_WALKS: "Final[dict[ast.BinaryOp, tuple[tuple[bool, int], ...]]]" = {
+    _SET_WALKS: Final[dict[ast.BinaryOp, tuple[tuple[bool, int], ...]]] = {
         ast.BinaryOp.BIT_OR: ((True, tables.WANT_EITHER),
                               (False, tables.WANT_EITHER)),
         ast.BinaryOp.BIT_AND: ((True, tables.WANT_PRESENT),),
@@ -5061,7 +5064,7 @@ class Checker:
     #: What each operator that can fault does, where both sides are known.  The
     #: saturating ones are not here: theirs is the answer nearest the end of the
     #: type, which always fits and is never a mistake.
-    _ARITHMETIC: Final[dict[ast.BinaryOp, "Callable[[int, int], int]"]] = {
+    _ARITHMETIC: Final[dict[ast.BinaryOp, Callable[[int, int], int]]] = {
         ast.BinaryOp.ADD: lambda a, b: a + b,
         ast.BinaryOp.SUBTRACT: lambda a, b: a - b,
         ast.BinaryOp.MULTIPLY: lambda a, b: a * b,
@@ -5124,7 +5127,7 @@ class Checker:
     #: here is the answer the program would compute -- for `f64`.  For `f32` it
     #: is the answer rounded once instead of twice, which can differ in the last
     #: place, so only the question asked of it is used: whether it is finite.
-    _FLOAT_ARITHMETIC: Final[dict[ast.BinaryOp, "Callable[[float, float], float]"]] = {
+    _FLOAT_ARITHMETIC: Final[dict[ast.BinaryOp, Callable[[float, float], float]]] = {
         ast.BinaryOp.ADD: lambda a, b: a + b,
         ast.BinaryOp.SUBTRACT: lambda a, b: a - b,
         ast.BinaryOp.MULTIPLY: lambda a, b: a * b,
@@ -5262,7 +5265,7 @@ class Checker:
                 else None)
 
     def _float_literal_type(self, expr: ast.FloatLit,
-                            expected: Type | None) -> "FloatType | None":
+                            expected: Type | None) -> FloatType | None:
         """The type a floating-point literal has, from its suffix or its place."""
         expected = self._aiming_at(expected)
         named = BUILTIN_TYPES.get(expr.type_name) if expr.type_name is not None else None
@@ -5354,7 +5357,7 @@ class Checker:
             return UndefConst(ERROR)
         return answer
 
-    def _scalar_of(self, ty: "Type | None") -> "Type | None":
+    def _scalar_of(self, ty: Type | None) -> Type | None:
         """What an array is an array of, however many dimensions deep.
 
         What an operator is defined on is never an array, so this is what is
@@ -5367,8 +5370,8 @@ class Checker:
         return ty
 
     def _walk_operands(self, builder: IRBuilder, expr: ast.Expr,
-                       given: "Sequence[tuple[str, Value]]",
-                       expected: "Type | None") -> "Value | None":
+                       given: Sequence[tuple[str, Value]],
+                       expected: Type | None) -> Value | None:
         """Where an operand is an array, apply the operator element by element.
 
         Nothing where none of them is one, which is every operator on every
@@ -5416,8 +5419,8 @@ class Checker:
             return UndefConst(ERROR)
         return held
 
-    def _shape_walked(self, values: "Sequence[Value]", wanted: "Sequence[Type]",
-                      span: Span) -> "tuple[int, ...] | None":
+    def _shape_walked(self, values: Sequence[Value], wanted: Sequence[Type],
+                      span: Span) -> tuple[int, ...] | None:
         """How many along each dimension the operands are walked."""
         found: list[int] = []
         seen = [value.ty for value in values]
@@ -5426,7 +5429,7 @@ class Checker:
                       if ty is not want]
             if not walked:
                 return tuple(found)
-            along: "int | None" = None
+            along: int | None = None
             for at in walked:
                 ty = seen[at]
                 if not (isinstance(ty, ArrayType) and ty.fixed):
@@ -5444,8 +5447,8 @@ class Checker:
             found.append(along)
 
     def _element_answer(self, builder: IRBuilder, expr: ast.Expr,
-                        names: "Sequence[str]", values: "Sequence[Value]",
-                        wanted: "Sequence[Type]", index: "tuple[int, ...]") -> Value:
+                        names: Sequence[str], values: Sequence[Value],
+                        wanted: Sequence[Type], index: tuple[int, ...]) -> Value:
         """Lower the operator once, for the element the index names."""
         taken: dict[str, object] = {}
         for name, value, want in zip(names, values, wanted):
@@ -5459,8 +5462,8 @@ class Checker:
         return self._lower_expr(builder, replace(expr, **taken), None)
 
     def _walked(self, builder: IRBuilder, func: Function,
-                args: "list[Value]", expr: ast.Call,
-                expected: "Type | None") -> Value:
+                args: list[Value], expr: ast.Call,
+                expected: Type | None) -> Value:
         """Call *func* once for each element of what was handed it as an array.
 
         An array handed where one of its elements is wanted is walked: the
@@ -5492,8 +5495,8 @@ class Checker:
             return UndefConst(ERROR)
         return made
 
-    def _walking_shape(self, func: Function, args: "Sequence[Value]",
-                       expr: ast.Call) -> "tuple[int, ...] | None":
+    def _walking_shape(self, func: Function, args: Sequence[Value],
+                       expr: ast.Call) -> tuple[int, ...] | None:
         """How many along each dimension the walk goes, outermost first.
 
         Worked out before anything is lowered for it, because the room the
@@ -5506,7 +5509,7 @@ class Checker:
                       if ty is not wanted]
             if not walked:
                 return tuple(found)
-            along: "int | None" = None
+            along: int | None = None
             for at in walked:
                 ty = seen[at]
                 if not (isinstance(ty, ArrayType) and ty.fixed):
@@ -5535,7 +5538,7 @@ class Checker:
         return self._module.types.array_type(ty.element, ty.shape[1:])
 
     def _each_of(self, builder: IRBuilder, func: Function,
-                 args: "Sequence[Value]", shape: "tuple[int, ...]",
+                 args: Sequence[Value], shape: tuple[int, ...],
                  place: Value, at: int, span: Span) -> None:
         """Make the calls one dimension at a time, writing the answers in order.
 
@@ -5581,9 +5584,9 @@ class Checker:
                 span)
         return self._row_at(builder, start, ty, lengths, offset, 1, span)
 
-    def _one_by_one(self, builder: IRBuilder, written: "Sequence[ast.Expr]",
-                    wanted: "Sequence[Type] | None",
-                    callee: "str | None" = None) -> "list[Value] | None":
+    def _one_by_one(self, builder: IRBuilder, written: Sequence[ast.Expr],
+                    wanted: Sequence[Type] | None,
+                    callee: str | None = None) -> list[Value] | None:
         """Lower a list of written things left to right, spreads and all.
 
         The two such lists are a call's arguments and a tuple's members.  Each
@@ -5606,7 +5609,7 @@ class Checker:
         """
         values: list[Value] = []
 
-        def place() -> "Type | None":
+        def place() -> Type | None:
             """What the next value is to be, where anything says."""
             return wanted[len(values)] \
                 if wanted is not None and len(values) < len(wanted) else None
@@ -5635,7 +5638,7 @@ class Checker:
         return values
 
     def _taken_one_each(self, builder: IRBuilder, spread: ast.Spread
-                        ) -> "list[Value] | None":
+                        ) -> list[Value] | None:
         """The values `\N{ASTERISM}x` stands for, one each, or nothing where it stands
         for no such list.
 
@@ -5827,7 +5830,7 @@ class Checker:
             return value
         return UndefConst(ERROR)
 
-    def _walks_down_to(self, found: Type, wanted: Type) -> "int | None":
+    def _walks_down_to(self, found: Type, wanted: Type) -> int | None:
         """How many dimensions come off *found* before it is *wanted*, or nothing.
 
         Nothing where the two never meet, and nothing where a dimension that
@@ -5845,7 +5848,7 @@ class Checker:
             depth += 1
         return depth
 
-    def _aiming_at(self, expected: "Type | None") -> "Type | None":
+    def _aiming_at(self, expected: Type | None) -> Type | None:
         """What is wanted of something that cannot itself be a result.
 
         A result is an answer and the fact of whether there is one.  Something
@@ -5860,7 +5863,7 @@ class Checker:
         """
         return expected.ok if isinstance(expected, ResultType) else expected
 
-    def _accepts(self, expected: "Type | None", found: Type) -> bool:
+    def _accepts(self, expected: Type | None, found: Type) -> bool:
         """Whether a value of *found* stands where *expected* is wanted.
 
         Its own type does, and so does the answer type of a result: a value

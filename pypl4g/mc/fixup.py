@@ -16,6 +16,8 @@ operations are: a target registers the ones it needs without this module having
 to know about them.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 from enum import Enum
 from typing import Callable, Final

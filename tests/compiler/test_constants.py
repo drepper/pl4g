@@ -13,6 +13,8 @@ number -- and exits with whether they agree.  A defect in either one is a
 disagreement, and there is nowhere for both to be wrong in the same way.
 """
 
+from __future__ import annotations
+
 import pytest
 
 from conftest import compiler_targets

@@ -6,6 +6,8 @@ sequence of more than one character: a single character is never a substitute,
 so that it stays available for a future language feature.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Final

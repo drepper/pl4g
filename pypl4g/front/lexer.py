@@ -6,6 +6,8 @@ an explicit brace-enclosed block, line structure carries no meaning and those
 tokens are not produced.
 """
 
+from __future__ import annotations
+
 from typing import Final
 
 from ..diag import ids as D

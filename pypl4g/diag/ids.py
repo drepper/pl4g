@@ -4,6 +4,8 @@ Generated from ``share/diagnostics.json`` by ``bin/pl4g-gen-diag-ids``.
 Do not edit; change the catalog and regenerate.
 """
 
+from __future__ import annotations
+
 from typing import Final
 
 from .catalog import DiagID

@@ -1,5 +1,7 @@
 """The streamer: where emitted instructions, data and symbols are collected."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from typing import Callable, Sequence
 

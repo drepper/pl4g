@@ -25,6 +25,8 @@ would come to one name, so both get a few characters of the hash of their path
 to tell them apart.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from hashlib import blake2b
 from pathlib import Path

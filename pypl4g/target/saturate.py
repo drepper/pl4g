@@ -31,6 +31,8 @@ two of these architectures have as an instruction and the third has only in a
 form with a fixed pair of registers.
 """
 
+from __future__ import annotations
+
 from typing import Protocol, Sequence
 
 from ..ir.inst import BinOp
@@ -140,7 +142,7 @@ def lower_trapping(asm: Assembler, op: BinOp, ty: Type, left: MCOperand,
 
 def _lower(asm: Assembler, op: BinOp, ty: Type, left: MCOperand,
            right: MCOperand, destination: Reg, scratch: Scratch,
-           register_bits: int, fault: "Fault | None", span: Span) -> None:
+           register_bits: int, fault: Fault | None, span: Span) -> None:
     """The body of both of the above."""
     if not isinstance(ty, IntType):
         raise Unsupported("arithmetic on something that is not an integer")
@@ -154,7 +156,7 @@ def _lower(asm: Assembler, op: BinOp, ty: Type, left: MCOperand,
 
 
 def _answer(asm: Assembler, cond: Condition, destination: Reg, lhs: MCOperand,
-            rhs: MCOperand, bound: MCOperand, fault: "Fault | None",
+            rhs: MCOperand, bound: MCOperand, fault: Fault | None,
             span: Span) -> None:
     """What is done where *lhs* and *rhs* stand in *cond*, which is what says
     the answer went past the end of its type.
@@ -173,7 +175,7 @@ def _answer(asm: Assembler, cond: Condition, destination: Reg, lhs: MCOperand,
 
 
 def _exact(asm: Assembler, op: BinOp, ty: IntType, left: MCOperand,
-           right: MCOperand, destination: Reg, bits: int, fault: "Fault | None",
+           right: MCOperand, destination: Reg, bits: int, fault: Fault | None,
            span: Span) -> None:
     """Compute the operation as it stands, where the answer cannot overflow the
     register, and bring it back to the ends of the type."""
@@ -201,7 +203,7 @@ def _exact(asm: Assembler, op: BinOp, ty: IntType, left: MCOperand,
 
 def _widened(asm: Assembler, op: BinOp, ty: IntType, left: MCOperand,
              right: MCOperand, destination: Reg, scratch: Scratch,
-             fault: "Fault | None", span: Span) -> None:
+             fault: Fault | None, span: Span) -> None:
     """Fill whole registers with the two operands and then compute exactly.
 
     The answer is inside the type by the time it is written back, so writing it
@@ -217,7 +219,7 @@ def _widened(asm: Assembler, op: BinOp, ty: IntType, left: MCOperand,
 
 def _wrapping(asm: Assembler, op: BinOp, ty: IntType, left: MCOperand,
               right: MCOperand, destination: Reg, scratch: Scratch,
-              fault: "Fault | None", span: Span) -> None:
+              fault: Fault | None, span: Span) -> None:
     """Let the operation wrap and ask the wrapped answer what happened."""
     if _ORDINARY[op] is BinOp.MUL:
         raise Unsupported(
@@ -245,7 +247,7 @@ def _wrapping(asm: Assembler, op: BinOp, ty: IntType, left: MCOperand,
 
 def _signed_wrapping(asm: Assembler, op: BinOp, ty: IntType, left: MCReg,
                      right: MCOperand, destination: Reg, scratch: Scratch,
-                     fault: "Fault | None", span: Span) -> None:
+                     fault: Fault | None, span: Span) -> None:
     """The signed half of the above.
 
     An addition has gone past an end when both operands had one sign and the

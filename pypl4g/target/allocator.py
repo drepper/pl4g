@@ -30,6 +30,8 @@ there is nothing a program could usefully do at that point that the operating
 system will not do better by refusing to start it.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 from typing import Callable, Final, Sequence
 
@@ -102,7 +104,7 @@ OUT_OF_MEMORY: Final[str] = "pl4g: out of memory\n"
 RUNTIME_SYMBOLS: Final[frozenset[str]] = frozenset((ALLOC_SYMBOL, RELEASE_SYMBOL))
 
 
-def wanted_by(module: "Module") -> bool:
+def wanted_by(module: Module) -> bool:
     """Whether anything in *module* calls into the allocator."""
     return any(func.is_declaration and symbol_name(func) in RUNTIME_SYMBOLS
                for func in module.functions.values())

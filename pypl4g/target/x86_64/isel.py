@@ -6,6 +6,8 @@ Every builder call turns into table rows, and the table decides which encoding i
 shortest.
 """
 
+from __future__ import annotations
+
 from typing import TYPE_CHECKING, Final, Mapping, Sequence
 
 from ...mc import ops
@@ -109,13 +111,13 @@ ZERO_IMMEDIATE: Final[MCImm] = MCImm(0, 32, signed=False)
 #: The four a floating-point value answers to.  There are no bitwise operations
 #: on one and no saturating ones: what those mean is a question about bits, and
 #: a floating-point type says the value is a number and not its bits.
-_FLOAT_OPERATIONS: Final[dict[BinOp, "Op"]] = {
+_FLOAT_OPERATIONS: Final[dict[BinOp, Op]] = {
     BinOp.ADD: ops.PLUS, BinOp.SUB: ops.MINUS, BinOp.MUL: ops.TIMES,
     BinOp.FDIV: ops.DIVIDE,
 }
 
 #: What each operation of the representation is called in the assembler.
-_OPERATIONS: Final[dict[BinOp, "Op"]] = {
+_OPERATIONS: Final[dict[BinOp, Op]] = {
     BinOp.ADD: ops.PLUS, BinOp.SUB: ops.MINUS, BinOp.MUL: ops.TIMES,
     BinOp.AND: ops.AND, BinOp.OR: ops.OR, BinOp.XOR: ops.XOR,
     # The wrapping three are the same instructions with nothing asked
@@ -125,7 +127,7 @@ _OPERATIONS: Final[dict[BinOp, "Op"]] = {
 }
 
 #: The same for the operations that take one operand.
-_UNARY_OPERATIONS: Final[dict[UnOp, "Op"]] = {
+_UNARY_OPERATIONS: Final[dict[UnOp, Op]] = {
     UnOp.NOT: ops.NOT, UnOp.NEG: ops.NEG,
 }
 
@@ -683,11 +685,11 @@ class X86Selector(InstructionSelector):
 
 # -- lowering the IR ------------------------------------------------------------
 
-def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
-                   registers: "RegisterInfo", messages: "Messages | None" = None,
-                   sources: "SourceManager | None" = None,
-                   constants: "Constants | None" = None,
-                   known_clobbers: "Mapping[str, frozenset[RegUnit]] | None" = None
+def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
+                   registers: RegisterInfo, messages: Messages | None = None,
+                   sources: SourceManager | None = None,
+                   constants: Constants | None = None,
+                   known_clobbers: Mapping[str, frozenset[RegUnit]] | None = None
                    ) -> None:
     """Build the machine form of one IR function.
 
@@ -769,7 +771,7 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
                     span if span.is_valid else None)
             return MCReg(found)
 
-        def register_of(self, value: object, span: "Span | None") -> VirtReg:
+        def register_of(self, value: object, span: Span | None) -> VirtReg:
             """The register a value the function computed is held in."""
             found = held.get(id(value))
             if found is None:
@@ -777,12 +779,12 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
                     "a value this backend did not compute", span)
             return found
 
-        def flag_of(self, value: object, span: "Span | None") -> VirtReg:
+        def flag_of(self, value: object, span: Span | None) -> VirtReg:
             """The register holding whether a result has an answer."""
             return self.part_of(value, 1, span)
 
         def part_of(self, value: object, index: int,
-                    span: "Span | None") -> VirtReg:
+                    span: Span | None) -> VirtReg:
             """The register holding one of a value's several parts."""
             if index == 0:
                 return self.register_of(value, span)
@@ -792,7 +794,7 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
                     "a value of several parts this backend did not compute", span)
             return found[index - 1]
 
-        def undefined(self, value: object, ty: "Type", span: Span) -> MCOperand:
+        def undefined(self, value: object, ty: Type, span: Span) -> MCOperand:
             """The operand for *value*, where it may be one nothing may read.
 
             The answer half of an error is such a value.  It is written as zero
@@ -816,7 +818,7 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
                                            None)
             return found
 
-        def floating(self, value: "FloatConst", span: Span) -> VirtReg:
+        def floating(self, value: FloatConst, span: Span) -> VirtReg:
             """A register holding the floating-point constant *value*."""
             if constants is None:
                 raise UnsupportedOperation(
@@ -847,7 +849,7 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
 
     operands = _Operands()
 
-    def place_of(address: object, span: "Span | None", **where: object) -> MCMem:
+    def place_of(address: object, span: Span | None, **where: object) -> MCMem:
         """Where in memory an address names, for a read or for a write.
 
         A variable is named by its symbol and reached relative to the
@@ -865,10 +867,10 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
     class _Fault:
         """What is emitted where an answer will not fit its type."""
 
-        def __init__(self, what: str, span: "Span") -> None:
+        def __init__(self, what: str, span: Span) -> None:
             self.text = describe(what, func.name, span, sources)
 
-        def out_of_range(self, asm: "Assembler", span: "Span") -> None:
+        def out_of_range(self, asm: Assembler, span: Span) -> None:
             """Report the fault and stop; this does not come back."""
             if messages is None:
                 raise UnsupportedOperation(
@@ -1492,7 +1494,7 @@ def lower_function(asm: "Assembler", func: "Function", cconv: "CallConvDesc",
                         "the instruction '", inst.opcode, "'")), span)
     asm.end_function()
 
-def _is_floating(ty: "Type") -> bool:
+def _is_floating(ty: Type) -> bool:
     """Whether *ty* is a floating-point type, or a result answering with one."""
     from ...ir.types import FloatType, ResultType
 
@@ -1501,7 +1503,7 @@ def _is_floating(ty: "Type") -> bool:
     return isinstance(ty, FloatType)
 
 
-def _bits_of(ty: "Type") -> int:
+def _bits_of(ty: Type) -> int:
     """How wide a floating-point type is, which is the width the format has."""
     from ...ir.types import FloatType
 
@@ -1509,8 +1511,8 @@ def _bits_of(ty: "Type") -> int:
     return ty.bits
 
 
-def _as_argument(place: "PhysReg", ty: "Type",
-                 registers: "RegisterInfo") -> "PhysReg":
+def _as_argument(place: PhysReg, ty: Type,
+                 registers: RegisterInfo) -> PhysReg:
     """*place* named at the width a value of *ty* is passed at.
 
     The caller writes this view and the callee reads it, and both take the width
@@ -1527,8 +1529,8 @@ def _as_argument(place: "PhysReg", ty: "Type",
     return registers.view(place.unit, max(32, _width_of(ty)))
 
 
-def _result_register(ty: "Type", cconv: "CallConvDesc",
-                     registers: "RegisterInfo", index: int = 0) -> "PhysReg":
+def _result_register(ty: Type, cconv: CallConvDesc,
+                     registers: RegisterInfo, index: int = 0) -> PhysReg:
     """The register an instruction's result is put in.
 
     A value narrower than a word lands in the word-wide view of the register a
@@ -1550,10 +1552,10 @@ def _result_register(ty: "Type", cconv: "CallConvDesc",
 _FLOAT_REGISTER_BITS: Final[int] = 128
 
 
-def _destroyed_by(callee: "Function", cconv: "CallConvDesc",
-                  registers: "RegisterInfo",
-                  known: "Mapping[str, frozenset[RegUnit]] | None"
-                  ) -> "list[PhysReg]":
+def _destroyed_by(callee: Function, cconv: CallConvDesc,
+                  registers: RegisterInfo,
+                  known: Mapping[str, frozenset[RegUnit]] | None
+                  ) -> list[PhysReg]:
     """Which registers a call to *callee* destroys.
 
     What the callee turned out to destroy where that has been worked out, and
@@ -1570,8 +1572,8 @@ def _destroyed_by(callee: "Function", cconv: "CallConvDesc",
     return [registers.widest(unit) for unit in units]
 
 
-def _new_value(ty: "Type", registers: "RegisterInfo",
-               hint: "PhysReg | None" = None) -> VirtReg:
+def _new_value(ty: Type, registers: RegisterInfo,
+               hint: PhysReg | None = None) -> VirtReg:
     """A register for a value the function computes.
 
     A value narrower than a word gets a word-wide register: the architecture has
@@ -1600,7 +1602,7 @@ def _new_value(ty: "Type", registers: "RegisterInfo",
     return registers.new_virtual(GPR, max(32, bits), hint=hint)
 
 
-def _returned_value(func: "Function") -> object:
+def _returned_value(func: Function) -> object:
     """The value the function returns, where it computes one.
 
     It is worth knowing before the value is computed, because that is when the
@@ -1615,8 +1617,8 @@ def _returned_value(func: "Function") -> object:
     return None
 
 
-def _value_of(value: object, held: "dict[int, VirtReg]",
-              span: "Span | None") -> VirtReg:
+def _value_of(value: object, held: dict[int, VirtReg],
+              span: Span | None) -> VirtReg:
     """The register a value the function computed is in."""
     found = held.get(id(value))
     if found is None:
@@ -1624,7 +1626,7 @@ def _value_of(value: object, held: "dict[int, VirtReg]",
     return found
 
 
-def _width_of(ty: "Type") -> int:
+def _width_of(ty: Type) -> int:
     """How many bits a value of *ty* occupies in memory.
 
     A truth value is a byte, which is what the layout says it is.  Reading or
@@ -1639,7 +1641,7 @@ def _width_of(ty: "Type") -> int:
     return 8 if isinstance(ty, BoolType) else 64
 
 
-def _number_of(value: object) -> "tuple[int, Type] | None":
+def _number_of(value: object) -> tuple[int, Type] | None:
     """The number a constant stands for and its type, or nothing where it is
     not a constant.
 
@@ -1661,7 +1663,7 @@ def _number_of(value: object) -> "tuple[int, Type] | None":
     return None
 
 
-def _is_signed(ty: "Type") -> bool:
+def _is_signed(ty: Type) -> bool:
     """Whether a narrow value of *ty* is widened by its sign when it is read."""
     from ...ir.types import EnumType, IntType
 
@@ -1717,7 +1719,7 @@ def _whole(operand: MCOperand) -> MCOperand:
     return MCReg(operand.reg, bits=64) if isinstance(operand, MCReg) else operand
 
 
-def _operand_width(operands: "Sequence[MCOperand]") -> int:
+def _operand_width(operands: Sequence[MCOperand]) -> int:
     """How wide a register holding one of these operands has to be.
 
     An instruction's register operands are all of one width, so a constant put

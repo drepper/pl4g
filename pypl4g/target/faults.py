@@ -25,6 +25,8 @@ signal arrives.  A status would say less and would be indistinguishable from a
 program that meant to exit with it.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from typing import Sequence
 
@@ -75,7 +77,7 @@ class Messages:
 
 
 def describe(what: str, function: str, span: Span,
-             sources: "SourceManager | None") -> str:
+             sources: SourceManager | None) -> str:
     """The message a fault of kind *what* in *function* reports.
 
     Written the way a compiler's own diagnostics are written -- the place first,

@@ -6,6 +6,8 @@ testing facility, not a serialization format -- it does not preserve source
 spans, and a persistent form would be a packed binary one instead.
 """
 
+from __future__ import annotations
+
 from typing import Sequence
 
 from .function import (DEFAULT_CCONV, BasicBlock, FuncAttrs, Function,

@@ -11,6 +11,8 @@ The templates were checked against the GNU assembler, and a test keeps checking
 them.
 """
 
+from __future__ import annotations
+
 from typing import Final
 
 from ...mc.desc import InstFlags, OperandKind, OperandRole, OperandSpec

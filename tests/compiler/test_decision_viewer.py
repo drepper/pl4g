@@ -1,5 +1,7 @@
 """The program that shows a source with the compiler's decisions in it."""
 
+from __future__ import annotations
+
 import json
 import shutil
 import subprocess
@@ -183,7 +185,7 @@ def test_colour_can_be_refused(compiled) -> None:  # noqa: ANN001
     assert "\033[" not in view(log, "--color=never").stdout
 
 
-def _marked(out: str, subject: str) -> "tuple[str, str]":
+def _marked(out: str, subject: str) -> tuple[str, str]:
     """The mark's line and the source line under it, for one subject."""
     lines = out.split("\n")
     for index, line in enumerate(lines):

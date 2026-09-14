@@ -9,6 +9,8 @@ rather than the smallest possible code; enabling it later means rows whose size
 differs, which the table's shortest-encoding rule already handles.
 """
 
+from __future__ import annotations
+
 from typing import Final
 
 from ...mc.fixedwidth import Field, FieldKind, FixedWidthInstDesc

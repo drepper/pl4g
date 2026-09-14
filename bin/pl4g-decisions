@@ -13,6 +13,8 @@ source is highlighted using the tree-sitter grammar in `tree-sitter-pl4g`; where
 it is a file or a pipe it is not, unless asked for.
 """
 
+from __future__ import annotations
+
 import argparse
 import fnmatch
 import json

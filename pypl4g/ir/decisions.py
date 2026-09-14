@@ -16,6 +16,8 @@ asked for the log, because a decision recorded only when someone is watching is
 a decision that cannot be checked in a test.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from enum import StrEnum
 

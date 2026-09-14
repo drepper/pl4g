@@ -8,6 +8,8 @@ incremental rebuilds and what would make "write only the pages that changed" a
 matter of comparing two buffers.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 from typing import Final, Sequence
 

@@ -4,6 +4,8 @@ Strings are shared where one is a suffix of another, which costs a dictionary
 lookup and makes the table as small as it can be without any further work.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 
 

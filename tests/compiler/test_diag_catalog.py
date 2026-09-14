@@ -5,6 +5,8 @@ numbers in declared blocks, symbolic names derived from the specification, and a
 generated identifier module that matches the catalog it was generated from.
 """
 
+from __future__ import annotations
+
 import json
 import re
 from dataclasses import replace

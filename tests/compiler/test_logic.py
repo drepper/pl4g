@@ -10,6 +10,8 @@ block and read by another, so the moves that put it in place and the register
 allocator's view of its life are both new and both only provable by running.
 """
 
+from __future__ import annotations
+
 import pytest
 
 from conftest import compiler_targets, describe, run_compiler

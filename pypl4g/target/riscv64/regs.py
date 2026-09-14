@@ -17,6 +17,8 @@ calling convention gives the role.  Both name the same object, so two spellings
 of one register are the same register and not merely equal ones.
 """
 
+from __future__ import annotations
+
 from typing import Final
 
 from ...mc.reg import PhysReg, RegClass, RegisterInfo

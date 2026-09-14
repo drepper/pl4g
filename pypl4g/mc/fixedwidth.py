@@ -15,6 +15,8 @@ value is stored -- a field whose bits are scattered across the word, as several
 of these architectures have, can only be described where it is defined.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 from enum import Enum
 from typing import Sequence

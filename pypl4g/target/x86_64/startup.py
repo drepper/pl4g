@@ -9,6 +9,8 @@ C runtime, so this is the first instruction the kernel runs and the process
 leaves through a system call rather than by returning to anything.
 """
 
+from __future__ import annotations
+
 from typing import Final
 
 from ...ir.mangle import symbol_name
@@ -32,7 +34,7 @@ ENTRY_SYMBOL: Final[str] = "_start"
 
 def emit_start(asm: Assembler, module: Module, cconv: CallConvDesc,
                level: str = levels.DEFAULT,
-               refused: "str | None" = None) -> None:
+               refused: str | None = None) -> None:
     """Emit the entry point for *module*.
 
     The constructor and destructor loops emit nothing while a program has none,

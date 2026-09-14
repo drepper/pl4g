@@ -18,6 +18,8 @@ least disturbed by whatever else the machine was doing, and the question here is
 how long the work takes, not how busy the machine was.
 """
 
+from __future__ import annotations
+
 import argparse
 import json
 import subprocess

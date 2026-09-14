@@ -15,6 +15,8 @@ The rest of what is dead waits for `-O1` as it did: a local nothing reads is the
 compiler noticing, and an unoptimized build keeps what the program wrote.
 """
 
+from __future__ import annotations
+
 from ...ir.decisions import DecisionKind, DecisionLog
 from ...ir.function import Function
 from ...ir.inst import CallInst, Terminator
@@ -69,7 +71,7 @@ def _record(func: Function, inst: CallInst, decisions: DecisionLog) -> None:
         inst.span)
 
 
-def _read_in(func: Function) -> "set[int]":
+def _read_in(func: Function) -> set[int]:
     """The identities of the values something in *func* reads.
 
     A branch argument counts, being what a block parameter is given.

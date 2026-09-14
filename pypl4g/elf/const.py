@@ -1,5 +1,7 @@
 """ELF constants, for the part of the format the compiler generates."""
 
+from __future__ import annotations
+
 from typing import Final
 
 EI_NIDENT: Final[int] = 16

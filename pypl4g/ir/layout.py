@@ -7,6 +7,8 @@ held inside one, and it is computed against a particular target, because the
 width of a pointer is the target's business and not the type's.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 from typing import Final
 

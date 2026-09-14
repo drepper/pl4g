@@ -22,6 +22,8 @@ changed, and a question asked of the kernel about a processor rather than of the
 processor.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 from typing import Final, Sequence
 
@@ -90,7 +92,7 @@ NAMES: Final[tuple[str, ...]] = ("v1", "v2", "v3", "v4")
 DEFAULT: Final[str] = "v4"
 
 
-def requirements(level: str) -> "Sequence[Requirement]":
+def requirements(level: str) -> Sequence[Requirement]:
     """Everything a program of this level needs, its own and what it contains."""
     found: list[Requirement] = []
     for name in NAMES:
@@ -100,7 +102,7 @@ def requirements(level: str) -> "Sequence[Requirement]":
     return _merged(found)
 
 
-def _merged(found: "Sequence[Requirement]") -> "list[Requirement]":
+def _merged(found: Sequence[Requirement]) -> list[Requirement]:
     """One question per leaf and register, so that `CPUID` is asked once each."""
     order: list[tuple[int, int, str]] = []
     bits: dict[tuple[int, int, str], int] = {}

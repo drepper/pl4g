@@ -5,6 +5,8 @@ same parameters: a build system should not have to know whether it is invoking
 the bootstrap compiler or the final one.
 """
 
+from __future__ import annotations
+
 import json
 from dataclasses import dataclass, field
 from enum import Enum
@@ -59,7 +61,7 @@ class Options:
     #: none says so; the default is the highest x86-64 states, since a program
     #: that will not run says so at once and one built down to the oldest
     #: machine is a thing to ask for.
-    mclevel: "str | None" = None
+    mclevel: str | None = None
     warnings: dict[str, bool] = field(default_factory=dict)
     warnings_are_errors: bool = False
     debug_info: bool = False

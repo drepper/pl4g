@@ -6,6 +6,8 @@ that the numbers a program can react to mean the same thing in every
 implementation.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from typing import Callable, Mapping
 
@@ -29,17 +31,18 @@ class Diagnostic:
     info: DiagInfo
     span: Span
     args: Mapping[str, object]
-    notes: list["Diagnostic"] = field(default_factory=list)
+    notes: list[Diagnostic] = field(default_factory=list)
     #: Whether this diagnostic was actually handed to the renderer.
     reported: bool = False
-    _engine: "DiagEngine | None" = None
+    _engine: DiagEngine | None = None
 
     @property
     def text(self) -> str:
         """The message with its arguments substituted."""
         return self.info.message.format_map(_Args(self.args, self.info))
 
-    def note(self, ident: DiagID, span: Span = INVALID_SPAN, /, **args: object) -> "Diagnostic":
+    def note(self, ident: DiagID, span: Span = INVALID_SPAN, /,
+             **args: object) -> Diagnostic:
         """Attach a note to this diagnostic and return the diagnostic.
 
         The note is handed to the renderer at once rather than when the parent

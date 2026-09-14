@@ -12,6 +12,8 @@ without having to know what this architecture calls it.  A function marked
 for it is to be called by something that has never heard of this language.
 """
 
+from __future__ import annotations
+
 from typing import Final
 
 from ..callconv import CallConvDesc

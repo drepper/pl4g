@@ -5,6 +5,8 @@ specific to this architecture -- the relocations and the way their values are
 scattered through the word -- is in ``fixups``.
 """
 
+from __future__ import annotations
+
 from ...mc.fixedwidth import EncodingError, encode as encode_fixed_width
 from ...mc.fixup import MCFixup
 from ...mc.inst import MCInst

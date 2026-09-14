@@ -6,6 +6,8 @@ grow are re-encoded until nothing changes; growth only ever increases a size, so
 the loop terminates.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 from typing import Callable, Sequence
 

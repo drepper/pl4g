@@ -6,6 +6,8 @@ what makes it possible later to patch a function in place without moving
 anything around it.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 
 from .fixup import MCFixup

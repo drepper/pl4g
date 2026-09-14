@@ -5,6 +5,8 @@ the parser produces one syntax tree per file and leaves every question of
 meaning to the semantic analysis.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass, replace
 from typing import Final, Sequence
 
@@ -239,7 +241,7 @@ class Parser:
         raise _Bail()
 
     def _parse_variable(self, attrs: tuple[ast.Attribute, ...] = (),
-                        doc: str | None = None) -> "ast.VarDef | ast.ModuleImport":
+                        doc: str | None = None) -> ast.VarDef | ast.ModuleImport:
         """Parse ``let NAME ':' ['mut'] [TYPE] '=' VALUE``.
 
         The colon is always there; what varies is what follows it.  Written with
@@ -260,7 +262,7 @@ class Parser:
         # part may be left out: the type is then the value's, and without 'mut'
         # the variable keeps whatever it was given.
         mutable = self._accept(TokKind.KW_MUT) is not None
-        declared: "ast.TypeExpr | None" = None
+        declared: ast.TypeExpr | None = None
         if self._check(TokKind.IDENT) or self._check(TokKind.SET_OPEN) \
                 or self._check(TokKind.TUPLE_OPEN):
             declared = self._parse_type_ref()
@@ -277,7 +279,7 @@ class Parser:
                           more=tuple(more))
 
     def _parse_import(self, start: Span, name_token: Token, mutable: bool,
-                      declared: "ast.TypeExpr | None",
+                      declared: ast.TypeExpr | None,
                       doc: str | None) -> ast.ModuleImport:
         """Parse the rest of ``let NAME ':=' import(STRING)``.
 
@@ -411,7 +413,7 @@ class Parser:
         # Leaving them off is how a function says it answers with nothing;
         # there is no name to write for that, which is what keeps the two from
         # being two ways of saying one thing.
-        ret_type: "ast.TypeExpr | None" = None
+        ret_type: ast.TypeExpr | None = None
         if self._accept(TokKind.ARROW) is not None:
             ret_type = self._parse_type_ref()
         body = self._parse_body()
@@ -419,7 +421,7 @@ class Parser:
                            name_span=name_token.span, params=params, ret_type=ret_type,
                            body=body, attrs=attrs, doc=doc)
 
-    def _parse_type_ref(self) -> "ast.TypeExpr":
+    def _parse_type_ref(self) -> ast.TypeExpr:
         """Parse a type, which may be a collection written the way a value is.
 
         An array is written after what it holds -- `i32\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}4\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}` -- and more than one
@@ -428,7 +430,7 @@ class Parser:
         four whose elements are these.
         """
         if self._check(TokKind.SET_OPEN):
-            found: "ast.TypeExpr" = self._parse_collection_type()
+            found: ast.TypeExpr = self._parse_collection_type()
         elif self._check(TokKind.TUPLE_OPEN):
             found = self._parse_tuple_type()
         else:
@@ -444,7 +446,7 @@ class Parser:
                                      shape=tuple(shape))
         return found
 
-    def _parse_dimension(self) -> "ast.Expr | None":
+    def _parse_dimension(self) -> ast.Expr | None:
         """Parse how many there are along one dimension, or nothing for a
         dimension the type does not say the size of."""
         if self._check(TokKind.ARRAY_CLOSE) or self._check(TokKind.COMMA):
@@ -465,7 +467,7 @@ class Parser:
         """Parse ``\N{LEFT DOUBLE PARENTHESIS}TYPE\N{RIGHT DOUBLE PARENTHESIS}`` or ``\N{LEFT DOUBLE PARENTHESIS}TYPE ':' TYPE\N{RIGHT DOUBLE PARENTHESIS}``."""
         start = self._expect(TokKind.SET_OPEN).span
         element = self._parse_type_ref()
-        value: "ast.TypeExpr | None" = None
+        value: ast.TypeExpr | None = None
         if self._accept(TokKind.COLON) is not None:
             value = self._parse_type_ref()
         end = self._expect(TokKind.SET_CLOSE, D.LANG_SYNTAX_EXPECTED_CLOSING_SET).span
@@ -597,7 +599,7 @@ class Parser:
         """
         start = self._expect(TokKind.KW_ENUM).span
         name_token = self._expect(TokKind.IDENT)
-        holder: "ast.TypeExpr | None" = None
+        holder: ast.TypeExpr | None = None
         indented = False
         if self._accept(TokKind.COLON) is not None:
             if self._check(TokKind.IDENT):
@@ -648,7 +650,7 @@ class Parser:
         if token.kind is TokKind.INT:
             self._advance()
             assert token.int_value is not None
-            value: "ast.IntLit | ast.NameRef" = ast.IntLit(
+            value: ast.IntLit | ast.NameRef = ast.IntLit(
                 span=token.span, value=token.int_value, type_name=token.int_type)
         elif token.kind is TokKind.IDENT:
             self._advance()
@@ -859,7 +861,7 @@ class Parser:
                          condition=condition, body=body, label=label,
                          alternative=otherwise)
 
-    def _parse_otherwise(self) -> "ast.Block | None":
+    def _parse_otherwise(self) -> ast.Block | None:
         """Parse a loop's `else` arm, which is where the loop ran out.
 
         It is found the way an `if`'s is: the keyword after the body, the
@@ -872,7 +874,7 @@ class Parser:
         self._advance()
         return self._parse_body()
 
-    def _parse_label(self) -> "ast.Label | None":
+    def _parse_label(self) -> ast.Label | None:
         """Parse `\N{SECTION SIGN}name` where a loop may be given one.
 
         It stands between the keyword and what the loop runs on, which is where
@@ -904,7 +906,7 @@ class Parser:
         span = keyword.span.to(label.span)
         if keyword.kind is not TokKind.KW_BREAK:
             return ast.Continue(span=span, label=label)
-        handed: "ast.Expr | None" = None
+        handed: ast.Expr | None = None
         if not self._ends_a_statement():
             handed = self._parse_expression()
             span = span.to(handed.span)
@@ -937,7 +939,7 @@ class Parser:
                 and self._peek(2).kind is not TokKind.NEWLINE)
 
     def _parse_iteration(self, start: Span, keyword: str,
-                         label: "ast.Label | None" = None) -> ast.ForEach:
+                         label: ast.Label | None = None) -> ast.ForEach:
         """Parse ``NAMES [':' [TYPE]] '=' EXPR BODY``, which is `let`'s shape.
 
         The colon and the type may both be left out where the values say what
@@ -950,7 +952,7 @@ class Parser:
         while self._accept(TokKind.COMMA) is not None:
             written = self._expect(TokKind.IDENT)
             more.append((written.text, written.span))
-        declared: "ast.TypeExpr | None" = None
+        declared: ast.TypeExpr | None = None
         if self._accept(TokKind.COLON) is not None:
             if self._check(TokKind.IDENT) or self._check(TokKind.SET_OPEN) \
                     or self._check(TokKind.TUPLE_OPEN):
@@ -1286,7 +1288,7 @@ class Parser:
         return ast.DictLit(span=start.to(where.span if where is not None else end),
                            entries=tuple(entries), arena=where)
 
-    def _parse_arena(self) -> "ast.NameRef | None":
+    def _parse_arena(self) -> ast.NameRef | None:
         """Parse ``'in' NAME`` where one was written: which allocator to use.
 
         A name and not an expression.  What goes here is a place the allocator
@@ -1383,7 +1385,7 @@ def _ends_with_a_block(stmt: ast.Stmt) -> bool:
     return _trailing_match(getattr(stmt, "value", None))
 
 
-def _trailing_match(expr: "ast.Expr | None") -> bool:
+def _trailing_match(expr: ast.Expr | None) -> bool:
     """Whether something with a block of its own ends an expression."""
     while True:
         if isinstance(expr, (ast.Match, ast.If, ast.While, ast.ForEach)):

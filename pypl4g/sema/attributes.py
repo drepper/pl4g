@@ -10,6 +10,8 @@ declares which kinds it accepts, so that applying one where it has no meaning is
 an error rather than a silently ignored annotation.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from enum import Flag, auto
 from typing import Final, Mapping

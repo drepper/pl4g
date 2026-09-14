@@ -5,6 +5,8 @@ is the one place that turns an internal failure into a report rather than a
 traceback.
 """
 
+from __future__ import annotations
+
 import json
 import sys
 from dataclasses import dataclass, field
@@ -149,7 +151,7 @@ class Driver:
         meaning rather than for the only thing there is.
         """
         wanted = self.options.mclevel
-        known: "tuple[str, ...]" = getattr(target, "mclevels", ())
+        known: tuple[str, ...] = getattr(target, "mclevels", ())
         if wanted is None:
             return True
         if not known:

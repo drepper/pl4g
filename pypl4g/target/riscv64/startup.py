@@ -8,6 +8,8 @@ kernel runs, and the process leaves through an environment call rather than by
 returning to anything.
 """
 
+from __future__ import annotations
+
 from typing import Final
 
 from ...ir.mangle import symbol_name

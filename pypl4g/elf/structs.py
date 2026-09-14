@@ -4,6 +4,8 @@ Each structure is packed by a prepared ``struct.Struct``, so the sizes the forma
 requires are checked once, here, rather than assumed at every use.
 """
 
+from __future__ import annotations
+
 from struct import Struct
 from typing import Final
 

@@ -7,6 +7,8 @@ removed, which is both what the first leaves behind and what keeps later passes
 from having to reason about dead code.  The entry block is never removed.
 """
 
+from __future__ import annotations
+
 from ...ir.function import BasicBlock, Function
 from ...ir.inst import BrInst, CondBrInst
 from ...ir.module import Module

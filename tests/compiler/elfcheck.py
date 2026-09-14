@@ -4,6 +4,8 @@ Written from the format rather than by reusing the compiler's own structures, so
 that a mistake in the writer cannot be repeated here and go unnoticed.
 """
 
+from __future__ import annotations
+
 import struct
 from dataclasses import dataclass
 from typing import Sequence

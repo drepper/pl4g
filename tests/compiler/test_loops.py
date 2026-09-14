@@ -7,6 +7,8 @@ in the backend: liveness that follows the graph rather than the layout, and a
 branch that hands a block its own parameters back rearranged.
 """
 
+from __future__ import annotations
+
 import stat
 import subprocess
 

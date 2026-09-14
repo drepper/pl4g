@@ -6,6 +6,8 @@ apart.  Those tests drive the compiler only through its command line, so they
 will still be valid once the final compiler replaces this one.
 """
 
+from __future__ import annotations
+
 import fcntl
 import platform
 import shutil

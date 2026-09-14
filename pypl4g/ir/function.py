@@ -1,5 +1,7 @@
 """Basic blocks, functions and the attributes a function carries."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from enum import Enum, StrEnum
 from typing import Final, Mapping, Sequence
@@ -89,7 +91,7 @@ class BasicBlock:
     """A straight-line sequence of instructions ending in one terminator."""
 
     label: str
-    parent: "Function | None" = None
+    parent: Function | None = None
     params: list[BlockParam] = field(default_factory=list)
     insts: list[Instruction] = field(default_factory=list)
 

@@ -10,6 +10,8 @@ definition is told is written in one list, not several.  And an attribute that
 carries no arguments is written without the parentheses that would carry them.
 """
 
+from __future__ import annotations
+
 import pytest
 
 from conftest import describe, run_compiler

@@ -5,6 +5,8 @@ carries no promise of stability.  It exists so that a golden test can notice whe
 instruction selection changes, and so that a person can see what was built.
 """
 
+from __future__ import annotations
+
 from typing import Sequence
 
 from .fragment import (MCAlignFragment, MCDataFragment, MCFragment,

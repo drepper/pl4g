@@ -5,6 +5,8 @@ command line can be wrong maps onto a numbered diagnostic of the shared catalog
 rather than onto text of some library's choosing.
 """
 
+from __future__ import annotations
+
 from enum import Enum
 from pathlib import Path
 

@@ -1,6 +1,8 @@
 #!/usr/bin/python3
 """Regenerate ``pypl4g/diag/ids.py`` from the shared diagnostic catalog."""
 
+from __future__ import annotations
+
 import sys
 from pathlib import Path
 

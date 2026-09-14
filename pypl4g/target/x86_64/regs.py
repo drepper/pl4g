@@ -8,6 +8,8 @@ general-purpose registers add, so nothing here changes when they are encoded --
 only the prefix the encoder emits does.
 """
 
+from __future__ import annotations
+
 from typing import Final
 
 from ...mc.reg import PhysReg, RegClass, RegisterInfo, RegUnit

@@ -1,5 +1,7 @@
 """The lexer, including the layout rules and the glyphs."""
 
+from __future__ import annotations
+
 from pathlib import Path
 
 import pytest

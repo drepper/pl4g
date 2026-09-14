@@ -16,6 +16,8 @@ targets -- how an address is computed and how a value of a given width is loaded
 -- is in each backend.
 """
 
+from __future__ import annotations
+
 from collections.abc import Sequence
 from dataclasses import replace
 

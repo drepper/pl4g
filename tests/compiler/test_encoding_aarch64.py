@@ -6,6 +6,8 @@ read back the instruction the table claimed to describe.  Here the assembler is
 also available, so the templates themselves are checked against it.
 """
 
+from __future__ import annotations
+
 import shutil
 import subprocess
 import tempfile

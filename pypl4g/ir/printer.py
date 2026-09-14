@@ -6,6 +6,8 @@ object address or on the order of a dictionary.  It is the form ``--emit=ir``
 writes and the form ``reader`` reads back.
 """
 
+from __future__ import annotations
+
 from typing import Sequence
 
 from .function import BasicBlock, Function

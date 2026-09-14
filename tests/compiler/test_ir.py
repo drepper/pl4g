@@ -1,5 +1,7 @@
 """The IR: its textual form, its round trip and its verifier."""
 
+from __future__ import annotations
+
 import pytest
 
 from pypl4g.diag.engine import InternalError

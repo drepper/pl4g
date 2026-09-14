@@ -27,6 +27,8 @@ are the part that is not.  A truth value is one or zero, which is what every
 instruction producing one on these architectures produces.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 from typing import Callable, Protocol, Sequence
 
@@ -87,7 +89,7 @@ class Operands(Protocol):
         rather than read: a block parameter, which a branch writes."""
         ...
 
-    def part_of(self, value: object, index: int, span: "Span | None") -> Reg:
+    def part_of(self, value: object, index: int, span: Span | None) -> Reg:
         """The register holding one of a value's several parts."""
         ...
 
@@ -225,7 +227,7 @@ def _reads(source: MCOperand, reg: Reg) -> bool:
 
 
 def sequenced(moves: Sequence[Move],
-               spare: "Callable[[Reg], Reg]") -> list[Move]:
+               spare: Callable[[Reg], Reg]) -> list[Move]:
     """The same moves in an order in which none reads what another has written.
 
     A move is ready when no move still to be made reads the register it writes.

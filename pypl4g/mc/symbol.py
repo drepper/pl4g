@@ -1,5 +1,7 @@
 """Symbols and sections of the symbolic assembler."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from enum import Enum
 
@@ -42,7 +44,7 @@ class MCSymbol:
     """A named place in the generated image."""
 
     name: str
-    section: "MCSection | None" = None
+    section: MCSection | None = None
     #: Index of the fragment the symbol sits in front of.  The byte offset is
     #: not known until the section is laid out, because alignment padding has no
     #: size until then.

@@ -7,6 +7,8 @@ architecture scatters its bits across the word in four pieces and reassembling
 them is the only thing here that could plausibly be wrong.
 """
 
+from __future__ import annotations
+
 import shutil
 import subprocess
 import tempfile

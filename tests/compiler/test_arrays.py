@@ -8,6 +8,8 @@ shows: a variable something outside the image reads is laid out the way that
 world expects, and every other one whichever way is better.
 """
 
+from __future__ import annotations
+
 import subprocess
 
 import pytest

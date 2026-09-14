@@ -7,6 +7,8 @@ order -- the numbers below are what a later pass that reorders would change,
 and are here so that it changes them deliberately.
 """
 
+from __future__ import annotations
+
 import pytest
 
 from pypl4g.ir.layout import (DataLayout, NoLayoutError, align_of, offsets_of,

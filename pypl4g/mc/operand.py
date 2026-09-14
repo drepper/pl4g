@@ -6,6 +6,8 @@ the fixup evaluator is written against expressions so that adding it later is no
 a retrofit.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 from enum import Enum
 

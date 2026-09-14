@@ -40,6 +40,8 @@ register is simply not given that register.  Nothing yet produces such a point
 except the move to the register a result is returned in, which nothing outlives.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from collections.abc import Mapping
 from typing import Final, Protocol, Sequence
@@ -78,7 +80,7 @@ class LiveRange:
     start: int
     end: int
 
-    def covers(self, other: "LiveRange") -> bool:
+    def covers(self, other: LiveRange) -> bool:
         """Whether the two ranges are wanted at the same time."""
         return self.start <= other.end and other.start <= self.end
 
@@ -209,8 +211,8 @@ class LinearScan:
     """Assigns a register to every virtual register of a function."""
 
     def __init__(self, registers: RegisterInfo,
-                 order: "Sequence[RegUnit] | Mapping[str, Sequence[RegUnit]]",
-                 selector: "SpillSelector") -> None:
+                 order: Sequence[RegUnit] | Mapping[str, Sequence[RegUnit]],
+                 selector: SpillSelector) -> None:
         self._registers = registers
         #: What the target says a read or a write of a frame slot looks like.
         self._selector = selector
@@ -324,8 +326,8 @@ class LinearScan:
         return virtual, physical
 
     def _physical_ranges(self, function: MachineFunction,
-                         flows: "Sequence[BlockFlow]",
-                         seen: "Mapping[int, Reg]") -> list[LiveRange]:
+                         flows: Sequence[BlockFlow],
+                         seen: Mapping[int, Reg]) -> list[LiveRange]:
         """Every stretch over which each physical register is holding something.
 
         Several stretches per register and not one, which is what a virtual
@@ -680,7 +682,7 @@ class SpillSelector(Protocol):
 
 
 def allocate(function: MachineFunction, registers: RegisterInfo,
-             order: "Sequence[RegUnit] | Mapping[str, Sequence[RegUnit]]",
+             order: Sequence[RegUnit] | Mapping[str, Sequence[RegUnit]],
              selector: SpillSelector) -> Assignment:
     """Assign every virtual register of *function*.
 

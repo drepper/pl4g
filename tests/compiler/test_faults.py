@@ -7,6 +7,8 @@ to look, and that a program with nothing that can fault carries none of the
 machinery.
 """
 
+from __future__ import annotations
+
 import subprocess
 
 import pytest

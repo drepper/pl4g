@@ -10,6 +10,8 @@ not fit in a `bool`.  The logical operators are the bitwise instructions asked
 of values that are one or zero, so the same folders answer them.
 """
 
+from __future__ import annotations
+
 from ...ir.inst import BinaryInst, BinOp, CmpInst, CmpPred, Instruction
 from ...ir.module import Module
 from ...ir.types import BOOL, IntType

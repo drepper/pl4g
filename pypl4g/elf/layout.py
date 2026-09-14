@@ -7,6 +7,8 @@ where each function lives and how much slack follows it, so a rebuilt function
 that still fits can be patched in place without moving anything else.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from enum import Enum
 

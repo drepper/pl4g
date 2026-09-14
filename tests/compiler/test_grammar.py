@@ -8,6 +8,8 @@ not is then a failing test rather than something noticed months later in an
 editor.
 """
 
+from __future__ import annotations
+
 import shutil
 import subprocess
 from pathlib import Path

@@ -6,6 +6,8 @@ condition under which it is valid and checks that condition rather than assuming
 it.
 """
 
+from __future__ import annotations
+
 from typing import Sequence
 
 from ...mc.asmbuilder import MachinePass

@@ -9,6 +9,8 @@ and EVEX need -- the opcode map number and the mandatory prefix -- are already
 the fields a legacy encoding uses.
 """
 
+from __future__ import annotations
+
 from typing import Final, Sequence
 
 from .desc import EncKind, ModRMUse, OpMap, OpSize, X86InstDesc

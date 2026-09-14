@@ -5,6 +5,8 @@ the set of operations open: a target adds what it needs without touching the
 builder or the shared operation list.
 """
 
+from __future__ import annotations
+
 from typing import Final
 
 from ...mc.ops import Op, register

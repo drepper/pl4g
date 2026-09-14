@@ -7,6 +7,8 @@ property of the target, and a pass that later synthesizes a bespoke convention
 for one function has somewhere to put the result.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from typing import Sequence
 
@@ -82,7 +84,7 @@ def result_places(cconv: CallConvDesc, ty: Type) -> list[PhysReg]:
     return _places(cconv.int_ret_regs, cconv.float_ret_regs, (ty,))[0]
 
 
-def _places(integers: "Sequence[PhysReg]", floats: "Sequence[PhysReg]",
+def _places(integers: Sequence[PhysReg], floats: Sequence[PhysReg],
             types: Sequence[Type]) -> list[list[PhysReg]]:
     """The registers each of *types* occupies, counted per kind."""
     found: list[list[PhysReg]] = []

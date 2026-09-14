@@ -6,6 +6,8 @@ whole prefix family is one more emitter in the encoder's prefix phase plus the
 fields it needs in ``desc``.
 """
 
+from __future__ import annotations
+
 from typing import Final
 
 from ...mc.desc import InstFlags, OperandKind, OperandRole, OperandSpec

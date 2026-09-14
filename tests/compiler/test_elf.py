@@ -5,6 +5,8 @@ an independent reader parses it, elfutils reads it, and an external disassembler
 shows what the backend actually emitted.
 """
 
+from __future__ import annotations
+
 import shutil
 import subprocess
 from dataclasses import dataclass

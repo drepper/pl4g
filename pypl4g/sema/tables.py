@@ -33,6 +33,8 @@ may write and which this is: a hash is defined on the bits, and there is nothing
 about an overflow here to report to anyone.
 """
 
+from __future__ import annotations
+
 from typing import Final
 
 from ..ir.builder import IRBuilder
@@ -125,7 +127,7 @@ def _declared(module: Module, name: str, params: tuple[Type, ...],
 
 
 def _generated(module: Module, name: str, params: tuple[Type, ...],
-               result: Type) -> "tuple[Function, bool]":
+               result: Type) -> tuple[Function, bool]:
     """A function of this module's own, and whether it has yet to be built."""
     found = module.functions.get(name)
     if isinstance(found, Function):

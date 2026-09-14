@@ -5,6 +5,8 @@ lets the compiler reorder the fields of a product type for efficiency, so layout
 is a property computed late and held beside the type, never inside it.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 from typing import Final, Sequence
 
@@ -283,7 +285,7 @@ class ArrayType(Type):
         return all(along is not None for along in self.shape)
 
     @property
-    def count(self) -> "int | None":
+    def count(self) -> int | None:
         """How many elements in all, where the type says."""
         if not self.fixed:
             return None
@@ -476,7 +478,7 @@ class TypeContext:
                 return self.int_type(bits, False)
         return self.int_type(64, False)
 
-    def tuple_type(self, members: "Sequence[Type]") -> TupleType:
+    def tuple_type(self, members: Sequence[Type]) -> TupleType:
         """Return the tuple type over *members*."""
         key = tuple(members)
         found = self._tuples.get(key)
@@ -486,7 +488,7 @@ class TypeContext:
         return found
 
     def array_type(self, element: Type,
-                   shape: "Sequence[int | None]" = (None,)) -> ArrayType:
+                   shape: Sequence[int | None] = (None,)) -> ArrayType:
         """Return the array type over *element* with this shape."""
         key = (element, tuple(shape))
         found = self._arrays.get(key)
@@ -556,7 +558,7 @@ class TypeContext:
 #: asks for one answer with the same type.  `parts_of` has no type context to
 #: ask, and a fresh one each time would be a type that compares equal to the
 #: interned one and is not it.
-_ELEMENT_POINTERS: "dict[Type, PtrType]" = {}
+_ELEMENT_POINTERS: dict[Type, PtrType] = {}
 
 
 def _pointer_to(element: Type) -> PtrType:

@@ -7,6 +7,8 @@ it is why storing a relocated value has to be the target's business rather than
 a shared one.
 """
 
+from __future__ import annotations
+
 from typing import Callable, Final
 
 from ...mc.fixedwidth import insert_bits, read_word, write_word

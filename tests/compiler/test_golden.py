@@ -4,6 +4,8 @@ Regenerate them with ``PL4G_UPDATE_GOLDEN=1 pytest``, and read the diff: a chang
 here is a change in what the compiler produces.
 """
 
+from __future__ import annotations
+
 import os
 from pathlib import Path
 

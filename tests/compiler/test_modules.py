@@ -1,5 +1,7 @@
 """Modules: where they are found, how often they are read, and what they are called."""
 
+from __future__ import annotations
+
 import subprocess
 import sys
 from pathlib import Path

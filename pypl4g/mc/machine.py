@@ -6,6 +6,8 @@ and keeping it separate from the streamer is what lets the debugging dump and
 the image share every bit of instruction selection.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from typing import Sequence
 
@@ -117,7 +119,7 @@ class MachineFunction:
         """Every instruction of the function, in layout order."""
         return [i for b in self.blocks for i in b.insts]
 
-    def index_of(self, label: str) -> "int | None":
+    def index_of(self, label: str) -> int | None:
         """Where the block called *label* is laid out, or nothing where this
         function has no such block."""
         for index, block in enumerate(self.blocks):
@@ -139,7 +141,7 @@ class MachineFunction:
             found.append(tuple(at for at in reached if at is not None))
         return found
 
-    def edges_are_complete(self) -> "str | None":
+    def edges_are_complete(self) -> str | None:
         """What is wrong with the recorded edges, or nothing where all is well.
 
         One invariant, and everything that walks the graph rests on it: a block

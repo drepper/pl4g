@@ -1,5 +1,7 @@
 """The optimizer: what each pass removes, and what it must not."""
 
+from __future__ import annotations
+
 import pytest
 
 from conftest import describe

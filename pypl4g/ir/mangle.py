@@ -20,6 +20,8 @@ point of declaring one is to be callable from a world that has never heard of
 this language, and that world knows the function by the name it was given.
 """
 
+from __future__ import annotations
+
 from .function import Function
 from .types import FuncType
 

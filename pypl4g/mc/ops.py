@@ -6,6 +6,8 @@ its own without touching this module: ``X86Op.SYSCALL`` is built the same way
 an encoding.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 from enum import Enum
 from typing import Final
@@ -47,7 +49,7 @@ class Condition(Enum):
     UGT = "ugt"
     UGE = "uge"
 
-    def inverted(self) -> "Condition":
+    def inverted(self) -> Condition:
         """The condition that is true exactly when this one is not.
 
         Inverting is what lets a branch be turned round so that the block that
@@ -56,7 +58,7 @@ class Condition(Enum):
         """
         return _INVERSE[self]
 
-    def swapped(self) -> "Condition":
+    def swapped(self) -> Condition:
         """The condition that holds when the two operands are exchanged.
 
         An architecture whose branch has no form for one ordering has the other:

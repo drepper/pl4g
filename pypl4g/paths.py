@@ -5,6 +5,8 @@ notably the diagnostic catalog.  It is therefore found without relying on any
 particular Python packaging arrangement.
 """
 
+from __future__ import annotations
+
 import os
 from pathlib import Path
 

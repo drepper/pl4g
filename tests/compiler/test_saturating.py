@@ -11,6 +11,8 @@ it.  The values are the ones where the answer changes: on either side of each
 end, and at it.
 """
 
+from __future__ import annotations
+
 import pytest
 
 from conftest import compiler_targets

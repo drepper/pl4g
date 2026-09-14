@@ -5,6 +5,8 @@ compiler must always perform all conformance checks.  The manager also records
 how long each pass took, which is what ``--time-report`` prints.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from time import perf_counter
 from typing import Protocol, Sequence

@@ -1,5 +1,7 @@
 """The register allocator: what it reads, what it decides, and what it refuses."""
 
+from __future__ import annotations
+
 import subprocess
 
 import pytest

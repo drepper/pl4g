@@ -12,6 +12,8 @@ and it cannot be out of date about the processor the program is actually running
 on, which a file the kernel writes can be.
 """
 
+from __future__ import annotations
+
 import shutil
 import subprocess
 from pathlib import Path
@@ -27,7 +29,7 @@ X86 = "x86_64-linux-none"
 
 #: Each level's binary, built once.
 @pytest.fixture(scope="module")
-def built(tmp_path_factory: pytest.TempPathFactory) -> "dict[str, Path]":
+def built(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Path]:
     """One binary per level, and one for the level left unstated."""
     directory = tmp_path_factory.mktemp("mclevel")
     source = directory / "t.pl4g"
@@ -79,7 +81,7 @@ def test_a_level_asks_for_more_than_the_one_below(tmp_path: Path) -> None:
     assert masks["v2"] != masks["v3"] != masks["v4"], masks
 
 
-def _masks(text: str) -> "set[int]":
+def _masks(text: str) -> set[int]:
     """The numbers the emitted checks compare against."""
     found: set[int] = set()
     for line in text.splitlines():
@@ -90,7 +92,7 @@ def _masks(text: str) -> "set[int]":
     return found
 
 
-def test_the_level_left_unstated_is_the_newest(built: "dict[str, Path]") -> None:
+def test_the_level_left_unstated_is_the_newest(built: dict[str, Path]) -> None:
     """A program that will not run says so at once; one built for the oldest
     machine quietly leaves everything on the table."""
     assert built["default"].read_bytes() == built["v4"].read_bytes()
@@ -147,7 +149,7 @@ def _emulated(cpu: str, path: Path) -> subprocess.CompletedProcess[bytes]:
 
 @pytest.mark.qemu
 @pytest.mark.parametrize(("cpu", "level"), OLD_ENOUGH)
-def test_a_processor_that_cannot_run_it_is_told_so(built: "dict[str, Path]",
+def test_a_processor_that_cannot_run_it_is_told_so(built: dict[str, Path],
                                                    cpu: str, level: str) -> None:
     """The whole point: a clear line of text, not an illegal instruction.
 
@@ -163,7 +165,7 @@ def test_a_processor_that_cannot_run_it_is_told_so(built: "dict[str, Path]",
 
 @pytest.mark.qemu
 @pytest.mark.parametrize(("cpu", "level"), NEW_ENOUGH)
-def test_a_processor_that_can_run_it_does(built: "dict[str, Path]",
+def test_a_processor_that_can_run_it_does(built: dict[str, Path],
                                           cpu: str, level: str) -> None:
     """The other half: the check lets through what it should.
 
