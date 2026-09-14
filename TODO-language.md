@@ -57,13 +57,25 @@ To Do List for the PL4g language
     one reads.  What it cost was in the backend rather than in the syntax: liveness that follows the graph, and a branch's
     arguments passed as a parallel copy.
 
-[ ] `foreach`, iterators and ranges.  `foreach` shares `let`'s syntax: one or more names, optional types, an equal sign, an
-    expression, and then a statement list.  The expression has to be convertible to an **iterator**, which is a new concept: a
-    value with a `next` answering the next element or a failure, represented internally as a result type that does not surface.
-    The loop ends where there is no value, and the names are bound to what there was.  The only source of iterators for now is a
-    **range**, `NUM1…NUM2` or `NUM1…NUM2…NUM3`, which mean what Python's `range` means with two or three arguments.  `while` is
-    to take the same form as a second spelling: `while var : [TYPE] = EXPR` over an iterator, beside `while EXPR` over a
-    condition.
+[x] `foreach`, iterators and ranges.  Done: `foreach` shares `let`'s shape, and `while` written with a binding is the same
+    statement.  An iterator is a value with a `next` answering the next value or a failure, and the failure is what ends the
+    loop; the result type does not surface.  A range is the only thing that is one, written `A…B` or `A…B…C` with Python's
+    meaning, and its `next` is lowered where it is asked rather than called -- a comparison against the end and an addition.
+    `_` as the name binds nothing, as it does in a `match` arm.
+
+[ ] let a program write an iterator.  There is one implementor of the protocol and the compiler is it.  What a second one needs:
+    a way to write a type with a `next` that answers a result, and a rule that says a `foreach` over a value of such a type calls
+    it.  Neither is much on its own, and both wait on something to iterate over that is not a range -- a collection, most
+    likely, whose iterator is the reason the protocol is a protocol.
+
+[ ] a range as a value.  Refused today (4443): a range stands where a loop takes its values from and nowhere else.  Making it a
+    value means a type for it, a layout, and a rule about what a range of one type compared with a range of another means; Rust
+    has all of that and needs it because its ranges are iterators like any other.  Worth doing when something wants to pass one.
+
+[ ] a step that is computed rather than written down.  Refused today (4441).  Which way a range runs follows from the sign of the
+    step, and that decides which comparison ends the loop; a computed step needs both comparisons and a choice between them, or a
+    loop written so that the choice is made once before it starts.  The second is what a real implementation does and is worth
+    doing when a program wants it.
 
 [ ] leaving a loop early.  There is no `break` and no `continue`, and no `loop` that answers with what a `break` hands it.  A
     loop is a statement for that reason: with nothing that leaves it early, every way out is the condition, and a construct whose

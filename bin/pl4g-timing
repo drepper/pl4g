@@ -111,7 +111,9 @@ GROUPS: tuple[Group, ...] = (
           "the graph rather than about the layout.  These move when the "
           "register allocator or the branch lowering does.",
           {"while-loop": "one loop, carrying two values",
-           "while-loop-nested": "a loop inside a loop, in both notations"}),
+           "while-loop-nested": "a loop inside a loop, in both notations",
+           "foreach-over-a-range": "a loop over a range, counting up by one",
+           "foreach-range-step": "three ranges, one of them counting down"}),
 )
 
 #: How many times each sample is compiled.  The best is kept.

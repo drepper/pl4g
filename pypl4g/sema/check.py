@@ -13,7 +13,7 @@ from ..diag import ids as D
 from ..diag.engine import DiagEngine, Expectation
 from ..front import ast
 from ..front.token import (BOTTOM_GLYPH, BUILTIN_GLYPH, TOLERANCE_DEFAULT,
-                          TOLERANCE_NAME)
+                          TOLERANCE_NAME, WILDCARD_NAME)
 from ..ir.builder import IRBuilder
 from ..ir.inst import BinOp, CastKind, CmpPred, Instruction, UnOp
 from ..ir.function import (BasicBlock, FuncAttrs, Function, InlineHint,
@@ -163,7 +163,7 @@ def _collect_assigned(block: "ast.Block", into: list[str]) -> None:
             case ast.AssignStmt():
                 into.append(stmt.name)
                 into.extend(name for name, _ in stmt.more)
-            case ast.While():
+            case ast.While() | ast.ForEach():
                 _collect_assigned(stmt.body, into)
             case ast.ExprStmt(value=ast.If() as asked):
                 for arm in asked.arms:
@@ -1635,6 +1635,8 @@ class Checker:
                 self._lower_entry_assign(builder, stmt)
             case ast.While():
                 self._lower_while(builder, stmt, func)
+            case ast.ForEach():
+                self._lower_foreach(builder, stmt, func)
             case ast.EmptyStmt():
                 # Nothing to lower.  What it does is be a statement, so that a
                 # body ending in a semicolon ends in one that produces no value.
@@ -1960,6 +1962,170 @@ class Checker:
             local.value = param
             local.value_span = stmt.span
         builder.set_memory(token)
+
+    def _lower_foreach(self, builder: IRBuilder, stmt: ast.ForEach,
+                       func: Function) -> None:
+        """Check and lower a `foreach`, and `while` written with a binding.
+
+        An **iterator** is a value with a `next` answering the next element or a
+        failure, and the failure is what ends the loop.  The result type is how
+        that is said, and it does not surface: the names are bound to what
+        there was, and a loop over something with nothing in it runs no turns.
+
+        A range is the only thing that is an iterator so far, and its `next` is
+        lowered where it is asked rather than called: what it comes to is a
+        comparison against the end and an addition, which is what every language
+        that has ranges emits for one.  The shape a user-written iterator will
+        have is the same -- ask, then take what the asking gave -- so the loop
+        below is the loop either kind wants.
+
+            before:  br loop(first, v₁ … vₙ, mem)
+            loop(i, p₁ … pₙ, mem):  condbr i has not passed the end → body, done
+            body:    the name stands for i; the statements; br loop(i + step, …)
+            done:    what follows
+        """
+        if builder.block is None:
+            return
+        found = self._range_of(builder, stmt)
+        if found is None:
+            # Bound to nothing that means anything, so that a later mention of
+            # the name reports nothing of its own.
+            self._push_scope()
+            self._bind_local(stmt.name, UndefConst(ERROR), stmt.name_span)
+            self._lower_block(builder, stmt.body, func, as_result=False)
+            self._pop_scope()
+            return
+        first, last, step, rising, element = found
+        carried = self._loop_locals(stmt.body)
+        header = builder.new_block("loop")
+        body = builder.new_block("body")
+        after = builder.new_block("done")
+        builder.br(header,
+                   (first, *(local.value for local in carried), builder.memory()),
+                   stmt.span)
+        builder.position_at(header)
+        index = header.add_param(element, stmt.name)
+        params = [header.add_param(self._value_type_of(local.value), local.name)
+                  for local in carried]
+        token = header.add_param(MEM, "mem")
+        for local, param in zip(carried, params):
+            local.value = param
+            local.value_span = stmt.span
+            local.read = False
+        builder.set_memory(token)
+        signed = element.signed
+        going = builder.compare(
+            (CmpPred.SLT if signed else CmpPred.ULT) if rising
+            else (CmpPred.SGT if signed else CmpPred.UGT),
+            index, last, stmt.span)
+        builder.condbr(going, body, after, span=stmt.span)
+        outer_carried = self._carried
+        self._carried = outer_carried | {id(local) for local in carried}
+        builder.position_at(body)
+        self._push_scope()
+        if stmt.more:
+            self._name_value(index, stmt.name)
+            self._bind_apart(builder, stmt, index)
+        elif stmt.name == WILDCARD_NAME:
+            # The name that is not a name, as it is in a `match` arm: the loop
+            # runs a turn for each value there is and the value itself is not
+            # wanted.  Nothing is bound, so nothing is reported as unread.
+            pass
+        else:
+            self._name_value(index, stmt.name)
+            self._bind_local(stmt.name, index, stmt.name_span,
+                             value_span=stmt.iterable.span)
+        self._lower_block(builder, stmt.body, func, as_result=False)
+        self._pop_scope()
+        self._carried = outer_carried
+        if not builder.is_terminated and builder.block is not None:
+            # The step saturates rather than checking, so that a range whose
+            # last turn would step past the end of its own type ends instead of
+            # faulting: what a turn past the end would be is not a value, and
+            # the comparison above is what says there is no turn.
+            moved = builder.binary(BinOp.SAT_ADD if rising else BinOp.SAT_SUB,
+                                   index, step, stmt.span)
+            builder.br(header,
+                       (moved, *(local.value for local in carried),
+                        builder.memory()), stmt.span)
+            for local in carried:
+                local.read = True
+        builder.position_at(after)
+        for local, param in zip(carried, params):
+            local.value = param
+            local.value_span = stmt.span
+        builder.set_memory(token)
+
+    def _range_of(self, builder: IRBuilder, stmt: ast.ForEach
+                  ) -> "tuple[Value, Value, Value, bool, IntType] | None":
+        """What a loop's expression gives out: where it starts, where it stops,
+        how far it moves, which way it runs, and of what type.
+
+        Nothing but a range is one of these yet, and anything else is reported
+        as not being something to take values from rather than as not being a
+        range -- what the loop wants is an iterator, and a range is merely the
+        only thing that is one.
+        """
+        written = stmt.iterable
+        if not isinstance(written, ast.Range):
+            value = self._lower_expr(builder, written, None)
+            found = self._value_type_of(value)
+            if found is not ERROR:
+                self._diags.emit(D.LANG_LOOP_NOT_AN_ITERATOR, written.span,
+                                 found=found.render())
+            return None
+        declared = self._resolve_type(stmt.type) if stmt.type is not None else None
+        first = (self._lower_into(builder, written.start, declared,
+                                  written.start.span) if declared is not None
+                 else self._lower_expr(builder, written.start, None))
+        element = self._value_type_of(first)
+        if element is ERROR:
+            return None
+        if not isinstance(element, IntType):
+            self._diags.emit(D.LANG_RANGE_NOT_AN_INTEGER, written.start.span,
+                             found=element.render())
+            return None
+        last = self._lower_expr(builder, written.stop, element)
+        other = self._value_type_of(last)
+        if other is ERROR:
+            return None
+        if other != element:
+            self._diags.emit(D.LANG_RANGE_ENDS_DIFFER, written.span,
+                             first=element.render(), second=other.render())
+            return None
+        distance, rising = self._range_step(written, element)
+        if distance is None:
+            return None
+        return first, last, builder.int_const(element, distance), rising, element
+
+    def _range_step(self, written: ast.Range,
+                    element: IntType) -> "tuple[int | None, bool]":
+        """How far a range moves each turn, and whether it counts up.
+
+        It is written down rather than computed.  Which way the range runs
+        follows from its sign, and that decides which comparison ends the loop;
+        a step the compiler cannot read would need both comparisons and a choice
+        between them on every turn, for a generality nothing has asked for.  The
+        sign is read here and the distance is what is left, so a range that
+        counts down over an unsigned type is written the way one that counts up
+        is.
+        """
+        if written.step is None:
+            return 1, True
+        if not isinstance(written.step, ast.IntLit):
+            self._diags.emit(D.LANG_RANGE_STEP_NOT_WRITTEN_DOWN,
+                             written.step.span)
+            return None, True
+        given = written.step.value
+        if given == 0:
+            self._diags.emit(D.LANG_RANGE_STEP_IS_ZERO, written.step.span)
+            return None, True
+        distance = abs(given)
+        if not element.holds(distance):
+            self._diags.emit(D.LANG_SYNTAX_INTEGER_RANGE, written.step.span,
+                             literal=str(distance), type=element.render())
+            return None, True
+        return distance, given > 0
 
     def _loop_locals(self, body: ast.Block) -> list[_Local]:
         """The names in scope that a turn of the loop may change.
@@ -2360,19 +2526,24 @@ class Checker:
         self._bind_local(node.name, value, node.name_span, node.mutable,
                          value_span=node.span)
 
-    def _bind_apart(self, builder: IRBuilder, node: ast.VarDef,
-                    value: Value) -> None:
-        """Bind each name of a definition that takes a tuple apart."""
+    def _bind_apart(self, builder: IRBuilder,
+                    node: "ast.VarDef | ast.ForEach", value: Value) -> None:
+        """Bind each name of a definition, or of a loop, that takes a tuple apart.
+
+        A loop's names are never `mut`: what they stand for is what the turn
+        gave, and the next turn gives another.
+        """
+        mutable = getattr(node, "mutable", False)
         names = [(node.name, node.name_span), *node.more]
         members = self._taken_apart(value, names, node.span)
         for index, (name, where) in enumerate(names):
             if members is None:
-                self._bind_local(name, UndefConst(ERROR), where, node.mutable,
+                self._bind_local(name, UndefConst(ERROR), where, mutable,
                                  value_span=node.span)
                 continue
             part = builder.extract(value, index, members[index], node.span)
             self._name_value(part, name)
-            self._bind_local(name, part, where, node.mutable, value_span=node.span)
+            self._bind_local(name, part, where, mutable, value_span=node.span)
 
     def _name_value(self, value: Value, name: str) -> None:
         """Record which local a computed value belongs to.
@@ -2574,6 +2745,12 @@ class Checker:
                 return self._lower_name(builder, expr, expected)
             case ast.TupleLit():
                 return self._lower_tuple(builder, expr, expected)
+            case ast.Range():
+                # A range is a source of values for a loop and not a value.
+                # Giving it a name would make it one, with a type and a place in
+                # memory, and nothing yet needs that.
+                self._diags.emit(D.LANG_RANGE_OUTSIDE_A_LOOP, expr.span)
+                return UndefConst(ERROR)
             case ast.SetLit() | ast.DictLit():
                 return self._lower_collection(builder, expr, expected)
             case ast.Index():

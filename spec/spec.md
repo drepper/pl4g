@@ -580,6 +580,43 @@ Compare APL, which writes these as `∧` `∨` `⊼` `⊽` and is where the glyp
 compute both operands and words for the two that do not is what makes the difference between them visible in the source rather
 than something to be remembered.
 
+#### Ranges
+
+A range is the whole numbers from one end towards another.  It is written with `…` (U+2026 HORIZONTAL ELLIPSIS), with two ends or
+with three.
+
+```
+0u8…5u8         ※ nought, one, two, three, four
+0u8…10u8…2u8    ※ nought, two, four, six, eight
+5u8…0u8…⁻1      ※ five, four, three, two, one
+```
+
+**`A…B` and `A…B…C` mean what Python's `range` means** with two arguments and with three: the first end is included and the second
+is not, and the third says how far each turn moves.  Python is the language this is taken from outright, because the half-open
+convention is right for the same reason there: the count of values is the difference between the ends, and two ranges that meet at
+a number cover everything between their outer ends exactly once.
+
+**The ends are of one integer type** (4439, 4440).  Nothing is widened on the way in: a language that widened here would decide the
+type of every value the loop gives out by a rule the reader has to know.  Only a whole number has a next one, so a floating-point
+range is refused -- what one would have to say is how many steps it takes rather than how large each is, which is a different
+construct.
+
+**How far each turn moves is written down** (4441), and it is not zero (4442).  Its sign says which way the range runs, and that
+decides which comparison ends the loop; a step the compiler cannot read would need both comparisons and a choice between them on
+every turn, for a generality nothing has asked for.  The sign is read off the step and what is left is the distance, so a range
+that counts down is written the same way over an unsigned type as over a signed one.
+
+**Three ends and no more** (3029).  A range is not a binary operator: three written with one would nest, and `a…b…c` does not mean
+`(a…b)…c`.  The ends bind one level in from the range itself, so `1…n-1` reads the way it looks.
+
+**A range stands where a loop takes its values from, and nowhere else yet** (4443).  Giving one a name would make it a value like
+any other, with a type and a place in memory, and nothing yet needs that.
+
+Compare: Rust writes `a..b` and `a..=b` and makes a range a value with a type; Python's `range` is a callable object; Go has
+none and counts with `for i := 0; i < n; i++`; Zig writes `0..n` only in a `for`.  Writing the ends of a step as a third part
+rather than as a separate construct is Python's; Rust needs `.step_by(c)`, which is a method on an iterator and so needs iterators
+to be values first.
+
 #### Statements that are expressions
 
 A statement may be an expression on its own.  **Its value must be used**, and there is exactly one place where it is: the last
@@ -650,6 +687,10 @@ the one way to write it.  A substitute exists to rescue a glyph that is hard to 
 The six approximate comparisons have none for the first rule's sake as much as the second: there is no sequence of ASCII
 characters that says "approximate" without being read as something else, and `~=` or `=~` would be a spelling to learn rather than
 one to see.
+
+`…` has none, and the reason is the second rule rather than the first: `...` is three characters and so passes, but it is three
+copies of the character a member access is written with, and telling `a...b` from `a . ..b` would be a question of how far the
+lexer can look ahead rather than of what the characters are.  One character is one token, which is what a range is.
 
 Using an accepted substitute is not an error.  A warning reports it for anyone who wants their sources in canonical form; it is
 off by default, since the substitute is accepted usage and not a defect.
@@ -1183,6 +1224,50 @@ At the top level of a file one can find:
 - variable definitions
 - function definitions
 
+
+#### foreach
+
+`foreach` runs its body once for each value something gives out.
+
+```
+let total: mut u8 = 0u8
+foreach i = 0u8…5u8:
+    total ← total + i
+```
+
+**It shares `let`'s shape**: one or more names, an optional type, an equal sign, and what the loop takes its values from.  The
+colon before the type may be left out along with the type, where the values say what they are.
+
+**What it takes its values from has to be an iterator** (4438).  An **iterator** is a value with a `next` answering the next value
+or a failure; the failure is what ends the loop.  The result type is how that is said, and it does not surface: the names are
+bound to what there was, and a loop over something with nothing in it runs no turns.  A range is the only thing that is an
+iterator so far, and its `next` is lowered where it is asked rather than called -- what it comes to is a comparison against the
+end and an addition.
+
+**Several names take each value apart**, the way several names take a tuple apart in a definition.  A range gives out one number,
+so several names over one is refused; what this is for is an iterator whose values are tuples.
+
+**`_` is the name that is not a name**, as it is in a `match` arm: the loop runs a turn for each value there is and the value
+itself is not wanted.  Nothing is bound, so nothing is reported as a value nothing reads.
+
+**`while` written with a binding is the same statement.**
+
+```
+while i : u8 = 0…5:
+    total ← total + i
+```
+
+After `while` the colon has to be written, because a name on its own followed by a colon is a condition with a body after it; the
+type may still be left out.  The two spellings exist because the instruction that asked for the loops asked for both: `foreach`
+says what the loop is, and `while` says that the two kinds of loop are one construct with two ways of deciding when to stop.
+
+**The name is bound afresh on every turn** and is gone after the loop.  It is never `mut`: what it stands for is what the turn
+gave, and the next turn gives another.
+
+Compare: Python's `for x in r`, which this follows in meaning; Rust's `for x in r` over anything that is `IntoIterator`; Go's
+`for i := range n`; Zig's `for (0..n) |i|`.  What none of them has is the second spelling, and what this has instead of Rust's
+trait is a single iterator protocol the compiler knows -- until a program can write one, there is nothing for a trait to abstract
+over.
 
 #### Attributes
 

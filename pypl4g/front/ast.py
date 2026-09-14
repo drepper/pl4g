@@ -462,6 +462,40 @@ class ModuleImport(Node):
 
 
 @dataclass(frozen=True, slots=True)
+class Range(Expr):
+    """`A…B`, or `A…B…C`: the numbers from one end towards the other.
+
+    Two ends or three, and never more: what a fourth would mean is nothing, and
+    a range of ranges is not a thing this has.  `step` is nothing where only two
+    were written, which means one.
+    """
+
+    start: Expr
+    stop: Expr
+    step: "Expr | None" = None
+
+
+@dataclass(frozen=True, slots=True)
+class ForEach(Stmt):
+    """``foreach NAMES [: TYPE] = EXPR BODY``: a turn for each value there is.
+
+    `while` written with a binding instead of a condition is the same thing,
+    and reaches here; which keyword was written is kept for what a message has
+    to say and for nothing else.
+    """
+
+    name: str
+    name_span: Span
+    type: "TypeExpr | None"
+    iterable: Expr
+    body: Block
+    #: The names after the first, where each value is taken apart.
+    more: tuple[tuple[str, Span], ...] = ()
+    #: Which of the two spellings was written.
+    keyword: str = "foreach"
+
+
+@dataclass(frozen=True, slots=True)
 class While(Stmt):
     """``while COND BODY``: the body runs again for as long as the condition holds.
 

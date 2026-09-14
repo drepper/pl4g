@@ -26,6 +26,18 @@ module.exports = grammar({
   // comment rather than an ordinary one that happens to start with a mark.
   extras: $ => [/[ \t\r]/, $.doc_comment, $.line_comment],
 
+  // `while NAME :` is two statements until the token after the colon is seen:
+  // a loop that binds a name to what an iterator gives, or a loop whose
+  // condition is that name and whose body begins there.  The compiler's parser
+  // asks the same question by looking one token further.
+  conflicts: $ => [
+    [$._binding_names, $._non_range],
+    // How far a range's last end reaches.  An operator that binds tighter than
+    // the range belongs to the end, which is what the compiler's precedence
+    // table says; the generalized parse is what says it here.
+    [$._non_comparison, $.range_expression],
+  ],
+
   word: $ => $.identifier,
 
   rules: {
@@ -252,6 +264,7 @@ module.exports = grammar({
         $.match_statement,
         $.if_statement,
         $.while_statement,
+        $.foreach_statement,
       ),
     )),
 
@@ -298,6 +311,23 @@ module.exports = grammar({
       'while', field('condition', $._expression), field('body', $._block),
     ),
 
+    // `foreach` shares `let`'s shape: one or more names, an optional type, an
+    // equal sign, and what the loop takes its values from.  `while` written
+    // this way is the same statement; after `while` the colon has to be there,
+    // because a name on its own followed by a colon is a condition with a body.
+    foreach_statement: $ => seq(
+      choice(
+        seq('foreach', $._binding_names, optional($._binding_type)),
+        seq('while', $._binding_names, $._binding_type),
+      ),
+      '=', field('iterable', $._expression), field('body', $._block),
+    ),
+
+    _binding_names: $ => seq(field('name', $.identifier),
+                             repeat(seq(',', field('name', $.identifier)))),
+
+    _binding_type: $ => seq(':', optional(field('type', $.type))),
+
     // What follows a semicolon may be written or may be left out, and leaving
     // it out is the empty statement.  It has no node of its own: there is
     // nothing in the text to give one to, and what matters about it is only
@@ -316,6 +346,7 @@ module.exports = grammar({
       // stands on ends after it like any other; one written with a colon takes
       // that line ending with it and is read by the rule above instead.
       $.while_statement,
+      $.foreach_statement,
       $.expression_statement,
     ),
 
@@ -412,6 +443,22 @@ module.exports = grammar({
     // grammar says that `a < b < c` is not written: a comparison answers with a
     // truth value, so a second one beside it would be comparing that answer.
     _non_comparison: $ => choice(
+      $.range_expression,
+      $._non_range,
+    ),
+
+    // A range is written with two ends or with three.  It is not a binary
+    // operator: three written with one would nest, which is not what `a\u2026b\u2026c`
+    // means, so the ends are listed and there are never more than three.  They
+    // are parsed one level in, so that what is written on either side of the
+    // glyph binds to the end and not to the range.
+    range_expression: $ => prec.right(4, seq(
+      field('start', $._non_range), '\u2026', field('stop', $._non_range),
+      optional(seq('\u2026', field('step', $._non_range))),
+    )),
+
+    // Everything an expression can be except a range.
+    _non_range: $ => choice(
       $.match_expression,
       $.if_expression,
       $.tuple_literal,

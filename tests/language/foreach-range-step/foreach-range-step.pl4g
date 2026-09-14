@@ -1,0 +1,25 @@
+※ pl4g-test: compile=ok run=native,qemu exit=31 diag=none
+
+※ `A…B…C` means what Python's `range(A, B, C)` means: how far each turn moves.
+※ It is written down rather than computed, because its sign is what says which
+※ way the range runs and so which comparison ends the loop.
+※
+※ A range that counts down is written the same way over an unsigned type as
+※ over a signed one: the sign is read off the step and what is left is how far.
+※
+※ `_` is the name that is not a name, as it is in a `match` arm: the loop runs a
+※ turn for each value there is and the value itself is not wanted.
+
+@[startup]
+fn main() → u8:
+    let total: mut u8 = 0u8
+    ※ a step, with the type written rather than taken from the ends
+    foreach i : u8 = 0…10…2:
+        total ← total + i
+    ※ counting down, over an unsigned type, with the value not wanted
+    while _ : u8 = 5…0…⁻1:
+        total ← total + 1u8
+    ※ the other spelling, with the type taken from the ends
+    foreach k = 1u8…4u8:
+        total ← total + k
+    total

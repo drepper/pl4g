@@ -68,6 +68,12 @@ TUPLE_CLOSE_GLYPH: Final[str] = "\N{RIGHT ANGLE BRACKET}"
 SET_OPEN_GLYPH: Final[str] = "\N{LEFT DOUBLE PARENTHESIS}"
 SET_CLOSE_GLYPH: Final[str] = "\N{RIGHT DOUBLE PARENTHESIS}"
 
+#: What separates the ends of a range from each other.  One character and not
+#: three dots: a range is one thing, and spelling it out of three copies of the
+#: character a member access is written with would make the lexer's job a
+#: question of how far it can look ahead.
+RANGE_GLYPH: Final[str] = "\N{HORIZONTAL ELLIPSIS}"
+
 #: What a `match` arm that takes every alternative left is written with.  It is
 #: a name no definition may have, so nothing a program writes can be mistaken
 #: for it; every language with pattern matching spells it this way.
@@ -169,6 +175,7 @@ class TokKind(StrEnum):
     KW_ELIF = "'elif'"
     KW_ELSE = "'else'"
     KW_WHILE = "'while'"
+    KW_FOREACH = "'foreach'"
     KW_TRUE = "'true'"
     KW_FALSE = "'false'"
     KW_IMPORT = "'import'"
@@ -206,6 +213,8 @@ class TokKind(StrEnum):
 
     SET_OPEN = "'\N{LEFT DOUBLE PARENTHESIS}'"
     SET_CLOSE = "'\N{RIGHT DOUBLE PARENTHESIS}'"
+
+    RANGE = "'\N{HORIZONTAL ELLIPSIS}'"
 
     QUESTION = "'?'"
     BOTTOM = "'\N{UP TACK}'"
@@ -269,6 +278,7 @@ KEYWORDS: Final[dict[str, TokKind]] = {
     "elif": TokKind.KW_ELIF,
     "else": TokKind.KW_ELSE,
     "while": TokKind.KW_WHILE,
+    "foreach": TokKind.KW_FOREACH,
     "true": TokKind.KW_TRUE,
     "false": TokKind.KW_FALSE,
     "import": TokKind.KW_IMPORT,

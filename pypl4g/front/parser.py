@@ -63,6 +63,12 @@ class _Operator:
 #: addition, as it does everywhere and as it does in writing.  It is tighter
 #: than the bitwise operators, which is C's order too and the one place C's
 #: order was not a mistake.
+#: Where a range binds, which is not in the table below: a range is not a
+#: binary operator, taking two ends or three.  It sits between the comparisons
+#: and the bitwise operators, so that the arithmetic in `1…n-1` binds to the end
+#: and the whole range is something a comparison could be asked about.
+_RANGE_PRECEDENCE: Final[int] = 7
+
 _BINARY_OPERATORS: Final[dict[TokKind, _Operator]] = {
     TokKind.LOGIC_OR: _Operator(ast.BinaryOp.LOGIC_OR, 1),
     TokKind.KW_OR: _Operator(ast.BinaryOp.SHORT_OR, 1),
@@ -774,6 +780,8 @@ class Parser:
             return ast.ExprStmt(span=asked.span, value=asked)
         if self._check(TokKind.KW_WHILE):
             return self._parse_while()
+        if self._check(TokKind.KW_FOREACH):
+            return self._parse_iteration(self._advance().span, "foreach")
         if self._check(TokKind.KW_RETURN):
             start = self._advance().span
             if self._check(TokKind.NEWLINE) or self._check(TokKind.SEMICOLON) \
@@ -808,9 +816,55 @@ class Parser:
         or a brace, and neither can be part of an expression.
         """
         start = self._expect(TokKind.KW_WHILE).span
+        if self._binds_a_value():
+            return self._parse_iteration(start, "while")
         condition = self._parse_expression()
         body = self._parse_body()
         return ast.While(span=start.to(body.span), condition=condition, body=body)
+
+    def _binds_a_value(self) -> bool:
+        """Whether what follows `while` is a binding rather than a condition.
+
+        A name and a comma can begin nothing else, and a name and a colon can
+        begin only one other thing -- a condition that is a bare name, with the
+        colon opening the body -- which is why the line ending after it is what
+        tells the two apart.
+        """
+        if not self._check(TokKind.IDENT):
+            return False
+        if self._peek().kind is TokKind.COMMA:
+            return True
+        return (self._peek().kind is TokKind.COLON
+                and self._peek(2).kind is not TokKind.NEWLINE)
+
+    def _parse_iteration(self, start: Span, keyword: str) -> ast.ForEach:
+        """Parse ``NAMES [':' [TYPE]] '=' EXPR BODY``, which is `let`'s shape.
+
+        The colon and the type may both be left out where the values say what
+        they are, which they always do so far.  After `while` the colon has to
+        be written, because a name on its own followed by a colon is a condition
+        with a body after it.
+        """
+        name_token = self._expect(TokKind.IDENT)
+        more: list[tuple[str, Span]] = []
+        while self._accept(TokKind.COMMA) is not None:
+            written = self._expect(TokKind.IDENT)
+            more.append((written.text, written.span))
+        declared: "ast.TypeExpr | None" = None
+        if self._accept(TokKind.COLON) is not None:
+            if self._check(TokKind.IDENT) or self._check(TokKind.SET_OPEN) \
+                    or self._check(TokKind.TUPLE_OPEN):
+                declared = self._parse_type_ref()
+        if self._accept(TokKind.EQUALS) is None:
+            self._diags.emit(D.LANG_VARDEF_MISSING_INITIALIZER, name_token.span,
+                             name=name_token.text)
+            raise _Bail()
+        iterable = self._parse_expression()
+        body = self._parse_body()
+        return ast.ForEach(span=start.to(body.span), name=name_token.text,
+                           name_span=name_token.span, type=declared,
+                           iterable=iterable, body=body, more=tuple(more),
+                           keyword=keyword)
 
     def _parse_if(self) -> ast.If:
         """Parse ``if COND BODY`` with its `elif`s and its `else`.
@@ -931,9 +985,16 @@ class Parser:
         function per level.  Adding an operator is a row in the table above and
         nothing else, which is what keeps the grammar from growing a new layer
         each time the language gains a symbol.
+
+        A range is the one thing here that is not in that table, because it is
+        not a binary operator: it takes two ends or three, and three written
+        with a binary operator would nest, which is not what `a…b…c` means.
         """
         left = self._parse_unary()
         while True:
+            if self._check(TokKind.RANGE) and _RANGE_PRECEDENCE >= minimum:
+                left = self._parse_range(left)
+                continue
             operator = _BINARY_OPERATORS.get(self._current.kind)
             if operator is None or operator.precedence < minimum:
                 return left
@@ -952,6 +1013,23 @@ class Parser:
                                      self._current.span, first=operator.op.value,
                                      second=following.op.value)
                     raise _Bail()
+
+    def _parse_range(self, first: ast.Expr) -> ast.Range:
+        """Parse the rest of ``A…B`` or ``A…B…C``, the first end being in hand.
+
+        The ends are parsed one level in, so that what is written on either side
+        of the glyph binds to the end and not to the range: `1…n-1` reads the
+        way it looks.
+        """
+        ends = [first]
+        while self._accept(TokKind.RANGE) is not None:
+            ends.append(self._parse_expression(_RANGE_PRECEDENCE + 1))
+            if len(ends) > 3:
+                self._diags.emit(D.LANG_SYNTAX_RANGE_TOO_MANY_ENDS,
+                                 first.span.to(ends[-1].span), count=len(ends))
+                raise _Bail()
+        return ast.Range(span=first.span.to(ends[-1].span), start=ends[0],
+                         stop=ends[1], step=ends[2] if len(ends) > 2 else None)
 
     def _parse_unary(self) -> ast.Expr:
         """Parse an operand, with any operators written before it."""
@@ -1103,7 +1181,7 @@ def _ends_with_a_block(stmt: ast.Stmt) -> bool:
     other two are expressions, so what is asked of a statement is what it ends
     with.
     """
-    if isinstance(stmt, ast.While):
+    if isinstance(stmt, (ast.While, ast.ForEach)):
         return True
     return _trailing_match(getattr(stmt, "value", None))
 

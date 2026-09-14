@@ -1,0 +1,16 @@
+※ pl4g-test: compile=ok run=native,qemu exit=10 diag=none
+
+※ `foreach` shares `let`'s shape: one or more names, an optional type, an equal
+※ sign, and what the loop takes its values from.  A turn runs for each value
+※ there is, and the names stand for what that turn was given.
+※
+※ What the loop takes its values from has to be an iterator, which is a value
+※ with a `next` answering the next value or a failure.  A range is the only
+※ thing that is one so far, and `A…B` means what Python's `range(A, B)` means.
+
+@[startup]
+fn main() → u8:
+    let total: mut u8 = 0u8
+    foreach i = 0u8…5u8:
+        total ← total + i
+    total

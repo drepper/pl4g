@@ -1,0 +1,10 @@
+※ pl4g-test: compile=error diag=4443
+
+※ A range is a source of values for a loop and not a value.  Giving one a name
+※ would make it one, with a type and a place in memory, and nothing yet needs
+※ that.
+
+@[startup]
+fn main() → u8:
+    let r: u8 = 0u8…5u8
+    r

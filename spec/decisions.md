@@ -2377,6 +2377,57 @@ and asks what the statement is; the grammar has to say both, because a line endi
 
 ---
 
+## 2026-09-14T16:00+02:00 — language
+
+**`foreach`, iterators and ranges**
+
+The second half of what the language gets for repetition, decided on the user's direction.
+
+**An iterator is a value with a `next` answering the next value or a failure**, and the failure is what ends the loop.  The result
+type is how the failure is said, and it does not surface: a `foreach` binds its names to what there was, and a loop over something
+with nothing in it runs no turns.  That is the same shape `?` already has -- ask, then take what the asking gave -- so nothing new
+was needed in the representation.
+
+Rust's `Iterator` answers `Option<T>`, which is the same thing with a different name; Python's raises `StopIteration`, which is an
+exception used as a value and is the thing this language has no mechanism for; Go has no protocol at all until its range-over-func.
+Answering a result is the choice that costs nothing, because the language already routes every "there may be no answer" through
+one.
+
+**A range is the only iterator so far, and its `next` is lowered where it is asked rather than called.**  What it comes to is a
+comparison against the end and an addition, which is what every language with ranges emits.  The protocol is still the design: a
+user-written iterator drops into the same loop, and the entry in the list says what it needs.
+
+**`A…B` and `A…B…C` mean what Python's `range` means.**  Half-open, because the count of values is then the difference between the
+ends and two ranges that meet at a number cover everything between their outer ends exactly once.  Rust writes `a..b`, which is the
+same meaning; what is taken from Python rather than Rust is the third part, which Rust spells `.step_by(c)` -- a method, and so a
+thing that needs iterators to be values first.
+
+**One glyph and not three dots.**  `...` passes the substitute rules on length, but it is three copies of the character a member
+access is written with, and telling `a...b` from `a . ..b` would be a question of how far the lexer can look ahead.
+
+**The step is written down** (4441) **and is not zero** (4442).  Its sign says which way the range runs, and that decides which
+comparison ends the loop; a computed step needs both comparisons and a choice between them on every turn.  The sign is read off the
+step and what is left is the distance, which is what lets a range count down over an unsigned type.
+
+**The step saturates rather than checking.**  A range whose last turn would step past the end of its own type ends instead of
+faulting: what a turn past the end would be is not a value, and the comparison is what says there is no turn.  That is the one
+place in the language where saturation is chosen for a reason other than a program asking for it, and it is chosen because the
+alternative is a program that faults where Python's would stop.
+
+**`_` binds nothing**, as it does in a `match` arm.  Without it, a loop that runs a fixed number of turns would report a value
+nothing reads on every one of them.
+
+**Two spellings for one statement**, which the instruction asked for: `foreach` says what the loop is, and `while` written with a
+binding says that the two kinds of loop are one construct with two ways of deciding when to stop.  It is the one place the "one
+meaning, one spelling" principle is set aside, and it is set aside deliberately -- what `while` buys is that a reader looking for
+the loops finds both under one word.  After `while` the colon has to be written, because a name on its own followed by a colon is
+a condition with a body after it; the compiler's parser looks one token further and the grammar declares the conflict.
+
+**A range stands where a loop takes its values from and nowhere else** (4443).  Giving one a name would make it a value with a
+type and a place in memory; Rust needs that because its ranges are iterators like any other, and nothing here yet does.
+
+---
+
 ---
 
 Open questions

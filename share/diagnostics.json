@@ -1317,6 +1317,28 @@
       "option": null
     },
     {
+      "number": 3029,
+      "name": "LANG_SYNTAX_RANGE_TOO_MANY_ENDS",
+      "severity": "error",
+      "message": "a range has two ends or three, and this has {count}",
+      "args": [
+        {
+          "name": "count",
+          "type": "number",
+          "description": "how many were written"
+        }
+      ],
+      "cause": "A range is a first value, a value it runs towards, and optionally how far it moves each turn.  A fourth would have nothing to mean, and a range of ranges is not a thing this language has.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Ranges",
+        "requirement": "A range is written with two ends or with three."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 4001,
       "name": "LANG_FILESTRUCT_DUPLICATE_DEFINITION",
       "severity": "error",
@@ -3004,6 +3026,125 @@
         "document": "spec/spec.md",
         "section": "The Language / Statements / while",
         "requirement": "The condition of a `while` is of type `bool`."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4438,
+      "name": "LANG_LOOP_NOT_AN_ITERATOR",
+      "severity": "error",
+      "message": "'{found}' is not something a loop can take values from",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type of what was written"
+        }
+      ],
+      "cause": "A loop written with a binding takes its values from an iterator, and a range is the only thing that is one so far.  A single value is not a sequence of values, and there is nothing for a turn to be.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Statements / foreach",
+        "requirement": "The expression of a `foreach` is convertible to an iterator."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4439,
+      "name": "LANG_RANGE_ENDS_DIFFER",
+      "severity": "error",
+      "message": "a range from '{first}' to '{second}' has no values",
+      "args": [
+        {
+          "name": "first",
+          "type": "string",
+          "description": "the type of the first end"
+        },
+        {
+          "name": "second",
+          "type": "string",
+          "description": "the type of the other"
+        }
+      ],
+      "cause": "The values a range gives out are of one type, which is the type of its ends, so the ends have to agree on what that is.  Nothing is widened on the way in: a language that widened here would decide the type of every value the loop gives out by a rule the reader has to know.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Ranges",
+        "requirement": "The ends of a range are of one integer type."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4440,
+      "name": "LANG_RANGE_NOT_AN_INTEGER",
+      "severity": "error",
+      "message": "a range runs over whole numbers, not over '{found}'",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type of what was written"
+        }
+      ],
+      "cause": "What a range gives out is each value in turn, and only a whole number has a next one.  A floating-point range would have to say how many steps it takes rather than how large each is, which is a different construct.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Ranges",
+        "requirement": "The ends of a range are of one integer type."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4441,
+      "name": "LANG_RANGE_STEP_NOT_WRITTEN_DOWN",
+      "severity": "error",
+      "message": "how far a range moves each turn is written down, not computed",
+      "args": [],
+      "cause": "Which way a range runs follows from the sign of its step, and that decides which comparison ends the loop.  A step the compiler cannot read would need both comparisons and a choice between them on every turn, for a generality nothing has asked for; a generated program writes the number.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Ranges",
+        "requirement": "The step of a range is a literal."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4442,
+      "name": "LANG_RANGE_STEP_IS_ZERO",
+      "severity": "error",
+      "message": "a range that moves no distance each turn never ends",
+      "args": [],
+      "cause": "A step of zero leaves the loop where it started, so the condition that ends it never changes.  Python raises at run time for this; here it is written down, so it is read at compile time.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Ranges",
+        "requirement": "The step of a range is not zero."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4443,
+      "name": "LANG_RANGE_OUTSIDE_A_LOOP",
+      "severity": "error",
+      "message": "a range stands where a loop takes its values from, and nowhere else yet",
+      "args": [],
+      "cause": "A range is a source of values for a loop.  Giving one a name would make it a value like any other, with a type and a place in memory, and nothing yet needs that; until something does, it is written where it is used.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Ranges",
+        "requirement": "A range stands as the expression a loop takes its values from."
       },
       "since": "0.1",
       "default_enabled": true,

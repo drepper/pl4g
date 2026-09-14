@@ -20,6 +20,7 @@ from .token import (ABOVE_NOT_ALIKE_GLYPH, ABOVE_OR_ALIKE_GLYPH, ALIKE_GLYPH,
                     INTEGER_TYPE_NAMES,
                     KEYWORDS, LESS_EQUAL_GLYPH, NAND_GLYPH, NEGATIVE_GLYPH,
                     NOR_GLYPH, NOT_EQUAL_GLYPH, NOT_GLYPH, OR_GLYPH,
+                    RANGE_GLYPH,
                     DIVIDE_GLYPH, ROTATE_LEFT_GLYPH, ROTATE_RIGHT_GLYPH,
                     SAT_ADD_GLYPH, SAT_MUL_GLYPH, SHIFT_LEFT_GLYPH,
                     SHIFT_RIGHT_GLYPH,
@@ -81,6 +82,7 @@ _SIMPLE: Final[dict[str, TokKind]] = {
     SET_CLOSE_GLYPH: TokKind.SET_CLOSE,
     QUESTION_GLYPH: TokKind.QUESTION,
     BOTTOM_GLYPH: TokKind.BOTTOM,
+    RANGE_GLYPH: TokKind.RANGE,
 }
 
 _OPEN: Final[frozenset[TokKind]] = frozenset(
