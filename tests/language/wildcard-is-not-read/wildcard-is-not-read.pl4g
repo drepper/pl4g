@@ -1,0 +1,13 @@
+※ pl4g-test: compile=error diag=4475
+
+※ `_` is not a variable: it is the place a value is sent to when the program
+※ means to work it out and not use it.  Nothing is stored there, so there is
+※ nothing to read back.
+
+fn twice(n: u8) → u8:
+    n + n
+
+@[startup]
+fn main() → u8:
+    _ ← twice(4u8)
+    _

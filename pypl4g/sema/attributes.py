@@ -113,6 +113,8 @@ REGISTRY: Final[Mapping[str, AttrSpec]] = {
         AttrSpec("cdecl", AttrTarget.FUNCTION | AttrTarget.VARIABLE,
                  (_param("variadic", "boolean", default=False, required=False),),
                  doc="the definition follows the system's conventions"),
+        AttrSpec("can_ignore", AttrTarget.FUNCTION,
+                 doc="a caller need not take what the function answers with"),
         AttrSpec("abi", AttrTarget.FUNCTION,
                  (_param("name", "string"),
                   _param("variadic", "boolean", default=False, required=False)),

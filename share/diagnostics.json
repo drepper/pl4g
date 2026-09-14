@@ -3840,6 +3840,82 @@
       "option": null
     },
     {
+      "number": 4474,
+      "name": "LANG_CALL_ANSWER_DROPPED",
+      "severity": "error",
+      "message": "nothing takes what '{name}' answers with",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the function that was called"
+        }
+      ],
+      "cause": "A function that answers with something is a function whose answer is the point of calling it, so a call whose answer goes nowhere is either a mistake or a leftover -- and in a language emitted by a generator a leftover is a defect in the generator.  Where the call is meant to be made for what it does and the answer is genuinely not wanted, `_ \u2190 f()` says so in one line; where that is true of every call to the function, `@[can_ignore]` on the function says it once.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Calls",
+        "requirement": "A call whose function answers with something has its answer taken, unless the function is marked '@[can_ignore]'."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4475,
+      "name": "LANG_WILDCARD_IS_NOT_READ",
+      "severity": "error",
+      "message": "'_' is where a value is put to be dropped, and nothing reads it",
+      "args": [],
+      "cause": "'_' is not a variable: it is the place a value is sent to when the program means to work it out and not use it.  Nothing is stored there, so there is nothing to read back.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Statements / Assignment",
+        "requirement": "'_' may be assigned to and may not be read."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4476,
+      "name": "LANG_WILDCARD_IS_NOT_DEFINED",
+      "severity": "error",
+      "message": "'_' needs no definition, and having one would make it a name",
+      "args": [],
+      "cause": "'_' is where a value is put to be dropped, and it is that everywhere without being defined anywhere.  A definition would make it an ordinary variable in that scope -- one that could be read, and that would have to be 'mut' to be assigned to again -- which is a second meaning for one spelling.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Statements / Assignment",
+        "requirement": "'_' is not defined."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4477,
+      "name": "LANG_WILDCARD_TAKES_A_VALUE",
+      "severity": "error",
+      "message": "'{name}' answers with nothing, so there is nothing here to drop",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the function that was called"
+        }
+      ],
+      "cause": "Assigning to '_' says that a value is being worked out and deliberately not used.  Where what is written produces no value there is nothing to say that about, and the call stands on its own as the statement it already is.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Statements / Assignment",
+        "requirement": "What is assigned to '_' produces a value."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 5001,
       "name": "LANG_STMT_UNREACHABLE",
       "severity": "warning",

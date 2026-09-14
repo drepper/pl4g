@@ -1,0 +1,27 @@
+※ pl4g-test: compile=ok run=native,qemu exit=9 diag=none
+
+※ `_` is where a value goes when the program means to work it out and not use
+※ it.  It is not a variable: it needs no definition, it is the same `_`
+※ everywhere, and nothing reads it -- so there is no `mut` to write and no
+※ question about what it held before.
+※
+※ What it is for is the call that is made for what it does while answering with
+※ something anyway.  `@[can_ignore]` says that of every call to a function; this
+※ says it of one call, which is what a program wants where most callers do use
+※ the answer.
+
+let counter: mut u8 = 0u8
+
+fn bump() → u8:
+    counter ← counter + 1u8
+    counter
+
+@[startup]
+fn main() → u8:
+    ※ this call is made for what it does
+    _ ← bump()
+    ※ and this one for what it answers with
+    let seen: u8 = bump()
+    ※ anything with a value may be dropped, not only a call
+    _ ← seen + 100u8
+    seen + counter + 5u8

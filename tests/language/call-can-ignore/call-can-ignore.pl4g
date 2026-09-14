@@ -1,0 +1,29 @@
+※ pl4g-test: compile=ok run=native,qemu exit=7 diag=none
+
+※ `@[can_ignore]` says a caller need not take what the function answers with.
+※ It belongs on the function rather than on the call because that is where the
+※ fact lives: a function whose answer is a convenience -- the thing it wrote,
+※ the count it updated -- is one every caller may ignore, and saying so once is
+※ saying it where it is true.
+※
+※ A function that answers with nothing needs none of this.  A call to one is a
+※ call made for what it does, which is what standing as a statement says, and
+※ there is no answer for anything to take.
+
+let counter: mut u8 = 0u8
+
+@[can_ignore]
+fn bump() → u8:
+    counter ← counter + 1u8
+    counter
+
+fn prepare():
+    counter ← 5u8
+
+@[startup]
+fn main() → u8:
+    ※ nothing takes what it answers with, and the attribute says that is meant
+    prepare()
+    bump()
+    bump()
+    counter

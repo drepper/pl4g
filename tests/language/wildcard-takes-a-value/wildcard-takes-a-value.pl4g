@@ -1,0 +1,15 @@
+※ pl4g-test: compile=error diag=4477
+
+※ Assigning to `_` says that a value is being worked out and deliberately not
+※ used.  Where what is written produces no value there is nothing to say that
+※ about, and the call stands on its own as the statement it already is.
+
+let counter: mut u8 = 0u8
+
+fn prepare():
+    counter ← 5u8
+
+@[startup]
+fn main() → u8:
+    _ ← prepare()
+    counter

@@ -647,6 +647,9 @@ class Checker:
         later mention of the name would otherwise report it again as undefined,
         which says nothing the first message did not.
         """
+        if node.name == WILDCARD_NAME:
+            self._diags.emit(D.LANG_WILDCARD_IS_NOT_DEFINED, node.span)
+            return
         if not self._declare(node.name, node.name_span):
             return
         attrs = self._bind_attributes(node.attrs, AttrTarget.VARIABLE)
@@ -1095,7 +1098,15 @@ class Checker:
         return None
 
     def _lookup(self, ref: ast.NameRef) -> Value | None:
-        """Resolve a name: the innermost binding first, then the top level."""
+        """Resolve a name: the innermost binding first, then the top level.
+
+        `_` is the one name that resolves to nothing on purpose: it is where a
+        value goes to be dropped, so there is nothing there to read back and
+        saying it is undefined would be answering a different question.
+        """
+        if ref.name == WILDCARD_NAME:
+            self._diags.emit(D.LANG_WILDCARD_IS_NOT_READ, ref.span)
+            return None
         found = self._find_local(ref.name)
         if found is not None:
             found.read = True
@@ -1328,6 +1339,7 @@ class Checker:
         priority: int | None = None
         inline = InlineHint.DEFAULT
         abi: str | None = None
+        can_ignore = False
         linkage = self._linkage_of(bound)
         extra: dict[str, int | str | bool] = {}
         for attr in bound:
@@ -1345,6 +1357,8 @@ class Checker:
                 case "inline":
                     inline = (InlineHint.NEVER if attr.as_str("mode") == "never"
                               else InlineHint.ALWAYS)
+                case "can_ignore":
+                    can_ignore = True
                 case "cdecl":
                     # The one every program that means to be called from
                     # elsewhere writes.  It says "the one this system uses"
@@ -1362,7 +1376,7 @@ class Checker:
                 case _:
                     pass
         return FuncAttrs(special=special, priority=priority, inline=inline, abi=abi,
-                         extra=extra), linkage
+                         can_ignore=can_ignore, extra=extra), linkage
 
     # -- types -----------------------------------------------------------------
 
@@ -3842,20 +3856,78 @@ class Checker:
         comparison is, and all of them are written the same way for a reader.
         `@[ignore(5005)]` on the statement says the line is meant.
 
-        A call will be the first expression this cannot say that about, since a
-        call does whatever the callee does whether or not anyone wants its
-        result.  There is no way to write one yet, and when there is, this asks
-        the expression whether it has an effect instead of knowing that none
-        has.
+        A call is the one expression this cannot say that about, since a call
+        does whatever the callee does whether or not anyone wants its result.
+        What is asked of one is a different question, and `_answer_is_taken`
+        asks it.
         """
         if isinstance(expr, ast.Call):
-            # The exception this rule was written to leave room for.  A call
-            # does whatever the function does, whether or not anyone wants what
-            # it answers with.
+            self._answer_is_taken(expr)
             return
         found = self._diags.emit(D.LANG_STMT_VALUE_DISCARDED, expr.span)
         if isinstance(expr, ast.Binary) and expr.op is ast.BinaryOp.EQUAL:
             found.note(D.LANG_STMT_ASSIGNMENT_IS_AN_ARROW, expr.span)
+
+    def _answer_is_taken(self, expr: ast.Call) -> None:
+        """Report a call, standing as a statement, whose answer goes nowhere.
+
+        A function that answers with something is a function whose answer is
+        the point of calling it, so by default the answer has to be taken.  The
+        two ways of saying that it need not be are one line and one word: `_` to
+        drop this answer, and `@[can_ignore]` on the function where that is true
+        of every call to it.
+
+        A call that answers with nothing is a call made for what it does, which
+        is what standing as a statement already says.
+        """
+        func = self._callee_named(expr.callee)
+        if func is None or func.ty.ret is VOID or func.attrs.can_ignore:
+            return
+        self._diags.emit(D.LANG_CALL_ANSWER_DROPPED, expr.span, name=func.name)
+
+    def _callee_named(self, expr: ast.Expr) -> "Function | None":
+        """The function a call names, asked of the syntax and reporting nothing.
+
+        Whether the callee is a function at all is the call's own business and
+        is reported where the call is lowered; this is asked before that, so it
+        answers nothing rather than saying anything.
+        """
+        if isinstance(expr, ast.NameRef):
+            found = self._top.get(expr.name)
+            return found if isinstance(found, Function) else None
+        return None
+
+    def _dropped(self, builder: IRBuilder, node: ast.AssignStmt,
+                 wants_value: bool) -> "Value | None":
+        """Lower `_ \N{LEFTWARDS ARROW} v`: work the value out and deliberately drop it.
+
+        `_` is not a variable and is not defined anywhere: it is where a value
+        goes when the program means to work it out and not use it, which is what
+        a call made for what it does rather than for what it answers needs to be
+        able to say.  So there is no mutability to check, nothing to rebind, and
+        nothing for a later line to read.
+
+        What is written must still produce something.  Dropping nothing is not a
+        thing to say, and the call that answers with nothing is already the
+        statement it should be.
+        """
+        value = self._lower_expr(builder, node.value, None)
+        ty = self._value_type_of(value)
+        if ty is ERROR:
+            return None
+        if ty is VOID:
+            name = self._callee_named(node.value.callee).name \
+                if isinstance(node.value, ast.Call) \
+                and self._callee_named(node.value.callee) is not None \
+                else "this"
+            self._diags.emit(D.LANG_WILDCARD_TAKES_A_VALUE, node.span, name=name)
+            return None
+        if wants_value:
+            # The last statement of a body is the body's result, and what this
+            # statement leaves behind is nothing anybody may read.
+            self._diags.emit(D.LANG_WILDCARD_IS_NOT_READ, node.span)
+            return None
+        return None
 
     def _lower_local(self, builder: IRBuilder, node: ast.VarDef) -> None:
         """Lower a variable defined inside a function body.
@@ -3867,6 +3939,12 @@ class Checker:
         branch, which is why the representation has them.
         """
         self._bind_attributes(node.attrs, AttrTarget.VARIABLE)
+        if node.name == WILDCARD_NAME:
+            # It is where a value goes to be dropped, everywhere, without being
+            # defined anywhere; a definition would make it a variable of that
+            # scope instead, which is a second meaning for one spelling.
+            self._diags.emit(D.LANG_WILDCARD_IS_NOT_DEFINED, node.span)
+            return
         if node.type is None and not _says_its_type(node.value):
             # Nothing written and nothing to read off the value: it is lowered
             # first and what it turned out to be is what the name stands for.
@@ -3961,6 +4039,8 @@ class Checker:
         if node.more:
             self._assign_apart(builder, node)
             return None
+        if node.name == WILDCARD_NAME:
+            return self._dropped(builder, node, wants_value)
         local = self._find_local(node.name)
         if local is not None:
             if not self._check_mutable(node, local.mutable, local.span):

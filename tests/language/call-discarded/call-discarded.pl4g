@@ -1,9 +1,13 @@
 ※ pl4g-test: compile=ok run=native,qemu exit=7 diag=none
 
-※ A call may stand as a statement of its own with nothing taking its answer.
-※ It is the first expression in the language that does something besides
+※ A call may stand as a statement of its own where the function answers with
+※ nothing.  It is the one expression in the language that does something besides
 ※ produce a value, which is the exception the rule about discarded values was
-※ written to leave room for.
+※ written to leave room for -- and where there is no answer there is nothing for
+※ anything to take, so nothing more has to be said.
+※
+※ A call to a function that *does* answer is a different question, asked in
+※ `call-answer-must-be-used`: by default its answer has to be taken.
 
 let counter: mut u8 = 0u8
 

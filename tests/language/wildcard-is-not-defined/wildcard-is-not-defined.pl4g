@@ -1,0 +1,11 @@
+※ pl4g-test: compile=error diag=4476
+
+※ `_` is where a value goes to be dropped, and it is that everywhere without
+※ being defined anywhere.  A definition would make it an ordinary variable in
+※ that scope -- one that could be read, and that would have to be `mut` to be
+※ assigned to again -- which is a second meaning for one spelling.
+
+@[startup]
+fn main() → u8:
+    let _: u8 = 1u8
+    0u8

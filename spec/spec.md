@@ -267,12 +267,39 @@ left to right.
 The freedom C keeps is worth nothing to a language that is written by a program: a generator emits what it means, and an order
 the compiler chooses is one more thing the generator would have to avoid relying on by accident.
 
-**A call may stand as a statement of its own.**  It is the first expression in the language that does something besides produce a
-value, which is why the rule that a statement's value must be used does not apply to it.
+**A call may stand as a statement of its own.**  It is the one expression in the language that does something besides produce a
+value, which is why the rule that a statement's value must be used does not apply to it as written.
 
-Compare C, C++, Java and Go, where a call is likewise the exception to the discarded-value rule; and Rust, where a call producing
-a value that is discarded is a warning unless the type says otherwise.  A rule of that kind wants a way for a function to say its
-answer must not be dropped, which this language will want too and does not have yet.
+**What applies instead is that a call's answer must be taken** (4474).  A function that answers with something is a function
+whose answer is the point of calling it, so a call whose answer goes nowhere is a mistake or a leftover -- and in a language
+emitted by a generator a leftover is a defect in the generator.  A function that answers with nothing needs none of this: there
+is no answer for anything to take, and standing as a statement is what a call to one is for.
+
+Two things say that an answer really is not wanted, and they say it at the two places the fact can live:
+
+```
+@[can_ignore]
+fn bump() → u8:            ※ true of every call to it: the answer is a convenience
+    …
+
+_ ← twice(4u8)             ※ true of this call: work it out and drop it
+```
+
+**`@[can_ignore]` is written on the function**, because that is where the fact is: a function whose answer is a convenience --
+the count it updated, the thing it wrote -- is one every caller may ignore, and saying so once says it where it is true rather
+than at each of the places that would otherwise have to repeat it.
+
+**`_` is written at the call**, for the case where most callers do want the answer and this one does not.  It is described under
+Assignment, being an assignment.
+
+Compare: C, C++, Java and Go, where a call is the exception to the discarded-value rule outright, so that a dropped answer is
+never remarked on -- C and C++ have `[[nodiscard]]` and Java has nothing; Rust, where `#[must_use]` marks the types and functions
+whose answers must be taken and the report is a warning.  All of them default the other way round from this, and they can: they
+are written by people, for whom the common case is the one worth making silent.  A language emitted by a generator has the
+opposite common case -- a generator that emits a call and drops its answer has a defect -- so the default is reversed and
+`@[can_ignore]` is what `#[must_use]` would have been.
+
+`_` is Go's, Rust's and Python's blank identifier, used here for the one thing all three use it for and for nothing else.
 
 **A tuple may be handed over as several arguments rather than as one**, by writing `⁂` (U+2042 ASTERISM) in front of it among the
 arguments:
@@ -2034,6 +2061,32 @@ count ← 7u8
 ```
 
 The value must have the variable's type, and -- as everywhere -- must fit it: `count ← 300u8` does not compile.
+
+##### Assigning to `_`
+
+`_` is where a value goes when the program means to work it out and not use it:
+
+```
+_ ← bump()             ※ the call is made for what it does
+_ ← seen + 100u8       ※ anything with a value may be dropped, not only a call
+```
+
+**It is not a variable.**  It needs no definition and may not have one (4476); it is the same `_` in every scope; and nothing
+reads it (4475), so there is no `mut` to write and no question about what it held before.  Those three follow from what it is: a
+place to put a value, not a name for one.
+
+**What is assigned to it must produce a value** (4477).  Dropping nothing is not a thing to say, and a call that answers with
+nothing already stands as a statement of its own.
+
+The reason it exists is the call made for what it does by a function that answers anyway -- the case `@[can_ignore]` covers when
+it is true of every caller, and this covers when it is true of one.
+
+`_` is the same name a `foreach` and a `match` arm use for a value that is not wanted, which is the same meaning: a place where a
+name would go, saying that no name is needed.
+
+Compare: Go, where `_` is the blank identifier and assigning to it is how an unwanted result is discarded, exactly as here;
+Rust and Python, where `_` is a pattern rather than a place, so `let _ = f()` is a definition that binds nothing -- a spelling
+this language does not have, since a definition here defines and `_` is not defined.
 
 **An assignment stands for the variable it changed.**  It refers to the variable, not to the value that was written, so reading it
 gives what the variable now holds.  As the last statement of a function it is therefore the function's result, the way any other

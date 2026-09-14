@@ -3026,6 +3026,48 @@ waits for there to be a second one.
 
 ---
 
+## 2026-09-15T02:00+02:00 — language
+
+**An answer that has to be taken**
+
+Decided on the user's direction, which reversed the to-do item that prompted it: a call's answer must be taken by default, and
+`@[can_ignore]` on the function says a caller need not take it.
+
+**The default is reversed from every language that has this.**  C and C++ have `[[nodiscard]]`, Rust has `#[must_use]`, and all
+of them make silence the default and the requirement the exception -- because they are written by people, for whom the common
+case is the one worth making quiet.  This language is emitted by a generator, for which the common case is the opposite: a
+generator that emits a call and drops its answer has a defect, and a defect that is silent by default is one nobody finds.  So
+the rule is on for every function and `@[can_ignore]` is what `#[must_use]` would have been.
+
+It is an error rather than a warning, which is the same choice 5005 already made about a statement whose value goes nowhere, and
+for the same reason written down there.
+
+**`@[can_ignore]` is on the function, not on the call**, because that is where the fact lives.  A function whose answer is a
+convenience -- the count it updated, the thing it wrote -- is one every caller may ignore; saying so once says it where it is
+true, and saves the places that would otherwise repeat it.
+
+**`_` covers the other case**, where most callers want the answer and one does not.  It is an assignment -- `_ ← f()` -- and
+therefore needs nothing new in the grammar.
+
+**`_` is not a variable, and the three rules follow from that.**  No definition is needed and none is allowed (4476), because a
+definition would make it an ordinary local of that scope: one that could be read, and that would need `mut` to be assigned again,
+which is a second meaning for one spelling.  Nothing reads it (4475), there being nothing there.  And what is assigned to it must
+produce a value (4477), since dropping nothing is not a thing to say.
+
+Rejected: `let _ = f()`, which is how Rust and Python spell it.  Both treat `_` as a *pattern*, so a definition that binds
+nothing is an ordinary definition; here a definition defines, and making one spelling mean "define" and another "do not" is the
+kind of thing this language reports rather than admits.  Go's blank identifier is an assignment target exactly as this is, and is
+what this follows.
+
+Rejected: an attribute on the statement, `@[ignore(4474)]`, which already works and was the reason to think nothing more was
+needed.  It says "do not tell me about this diagnostic", which is a statement about the compiler; `_ ←` says "this value is
+deliberately dropped", which is a statement about the program, and the program is what a later reader is trying to understand.
+
+`_` is already the name a `foreach` and a `match` arm use for a value that is not wanted, so this is the same meaning in a third
+place rather than a new one.
+
+---
+
 ---
 
 Open questions

@@ -66,6 +66,11 @@ class FuncAttrs:
     priority: int | None = None
     inline: InlineHint = InlineHint.DEFAULT
     abi: str | None = None
+    #: Whether a caller may let what the function answers with go nowhere.  It
+    #: may not by default: a function that answers is a function whose answer is
+    #: the point of calling it, and the ones that may be called for what they do
+    #: instead say so.
+    can_ignore: bool = False
     extra: Mapping[str, AttrValue] = field(default_factory=dict)
 
 

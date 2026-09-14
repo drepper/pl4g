@@ -13,9 +13,11 @@ To Do List for the PL4g language
     Still open, and the only part of the original question that was: whether arguments may also be named, as an attribute's are.
     Nothing in what was built forecloses it.
 
-[ ] let a function say that its answer must not be dropped, so that a call whose value is discarded can be reported where the
-    answer was the point.  Rust has `#[must_use]` for this and reports it as a warning; the shape here would be an attribute, and
-    the rule that a statement's value must be used is what it would switch back on for that one function.
+[x] let a function say that its answer must not be dropped.  Done the other way round, on the user's direction: a call's answer
+    must be taken by default (4474) and `@[can_ignore]` on the function says a caller need not take it.  Rust's `#[must_use]` and
+    C++'s `[[nodiscard]]` default to silence because they are written by people; a generator that emits a call and drops its
+    answer has a defect, so the rule is on for every function.  `_ ← f()` drops one call's answer, `_` being a place a value goes
+    to and not a variable: no definition (4476), no reading (4475), and something with a value to drop (4477).
 
 [x] the conditional half of the control flow: `if`, `elif` and `else`.  Done: a condition with no parentheses around it, which
     must be a `bool` -- a number is not a condition -- then a body in either notation, zero or more `elif` with the same shape and

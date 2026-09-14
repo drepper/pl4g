@@ -972,6 +972,25 @@ The rule that makes this easy to keep: **a function that answers what type somet
 `_one_type` takes an `into` list, `_array_written` answers the elements beside the type, and `_entries_written` answers an
 `_Entries`.  Anything that asks a type and throws the value away will lower it a second time somewhere.
 
+An answer that has to be taken
+-----------------------------
+
+`_check_value_is_used` reports a statement that is an expression whose value goes nowhere, and a call has always been the one
+thing it let past.  What it asks of a call now is `_answer_is_taken`: a call is fine where the function answers with nothing, and
+where `FuncAttrs.can_ignore` says so, and is reported otherwise.
+
+The callee is found by `_callee_named`, which looks the name up and answers nothing where it is not a function.  It reports
+nothing of its own: whether the callee is a function at all is the call's business and is said where the call is lowered, and
+this runs before that.
+
+**`_` is handled in three places, and each is a refusal but one.**  `_lower_assignment` sends it to `_dropped`, which lowers the
+value and keeps nothing -- there is no local to rebind, no mutability to check and no unread-value question to ask.  Resolving a
+name reports it (4475) rather than saying it is undefined, which would be answering a different question.  And defining one is
+reported (4476) both inside a function and at the top level.
+
+Nothing reaches the IR: dropping a value is lowering the expression and not using what came back, so what is left is whatever the
+expression itself does, which dead-code elimination then keeps or drops by the ordinary rule.
+
 Answering with more than the registers hold
 ------------------------------------------
 

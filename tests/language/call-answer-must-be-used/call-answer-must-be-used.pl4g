@@ -1,0 +1,19 @@
+※ pl4g-test: compile=error diag=4474
+
+※ A function that answers with something is a function whose answer is the
+※ point of calling it, so by default a call whose answer goes nowhere is either
+※ a mistake or a leftover -- and in a language emitted by a generator a leftover
+※ is a defect in the generator, which is why this is an error rather than a
+※ warning.
+※
+※ The two ways of saying that the answer really is not wanted are one line and
+※ one word: `_ ← f()` for this call, and `@[can_ignore]` on the function where
+※ it is true of every call to it.
+
+fn twice(n: u8) → u8:
+    n + n
+
+@[startup]
+fn main() → u8:
+    twice(4u8)
+    0u8
