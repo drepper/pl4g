@@ -148,6 +148,48 @@ AARCH64_INSTRS: Final[tuple[A64InstDesc, ...]] = (
                 fields=(_reg_field(0, _RD), _reg_field(1, _RN),
                         Field(FieldKind.IMMEDIATE, 2, 10, 12)),
                 est_size=INSTRUCTION_SIZE),
+    # adds Wd, Wn, Wm / subs, and their immediate forms.  The flag-setting
+    # pair, which differ from the plain ones by one bit and by leaving behind
+    # whether the answer went past the end of the width they were done at.
+    A64InstDesc("adds", (_r(32), _r(32), _r(32)), template=0x2B000000,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN), _reg_field(2, _RM)),
+                implicit_defs=(NZCV,), flags=InstFlags.ZEXT32,
+                est_size=INSTRUCTION_SIZE),
+    # adds Xd, Xn, Xm
+    A64InstDesc("adds", (_r(64), _r(64), _r(64)), template=0xAB000000,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN), _reg_field(2, _RM)),
+                implicit_defs=(NZCV,), est_size=INSTRUCTION_SIZE),
+    # adds Wd, Wn, #imm12
+    A64InstDesc("adds", (_r(32), _r(32), _imm(0xFFF)), template=0x31000000,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN),
+                        Field(FieldKind.IMMEDIATE, 2, 10, 12)),
+                implicit_defs=(NZCV,), flags=InstFlags.ZEXT32,
+                est_size=INSTRUCTION_SIZE),
+    # adds Xd, Xn, #imm12
+    A64InstDesc("adds", (_r(64), _r(64), _imm(0xFFF)), template=0xB1000000,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN),
+                        Field(FieldKind.IMMEDIATE, 2, 10, 12)),
+                implicit_defs=(NZCV,), est_size=INSTRUCTION_SIZE),
+    # subs Wd, Wn, Wm
+    A64InstDesc("subs", (_r(32), _r(32), _r(32)), template=0x6B000000,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN), _reg_field(2, _RM)),
+                implicit_defs=(NZCV,), flags=InstFlags.ZEXT32,
+                est_size=INSTRUCTION_SIZE),
+    # subs Xd, Xn, Xm
+    A64InstDesc("subs", (_r(64), _r(64), _r(64)), template=0xEB000000,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN), _reg_field(2, _RM)),
+                implicit_defs=(NZCV,), est_size=INSTRUCTION_SIZE),
+    # subs Wd, Wn, #imm12
+    A64InstDesc("subs", (_r(32), _r(32), _imm(0xFFF)), template=0x71000000,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN),
+                        Field(FieldKind.IMMEDIATE, 2, 10, 12)),
+                implicit_defs=(NZCV,), flags=InstFlags.ZEXT32,
+                est_size=INSTRUCTION_SIZE),
+    # subs Xd, Xn, #imm12
+    A64InstDesc("subs", (_r(64), _r(64), _imm(0xFFF)), template=0xF1000000,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN),
+                        Field(FieldKind.IMMEDIATE, 2, 10, 12)),
+                implicit_defs=(NZCV,), est_size=INSTRUCTION_SIZE),
     # sub Wd, Wn, Wm
     A64InstDesc("sub", (_r(32), _r(32), _r(32)), template=0x4B000000,
                 fields=(_reg_field(0, _RD), _reg_field(1, _RN), _reg_field(2, _RM)),
@@ -270,6 +312,14 @@ AARCH64_INSTRS: Final[tuple[A64InstDesc, ...]] = (
                 est_size=INSTRUCTION_SIZE),
     # b.eq label
     A64InstDesc("b.eq", (_sym(),), template=0x54000000,
+                fields=(Field(FieldKind.RELOCATION, 0, 5, 19, shift=2, signed=True,
+                              reloc=BRANCH19),),
+                implicit_uses=(NZCV,), flags=InstFlags.TERMINATOR,
+                est_size=INSTRUCTION_SIZE),
+    # b.vc label
+    # The overflow flag clear, which for a flag-setting signed operation is the
+    # whole of "it did not go past the end of its width".
+    A64InstDesc("b.vc", (_sym(),), template=0x54000007,
                 fields=(Field(FieldKind.RELOCATION, 0, 5, 19, shift=2, signed=True,
                               reloc=BRANCH19),),
                 implicit_uses=(NZCV,), flags=InstFlags.TERMINATOR,

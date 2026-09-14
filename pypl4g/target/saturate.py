@@ -146,6 +146,9 @@ def _lower(asm: Assembler, op: BinOp, ty: Type, left: MCOperand,
     """The body of both of the above."""
     if not isinstance(ty, IntType):
         raise Unsupported("arithmetic on something that is not an integer")
+    if fault is not None and op in _FLAGGED and ty.bits in asm.flagged_widths:
+        _by_flags(asm, op, ty, left, right, destination, fault, span)
+        return
     if ty.bits < register_bits:
         _exact(asm, op, ty, left, right, destination, register_bits, fault, span)
         return
@@ -153,6 +156,35 @@ def _lower(asm: Assembler, op: BinOp, ty: Type, left: MCOperand,
         _widened(asm, op, ty, left, right, destination, scratch, fault, span)
         return
     _wrapping(asm, op, ty, left, right, destination, scratch, fault, span)
+
+
+#: The two whose overflow a flag answers for at every width.  A product is not
+#: among them: seeing that one went past wants the upper half of it, which is a
+#: second instruction and on some widths a pair of fixed registers -- where
+#: widening it and comparing is one instruction and no constraint at all.
+_FLAGGED: frozenset[BinOp] = frozenset((BinOp.ADD, BinOp.SUB))
+
+
+def _by_flags(asm: Assembler, op: BinOp, ty: IntType, left: MCOperand,
+              right: MCOperand, destination: Reg, fault: Fault,
+              span: Span) -> None:
+    """Compute the operation at the type's own width and ask the flags.
+
+    This is what an architecture with flags is for.  The operation is emitted at
+    the width the type actually is -- an eight-bit addition is an eight-bit
+    addition -- so what the flags then say is whether *that* answer went past,
+    which is the question, and not whether some wider answer did, which would
+    then have to be asked all over again by comparing.
+
+    One instruction and one branch, against an instruction, one or two
+    comparisons and one or two branches.  And the answer needs no bringing back
+    into its type afterwards, because it never left it.
+    """
+    asm.op_at(_PLAIN[op], destination, left, right, ty.bits, span)
+    carry_on = asm.reserve_label("in.range")
+    asm.branch_if_in_range(_PLAIN[op], ty.signed, carry_on, span)
+    fault.out_of_range(asm, span)
+    asm.block(carry_on)
 
 
 def _answer(asm: Assembler, cond: Condition, destination: Reg, lhs: MCOperand,
@@ -187,7 +219,7 @@ def _exact(asm: Assembler, op: BinOp, ty: IntType, left: MCOperand,
         low = MCImm(ty.low, bits, signed=True)
         _answer(asm, Condition.SLT, destination, value, low, low, fault, span)
         return
-    if op is BinOp.SAT_SUB:
+    if _ORDINARY[op] is BinOp.SUB:
         # A difference is the one unsigned answer that can come out below zero,
         # and it can never come out too large: the left operand was in the type
         # to begin with and nothing was added to it.
@@ -235,7 +267,7 @@ def _wrapping(asm: Assembler, op: BinOp, ty: IntType, left: MCOperand,
     asm.op(_PLAIN[op], destination, held, right, span=span)
     answer = MCReg(destination)
     if not ty.signed:
-        if op is BinOp.SAT_ADD:
+        if _ORDINARY[op] is BinOp.ADD:
             high = MCImm(ty.high, 64, signed=False)
             _answer(asm, Condition.ULT, destination, answer, held, high, fault, span)
         else:
@@ -260,7 +292,7 @@ def _signed_wrapping(asm: Assembler, op: BinOp, ty: IntType, left: MCReg,
     first = MCReg(scratch.scratch())
     second = MCReg(scratch.scratch())
     asm.op(ops.XOR, first.reg, left, answer, span=span)
-    if op is BinOp.SAT_ADD:
+    if _ORDINARY[op] is BinOp.ADD:
         asm.op(ops.XOR, second.reg, right, answer, span=span)
     else:
         asm.op(ops.XOR, second.reg, left, right, span=span)

@@ -147,6 +147,34 @@ class InstructionSelector(Protocol):
         """
         ...
 
+    #: The widths at which this target's ordinary arithmetic both exists as an
+    #: instruction and leaves behind something that says whether the answer went
+    #: past the end of that width.  Empty where it has no such thing, which is
+    #: what says the answer has to be found by comparing it instead.
+    flagged_widths: frozenset[int] = frozenset()
+
+    def select_op_at(self, op: Op, dst: Reg, left: MCOperand, right: MCOperand,
+                     bits: int, span: Span) -> Sequence[MCInst]:
+        """Instructions computing *op* into *dst*, naming everything at *bits*.
+
+        Asked where the width matters to what the instruction leaves behind and
+        not only to the answer: arithmetic on a narrow type is done at that
+        type's width so that the flags say whether *it* went past.
+        """
+        ...
+
+    def select_branch_if_in_range(self, op: Op, signed: bool, target: MCSymRef,
+                                  span: Span) -> Sequence[MCInst]:
+        """Instructions that go to *target* when the last arithmetic did not go past.
+
+        Asked only at a width in `flagged_widths`, and only straight after the
+        instruction it is about: what it reads was written by that instruction
+        and by nothing since.  It is told which operation, because an
+        architecture may say "carried out" and "borrowed into" with one flag and
+        opposite senses.
+        """
+        ...
+
     def select_float_op(self, op: Op, dst: Reg, left: MCOperand, right: MCOperand,
                         bits: int, span: Span) -> Sequence[MCInst]:
         """Instructions that compute *op* over two floating-point values."""
@@ -648,6 +676,24 @@ class Assembler:
         self._block.successors.append(target)
         self._emit(self._selector.select_branch_if_finite(
             value, bits, self._symref(target), span))
+
+    @property
+    def flagged_widths(self) -> frozenset[int]:
+        """The widths whose arithmetic says for itself whether it went past."""
+        return getattr(self._selector, "flagged_widths", frozenset())
+
+    def op_at(self, op: Op, dst: Reg, left: MCOperand, right: MCOperand,
+              bits: int, span: Span = INVALID_SPAN) -> None:
+        """Compute *op* into *dst* with everything named at *bits*."""
+        self._emit(self._selector.select_op_at(op, dst, left, right, bits, span))
+
+    def branch_if_in_range(self, op: Op, signed: bool, target: str,
+                           span: Span = INVALID_SPAN) -> None:
+        """Go to *target* where the arithmetic just emitted stayed in its width."""
+        assert self._block is not None
+        self._block.successors.append(target)
+        self._emit(self._selector.select_branch_if_in_range(
+            op, signed, self._symref(target), span))
 
     def float_op(self, op: Op, dst: Reg, left: MCOperand, right: MCOperand,
                  bits: int, span: Span = INVALID_SPAN) -> None:

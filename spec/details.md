@@ -314,6 +314,38 @@ nothing further to do -- which is also why such an operation can be computed
 *exactly* for any type narrower than a register, and needs a rule of its own only
 at the width of the register itself.
 
+**A sum or a difference that faults is computed at the type's own width where
+the architecture has an instruction for it**, and what says whether it went past
+is the flags that instruction wrote.  An eight-bit addition is an eight-bit
+addition: `add %cl,%al` and then a branch on the carry flag for an unsigned type
+or the overflow flag for a signed one.  One instruction and one branch, against
+the other way of asking -- widen both operands, add at the register's width, and
+compare the answer against one end of the type or both -- which is an extra
+instruction for each operand and one or two comparisons after.  And the answer
+needs no bringing back into its type afterwards, because it never left it.
+
+Which widths that covers is a property of the architecture and each one says so
+for itself.  x86-64 has arithmetic at all four widths and uses this at all four.
+AArch64 has it at thirty-two and sixty-four, so a byte or a halfword there keeps
+the widen-and-compare path.  RISC-V has no flags at all and keeps it at every
+width: the question is asked of the answer instead, which is what the rest of
+this section describes.
+
+A **product** is not among them on any of the three.  Seeing that a
+multiplication went past wants the upper half of the product, which is a second
+instruction and on x86-64 a form with a fixed pair of registers -- where widening
+and comparing is one instruction and no constraint on which registers are used.
+The one flag x86-64 does write for a product says only whether a *signed* one
+went past, and the unsigned question would still want the other instruction, so
+taking it would leave two paths rather than one.
+
+**Which operation it is, is asked of the ordinary operation it is built from.**
+The saturating form and the trapping form of an addition are two opcodes and both
+are an addition; a test written against one of the two spellings answers `false`
+for the other and quietly picks the code for a subtraction.  That was a real
+defect -- the widest signed and unsigned sums did not notice they had gone
+past -- and it is why every such test names the ordinary operation.
+
 **A constant wider than an instruction can carry is built rather than loaded.**  No constant pool is emitted and none is planned:
 a pool costs a relocation, a cache line and a section, where a sequence costs two to four instructions that no other value has to
 wait for.  AArch64 sets a quarter of a word at a time, and turns every bit round first where the value has more quarters of ones

@@ -1,0 +1,16 @@
+※ pl4g-test: compile=ok run=native,qemu exit=64 diag=none
+
+※ A sum of the widest signed type that will not fit stops the program too.
+※ There is nowhere wider to compute it in, so what says it went past is the
+※ sign the answer came out with: two numbers of one sign whose sum has the
+※ other.  Both operands here are the same number, which is the case that asks
+※ the question of the right pair of values or does not ask it at all.
+
+let big: i64 = 9000000000000000000i64
+
+@[startup]
+fn main() → u8:
+    if big + big = big:
+        1u8
+    else:
+        2u8

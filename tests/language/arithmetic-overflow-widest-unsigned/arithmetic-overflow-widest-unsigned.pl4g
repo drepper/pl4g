@@ -1,0 +1,13 @@
+※ pl4g-test: compile=ok run=native,qemu exit=64 diag=none
+
+※ And the widest unsigned type, where what says the sum went past is that it
+※ came out below what it was given.
+
+let big: u64 = 18000000000000000000u64
+
+@[startup]
+fn main() → u8:
+    if big + big = big:
+        1u8
+    else:
+        2u8

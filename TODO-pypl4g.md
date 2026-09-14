@@ -305,6 +305,16 @@ To Do List for the pypl4g compiler
     would be the thing that breaks them.  A callee can write a variable at the top level, so this is wanted for every call and not
     only for those.
 
+[x] compute a narrow sum or difference at its own width and read the flags, rather than widening and comparing.  Done: the
+    backend states which widths its arithmetic writes flags about -- all four on x86-64, thirty-two and sixty-four on AArch64,
+    none at all on RISC-V, which has no flags -- and a trapping addition or subtraction at one of them is one instruction and one
+    branch on the carry or overflow flag.  A `u8` sum was four instructions and a constant; it is now `add %cl,%al` and `jae`.  A
+    product is left out on every target: whether one went past is in the upper half, which is a second instruction and on x86-64 a
+    fixed pair of registers.
+    A real defect came out with it.  The shared code asked which operation it was by comparing against the *saturating* opcode,
+    which is false for the trapping one, so a trapping addition took the branch written for a subtraction -- and the widest signed
+    and unsigned sums did not notice they had gone past.  Every such test now names the ordinary operation the two are built from.
+
 [ ] report a tuple holding an array.  `〈⟦1u8, 2u8⟧〉` reaches the code generator and fails there (9901, "making a 〈u8⟦2⟧〉, which
     is one value and not several"), so what a reader is told is an internal error about a program the front end accepted.  Either
     an array is a thing a tuple may hold, in which case `parts_of` has to say what its parts are, or it is not and the checker

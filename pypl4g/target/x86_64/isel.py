@@ -252,9 +252,14 @@ class X86Selector(InstructionSelector):
             if not isinstance(operand, MCImm):
                 rewritten.append(operand)
                 continue
-            carried = REGISTERS.new_virtual(GPR, _operand_width(operands))
-            before.extend(self.select_move(carried, operand, span))
-            rewritten.append(MCReg(carried))
+            # The register is a whole word even where the instruction names
+            # only a part of it, for the reason ``_new_value`` gives: what a
+            # value is computed into is at least a word, and the instruction
+            # then says which view of it it reads.
+            width = _operand_width(operands)
+            carried = REGISTERS.new_virtual(GPR, max(32, width))
+            before.extend(self.select_move(carried, _at_least_a_word(operand), span))
+            rewritten.append(MCReg(carried, bits=width))
         return before, rewritten
 
     def select_op(self, op: Op, dst: Reg | None, sources: Sequence[MCOperand],
@@ -374,6 +379,55 @@ class X86Selector(InstructionSelector):
             lhs, rhs, cond = rhs, lhs, cond.swapped()
         return (*self._select_compare(lhs, rhs, cond, span),
                 self._inst(_CONDITIONAL[cond], (target,), span))
+
+    #: Every width this architecture has arithmetic at, which is every width
+    #: the language has: an eight-bit addition is an instruction, and what it
+    #: leaves in the flags is whether an eight-bit answer went past.
+    flagged_widths = frozenset((8, 16, 32, 64))
+
+    def select_op_at(self, op: Op, dst: Reg, left: MCOperand, right: MCOperand,
+                     bits: int, span: Span) -> Sequence[MCInst]:
+        """Compute *op* into *dst*, naming every operand at *bits*.
+
+        The value is moved into the destination at its own full width and the
+        arithmetic then names the narrow view of it, which is what leaves the
+        upper part of the register as it was -- nothing reads it, a value of a
+        narrow type being the narrow view and nothing more, and every place that
+        wants it wider widens it with an instruction that says so.
+        """
+        mnemonic = _BINARY.get(op.name)
+        if mnemonic is None:
+            raise UnsupportedOperation("".join((
+                "'", op.name, "' at a stated width")), span)
+        narrow = MCReg(dst, bits=bits)
+        # The destination is also the first source here, so the first source
+        # goes into it whatever it was; the table is then asked whether it will
+        # take the second as it stands, which is what puts an immediate in a
+        # register only where no row carries one.  Both happen before the
+        # arithmetic, so neither disturbs what it leaves behind.
+        moved: Sequence[MCInst] = ()
+        if not self._same_register(dst, left):
+            # A number moved into the destination is moved at a width the move
+            # has a form for, which the narrow ones do not always have; the
+            # arithmetic then names the narrow view of what arrived, and what is
+            # above it is never read.
+            moved = self.select_move(dst, _at_least_a_word(left), span)
+        before, ready = self._accepting(mnemonic, (narrow, _named_at(right, bits)),
+                                        span)
+        return (*moved, *before, self._inst(mnemonic, ready, span))
+
+    def select_branch_if_in_range(self, op: Op, signed: bool, target: MCSymRef,
+                                  span: Span) -> Sequence[MCInst]:
+        """Go to *target* where the arithmetic just emitted did not go past.
+
+        Two flags and two questions.  A signed operation goes past when the
+        answer's sign is not the one the operands called for, which is what the
+        overflow flag says; an unsigned one goes past when it carried out of the
+        top or borrowed into it, which is the carry flag.  Neither needs the
+        answer looked at again, and neither knows or cares how wide it was.
+        """
+        del op  # both say it the same way here
+        return (self._inst("jno" if signed else "jae", (target,), span),)
 
     def select_set(self, cond: Condition, dst: Reg, lhs: MCOperand, rhs: MCOperand,
                    span: Span) -> Sequence[MCInst]:
@@ -1527,6 +1581,37 @@ def _as_argument(place: PhysReg, ty: Type,
         # whole of it, so this is the same register the callee computes into.
         return registers.view(place.unit, _FLOAT_REGISTER_BITS)
     return registers.view(place.unit, max(32, _width_of(ty)))
+
+
+def _at_least_a_word(operand: MCOperand) -> MCOperand:
+    """A number written at no fewer bits than a word, and anything else as it is."""
+    if isinstance(operand, MCImm) and operand.bits < 32:
+        return MCImm(operand.value, 32, signed=operand.signed)
+    return operand
+
+
+def _named_at(operand: MCOperand, bits: int) -> MCOperand:
+    """The same operand, named at *bits* where naming it is what it is.
+
+    A register is a view of a register and this says which view.  A number is
+    declared at the width the operation is done at, where it says the same thing
+    there -- an instruction that works on a byte has no form that carries four,
+    and a value of a byte type is a byte.  One that does not say the same thing
+    there is left as it was, and goes into a register like any other operand the
+    table will not take.
+    """
+    if isinstance(operand, MCReg):
+        return MCReg(operand.reg, bits=bits)
+    if isinstance(operand, MCImm) and operand.bits > bits and _fits(operand, bits):
+        return MCImm(operand.value, bits, signed=operand.signed)
+    return operand
+
+
+def _fits(imm: MCImm, bits: int) -> bool:
+    """Whether *imm* says the same thing declared at *bits*."""
+    if imm.signed:
+        return -(1 << (bits - 1)) <= imm.value < (1 << (bits - 1))
+    return 0 <= imm.value < (1 << bits)
 
 
 def _result_register(ty: Type, cconv: CallConvDesc,

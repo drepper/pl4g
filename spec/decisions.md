@@ -3332,6 +3332,48 @@ program that meant to; and Go, which exits 2.
 
 ---
 
+## 2026-09-15T17:20+02:00 — compiler
+
+**A narrow sum or difference is computed narrow, and the flags say whether it fit**
+
+Decided on the user's direction: arithmetic on an eight-, sixteen- or thirty-two-bit integer uses the instruction for that width
+rather than a wider instruction followed by a comparison, and an architecture that has flags then reads the flags.
+
+**What it replaces.**  A trapping addition of a `u8` used to be `movzbl` on each operand, a thirty-two-bit `add`, a `cmp` against
+255 and a branch -- four instructions and a constant to check one addition.  It is now `add %cl,%al` and a branch on the carry
+flag.  A signed one is the same with the overflow flag.  Nothing is widened, nothing is compared, and the answer is already
+inside its type because it was computed there.
+
+**The flags are the point.**  Every architecture that has them writes, for free, exactly the two facts the check wants: whether an
+unsigned operation carried out of the top or borrowed into it, and whether a signed one came out with a sign its operands did not
+call for.  Asking the answer afterwards is reconstructing what the hardware already said.
+
+**Which widths this covers is the architecture's own answer, and each backend states it.**  x86-64 has arithmetic at all four
+widths, so all four.  AArch64 has it at thirty-two and sixty-four; a byte or a halfword there has no instruction to write flags
+about, so those two widths keep the old path.  RISC-V deliberately has no flags -- the ISA's stated reason is that they are a
+serialising dependency between instructions -- so it keeps the old path at every width, and the old path had to stay for exactly
+that reason.
+
+**A product is left out on all three.**  Whether a multiplication went past is in the upper half of the product, which is a second
+instruction everywhere and on x86-64 a form with a fixed pair of registers; widening and comparing is cheaper and constrains
+nothing.  x86-64's two-operand `imul` does set the overflow flag, but only for a signed product, so taking it would buy one of the
+two cases and leave both paths in place.
+
+**It uncovered a real defect.**  The shared code asked *which* operation it was by comparing against the saturating opcode, which
+is `false` for the trapping one -- so a trapping addition took the code written for a subtraction.  The widest signed and
+unsigned sums therefore did not notice they had gone past: `9000000000000000000i64 + 9000000000000000000i64` ran on and answered
+a negative number on all three targets.  Every such test now names the ordinary operation the two are built from, and two
+language tests hold it.
+
+Compare: C, where the check is the programmer's and the idiom is exactly the reconstruction this stops doing, with
+`__builtin_add_overflow` added later to let the compiler use the flags; Rust, whose debug builds check every arithmetic operation
+and which lowers `checked_add` to the narrow instruction and the flag; Zig, the same with `@addWithOverflow`; Go, which wraps and
+so asks nothing; and Swift, which traps by default and reads the flags to do it.  What none of them has that matters here is
+RISC-V's position, which is that the flags are not worth the coupling -- so any compiler wanting this check has to carry both
+paths, and saying which widths an architecture answers for is what keeps that to one line per backend.
+
+---
+
 ---
 
 Open questions

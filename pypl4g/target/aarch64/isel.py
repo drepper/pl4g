@@ -543,6 +543,47 @@ class A64Selector(InstructionSelector):
                         self._inst("cmp", (lhs, MCReg(carried)), span))
         return (self._inst("cmp", (lhs, rhs), span),)
 
+    #: The two widths this architecture has arithmetic at.  There is no
+    #: instruction narrower than a W register, so an eight- or sixteen-bit type
+    #: is computed wider and brought back by comparing, as it was.
+    flagged_widths = frozenset((32, 64))
+
+    #: The flag-setting form of each operation this can be asked for.
+    _SETS_FLAGS: Final[dict[str, str]] = {ops.PLUS.name: "adds",
+                                          ops.MINUS.name: "subs"}
+
+    def select_op_at(self, op: Op, dst: Reg, left: MCOperand, right: MCOperand,
+                     bits: int, span: Span) -> Sequence[MCInst]:
+        """Compute *op* into *dst* at *bits*, in the form that writes the flags.
+
+        This architecture keeps the two apart: `add` and `adds` are different
+        instructions, and only the second says anything about what happened.
+        """
+        mnemonic = self._SETS_FLAGS.get(op.name)
+        if mnemonic is None:
+            raise UnsupportedOperation("".join((
+                "'", op.name, "' in a form that writes the flags")), span)
+        before, ready = self._accepting(
+            mnemonic, (MCReg(dst, bits=bits), _named_at(left, bits),
+                       _named_at(right, bits)), span)
+        return (*before, self._inst(mnemonic, ready, span))
+
+    def select_branch_if_in_range(self, op: Op, signed: bool, target: MCSymRef,
+                                  span: Span) -> Sequence[MCInst]:
+        """Go to *target* where the arithmetic just emitted did not go past.
+
+        A signed operation is answered by the overflow flag, whichever it was.
+        An unsigned one is answered by the carry, and the two operations read it
+        oppositely: an addition sets it where it carried out of the top, and a
+        subtraction sets it where it did *not* borrow into it.  So one asks for
+        the carry clear and the other for the carry set, which is the whole
+        reason this is told which operation it follows.
+        """
+        if signed:
+            return (self._inst("b.vc", (target,), span),)
+        stayed = "b.hs" if op.name == ops.MINUS.name else "b.lo"
+        return (self._inst(stayed, (target,), span),)
+
     def select_set(self, cond: Condition, dst: Reg, lhs: MCOperand, rhs: MCOperand,
                    span: Span) -> Sequence[MCInst]:
         """Instructions that put whether *lhs* and *rhs* stand in *cond* into *dst*.
@@ -1527,6 +1568,13 @@ def _as_argument(place: PhysReg, ty: Type,
         # whole of it, so this is the same register the callee computes into.
         return registers.view(place.unit, _FLOAT_REGISTER_BITS)
     return registers.view(place.unit, max(32, _width_of(ty)))
+
+
+def _named_at(operand: MCOperand, bits: int) -> MCOperand:
+    """The same operand, named at *bits* where naming it is what it is."""
+    if isinstance(operand, MCReg):
+        return MCReg(operand.reg, bits=bits)
+    return operand
 
 
 def _result_register(ty: Type, cconv: CallConvDesc,

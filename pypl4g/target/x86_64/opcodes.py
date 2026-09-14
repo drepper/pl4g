@@ -120,6 +120,25 @@ X86_INSTRS: Final[tuple[X86InstDesc, ...]] = (
     X86InstDesc("xor", (_rm(64), _r(64)), opcode=0x31, opsize=OpSize.REXW,
                 modrm=ModRMUse.REG_RM, reg_op=1, rm_op=0, implicit_defs=(EFLAGS,),
                 est_size=3, roles=_ACCUMULATE),
+    # add r/m8, r8                       00 /r
+    # The narrow widths are here because arithmetic on a narrow type is done at
+    # that width: what the flags then say is whether the answer went past the
+    # end of *that* type, which is the question being asked.
+    X86InstDesc("add", (_rm(8), _r(8)), opcode=0x00, modrm=ModRMUse.REG_RM,
+                reg_op=1, rm_op=0, implicit_defs=(EFLAGS,),
+                est_size=2, roles=_ACCUMULATE),
+    # add r/m16, r16                     66 01 /r
+    X86InstDesc("add", (_rm(16), _r(16)), opcode=0x01, opsize=OpSize.P66,
+                modrm=ModRMUse.REG_RM, reg_op=1, rm_op=0, implicit_defs=(EFLAGS,),
+                est_size=3, roles=_ACCUMULATE),
+    # sub r/m8, r8                       28 /r
+    X86InstDesc("sub", (_rm(8), _r(8)), opcode=0x28, modrm=ModRMUse.REG_RM,
+                reg_op=1, rm_op=0, implicit_defs=(EFLAGS,),
+                est_size=2, roles=_ACCUMULATE),
+    # sub r/m16, r16                     66 29 /r
+    X86InstDesc("sub", (_rm(16), _r(16)), opcode=0x29, opsize=OpSize.P66,
+                modrm=ModRMUse.REG_RM, reg_op=1, rm_op=0, implicit_defs=(EFLAGS,),
+                est_size=3, roles=_ACCUMULATE),
     # add r/m32, r32                     01 /r
     X86InstDesc("add", (_rm(32), _r(32)), opcode=0x01, modrm=ModRMUse.REG_RM,
                 reg_op=1, rm_op=0, implicit_defs=(EFLAGS,), flags=InstFlags.ZEXT32,
@@ -190,6 +209,32 @@ X86_INSTRS: Final[tuple[X86InstDesc, ...]] = (
     X86InstDesc("not", (_rm(64),), opcode=0xF7, opsize=OpSize.REXW,
                 modrm=ModRMUse.EXT_RM, ext=2, rm_op=0, est_size=3,
                 roles=(OperandRole.DEF_USE,)),
+    # add r/m8, imm8                     80 /0 ib
+    # The narrow immediate forms, for the same reason the narrow register forms
+    # are here: arithmetic on a narrow type is done at that type's width.
+    X86InstDesc("add", (_rm(8), _imm(8)), opcode=0x80,
+                modrm=ModRMUse.EXT_RM, ext=0, rm_op=0, imm_op=1, imm_bits=8,
+                implicit_defs=(EFLAGS,), est_size=3, roles=_ACCUMULATE),
+    # sub r/m8, imm8                     80 /5 ib
+    X86InstDesc("sub", (_rm(8), _imm(8)), opcode=0x80,
+                modrm=ModRMUse.EXT_RM, ext=5, rm_op=0, imm_op=1, imm_bits=8,
+                implicit_defs=(EFLAGS,), est_size=3, roles=_ACCUMULATE),
+    # add r/m16, imm8 (sign extended)    66 83 /0 ib
+    X86InstDesc("add", (_rm(16), _imm(8)), opcode=0x83, opsize=OpSize.P66,
+                modrm=ModRMUse.EXT_RM, ext=0, rm_op=0, imm_op=1, imm_bits=8,
+                implicit_defs=(EFLAGS,), est_size=4, roles=_ACCUMULATE),
+    # add r/m16, imm16                   66 81 /0 iw
+    X86InstDesc("add", (_rm(16), _imm(16)), opcode=0x81, opsize=OpSize.P66,
+                modrm=ModRMUse.EXT_RM, ext=0, rm_op=0, imm_op=1, imm_bits=16,
+                implicit_defs=(EFLAGS,), est_size=5, roles=_ACCUMULATE),
+    # sub r/m16, imm8 (sign extended)    66 83 /5 ib
+    X86InstDesc("sub", (_rm(16), _imm(8)), opcode=0x83, opsize=OpSize.P66,
+                modrm=ModRMUse.EXT_RM, ext=5, rm_op=0, imm_op=1, imm_bits=8,
+                implicit_defs=(EFLAGS,), est_size=4, roles=_ACCUMULATE),
+    # sub r/m16, imm16                   66 81 /5 iw
+    X86InstDesc("sub", (_rm(16), _imm(16)), opcode=0x81, opsize=OpSize.P66,
+                modrm=ModRMUse.EXT_RM, ext=5, rm_op=0, imm_op=1, imm_bits=16,
+                implicit_defs=(EFLAGS,), est_size=5, roles=_ACCUMULATE),
     # add r/m64, imm8 (sign extended)    REX.W 83 /0 ib
     X86InstDesc("add", (_rm(64), _imm(8)), opcode=0x83, opsize=OpSize.REXW,
                 modrm=ModRMUse.EXT_RM, ext=0, rm_op=0, imm_op=1, imm_bits=8,
@@ -523,6 +568,14 @@ X86_INSTRS: Final[tuple[X86InstDesc, ...]] = (
                 flags=InstFlags.TERMINATOR, est_size=6),
     # jge rel32                          0F 8D cd
     X86InstDesc("jge", (_rel(32),), opcode=0x8D, map=OpMap.M0F,
+                rel_op=0, rel_bits=32, implicit_uses=(EFLAGS,),
+                flags=InstFlags.TERMINATOR, est_size=6),
+    # jno rel32                          0F 81 cd
+    # What it reads is the overflow flag, which the arithmetic before it wrote:
+    # for a signed operation that is the whole of the question.  It is the
+    # negative form because what it jumps over is the report of the fault, which
+    # is how every check here is written: going past is what does not come back.
+    X86InstDesc("jno", (_rel(32),), opcode=0x81, map=OpMap.M0F,
                 rel_op=0, rel_bits=32, implicit_uses=(EFLAGS,),
                 flags=InstFlags.TERMINATOR, est_size=6),
     # jb rel32                           0F 82 cd

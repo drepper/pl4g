@@ -93,6 +93,7 @@ GROUPS: tuple[Group, ...] = (
            "logic-short-circuit": "three short circuits, which is six blocks",
            "saturating-precedence": "a sum and a product that saturate",
            "arithmetic-operators": "a sum and a product that check and can fault",
+           "arithmetic-at-each-width": "a sum and a difference at each of the four widths",
            "call-nested": "four calls, two of them nested",
            "assign-to-the-wildcard": "two answers taken and two dropped into '_'",
            "pure-by-default": "four pure functions, one of them writing its own array",
