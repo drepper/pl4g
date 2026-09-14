@@ -64,6 +64,7 @@ the parser does, and they are the floor everything else is measured against.
 | `3ef3db4` | 1.29 | 1.88 | 1.76 | 1.45 |
 | `90846b5` | 1.06 | 1.87 | 1.74 | 1.45 |
 | `e927edf` | 1.22 | 2.05 | 1.91 | 1.58 |
+| `53908ab` | 1.18 | 2.03 | 1.84 | 1.56 |
 
 ### Variables and memory
 
@@ -112,6 +113,7 @@ backend do.
 | `3ef3db4` | 1.34 | 2.01 | 1.56 |
 | `90846b5` | 1.27 | 1.77 | 1.52 |
 | `e927edf` | 1.35 | 1.93 | 1.73 |
+| `53908ab` | 1.38 | 1.89 | 1.64 |
 
 ### Register pressure
 
@@ -160,6 +162,7 @@ and they are the only ones that reach the frame.
 | `3ef3db4` | 2.26 | 7.37 |
 | `90846b5` | 2.01 | 7.35 |
 | `e927edf` | 2.29 | 7.44 |
+| `53908ab` | 2.30 | 7.47 |
 
 ### What is left out
 
@@ -208,6 +211,7 @@ decision log does.
 | `3ef3db4` | 1.72 | 1.74 |
 | `90846b5` | 1.55 | 1.64 |
 | `e927edf` | 1.71 | 1.79 |
+| `53908ab` | 1.67 | 1.77 |
 
 ### Expressions
 
@@ -256,6 +260,7 @@ optimizer does.
 | `3ef3db4` | 1.72 | 1.49 | 2.61 | 2.77 | 2.61 | 1.74 | 1.97 | 2.75 | 2.39 | 2.42 | 6.53 | 9.64 | 3.88 | 10.14 | 4.31 | 3.28 |  |
 | `90846b5` | 1.69 | 1.48 | 2.61 | 2.66 | 2.52 | 1.71 | 1.99 | 2.71 | 2.45 | 2.43 | 6.54 | 9.74 | 3.79 | 10.09 | 4.29 | 3.34 |  |
 | `e927edf` | 1.88 | 1.60 | 2.63 | 2.80 | 2.51 | 1.86 | 2.26 | 2.73 | 2.46 | 2.42 | 6.53 | 10.08 | 3.91 | 10.23 | 4.32 | 3.24 | 3.44 |
+| `53908ab` | 1.85 | 1.57 | 2.60 | 2.66 | 2.48 | 1.80 | 2.25 | 2.72 | 2.44 | 2.42 | 6.42 | 9.88 | 3.81 | 10.11 | 4.30 | 3.22 | 3.47 |
 
 ### Types
 
@@ -303,6 +308,7 @@ Definitions the program writes.  These move when the parser, the name resolution
 | `3ef3db4` | 1.41 | 3.85 | 3.92 |
 | `90846b5` | 1.40 | 3.91 | 3.94 |
 | `e927edf` | 1.54 | 3.80 | 3.89 |
+| `53908ab` | 1.50 | 3.81 | 3.87 |
 
 Process
 -------
@@ -355,6 +361,7 @@ worth showing here, and every figure is in the JSON beside this file.
 | `3ef3db4` | 82 | 93 |
 | `90846b5` | 82 | 93 |
 | `e927edf` | 82 | 94 |
+| `53908ab` | 82 | 94 |
 
 What each row is:
 
@@ -398,6 +405,7 @@ What each row is:
 - `3ef3db4` -- 📝 Timings for the collections front end
 - `90846b5` -- 📝 Take the collection sample out of the timings for good
 - `e927edf` -- 📝 Time the tuples too
+- `53908ab` -- ✨ Reach a place through an address held in a register
 
 What each program exercises:
 
