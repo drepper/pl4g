@@ -380,6 +380,20 @@ every optimization level, because a function nothing can reach is code the progr
 because an unoptimized build keeps what the program wrote and so decides nothing about it.  Recording happens whether or not the
 log was asked for, because a decision recorded only when someone is watching is one a test cannot check.
 
+**A call the program said it did not want goes at every optimization level**, which the `dropignored` pass does before anything
+else runs.  That is the rule the reachability pass already follows and for the same reason: what it acts on is not something the
+compiler noticed about the program but something the program said, and `_ ← f()` means the same thing however the compiler
+was asked to build.  The rest of what is dead still waits for `-O1`, a local nothing reads being the compiler noticing.
+
+It runs before `largeanswers` because that is what asks the question about the program as written.  **A function rewritten to
+answer through the caller's storage is impure from then on**: it writes through a pointer it was handed, whether or not the
+program was allowed to write anything.  Without that its calls answer with nothing, are used by nothing, and are swept away with
+the answer still unwritten -- which is a wrong-code bug the suite did not catch, the test for that shape having run only at `-O0`.
+It now runs at both.
+
+**The textual form prints `impure`**, and the reader takes it.  A form that left it out would read back as a module where
+everything is pure, which is the one mistake about this that writes wrong code rather than slow code.
+
 **A call that is not made is the largest thing the sweep does**, which is why it is recorded even though the value it produced had
 no name: what the program asked for was a function to run, and it does not run.  The entry names the callee and says why -- nothing
 reads what it answers with, and it changes nothing that outlives the call -- because the why is a property of a function the

@@ -273,6 +273,11 @@ To Do List for the pypl4g compiler
     is wanted, as in `⟦1u8, 2u8⟧⟦0⟧`, they say their own type and what they came to is carried to `_fill` rather than worked out
     twice, which is what keeps a call written as an element from being made twice.  The array decays as it always did.
 
+[ ] let a pure function answering through the caller's storage keep its purity.  `largeanswers` marks such a function impure,
+    because after the rewrite it writes through a pointer it was handed; so a call to one is never dropped even where nothing
+    reads the answer.  Dropping it would mean dropping the `frame` that was made for it too, which is a thing the sweep could
+    learn: a frame nothing else reads, handed to one call and read by loads that go with it.
+
 [ ] count registers per part recursively.  `parts_of` gives a tuple its members and stops, so a member that is itself several
     values -- a result among them, `〈u8?, u8〉` -- is given one register where it needs two, and the program is refused with a
     message about an encoding of `mov`.  It has never worked; what it wants is for everything that counts parts to flatten, which

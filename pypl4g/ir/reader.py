@@ -127,8 +127,11 @@ class _FunctionReader:
         special: SpecialKind | None = None
         priority: int | None = None
         abi: str | None = None
+        impure = False
         for word in words[1:]:
-            if word in (l.value for l in Linkage):
+            if word == "impure":
+                impure = True
+            elif word in (l.value for l in Linkage):
                 linkage = Linkage(word)
             elif word.startswith("cconv("):
                 cconv = word[len("cconv("):-1]
@@ -139,7 +142,7 @@ class _FunctionReader:
             elif word.startswith("abi("):
                 abi = word[len("abi("):-1]
         attrs = FuncAttrs(special=special, priority=priority, inline=InlineHint.DEFAULT,
-                          abi=abi)
+                          abi=abi, impure=impure)
         func = Function(name=name, ty=self._module.types.func_type(params, ret),
                         attrs=attrs, linkage=linkage, cconv=cconv)
         return func

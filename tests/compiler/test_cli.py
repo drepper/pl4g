@@ -297,3 +297,21 @@ def test_a_call_that_is_not_made_reaches_the_log(tmp_path: Path) -> None:
     calls = [d for d in decisions if d["kind"] == "drop-call"]
     assert [d["subject"] for d in calls] == ["worked_out"], decisions
     assert calls[0]["where"]["line"] == 6, calls
+
+
+def test_a_call_that_is_not_made_goes_at_every_level(tmp_path: Path) -> None:
+    """`_ \N{LEFTWARDS ARROW} f()` is the program speaking, so it does not wait for a flag.
+
+    Dropping a local nothing reads is the compiler noticing something, and waits
+    for `-O1`; this is the program saying that an answer is not wanted, and what
+    it says means the same thing however the compiler was asked to build it.
+    """
+    source = tmp_path / "t.pl4g"
+    source.write_text(DROPPED_CALL, encoding="utf-8")
+    log = tmp_path / "decisions.json"
+    proc = run_compiler(["-o", str(tmp_path / "out"),
+                         "".join(("--decision-log=", str(log))), str(source)])
+    assert proc.returncode == ExitCode.SUCCESS, proc.stderr
+    decisions = json.loads(log.read_text(encoding="utf-8"))["decisions"]
+    assert [d["subject"] for d in decisions if d["kind"] == "drop-call"] \
+        == ["worked_out"], decisions

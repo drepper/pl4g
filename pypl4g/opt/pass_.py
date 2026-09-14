@@ -63,16 +63,26 @@ def pipeline_for(level: int) -> Sequence[str]:
     # is how a function of that shape is called, so it runs whatever was asked
     # for, and it runs first, the passes after it seeing the calls as they will
     # be rather than as they were written.
+    # A call whose answer the program said it did not want is not an
+    # optimization either, and for the same reason: what it acts on is not
+    # something the compiler noticed but something the program said, so a reader
+    # who wrote `_ \N{LEFTWARDS ARROW}` is told the same thing at every level.  It goes before the
+    # rest so that it is what reports the call, whatever else runs afterwards.
+    # It runs before `largeanswers`, which is what asks the question about the
+    # program as written: after that pass a call of the wrong shape writes the
+    # caller's storage and is not droppable at all.
     if level <= 0:
-        return ("largeanswers", "dropunreached")
+        return ("dropignored", "largeanswers", "dropunreached")
     # Dead code is swept before that, since both of the others leave some.
-    return ("largeanswers", "constfold", "simplifycfg", "dce", "dropunreached")
+    return ("dropignored", "largeanswers", "constfold", "simplifycfg", "dce",
+            "dropunreached")
 
 
 def build_manager(level: int) -> PassManager:
     """Build the pass manager for optimization level *level*."""
     from .passes.constfold import ConstantFolding
     from .passes.dce import DeadCodeElimination
+    from .passes.dropignored import DropIgnoredCalls
     from .passes.dropunreached import DropUnreached
     from .passes.largeanswers import LargeAnswers
     from .passes.simplifycfg import SimplifyCFG
@@ -80,6 +90,7 @@ def build_manager(level: int) -> PassManager:
     available: dict[str, Pass] = {
         "constfold": ConstantFolding(),
         "dce": DeadCodeElimination(),
+        "dropignored": DropIgnoredCalls(),
         "dropunreached": DropUnreached(),
         "largeanswers": LargeAnswers(),
         "simplifycfg": SimplifyCFG(),

@@ -3,7 +3,7 @@ module "assign-global.pl4g" triple "x86_64-linux-none"
 
 let @counter: mut u8 internal = 1
 
-fn @main() → u8 internal cconv(pl4g) special(startup) {
+fn @main() → u8 internal cconv(pl4g) special(startup) impure {
 block0:
   %0 = mem.start
   %1 = store.u8 %0, @counter, 7

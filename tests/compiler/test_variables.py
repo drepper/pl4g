@@ -584,6 +584,10 @@ def test_an_answer_of_three_parts_goes_through_the_callers_storage(  # noqa: ANN
     assert proc.returncode == 0, describe(proc)
     text = output.read_text(encoding="utf-8")
     assert "fn @three(ptr<mut \N{LEFT ANGLE BRACKET}u8, u8, u8\N{RIGHT ANGLE BRACKET}>) \N{RIGHTWARDS ARROW} void" in text, text
+    # It writes through the pointer now, so a call to it is one that has an
+    # effect -- without which the call is swept away with the answer unwritten,
+    # which is what the textual form saying so is for.
+    assert "\N{RIGHTWARDS ARROW} void internal cconv(pl4g) impure" in text, text
     assert "frame.ptr<mut \N{LEFT ANGLE BRACKET}u8, u8, u8\N{RIGHT ANGLE BRACKET}>" in text, text
     assert "ret.\N{LEFT ANGLE BRACKET}" not in text, text
 

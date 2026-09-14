@@ -144,6 +144,12 @@ def render_function(func: Function, out: list[str]) -> None:
         head.append("".join((" priority(", str(func.attrs.priority), ")")))
     if func.attrs.abi is not None:
         head.append("".join((" abi(", func.attrs.abi, ")")))
+    if func.attrs.impure:
+        # It is here because it changes what may be done to a call: a call to a
+        # function that says nothing is one nothing has to make.  A form that
+        # left it out would read back as a module where everything is pure,
+        # which is the one mistake about this that writes wrong code.
+        head.append(" impure")
     if func.is_declaration:
         out.append("".join(head))
         return

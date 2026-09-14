@@ -16,6 +16,8 @@ an argument any program can pass, and no rule about arguments should have to kno
 that one of them is not one.
 """
 
+from dataclasses import replace
+
 from ...ir.decisions import DecisionKind, DecisionLog
 from ...ir.function import BasicBlock, Function, ReturnStyle
 from ...ir.inst import (BinOp, BinaryInst, CallInst, CastInst, CastKind,
@@ -89,6 +91,13 @@ class LargeAnswers:
         """
         place = module.types.ptr_type(func.ty.ret, mutable=True)
         func.ty = module.types.func_type((*func.ty.params, place), VOID)
+        # It writes through a pointer it was handed, which is what impure means
+        # once the language is behind us: whether the program was allowed to
+        # write it was settled while the program was checked, and what is left
+        # is that a call to it now changes memory of the caller's.  Without this
+        # a call to a pure function of this shape answers with nothing, is used
+        # by nothing, and is swept away with the answer still unwritten.
+        func.attrs = replace(func.attrs, impure=True)
         if func.blocks:
             func.blocks[0].add_param(place, "answer")
 

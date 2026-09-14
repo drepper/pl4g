@@ -1,4 +1,6 @@
-※ pl4g-test: compile=ok run=native,qemu exit=42 diag=none
+※ pl4g-test: compile=ok opt=0,1
+※ pl4g-test: run=native,qemu exit=42
+※ pl4g-test: diag=none
 
 ※ A function says how it hands back an answer of more than one value, and the
 ※ one style there is answers two of them in the registers the convention names
