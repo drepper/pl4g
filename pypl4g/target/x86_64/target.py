@@ -25,6 +25,7 @@ from ..faults import Messages
 from ..pool import Constants
 from ..globals import emit_globals
 from ..vectors import Vectors, settle as settle_vectors
+from ...ir.inst import BinOp, UnOp
 from ..target import ImageDefaults
 from .abi import CC_PL4G, lookup as lookup_cconv
 from . import levels
@@ -104,12 +105,19 @@ class X86_64Target:
     def vectors(self) -> Vectors:
         """What this machine can do to a run of elements at once.
 
-        Nothing yet.  The registers are there and so is the register file that
-        describes them; what is not there is the instructions, so every run is
-        still done an element at a time -- which is what the program means, and
-        is why saying "nothing" is a complete answer rather than a gap.
+        Sixteen bytes at a time, at every level: the SSE2 integer instructions
+        are part of what "x86-64" means, so this is what the oldest machine the
+        architecture defines can do and there is no level to ask for it with.
+        The wider registers the newer levels add are not used yet.
+
+        The three bitwise operations are what it can do to a whole register so
+        far.  They are the ones whose answer in a lane depends on that lane
+        alone and which can never fail, so there is nothing to check afterwards
+        -- which is why they are the ones that come first.
         """
-        return Vectors()
+        return Vectors(bits=128, widest=64,
+                       binary=frozenset((BinOp.AND, BinOp.OR, BinOp.XOR)),
+                       unary=frozenset((UnOp.NOT,)))
 
     def generate(self, module: Module, asm: Assembler, diags: DiagEngine,
                  opt_level: int, sources: SourceManager | None = None) -> None:

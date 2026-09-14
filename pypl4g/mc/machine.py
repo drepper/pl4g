@@ -75,10 +75,16 @@ class FrameInfo:
         self.taken += size
         return offset
 
-    def allocate(self) -> int:
-        """Take a slot for one register and return its offset."""
+    def allocate(self, size: int | None = None) -> int:
+        """Take a slot for one register and return its offset.
+
+        *size* is how many bytes that register is, where it is not the ordinary
+        one: a register holding a whole run of elements is wider than a word and
+        saving only a word of it would lose the rest.
+        """
         self.slots += 1
-        return self.reserve(self.slot_size, self.slot_size)
+        wide = self.slot_size if size is None else max(size, self.slot_size)
+        return self.reserve(wide, wide)
 
     @property
     def size(self) -> int:

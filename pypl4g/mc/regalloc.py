@@ -509,7 +509,7 @@ class LinearScan:
                                             len(self._order_for(victim)))
             if victim.ident in assignment.spilled:
                 continue
-            slots[victim.ident] = function.frame.allocate()
+            slots[victim.ident] = function.frame.allocate(victim.bits // 8)
         assignment.spilled.update(slots)
         wanted = {v.ident: v for v in victims if v.ident in assignment.spilled}
         for block in function.blocks:

@@ -94,8 +94,42 @@ class ClearRegisterWithXor:
                       span=inst.span)
 
 
+class DropMovesToItself:
+    """Removes a move of a register to the register it is already in.
+
+    The lowering writes one wherever an operation's destination is also its
+    first source, since which register each of the two ends up in is not known
+    until the allocator has run -- and the allocator's hint often makes them the
+    same one, which is what this then notices.  It moves nothing and writes no
+    flags, so removing it is safe wherever it stands.
+    """
+
+    name = "x86.drop-moves-to-itself"
+
+    def run(self, function: MachineFunction) -> bool:
+        """Remove them; report whether any went."""
+        changed = False
+        for block in function.blocks:
+            kept = [inst for inst in block.insts if not _moves_to_itself(inst)]
+            if len(kept) != len(block.insts):
+                block.insts = kept
+                changed = True
+        return changed
+
+
+def _moves_to_itself(inst: MCInst) -> bool:
+    """Whether this instruction puts a register where it already is."""
+    if inst.desc.mnemonic not in ("mov", "movdqu") or len(inst.operands) != 2:
+        return False
+    dst, src = inst.operands
+    return (isinstance(dst, MCReg) and isinstance(src, MCReg)
+            and isinstance(dst.reg, PhysReg) and isinstance(src.reg, PhysReg)
+            and dst.reg.unit is src.reg.unit and dst.width == src.width
+            and dst.reg.byte_off == src.reg.byte_off)
+
+
 def passes_for(table: InstrTable, opt_level: int) -> Sequence[MachinePass]:
     """The machine passes to run at optimization level *opt_level*."""
     if opt_level <= 0:
         return ()
-    return (ClearRegisterWithXor(table),)
+    return (ClearRegisterWithXor(table), DropMovesToItself())

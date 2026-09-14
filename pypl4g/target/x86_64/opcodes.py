@@ -521,6 +521,96 @@ X86_INSTRS: Final[tuple[X86InstDesc, ...]] = (
     X86InstDesc("andpd", (_x(), _xm(128)), opcode=0x54, map=OpMap.M0F,
                 mandatory_prefix=0x66, modrm=ModRMUse.REG_RM,
                 reg_op=0, rm_op=1, est_size=4, roles=_ACCUMULATE),
+    # -- a whole run of elements in one register -------------------------------
+    # These are the SSE2 integer instructions, which every x86-64 processor has:
+    # the architecture's own oldest level includes them, so a run of elements is
+    # done this way at every level rather than only at the newer ones.  A read
+    # names the number of bytes it actually reads, which is what lets a run
+    # shorter than a register be read without touching what lies beyond it, and
+    # what makes the lanes above it zero rather than whatever was there.
+    #
+    # movdqu xmm, xmm/m128               F3 0F 6F /r
+    X86InstDesc("movdqu", (_x(), _xm(128)), opcode=0x6F, map=OpMap.M0F,
+                mandatory_prefix=0xF3, modrm=ModRMUse.REG_RM,
+                reg_op=0, rm_op=1, est_size=4,
+                roles=(OperandRole.DEF, OperandRole.USE)),
+    # movdqu m128, xmm                   F3 0F 7F /r
+    X86InstDesc("movdqu", (_mem(128), _x()), opcode=0x7F, map=OpMap.M0F,
+                mandatory_prefix=0xF3, modrm=ModRMUse.REG_RM,
+                reg_op=1, rm_op=0, est_size=4, roles=_READS_BOTH),
+    # movq xmm, xmm/m64                  F3 0F 7E /r
+    # Eight bytes read into the low half and the high half cleared, which is
+    # what makes a run of eight bytes a value with nothing of its neighbours in
+    # it.
+    X86InstDesc("movq", (_x(), _xm(64)), opcode=0x7E, map=OpMap.M0F,
+                mandatory_prefix=0xF3, modrm=ModRMUse.REG_RM,
+                reg_op=0, rm_op=1, est_size=4,
+                roles=(OperandRole.DEF, OperandRole.USE)),
+    # movq xmm/m64, xmm                  66 0F D6 /r
+    X86InstDesc("movq", (_mem(64), _x()), opcode=0xD6, map=OpMap.M0F,
+                mandatory_prefix=0x66, modrm=ModRMUse.REG_RM,
+                reg_op=1, rm_op=0, est_size=4, roles=_READS_BOTH),
+    # movd xmm, r/m32                    66 0F 6E /r
+    X86InstDesc("movd", (_x(), _mem(32)), opcode=0x6E, map=OpMap.M0F,
+                mandatory_prefix=0x66, modrm=ModRMUse.REG_RM,
+                reg_op=0, rm_op=1, est_size=4,
+                roles=(OperandRole.DEF, OperandRole.USE)),
+    X86InstDesc("movd", (_x(), _r(32)), opcode=0x6E, map=OpMap.M0F,
+                mandatory_prefix=0x66, modrm=ModRMUse.REG_RM,
+                reg_op=0, rm_op=1, est_size=4,
+                roles=(OperandRole.DEF, OperandRole.USE)),
+    # movd r/m32, xmm                    66 0F 7E /r
+    X86InstDesc("movd", (_mem(32), _x()), opcode=0x7E, map=OpMap.M0F,
+                mandatory_prefix=0x66, modrm=ModRMUse.REG_RM,
+                reg_op=1, rm_op=0, est_size=4, roles=_READS_BOTH),
+    X86InstDesc("movd", (_r(32), _x()), opcode=0x7E, map=OpMap.M0F,
+                mandatory_prefix=0x66, modrm=ModRMUse.REG_RM,
+                reg_op=1, rm_op=0, est_size=4,
+                roles=(OperandRole.DEF, OperandRole.USE)),
+    # movq xmm, r/m64                    66 REX.W 0F 6E /r
+    X86InstDesc("movq", (_x(), _r(64)), opcode=0x6E, map=OpMap.M0F,
+                mandatory_prefix=0x66, opsize=OpSize.REXW,
+                modrm=ModRMUse.REG_RM, reg_op=0, rm_op=1, est_size=5,
+                roles=(OperandRole.DEF, OperandRole.USE)),
+    # pand xmm, xmm/m128                 66 0F DB /r
+    X86InstDesc("pand", (_x(), _xm(128)), opcode=0xDB, map=OpMap.M0F,
+                mandatory_prefix=0x66, modrm=ModRMUse.REG_RM,
+                reg_op=0, rm_op=1, est_size=4, roles=_ACCUMULATE),
+    # por xmm, xmm/m128                  66 0F EB /r
+    X86InstDesc("por", (_x(), _xm(128)), opcode=0xEB, map=OpMap.M0F,
+                mandatory_prefix=0x66, modrm=ModRMUse.REG_RM,
+                reg_op=0, rm_op=1, est_size=4, roles=_ACCUMULATE),
+    # pxor xmm, xmm/m128                 66 0F EF /r
+    X86InstDesc("pxor", (_x(), _xm(128)), opcode=0xEF, map=OpMap.M0F,
+                mandatory_prefix=0x66, modrm=ModRMUse.REG_RM,
+                reg_op=0, rm_op=1, est_size=4, roles=_ACCUMULATE),
+    # pcmpeqd xmm, xmm/m128              66 0F 76 /r
+    # Asked of a register and itself it is how every bit of one is set, there
+    # being no instruction that puts a constant in one of these.
+    X86InstDesc("pcmpeqd", (_x(), _xm(128)), opcode=0x76, map=OpMap.M0F,
+                mandatory_prefix=0x66, modrm=ModRMUse.REG_RM,
+                reg_op=0, rm_op=1, est_size=4, roles=_ACCUMULATE),
+    # punpcklbw xmm, xmm/m128            66 0F 60 /r
+    # The three that double the width of what is in the low half by taking every
+    # value twice, which is how one value is spread over a whole register: a
+    # byte becomes a pair, the pair a quadruple, and so on until the register is
+    # full.
+    X86InstDesc("punpcklbw", (_x(), _xm(128)), opcode=0x60, map=OpMap.M0F,
+                mandatory_prefix=0x66, modrm=ModRMUse.REG_RM,
+                reg_op=0, rm_op=1, est_size=4, roles=_ACCUMULATE),
+    # punpcklwd xmm, xmm/m128            66 0F 61 /r
+    X86InstDesc("punpcklwd", (_x(), _xm(128)), opcode=0x61, map=OpMap.M0F,
+                mandatory_prefix=0x66, modrm=ModRMUse.REG_RM,
+                reg_op=0, rm_op=1, est_size=4, roles=_ACCUMULATE),
+    # punpcklqdq xmm, xmm/m128           66 0F 6C /r
+    X86InstDesc("punpcklqdq", (_x(), _xm(128)), opcode=0x6C, map=OpMap.M0F,
+                mandatory_prefix=0x66, modrm=ModRMUse.REG_RM,
+                reg_op=0, rm_op=1, est_size=4, roles=_ACCUMULATE),
+    # pshufd xmm, xmm/m128, imm8         66 0F 70 /r ib
+    X86InstDesc("pshufd", (_x(), _xm(128), _imm(8)), opcode=0x70, map=OpMap.M0F,
+                mandatory_prefix=0x66, modrm=ModRMUse.REG_RM,
+                reg_op=0, rm_op=1, imm_op=2, imm_bits=8, est_size=5,
+                roles=(OperandRole.DEF, OperandRole.USE, OperandRole.USE)),
     # cvtss2sd xmm, xmm/m32              F3 0F 5A /r
     X86InstDesc("cvtss2sd", (_x(), _xm(32)), opcode=0x5A, map=OpMap.M0F,
                 mandatory_prefix=0xF3, modrm=ModRMUse.REG_RM,

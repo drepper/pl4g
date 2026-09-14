@@ -175,6 +175,32 @@ class InstructionSelector(Protocol):
         """
         ...
 
+    def select_run_move(self, dst: Reg | MCMem, src: MCOperand, bits: int,
+                        span: Span) -> Sequence[MCInst]:
+        """Instructions that move *bits* of a run of elements into or out of a
+        register.
+
+        A read of fewer bits than the register holds leaves the rest of it
+        clear, which is what lets a run shorter than a register be worked on in
+        one: the lanes beyond the run hold zero and what is done to them is
+        thrown away.
+        """
+        ...
+
+    def select_run_op(self, op: Op, dst: Reg, left: MCOperand, right: MCOperand,
+                      span: Span) -> Sequence[MCInst]:
+        """Instructions that do *op* to every lane of a run at once."""
+        ...
+
+    def select_run_splat(self, dst: Reg, src: MCOperand, bits: int,
+                         span: Span) -> Sequence[MCInst]:
+        """Instructions that put one value of *bits* in every lane of *dst*."""
+        ...
+
+    def select_run_ones(self, dst: Reg, span: Span) -> Sequence[MCInst]:
+        """Instructions that set every bit of a run register."""
+        ...
+
     def select_float_op(self, op: Op, dst: Reg, left: MCOperand, right: MCOperand,
                         bits: int, span: Span) -> Sequence[MCInst]:
         """Instructions that compute *op* over two floating-point values."""
@@ -419,6 +445,11 @@ class Assembler:
         if wrong is not None:
             raise MalformedGraph(wrong)
         self._assign_registers(function)
+        # And again, now that every value has a register: which two of them are
+        # the same one is not a question that can be asked before this, and one
+        # of the rewrites is about exactly that.
+        for machine_pass in self._machine_passes:
+            machine_pass.run(function)
         self._make_frame(function)
         self._streamer.emit_align(self._alignment, self._pad_byte)
         # What is not exported is kept in twice over: bound locally, so nothing
@@ -694,6 +725,30 @@ class Assembler:
         self._block.successors.append(target)
         self._emit(self._selector.select_branch_if_in_range(
             op, signed, self._symref(target), span))
+
+    def run_move(self, dst: Reg | MCMem, src: MCOperand, bits: int,
+                 span: Span = INVALID_SPAN) -> None:
+        """Move *bits* of a run of elements into *dst*."""
+        self._emit(self._selector.select_run_move(dst, src, bits, span))
+
+    def run_store(self, place: MCMem, src: MCOperand, bits: int,
+                  span: Span = INVALID_SPAN) -> None:
+        """Write *bits* of a run of elements into *place*."""
+        self._emit(self._selector.select_run_move(place, src, bits, span))
+
+    def run_op(self, op: Op, dst: Reg, left: MCOperand, right: MCOperand,
+               span: Span = INVALID_SPAN) -> None:
+        """Do *op* to every lane of a run at once."""
+        self._emit(self._selector.select_run_op(op, dst, left, right, span))
+
+    def run_splat(self, dst: Reg, src: MCOperand, bits: int,
+                  span: Span = INVALID_SPAN) -> None:
+        """Put one value of *bits* in every lane of *dst*."""
+        self._emit(self._selector.select_run_splat(dst, src, bits, span))
+
+    def run_ones(self, dst: Reg, span: Span = INVALID_SPAN) -> None:
+        """Set every bit of a run register."""
+        self._emit(self._selector.select_run_ones(dst, span))
 
     def float_op(self, op: Op, dst: Reg, left: MCOperand, right: MCOperand,
                  bits: int, span: Span = INVALID_SPAN) -> None:
