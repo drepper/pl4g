@@ -3390,6 +3390,7 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
         0x3009, 49,
       );
       if (lookahead == '\t' ||
+          lookahead == '\n' ||
           lookahead == '\r' ||
           lookahead == ' ') SKIP(0);
       if (('1' <= lookahead && lookahead <= '9')) ADVANCE(111);
@@ -3607,6 +3608,7 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
         0x3009, 49,
       );
       if (lookahead == '\t' ||
+          lookahead == '\n' ||
           lookahead == '\r' ||
           lookahead == ' ') SKIP(26);
       if (('1' <= lookahead && lookahead <= '9')) ADVANCE(111);
@@ -3650,6 +3652,7 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
         0x3009, 49,
       );
       if (lookahead == '\t' ||
+          lookahead == '\n' ||
           lookahead == '\r' ||
           lookahead == ' ') SKIP(27);
       if (('1' <= lookahead && lookahead <= '9')) ADVANCE(117);
@@ -4095,6 +4098,7 @@ static bool ts_lex_keywords(TSLexer *lexer, TSStateId state) {
         'w', 12,
       );
       if (lookahead == '\t' ||
+          lookahead == '\n' ||
           lookahead == '\r' ||
           lookahead == ' ') SKIP(0);
       END_STATE();

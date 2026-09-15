@@ -24,7 +24,18 @@ module.exports = grammar({
   // tokens, because anything used as an extra has to be one.  The longer of
   // the two wins where both match, which is what makes `※※` a documentation
   // comment rather than an ordinary one that happens to start with a mark.
-  extras: $ => [/[ \t\r]/, $.doc_comment, $.line_comment],
+  //
+  // An end of line is an extra too, which is how a line break inside brackets
+  // is read.  The external scanner is asked first at every position, and where
+  // the parser is willing to end a statement it answers with `_newline`, an
+  // indent or a dedent, so the layout rules are decided there and this never
+  // sees those line breaks.  What is left is the line breaks the parser cannot
+  // end a statement at, and inside brackets those are exactly the ones the
+  // compiler's lexer suppresses while a bracket is open.  tree-sitter-python
+  // reads Python's identical rule the identical way, and for the same reason:
+  // the scanner cannot be asked how many brackets are open, because it is not
+  // called between two tokens the parser is confident about.
+  extras: $ => [/[ \t\r]/, /\n/, $.doc_comment, $.line_comment],
 
   // `while NAME :` is two statements until the token after the colon is seen:
   // a loop that binds a name to what an iterator gives, or a loop whose

@@ -4299,6 +4299,31 @@ default (4530) are the three remaining ways a call can fail to name each paramet
 done on the lowered values, after every argument has been worked out, so the rule that a call's arguments run left to right did
 not have to acquire an exception.
 
+---
+
+## 2026-09-16T10:20+02:00 — compiler
+
+**A line break inside brackets, in the tree-sitter grammar**
+
+The compiler's lexer counts open brackets and gives out no end of line while any of them is, so a parameter list or a call may be
+written down the page.  The tree-sitter grammar refused every such program, and the specification had never stated the rule the
+compiler was implementing; both are fixed here, the specification first.
+
+**An end of line is an extra in the grammar.**  The external scanner is asked first at every position it is asked at, so wherever
+the parser would end a statement it still answers with a newline, an indent or a dedent and the layout rules are decided exactly
+where they were; the extra catches the breaks the parser would not end a statement at, which inside brackets are the ones the
+compiler suppresses.  **tree-sitter-python** reads Python's identical rule the identical way.
+
+The alternative was for the scanner to count the brackets, as the compiler's lexer does.  It cannot: tree-sitter asks an external
+scanner only where one of its tokens is valid in the parse state, and inside a bracket none of the three is, so the scanner is
+never shown most of the brackets.  Making them external tokens would show them to it, at the price of the scanner lexing a dozen
+characters the grammar lexes today, and of every rule naming a bracket naming an aliased token instead.
+
+What the extra costs is that the grammar also admits a line break after a binary operator, after the `=` of a definition and after
+`fn`, where the compiler ends the statement and reports an error.  A grammar that takes a few programs the compiler refuses is the
+safe direction for one an editor colours with -- the opposite, refusing programs that are perfectly good, is what this fixes -- and
+the compiler remains what decides whether a program is one.
+
 Open questions
 --------------
 

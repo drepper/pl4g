@@ -4240,6 +4240,10 @@
       "value": "[ \\t\\r]"
     },
     {
+      "type": "PATTERN",
+      "value": "\\n"
+    },
+    {
       "type": "SYMBOL",
       "name": "doc_comment"
     },

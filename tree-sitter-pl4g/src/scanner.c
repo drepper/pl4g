@@ -1,10 +1,16 @@
 // The external scanner: the tokens a context-free grammar cannot produce.
 //
-// All three come from the layout rules.  A newline ends a statement, but
-// only where one is wanted: a blank line, a line holding nothing but a comment,
-// and anything inside brackets are not the end of a statement, so no token is
-// produced for them.  An indent and a dedent stand for a column that grew or
-// shrank, and are what a block written by indentation is delimited by.
+// All three come from the layout rules.  A newline ends a statement, but only
+// where one is wanted: a blank line and a line holding nothing but a comment
+// are not the end of a statement, so no token is produced for them.  An indent
+// and a dedent stand for a column that grew or shrank, and are what a block
+// written by indentation is delimited by.
+//
+// A line break inside brackets is not one of these and is not decided here.
+// The scanner is asked only where the parser would accept one of the three, and
+// inside brackets it would accept none of them, so it is not asked at all; the
+// grammar reads such a break as an extra instead.  What that costs is stated
+// where the extras are declared.
 //
 // A comment is not one of them: both kinds are ordinary tokens the grammar
 // treats as extras.  The scanner has to know about them all the same, because a

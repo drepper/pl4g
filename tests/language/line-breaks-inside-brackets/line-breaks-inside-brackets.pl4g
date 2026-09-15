@@ -1,0 +1,62 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ An end of line inside brackets does not end a statement.  The lexer counts
+※ the brackets that are open and gives out no end-of-line token while any of
+※ them is, which is Python's rule and is what lets a long list be written down
+※ the page instead of across it -- the thing a generator emitting a call with
+※ twenty arguments would otherwise have no way to make readable.
+※
+※ Every kind of bracket counts: the parentheses of a parameter list, a call and
+※ a grouping; the white square brackets of an array; the angle brackets of a
+※ tuple; the ones an array is looked in with; the `@[` of an attribute list;
+※ and the braces of a block written in the explicit notation.
+
+@[startup,
+  impure]
+fn main() → u6:
+    ※ an array written down the page
+    let v: u8⟦4⟧ = ⟦10u8,
+                    20u8,
+                    30u8,
+                    40u8⟧
+    ※ a tuple, and a grouping
+    let pair: 〈u8,
+               u16〉 = 〈1u8,
+                        2u16〉
+    let grouped: u8 = (1u8 +
+                       2u8) × 3u8
+    ※ a call whose arguments stand on lines of their own, named and not
+    let summed: u8 = four(1u8,
+                          2u8,
+                          .fourth ← 8u8,
+                          .third ← 4u8)
+    ※ a lookup written over two lines
+    let picked: u8 = v⟦1u8 +
+                       1u8⟧
+    if v⟦0⟧ ≠ 10u8 ∨ v⟦3⟧ ≠ 40u8:
+        1u6
+    elif pair⟦0⟧ ≠ 1u8 ∨ pair⟦1⟧ ≠ 2u16:
+        2u6
+    elif grouped ≠ 9u8:
+        3u6
+    elif summed ≠ 15u8:
+        4u6
+    elif picked ≠ 30u8:
+        5u6
+    ※ and the explicit notation, where a semicolon is the only separator and an
+    ※ end of line says nothing at all
+    elif braced(2u8) ≠ 6u8:
+        6u6
+    else:
+        0u6
+
+※ A parameter list down the page, which is what a function with more
+※ parameters than fit across one is written as.
+fn four(first: u8,
+        second: u8,
+        third: u8 ← 0u8,
+        fourth: u8 ← 0u8) → u8:
+    first + second + third + fourth
+
+fn braced(n: u8) → u8 { let tripled: u8 = n × 3u8 ;
+    tripled }

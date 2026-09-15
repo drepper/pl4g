@@ -88,6 +88,26 @@ too -- but it takes one, so that two short statements may stand on one line and 
 which notation it is written in.  Inside braces there are no ends of lines to separate with, so the semicolon is the only
 separator there.
 
+**An end of line inside brackets does not end a statement.**  The lexer counts the brackets that are open -- the parentheses of a
+call, a parameter list or a grouping, the brackets an array or a list is written and looked in with, the marks a tuple, a set and
+an attribute list are written with, and the braces of an explicit block -- and gives out no end of line while any of them is.  So
+a call with more arguments than fit across a line, or a function with more parameters, is written down the page:
+
+```
+fn four(first: u8,
+        second: u8,
+        third: u8 ← 0u8) → u8:
+    …
+
+let n: u8 = four(1u8,
+                 2u8,
+                 .third ← 8u8)
+```
+
+That is Python's rule and is written here for Python's reason: the alternative is a mark at the end of every line that continues,
+which a generator would have to emit and a reader would have to look for.  There is no such mark in this language -- a line that
+continues is a line inside brackets, and nothing else.
+
 **A semicolon separates and never terminates**, which is the whole of the rule and decides everything else about it.  What follows
 a semicolon is another statement; where nothing is written there, that statement is the empty one.  So `a;` is two statements and
 not one, `a;;` is three, and a body ending in a semicolon ends in a statement that does nothing.  That matters because the last

@@ -1794,6 +1794,34 @@ neither the call nor the definition says anything but the places, and is otherwi
 defaults in play "three where four were wanted" does not say which one is missing.
 
 
+A line break the layout does not end a statement at
+---------------------------------------------------
+
+The compiler's lexer counts open brackets and gives out no `NEWLINE` while any of them is, which is what lets a parameter list or
+a call be written down the page.  The tree-sitter grammar could not read those programs at all, and the reason is worth writing
+down because it is a property of the two designs and not a bug in either.
+
+The external scanner is the only thing that may consume a line break, since a newline matches nothing in the grammar's own lexer.
+But tree-sitter asks an external scanner only where at least one of its tokens is valid in the parse state, and inside a bracket
+none of `_newline`, `_indent` and `_dedent` is: the parser is in the middle of a list and would not accept the end of a statement
+there.  So the scanner is never asked, and the line break reached the internal lexer, which had no rule for it.  (It reached the
+scanner in the end, but only through error recovery, where every token is valid -- and the scanner then answered with an indent,
+which is where the error came from.)
+
+The scanner cannot count the brackets itself for the same reason: it is not called between two tokens the parser is confident
+about, so it never sees most of them.  Making the brackets external tokens would fix that and would put the lexing of a dozen
+characters in the scanner to do it.
+
+**An end of line is therefore an extra.**  The scanner is still asked first at every position it is asked at, so wherever the
+parser would end a statement the answer is `_newline`, an indent or a dedent, and the layout rules are decided exactly where they
+were.  The extra catches what is left, and inside brackets what is left is precisely the breaks the compiler suppresses.
+tree-sitter-python reads Python's identical rule the identical way.
+
+What it costs is that the grammar also admits a line break where the compiler ends the statement and reports an error: after a
+binary operator, after the `=` of a definition, after the `fn` keyword.  The grammar accepts a few programs the compiler refuses,
+which is the safe direction for a grammar an editor colours with, and the compiler remains what decides whether a program is one.
+
+
 Expectations
 ------------
 

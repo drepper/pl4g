@@ -411,10 +411,11 @@ To Do List for the pypl4g compiler
     several has nowhere to go.  It is what stops `\N{APL FUNCTIONAL SYMBOL QUAD}enumerate` counting the turns of a dictionary, whose turn is already a
     pair, and it is the same gap as the array below.
 
-[ ] let the tree-sitter grammar read a parameter list written over several lines.  The compiler's lexer suppresses newlines
-    inside parentheses and the grammar does not, so `fn f(a: u8,` followed by the rest on the next line is a program the compiler
-    takes and the grammar refuses.  Found writing a function with five parameters for the defaults test, which had to be put on
-    one line.
+[ ] narrow what the tree-sitter grammar admits where the compiler ends a statement.  An end of line is an extra there, which is
+    what lets a line break inside brackets be read; it also admits one after a binary operator, after the `=` of a definition and
+    after `fn`, which the compiler refuses.  Closing it means the scanner counting open brackets, which means the brackets
+    becoming external tokens it lexes itself.  The direction is the safe one -- the grammar takes a few programs the compiler
+    does not -- so this is fidelity and not a defect.
 
 [ ] report a tuple holding an array.  `〈⟦1u8, 2u8⟧〉` reaches the code generator and fails there (9901, "making a 〈u8⟦2⟧〉, which
     is one value and not several"), so what a reader is told is an internal error about a program the front end accepted.  Either

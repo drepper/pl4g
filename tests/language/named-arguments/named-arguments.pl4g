@@ -83,7 +83,8 @@ fn three(first: u8 ← 1u8, middle: u8 ← 10u8, last: u8 ← 100u8) → u8:
 
 ※ A default of every kind of value the compiler settles: a number, a truth
 ※ value, a floating-point number, a code point and a value of an enumeration.
-fn sizes(n: u16, yes: bool ← false, scale: f64 ← 2.5, mark: char ← 'x', hue: Colour ← Colour.red) → bool:
+fn sizes(n: u16, yes: bool ← false, scale: f64 ← 2.5, mark: char ← 'x',
+         hue: Colour ← Colour.red) → bool:
     n = 10u16 ∧ (yes ∨ ¬yes) ∧ scale > 2.0 ∧ mark = 'x' ∧ hue = Colour.red
 
 fn two(first: u8, second: u8) → u8:
