@@ -1,0 +1,45 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ `⧺` joins two arrays: the elements of the left, then the elements of the
+※ right, in an array as long as the two together.  It is not one of the
+※ operators that reach an array by being applied to every element of it -- it
+※ is defined on arrays themselves, its two sides are of two different types,
+※ and what it answers with is of a third.
+※
+※ `++` is the accepted substitute, which is Haskell's spelling of the same
+※ operation and is two characters, this language having no operator that adds
+※ one to something.
+※
+※ The lengths here are chosen so that the copy lands on either side of a
+※ register: two and three go an element at a time wherever they are compiled,
+※ sixteen is a whole register on every machine, and the join of the two
+※ sixteens is thirty-two, which is one register on the newer x86-64 levels and
+※ two on the older.
+
+let a: u8⟦3⟧ = ⟦1u8, 2u8, 3u8⟧
+let b: u8⟦2⟧ = ⟦4u8, 5u8⟧
+let wide: u8⟦16⟧ = ⟦0u8, 1u8, 2u8, 3u8, 4u8, 5u8, 6u8, 7u8, 8u8, 9u8, 10u8, 11u8, 12u8, 13u8, 14u8, 15u8⟧
+let more: u8⟦16⟧ = ⟦100u8, 101u8, 102u8, 103u8, 104u8, 105u8, 106u8, 107u8, 108u8, 109u8, 110u8, 111u8, 112u8, 113u8, 114u8, 115u8⟧
+
+@[startup]
+fn main() → u8:
+    let both: u8⟦5⟧ = a ⧺ b
+    let long: u8⟦32⟧ = wide ⧺ more
+    ※ the substitute says the same thing
+    let same: u8⟦5⟧ = a ++ b
+    ※ it binds looser than everything that works out what goes in an array
+    let raised: u8⟦5⟧ = a + 10u8 ⧺ b + 20u8
+    ※ and it joins what it made, left to right
+    let three: u8⟦8⟧ = a ⧺ b ⧺ a
+    if both⟦0⟧ ≠ 1u8 ∨ both⟦2⟧ ≠ 3u8 ∨ both⟦3⟧ ≠ 4u8 ∨ both⟦4⟧ ≠ 5u8:
+        1u8
+    elif long⟦0⟧ ≠ 0u8 ∨ long⟦15⟧ ≠ 15u8 ∨ long⟦16⟧ ≠ 100u8 ∨ long⟦31⟧ ≠ 115u8:
+        2u8
+    elif same⟦0⟧ ≠ 1u8 ∨ same⟦4⟧ ≠ 5u8:
+        3u8
+    elif raised⟦0⟧ ≠ 11u8 ∨ raised⟦2⟧ ≠ 13u8 ∨ raised⟦3⟧ ≠ 24u8:
+        4u8
+    elif three⟦0⟧ ≠ 1u8 ∨ three⟦4⟧ ≠ 5u8 ∨ three⟦7⟧ ≠ 3u8:
+        5u8
+    else:
+        0u8

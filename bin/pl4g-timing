@@ -131,6 +131,8 @@ GROUPS: tuple[Group, ...] = (
            "array-table": "a table, a cube, and one of no stated shape",
            "array-row": "a row taken out of a table, and passed on",
            "array-masked-pick": "four picks, by rows and by elements",
+           "concatenate-arrays": "five joins, one of them of two whole registers",
+           "concatenate-tables": "tables and cubes joined along their first dimension",
            "array-masked-write": "four writes through a mask, one of them by rows",
            "listable-over-an-array": "four walks, one of them over a table twice",
            "listable-operators": "ten operators walked, and a table against a column",

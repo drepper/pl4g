@@ -206,6 +206,23 @@ class _Settler:
                     self._spread(inst, self._cut_for(inst))
                 case _:
                     pass
+        # A run that reaches no operation is one that is only being moved: read
+        # out of one place and written into another, which is what joining two
+        # arrays asks for.  There is no operation to ask which widths it exists
+        # at, and none is needed -- a register holds a run of any lane width, so
+        # what cuts it up is only how wide the register is.
+        for inst in block.insts:
+            if isinstance(inst, StoreInst) \
+                    and isinstance(inst.operands[2].ty, VecType) \
+                    and id(inst.operands[2]) not in self._cuts:
+                self._spread(inst, self._moving(inst.operands[2].ty))
+
+    def _moving(self, held: VecType) -> list[int]:
+        """How a run that is only being moved is cut up."""
+        stride = stride_of(held.element, self._layout)
+        at_once = 0 if self._able.bits == 0 or stride == 0 \
+            else self._able.bits // (stride * 8)
+        return _pieces(held.lanes, stride, at_once)
 
     def _spread(self, inst: Instruction, cut: list[int]) -> None:
         """Give this cut to an operation, to what reaches it and to nothing else."""

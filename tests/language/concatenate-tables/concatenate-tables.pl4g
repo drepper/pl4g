@@ -1,0 +1,26 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ A join of two tables puts rows after rows: the first dimension grows and
+※ every dimension inside it stays as it was, so two tables of three columns
+※ join into a table of three columns.  That is what "the inner dimensions must
+※ match" means, and it is why the elements can simply be copied one run after
+※ another -- the last dimension is the one whose neighbours are next to each
+※ other, so a table's rows are already laid out in the order the join wants.
+
+let m: u8⟦2,3⟧ = ⟦⟦1u8, 2u8, 3u8⟧, ⟦4u8, 5u8, 6u8⟧⟧
+let n: u8⟦1,3⟧ = ⟦⟦7u8, 8u8, 9u8⟧⟧
+let cube: u16⟦1,2,2⟧ = ⟦⟦⟦1u16, 2u16⟧, ⟦3u16, 4u16⟧⟧⟧
+let other: u16⟦2,2,2⟧ = ⟦⟦⟦5u16, 6u16⟧, ⟦7u16, 8u16⟧⟧, ⟦⟦9u16, 10u16⟧, ⟦11u16, 12u16⟧⟧⟧
+
+@[startup]
+fn main() → u8:
+    let joined: u8⟦3,3⟧ = m ⧺ n
+    let deep: u16⟦3,2,2⟧ = cube ⧺ other
+    if joined⟦0,0⟧ ≠ 1u8 ∨ joined⟦1,2⟧ ≠ 6u8 ∨ joined⟦2,0⟧ ≠ 7u8 ∨ joined⟦2,2⟧ ≠ 9u8:
+        1u8
+    elif deep⟦0,0,0⟧ ≠ 1u16 ∨ deep⟦0,1,1⟧ ≠ 4u16:
+        2u8
+    elif deep⟦1,0,0⟧ ≠ 5u16 ∨ deep⟦2,1,1⟧ ≠ 12u16:
+        3u8
+    else:
+        0u8

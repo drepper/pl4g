@@ -1285,6 +1285,46 @@ A value of such a type carries a count for every dimension, the stated ones incl
 does not depend on how much of its shape the type says.  **What may be let go of is a length, never a length for a different
 one**: a `u8⟦2,3⟧` stands where `u8⟦,3⟧` or `u8⟦,⟧` is wanted and does not stand where `u8⟦,4⟧` is.
 
+##### Joining two arrays
+
+**`A ⧺ B` is the elements of `A` followed by the elements of `B`**, in an array as long as the two together.  `++` is the
+accepted substitute.
+
+```
+let a: u8⟦3⟧ = ⟦1u8, 2u8, 3u8⟧
+let b: u8⟦2⟧ = ⟦4u8, 5u8⟧
+
+a ⧺ b                            ※ u8⟦5⟧, holding 1 2 3 4 5
+a + 10u8 ⧺ b                     ※ 11 12 13 4 5: it binds looser than the arithmetic
+```
+
+**It is not one of the operators that reach an array by being applied to every element of it.**  Those are defined on values;
+this one is defined on arrays themselves.  Its two sides are of two different types and what it answers with is of a third, so
+none of the rules about walking an array apply to it.
+
+**The join goes along the first dimension and every dimension inside it stays as it was** (4492).  Two tables of three columns
+join into a table of three columns; a table of three columns and a table of two do not join at all, and neither does a table with
+a vector.  Row-major is what makes this a copy of one run after another rather than an interleaving: the last dimension is the one
+whose neighbours are next to each other, so a table's rows are already laid out in the order a join wants them.
+
+```
+let m: u8⟦2,3⟧ = ⟦⟦1u8, 2u8, 3u8⟧, ⟦4u8, 5u8, 6u8⟧⟧
+let n: u8⟦1,3⟧ = ⟦⟦7u8, 8u8, 9u8⟧⟧
+
+m ⧺ n                            ※ u8⟦3,3⟧
+```
+
+**Both sides hold the same thing** (4491), an array holding one type, and **both say their shape** (4490), since room for the
+answer has to be taken where the join stands and how much room that is, is how long the two sides are together.  A side that is
+not an array at all is reported as such (4489); a single value is made an array of one by writing it between the brackets.
+
+Compare: **Haskell**, whose `++` this borrows both the meaning and the ASCII spelling from; **APL**, whose `,` catenates along the
+last axis and `⍪` along the first, with a conformability rule this one is the fixed-shape case of; **Python**, where `+` on lists
+is this and `+` on arrays is element-wise, which is exactly the confusion a separate glyph avoids; **Go**, whose `append` is a
+function because a slice's length is not in its type; and **Fortran**, where `[a, b]` is the array constructor doing this job.
+What settles the glyph is that this language already uses `+` for the element-wise addition that Python's arrays use it for, so
+the two had to be told apart, and a doubled plus is what says "of the things, not of the values".
+
 ##### Picking with a mask
 
 **An array indexed by an array of truth values is picked from**: the things the mask says true, in the order they were in.

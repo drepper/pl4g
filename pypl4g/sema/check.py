@@ -5044,6 +5044,100 @@ class Checker:
                              operator=op.value, found=ty.render())
         return ERROR
 
+    def _lower_concat(self, builder: IRBuilder, expr: ast.Binary,
+                      expected: Type | None) -> Value:
+        """Lower `A \N{DOUBLE PLUS} B`: one array's elements after another's.
+
+        It is not one of the operators the arithmetic path handles and cannot
+        be.  Those are defined on values and reach an array by being applied to
+        every element of it; this one is defined on arrays themselves, its two
+        sides are of two different types, and what it answers with is of a third
+        -- so there is nothing about it for that path to share.
+
+        Nothing is wanted of either side.  What each is, is what says how long
+        the answer is, so neither can be told what to be by the other or by what
+        the whole is wanted to be; an array written out as a side says its own
+        type, which is what it would have done anyway.
+        """
+        left = self._lower_expr(builder, expr.left, None)
+        right = self._lower_expr(builder, expr.right, None)
+        joined = self._joined_type(expr, left, right)
+        if joined is None:
+            return UndefConst(ERROR)
+        place = builder.frame(joined, expr.span)
+        at = 0
+        for side in (left, right):
+            ty = self._value_type_of(side)
+            assert isinstance(ty, ArrayType) and ty.count is not None
+            self._copied(builder, side, ty, place, joined.element, at, expr.span)
+            at += ty.count
+        found = builder.cast(CastKind.BITCAST, place, joined, expr.span)
+        if not self._accepts(expected, joined):
+            self._report_mismatch(expr.span, joined, expected)
+            return UndefConst(ERROR)
+        return found
+
+    def _joined_type(self, expr: ast.Binary, left: Value,
+                     right: Value) -> ArrayType | None:
+        """What joining these two answers with, or nothing where they do not join.
+
+        Four things have to hold and each is its own mistake.  Both sides are
+        arrays; both say their shape, since how much room the answer takes is
+        how long the two are together; both hold the same thing, an array
+        holding one type; and both agree about every dimension but the first,
+        which is the one the join goes along.
+        """
+        sides = (self._value_type_of(left), self._value_type_of(right))
+        if any(ty is ERROR for ty in sides):
+            return None
+        for ty, side in zip(sides, (expr.left, expr.right)):
+            if not isinstance(ty, ArrayType):
+                self._diags.emit(D.LANG_CONCAT_NEEDS_AN_ARRAY, side.span,
+                                 found=ty.render())
+                return None
+            if not ty.fixed:
+                self._diags.emit(D.LANG_CONCAT_NEEDS_A_STATED_SHAPE, side.span,
+                                 found=ty.render())
+                return None
+        first, second = sides
+        assert isinstance(first, ArrayType) and isinstance(second, ArrayType)
+        if first.element is not second.element:
+            self._diags.emit(D.LANG_CONCAT_ELEMENTS_DIFFER, expr.span,
+                             left=first.render(), right=second.render())
+            return None
+        if first.shape[1:] != second.shape[1:]:
+            self._diags.emit(D.LANG_CONCAT_SHAPES_DIFFER, expr.span,
+                             left=first.render(), right=second.render())
+            return None
+        along = (first.shape[0] or 0) + (second.shape[0] or 0)
+        return self._module.types.array_type(first.element,
+                                             (along, *first.shape[1:]))
+
+    def _copied(self, builder: IRBuilder, side: Value, ty: ArrayType,
+                place: Value, element: Type, at: int, span: Span) -> None:
+        """Put the elements of *side* into *place*, starting at the *at*-th.
+
+        Read and written as one value of as many lanes as there are elements,
+        which is the same machinery an operator over a whole run uses and comes
+        to the same three answers: one instruction where the machine holds that
+        many at once, a few where it holds fewer, and an element at a time where
+        it holds none.  A copy is a copy whatever the elements are, so this asks
+        for it in the one shape every target already knows how to cut up.
+        """
+        count = ty.count
+        assert count is not None
+        held = self._module.types.vec_type(element, count)
+        pointer = self._module.types.ptr_type(held, mutable=True)
+        start, _ = self._shape_of(builder, side, ty, span)
+        builder.store(
+            builder.cast(CastKind.BITCAST,
+                         self._element_place(builder, place, element,
+                                             builder.int_const(U64, at), span),
+                         pointer, span),
+            builder.load(builder.cast(CastKind.BITCAST, start, pointer, span),
+                         span),
+            span)
+
     def _lower_binary(self, builder: IRBuilder, expr: ast.Binary,
                       expected: Type | None) -> Value:
         """Lower an operator written between two operands.
@@ -5053,6 +5147,8 @@ class Checker:
         what lets a literal without a suffix stand on either side of one that
         has a type, which a rule that only looked leftwards would not allow.
         """
+        if expr.op is ast.BinaryOp.CONCAT:
+            return self._lower_concat(builder, expr, expected)
         # An operator is defined on values and not on arrays, so what is wanted
         # of each side is what an array of them would be an array of -- which
         # lets a number stand beside an array and take its element's type.

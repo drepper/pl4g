@@ -1,0 +1,14 @@
+※ pl4g-test: compile=error diag=4491
+
+※ An array holds values of one type, so an array made out of two others holds
+※ what both of them held.  Where the two held different things there is no
+※ such type, and which of the two the answer would be is not something to
+※ guess at.
+
+let a: u8⟦3⟧ = ⟦1u8, 2u8, 3u8⟧
+let w: u16⟦2⟧ = ⟦4u16, 5u16⟧
+
+@[startup]
+fn main() → u8:
+    let both: u16⟦5⟧ = a ⧺ w
+    0u8

@@ -178,6 +178,12 @@ SAT_ADD_GLYPH: Final[str] = "\N{SQUARED PLUS}"
 SAT_SUB_GLYPH: Final[str] = "\N{SQUARED MINUS}"
 SAT_MUL_GLYPH: Final[str] = "\N{SQUARED TIMES}"
 
+#: Joining two arrays end to end.  A plus doubled, which is what every language
+#: that has a notation for this uses: one array after another is not an addition
+#: but it is the nearest thing to one, and the doubling is what says "of the
+#: things, not of the values".
+CONCAT_GLYPH: Final[str] = "\N{DOUBLE PLUS}"
+
 #: Accepted substitute for the arrow.  Two characters, so it claims nothing.
 ARROW_ASCII: Final[str] = "->"
 
@@ -188,6 +194,10 @@ ASCII_SUBSTITUTES: Final[dict[str, str]] = {
     ARROW_ASCII: ARROW_GLYPH,
     "<=": LESS_EQUAL_GLYPH,
     ">=": GREATER_EQUAL_GLYPH,
+    # This language has no operator that adds one to something, so two plus
+    # signs are not the beginning of anything else.  It is Haskell's spelling of
+    # the same operation.
+    "++": CONCAT_GLYPH,
 }
 
 
@@ -291,6 +301,8 @@ class TokKind(StrEnum):
     SAT_ADD = "'\N{SQUARED PLUS}'"
     SAT_SUB = "'\N{SQUARED MINUS}'"
     SAT_MUL = "'\N{SQUARED TIMES}'"
+
+    CONCAT = "'\N{DOUBLE PLUS}'"
 
     DOC_COMMENT = "documentation comment"
     NEWLINE = "end of line"

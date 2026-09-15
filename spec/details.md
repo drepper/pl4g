@@ -375,6 +375,17 @@ give -- `pmullw` and `pmulld` on one, `mul` at three arrangements on the other.
 Which lane widths a machine has an operation at is stated as a set and not as a width to stay under, because of that last one:
 x86-64 multiplies halfwords at every level and words from the second on and bytes not at all, which is not a range.
 
+**Joining two arrays is two reads and two writes, and both are runs.**  `a ⧺ b` takes room for the answer where it stands and
+copies each side into its part of it -- and it asks for each copy as one value of as many lanes as that side has elements, which
+is the same shape an operator over a whole run asks for.  So the step in each backend that cuts a run into pieces cuts these too,
+and a copy comes out as one instruction per register's worth on a machine that has them and an element at a time on one that does
+not, with nothing written here to say either.
+
+That needed one rule added to the cutting: a run that reaches no operation is one that is only being moved, so there is no
+operation to ask which lane widths it exists at, and none is needed -- a register holds a run of any lane width, so what cuts it
+up is only how wide the register is.  A join of two sixteen-byte arrays is two `movdqu` pairs where it was thirty-two loads and
+thirty-two stores.
+
 **An operator over an array is one operation over a whole run of elements.**  The front end asks the question of the whole
 innermost run -- the last dimension, which is the one whose elements are next to each other -- as a single value of as many
 *lanes* as the run is long, whatever the machine it is being built for can actually do.  `u8⟦16⟧ + u8⟦16⟧` is one

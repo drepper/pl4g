@@ -102,6 +102,10 @@ _BINARY_OPERATORS: Final[dict[TokKind, _Operator]] = {
                                        non_associative=True),
     TokKind.GREATER_EQUAL: _Operator(ast.BinaryOp.GREATER_EQUAL, 5,
                                      non_associative=True),
+    # Joining two arrays binds looser than everything that works out what goes
+    # in one and tighter than every comparison, so that `a + 1u8 \N{DOUBLE PLUS} b` joins
+    # what the two sides came to and `x \N{DOUBLE PLUS} y = z` asks about the whole join.
+    TokKind.CONCAT: _Operator(ast.BinaryOp.CONCAT, 8),
     TokKind.PIPE: _Operator(ast.BinaryOp.BIT_OR, 10),
     TokKind.CARET: _Operator(ast.BinaryOp.BIT_XOR, 20),
     TokKind.AMPERSAND: _Operator(ast.BinaryOp.BIT_AND, 30),

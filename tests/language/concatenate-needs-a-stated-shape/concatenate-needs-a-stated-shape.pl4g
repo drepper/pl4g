@@ -1,0 +1,13 @@
+※ pl4g-test: compile=error diag=4490
+
+※ What a join answers with is as long as its two sides together, and room for
+※ that many has to be taken where the join stands.  A run taken out of an
+※ array does not say in its type how long it is, so how much room to take
+※ would not be known until the program ran.
+
+let a: u8⟦3⟧ = ⟦1u8, 2u8, 3u8⟧
+
+@[startup]
+fn main() → u8:
+    let both: u8⟦5⟧ = a ⧺ a⟦0…2⟧
+    both⟦0⟧

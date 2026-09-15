@@ -221,6 +221,8 @@ class BinaryOp(StrEnum):
     SAT_SUB = "\N{SQUARED MINUS}"
     SAT_MUL = "\N{SQUARED TIMES}"
 
+    CONCAT = "\N{DOUBLE PLUS}"
+
 
 class UnaryOp(StrEnum):
     """An operator written before its operand."""

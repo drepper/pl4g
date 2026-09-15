@@ -1,0 +1,13 @@
+※ pl4g-test: compile=error diag=4492
+
+※ A join goes along the first dimension and leaves every dimension inside it
+※ as it was, so two tables that disagree about their columns have no rows of
+※ one shape to put after one another.
+
+let m: u8⟦2,3⟧ = ⟦⟦1u8, 2u8, 3u8⟧, ⟦4u8, 5u8, 6u8⟧⟧
+let k: u8⟦2,2⟧ = ⟦⟦1u8, 2u8⟧, ⟦3u8, 4u8⟧⟧
+
+@[startup]
+fn main() → u8:
+    let both: u8⟦4,3⟧ = m ⧺ k
+    0u8

@@ -1,0 +1,13 @@
+※ pl4g-test: compile=error diag=4489
+
+※ Joining puts the elements of one array after the elements of another, which
+※ is a thing to do to arrays and to nothing else.  A single value is made an
+※ array of one by writing it between the array brackets, which is what this
+※ program meant and did not say.
+
+let a: u8⟦3⟧ = ⟦1u8, 2u8, 3u8⟧
+
+@[startup]
+fn main() → u8:
+    let both: u8⟦4⟧ = a ⧺ 7u8
+    both⟦0⟧

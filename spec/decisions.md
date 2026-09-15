@@ -3488,6 +3488,49 @@ say which it takes, and a program that wants one expression to wrap has to conve
 
 ---
 
+## 2026-09-16T00:40+02:00 — language
+
+**`⧺`, which joins two arrays**
+
+Decided on the user's direction: an operator that puts one array's elements after another's, with the inner dimensions required
+to match where the arrays have more than one.
+
+**A glyph of its own rather than `+`.**  Python overloads `+` for both -- list concatenation and array element-wise addition --
+and the result is that what `a + b` means depends on which of two things `a` is, which is the single most reliably confusing
+thing about numerical Python.  This language had already given `+` the element-wise reading by making the operators walk arrays,
+so the two had to be told apart, and a doubled plus is what says "of the things, not of the values".  It is Haskell's spelling,
+and `++` is its accepted ASCII substitute for the same reason -- two characters, and this language has no operator that adds one
+to something, so two plus signs begin nothing else.
+
+**It binds looser than everything that works out what goes in an array and tighter than every comparison.**  `a + 1u8 ⧺ b`
+joins what the two sides came to, which is the reading anyone writing it means, and `x ⧺ y = z` asks about the whole join.
+
+**The inner dimensions must match, and rank must match with them.**  A join goes along the first dimension and leaves every
+dimension inside it as it was: two tables of three columns join into a table of three columns.  A table joined to a vector is
+refused rather than given a meaning -- there is a meaning available, treating the vector as one row, and it is refused because
+the two readings of `m ⧺ v` (a new row, or a flattened concatenation) are equally defensible and the program can say which it
+means by writing the brackets.
+
+**Both sides must state their shape.**  What the join answers with is as long as the two together, and room for that many is
+taken where the join stands; a side whose length the type does not say would mean taking room while the program runs, which is an
+allocation and a change to something that outlives the call.  That is the same rule picking with a mask follows and for the same
+reason.
+
+**It is lowered as two runs and not as a loop or a memcpy.**  Each side is read as one value of as many lanes as it has elements
+and written into its part of the answer, which is the shape the vectorization step already knows how to cut up -- so a join is
+one instruction per register's worth where the machine has registers for it and an element at a time where it has none, with
+nothing target-specific written for it.
+
+Compare, beyond the above: **APL**, whose `,` catenates along the last axis and `⍪` along the first, with a conformability rule
+this is the fixed-shape case of -- and which has both because its arrays grow, where these do not; **Go**, whose `append` is a
+function rather than an operator because a slice carries its length beside it and a join may reallocate, neither of which is true
+here; **Fortran**, where `[a, b]` is the array constructor doing this job, so there is no operator and no question about
+precedence; **C**, which has neither and leaves it to `memcpy` and two lengths the compiler cannot check; and **Rust**, whose
+`concat` and `chain` are methods on slices and iterators, one answering a `Vec` that allocates and the other answering something
+lazy, neither of which is a fixed-shape array.
+
+---
+
 ---
 
 Open questions

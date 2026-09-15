@@ -4198,6 +4198,104 @@
       "option": null
     },
     {
+      "number": 4489,
+      "name": "LANG_CONCAT_NEEDS_AN_ARRAY",
+      "severity": "error",
+      "message": "'⧺' joins two arrays, and '{found}' is not one",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type of the side that is not an array"
+        }
+      ],
+      "cause": "Joining puts the elements of one array after the elements of another, which is a thing to do to arrays and to nothing else.  A single value is made an array of one by writing it between the array brackets.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Arrays",
+        "requirement": "Both sides of '⧺' are arrays."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4490,
+      "name": "LANG_CONCAT_NEEDS_A_STATED_SHAPE",
+      "severity": "error",
+      "message": "joining '{found}' needs a shape the type states",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type of the side whose shape the type does not state"
+        }
+      ],
+      "cause": "What a join answers with is as long as its two sides together, and room for that many has to be taken where the join stands.  Where the type does not say how long a side is, how much room to take is not known until the program runs, which is an allocation and a change to something that outlives the call.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Arrays",
+        "requirement": "Both sides of '⧺' state their shape."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4491,
+      "name": "LANG_CONCAT_ELEMENTS_DIFFER",
+      "severity": "error",
+      "message": "'{left}' and '{right}' hold different things, and a join holds one",
+      "args": [
+        {
+          "name": "left",
+          "type": "string",
+          "description": "the type of the left side"
+        },
+        {
+          "name": "right",
+          "type": "string",
+          "description": "the type of the right side"
+        }
+      ],
+      "cause": "An array holds values of one type, so an array made out of two others holds what both of them held.  Where the two held different things there is no such type, and which of the two the answer would be is not something to guess at.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Arrays",
+        "requirement": "The two sides of '⧺' are arrays of one element type."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4492,
+      "name": "LANG_CONCAT_SHAPES_DIFFER",
+      "severity": "error",
+      "message": "'{left}' and '{right}' differ in a dimension other than the first",
+      "args": [
+        {
+          "name": "left",
+          "type": "string",
+          "description": "the type of the left side"
+        },
+        {
+          "name": "right",
+          "type": "string",
+          "description": "the type of the right side"
+        }
+      ],
+      "cause": "A join puts rows after rows, which is the first dimension growing and every dimension inside it staying as it was: two tables of three columns each join into a table of three columns.  Where the inner dimensions differ there are no rows of one shape to put after one another, and neither is a two-dimensional array joined to a one-dimensional one.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Arrays",
+        "requirement": "The two sides of '⧺' agree about every dimension but the first."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 5001,
       "name": "LANG_STMT_UNREACHABLE",
       "severity": "warning",
