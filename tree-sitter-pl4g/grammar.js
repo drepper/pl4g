@@ -351,10 +351,14 @@ module.exports = grammar({
     // equal sign, and what the loop takes its values from.  `while` written
     // this way is the same statement; after `while` the colon has to be there,
     // because a name on its own followed by a colon is a condition with a body.
+    // The colon is always there and the type may be left out, exactly as in a
+    // variable: a `foreach` binds a name the way `let` does, so a type written
+    // on that name says what a turn gives -- and what the loop takes its turns
+    // from may take its own type from that.
     foreach_statement: $ => seq(
       choice(
         seq('foreach', optional(field('label', $.label)),
-            $._binding_names, optional($._binding_type)),
+            $._binding_names, $._binding_type),
         seq('while', optional(field('label', $.label)),
             $._binding_names, $._binding_type),
       ),

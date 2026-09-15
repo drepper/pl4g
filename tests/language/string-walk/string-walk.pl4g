@@ -15,7 +15,7 @@ fn main() → u8:
     let text: str = "a£€𐀀"
     let at: mut u8 = 0u8
     let wrong: mut u8 = 0u8
-    foreach c = text:
+    foreach c := text:
         if at = 0u8:
             if ⎕ord(c) ≠ 97u32:
                 wrong ← wrong + 1u8

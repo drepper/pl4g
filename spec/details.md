@@ -1119,7 +1119,7 @@ an addition and a read.
 second loop written into this one.  That is what keeps the shape above the shape of every iterator: a `more` that had to search
 would have to hand the body what it found, and there is nowhere in the shape for it to put that.
 
-**A dictionary gives a tuple**, and two names take a tuple apart everywhere a tuple is bound.  So `foreach k, v = d:` needed
+**A dictionary gives a tuple**, and two names take a tuple apart everywhere a tuple is bound.  So `foreach k, v := d:` needed
 nothing of its own: the tuple is made and the binding that already existed takes it apart.
 
 A tuple handed over as several arguments

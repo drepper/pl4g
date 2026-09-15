@@ -10,7 +10,7 @@
 ※ ended.  That is the same shape a division gives, and it is read the same way.
 
 fn root_of(square: u8) → u8:
-    let found: u8? = foreach §looking i = 0u8…10u8:
+    let found: u8? = foreach §looking i := 0u8…10u8:
         if i × i = square:
             break §looking i
     found ?? 99u8

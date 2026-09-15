@@ -31,6 +31,6 @@ fn main() → u8:
 
 fn total(s: str) → u32:
     let found: mut u32 = 0u32
-    foreach c = s:
+    foreach c := s:
         found ← found + ⎕ord(c)
     found

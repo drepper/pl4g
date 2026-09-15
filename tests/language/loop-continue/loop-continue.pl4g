@@ -8,7 +8,7 @@
 @[startup]
 fn main() → u8:
     let total: mut u8 = 0u8
-    foreach §counting i = 0u8…10u8:
+    foreach §counting i := 0u8…10u8:
         if i > 4u8:
             continue §counting
         total ← total + i

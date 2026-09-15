@@ -20,6 +20,6 @@ fn main() → u8:
     while _ : u8 = 5…0…⁻1:
         total ← total + 1u8
     ※ the other spelling, with the type taken from the ends
-    foreach k = 1u8…4u8:
+    foreach k := 1u8…4u8:
         total ← total + k
     total

@@ -34,12 +34,12 @@ fn main() → u8:
 
 fn total(l: [u8]) → u8:
     let found: mut u8 = 0u8
-    foreach x = l:
+    foreach x := l:
         found ← found + x
     found
 
 fn widest(l: [u32]) → u32:
     let found: mut u32 = 0u32
-    foreach x = l:
+    foreach x := l:
         found ← found + x
     found

@@ -1,0 +1,13 @@
+※ pl4g-test: compile=error diag=3006
+
+※ A `foreach` binds a name the way `let` does and is written the way `let` is,
+※ so the colon is always there.  Two spellings of one thing is what this
+※ language does not have -- and after `while` it could not be optional anyway,
+※ a name on its own followed by a colon being a condition with a body after it.
+
+@[startup]
+fn main() → u8:
+    let found: mut u8 = 0u8
+    foreach i = 0u8…3u8:
+        found ← found + i
+    found

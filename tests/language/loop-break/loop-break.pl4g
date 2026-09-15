@@ -13,7 +13,7 @@
 @[startup]
 fn main() → u8:
     let total: mut u8 = 0u8
-    foreach §counting i = 0u8…10u8:
+    foreach §counting i := 0u8…10u8:
         if i = 5u8:
             break §counting
         total ← total + i

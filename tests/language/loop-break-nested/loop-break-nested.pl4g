@@ -16,8 +16,8 @@
 @[startup]
 fn main() → u8:
     let found: mut u8 = 0u8
-    foreach §rows r = 0u8…4u8:
-        foreach §cols c = 0u8…4u8:
+    foreach §rows r := 0u8…4u8:
+        foreach §cols c := 0u8…4u8:
             if c = 0u8:
                 ※ the inner loop's own next turn
                 continue §cols

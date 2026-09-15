@@ -14,19 +14,19 @@
 fn main() → u8:
     let s: ⸨u8⸩ = ⸨1u8, 2u8, 4u8, 8u8, 16u8⸩
     let held: mut u8 = 0u8
-    foreach k = s:
+    foreach k := s:
         held ← held + k
 
     let d: ⸨u8: u8⸩ = ⸨1u8: 10u8, 2u8: 20u8, 3u8: 30u8⸩
     let keys: mut u8 = 0u8
     let values: mut u8 = 0u8
-    foreach k, v = d:
+    foreach k, v := d:
         keys ← keys + k
         values ← values + v
 
     ※ and with one name, the two arrive together
     let pairs: mut u8 = 0u8
-    foreach pair = d:
+    foreach pair := d:
         let key, value := pair
         pairs ← pairs + key + value
 

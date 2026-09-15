@@ -1639,7 +1639,7 @@ an argument, what a function answers with.  Where nothing wants one there is not
 
 ```
 #a                                   ※ 3
-foreach x = a:                       ※ 1, then 2, then 3
+foreach x := a:                       ※ 1, then 2, then 3
 a ⧺ [4u8]                            ※ [u8] holding four
 ```
 
@@ -1964,8 +1964,8 @@ the condition is a truth value.
 
 ```
 let found: mut u8 = 0u8
-foreach §rows r = 0u8…4u8:
-    foreach §cols c = 0u8…4u8:
+foreach §rows r := 0u8…4u8:
+    foreach §cols c := 0u8…4u8:
         if c = 0u8:
             continue §cols        ※ the inner loop's own next turn
         if r × c = 6u8:
@@ -2010,7 +2010,7 @@ every `break`, so what follows the loop reads what the way actually taken left t
 
 ```
 fn root_of(square: u8) → u8:
-    let found: u8? = foreach §looking i = 0u8…10u8:
+    let found: u8? = foreach §looking i := 0u8…10u8:
         if i × i = square:
             break §looking i
     found ?? 99u8
@@ -2024,7 +2024,7 @@ there is none where the loop simply ended.  That is the same shape a division gi
 **An `else` arm is what the ran-out way comes to**, and a loop with one comes to a plain value:
 
 ```
-foreach §looking i = 0u8…10u8:
+foreach §looking i := 0u8…10u8:
     if i × i = square:
         break §looking i
 else:
@@ -2101,12 +2101,25 @@ At the top level of a file one can find:
 
 ```
 let total: mut u8 = 0u8
-foreach i = 0u8…5u8:
+foreach i := 0u8…5u8:
     total ← total + i
 ```
 
-**It shares `let`'s shape**: one or more names, an optional type, an equal sign, and what the loop takes its values from.  The
-colon before the type may be left out along with the type, where the values say what they are.
+**It shares `let`'s shape**: one or more names, a colon, an optional type, an equal sign, and what the loop takes its values
+from.  **The colon is always written**, exactly as in a variable -- with neither a type nor a qualifier the two characters read
+as `:=`, and they are the same two tokens either way.  It binds a name the way `let` does, so it is written the way `let` is;
+two spellings of one thing is what this language does not have.
+
+**A type written on the name says what a turn gives** -- and what the loop takes its turns from can take its own type from that:
+
+```
+foreach x: u8 = [1, 2, 3]:     ※ three bytes: the type on the name settles them
+foreach y: u16 = ⟦10, 20⟧:       ※ and the same for an array
+foreach r: u8⟦2⟧ = ⟦⟦1, 2⟧, ⟦3, 4⟧⟧:   ※ a turn of a table gives a row, so the row is what is written
+```
+
+Without it the numbers inside would have nothing to say what they are, the thing they are written in being the only thing that
+could say and having been asked first.  A range already worked this way, and now everything the loop can walk does.
 
 **What it takes its values from has to be an iterator** (4438).  An **iterator** is a value with a `next` answering the next value
 or a failure; the failure is what ends the loop.  The result type is how that is said, and it does not surface: the names are
@@ -2123,10 +2136,10 @@ bound to what there was, and a loop over something with nothing in it runs no tu
 | a dictionary | a key and what it stands for, as a tuple |
 
 ```
-foreach x = a:           ※ every element of a vector
-foreach row = m:         ※ every row of a table
-foreach k = s:           ※ every key of a set
-foreach k, v = d:        ※ every key of a dictionary, and what it stands for
+foreach x := a:           ※ every element of a vector
+foreach row := m:         ※ every row of a table
+foreach k := s:           ※ every key of a set
+foreach k, v := d:        ※ every key of a dictionary, and what it stands for
 ```
 
 **Iterating an array is over its outermost dimension**, so a turn of a `T⟦2,3⟧` gives a `T⟦3⟧`.  Row-major is what makes that
@@ -2138,7 +2151,7 @@ it, and growing the table moves everything.  Python promises the order keys were
 deliberately randomises its walk so that no program can come to depend on an order it never promised.  This promises nothing.
 
 **Several names take each value apart**, the way several names take a tuple apart in a definition.  That is the whole of what
-`foreach k, v = d:` is -- a dictionary gives a key and a value together as a tuple, and two names take a tuple apart everywhere
+`foreach k, v := d:` is -- a dictionary gives a key and a value together as a tuple, and two names take a tuple apart everywhere
 else too, so the form needs nothing of its own.  Over something that gives one value, several names are refused.
 
 **`_` is the name that is not a name**, as it is in a `match` arm: the loop runs a turn for each value there is and the value
@@ -2158,7 +2171,7 @@ says what the loop is, and `while` says that the two kinds of loop are one const
 **The name is bound afresh on every turn** and is gone after the loop.  It is never `mut`: what it stands for is what the turn
 gave, and the next turn gives another.
 
-**A label goes after the keyword**, before the names: `foreach §rows r = 0u8…4u8:`, and likewise `while §rows r: u8 = …`.  What
+**A label goes after the keyword**, before the names: `foreach §rows r := 0u8…4u8:`, and likewise `while §rows r: u8 = …`.  What
 it is for is in the section on leaving a loop and repeating it, above.
 
 Compare: Python's `for x in r`, which this follows in meaning -- including `for k, v in d` taking a pair apart, which is where the

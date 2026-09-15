@@ -970,12 +970,15 @@ class Parser:
 
     def _parse_iteration(self, start: Span, keyword: str,
                          label: ast.Label | None = None) -> ast.ForEach:
-        """Parse ``NAMES [':' [TYPE]] '=' EXPR BODY``, which is `let`'s shape.
+        """Parse ``NAMES ':' [TYPE] '=' EXPR BODY``, which is `let`'s shape.
 
-        The colon and the type may both be left out where the values say what
-        they are, which they always do so far.  After `while` the colon has to
-        be written, because a name on its own followed by a colon is a condition
-        with a body after it.
+        The colon is always there and the type may be left out, exactly as in a
+        variable: written with neither a qualifier nor a type the two characters
+        read as ``:=``, and they are the same two tokens either way.  It is not
+        optional because a name binds a value here as much as `let` does, and
+        two spellings of one thing is what this language does not have -- and
+        after `while` it could not be optional anyway, a name on its own
+        followed by a colon being a condition with a body after it.
         """
         name_token = self._expect(TokKind.IDENT)
         more: list[tuple[str, Span]] = []
@@ -983,9 +986,9 @@ class Parser:
             written = self._expect(TokKind.IDENT)
             more.append((written.text, written.span))
         declared: ast.TypeExpr | None = None
-        if self._accept(TokKind.COLON) is not None:
-            if self._begins_a_type():
-                declared = self._parse_type_ref()
+        self._expect(TokKind.COLON, D.LANG_VARDEF_EXPECTED_COLON)
+        if self._begins_a_type():
+            declared = self._parse_type_ref()
         if self._accept(TokKind.EQUALS) is None:
             self._diags.emit(D.LANG_VARDEF_MISSING_INITIALIZER, name_token.span,
                              name=name_token.text)

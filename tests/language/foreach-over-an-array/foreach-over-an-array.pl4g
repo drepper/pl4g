@@ -12,7 +12,7 @@
 
 fn sum(xs: u8⟦⟧) → u8:
     let n: mut u8 = 0u8
-    foreach x = xs:
+    foreach x := xs:
         n ← n + x
     n
 
@@ -20,7 +20,7 @@ fn sum(xs: u8⟦⟧) → u8:
 fn main() → u8:
     let m: u8⟦2,3⟧ = ⟦⟦1u8,2u8,3u8⟧,⟦10u8,20u8,30u8⟧⟧
     let total: mut u8 = 0u8
-    foreach row = m:
+    foreach row := m:
         total ← total + sum(row)
     let v: u8⟦5⟧ = ⟦1u8,2u8,4u8,8u8,16u8⟧
     total + sum(v⟦1…4⟧)

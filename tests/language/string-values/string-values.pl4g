@@ -33,13 +33,13 @@ fn main() → u8:
 ※ one thing a string offers.
 fn total(s: str) → u32:
     let found: mut u32 = 0u32
-    foreach c = s:
+    foreach c := s:
         found ← found + ⎕ord(c)
     found
 
 fn counted(s: str) → u8:
     let found: mut u8 = 0u8
-    foreach c = s:
+    foreach c := s:
         ※ every character counts, which is what makes this a count
         if ⎕ord(c) < 0x110000u32:
             found ← found + 1u8

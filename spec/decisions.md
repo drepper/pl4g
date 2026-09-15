@@ -2640,7 +2640,7 @@ That is not a shortcut past the protocol: a `next` answering a result *is* those
 is the loop a user-written iterator will want.
 
 **A dictionary gives a tuple, and two names take it apart.**  Nothing of its own was needed: several names next to each other take
-a tuple apart everywhere a tuple is bound, so `foreach k, v = d:` is the tuple plus a binding that already existed.  Go spells the
+a tuple apart everywhere a tuple is bound, so `foreach k, v := d:` is the tuple plus a binding that already existed.  Go spells the
 same thing as two results of `range`, which is a second mechanism for one case; Python spells it as a pair taken apart, which is
 this.
 
@@ -3713,6 +3713,36 @@ in its type.  The to-do list records it rather than this deciding it in passing.
 Compare, beyond the above: **Python**, whose lists are heterogeneous and boxed always, which is the shape this aims at and the
 cost it means to avoid where it can; **Lisp**, where the list is the type and the cons cell is the price; and **Java**, whose
 generics box every element of a `List<Integer>` and whose value types exist to undo exactly that.
+
+---
+
+## 2026-09-16T09:45+02:00 — language
+
+**A `foreach` is written the way a `let` is, colon and all**
+
+Decided on the user's direction, and it corrects something this compiler had let slide: the colon before a loop binding's type is
+not optional.
+
+**Two spellings of one thing is what this language does not have**, and `foreach x = v` beside `foreach x: T = v` was two.  A
+`foreach` binds a name exactly as `let` does -- the name stands for a value and may be given a type -- so it is written exactly
+as `let` is, and with neither a type nor a qualifier the two characters read as `:=` there as here.  It could not have been
+optional after `while` in any case, a name on its own followed by a colon being a condition with a body after it; having it
+optional after `foreach` and required after `while` was the worst of the three possibilities.
+
+**And the type now reaches what the loop walks.**  `foreach x: u8 = [1, 2, 3]` is three bytes.  That follows from the colon
+being what it is: a type on the name says what a turn gives, and what a turn gives is what the thing being walked holds -- so the
+list, the array or the set being written there can take its own type from it.  Before this the declared type was only checked
+against what the expression turned out to be, which made `foreach x: u8 = [1, 2, 3]` fail for want of a type the program had
+plainly written down two words earlier.
+
+What is wanted is worked out from how the loop's expression is *written* -- a list of them, an array of as many as are written, a
+set of them -- because that is what says which container it is before anything is lowered.  A name or a call says its own type
+already and is unaffected.
+
+Compare: **Go**, whose `for i := range v` has the same `:=` and no place for a type at all, the element's being the container's;
+**Rust**, where `for x: u8 in v` is not allowed and the pattern carries the type only through `let`; **C++**, whose
+`for (uint8_t x : v)` does exactly what this now does, with the declared type converting rather than settling -- which is the
+part this does not copy; and **Python**, which has no types to write there.
 
 ---
 

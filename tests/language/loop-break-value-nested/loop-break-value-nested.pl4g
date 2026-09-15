@@ -9,8 +9,8 @@
 ※ ways and reads one thing, so there is one type for that thing to have.
 
 fn cell_where(product: u8) → u8:
-    foreach §rows r = 1u8…5u8:
-        foreach c = 1u8…5u8:
+    foreach §rows r := 1u8…5u8:
+        foreach c := 1u8…5u8:
             if r × c = product:
                 ※ hands the outer loop its value from inside the inner one
                 break §rows r × 10u8 + c

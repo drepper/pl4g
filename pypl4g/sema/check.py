@@ -3696,7 +3696,8 @@ class Checker:
         if isinstance(stmt.iterable, ast.Range):
             return self._over_a_range(builder, stmt)
         declared = self._resolve_type(stmt.type) if stmt.type is not None else None
-        value = self._lower_expr(builder, stmt.iterable, None)
+        value = self._lower_expr(builder, stmt.iterable,
+                                 self._holding(declared, stmt.iterable))
         ty = self._value_type_of(value)
         if ty is ERROR:
             return None
@@ -3717,6 +3718,43 @@ class Checker:
             self._report_mismatch(stmt.iterable.span, found.element, declared)
             return None
         return found
+
+    def _holding(self, declared: Type | None,
+                 iterable: ast.Expr) -> Type | None:
+        """What is wanted of a loop's expression, given what a turn is declared
+        to be.
+
+        A `foreach` binds a name the way `let` does, so a type written on that
+        name says what its value is -- and a value written where the loop takes
+        its turns from can take its own type from that, which is what makes
+        `foreach x: u8 = [1, 2, 3]` the three bytes it reads as.  Without it the
+        numbers inside would have nothing to say what they are, the list being
+        the only thing that could say and having been asked first.
+
+        What is wanted is worked out from how the loop's expression is written,
+        because that is what says which container it is: a list of them, an
+        array of as many of them as are written, a set of them.  Anything else
+        -- a name, a call, a range -- either says its own type already or is
+        asked for one another way.
+        """
+        if declared is None or declared is ERROR:
+            return None
+        match iterable:
+            case ast.ListLit():
+                return self._module.types.list_type(declared)
+            case ast.ArrayLit():
+                # A turn gives an element where the array has one dimension and
+                # a row where it has more, so a row declared says every
+                # dimension but the first and the writing says the first.
+                inner = declared.shape if isinstance(declared, ArrayType) else ()
+                element = declared.element if isinstance(declared, ArrayType) \
+                    else declared
+                return self._module.types.array_type(
+                    element, (len(iterable.elements), *inner))
+            case ast.SetLit():
+                return self._module.types.set_type(declared)
+            case _:
+                return None
 
     def _over_a_range(self, builder: IRBuilder,
                       stmt: ast.ForEach) -> _Iteration | None:

@@ -323,6 +323,10 @@ To Do List for the PL4g language
     well-formed UTF-8, walked by `foreach` a character at a time and joined with `⧺`.  There is no index, the n-th byte of
     UTF-8 not being the n-th character; a grapheme cluster is the larger question and stays open.
 
+[ ] take the type a set or a dictionary holds down to what is written inside it.  `let s: ⸨u8⸩ = ⸨1, 2, 4⸩` does not
+    compile: the numbers have nothing to say what they are, where an array and a list in the same place do take it.  Found while
+    making `foreach x: T = ...` hand the declared type to what the loop walks.
+
 [ ] box a list's elements, so that they need not be of one type.  The type records what they agree on today, which is what
     makes the agreeing case the one worth not boxing; what is missing is the boxed value -- a value held with enough beside it
     to say what it is -- and the rule for which of the two a list is.

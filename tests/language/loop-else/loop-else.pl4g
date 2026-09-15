@@ -9,7 +9,7 @@
 ※ gives, and where one of the ways gives nothing, that is what the result says.
 
 fn root_of(square: u8) → u8:
-    foreach §looking i = 0u8…10u8:
+    foreach §looking i := 0u8…10u8:
         if i × i = square:
             break §looking i
     else:

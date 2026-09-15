@@ -1718,16 +1718,8 @@
                   "name": "_binding_names"
                 },
                 {
-                  "type": "CHOICE",
-                  "members": [
-                    {
-                      "type": "SYMBOL",
-                      "name": "_binding_type"
-                    },
-                    {
-                      "type": "BLANK"
-                    }
-                  ]
+                  "type": "SYMBOL",
+                  "name": "_binding_type"
                 }
               ]
             },

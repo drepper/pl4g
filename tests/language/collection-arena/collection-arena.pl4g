@@ -21,7 +21,7 @@ fn main() → u8:
     let b: ⸨u8⸩ = ⸨2u8, 3u8⸩ in ⎕heap
     let joined: ⸨u8⸩ = a | b
     let total: mut u8 = 0u8
-    foreach i = 0u8…5u8:
+    foreach i := 0u8…5u8:
         if joined⸨i⸩:
             total ← total + 1u8
     total
