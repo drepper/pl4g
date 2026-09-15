@@ -1,13 +1,49 @@
-※ pl4g-test: compile=error diag=4511
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
 
-※ A negative exponent means one divided by the positive power, which is a
-※ division and not a multiplication: for an integer it has no answer of the
-※ type, and for a floating-point value it has a divisor that may be zero and so
-※ an answer that is a result.  Neither is what this operator gives, so a
-※ program that wants the reciprocal writes the division -- where what happens
-※ when the divisor is zero is written down as well.
+※ A negative exponent means one divided by the positive power.  That is a
+※ division, so it answers what every division here answers: the number where
+※ there is one, and the fact that there is none where what was raised is zero.
+※
+※ For an integer that makes a negative power almost always nothing, which is
+※ what dividing one by a whole number greater than one *is*.  The operator is
+※ not the place to decide that a program did not mean it, and the division it
+※ is written as is the one the program would have written itself.
+※
+※ Written as a raised number it is known to be negative where it is written,
+※ so `f⁻¹` is a result and `f¹` is not.  Written with the operator the exponent
+※ may be anything, so the answer is a result either way -- which is why
+※ `a ⁿ 2u8` carries a mark that `a²` does not.
 
-@[startup]
+@[startup, impure]
 fn main() → u8:
-    let x: u32 = 2u32⁻³
-    0u8
+    let f: f64 = 2.0f64
+    let a: u32 = 3u32
+    let one: u32 = 1u32
+    let z: u32 = 0u32
+    let neg: i32 = ⁻3i32
+    ※ one over a power, in the format where that is the useful thing
+    if ¬((f⁻¹ ?? 0.0f64) ≅ 0.5f64) ∨ ¬((f⁻² ?? 0.0f64) ≅ 0.25f64):
+        1u8
+    ※ one divided by a whole number greater than one is nothing, and that is
+    ※ the answer and not a mistake
+    elif (a⁻² ?? 9u32) ≠ 0u32 ∨ (one⁻⁵ ?? 9u32) ≠ 1u32:
+        2u8
+    ※ there is no answer where what was raised is zero, which is the one pair
+    ※ the operator has none for
+    elif (z⁻¹ ?? 7u32) ≠ 7u32 ∨ (z⁻³ ?? 7u32) ≠ 7u32:
+        3u8
+    ※ the same, with the exponent worked out while the program runs
+    elif (a ⁿ neg ?? 9u32) ≠ 0u32 ∨ (z ⁿ neg ?? 7u32) ≠ 7u32:
+        4u8
+    elif (one ⁿ neg ?? 9u32) ≠ 1u32:
+        5u8
+    ※ the most negative exponent there is, whose magnitude the type has not got
+    ※ -- what the loop walks is a magnitude and not a signed number, so it
+    ※ comes out right
+    elif (one ⁿ ⁻2147483648i32 ?? 9u32) ≠ 1u32:
+        6u8
+    ※ and a negative exponent of zero magnitude is not negative
+    elif ¬((f ⁿ 0i32 ?? 0.0f64) ≅ 1.0f64):
+        7u8
+    else:
+        0u8

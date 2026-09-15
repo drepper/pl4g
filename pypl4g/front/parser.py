@@ -1280,17 +1280,16 @@ class Parser:
                                     indices=tuple(indices))
                 continue
             if self._check(TokKind.EXPONENT):
-                # A number written raised is the power operator with that
-                # number on the right, which is the whole of what it is.  It
-                # binds where a call and an index bind, which is to whatever
-                # stands immediately before it: `a²×b` squares `a`, and
-                # `f(x)²` squares what the call answered with.
+                # A number written raised is a power whose exponent is
+                # written down, which is what makes it answer differently from
+                # the operator: here the compiler knows whether the exponent is
+                # negative.  It binds where a call and an index bind, which is
+                # to whatever stands immediately before it: `a²×b` squares
+                # `a`, and `f(x)²` squares what the call answered with.
                 raised = self._advance()
                 assert raised.int_value is not None
-                found = ast.Binary(
-                    span=found.span.to(raised.span), op=ast.BinaryOp.POWER,
-                    left=found,
-                    right=ast.IntLit(span=raised.span, value=raised.int_value))
+                found = ast.Raised(span=found.span.to(raised.span), base=found,
+                                   exponent=raised.int_value)
                 continue
             if self._check(TokKind.QUESTION):
                 mark = self._advance()

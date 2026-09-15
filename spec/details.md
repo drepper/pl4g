@@ -499,6 +499,20 @@ handed over by a block after the test, not by the test.
 The exponent is not walked where what is raised is an array.  One count serves every element, which is what being listable means
 for the one operator here whose two sides are of two different types.
 
+**The sign of the exponent is looked at twice and the loop walks a magnitude.**  Once before, to take that magnitude, and once
+after, to divide one by what came out.  The bits are walked with a *logical* shift whatever the type, because what is in the
+register after the first of those is a magnitude and not a signed number -- which is also what makes the most negative exponent
+there is come out right, its magnitude being one more than the largest the type holds and its bit pattern being that magnitude
+already.
+
+**What the loop hands over at the end is the two halves of a result and not the result.**  A block parameter is a value of the
+kinds a block parameter is, and a result travels in two: so the branch that chooses between the division and the plain answer
+hands over the number and the truth value beside it, and the whole is put back together after the merge.
+
+Where the exponent is written down none of that is built.  A raised number that is not negative is the multiplications and
+nothing else; one that is negative is those multiplications and the division; the operator with a written-down exponent is
+whichever of the two, with the answer wrapped up as a result because the *operator's* type says so and not this one exponent's.
+
 **Rounding is one instruction on two of the three machines and eight on the other.**  x86-64 has `roundss`/`roundsd`, whose
 immediate names the direction and whose value four says to ask `MXCSR` instead -- one instruction for all four operators.
 AArch64 has `frintm`, `frintp`, `frintn` and `frinti`, one apiece.  RISC-V has none: rounding a floating-point number where it

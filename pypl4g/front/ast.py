@@ -329,6 +329,22 @@ class Try(Expr):
 
 
 @dataclass(frozen=True, slots=True)
+class Raised(Expr):
+    """`EXPR\N{SUPERSCRIPT TWO}`: raised to a power written as a raised number.
+
+    It is not `\N{SUPERSCRIPT LATIN SMALL LETTER N}` with a literal on the right, and the difference is what it
+    answers with.  The exponent here is written down, so whether it is negative
+    is known while compiling: a power of a non-negative number is a value of
+    what was raised, and one of a negative number is a division and answers a
+    result.  Written with the operator the exponent may be anything, so the
+    answer is a result whatever it turns out to be.
+    """
+
+    base: Expr
+    exponent: int
+
+
+@dataclass(frozen=True, slots=True)
 class TupleLit(Expr):
     """`\N{LEFT ANGLE BRACKET}a, b\N{RIGHT ANGLE BRACKET}`: several values written as one."""
 

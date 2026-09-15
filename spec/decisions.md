@@ -4021,13 +4021,23 @@ what it is raised by is a *count*.  Making them agree would have refused `1.5f64
 is also why the operator is not on the arithmetic path with the others: that path's whole shape is "both sides have one type and
 the answer has it too".
 
-**The exponent is a whole number and is not negative.**  A fractional power is a root, which none of these machines has an
-instruction for and which would need a library this compiler does not have.  A negative one is one divided by the positive power:
-for an integer there is no answer of the type, and for a floating-point value the divisor may be zero, so the answer would be a
-result — which would put a `?` on `x⁻²` and on nothing else.  Refusing it is what keeps the operator's type simple, and the
-program that wants a reciprocal writes the division, where the zero divisor is written down too.  Python answers a float for a
-negative integer exponent, which a language whose integer types say what they hold cannot copy; Fortran and Ada refuse it exactly
-as this does.
+**The exponent is a whole number.**  A fractional power is a root, which none of these machines has an instruction for and which
+would need a library this compiler does not have.
+
+**A negative exponent is one divided by the positive power, and the answer is a result.**  Decided on the user's direction, after
+first being refused outright.  Three answers were possible and every language picks a different one: Python changes the *type*
+and answers a float, which a language whose integer types say what they hold cannot copy; Fortran and Ada make it an error; this
+makes it the division it already is, and a division here answers a result.  The third is the one that adds nothing — there is no
+new rule, no new failure and no new type, only the operator written as what it means.  For an integer it makes a negative power
+almost always nothing, which is what dividing one by a whole number greater than one *is*; the operator is not the place to
+decide that a program did not mean it.
+
+**Which is why the two spellings are two things.**  `a ⁿ b` cannot see its exponent, so its answer is a result whatever the
+exponent turns out to be — exactly as a division's type cannot depend on whether the divisor turns out to be zero.  `a²` can see
+it: the exponent is written down and is not negative, so there is always an answer and a `?` would be a mark for a failure that
+cannot happen.  `a⁻²` can see it too, and it *is* the division, so it carries the mark.  That settles the one thing that was
+uncomfortable about having both notations: they are not two spellings of one meaning after all, and which one a program writes
+says something the other cannot say.
 
 **Anything raised to no power at all is one, including zero.**  The empty product is one, and every polynomial written anywhere
 means that.  The alternative, a special case for `0⁰`, would make the operator answer differently for a value the program may not

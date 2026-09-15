@@ -4912,6 +4912,8 @@ class Checker:
                                          expected, True)
             case _Ready():
                 return expr.value
+            case ast.Raised():
+                return self._lower_raised(builder, expr, expected)
             case ast.Try():
                 return self._lower_try(builder, expr, expected)
             case ast.Binary() if expr.op is ast.BinaryOp.OR_ELSE:
@@ -5519,87 +5521,173 @@ class Checker:
 
     def _lower_power(self, builder: IRBuilder, expr: ast.Binary,
                      expected: Type | None) -> Value:
-        """Lower `a \N{SUPERSCRIPT LATIN SMALL LETTER N} b`, and the raised number that is the same thing written
-        the way it is written on paper.
+        """Lower `a \N{SUPERSCRIPT LATIN SMALL LETTER N} b`: raising by an exponent the compiler cannot see.
 
         It is not one of the operators the arithmetic path handles, and the
         reason is its two sides: everywhere else they are of one type and here
         they are not.  What is raised is a number of whatever type it is, and
         what it is raised by is a *count* -- how many times to multiply the one
-        by itself -- so `1.5f64 \N{SUPERSCRIPT THREE}` is the natural thing to write and would be
-        refused by a rule that made the two agree.
+        by itself -- so a rule that made the two agree would have refused
+        `1.5f64 \N{SUPERSCRIPT LATIN SMALL LETTER N} 3u8`.
 
-        **The exponent is a whole number and is not negative.**  A fractional
-        power is a root, which no instruction on any of these machines computes;
-        a negative one is one divided by the positive power, which for an
-        integer has no answer of the type and for a floating-point value has a
-        divisor that may be zero.  Neither is what this operator gives, and a
-        program that wants either writes what it wants.
+        **It answers a result**, for the reason division does: there are
+        exponents it has no answer for.  A negative one means one divided by the
+        positive power, and that division has no answer where what was raised is
+        zero -- so the answer is the number where there is one and the fact that
+        there is none where there is not.  Whether the exponent is negative is
+        not known here, so the type cannot depend on it, exactly as a division's
+        cannot depend on whether the divisor turns out to be zero.
+
+        What is written with a raised number is a different question, answered
+        by `_lower_raised`: there the exponent is written down.
         """
-        context = self._scalar_of(self._aiming_at(expected)) \
-            if expected is not None else self._hint_of(expr.left)
-        outer, self._operand_of = self._operand_of, expr.op.value
-        was_listing, self._listing = self._listing, True
-        try:
-            base = self._lower_expr(builder, expr.left, context)
-        finally:
-            self._operand_of = outer
-            self._listing = was_listing
-        if isinstance(expr.right, ast.IntLit) and expr.right.value < 0:
-            # Asked before it is lowered, so that what is reported is what is
-            # wrong with it.  A count has no room for a negative number, and
-            # telling the program that a written-down one does not fit would be
-            # answering a question it did not ask.
-            self._diags.emit(D.LANG_POWER_EXPONENT_NEGATIVE, expr.right.span,
-                             value=str(expr.right.value))
+        base, ty, times, count = self._sides_of_a_power(builder, expr,
+                                                        expr.left, expr.right,
+                                                        expected)
+        if ty is None or count is None:
             return UndefConst(ERROR)
-        # A count with nothing to say what width it is, is the widest there is:
-        # an exponent is never the thing a program is being careful about, and
-        # `x\N{SUPERSCRIPT THREE}` would otherwise have to take its width from the thing being
-        # raised, which is exactly what it is not.  Only a number written
-        # without a suffix is told that; anything else says what it is, and
-        # being told otherwise would report the mistake in the wrong place.
-        times = self._lower_expr(
-            builder, expr.right,
-            U64 if isinstance(expr.right, ast.IntLit)
-            and expr.right.type_name is None else None)
-        ty = self._scalar_of(self._value_type_of(base))
-        count = self._value_type_of(times)
-        if ty is None or ty is ERROR or count is ERROR:
-            return UndefConst(ERROR)
-        if not isinstance(ty, (IntType, FloatType)):
-            self._diags.emit(D.LANG_POWER_BASE_NOT_A_NUMBER, expr.left.span,
-                             found=ty.render())
-            return UndefConst(ERROR)
-        if not isinstance(count, IntType):
-            self._diags.emit(D.LANG_POWER_EXPONENT_NOT_A_COUNT, expr.right.span,
-                             found=count.render())
-            return UndefConst(ERROR)
-        if isinstance(times, IntConst) and times.value < 0:
-            self._diags.emit(D.LANG_POWER_EXPONENT_NEGATIVE, expr.right.span,
-                             value=str(times.value))
-            return UndefConst(ERROR)
-        # The exponent is not walked where the thing being raised is an array:
-        # it is one count, and one count serves every element -- which is what
-        # being listable means for an operator whose two sides are of two
-        # different types.
+        answer = self._module.types.result_type(ty)
         walked = self._walk_operands(builder, expr,
                                      (("left", base), ("right", times)),
                                      expected)
         if walked is not None:
             return walked
-        if not self._accepts(expected, ty):
-            self._report_mismatch(expr.span, ty, expected)
+        if not self._accepts(expected, answer):
+            self._report_mismatch(expr.span, answer, expected)
             return UndefConst(ERROR)
         if isinstance(times, IntConst):
+            # Written down after all, which settles which of the two it is --
+            # and the answer is a result either way, the type being the
+            # operator's and not this one exponent's.
+            if times.value < 0:
+                return self._reciprocal(builder, base, ty,
+                                        -times.value, answer, expr.span)
             if isinstance(base, IntConst) \
-                    and self._power_is_already_known(expr, ty, base, times):
+                    and self._power_is_already_known(expr, ty, base,
+                                                     times.value):
                 return UndefConst(ERROR)
-            return self._raised_by(builder, base, ty, times.value, expr.span)
-        return self._raised_over(builder, base, ty, times, count, expr.span)
+            return builder.wrap(self._raised_by(builder, base, ty, times.value,
+                                                expr.span),
+                                builder.bool_const(False), answer, expr.span)
+        return self._raised_over(builder, base, ty, times, count, answer,
+                                 expr.span)
 
-    def _power_is_already_known(self, expr: ast.Binary, ty: Type,
-                                base: IntConst, times: IntConst) -> bool:
+    def _lower_raised(self, builder: IRBuilder, expr: ast.Raised,
+                      expected: Type | None) -> Value:
+        """Lower `a\N{SUPERSCRIPT TWO}`: raising by an exponent written as a raised number.
+
+        The exponent is written down, so which of the two things this is, is
+        known while compiling.  **A non-negative one answers a value of what was
+        raised**: every such power exists, and one that will not fit stops the
+        program the way a multiplication that will not fit does.  **A negative
+        one is a division** -- one divided by the positive power -- and answers
+        a result, as every division here does, because what was raised may be
+        zero.
+
+        That is why this is not the operator with a number on the right.  The
+        operator cannot see its exponent and so answers a result whatever it
+        turns out to be; this one can, and a `?` on `a\N{SUPERSCRIPT TWO}` would be a mark for a
+        failure that cannot happen.
+        """
+        wanted = expected
+        if expr.exponent < 0 and isinstance(self._aiming_at(expected), ResultType):
+            found = self._aiming_at(expected)
+            assert isinstance(found, ResultType)
+            wanted = found.ok
+        base, ty, _, _ = self._sides_of_a_power(builder, expr, expr.base, None,
+                                                wanted)
+        if ty is None:
+            return UndefConst(ERROR)
+        answer: Type = (self._module.types.result_type(ty) if expr.exponent < 0
+                        else ty)
+        walked = self._walk_operands(builder, expr, (("base", base),), expected)
+        if walked is not None:
+            return walked
+        if not self._accepts(expected, answer):
+            self._report_mismatch(expr.span, answer, expected)
+            return UndefConst(ERROR)
+        if expr.exponent < 0:
+            return self._reciprocal(builder, base, ty, -expr.exponent, answer,
+                                    expr.span)
+        if isinstance(base, IntConst) \
+                and self._power_is_already_known(expr, ty, base, expr.exponent):
+            return UndefConst(ERROR)
+        return self._raised_by(builder, base, ty, expr.exponent, expr.span)
+
+    def _sides_of_a_power(self, builder: IRBuilder, expr: ast.Expr,
+                          written: ast.Expr, exponent: ast.Expr | None,
+                          expected: Type | None
+                          ) -> tuple[Value, Type | None, Value, IntType | None]:
+        """Lower what is raised and what it is raised by, and check both.
+
+        Shared by the two, since what may be raised and what may raise it are
+        the same question however the exponent was written.
+        """
+        context = self._scalar_of(self._aiming_at(expected)) \
+            if expected is not None else self._hint_of(written)
+        outer, self._operand_of = self._operand_of, ast.BinaryOp.POWER.value
+        was_listing, self._listing = self._listing, True
+        try:
+            base = self._lower_expr(builder, written, context)
+        finally:
+            self._operand_of = outer
+            self._listing = was_listing
+        ty = self._scalar_of(self._value_type_of(base))
+        if ty is not None and ty is not ERROR \
+                and not isinstance(ty, (IntType, FloatType)):
+            self._diags.emit(D.LANG_POWER_BASE_NOT_A_NUMBER, written.span,
+                             found=ty.render())
+            ty = ERROR
+        if exponent is None:
+            return base, None if ty is ERROR else ty, UndefConst(ERROR), None
+        # A count with nothing to say what width it is, is the widest there is:
+        # an exponent is never the thing a program is being careful about, and
+        # it would otherwise have to take its width from the thing being
+        # raised, which is exactly what it is not.  Only a number written
+        # without a suffix is told that; anything else says what it is, and
+        # being told otherwise would report a mistake in the wrong place.
+        times = self._lower_expr(
+            builder, exponent,
+            U64 if isinstance(exponent, ast.IntLit)
+            and exponent.type_name is None else None)
+        count = self._value_type_of(times)
+        if not isinstance(count, IntType):
+            if count is not ERROR:
+                self._diags.emit(D.LANG_POWER_EXPONENT_NOT_A_COUNT,
+                                 exponent.span, found=count.render())
+            return base, None, times, None
+        if ty is ERROR or ty is None:
+            return base, None, times, count
+        return base, ty, times, count
+
+    def _reciprocal(self, builder: IRBuilder, base: Value, ty: Type, times: int,
+                    answer: Type, span: Span) -> Value:
+        """One divided by a power, which is what a negative exponent means.
+
+        The division is the language's own, so what it answers where it has no
+        answer is what every other division answers there, and a program that
+        reads it reads it the same way.  For an integer that makes a negative
+        power almost always zero, which is what dividing one by a whole number
+        greater than one *is*; the operator is not the place to decide that a
+        program did not mean it.
+        """
+        return self._reciprocal_of(
+            builder, self._raised_by(builder, base, ty, times, span), ty,
+            answer, span)
+
+    def _reciprocal_of(self, builder: IRBuilder, raised: Value, ty: Type,
+                       answer: Type, span: Span) -> Value:
+        """One divided by a value, in whichever division its type has."""
+        if isinstance(ty, FloatType):
+            return builder.binary(BinOp.FDIV, self._unity(builder, ty, span),
+                                  raised, span, answer)
+        assert isinstance(ty, IntType)
+        return builder.binary(BinOp.SDIV if ty.signed else BinOp.UDIV,
+                              self._unity(builder, ty, span), raised, span,
+                              answer)
+
+    def _power_is_already_known(self, expr: ast.Expr, ty: Type,
+                                base: IntConst, times: int) -> bool:
         """Report a power of two written-down numbers that will not fit.
 
         The same rule every other operator follows where both sides are known:
@@ -5610,7 +5698,7 @@ class Checker:
         if self._wrapping:
             return False
         assert isinstance(ty, IntType)
-        answer = base.value ** times.value
+        answer = base.value ** times
         if ty.holds(answer):
             return False
         self._diags.emit(D.LANG_TYPE_ANSWER_DOES_NOT_FIT, expr.span,
@@ -5662,7 +5750,8 @@ class Checker:
             power = builder.binary(self._wrapped(BinOp.MUL), power, power, span)
 
     def _raised_over(self, builder: IRBuilder, base: Value, ty: Type,
-                     times: Value, count: IntType, span: Span) -> Value:
+                     times: Value, count: IntType, answer: Type,
+                     span: Span) -> Value:
         """Raise something to a power the program works out, which is a loop.
 
         The same squaring and multiplying the written-down form is, with the
@@ -5676,13 +5765,59 @@ class Checker:
         going past the end of the type for an answer that fits, which would stop
         a program that was right.  So the test for another turn comes between
         the two multiplications rather than at the top of the loop.
+
+        **What the loop walks is the exponent's magnitude**, and the sign is
+        looked at twice: once before, to take the magnitude, and once after, to
+        divide one by what came out.  The bits are walked with a logical shift
+        whatever the type, because what is in the register after the first of
+        those is a magnitude and not a signed number -- which is also what makes
+        the most negative exponent there is come out right, its magnitude being
+        one more than the largest the type holds.
         """
-        if count.signed:
-            builder.check(
-                builder.compare(CmpPred.SGE, times,
-                                builder.int_const(count, 0), span),
-                "a negative number of times to multiply something by itself",
-                span)
+        if not count.signed:
+            # No sign to look at: what it walks is what it was given, and there
+            # is no answer it has not got.
+            return builder.wrap(
+                self._power_loop(builder, base, ty, times, count, span),
+                builder.bool_const(False), answer, span)
+        negative = builder.compare(CmpPred.SLT, times,
+                                   builder.int_const(count, 0), span)
+        flip = builder.new_block("power.flip")
+        keep = builder.new_block("power.keep")
+        sized = builder.new_block("power.by")
+        builder.condbr(negative, flip, keep, span=span)
+        builder.position_at(flip)
+        builder.br(sized, (builder.binary(BinOp.WRAP_SUB,
+                                          builder.int_const(count, 0), times,
+                                          span),), span)
+        builder.position_at(keep)
+        builder.br(sized, (times,), span)
+        builder.position_at(sized)
+        magnitude = sized.add_param(count, "times")
+        raised = self._power_loop(builder, base, ty, magnitude, count, span)
+        over = builder.new_block("power.over")
+        plain = builder.new_block("power.plain")
+        finish = builder.new_block("power.answered")
+        builder.condbr(negative, over, plain, span=span)
+        builder.position_at(over)
+        # One divided by the power, which is what a negative exponent means and
+        # which is the one pair this operator has no answer for.
+        divided = self._reciprocal_of(builder, raised, ty, answer, span)
+        builder.br(finish, (builder.unwrap(divided, ty, span),
+                            builder.failed(divided, span)), span)
+        builder.position_at(plain)
+        builder.br(finish, (raised, builder.bool_const(False)), span)
+        builder.position_at(finish)
+        # The two halves rather than the whole, so that what a block hands over
+        # is values of the kinds a block hands over.
+        value = finish.add_param(ty, "raised")
+        bad = finish.add_param(BOOL, "failed")
+        return builder.wrap(value, bad, answer, span)
+
+    def _power_loop(self, builder: IRBuilder, base: Value, ty: Type,
+                    times: Value, count: IntType, span: Span) -> Value:
+        """Squaring and multiplying, with the exponent's magnitude in a
+        register."""
         one = self._unity(builder, ty, span)
         start = builder.new_block("raise")
         header = builder.new_block("raising")
@@ -5705,8 +5840,8 @@ class Checker:
         builder.position_at(start)
         builder.br(header, (one, base, times), span)
         builder.position_at(header)
-        # Which one it enters with, and what it carries: the answer so far, the
-        # power of the base this bit stands for, and the bits left to look at.
+        # What it carries: the answer so far, the power of the base this bit
+        # stands for, and the bits left to look at.
         found = header.add_param(ty, "found")
         power = header.add_param(ty, "power")
         left = header.add_param(count, "left")
@@ -5723,13 +5858,8 @@ class Checker:
         builder.br(after, (found,), span)
         builder.position_at(after)
         carried = after.add_param(ty, "found")
-        # The bits it has not looked at yet.  The value is not negative -- a
-        # written-down one was refused and a computed one was checked -- so
-        # which of the two shifts this is says nothing about the answer, only
-        # about the type it is done in.
-        rest = builder.binary(
-            BinOp.WRAP_ASHR if count.signed else BinOp.WRAP_LSHR,
-            left, builder.int_const(count, 1), span)
+        rest = builder.binary(BinOp.WRAP_LSHR, left,
+                              builder.int_const(count, 1), span)
         builder.condbr(
             builder.compare(CmpPred.EQ, rest, builder.int_const(count, 0), span),
             last, again, span=span)
@@ -5741,8 +5871,7 @@ class Checker:
                                            power, span),
                             rest), span)
         builder.position_at(done)
-        answer = done.add_param(ty, "raised")
-        return answer
+        return done.add_param(ty, "raised")
 
     def _lower_concat(self, builder: IRBuilder, expr: ast.Binary,
                       expected: Type | None) -> Value:
@@ -6637,6 +6766,20 @@ class Checker:
             case ast.Try():
                 found = self._hint_of(expr.operand)
                 return found.ok if isinstance(found, ResultType) else found
+            case ast.Raised():
+                # A power of a written-down number is a value of what was
+                # raised, except where the number is negative: that is a
+                # division, and a division answers a result.
+                found = self._hint_of(expr.base)
+                if found is None or expr.exponent >= 0:
+                    return found
+                return self._module.types.result_type(found)
+            case ast.Binary() if expr.op is ast.BinaryOp.POWER:
+                # The operator takes an exponent it cannot see, so what it
+                # answers is a result whatever the exponent turns out to be.
+                found = self._hint_of(expr.left)
+                return (None if found is None
+                        else self._module.types.result_type(found))
             case ast.Binary():
                 return self._hint_of(expr.left) or self._hint_of(expr.right)
             case ast.Unary():

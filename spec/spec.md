@@ -424,16 +424,33 @@ operator at all, wrapping being a thing to ask for by writing the wrap rather th
 
 #### Raising to a power
 
-**`a ⁿ b` raises `a` to the power of `b`**, and **a number written raised is the same thing**: `a²` and `a ⁿ 2` are one
-operation written the two ways it is written on paper.  The glyph is the letter mathematics writes an exponent that is not a
-number with, raised the way an exponent is written.
+**`a ⁿ b` raises `a` to the power of `b`**, and **`a²` raises it to a power written as a raised number**.  The glyph is the
+letter mathematics writes an exponent that is not a number with, raised the way an exponent is written.
 
 ```
-a ⁿ b                          ※ a raised to whatever b is
-a²                             ※ the same as a ⁿ 2
-a¹⁴                            ※ a raised to the fourteenth
+a ⁿ b                          ※ u32?: a raised to whatever b is
+a²                             ※ u32:  raised to a power written down, which cannot be negative
+a¹⁴                            ※ u32:  raised to the fourteenth
+a⁻²                            ※ u32?: one divided by the square, which is a division
 1.5f64³                        ※ 3.375: what is raised is a number, what it is raised by is a count
 ```
+
+**The two are not two spellings of one thing**, and what tells them apart is what they answer with.
+
+| Written | Answers | Because |
+|---|---|---|
+| `a ⁿ b` | `T?` | the exponent may turn out to be negative, and a negative one is a division |
+| `a²` | `T` | the exponent is written down and is not negative, so there is always an answer |
+| `a⁻²` | `T?` | the exponent is written down and *is* negative, so this is a division |
+
+**A negative exponent is one divided by the positive power**, which is a division and answers a result exactly as `÷` does:
+there is no answer where what was raised is zero.  For an integer that makes a negative power almost always nothing, which is
+what dividing one by a whole number greater than one *is*; the operator is not the place to decide that a program did not mean
+it, and the division it is written as is the one the program would have written itself.
+
+**The operator's answer is a result whatever the exponent turns out to be.**  Whether it is negative is not known where the
+operator is written, so the type cannot depend on it -- exactly as a division's cannot depend on whether the divisor turns out to
+be zero.  A raised number is known, so `a²` carries no mark for a failure that cannot happen.
 
 **Its two sides are not of one type**, and it is the only operator here of which that is true.  What is raised is a number of
 whatever type it is, and what it is raised by is a **count** -- how many times to multiply the one by itself.  So the answer has
@@ -441,12 +458,8 @@ the type of the left side and the right side is an integer of its own, which is 
 A raised number with nothing to say what width it is, is a `u64`, since an exponent is never the thing a program is being careful
 about.
 
-**The exponent is a whole number** (4510) **and is not negative** (4511).  A fractional power is a root, which no instruction on
-any of these machines computes; a negative one is one divided by the positive power, which for an integer has no answer of the
-type and for a floating-point value has a divisor that may be zero and so an answer that is a result.  Neither is what this
-operator gives, and a program that wants either writes what it wants.  A negative exponent written down is refused where it is
-written; one the program works out stops the program, and only where the exponent's type is signed -- an unsigned one cannot be
-negative, and asking would be asking a question the type has already answered.
+**The exponent is a whole number** (4510).  A fractional power is a root, which no instruction on any of these machines computes
+and which this language does not offer; one is written as a call to whatever computes it.
 
 **What is raised is a number** (4509), which is what may be multiplied: an integer or a floating-point value.
 
@@ -462,14 +475,14 @@ answered with.
 program, and inside `⎕wrap` it goes past the end of the type instead.  Where both sides are written down the answer is worked
 out while compiling and one that will not fit is refused there (4214).
 
-Compare: **Python**, whose `**` this is and which answers a float for a negative exponent, which a language with an integer type
-that says what it holds cannot do; **Fortran** and **Ada**, whose `**` likewise raises an integer by a non-negative integer and
-whose negative exponent is an error for the same reason this one is; **APL** and **BQN**, whose `⍟` and `⋆` are power and take a
-float exponent, having a float everything; **C**, which has no operator and whose `pow` is a floating-point library function, so
-that `x*x` is what everyone writes and `pow(x, 2)` is a famous performance mistake; **Rust**, **Go** and **Zig**, which have no
-operator either and whose `pow`/`powi` name the integer and floating-point cases separately; and **Haskell**, which has three
-operators -- `^`, `^^` and `**` -- one per combination of integer and fractional, which is the most honest arrangement and the
-hardest to remember.
+Compare: **Python**, whose `**` this is and which answers a *float* for a negative integer exponent -- a language whose integer
+types say what they hold cannot do that, so the answer here is the division rather than a change of type; **Fortran** and **Ada**,
+whose `**` raises an integer by a non-negative integer and makes a negative exponent an error, which is the third answer to the
+same question; **APL** and **BQN**, whose `⍟` and `⋆` take a float exponent, having a float everything; **C**, which has no
+operator and whose `pow` is a floating-point library function, so that `x*x` is what everyone writes and `pow(x, 2)` is a famous
+performance mistake; **Rust**, **Go** and **Zig**, which have no operator either and whose `pow`/`powi` name the integer and
+floating-point cases separately; and **Haskell**, which has three operators -- `^`, `^^` and `**` -- one per combination of
+integer and fractional, which is the most honest arrangement anyone has and the hardest to remember.
 
 #### Moving bits
 
