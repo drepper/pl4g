@@ -1,0 +1,20 @@
+※ pl4g-test: compile=error diag=4496
+
+※ An array carries its shape in its type, so how many there are along each
+※ dimension is settled while the program is compiled.  A shape worked out from
+※ something the compiler cannot see would be a shape the type could not say.
+※
+※ A name bound at the top level to a number *is* that number and may be written
+※ here; one bound inside a function stands for whatever an expression produced,
+※ which is a different thing however simple the expression was.
+
+let outer: u64 = 2u64
+
+@[startup]
+fn main() → u8:
+    let inner: u64 = outer
+    ※ this one is fine, the name being a number the compiler knows
+    let known: u8⟦2⟧ = outer ⍴ 0u8
+    ※ and this one is not
+    let made: u8⟦2⟧ = inner ⍴ 0u8
+    made⟦0⟧ + known⟦0⟧

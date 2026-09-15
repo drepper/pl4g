@@ -3650,6 +3650,40 @@ neither of the two numbers anybody wants.
 
 ---
 
+## 2026-09-16T07:00+02:00 — language
+
+**`⍴`, which answers a shape and makes something of one**
+
+Decided on the user's direction: APL's rho, doing APL's two jobs -- written before one thing it answers that thing's shape, and
+written between two it makes something of the shape on its left out of the values on its right, going round again where there are
+fewer values than the new object holds.
+
+**What it answers is what it takes**, and that is the decision that makes the two jobs one operator rather than two spellings
+that happen to share a glyph.  A number for one dimension, a tuple of numbers for more, so `(⍴a) ⍴ b` is well formed for any
+array.  The one place it differs from APL is that one dimension answers the number itself rather than a vector of one: a tuple of
+one is not a thing this language has, APL's arrays having no types they must agree with.
+
+**The shape has to be known while compiling**, which is not a restriction chosen for this operator but what an array is here: the
+shape is in the type.  Three things count as known -- a literal, a name bound at the top level to a number, and the shape of
+something whose type states it.  The third is what keeps `(⍴a) ⍴ b` from being a form of words.
+
+**Too many values are refused rather than dropped.**  APL truncates, and truncating is the one thing this language does not do
+anywhere else: a program that wrote more values than the shape holds either got the shape wrong or the values wrong, and which
+ones would be left out is not something to guess at.  Fewer values go round again, which is the operator's whole point -- and
+"round again" rather than "pad" because what to pad with is a question no type answers.  Fortran's `RESHAPE` takes a `PAD`
+argument and is the other answer; taking one here would mean every use writing what it does not care about.
+
+**One value everywhere is a run and not a loop.**  `n ⍴ 0u8` is a splat over as many lanes as the object holds and one store,
+which the vectorization step then makes one instruction per register's worth.  That is the common case and it costs nothing to
+make it the fast one.
+
+Compare, beyond those above: **NumPy**, whose `reshape` requires the counts to match exactly, and whose `full` and `tile` are the
+other two thirds of what this does -- three names for one idea; **BQN**, whose `⥊` is this with the same cycling; and **Julia**,
+whose `reshape` is a view rather than a copy, which is a decision about ownership this language cannot make until it has
+references.
+
+---
+
 ---
 
 Open questions

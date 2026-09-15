@@ -1419,6 +1419,47 @@ A value of such a type carries a count for every dimension, the stated ones incl
 does not depend on how much of its shape the type says.  **What may be let go of is a length, never a length for a different
 one**: a `u8⟦2,3⟧` stands where `u8⟦,3⟧` or `u8⟦,⟧` is wanted and does not stand where `u8⟦,4⟧` is.
 
+##### Shaping one
+
+**`⍴` is APL's rho and does APL's two jobs.**  Written before one thing it answers that thing's shape; written between two it
+makes something of the shape on its left out of the values on its right.
+
+```
+⍴v                             ※ u64: how many, of a u8⟦4⟧
+⍴m                             ※ 〈u64, u64〉: two and three, of a u8⟦2,3⟧
+
+3 ⍴ 7u8                        ※ u8⟦3⟧: 7 7 7
+6 ⍴ ⟦0u8, 1u8⟧                 ※ u8⟦6⟧: 0 1 0 1 0 1
+〈2, 3〉 ⍴ v                     ※ u8⟦2,3⟧: the four, and then round again
+```
+
+**What it answers is what it takes**, which is not a coincidence: a number for one dimension and a tuple of numbers for more, so
+`(⍴a) ⍴ b` is well formed for any array `a`.  A tuple of one is not a thing this language has, which is why one dimension
+answers the number itself; APL answers a vector of one there and can, its arrays having no types to agree with.
+
+**The shape has to be known while compiling** (4496).  An array carries its shape in its type, so a shape the compiler cannot see
+would be a shape the type could not say.  A literal is known, a name bound at the top level to a number is known, and the shape of
+something whose type states it is known -- which is what makes `(⍴a) ⍴ b` more than a form of words.  Every number of it says
+how many, so none of them is none (4497).
+
+**The values fill the new object in the order its elements lie in** -- the last dimension moving fastest, which is how they are
+laid out -- and **begin again where they run out**.  One value goes everywhere.  Going round again is what makes
+`n ⍴ ⟦0u8, 1u8⟧` alternate, which is the thing this operator is for, and it is why the rule is "round again" rather than
+"pad": what to pad with is a question no type answers.
+
+**More values than the new object holds is refused** (4498).  Which ones would be left out is not something to guess at, and a
+program that meant to leave some out can say which.  APL truncates there; this does not, for the same reason nothing else here
+quietly drops what a program wrote.
+
+It binds tighter than `⧺` and looser than everything that works out what goes in an array, so `2 ⍴ 3u8 + 4u8 ⧺ v` is
+`(2 ⍴ (3u8 + 4u8)) ⧺ v`.
+
+Compare: **APL**, whose `⍴` this is, including the cycling and the two jobs -- the differences are that a shape here has to be
+known while compiling, arrays here having types, and that too many values are refused rather than dropped; **NumPy**, whose
+`reshape` requires the counts to match exactly and whose `full` and `tile` are the other two thirds of this; **BQN**, whose `⥊`
+is the same operator with the same cycling; and **Fortran**, whose `RESHAPE` takes a `PAD` argument, which is the question this
+answers by going round again instead.
+
 ##### Joining two arrays
 
 **`A ⧺ B` is the elements of `A` followed by the elements of `B`**, in an array as long as the two together.  `++` is the

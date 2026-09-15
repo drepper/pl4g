@@ -1,0 +1,10 @@
+※ pl4g-test: compile=error diag=4499
+
+※ A shape is how many there are along each dimension, which is a thing an
+※ array has and other things do not.  What a string is made of is one number
+※ rather than a shape, and `#` is what asks for it.
+
+@[startup]
+fn main() → u8:
+    let how_many: u64 = ⍴"hi"
+    0u8

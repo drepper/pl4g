@@ -4409,6 +4409,92 @@
       "option": null
     },
     {
+      "number": 4496,
+      "name": "LANG_SHAPE_NOT_WRITTEN_DOWN",
+      "severity": "error",
+      "message": "the shape on the left of '⍴' has to be written down",
+      "cause": "An array carries its shape in its type, so how many there are along each dimension is settled while the program is compiled and not while it runs.  A shape worked out from something the compiler cannot see would be a shape the type could not say, which is an array whose room is taken while the program runs -- an allocation, and a different thing from this.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Arrays",
+        "requirement": "The shape on the left of '⍴' is a number, or a tuple of numbers, known while compiling."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4497,
+      "name": "LANG_SHAPE_NOT_A_COUNT",
+      "severity": "error",
+      "message": "{found} is not a length; a shape says how many, which is more than none",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the number that was written"
+        }
+      ],
+      "cause": "Each number of a shape says how many there are along one dimension.  None of them is a length: an array with no elements along a dimension has no elements at all, and this language has no such array.  Neither is a negative number, there being no such count.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Arrays",
+        "requirement": "Every number of a shape is greater than zero."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4498,
+      "name": "LANG_SHAPE_TOO_MANY",
+      "severity": "error",
+      "message": "{found} values will not fit a shape that holds {wanted}",
+      "args": [
+        {
+          "name": "found",
+          "type": "number",
+          "description": "how many values were given"
+        },
+        {
+          "name": "wanted",
+          "type": "number",
+          "description": "how many the new object holds"
+        }
+      ],
+      "cause": "The values on the right of the operator fill the new object, going round again where there are fewer of them than it holds.  More of them than it holds is the other way round, and there is no reading of it: which ones would be left out is not something to guess at, and a program that meant to leave some out can say which.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Arrays",
+        "requirement": "The right of the operator has no more elements than the shape on the left holds."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4499,
+      "name": "LANG_SHAPE_HAS_NONE",
+      "severity": "error",
+      "message": "'⍴' answers a shape, and '{found}' has none",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type of what was asked"
+        }
+      ],
+      "cause": "A shape is how many there are along each dimension, which is a thing an array has and other things do not.  What a string, a tuple, a set or a dictionary is made of is one number rather than a shape, and '#' is what asks for it.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Arrays",
+        "requirement": "'⍴' written before one thing is written before an array."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 5001,
       "name": "LANG_STMT_UNREACHABLE",
       "severity": "warning",

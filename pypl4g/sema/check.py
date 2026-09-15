@@ -5133,6 +5133,105 @@ class Checker:
                              operator=op.value, found=ty.render())
         return ERROR
 
+    def _lower_reshape(self, builder: IRBuilder, expr: ast.Binary,
+                       expected: Type | None) -> Value:
+        """Lower `SHAPE \N{APL FUNCTIONAL SYMBOL RHO} VALUES`: something of that shape, filled with those.
+
+        The shape has to be written down -- an array carries its shape in its
+        type, so how many there are along each dimension is settled while the
+        program is compiled.  What fills it is either one value, which goes
+        everywhere, or an array, which is walked in the order its elements lie
+        in and begun again where it runs out.  More values than the new object
+        holds is refused: which ones would be left out is not something to guess
+        at.
+
+        Going round again is what makes `n \N{APL FUNCTIONAL SYMBOL RHO} \N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}0u8, 1u8\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}` alternate, which is the
+        thing this operator is for and is why the rule is "round again" rather
+        than "pad with something".  What it would pad with is a question no type
+        answers.
+        """
+        shape = self._written_shape(expr.left)
+        source = self._lower_expr(builder, expr.right, None)
+        found = self._value_type_of(source)
+        if shape is None or found is ERROR:
+            return UndefConst(ERROR)
+        total = 1
+        for along in shape:
+            total *= along
+        element, count = (found.element, found.count) \
+            if isinstance(found, ArrayType) else (found, None)
+        if isinstance(found, ArrayType) and not found.fixed:
+            self._diags.emit(D.LANG_CONCAT_NEEDS_A_STATED_SHAPE, expr.right.span,
+                             found=found.render())
+            return UndefConst(ERROR)
+        if count is not None and count > total:
+            self._diags.emit(D.LANG_SHAPE_TOO_MANY, expr.span, found=count,
+                             wanted=total)
+            return UndefConst(ERROR)
+        answer = self._module.types.array_type(element, shape)
+        place = builder.frame(answer, expr.span)
+        if count is None:
+            # One value everywhere, which is one operation over the whole run
+            # rather than one per element: the same machinery an operator over
+            # an array uses, asked for a run of one value.
+            held = self._module.types.vec_type(element, total)
+            builder.store(
+                builder.cast(CastKind.BITCAST, place,
+                             self._module.types.ptr_type(held, mutable=True),
+                             expr.span),
+                builder.splat(source, held, expr.span), expr.span)
+        else:
+            start, _ = self._shape_of(builder, source, found, expr.span)
+            for at in range(total):
+                builder.store(
+                    self._element_place(builder, place, element,
+                                        builder.int_const(U64, at), expr.span),
+                    builder.load(
+                        self._element_place(builder, start, element,
+                                            builder.int_const(U64, at % count),
+                                            expr.span),
+                        expr.span),
+                    expr.span)
+        made = builder.cast(CastKind.BITCAST, place, answer, expr.span)
+        if not self._accepts(expected, answer):
+            self._report_mismatch(expr.span, answer, expected)
+            return UndefConst(ERROR)
+        return made
+
+    def _written_shape(self, expr: ast.Expr) -> tuple[int, ...] | None:
+        """The shape written on the left of the operator, or nothing where what
+        is written is not one.
+
+        Read off the syntax and not lowered.  Three things are one: a number
+        the compiler knows -- a literal, or a name bound at the top level to one
+        -- a tuple of those, and the shape of something whose type says its
+        shape.  The last is what makes `(⍴a) ⍴ b` well formed and is the reason
+        the one glyph does both jobs.
+        """
+        if isinstance(expr, ast.Unary) and expr.op is ast.UnaryOp.SHAPE:
+            # The shape of something, which is known where its type says it --
+            # and where its type says it is exactly where this needs it.  That
+            # is what makes `(\N{APL FUNCTIONAL SYMBOL RHO}a) \N{APL FUNCTIONAL SYMBOL RHO} b` well formed, which is the reason the one
+            # glyph does both jobs.
+            of = self._hint_of(expr.operand)
+            if isinstance(of, ArrayType) and of.fixed:
+                return tuple(along for along in of.shape if along is not None)
+            self._diags.emit(D.LANG_SHAPE_NOT_WRITTEN_DOWN, expr.span)
+            return None
+        written = expr.members if isinstance(expr, ast.TupleLit) else (expr,)
+        found: list[int] = []
+        for one in written:
+            along = self._constant_number(one)
+            if along is None:
+                self._diags.emit(D.LANG_SHAPE_NOT_WRITTEN_DOWN, one.span)
+                return None
+            if along <= 0:
+                self._diags.emit(D.LANG_SHAPE_NOT_A_COUNT, one.span,
+                                 found=str(along))
+                return None
+            found.append(along)
+        return tuple(found)
+
     def _lower_concat(self, builder: IRBuilder, expr: ast.Binary,
                       expected: Type | None) -> Value:
         """Lower `A \N{DOUBLE PLUS} B`: one array's elements after another's.
@@ -5286,6 +5385,8 @@ class Checker:
         """
         if expr.op is ast.BinaryOp.CONCAT:
             return self._lower_concat(builder, expr, expected)
+        if expr.op is ast.BinaryOp.SHAPE:
+            return self._lower_reshape(builder, expr, expected)
         # An operator is defined on values and not on arrays, so what is wanted
         # of each side is what an array of them would be an array of -- which
         # lets a number stand beside an array and take its element's type.
@@ -5483,6 +5584,8 @@ class Checker:
             return self._lower_not(builder, expr, expected)
         if expr.op is ast.UnaryOp.LENGTH:
             return self._lower_length(builder, expr, expected)
+        if expr.op is ast.UnaryOp.SHAPE:
+            return self._lower_shape(builder, expr, expected)
         outer, self._operand_of = self._operand_of, expr.op.value
         was_listing, self._listing = self._listing, True
         try:
@@ -5564,6 +5667,39 @@ class Checker:
                 builder, builder.cast(CastKind.BITCAST, value,
                                       tables.table_type(self._module), span))
         return None
+
+    def _lower_shape(self, builder: IRBuilder, expr: ast.Unary,
+                     expected: Type | None) -> Value:
+        """Lower `\N{APL FUNCTIONAL SYMBOL RHO}x`: how many there are along each of its dimensions.
+
+        What it answers is what it takes on the other side of itself: a number
+        for one dimension and a tuple of numbers for more, which is exactly what
+        may be written on the left of the two-sided form.  So `(\N{APL FUNCTIONAL SYMBOL RHO}a) \N{APL FUNCTIONAL SYMBOL RHO} b` is
+        well formed for any array `a`, and that is not a coincidence -- it is
+        the reason the one glyph does both jobs in APL and here.
+
+        A tuple of one is not a thing this language has, which is why one
+        dimension answers the number itself.  APL answers a vector of one there
+        and can, its arrays having no types to agree with.
+        """
+        value = self._lower_expr(builder, expr.operand, None)
+        ty = self._value_type_of(value)
+        if ty is ERROR:
+            return UndefConst(ERROR)
+        if not isinstance(ty, ArrayType):
+            self._diags.emit(D.LANG_SHAPE_HAS_NONE, expr.operand.span,
+                             found=ty.render())
+            return UndefConst(ERROR)
+        along = [builder.int_const(U64, count) if count is not None
+                 else builder.extract(value, at + 1, U64, expr.span)
+                 for at, count in enumerate(ty.shape)]
+        found = along[0] if ty.rank == 1 else builder.make_tuple(
+            along, self._module.types.tuple_type((U64,) * ty.rank), expr.span)
+        answer = self._value_type_of(found)
+        if not self._accepts(expected, answer):
+            self._report_mismatch(expr.span, answer, expected)
+            return UndefConst(ERROR)
+        return found
 
     def _lower_not(self, builder: IRBuilder, expr: ast.Unary,
                    expected: Type | None) -> Value:

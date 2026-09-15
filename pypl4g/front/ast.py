@@ -229,6 +229,8 @@ class BinaryOp(StrEnum):
     SAT_MUL = "\N{SQUARED TIMES}"
 
     CONCAT = "\N{DOUBLE PLUS}"
+    #: Making something of the shape on the left out of the values on the right.
+    SHAPE = "\N{APL FUNCTIONAL SYMBOL RHO}"
 
 
 class UnaryOp(StrEnum):
@@ -239,6 +241,8 @@ class UnaryOp(StrEnum):
     #: How many: of the characters of a string, of the outermost dimension of an
     #: array, of the members of a tuple, of what a set or a dictionary holds.
     LENGTH = "#"
+    #: The shape of an array: how many along each of its dimensions.
+    SHAPE = "\N{APL FUNCTIONAL SYMBOL RHO}"
 
 
 @dataclass(frozen=True, slots=True)

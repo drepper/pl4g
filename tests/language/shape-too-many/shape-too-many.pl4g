@@ -1,0 +1,12 @@
+※ pl4g-test: compile=error diag=4498
+
+※ The values fill the new object, going round again where there are fewer of
+※ them than it holds.  More of them than it holds is the other way round and
+※ has no reading: which ones would be left out is not something to guess at.
+
+let v: u8⟦4⟧ = ⟦1u8, 2u8, 3u8, 4u8⟧
+
+@[startup]
+fn main() → u8:
+    let made: u8⟦2⟧ = 2 ⍴ v
+    made⟦0⟧

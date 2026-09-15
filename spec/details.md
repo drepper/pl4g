@@ -375,6 +375,15 @@ give -- `pmullw` and `pmulld` on one, `mul` at three arrangements on the other.
 Which lane widths a machine has an operation at is stated as a set and not as a width to stay under, because of that last one:
 x86-64 multiplies halfwords at every level and words from the second on and bytes not at all, which is not a range.
 
+**`⍴` costs nothing on the left and one store per element on the right.**  The shape is known while compiling, so what it
+answers written before one thing is a constant or a read of the counts a dynamic array carries; the two-sided form takes room for
+the answer where it stands and fills it.
+
+Filling has two shapes.  **One value everywhere** is a run: a splat of that value over as many lanes as the new object holds, and
+one store -- which the step that cuts runs into pieces then makes one instruction per register's worth.  **Values from an array**
+are a store apiece, each reading the source at `at % count`, which is a number known while compiling since both are.  Where the
+two counts are equal that is a plain copy and could be a run as well; a to-do line records it.
+
 **`#` is four reads and one walk.**  A tuple's count and a fixed array's are numbers the type holds, so they are constants; a
 dynamic array's is the second of the parts it travels in; a table's is a field of the table block, kept by the two operations
 that put things in rather than counted when asked.  A string's is the one that needs code, and it is its own function rather than

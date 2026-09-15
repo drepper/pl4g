@@ -351,6 +351,11 @@ To Do List for the pypl4g compiler
     is a byte loop.  What it wants is a run whose length is a value rather than a number, which is the same thing a loop over a
     dynamically sized array would want.
 
+[ ] fill a shape from an array a run at a time where the counts are equal.  `⍴` with one value is a splat and one store,
+    which the run machinery cuts up; with an array it is a store per element, each reading the source at a place known while
+    compiling.  Where the two counts are equal that is a plain copy and is the same thing joining two arrays does, so it wants
+    the same treatment; where they are not, it is a copy of one run repeated, which is a different question.
+
 [ ] report a tuple holding an array.  `〈⟦1u8, 2u8⟧〉` reaches the code generator and fails there (9901, "making a 〈u8⟦2⟧〉, which
     is one value and not several"), so what a reader is told is an internal error about a program the front end accepted.  Either
     an array is a thing a tuple may hold, in which case `parts_of` has to say what its parts are, or it is not and the checker

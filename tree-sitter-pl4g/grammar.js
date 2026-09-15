@@ -569,13 +569,16 @@ module.exports = grammar({
       // something, so two plus signs begin nothing else.
       prec.left(4, seq($._non_comparison, field('operator', choice('\u29fa', '++')),
                        $._non_comparison)),
-      prec.left(5, seq($._non_comparison, field('operator', '|'), $._non_comparison)),
-      prec.left(6, seq($._non_comparison, field('operator', '^'), $._non_comparison)),
-      prec.left(7, seq($._non_comparison, field('operator', '&'), $._non_comparison)),
-      prec.left(8, seq($._non_comparison,
+      // Making something of a shape, which is APL's rho doing APL's job.
+      prec.left(5, seq($._non_comparison, field('operator', '\u2374'),
+                       $._non_comparison)),
+      prec.left(6, seq($._non_comparison, field('operator', '|'), $._non_comparison)),
+      prec.left(7, seq($._non_comparison, field('operator', '^'), $._non_comparison)),
+      prec.left(8, seq($._non_comparison, field('operator', '&'), $._non_comparison)),
+      prec.left(9, seq($._non_comparison,
                        field('operator', choice('+', '-', '\u229e', '\u229f')),
                        $._non_comparison)),
-      prec.left(9, seq($._non_comparison,
+      prec.left(10, seq($._non_comparison,
                        field('operator', choice('\u00d7', '\u00f7', '%', '\u22a0',
                                                 '\u00ab', '\u00bb', '\u21ba', '\u21bb')),
                        $._non_comparison)),
@@ -584,8 +587,8 @@ module.exports = grammar({
     // Both bind tighter than every operator written between two operands, so
     // `\u00ac ready \u2227 seen` is `(\u00ac ready) \u2227 seen` and `\u00ac (a < b)` needs its parentheses --
     // the same rule '!' follows in C, Go and Rust.
-    unary_expression: $ => prec(10, seq(
-      field('operator', choice('~', '\u00ac', '#')), $._non_comparison,
+    unary_expression: $ => prec(11, seq(
+      field('operator', choice('~', '\u00ac', '#', '\u2374')), $._non_comparison,
     )),
 
     // A call and a member both bind tighter than any operator, and to whatever
@@ -594,7 +597,7 @@ module.exports = grammar({
     // `EXPR?` hands back the answer inside a result and leaves the function
     // with the error where there is none.  It binds as tightly as a call does,
     // to whatever stands immediately before it.
-    try_expression: $ => prec(11, seq(
+    try_expression: $ => prec(12, seq(
       field('value', $._non_comparison), '?',
     )),
 
@@ -624,7 +627,7 @@ module.exports = grammar({
     // of them.  One index per dimension, in the order the shape was written
     // in.  It binds as tightly as a call does, and to whatever stands
     // immediately before it.
-    element_expression: $ => prec(11, seq(
+    element_expression: $ => prec(12, seq(
       field('array', $._non_comparison),
       '\u27e6', sepBy1(',', field('index', $._expression)), '\u27e7',
     )),
@@ -647,12 +650,12 @@ module.exports = grammar({
 
     // Whether a set holds a key, or what a dictionary has for one.  It binds
     // as tightly as a call does, and to whatever stands immediately before it.
-    index_expression: $ => prec(11, seq(
+    index_expression: $ => prec(12, seq(
       field('collection', $._non_comparison),
       '\u2e28', field('key', $._expression), '\u2e29',
     )),
 
-    call_expression: $ => prec(11, seq(
+    call_expression: $ => prec(12, seq(
       field('function', $._non_comparison),
       '(', sepBy(',', field('argument', $._spreadable)), ')',
     )),
@@ -667,7 +670,7 @@ module.exports = grammar({
 
     // Something named through the module it belongs to, which binds tighter
     // than any operator: `a.b & c` is `(a.b) & c`.
-    member_expression: $ => prec(11, seq(
+    member_expression: $ => prec(12, seq(
       field('base', $._non_comparison), '.', field('name', $.identifier),
     )),
 

@@ -106,6 +106,10 @@ _BINARY_OPERATORS: Final[dict[TokKind, _Operator]] = {
     # in one and tighter than every comparison, so that `a + 1u8 \N{DOUBLE PLUS} b` joins
     # what the two sides came to and `x \N{DOUBLE PLUS} y = z` asks about the whole join.
     TokKind.CONCAT: _Operator(ast.BinaryOp.CONCAT, 8),
+    # Making something of a shape binds tighter than joining two and looser than
+    # everything that works out what goes in one, so `2 ⍴ a + 1u8` makes two of
+    # what the addition came to and `s ⍴ v ⧺ w` joins what it made to `w`.
+    TokKind.SHAPE: _Operator(ast.BinaryOp.SHAPE, 9),
     TokKind.PIPE: _Operator(ast.BinaryOp.BIT_OR, 10),
     TokKind.CARET: _Operator(ast.BinaryOp.BIT_XOR, 20),
     TokKind.AMPERSAND: _Operator(ast.BinaryOp.BIT_AND, 30),
@@ -132,6 +136,7 @@ _UNARY_OPERATORS: Final[dict[TokKind, ast.UnaryOp]] = {
     TokKind.TILDE: ast.UnaryOp.BIT_NOT,
     TokKind.LOGIC_NOT: ast.UnaryOp.LOGIC_NOT,
     TokKind.LENGTH: ast.UnaryOp.LENGTH,
+    TokKind.SHAPE: ast.UnaryOp.SHAPE,
 }
 
 

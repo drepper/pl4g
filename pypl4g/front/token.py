@@ -193,6 +193,12 @@ SAT_MUL_GLYPH: Final[str] = "\N{SQUARED TIMES}"
 #: things, not of the values".
 CONCAT_GLYPH: Final[str] = "\N{DOUBLE PLUS}"
 
+#: The shape of an array, and the making of one with a shape.  It is APL's rho
+#: and does APL's two jobs: written before one thing it answers that thing's
+#: shape, and written between two it makes something of the shape on its left
+#: out of the values on its right.
+SHAPE_GLYPH: Final[str] = "\N{APL FUNCTIONAL SYMBOL RHO}"
+
 #: Accepted substitute for the arrow.  Two characters, so it claims nothing.
 ARROW_ASCII: Final[str] = "->"
 
@@ -314,6 +320,7 @@ class TokKind(StrEnum):
 
     CONCAT = "'\N{DOUBLE PLUS}'"
     LENGTH = "'#'"
+    SHAPE = "'\N{APL FUNCTIONAL SYMBOL RHO}'"
 
     DOC_COMMENT = "documentation comment"
     NEWLINE = "end of line"
