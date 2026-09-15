@@ -107,6 +107,7 @@ the parser does, and they are the floor everything else is measured against.
 | `c091086` | 2.27 | 3.06 | 2.83 | 2.66 |
 | `de02cdf` | 1.89 | 2.75 | 2.62 | 2.49 |
 | `2b9fd68` | 1.85 | 2.71 | 2.64 | 2.26 |
+| `914edae` | 1.96 | 3.12 | 2.70 | 2.35 |
 
 ### Variables and memory
 
@@ -192,6 +193,7 @@ backend do.
 | `c091086` | 2.42 | 2.97 | 2.65 |
 | `de02cdf` | 2.06 | 2.67 | 2.40 |
 | `2b9fd68` | 2.10 | 2.68 | 2.35 |
+| `914edae` | 2.24 | 2.79 | 2.76 |
 
 ### Register pressure
 
@@ -277,6 +279,7 @@ and they are the only ones that reach the frame.
 | `c091086` | 3.21 | 9.14 |
 | `de02cdf` | 2.96 | 8.91 |
 | `2b9fd68` | 2.92 | 8.91 |
+| `914edae` | 3.20 | 9.22 |
 
 ### What is left out
 
@@ -362,6 +365,7 @@ decision log does.
 | `c091086` | 2.83 | 2.83 |
 | `de02cdf` | 2.50 | 2.57 |
 | `2b9fd68` | 2.48 | 2.52 |
+| `914edae` | 2.70 | 2.72 |
 
 ### Expressions (1 of 3)
 
@@ -447,6 +451,7 @@ optimizer does.
 | `c091086` | 2.79 | 2.72 | 3.79 | 3.89 | 3.92 | 3.01 | 2.95 | 9.06 |  | 3.77 | 4.02 | 6.67 | 3.13 | 4.38 |
 | `de02cdf` | 2.66 | 2.37 | 3.58 | 3.71 | 3.60 | 2.59 | 2.78 | 9.00 |  | 3.53 | 3.84 | 6.52 | 2.96 | 4.32 |
 | `2b9fd68` | 2.65 | 2.31 | 3.60 | 3.63 | 3.57 | 2.57 | 2.71 | 8.75 | 9.48 | 3.52 | 3.60 | 6.17 | 2.85 | 4.23 |
+| `914edae` | 2.68 | 2.50 | 4.11 | 4.24 | 4.24 | 2.82 | 2.99 | 9.19 | 9.60 | 3.73 | 3.96 | 6.55 | 3.09 | 4.42 |
 
 ### Expressions (2 of 3)
 
@@ -529,6 +534,7 @@ optimizer does.
 | `c091086` | 4.38 | 3.66 | 3.35 | 7.37 | 11.39 | 5.10 | 9.87 | 10.60 | 5.84 | 4.50 | 4.56 | 4.15 | 9.89 | 5.79 |
 | `de02cdf` | 4.02 | 3.48 | 3.17 | 7.00 | 10.86 | 4.87 | 9.64 | 10.51 | 5.29 | 4.32 | 4.17 | 3.98 | 9.71 | 5.53 |
 | `2b9fd68` | 4.12 | 3.44 | 3.23 | 6.96 | 10.82 | 4.82 | 9.59 | 10.43 | 5.40 | 4.26 | 4.10 | 3.96 | 9.59 | 5.34 |
+| `914edae` | 3.99 | 3.95 | 3.53 | 7.54 | 11.07 | 5.04 | 9.61 | 10.52 | 5.41 | 4.57 | 4.68 | 3.98 | 9.79 | 5.75 |
 
 ### Expressions (3 of 3)
 
@@ -611,6 +617,7 @@ optimizer does.
 | `c091086` | 9.68 | 8.10 | 6.14 | 7.52 | 5.08 |
 | `de02cdf` | 9.32 | 7.97 | 5.95 | 7.35 | 4.90 |
 | `2b9fd68` | 9.40 | 7.94 | 5.84 | 7.23 | 4.91 |
+| `914edae` | 9.56 | 8.03 | 5.96 | 7.28 | 5.17 |
 
 ### Types (1 of 2)
 
@@ -695,6 +702,7 @@ Definitions the program writes.  These move when the parser, the name resolution
 | `c091086` | 2.51 | 5.34 | 5.48 | 5.83 | 7.03 | 4.02 | 8.16 | 6.76 | 41.89 | 33.04 | 25.97 | 54.66 |  |  |
 | `de02cdf` | 2.20 | 4.86 | 5.05 | 5.41 | 6.59 | 3.58 | 7.67 | 6.33 | 40.60 | 32.33 | 25.36 | 35.58 | 55.47 | 15.91 |
 | `2b9fd68` | 2.17 | 4.84 | 4.93 | 5.44 | 6.56 | 3.56 | 7.65 | 6.31 | 40.38 | 31.85 | 25.46 | 35.90 | 54.14 | 15.42 |
+| `914edae` | 2.30 | 4.84 | 5.39 | 5.68 | 6.56 | 3.66 | 7.83 | 6.43 | 42.54 | 33.58 | 26.15 | 35.86 | 55.46 | 15.58 |
 
 ### Types (2 of 2)
 
@@ -777,6 +785,7 @@ Definitions the program writes.  These move when the parser, the name resolution
 | `c091086` |  |  |  |
 | `de02cdf` | 19.53 | 9.36 |  |
 | `2b9fd68` | 19.55 | 9.03 | 9.04 |
+| `914edae` | 19.66 | 9.09 | 9.34 |
 
 ### Loops
 
@@ -862,6 +871,7 @@ These move when the register allocator or the branch lowering does.
 | `c091086` | 3.42 | 3.96 | 3.33 | 4.78 | 3.73 | 5.52 | 5.00 | 4.80 | 6.08 | 5.34 | 9.17 | 26.62 |
 | `de02cdf` | 3.13 | 3.74 | 3.11 | 4.58 | 3.45 | 5.82 | 5.09 | 4.70 | 6.29 | 5.30 | 8.89 | 26.61 |
 | `2b9fd68` | 3.09 | 3.66 | 3.14 | 4.60 | 3.43 | 5.22 | 4.81 | 4.53 | 5.81 | 5.06 | 8.94 | 26.44 |
+| `914edae` | 3.28 | 3.88 | 3.31 | 4.81 | 3.48 | 5.32 | 4.75 | 4.69 | 5.98 | 5.44 | 9.02 | 26.57 |
 
 ### Collections
 
@@ -947,6 +957,7 @@ changes, and they are the only samples that carry code the compiler wrote for it
 | `c091086` | 19.66 | 25.57 | 17.62 | 20.24 |
 | `de02cdf` | 19.44 | 25.57 | 17.53 | 20.26 |
 | `2b9fd68` | 19.87 | 25.95 | 17.75 | 20.56 |
+| `914edae` | 20.32 | 25.71 | 17.47 | 20.20 |
 
 Process
 -------
@@ -1036,6 +1047,7 @@ worth showing here, and every figure is in the JSON beside this file.
 | `c091086` | 92 | 151 |
 | `de02cdf` | 93 | 154 |
 | `2b9fd68` | 92 | 149 |
+| `914edae` | 96 | 154 |
 
 What each row is:
 
@@ -1116,6 +1128,7 @@ What each row is:
 - `c091086` -- ⚡ Narrow arithmetic is done narrow, and the flags say whether it fit
 - `de02cdf` -- 📝 What an operator over a whole run means, and what it does not
 - `2b9fd68` -- ✨ ⎕wrap, which says of a region that its arithmetic may go past the end
+- `914edae` -- ♻️ A saturating operator inside ⎕wrap is an error
 
 What each program exercises:
 
