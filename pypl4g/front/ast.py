@@ -236,6 +236,9 @@ class UnaryOp(StrEnum):
 
     BIT_NOT = "~"
     LOGIC_NOT = "\N{NOT SIGN}"
+    #: How many: of the characters of a string, of the outermost dimension of an
+    #: array, of the members of a tuple, of what a set or a dictionary holds.
+    LENGTH = "#"
 
 
 @dataclass(frozen=True, slots=True)

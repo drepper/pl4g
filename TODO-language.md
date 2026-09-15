@@ -328,9 +328,12 @@ To Do List for the PL4g language
     comparison of the bytes, and the run-at-a-time machinery is what would do the second.  Ordering is a different question and
     a much larger one: which order is a collation, and there is more than one.
 
-[ ] say how long a string is.  Two answers are wanted and they are different numbers: how many bytes, which is in the value
-    already, and how many characters, which is a walk.  Naming them both is the decision; naming one `length` is the mistake
-    every language that has made it has had to live with.
+[x] say how long a string is.  Done as `#`, which answers characters -- the number that needs a walk, on the grounds that the
+    number that does not is the one nobody wants.  What is still open is how the *byte* count is spelled, it being in the value
+    already and wanted by anything that writes a string out.  `#` is taken and should stay taken by the useful one.
+
+[ ] count all the elements of a multi-dimensional array.  `#` answers its outermost dimension, which is what makes it agree with
+    `foreach`; how many there are in all is a product of the shape and is a different question.  Nothing asks it yet.
 
 [ ] take a piece of a string.  A slice of one has to begin and end where a character does, so it is not the same operation an
     array's slice is -- either the ends are found by walking, or the type says they were.

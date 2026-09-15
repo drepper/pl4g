@@ -3614,6 +3614,42 @@ has, one layer up.
 
 ---
 
+## 2026-09-16T05:30+02:00 — language
+
+**`#`, which answers how many**
+
+Decided on the user's direction: one operator written before its operand, answering how many things the operand is made of --
+characters for a string, the outermost dimension for an array, members for a tuple, entries for a set or a dictionary.
+
+**One operator for five types rather than five names.**  The alternative is what Go and Rust do, a `len` per type reached as a
+method, and what it costs is that the five stop looking like one question.  They are one question: *how many things is this made
+of*.  Naming it once is what makes `#s`, `#v` and `#d` read alike, and it is what APL does with `≢` and Python with `len`.
+
+**A string's count is characters and not bytes**, and that is the decision the instruction was really about.  Go's `len` on a
+string is bytes and Rust's is bytes, and in both the easy call is the one that is usually wrong -- a program that wants to know
+how much text there is asks and gets an answer about storage.  Here the number that needs no walk is the one nobody wants, so it
+is not the one the operator gives; the byte count is not offered at all yet, and the to-do list records that rather than this
+guessing which spelling it should have.
+
+**An array answers its outermost dimension and not how many elements in all.**  `#m` of a `u8⟦2,4⟧` is two.  That is what makes
+`#` and `foreach` agree -- a walk over that array gives two rows -- and a count of all eight is a different question, which is a
+product of the shape and which nothing yet asks.
+
+**It is not walked over an array.**  Every other operator written before its operand reaches an array by being applied to every
+element; this one is defined on the array itself.  That is not an exception to the listable rule so much as a different kind of
+operator: the listable ones are defined on values and lifted, and this one was never defined on a value.
+
+**It binds where the other prefix operators bind**, which puts it tighter than every operator written between two operands and
+looser than an index or a call: `#v + 1u64` adds one to the count, and `#m⟦1⟧` counts the row.
+
+Compare, beyond the above: **C**, where `strlen` walks and `sizeof` does not and the two are spelled so differently that nobody
+confuses them -- which is the one thing C got right here and is an argument for two names rather than one, answered by the fact
+that a string is the only one of the five with two counts to tell apart; **Swift**, whose `count` on a `String` is grapheme
+clusters and is O(n) for the same reason this is; and **JavaScript**, whose `.length` on a string is UTF-16 code units, which is
+neither of the two numbers anybody wants.
+
+---
+
 ---
 
 Open questions

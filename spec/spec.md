@@ -539,6 +539,46 @@ to carry the mark and here the expression carries it once; **Go**, which wraps a
 whose `&+`, `&-` and `&*` are Zig's answer with different spelling.  What none of them has is a way to say it of a region rather
 than of an operator, which is what makes `⎕wrap` worth being a wrapup rather than nine more glyphs.
 
+#### How many
+
+**`#x` answers how many things `x` is made of**, as a `u64`.  What that means is the thing's own business:
+
+| Written before | Answers |
+|---|---|
+| a string | how many **characters** it has, not how many bytes |
+| an array | how many along its **outermost** dimension |
+| a tuple | how many members it has |
+| a set or a dictionary | how many it is holding just now |
+
+```
+#"a£€"                        ※ 3, and the bytes are six
+#⟦1u8, 2u8, 3u8⟧                ※ 3
+#m                             ※ 2, of a u8⟦2,4⟧ -- rows, not elements
+#〈1u8, 2u16〉                    ※ 2
+#⸨1u8, 2u8, 5u8⸩              ※ 3
+```
+
+**A string's count is the only one that is work.**  A tuple's is how many members its type names, a fixed array's is the first
+number of its shape, a dynamic array's is the count it carries beside where its elements are, and a table's is a field of the
+table -- all four are read or are already known.  A string's is a walk, because there is no arithmetic on the number of bytes
+that gives the number of characters; that is the whole reason this operator says "characters" and not "bytes", since the number
+nobody has to walk for is the one nobody wants.
+
+**It binds as tightly as the other operators written before their operand.**  So `#v + 1u64` asks about `v` and adds one, and
+`#m⟦1⟧` asks about the row rather than about the table -- an index binding tighter than any operator, as a call does.
+
+**It is not walked over an array** the way `~` and `¬` are.  Those are defined on values and reach an array by being applied to
+every element; this one is defined on the array itself, and asking it of every element would be a different question about a
+different thing.
+
+Asking it of something that is one thing is an error (4495).
+
+Compare: **APL**, whose monadic `≢` is this exactly -- the length of the leading axis -- and whose `⍴` gives the whole shape;
+**Python**, whose `len` is this for every one of these and is a function; **Go** and **Rust**, where `len` is a method and a
+string's is *bytes*, so counting characters is a different call and the easy one is the one that is usually wrong; and **C**,
+where `strlen` walks and `sizeof` does not and the two are spelled so differently that nobody confuses them, which is the one
+thing C got right here.
+
 #### Comparisons
 
 Six operators compare two values.  All six bind equally, and looser than every other operator.

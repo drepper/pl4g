@@ -77,6 +77,7 @@ _SIMPLE: Final[dict[str, TokKind]] = {
     TIMES_GLYPH: TokKind.TIMES,
     DIVIDE_GLYPH: TokKind.DIVIDE,
     "%": TokKind.PERCENT,
+    "#": TokKind.LENGTH,
     SHIFT_LEFT_GLYPH: TokKind.SHIFT_LEFT,
     SHIFT_RIGHT_GLYPH: TokKind.SHIFT_RIGHT,
     ROTATE_LEFT_GLYPH: TokKind.ROTATE_LEFT,

@@ -1,0 +1,57 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ `#` answers how many things something is made of, and what that means is the
+※ thing's own business: the characters of a string, the outermost dimension of
+※ an array, the members of a tuple, what a set or a dictionary holds.  All five
+※ answer a `u64`, since an array's length already is one.
+※
+※ Three of the five cost nothing.  A tuple's is how many members its type
+※ names; a fixed array's is the first number of its shape; a dynamic array's is
+※ the count it carries beside where its elements are.  A table's is a field of
+※ the table.  A string's is the only walk, there being no arithmetic on the
+※ number of bytes that gives the number of characters -- which is the whole
+※ reason the operator says "characters" and not "bytes".
+※
+※ It binds as tightly as the other operators written before their operand, so
+※ `#v + 1u64` asks about `v` and adds one, and `#v⟦0⟧` asks about the element.
+
+@[startup, impure]
+fn main() → u8:
+    let v: u8⟦3⟧ = ⟦1u8, 2u8, 3u8⟧
+    let m: u8⟦2,4⟧ = ⟦⟦1u8, 2u8, 3u8, 4u8⟧, ⟦5u8, 6u8, 7u8, 8u8⟧⟧
+    let t: 〈u8, u16, u32〉 = 〈1u8, 2u16, 3u32〉
+    let text: str = "a£€𐀀"
+    let s: ⸨u8⸩ = ⸨1u8, 2u8, 5u8⸩
+    let d: ⸨u8: u16⸩ = ⸨1u8: 10u16, 2u8: 20u16⸩
+    let run: u8⟦⟧ = v⟦0…2⟧
+    if #v ≠ 3u64:
+        1u8
+    ※ a table answers its outermost dimension and not how many elements in all
+    elif #m ≠ 2u64:
+        2u8
+    elif #t ≠ 3u64:
+        3u8
+    ※ four characters and ten bytes, which is what makes this the useful one
+    elif #text ≠ 4u64:
+        4u8
+    elif #s ≠ 3u64:
+        5u8
+    elif #d ≠ 2u64:
+        6u8
+    ※ a run taken out of an array carries its own count
+    elif #run ≠ 2u64:
+        7u8
+    ※ it binds tighter than every operator written between two operands
+    elif #v + 1u64 ≠ 4u64:
+        8u8
+    ※ and looser than an index, so this asks about the row and not the table
+    elif #m⟦1⟧ ≠ 4u64:
+        9u8
+    ※ a string made by joining two is a string, and is counted the same way
+    elif #("ab" ⧺ text) ≠ 6u64:
+        10u8
+    ※ and what it answers is a number like any other
+    elif #text + #v ≠ 7u64:
+        11u8
+    else:
+        0u8

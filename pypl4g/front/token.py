@@ -313,6 +313,7 @@ class TokKind(StrEnum):
     SAT_MUL = "'\N{SQUARED TIMES}'"
 
     CONCAT = "'\N{DOUBLE PLUS}'"
+    LENGTH = "'#'"
 
     DOC_COMMENT = "documentation comment"
     NEWLINE = "end of line"

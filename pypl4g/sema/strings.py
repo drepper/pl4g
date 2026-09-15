@@ -44,6 +44,7 @@ from .tables import ALLOC_SYMBOL
 #: collides with them.
 NEXT_SYMBOL: Final[str] = "__pl4g_str_next"
 JOIN_SYMBOL: Final[str] = "__pl4g_str_join"
+LENGTH_SYMBOL: Final[str] = "__pl4g_str_length"
 
 #: What the leading byte of a sequence says.  The first number is the value the
 #: byte must be below for the row to apply, the second how many bits of the code
@@ -108,6 +109,56 @@ def join_function(module: Module) -> Function:
     if fresh:
         _build_join(module, func)
     return func
+
+
+def length_function(module: Module) -> Function:
+    """The one that counts the characters of a string, built on first ask."""
+    func, fresh = _generated(
+        module, LENGTH_SYMBOL, (bytes_type(module), U64), U64, impure=False)
+    if fresh:
+        _build_length(module, func)
+    return func
+
+
+def _build_length(module: Module, func: Function) -> None:
+    """Build the one that counts the characters of a string.
+
+    A walk and a counter, because that is what counting characters of UTF-8 is:
+    how many bytes there are is in the value already and is a different number,
+    and no arithmetic on it answers this one.  What the walk needs of each
+    character is only how long it was, so the leading byte is all it reads --
+    which is what makes this cheaper than the walk a `foreach` does, that one
+    having to build the code point as well.
+    """
+    entry = func.add_block()
+    builder = IRBuilder(module, func)
+    builder.position_at(entry)
+    bytes_ = entry.add_param(bytes_type(module), "bytes")
+    length = entry.add_param(U64, "length")
+    header = builder.new_block("counting")
+    body = builder.new_block("count")
+    done = builder.new_block("counted")
+    builder.br(header, (builder.int_const(U64, 0), builder.int_const(U64, 0)))
+    builder.position_at(header)
+    at = header.add_param(U64, "at")
+    found = header.add_param(U64, "found")
+    builder.condbr(builder.compare(CmpPred.ULT, at, length), body, done)
+    builder.position_at(body)
+    # Every byte that is not a continuation byte begins a character, and a
+    # continuation byte is exactly one whose top two bits are `10`.  So the
+    # count is the number of bytes that are not those, which needs neither the
+    # length of each sequence nor the code point it stands for.
+    leading = _byte_at(builder, bytes_, at)
+    begins = builder.compare(
+        CmpPred.NE,
+        builder.binary(BinOp.AND, leading, builder.int_const(U64, 0xC0)),
+        builder.int_const(U64, 0x80))
+    builder.br(header, (builder.binary(BinOp.WRAP_ADD, at,
+                                       builder.int_const(U64, 1)),
+                        builder.binary(BinOp.WRAP_ADD, found,
+                                       builder.cast(CastKind.ZEXT, begins, U64))))
+    builder.position_at(done)
+    builder.ret(found)
 
 
 def _byte_at(builder: IRBuilder, bytes_: Value, at: Value) -> Value:

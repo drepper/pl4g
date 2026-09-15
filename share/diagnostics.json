@@ -4387,6 +4387,28 @@
       "option": null
     },
     {
+      "number": 4495,
+      "name": "LANG_LENGTH_HAS_NO_COUNT",
+      "severity": "error",
+      "message": "'#' asks how many, and '{found}' is not made of a number of things",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type of what was asked"
+        }
+      ],
+      "cause": "'#' answers how many things something is made of: the characters of a string, the outermost dimension of an array, the members of a tuple, what a set or a dictionary holds.  A value that is one thing is not made of a number of things, and answering one for it would be answering a question nobody asked.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / How many",
+        "requirement": "'#' is written before a string, an array, a tuple, a set or a dictionary."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 5001,
       "name": "LANG_STMT_UNREACHABLE",
       "severity": "warning",

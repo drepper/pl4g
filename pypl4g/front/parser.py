@@ -131,6 +131,7 @@ _BINARY_OPERATORS: Final[dict[TokKind, _Operator]] = {
 _UNARY_OPERATORS: Final[dict[TokKind, ast.UnaryOp]] = {
     TokKind.TILDE: ast.UnaryOp.BIT_NOT,
     TokKind.LOGIC_NOT: ast.UnaryOp.LOGIC_NOT,
+    TokKind.LENGTH: ast.UnaryOp.LENGTH,
 }
 
 

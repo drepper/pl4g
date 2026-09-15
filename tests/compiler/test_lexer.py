@@ -30,10 +30,17 @@ def test_comment_glyph_runs_to_end_of_line() -> None:
     assert TokKind.KW_FN in kinds
 
 
-def test_hash_is_not_a_comment() -> None:
-    """'#' is deliberately left free for a future language feature."""
-    _, diags = lex("# not a comment\n")
-    assert D.LANG_SYNTAX_UNEXPECTED_CHAR in diags
+def test_hash_asks_how_many_and_is_not_a_comment() -> None:
+    """'#' is the length operator, and what follows it is read as code.
+
+    It was left free for a future language feature and this is that feature.
+    What the test is really about is that the rest of the line is lexed rather
+    than thrown away, which is what it would be in every language that spells a
+    comment this way.
+    """
+    kinds, diags = lex("#v\n")
+    assert diags == []
+    assert kinds[:2] == [TokKind.LENGTH, TokKind.IDENT]
 
 
 def test_documentation_comment_is_a_token() -> None:

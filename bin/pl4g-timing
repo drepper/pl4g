@@ -68,7 +68,8 @@ GROUPS: tuple[Group, ...] = (
            "boolean-values": "truth values in both sections",
            "character-values": "code points written eight ways, and both conversions",
            "string-walk": "a walk over every length a UTF-8 sequence has",
-           "string-join": "four joins, and the arena they come out of"}),
+           "string-join": "four joins, and the arena they come out of",
+           "length-operator": "how many, asked of all five kinds of thing"}),
     Group("Variables and memory",
           "Reading and writing variables, including one of every width.  These "
           "move when the loads and stores of a backend do.",

@@ -37,7 +37,7 @@ from ..ir.types import (ARENA, ArrayType, BOOL, BoolType, BUILTIN_TYPES,
                         FloatType, IntType, MEM, ProductType, ResultType,
                         SetType, STR, SumType, TupleType, Type, VecType, VOID,
                         CHAR, MAX_CODE_POINT, U8, parts_of)
-from . import strings
+from . import strings, tables
 from .modules import (ImportCycle, LoadedModule, ModuleNotFound, ModuleRegistry,
                       base_name)
 from ..ir.value import (CharConst, Const, EnumConst, FloatConst, IntConst,
@@ -972,6 +972,8 @@ class Checker:
                 return CHAR
             case ast.StringLit():
                 return STR
+            case ast.Unary() if expr.op is ast.UnaryOp.LENGTH:
+                return U64
             case ast.FloatLit():
                 return BUILTIN_TYPES.get(expr.type_name) if expr.type_name else None
             case ast.NameRef():
@@ -5479,6 +5481,8 @@ class Checker:
         """Lower an operator written before its operand."""
         if expr.op is ast.UnaryOp.LOGIC_NOT:
             return self._lower_not(builder, expr, expected)
+        if expr.op is ast.UnaryOp.LENGTH:
+            return self._lower_length(builder, expr, expected)
         outer, self._operand_of = self._operand_of, expr.op.value
         was_listing, self._listing = self._listing, True
         try:
@@ -5503,6 +5507,63 @@ class Checker:
                              operator=expr.op.value, found=ty.render())
             return UndefConst(ERROR)
         return builder.unary(_UNARY_OPS[expr.op], operand, expr.span)
+
+    def _lower_length(self, builder: IRBuilder, expr: ast.Unary,
+                      expected: Type | None) -> Value:
+        """Lower `#x`: how many things *x* is made of.
+
+        It is not walked over an array the way the other operators written
+        before their operand are.  Those are defined on values and reach an
+        array by being applied to every element; this one is defined on the
+        array itself, and asking it of every element would be asking a different
+        question about a different thing.
+
+        Five answers and three of them cost nothing.  A tuple's is how many
+        members its type names; an array's is the first number of its shape
+        where the type says it, and the count it carries beside the elements
+        where it does not; a string's is a walk, there being no arithmetic on
+        the number of bytes that gives the number of characters; a table's is a
+        field of the table, kept by the two operations that put things in.
+        """
+        value = self._lower_expr(builder, expr.operand, None)
+        ty = self._value_type_of(value)
+        if ty is ERROR:
+            return UndefConst(ERROR)
+        found = self._counted(builder, value, ty, expr.span)
+        if found is None:
+            self._diags.emit(D.LANG_LENGTH_HAS_NO_COUNT, expr.operand.span,
+                             found=ty.render())
+            return UndefConst(ERROR)
+        if not self._accepts(expected, U64):
+            self._report_mismatch(expr.span, U64, expected)
+            return UndefConst(ERROR)
+        return found
+
+    def _counted(self, builder: IRBuilder, value: Value, ty: Type,
+                 span: Span) -> Value | None:
+        """How many things a value is made of, or nothing where it is one thing."""
+        if isinstance(ty, TupleType):
+            return builder.int_const(U64, len(ty.members))
+        if isinstance(ty, ArrayType):
+            along = ty.shape[0]
+            if along is not None:
+                return builder.int_const(U64, along)
+            # The outermost dimension, which such an array carries beside where
+            # its elements are -- the first count of however many it has.
+            return builder.extract(value, 1, U64, span)
+        if ty is STR:
+            return builder.call(
+                strings.length_function(self._module),
+                (builder.extract(value, 0, parts_of(STR)[0], span),
+                 builder.extract(value, 1, U64, span)),
+                U64, span)
+        if isinstance(ty, (SetType, DictType)):
+            # What a program holds is where the table is; the count is a field
+            # of the table, kept by the two operations that put things in.
+            return tables.count_of(
+                builder, builder.cast(CastKind.BITCAST, value,
+                                      tables.table_type(self._module), span))
+        return None
 
     def _lower_not(self, builder: IRBuilder, expr: ast.Unary,
                    expected: Type | None) -> Value:
@@ -5550,6 +5611,9 @@ class Checker:
                 return BOOL
             case ast.Unary() if expr.op is ast.UnaryOp.LOGIC_NOT:
                 return BOOL
+            case ast.Unary() if expr.op is ast.UnaryOp.LENGTH:
+                # How many, which is a count and not whatever was counted.
+                return U64
             case ast.Binary() if expr.op is ast.BinaryOp.OR_ELSE:
                 # What `??` answers with is the answer inside the result, which
                 # is the left side's type with the mark taken off.

@@ -375,6 +375,13 @@ give -- `pmullw` and `pmulld` on one, `mul` at three arrangements on the other.
 Which lane widths a machine has an operation at is stated as a set and not as a width to stay under, because of that last one:
 x86-64 multiplies halfwords at every level and words from the second on and bytes not at all, which is not a range.
 
+**`#` is four reads and one walk.**  A tuple's count and a fixed array's are numbers the type holds, so they are constants; a
+dynamic array's is the second of the parts it travels in; a table's is a field of the table block, kept by the two operations
+that put things in rather than counted when asked.  A string's is the one that needs code, and it is its own function rather than
+the walk `foreach` uses: what counting needs of each character is only how long it was, so it reads the leading byte and nothing
+else -- every byte that is not a continuation byte begins a character, which is one `and` and one comparison per byte and no
+decoding at all.
+
 **A string is two words and two generated functions.**  The value is where the bytes are and how many there are, which
 `parts_of` answers exactly as it answers for an array whose type does not say its length -- so a string travels in two registers,
 is passed and answered with in two, and needed nothing of the calling convention's own.

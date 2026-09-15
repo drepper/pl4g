@@ -1,0 +1,11 @@
+※ pl4g-test: compile=error diag=4495
+
+※ `#` answers how many things something is made of.  A value that is one thing
+※ is not made of a number of things, and answering one for it would be
+※ answering a question nobody asked.
+
+@[startup]
+fn main() → u8:
+    let n: u8 = 5u8
+    let how_many: u64 = #n
+    0u8

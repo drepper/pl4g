@@ -147,6 +147,16 @@ def arena_of(builder: IRBuilder, table: Value) -> Value:
     return _read_address(builder, table, ARENA_FIELD, ARENA)
 
 
+def count_of(builder: IRBuilder, table: Value) -> Value:
+    """How many entries a table holds, which is a field of the table itself.
+
+    Kept rather than counted: a walk of the entries would have to step past the
+    places holding nothing, and how many there are is a number the two that put
+    things in already maintain.
+    """
+    return _read(builder, table, COUNT_FIELD)
+
+
 def table_type(module: Module) -> PtrType:
     """What a table is reached by: a pointer to its first word."""
     return module.types.ptr_type(U64, mutable=True)
