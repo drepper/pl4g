@@ -27,11 +27,11 @@ fn main() → u6:
     let words: mut u32 = 0u32
 
     comptime foreach v := values:
-        comptime if ⎕typeof(v) = u8:
+        comptime if ⎕typeof(⌜v⌝) = ⌜u8⌝:
             bytes ← bytes + v
-        comptime elif ⎕typeof(v) = u16:
+        comptime elif ⎕typeof(⌜v⌝) = ⌜u16⌝:
             halves ← halves + v
-        comptime elif ⎕typeof(v) = u32:
+        comptime elif ⎕typeof(⌜v⌝) = ⌜u32⌝:
             words ← words + v
         else:
             ※ nothing else can reach here, every member being one of the three

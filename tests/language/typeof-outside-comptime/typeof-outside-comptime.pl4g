@@ -8,7 +8,7 @@
 @[startup]
 fn main() → u6:
     let n: u8 = 5u8
-    if ⎕typeof(n) = u8:
+    if ⎕typeof(⌜n⌝) = ⌜u8⌝:
         1u6
     else:
         0u6

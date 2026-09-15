@@ -1,0 +1,15 @@
+※ pl4g-test: compile=error diag=4512
+
+※ `⎕typeof` takes something lifted and nothing else.  A type's name and a
+※ value's name are both identifiers, and a type written out in full is not an
+※ expression at all, so what follows it cannot be read without knowing what the
+※ names turned out to mean -- which is the thing the brackets are there to
+※ stop.
+
+@[startup]
+fn main() → u6:
+    let n: u8 = 1u8
+    comptime if ⎕typeof(n) = ⌜u8⌝:
+        0u6
+    else:
+        1u6

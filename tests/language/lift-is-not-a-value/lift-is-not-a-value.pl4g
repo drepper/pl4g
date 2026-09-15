@@ -1,0 +1,13 @@
+※ pl4g-test: compile=error diag=4514
+
+※ Lifting something takes it out of the program and hands it to the compiler,
+※ which has no representation to give back: a type is not a value here and
+※ neither is a name.  The places a lift may stand are the ones where the
+※ compiler answers rather than the program computes -- inside `⎕typeof`, on
+※ either side of a comparison the compiler settles, and after `⌈` or `⌊`, where
+※ what it answers is the largest or smallest value the lifted type has.
+
+@[startup]
+fn main() → u6:
+    let n: u8 = ⌜u8⌝
+    0u6

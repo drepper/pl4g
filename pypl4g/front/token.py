@@ -224,6 +224,16 @@ ROUNDED_GLYPH: Final[str] = "\N{UP DOWN DOUBLE ARROW}"
 #: written on paper.
 POWER_GLYPH: Final[str] = "\N{SUPERSCRIPT LATIN SMALL LETTER N}"
 
+#: Lifting what is written between them out of the program and into the
+#: compiler: `\N{TOP LEFT CORNER}u32\N{TOP RIGHT CORNER}` is the type and not a value of it, and `\N{TOP LEFT CORNER}a\N{TOP RIGHT CORNER}` is the name and
+#: not what it stands for.  The brackets are what keeps the grammar
+#: context-free: a type's name and a value's name are both identifiers, and a
+#: type written out in full is not an expression at all, so without them what
+#: follows `\N{APL FUNCTIONAL SYMBOL QUAD}typeof` would have to be decided by what the names turned out to
+#: mean.
+LIFT_OPEN_GLYPH: Final[str] = "\N{TOP LEFT CORNER}"
+LIFT_CLOSE_GLYPH: Final[str] = "\N{TOP RIGHT CORNER}"
+
 #: The digits written raised, which is how an exponent that *is* a number is
 #: written.  The first three are where Latin-1 put them and the rest are where
 #: Unicode put the ones Latin-1 had not got, which is why this is a table and
@@ -366,6 +376,8 @@ class TokKind(StrEnum):
     NEAREST = "'\N{UP DOWN ARROW}'"
     ROUNDED = "'\N{UP DOWN DOUBLE ARROW}'"
     POWER = "'\N{SUPERSCRIPT LATIN SMALL LETTER N}'"
+    LIFT_OPEN = "'\N{TOP LEFT CORNER}'"
+    LIFT_CLOSE = "'\N{TOP RIGHT CORNER}'"
     #: A number written raised, which is an exponent and its operator at once.
     EXPONENT = "a raised number"
 

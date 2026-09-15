@@ -427,6 +427,16 @@ The type of what the one-sided form answers is worked out twice, once off the sy
 what was lowered.  That is not duplication for its own sake: a comparison lowers its left side with what the right side is wanted
 to be, so `⌈v ≠ 9u8` needs the answer's type before the answer exists.
 
+**Lifting is read twice and settled once.**  What stands between `⌜` and `⌝` is parsed as a *type* first and kept where that
+reading ends at the closing bracket; anything else is re-read as an expression.  Reading it twice rather than deciding is what
+makes the brackets worth having: a bare name is both readings and the parser is not the thing that knows which, so it carries
+whichever it could build and the checker looks the name up.  A name that a local has is a value; anything else is resolved as a
+type.
+
+`⌈⌜T⌝` and `⌊⌜T⌝` are constants and no instruction at all: the ends of a type are numbers the compiler has, and the answer is
+the constant it already knows how to put in an operand.  That is the whole of what they cost, and it is why they are in the
+checker beside the walk that answers the largest of an array rather than anywhere further down.
+
 **Nothing settled while compiling is lowered, and that is the whole implementation.**  A condition after `comptime` is answered
 by walking the syntax -- `⎕typeof` of something is that thing's type, read off it without lowering it; a type's name is that
 type; and the two are compared and joined.  There is no value of a type at any point, which is why the representation of what

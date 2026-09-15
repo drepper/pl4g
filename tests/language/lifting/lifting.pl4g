@@ -1,0 +1,63 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ `⌜x⌝` lifts what is written between the brackets out of the program and into
+※ the compiler: `⌜u32⌝` is the type and not a value of it, and `⌜a⌝` is the
+※ name and not what it stands for.
+※
+※ The brackets are what keeps the grammar context-free, which is the whole
+※ reason they are there.  A type's name and a value's name are both
+※ identifiers, and a type written out in full -- `u8⟦3⟧`, `〈u8, u16〉`, a name
+※ the program defined -- is not an expression at all.  Without something saying
+※ "what follows is lifted", the parser would have to know what the names turned
+※ out to mean before it could read them, which is not a thing a parser can do.
+※
+※ Two things read a lift.  `⎕typeof` answers the type of what was lifted, and
+※ the answer is compared with another lift in a question the compiler settles.
+※ And `⌈` and `⌊` written before a lifted type answer the largest and the
+※ smallest value that type has -- the same operators and the same word they
+※ have everywhere else, asked of a type rather than of something holding
+※ several values.
+
+enum Colour:
+    red ; green ; blue
+
+@[startup, impure]
+fn main() → u6:
+    let a: u32 = 5u32
+    let c: Colour = Colour.green
+    let v: u8⟦3⟧ = ⟦1u8, 2u8, 3u8⟧
+    let t: 〈u8, u16〉 = 〈1u8, 2u16〉
+    ※ the ends of a type, which is what a program otherwise writes out by hand
+    let most: u8 = ⌈⌜u8⌝
+    let least: i8 = ⌊⌜i8⌝
+    ※ including of a width that is not a machine width
+    let small: u3 = ⌈⌜u3⌝
+    let low: i5 = ⌊⌜i5⌝
+    ※ a type the program defined, named in a lift
+    comptime if ⎕typeof(⌜c⌝) = ⌜Colour⌝:
+        ※ a type written out in full, which is no expression at all
+        comptime if ⎕typeof(⌜v⌝) = ⌜u8⟦3⟧⌝:
+            comptime if ⎕typeof(⌜t⌝) = ⌜〈u8, u16〉⌝:
+                ※ and one that is not the type, asked the other way round
+                comptime if ⎕typeof(⌜a⌝) ≠ ⌜u8⌝:
+                    if most ≠ 255u8 ∨ least ≠ ⁻128i8:
+                        1u6
+                    elif small ≠ 7u3 ∨ low ≠ ⁻16i5:
+                        2u6
+                    ※ a floating-point type's smallest is the most negative
+                    ※ number it holds and not the smallest positive one
+                    elif ⌈⌜f32⌝ < 1.0f32 ∨ ⌊⌜f32⌝ > ⁻1.0f32:
+                        3u6
+                    ※ and a code point's ends are the ends Unicode gave it
+                    elif ⎕ord(⌈⌜char⌝) ≠ 1114111u32 ∨ ⎕ord(⌊⌜char⌝) ≠ 0u32:
+                        4u6
+                    else:
+                        0u6
+                else:
+                    5u6
+            else:
+                6u6
+        else:
+            7u6
+    else:
+        8u6

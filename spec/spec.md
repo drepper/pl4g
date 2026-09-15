@@ -2391,14 +2391,60 @@ test -- which is also why such a loop has nothing to hand over and takes no name
 A tuple is the only thing it walks (4503); everything else holds values of one type and is walked by an ordinary loop.  And a
 tuple is walked only this way (4504), for the same reason.
 
-##### comptime if
+##### Lifting
 
-**`comptime if` asks a question the compiler answers**, and **`⎕typeof` is what it asks about**:
+**`⌜x⌝` lifts what is written between the brackets out of the program and into the compiler**: `⌜u32⌝` is the type and not a
+value of it, and `⌜a⌝` is the name and not what it stands for.
 
 ```
-comptime if ⎕typeof(v) = u8:
+⌜u32⌝                          ※ the type
+⌜u8⟦3⟧⌝                        ※ a type written out in full
+⌜Colour⌝                        ※ a type the program defined
+⌜a⌝                             ※ the name, whatever it is of
+```
+
+**The brackets are what keeps the grammar context-free, and that is the whole reason they are there.**  A type's name and a
+value's name are both identifiers; a type written out in full -- `u8⟦3⟧`, `〈u8, u16〉`, `⸨u8: u16⸩` -- is not an expression at
+all; and a type the program defined is a name this compiler cannot tell from a variable's until it has looked it up.  Without
+something saying "what follows is lifted", the parser would have to know what the names turned out to mean before it could read
+them, which is not a thing a parser can do.  With it, the reading is settled by the brackets and *which* of the two it was is a
+question about the program.
+
+**Three places read a lift**, and a lift anywhere else is refused (4514) because there is nothing for it to be at run time:
+
+| Written | Answers |
+|---|---|
+| `⎕typeof(⌜a⌝)` | the type of what was lifted |
+| `⌜A⌝ = ⌜B⌝`, `⎕typeof(⌜a⌝) ≠ ⌜B⌝` | whether two types are the one type, in a question the compiler settles |
+| `⌈⌜T⌝`, `⌊⌜T⌝` | the largest and the smallest value the type `T` has |
+
+**`⌈⌜T⌝` and `⌊⌜T⌝` are the same operators and the same word** they have everywhere else, asked of a type rather than of
+something holding several values.  `⌈⌜u8⌝` is 255, `⌊⌜i8⌝` is −128, `⌈⌜u3⌝` is 7, `⌈⌜char⌝` is U+10FFFF.
+
+```
+let most: u8 = ⌈⌜u8⌝
+let least: i5 = ⌊⌜i5⌝
+```
+
+**A floating-point type's smallest is the most negative number it holds**, not the smallest positive one.  C++ calls the second
+`min()` and the first `lowest()`, and the number of programs that have reached for `min()` and got a tiny positive number is the
+argument for not repeating it: `⌊` means the smallest, and there is no value below it.
+
+Compare: **C++26**'s `^^`, which lifts a name into a reflection and which this follows in shape and in reason -- there too the
+problem is that a name is a name and the grammar must not have to know what it names; **C++**'s `std::numeric_limits<T>::max()`
+and `::lowest()`, which `⌈⌜T⌝` and `⌊⌜T⌝` are; **Zig**, whose `@TypeOf(x)` takes an expression and whose `std.math.maxInt(T)`
+takes a type, the two written differently because Zig's types *are* values there; **Ada**, whose `T'First` and `T'Last` are these
+two under an attribute notation that reads better and costs a second kind of name; and **Rust**, whose `T::MAX` is an associated
+constant, which needs types to be able to carry those.
+
+##### comptime if
+
+**`comptime if` asks a question the compiler answers**, and **`⎕typeof` of a lift is what it asks about**:
+
+```
+comptime if ⎕typeof(⌜v⌝) = ⌜u8⌝:
     bytes ← bytes + v
-comptime elif ⎕typeof(v) = u16:
+comptime elif ⎕typeof(⌜v⌝) = ⌜u16⌝:
     halves ← halves + v
 else:
     words ← words + v
@@ -2412,13 +2458,14 @@ lowered*, which is what lets them be of types that would not otherwise agree, an
 settles is a property of each condition, so a chain may mix them: a `comptime if` whose condition is false simply goes on to
 whatever follows, settled or not.
 
-**What may be asked** is whether two types are the one type -- `⎕typeof(x)` and a type's own name, joined with `=` or `≠` -- and
-those answers joined with the logical operators.  Anything about a value is a question about what the program does and is
-reported (4502).
+**What may be asked** is whether two types are the one type -- two lifts, or `⎕typeof` of one and another, joined with `=` or
+`≠` -- and those answers joined with the logical operators.  Anything about a value is a question about what the program does and
+is reported (4502).
 
-**`⎕typeof` answers a type, and a type is not a value.**  There is nothing for one to be at run time, which is why the
-representation is deliberately unspecified and why it may stand nowhere else (4505).  What it is of is read off the expression
-without lowering it, and asking what a name is of counts as reading that name.
+**`⎕typeof` takes a lift** (4512) **and answers a type, and a type is not a value.**  There is nothing for one to be at run time,
+which is why the representation is deliberately unspecified and why it may stand nowhere else (4505).  What it is of is read off
+the expression without lowering it, and asking what a name is of counts as reading that name.  Asking it of a lifted *type* is
+asking for the type of a type, which is refused (4513): the answer would be what was written.
 
 Compare: **C++**, whose `if constexpr` this is and whose `decltype` `⎕typeof` resembles -- with the difference that there the
 discarded branch is still parsed and instantiated unless the enclosing thing is a template, where here it is simply not lowered;

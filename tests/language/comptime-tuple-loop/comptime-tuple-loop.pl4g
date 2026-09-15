@@ -18,18 +18,18 @@ fn main() → u6:
     let halves: mut u16 = 0u16
     let words: mut u32 = 0u32
     comptime foreach v := values:
-        comptime if ⎕typeof(v) = u8:
+        comptime if ⎕typeof(⌜v⌝) = ⌜u8⌝:
             bytes ← bytes + v
-        comptime elif ⎕typeof(v) = u16:
+        comptime elif ⎕typeof(⌜v⌝) = ⌜u16⌝:
             halves ← halves + v
-        comptime elif ⎕typeof(v) = u32:
+        comptime elif ⎕typeof(⌜v⌝) = ⌜u32⌝:
             words ← words + v
         else:
             words ← words
     ※ the logical operators join what the compiler settled
     let joined: mut u8 = 0u8
     comptime foreach w := values:
-        comptime if ⎕typeof(w) = u8 ∨ ⎕typeof(w) = u16:
+        comptime if ⎕typeof(⌜w⌝) = ⌜u8⌝ ∨ ⎕typeof(⌜w⌝) = ⌜u16⌝:
             joined ← joined + 1u8
     ※ a tuple of one type walks the same way
     let alike: 〈u8, u8〉 = 〈6u8, 7u8〉
@@ -48,7 +48,7 @@ fn main() → u6:
         3u6
     ※ and one that is settled outside a loop, with an arm that is not
     else:
-        comptime if ⎕typeof(bytes) ≠ u8:
+        comptime if ⎕typeof(⌜bytes⌝) ≠ ⌜u8⌝:
             4u6
         elif halves = 7u16:
             0u6

@@ -3186,31 +3186,76 @@ class Checker:
     def _type_stood_for(self, expr: ast.Expr) -> Type | None:
         """The type an operand of a compile-time comparison stands for.
 
-        Two things stand for one: `\N{APL FUNCTIONAL SYMBOL QUAD}typeof` of something, which is that thing's
-        type, and a type's own name.  Neither is lowered -- a type is not a
-        value, and what makes that bearable is that the only place either may
-        stand is a question the compiler answers.
+        Two things stand for one: a type lifted out of the program, and
+        `\N{APL FUNCTIONAL SYMBOL QUAD}typeof` of a lifted expression, which is that expression's type.
+        Neither is lowered -- a type is not a value, and what makes that
+        bearable is that the only place either may stand is a question the
+        compiler answers.
         """
         match expr:
             case ast.Call() if isinstance(expr.callee, ast.NameRef) \
                     and expr.callee.name == TYPEOF_NAME:
                 if len(expr.args) != 1:
                     return None
-                asked = expr.args[0]
-                if isinstance(asked, ast.NameRef):
-                    # Asking what a name is of is reading it, as far as a reader
-                    # is concerned: the program mentioned it and the compiler
-                    # used it.  What it did not do is lower it, which is why
-                    # nothing of the value reaches the program.
-                    local = self._find_local(asked.name)
-                    if local is not None:
-                        local.read = True
-                found = self._hint_of(asked)
-                return None if found is ERROR else found
-            case ast.NameRef():
-                return BUILTIN_TYPES.get(expr.name)
+                return self._type_of_a_lift(expr.args[0])
+            case ast.Lifted():
+                found = self._lifted_type(expr)
+                return found
             case _:
                 return None
+
+    def _lifted_type(self, expr: ast.Lifted) -> Type | None:
+        """The type `\N{TOP LEFT CORNER}\N{HORIZONTAL ELLIPSIS}\N{TOP RIGHT CORNER}` lifted, or nothing where it lifted an expression.
+
+        A bare name is read as a type by the parser and may turn out to be a
+        value, which is the one thing left for here to settle: a name that is
+        not a type is a name of something, and what was lifted is that.
+        """
+        if expr.written is None:
+            return None
+        if isinstance(expr.written, ast.TypeRef) and expr.written.module is None \
+                and not expr.written.result \
+                and self._find_local(expr.written.name) is not None:
+            # A local by that name, so what stands there is the value and not a
+            # type of the same spelling.
+            return None
+        found = self._resolve_type(expr.written)
+        return None if found is ERROR else found
+
+    def _type_of_a_lift(self, asked: ast.Expr) -> Type | None:
+        """The type of what a lift lifted, which is what `\N{APL FUNCTIONAL SYMBOL QUAD}typeof` answers.
+
+        Its argument is a lift and nothing else.  Written without the brackets
+        the argument would be an ordinary expression, and a type's name and a
+        value's name being both identifiers, what it meant would depend on what
+        the names turned out to be -- which is the thing the brackets are there
+        to stop.
+        """
+        if not isinstance(asked, ast.Lifted):
+            self._diags.emit(D.LANG_TYPEOF_TAKES_A_LIFT, asked.span)
+            return None
+        lifted = self._lifted_type(asked)
+        if lifted is not None:
+            # A type was lifted, so its own type is being asked for, and a type
+            # is not a thing this language has a type of.
+            self._diags.emit(D.LANG_TYPEOF_OF_A_TYPE, asked.span,
+                             found=lifted.render())
+            return None
+        written = asked.value if asked.value is not None else \
+            (ast.NameRef(span=asked.span, name=asked.written.name)
+             if isinstance(asked.written, ast.TypeRef) else None)
+        if written is None:
+            return None
+        if isinstance(written, ast.NameRef):
+            # Asking what a name is of is reading it, as far as a reader is
+            # concerned: the program mentioned it and the compiler used it.
+            # What it did not do is lower it, which is why nothing of the value
+            # reaches the program.
+            local = self._find_local(written.name)
+            if local is not None:
+                local.read = True
+        found = self._hint_of(written)
+        return None if found is ERROR else found
 
     def _chosen_arms(self, stmt: ast.If) -> tuple[ast.IfArm, ...] | None:
         """The arms left once every one the compiler settled has been answered.
@@ -4915,6 +4960,13 @@ class Checker:
                                          expected, True)
             case _Ready():
                 return expr.value
+            case ast.Lifted():
+                # Every place one may stand looks at it before it gets here:
+                # `\N{APL FUNCTIONAL SYMBOL QUAD}typeof`, a comparison the compiler settles, and the two
+                # operators that answer a type's ends.  Reaching this is
+                # standing where a value stands.
+                self._diags.emit(D.LANG_LIFT_IS_NOT_A_VALUE, expr.span)
+                return UndefConst(ERROR)
             case ast.Raised():
                 return self._lower_raised(builder, expr, expected)
             case ast.Try():
@@ -6464,6 +6516,8 @@ class Checker:
         also where a thing with nothing in it has to be reported: the largest of
         nothing is not a value, so the program stops.
         """
+        if isinstance(expr.operand, ast.Lifted):
+            return self._end_of_a_type(expr, expr.operand, expected)
         value = self._lower_expr(builder, expr.operand, None)
         ty = self._value_type_of(value)
         if ty is ERROR:
@@ -6476,6 +6530,47 @@ class Checker:
         answer = self._value_type_of(found)
         if not self._accepts(expected, answer):
             self._report_mismatch(expr.span, answer, expected)
+            return UndefConst(ERROR)
+        return found
+
+    def _end_of_a_type(self, expr: ast.Unary, lifted: ast.Lifted,
+                       expected: Type | None) -> Value:
+        """Lower `\N{LEFT CEILING}\N{TOP LEFT CORNER}u8\N{TOP RIGHT CORNER}`: the largest or the smallest value a type has.
+
+        The same operator and the same word.  Written before something that
+        holds several values it answers the largest of them; written before a
+        *type* it answers the largest the type has -- which is the largest of
+        its values, so nothing had to be decided about what the word means.
+
+        For a floating-point type the smallest is the most negative number it
+        holds and not the smallest positive one.  C++ calls the second `min()`
+        and the first `lowest()`, and the number of programs that have reached
+        for `min()` and got a tiny positive number is the argument for not
+        repeating it: `\N{LEFT FLOOR}` means the smallest, and a value below it is not one.
+        """
+        ty = self._lifted_type(lifted)
+        if ty is None:
+            self._diags.emit(D.LANG_EXTREMUM_HAS_NONE, lifted.span,
+                             operator=expr.op.value, found="what was lifted")
+            return UndefConst(ERROR)
+        largest = expr.op is ast.UnaryOp.MAX
+        if isinstance(ty, IntType):
+            found: Value = IntConst(ty, ty.high if largest else ty.low)
+        elif ty is CHAR:
+            found = self._module.char_const(MAX_CODE_POINT if largest else 0)
+        elif isinstance(ty, FloatType):
+            # The largest finite number of the format, and its negation: what
+            # is beyond either is an infinity, which is not a value a program
+            # of this language may hold.
+            widest = (3.4028234663852886e38 if ty.bits == 32
+                      else 1.7976931348623157e308)
+            found = FloatConst(ty, widest if largest else -widest)
+        else:
+            self._diags.emit(D.LANG_EXTREMUM_HAS_NONE, lifted.span,
+                             operator=expr.op.value, found=ty.render())
+            return UndefConst(ERROR)
+        if not self._accepts(expected, ty):
+            self._report_mismatch(expr.span, ty, expected)
             return UndefConst(ERROR)
         return found
 

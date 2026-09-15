@@ -36,6 +36,11 @@ module.exports = grammar({
     // the range belongs to the end, which is what the compiler's precedence
     // table says; the generalized parse is what says it here.
     [$._non_comparison, $.range_expression],
+    // What is lifted is a type or an expression, and a name is both.  Which it
+    // is, is a question about the program and not about its syntax, so the
+    // generalized parse carries both readings until one of them ends at the
+    // closing bracket.
+    [$._non_range, $._plain_type],
   ],
 
   word: $ => $.identifier,
@@ -538,6 +543,7 @@ module.exports = grammar({
       $.call_expression,
       $.member_expression,
       $.parenthesized_expression,
+      $.lifted_expression,
       $.float_literal,
       $.integer_literal,
       $.string_literal,
@@ -723,6 +729,17 @@ module.exports = grammar({
     )),
 
     parenthesized_expression: $ => seq('(', $._expression, ')'),
+
+    // What is lifted out of the program and into the compiler.  The brackets
+    // are what keeps this grammar context-free: a type's name and a value's
+    // name are both identifiers, and a type written out in full -- `u8\u27e64\u27e7`,
+    // `\u2e28u8: u16\u2e29` -- is not an expression at all, so without them what follows
+    // `\u2395typeof` could not be read without knowing what the names meant.
+    //
+    // Both readings are listed and the generalized parse takes whichever fits;
+    // for a bare name they both do, and which it is, is a question about the
+    // program and not about its syntax.
+    lifted_expression: $ => seq('\u231c', choice($.type, $._expression), '\u231d'),
 
     // -- tokens ------------------------------------------------------------
 

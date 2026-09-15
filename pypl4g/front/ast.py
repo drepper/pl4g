@@ -329,6 +329,30 @@ class Try(Expr):
 
 
 @dataclass(frozen=True, slots=True)
+class Lifted(Expr):
+    """`\N{TOP LEFT CORNER}x\N{TOP RIGHT CORNER}`: what is written, lifted out of the program and into the compiler.
+
+    What it lifts is a *type* where the brackets hold one and an *expression*
+    where they hold one of those, and which it is, is a question about what the
+    names mean rather than about how they are written -- so the parser keeps
+    whichever reading it could build and the checker settles it.
+
+    The brackets are what keeps the grammar context-free.  A type's name and a
+    value's name are both identifiers, and a type written out in full --
+    `u8\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}4\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}`, `\N{LEFT DOUBLE PARENTHESIS}u8: u16\N{RIGHT DOUBLE PARENTHESIS}` -- is not an expression at all, so without
+    something saying "a type follows" the parser would have to know what the
+    names turned out to mean before it could read them.
+    """
+
+    #: The type where the brackets hold one, and nothing where they hold an
+    #: expression.  A bare name is read as a type here and may turn out to be a
+    #: value, which is the one thing the checker has to settle.
+    written: TypeRef | None
+    #: The expression where the brackets hold one.
+    value: Expr | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class Raised(Expr):
     """`EXPR\N{SUPERSCRIPT TWO}`: raised to a power written as a raised number.
 

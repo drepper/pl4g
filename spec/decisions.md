@@ -4097,6 +4097,44 @@ that a number known to be one of eight things is written as a byte and checked a
 
 ---
 
+## 2026-09-16T03:10+02:00 — language
+
+**Lifting, written `⌜x⌝`, and the ends of a type**
+
+Decided on the user's direction: what a compile-time question is asked *about* is written between `⌜` and `⌝`, so
+`⎕typeof(⌜a⌝) = ⌜u32⌝` rather than `⎕typeof(a) = u32`.
+
+**The grammar was the reason and it is a good one.**  The old spelling worked only because the right-hand side was a builtin
+type's name, which the lexer could be told about.  A type the *program* defines is an identifier like any other, and a type
+written out in full -- `u8⟦3⟧`, `〈u8, u16〉` -- is not an expression at all, so the general case would have had the parser
+decide what a name meant before it could read what followed.  The brackets say it instead, and what is between them is then read
+as a type where that reading reaches the closing bracket and as an expression where it does not.  Which of the two a bare name
+was is a question about the program and is settled where such questions are settled.
+
+This is **C++26's `^^` under a different glyph**, and for the same reason: there too the problem is that a name is a name and the
+grammar must not have to know what it names.  The corner brackets rather than a caret because `^` is already the exclusive or
+here and a doubled operator is a spelling to be told rather than one to see; the corners are a bracket pair, which is what this
+is.
+
+**`⌈⌜T⌝` and `⌊⌜T⌝` are the ends of a type**, and that fell out rather than being designed.  `⌈` already means "the largest
+of what this holds"; the largest of a *type* is the largest value it has, so the operator needed no new meaning and the language
+no new name.  Once lifting exists the two are unambiguous, which they were not before -- `⌈u8` would have been the largest
+element of something called `u8`.
+
+**The smallest of a floating-point type is its most negative value**, which is C++'s `lowest()` and not its `min()`.  C++ has
+both and the number of programs that reached for `min()` and got a tiny positive number is the argument: `⌊` means the smallest,
+and a value below it is not one.
+
+**A lift is refused everywhere else** (4514).  There is nothing for one to be at run time -- a type is not a value here, which is
+what the `comptime` entry above already decided -- so the three places that read one are the three places a compiler answers.
+
+Compare: **C++26**'s reflection, whose `^^` this is; **C++**'s `std::numeric_limits<T>::max()` and `::lowest()`, which the two
+operators are; **Zig**, whose types are values, so `@TypeOf(x)` and `maxInt(T)` need no lifting at all and pay for it elsewhere;
+**Ada**, whose `T'First` and `T'Last` read better than anything here and cost a second kind of name; and **Rust**, whose `T::MAX`
+is an associated constant and needs types that can carry those.
+
+---
+
 Open questions
 --------------
 

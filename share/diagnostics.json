@@ -1227,6 +1227,22 @@
       "option": null
     },
     {
+      "number": 3035,
+      "name": "LANG_SYNTAX_EXPECTED_CLOSING_LIFT",
+      "severity": "error",
+      "message": "expected '\u231d'",
+      "args": [],
+      "cause": "What is lifted out of the program and into the compiler is written between `\u231c` and `\u231d`, and the closing one is missing here.  The brackets are what says where what is lifted ends, so there is no reading of the rest without them.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Settled while compiling / Lifting",
+        "requirement": "What is lifted is closed with `\u231d`."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 3031,
       "name": "LANG_SYNTAX_SPREAD_OUTSIDE_A_CALL",
       "severity": "error",
@@ -4729,6 +4745,60 @@
         "document": "spec/spec.md",
         "section": "The Language / Expressions / Raising to a power",
         "requirement": "The right side of 'ⁿ' is an integer."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4512,
+      "name": "LANG_TYPEOF_TAKES_A_LIFT",
+      "severity": "error",
+      "message": "'⎕typeof' takes something lifted, written between '⌜' and '⌝'",
+      "args": [],
+      "cause": "A type's name and a value's name are both identifiers, and a type written out in full is not an expression at all, so what follows `⎕typeof` cannot be read without knowing what the names turned out to mean.  The brackets say it instead: `⎕typeof(⌜a⌝)` asks about the name `a`, whatever `a` is, and the grammar never has to guess.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Settled while compiling / Lifting",
+        "requirement": "The argument of '⎕typeof' is a lift."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4513,
+      "name": "LANG_TYPEOF_OF_A_TYPE",
+      "severity": "error",
+      "message": "'⎕typeof' asks what something is of, and '{found}' is already a type",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type that was lifted"
+        }
+      ],
+      "cause": "A type lifted out of the program is already the answer this would give, so asking it of one is asking a question with nothing behind it.  There is no type of a type here: a type is not a value, which is what lets the whole of this be settled while compiling and nothing of it reach the program.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Settled while compiling / Lifting",
+        "requirement": "'⎕typeof' is asked of a lifted expression."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4514,
+      "name": "LANG_LIFT_IS_NOT_A_VALUE",
+      "severity": "error",
+      "message": "what is lifted out of the program is not a value, and this is where a value stands",
+      "args": [],
+      "cause": "Lifting something takes it out of the program and hands it to the compiler, which has no representation to give back: a type is not a value here and neither is a name.  The places a lift may stand are the ones where the compiler answers rather than the program computes -- inside `⎕typeof`, on either side of a comparison the compiler settles, and after `⌈` or `⌊`, where what it answers is the largest or smallest value the lifted type has.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Settled while compiling / Lifting",
+        "requirement": "A lift stands where the compiler answers and nowhere else."
       },
       "since": "0.1",
       "default_enabled": true,

@@ -2526,6 +2526,10 @@
         },
         {
           "type": "SYMBOL",
+          "name": "lifted_expression"
+        },
+        {
+          "type": "SYMBOL",
           "name": "float_literal"
         },
         {
@@ -3741,6 +3745,32 @@
         }
       ]
     },
+    "lifted_expression": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "STRING",
+          "value": "⌜"
+        },
+        {
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "SYMBOL",
+              "name": "type"
+            },
+            {
+              "type": "SYMBOL",
+              "name": "_expression"
+            }
+          ]
+        },
+        {
+          "type": "STRING",
+          "value": "⌝"
+        }
+      ]
+    },
     "integer_literal": {
       "type": "TOKEN",
       "content": {
@@ -4109,6 +4139,10 @@
     [
       "_non_comparison",
       "range_expression"
+    ],
+    [
+      "_non_range",
+      "_plain_type"
     ]
   ],
   "precedences": [],

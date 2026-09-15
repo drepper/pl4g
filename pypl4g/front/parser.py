@@ -1428,6 +1428,30 @@ class Parser:
                            D.LANG_SYNTAX_EXPECTED_CLOSING_LIST).span
         return ast.ListLit(span=start.to(end), elements=tuple(elements))
 
+    def _parse_lift(self) -> ast.Expr:
+        """Parse ``'\N{TOP LEFT CORNER}' (TYPE | EXPRESSION) '\N{TOP RIGHT CORNER}'``.
+
+        A type is tried first and kept where it reaches the closing bracket,
+        because everything a type may be is written in a way no expression is --
+        except a bare name, which is both and which the checker settles by
+        looking the name up.  Anything else is an expression.
+
+        Reading it twice rather than deciding is what makes the brackets worth
+        having: what is between them may be a type this parser cannot tell from
+        an expression, and the one thing it does not have to do is guess.
+        """
+        start = self._expect(TokKind.LIFT_OPEN).span
+        mark = self._pos
+        written: ast.TypeRef | None = None
+        if self._begins_a_type():
+            written = self._parse_type_ref()
+            if not self._check(TokKind.LIFT_CLOSE):
+                written = None
+                self._pos = mark
+        value = None if written is not None else self._parse_expression()
+        end = self._expect(TokKind.LIFT_CLOSE, D.LANG_SYNTAX_EXPECTED_CLOSING_LIFT)
+        return ast.Lifted(span=start.to(end.span), written=written, value=value)
+
     def _parse_atom(self) -> ast.Expr:
         """Parse an expression with nothing binding it to what is around it."""
         token = self._current
@@ -1436,6 +1460,8 @@ class Parser:
             inner = self._parse_expression()
             self._expect(TokKind.RPAREN, D.LANG_SYNTAX_EXPECTED_CLOSING_PAREN)
             return inner
+        if token.kind is TokKind.LIFT_OPEN:
+            return self._parse_lift()
         match token.kind:
             case TokKind.INT:
                 self._advance()
