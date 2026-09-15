@@ -356,18 +356,18 @@ To Do List for the pypl4g compiler
     compiling.  Where the two counts are equal that is a plain copy and is the same thing joining two arrays does, so it wants
     the same treatment; where they are not, it is a copy of one run repeated, which is a different question.
 
-[ ] fold `\N{LEFT CEILING}` and `\N{LEFT FLOOR}` over a whole run.  The written-out form -- a tuple's members, a fixed array's elements --
+[ ] fold `⌈` and `⌊` over a whole run.  The written-out form -- a tuple's members, a fixed array's elements --
     is a chain of two-operand comparisons, one per element, where every one of these machines has a lane-at-a-time maximum
     (`pmaxub` and friends, `umax`, and the vector extension) that would do a register's worth at a time.  It wants the same
     treatment joining two arrays got: the elements are already a run whose length is written down, so what is missing is the
     entry in each target's `Vectors` table and a reduction over the lanes at the end.
 
-[ ] raise a whole run at once, and fold a power of a value written down.  `v\N{SUPERSCRIPT TWO}` over an array is one element at a time, where
-    each multiplication could be one instruction per register's worth; and `2u32\N{SUPERSCRIPT THREE}` reaches the code generator as two
+[ ] raise a whole run at once, and fold a power of a value written down.  `v²` over an array is one element at a time, where
+    each multiplication could be one instruction per register's worth; and `2u32³` reaches the code generator as two
     multiplications, where the same arithmetic written out is folded.
 
 [ ] use what the RISC-V extensions offer beyond the two the code generator asks about today.  `b` brings Zbb, whose `min`,
-    `max`, `minu` and `maxu` are one instruction where `\N{LEFT CEILING}` and `\N{LEFT FLOOR}` are a comparison and a conditional move, and whose
+    `max`, `minu` and `maxu` are one instruction where `⌈` and `⌊` are a comparison and a conditional move, and whose
     `rol` and `ror` are the rotations; `v` brings the vector extension, which is what `Vectors` is empty for on this target.
     Both are mandatory in the profile that is now the default, so the strings are already saying they are there.
 
@@ -381,7 +381,7 @@ To Do List for the pypl4g compiler
     above the value and the ceiling one more where it came out below.  The nearest and the current mode are `cvtsd2si`, which
     rounds by `MXCSR`, so the first of those needs the mode set and put back or a different sequence again.
 
-[ ] fold the four roundings of a value written down.  `\N{DOWNWARDS ARROW}2.5f64` reaches the code generator as an instruction, where the
+[ ] fold the four roundings of a value written down.  `↓2.5f64` reaches the code generator as an instruction, where the
     arithmetic on two written-down floating-point values is folded away.  Three of the four are settled while compiling; the
     fourth is not, which is the whole of why it is impure.
 
@@ -389,7 +389,7 @@ To Do List for the pypl4g compiler
     so rounding an array is an element at a time where it could be one instruction per register's worth.  It wants a `unary`
     entry in each target's `Vectors` table, which today holds only the complement.
 
-[ ] answer `\N{LEFT CEILING}` and `\N{LEFT FLOOR}` over strings.  Strings are ordered now, so the largest of a list of them is a
+[ ] answer `⌈` and `⌊` over strings.  Strings are ordered now, so the largest of a list of them is a
     question with an answer, and it is refused (4506): the fold is one of four instructions chosen by the type, and a string's
     comparison is a call.  What it wants is the walk carrying which of the two it has seen rather than the larger of them, which
     is the same shape and a different body.
@@ -397,18 +397,18 @@ To Do List for the pypl4g compiler
 [ ] fold a comparison of two strings written down.  `"a" < "b"` reaches the code generator as a call, where the same comparison
     of two numbers is folded away.  Both sides are bytes the compiler put in the image, so there is nothing to wait for.
 
-[ ] answer `\N{LEFT CEILING}` and `\N{LEFT FLOOR}` for an array of more than one dimension whose type does not say its shape.  Refused
+[ ] answer `⌈` and `⌊` for an array of more than one dimension whose type does not say its shape.  Refused
     today (8501): the answer is a row, and how long a row is, is not known until the program runs, so the room for it has to be
     taken while it runs and the walk has to be two loops rather than one written out.  It is the same piece of work walking such
     an array wants (4482).
 
-[ ] leave out the comparison where one side of `\N{LEFT CEILING}` is a constant at the end of the type.  `x \N{LEFT CEILING} 0u8` is `x` and
-    `x \N{LEFT FLOOR} 255u8` is `x`, and both are what a generator writes when the bound comes from somewhere else.  Neither folds
+[ ] leave out the comparison where one side of `⌈` is a constant at the end of the type.  `x ⌈ 0u8` is `x` and
+    `x ⌊ 255u8` is `x`, and both are what a generator writes when the bound comes from somewhere else.  Neither folds
     today.
 
 [ ] hold a tuple whose member is itself several values.  A tuple holding a tuple reaches the code generator and fails there
     ("no encoding of 'mov' accepts ..."), because what a tuple travels in is one register per part and a part that is itself
-    several has nowhere to go.  It is what stops `\N{APL FUNCTIONAL SYMBOL QUAD}enumerate` counting the turns of a dictionary, whose turn is already a
+    several has nowhere to go.  It is what stops `⎕enumerate` counting the turns of a dictionary, whose turn is already a
     pair, and it is the same gap as the array below.
 
 [ ] make the bill of materials the same in two directories.  A source's row names the path it was read from, so the same program

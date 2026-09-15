@@ -1958,8 +1958,8 @@ One entry says what a literal holds
 
 An array, a list, a set and a dictionary each hold one type, so an entry that says which says it for every other.  The compiler
 used to get that only from the left: entries were lowered in order with nothing expected, and the first one that turned out to
-have a type settled it for the rest.  That refused `\u27e61, 2u8\u27e7`, which says its type perfectly well, and -- because an array
-literal was lowered with nothing expected whenever the variable had no written type -- it refused `\u27e61u8, 2\u27e7` too.
+have a type settled it for the rest.  That refused `⟦1, 2u8⟧`, which says its type perfectly well, and -- because an array
+literal was lowered with nothing expected whenever the variable had no written type -- it refused `⟦1u8, 2⟧` too.
 
 **`_said_by` reads the type off the writing before any of it is lowered.**  It walks the entries, looking through nested array and
 list literals, and answers the first type an entry *says on its own* -- which is a literal carrying a suffix and nothing else.  An
@@ -1975,7 +1975,7 @@ handed somewhere.  `_taken_from` is that rule: an entry that says what it is tak
 The same call also settles the case a written type covers.  A collection's entries were deliberately lowered with nothing
 expected even where the type was written down, so that a disagreement with the type reads as a disagreement between entries; what
 is expected of them now is what an entry said, falling back to what the type says where no entry says anything -- so
-`let s: \u2e28u8\u2e29 = \u2e281, 2\u2e29` works, which it did not.
+`let s: ⸨u8⸩ = ⸨1, 2⸩` works, which it did not.
 
 
 Narrowing, and the conditions that cannot hold
@@ -1991,7 +1991,7 @@ comparison.
 **Which condition it was is their numbers added up rather than a choice between them.**  There is no select instruction in this
 IR, and building blocks for a three-way choice would be a branch where none is needed: the conditions are exclusive by
 construction -- `sign` is asked only where the type has no negative values and `underflow` only where it has -- so
-`underflow\u00d71 + sign\u00d72` is the answer whenever one of them holds.  `overflow` is nought, which is what makes it what the sum
+`underflow×1 + sign×2` is the answer whenever one of them holds.  `overflow` is nought, which is what makes it what the sum
 comes to when neither holds, and it is also what the sum comes to where nothing failed at all; the error of a result that
 succeeded is never read, so that costs nothing.
 
@@ -2002,11 +2002,11 @@ the bits above its own width are already what they should be.
 Two things elsewhere had to give a little.  The verifier's `_held_as` now covers an enumeration and its holder as well as a code
 point and its holder -- reading the one as the other is the same idea the widenings already allowed, and that an enumeration
 holds only its own values is the checker's to keep rather than anything an instruction can say structurally.  And `_lower_member`
-looks in `BUILTIN_TYPES` before the file's own names, so `\N{APL FUNCTIONAL SYMBOL QUAD}narrowing.overflow` is written the way every other enumeration's
+looks in `BUILTIN_TYPES` before the file's own names, so `⎕narrowing.overflow` is written the way every other enumeration's
 values are.
 
-**A unit on a result had been unwritable**, which `\N{APL FUNCTIONAL SYMBOL QUAD}narrow` found: the mark that makes a type a result was read before the unit,
-so `u8 \N{CURRENCY SIGN}meter?E` did not parse and `u8?E \N{CURRENCY SIGN}meter` would have put the unit on the result rather than on its answer.  `TypeRef`
+**A unit on a result had been unwritable**, which `⎕narrow` found: the mark that makes a type a result was read before the unit,
+so `u8 ¤meter?E` did not parse and `u8?E ¤meter` would have put the unit on the result rather than on its answer.  `TypeRef`
 now carries the unit and the parser reads it between the name and the mark, which is where it belongs -- a result of a length is
 a result whose answer is a length, and there is nothing about a result for a unit to say.
 

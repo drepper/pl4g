@@ -452,10 +452,10 @@ happens in the checker and the generated code shows no trace of it.
 
 #### Narrowing
 
-**`\N{APL FUNCTIONAL SYMBOL QUAD}narrow(EXPR, \N{TOP LEFT CORNER}TYPE\N{TOP RIGHT CORNER})` makes a value of a narrower type out of one of a wider**, and says so where it will not fit.
+**`⎕narrow(EXPR, ⌜TYPE⌝)` makes a value of a narrower type out of one of a wider**, and says so where it will not fit.
 
 ```
-let n: u8?\N{APL FUNCTIONAL SYMBOL QUAD}narrowing = \N{APL FUNCTIONAL SYMBOL QUAD}narrow(count, \N{TOP LEFT CORNER}u8\N{TOP RIGHT CORNER})
+let n: u8?⎕narrowing = ⎕narrow(count, ⌜u8⌝)
 let small: u8 = n ?? 0u8
 ```
 
@@ -463,7 +463,7 @@ Nothing in this language widens or narrows on its own, so a value that is to bec
 one.  What makes narrowing different from widening is that it can fail, so **what it answers with is a result**: the value where
 it fits, and why not where it does not.
 
-**The error carries which way it did not fit**, as a value of `\N{APL FUNCTIONAL SYMBOL QUAD}narrowing`, an enumeration the compiler provides:
+**The error carries which way it did not fit**, as a value of `⎕narrowing`, an enumeration the compiler provides:
 
 | value | when |
 | --- | --- |
@@ -480,7 +480,7 @@ The enumeration is the compiler's rather than each program's because every progr
 names: three spellings of one condition would not carry from one file to the next, and a `match` over one would have to be
 written again in each.  Its values are written and matched the way any enumeration's are.
 
-**The type is lifted** (4547).  A type is not a value, so it is written between `\N{TOP LEFT CORNER}` and `\N{TOP RIGHT CORNER}` as it is everywhere the compiler is
+**The type is lifted** (4547).  A type is not a value, so it is written between `⌜` and `⌝` as it is everywhere the compiler is
 asked about one; without the marks a type's name and a value's name are both identifiers and which was meant would depend on what
 the name turned out to be.
 
@@ -497,8 +497,8 @@ comparison.
 that.  The unit is written where it belongs, before the mark that makes the type a result:
 
 ```
-fn shorter(far: u32 \N{CURRENCY SIGN}meter) \N{RIGHTWARDS ARROW} u8 \N{CURRENCY SIGN}meter?\N{APL FUNCTIONAL SYMBOL QUAD}narrowing:
-    \N{APL FUNCTIONAL SYMBOL QUAD}narrow(far, \N{TOP LEFT CORNER}u8\N{TOP RIGHT CORNER})
+fn shorter(far: u32 ¤meter) → u8 ¤meter?⎕narrowing:
+    ⎕narrow(far, ⌜u8⌝)
 ```
 
 Compare: **C**'s implicit conversions, which narrow silently and are the source of an entire category of defect; **C++20**'s
