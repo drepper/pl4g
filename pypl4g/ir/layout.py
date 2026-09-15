@@ -12,7 +12,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Final
 
-from .types import (ArrayType, BoolType, DictType, EnumType, FloatType,
+from .types import (ArrayType, BoolType, CharType, DictType, EnumType,
+                    FloatType,
                     IntType, MemType,
                     ProductType, PtrType, SetType, TupleType,
                     ResultType, SumType, Type, VecType, VoidType)
@@ -57,7 +58,10 @@ def size_of(ty: Type, layout: DataLayout) -> int:
             return ty.bits // 8
         case BoolType():
             return 1
-        case EnumType():
+        case CharType() | EnumType():
+            # Each is held as an integer type and takes what that takes: a code
+            # point as the thirty-two bits every one of them fits in, a value of
+            # an enumeration as whatever holds its values.
             return size_of(ty.holder, layout)
         case TupleType():
             # Laid out as a product of the same members would be.
@@ -128,7 +132,7 @@ def align_of(ty: Type, layout: DataLayout) -> int:
             return ty.bits // 8
         case BoolType():
             return 1
-        case EnumType():
+        case CharType() | EnumType():
             return align_of(ty.holder, layout)
         case TupleType():
             return max((align_of(m, layout) for m in ty.members), default=1)

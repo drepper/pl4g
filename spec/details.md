@@ -375,6 +375,17 @@ give -- `pmullw` and `pmulld` on one, `mul` at three arrangements on the other.
 Which lane widths a machine has an operation at is stated as a set and not as a width to stay under, because of that last one:
 x86-64 multiplies halfwords at every level and words from the second on and bytes not at all, which is not a range.
 
+**A code point is held the way an enumeration's value is held, and is described the same way.**  `char` carries a *holder* --
+the integer type its values are stored and read as, which is `u32` -- and everything that has to know how wide one is, whether it
+is read back with its sign or with zeroes, and how much room it takes asks the holder rather than knowing about code points.
+That is the whole of what the backends were told: three places per target, all of which already had the same question to ask
+about an enumeration.
+
+`⎕ord` and `⎕chr` are one instruction apiece and one of them is none.  The value is the same bits in the same register bank at
+the same width, so the conversion is a bitcast -- which the verifier now allows for exactly this one pair, a code point and the
+type it is held as, beside the addresses it already allowed.  `⎕chr` puts a check in front of it and `⎕ord` does not, and a code
+point written down is settled while compiling either way.
+
 **Joining two arrays is two reads and two writes, and both are runs.**  `a ⧺ b` takes room for the answer where it stands and
 copies each side into its part of it -- and it asks for each copy as one value of as many lanes as that side has elements, which
 is the same shape an operator over a whole run asks for.  So the step in each backend that cuts a run into pieces cuts these too,

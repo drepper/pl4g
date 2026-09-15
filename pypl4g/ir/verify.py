@@ -21,7 +21,8 @@ from .inst import (AddressInst, AnyLaneInst, AssertInst, BinaryInst, BinOp,
                    LoadInst, RetInst, StoreInst, Terminator, UnaryInst,
                    UnwrapInst, WrapInst)
 from .module import GlobalVar, Module
-from .types import (ArrayType, BOOL, BoolType, DictType, EnumType, IntType,
+from .types import (ArrayType, BOOL, BoolType, CharType, DictType, EnumType,
+                    IntType,
                     MEM, PtrType, ResultType, SetType, TupleType, Type,
                     VecType, VOID, parts_of)
 from .value import Const, IntConst, Value
@@ -185,14 +186,17 @@ class Verifier:
                         "'", inst.opcode, "' between ",
                         inst.operands[0].ty.render(), " and ", inst.ty.render())))
             case CastInst() if inst.kind is CastKind.BITCAST:
-                # The same bits read as another type.  Only an address for now
-                # -- and a collection is one, being where its table is: an
-                # integer read as a floating-point number is the same question
-                # asked of two different register banks, and answering it wants
-                # a rule about where the bits are, not only that they are the
-                # same ones.
+                # The same bits read as another type.  An address -- and a
+                # collection is one, being where its table is -- or a code point
+                # read as the number it is held as, which is the same bits in
+                # the same register bank and the same width.  An integer read as
+                # a floating-point number is not among them: that is the same
+                # question asked of two different register banks, and answering
+                # it wants a rule about where the bits are and not only that
+                # they are the same ones.
                 if not (_is_an_address(inst.ty)
-                        and _is_an_address(inst.operands[0].ty)):
+                        and _is_an_address(inst.operands[0].ty)) \
+                        and not _held_as(inst.ty, inst.operands[0].ty):
                     self._fail(where, "".join((
                         "reading ", inst.operands[0].ty.render(), " as ",
                         inst.ty.render(), ", which is not the same kind of thing")))
@@ -463,10 +467,17 @@ def _is_an_address(ty: Type) -> bool:
         isinstance(ty, ArrayType) and ty.fixed)
 
 
+def _held_as(one: Type, other: Type) -> bool:
+    """Whether one of these is a code point and the other the number it is held
+    as, which is the one pair whose bits are the same bits."""
+    return (isinstance(one, CharType) and other is one.holder) \
+        or (isinstance(other, CharType) and one is other.holder)
+
+
 def _counts(ty: Type) -> bool:
     """Whether a value of *ty* is a whole number as far as a register is
     concerned, which is what a widening or a narrowing is between."""
-    return isinstance(ty, (IntType, BoolType, EnumType))
+    return isinstance(ty, (IntType, BoolType, CharType, EnumType))
 
 
 def verify(module: Module) -> None:

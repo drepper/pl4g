@@ -634,6 +634,43 @@
       "option": null
     },
     {
+      "number": 2009,
+      "name": "LANG_SYNTAX_UNTERMINATED_CHARACTER",
+      "severity": "error",
+      "message": "character literal is not closed before the end of the line",
+      "cause": "A character literal is one code point between apostrophes and neither of them may be left out.  A literal that runs to the end of the line is usually an apostrophe written for something else -- an English possessive in a comment that is not a comment, or a quotation mark of the wrong kind.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Syntax / Character Literals",
+        "requirement": "A character literal is closed with an apostrophe on the line it began on."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 2010,
+      "name": "LANG_SYNTAX_CHARACTER_IS_ONE",
+      "severity": "error",
+      "message": "a character literal holds one code point, and {found} were written",
+      "args": [
+        {
+          "name": "found",
+          "type": "number",
+          "description": "how many code points were written between the apostrophes"
+        }
+      ],
+      "cause": "A value of 'char' is one code point, so a literal of one is written with exactly one between the apostrophes.  Several of them are a string, which is written between quotation marks; none of them is nothing, which is not a value of any type.  A code point that takes several characters to type is written with an escape, which counts as the one it denotes.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Syntax / Character Literals",
+        "requirement": "A character literal holds exactly one code point."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 2101,
       "name": "LANG_SYNTAX_INCONSISTENT_INDENT",
       "severity": "error",
@@ -4290,6 +4327,60 @@
         "document": "spec/spec.md",
         "section": "The Language / Expressions / Arrays",
         "requirement": "The two sides of '⧺' agree about every dimension but the first."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4493,
+      "name": "LANG_CHAR_OUTSIDE_UNICODE",
+      "severity": "error",
+      "message": "{value} is not a code point; the last one is U+{last}",
+      "args": [
+        {
+          "name": "value",
+          "type": "string",
+          "description": "the number that was written"
+        },
+        {
+          "name": "last",
+          "type": "string",
+          "description": "the last code point there is, in hexadecimal"
+        }
+      ],
+      "cause": "A value of 'char' is a Unicode code point, and there is a last one: U+10FFFF, which is as far as UTF-16's surrogate pairs reach and which every encoding has had to agree with since.  A number above it, or below zero, is not a code point at all -- and 'char' being held in thirty-two bits says how much room one takes, not which numbers are values of it.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Characters",
+        "requirement": "A value of 'char' is between U+0000 and U+10FFFF."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4494,
+      "name": "LANG_CHAR_TAKES_ONE",
+      "severity": "error",
+      "message": "'{name}' is written around one expression, and {found} were given",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "which of the two was written"
+        },
+        {
+          "name": "found",
+          "type": "number",
+          "description": "how many expressions were written inside it"
+        }
+      ],
+      "cause": "Each of the two takes exactly one value: '⎕ord' the code point whose number is wanted, and '⎕chr' the number whose code point is wanted.  Neither has a reading for none or for several.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Characters",
+        "requirement": "'ord' and 'chr' each take one value."
       },
       "since": "0.1",
       "default_enabled": true,

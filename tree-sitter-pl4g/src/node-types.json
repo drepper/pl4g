@@ -24,6 +24,10 @@
           "named": true
         },
         {
+          "type": "character_literal",
+          "named": true
+        },
+        {
           "type": "comparison_expression",
           "named": true
         },
@@ -142,6 +146,10 @@
           },
           {
             "type": "call_expression",
+            "named": true
+          },
+          {
+            "type": "character_literal",
             "named": true
           },
           {
@@ -282,6 +290,10 @@
           "named": true
         },
         {
+          "type": "character_literal",
+          "named": true
+        },
+        {
           "type": "identifier",
           "named": true
         },
@@ -411,6 +423,10 @@
           "named": true
         },
         {
+          "type": "character_literal",
+          "named": true
+        },
+        {
           "type": "dictionary_literal",
           "named": true
         },
@@ -521,6 +537,10 @@
             "named": true
           },
           {
+            "type": "character_literal",
+            "named": true
+          },
+          {
             "type": "comparison_expression",
             "named": true
           },
@@ -622,6 +642,10 @@
           },
           {
             "type": "call_expression",
+            "named": true
+          },
+          {
+            "type": "character_literal",
             "named": true
           },
           {
@@ -727,6 +751,10 @@
             "named": true
           },
           {
+            "type": "character_literal",
+            "named": true
+          },
+          {
             "type": "dictionary_literal",
             "named": true
           },
@@ -820,6 +848,10 @@
           },
           {
             "type": "call_expression",
+            "named": true
+          },
+          {
+            "type": "character_literal",
             "named": true
           },
           {
@@ -975,6 +1007,10 @@
             "named": true
           },
           {
+            "type": "character_literal",
+            "named": true
+          },
+          {
             "type": "dictionary_literal",
             "named": true
           },
@@ -1097,6 +1133,10 @@
             "named": true
           },
           {
+            "type": "character_literal",
+            "named": true
+          },
+          {
             "type": "comparison_expression",
             "named": true
           },
@@ -1192,6 +1232,10 @@
           },
           {
             "type": "call_expression",
+            "named": true
+          },
+          {
+            "type": "character_literal",
             "named": true
           },
           {
@@ -1299,6 +1343,10 @@
             "named": true
           },
           {
+            "type": "character_literal",
+            "named": true
+          },
+          {
             "type": "dictionary_literal",
             "named": true
           },
@@ -1386,6 +1434,10 @@
           },
           {
             "type": "call_expression",
+            "named": true
+          },
+          {
+            "type": "character_literal",
             "named": true
           },
           {
@@ -1625,6 +1677,10 @@
           "named": true
         },
         {
+          "type": "character_literal",
+          "named": true
+        },
+        {
           "type": "comparison_expression",
           "named": true
         },
@@ -1749,6 +1805,10 @@
           },
           {
             "type": "call_expression",
+            "named": true
+          },
+          {
+            "type": "character_literal",
             "named": true
           },
           {
@@ -1946,6 +2006,10 @@
             "named": true
           },
           {
+            "type": "character_literal",
+            "named": true
+          },
+          {
             "type": "comparison_expression",
             "named": true
           },
@@ -2093,6 +2157,10 @@
             "named": true
           },
           {
+            "type": "character_literal",
+            "named": true
+          },
+          {
             "type": "dictionary_literal",
             "named": true
           },
@@ -2180,6 +2248,10 @@
           },
           {
             "type": "call_expression",
+            "named": true
+          },
+          {
+            "type": "character_literal",
             "named": true
           },
           {
@@ -2358,6 +2430,10 @@
             "named": true
           },
           {
+            "type": "character_literal",
+            "named": true
+          },
+          {
             "type": "comparison_expression",
             "named": true
           },
@@ -2486,6 +2562,10 @@
             "named": true
           },
           {
+            "type": "character_literal",
+            "named": true
+          },
+          {
             "type": "comparison_expression",
             "named": true
           },
@@ -2578,6 +2658,10 @@
         },
         {
           "type": "call_expression",
+          "named": true
+        },
+        {
+          "type": "character_literal",
           "named": true
         },
         {
@@ -2733,6 +2817,10 @@
             "named": true
           },
           {
+            "type": "character_literal",
+            "named": true
+          },
+          {
             "type": "comparison_expression",
             "named": true
           },
@@ -2859,6 +2947,10 @@
           },
           {
             "type": "call_expression",
+            "named": true
+          },
+          {
+            "type": "character_literal",
             "named": true
           },
           {
@@ -3004,6 +3096,10 @@
             "named": true
           },
           {
+            "type": "character_literal",
+            "named": true
+          },
+          {
             "type": "dictionary_literal",
             "named": true
           },
@@ -3091,6 +3187,10 @@
           },
           {
             "type": "call_expression",
+            "named": true
+          },
+          {
+            "type": "character_literal",
             "named": true
           },
           {
@@ -3241,6 +3341,10 @@
           "named": true
         },
         {
+          "type": "character_literal",
+          "named": true
+        },
+        {
           "type": "comparison_expression",
           "named": true
         },
@@ -3385,6 +3489,10 @@
             "named": true
           },
           {
+            "type": "character_literal",
+            "named": true
+          },
+          {
             "type": "dictionary_literal",
             "named": true
           },
@@ -3471,6 +3579,10 @@
             "named": true
           },
           {
+            "type": "character_literal",
+            "named": true
+          },
+          {
             "type": "dictionary_literal",
             "named": true
           },
@@ -3554,6 +3666,10 @@
           },
           {
             "type": "call_expression",
+            "named": true
+          },
+          {
+            "type": "character_literal",
             "named": true
           },
           {
@@ -3646,6 +3762,10 @@
         },
         {
           "type": "call_expression",
+          "named": true
+        },
+        {
+          "type": "character_literal",
           "named": true
         },
         {
@@ -3768,6 +3888,10 @@
         },
         {
           "type": "call_expression",
+          "named": true
+        },
+        {
+          "type": "character_literal",
           "named": true
         },
         {
@@ -3906,6 +4030,10 @@
             "named": true
           },
           {
+            "type": "character_literal",
+            "named": true
+          },
+          {
             "type": "comparison_expression",
             "named": true
           },
@@ -4025,6 +4153,10 @@
             "named": true
           },
           {
+            "type": "character_literal",
+            "named": true
+          },
+          {
             "type": "dictionary_literal",
             "named": true
           },
@@ -4118,6 +4250,10 @@
         },
         {
           "type": "call_expression",
+          "named": true
+        },
+        {
+          "type": "character_literal",
           "named": true
         },
         {
@@ -4235,6 +4371,10 @@
           },
           {
             "type": "call_expression",
+            "named": true
+          },
+          {
+            "type": "character_literal",
             "named": true
           },
           {
@@ -4479,6 +4619,10 @@
           "named": true
         },
         {
+          "type": "character_literal",
+          "named": true
+        },
+        {
           "type": "dictionary_literal",
           "named": true
         },
@@ -4591,6 +4735,10 @@
           },
           {
             "type": "call_expression",
+            "named": true
+          },
+          {
+            "type": "character_literal",
             "named": true
           },
           {
@@ -4729,6 +4877,10 @@
           },
           {
             "type": "call_expression",
+            "named": true
+          },
+          {
+            "type": "character_literal",
             "named": true
           },
           {
@@ -4875,6 +5027,10 @@
           },
           {
             "type": "call_expression",
+            "named": true
+          },
+          {
+            "type": "character_literal",
             "named": true
           },
           {
@@ -5062,6 +5218,10 @@
   {
     "type": "break",
     "named": false
+  },
+  {
+    "type": "character_literal",
+    "named": true
   },
   {
     "type": "continue",

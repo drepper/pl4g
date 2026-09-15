@@ -25,8 +25,8 @@ from ..ir.layout import (DataLayout, align_of, encode_float, encode_scalar,
                          size_of, stride_of, tag_offset_of)
 from ..ir.function import Linkage
 from ..ir.module import GlobalVar, Module
-from ..ir.types import ArrayType, EnumType, ResultType, Type
-from ..ir.value import (ArrayConst, BoolConst, EnumConst, FloatConst,
+from ..ir.types import ArrayType, CharType, EnumType, ResultType, Type
+from ..ir.value import (ArrayConst, BoolConst, CharConst, EnumConst, FloatConst,
                         IntConst, ResultConst)
 from ..mc.asmbuilder import Assembler
 from ..mc.symbol import SymBinding, SymKind, SymVisibility
@@ -113,6 +113,10 @@ def _encoded(initializer: object, ty: Type, layout: DataLayout) -> bytes:
             return encode_scalar(1 if initializer.value else 0, ty, layout)
         case FloatConst():
             return encode_float(initializer.value, ty, layout)
+        case CharConst() if isinstance(ty, CharType):
+            # The number Unicode gave the code point, written as the type it is
+            # held as says to write it.
+            return encode_scalar(initializer.value, ty.holder, layout)
         case EnumConst() if isinstance(ty, EnumType):
             # Which value it is, written as the number it is stored as.  The
             # numbering is the representation's business and lives in one place.

@@ -10,7 +10,8 @@ break every use list.
 from __future__ import annotations
 
 from ..source.location import INVALID_SPAN, Span
-from .types import (ArrayType, BoolType, EnumType, FloatType, IntType,
+from .types import (ArrayType, BoolType, CharType, EnumType, FloatType,
+                    IntType,
                     ResultType, Type)
 
 
@@ -46,6 +47,23 @@ class IntConst(Const):
     __slots__ = ("value",)
 
     def __init__(self, ty: IntType, value: int) -> None:
+        super().__init__(ty)
+        self.value = value
+
+
+class CharConst(Const):
+    """One code point, written down.
+
+    Kept as the number it is, which is what a code point is: Unicode numbers
+    them, and the number is the value rather than a representation chosen for
+    it.  It is not an `IntConst` because its type is not an integer type --
+    everything that asks a constant what it is would then have to ask again
+    whether the type it is of is one.
+    """
+
+    __slots__ = ("value",)
+
+    def __init__(self, ty: CharType, value: int) -> None:
         super().__init__(ty)
         self.value = value
 

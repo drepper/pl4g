@@ -1,0 +1,17 @@
+※ pl4g-test: compile=ok run=native,qemu exit=64 diag=none
+
+※ Every code point is a number and not every number is a code point, so the
+※ two conversions are not each other's mirror image: `⎕ord` cannot fail and
+※ `⎕chr` checks.  A number above the last code point stops the program, which
+※ is what "held as a u32" does not mean -- that says how much room one takes,
+※ not which numbers are values of it.
+
+let beyond: u32 = 0x110000u32
+
+@[startup]
+fn main() → u8:
+    let c: char = ⎕chr(beyond)
+    if ⎕ord(c) ≠ 0u32:
+        1u8
+    else:
+        2u8

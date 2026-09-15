@@ -138,6 +138,15 @@ BUILTIN_GLYPH: Final[str] = "\N{APL FUNCTIONAL SYMBOL QUAD}"
 #: have defined: what it does is decide what the operators inside it mean.
 WRAP_NAME: Final[str] = "".join((BUILTIN_GLYPH, "wrap"))
 
+#: The two conversions between a code point and the number Unicode gave it.
+#: They are the compiler's rather than a program's because neither can be
+#: written in the language -- one reads the bits of a value as another type and
+#: the other checks a number against the last code point there is -- and they
+#: carry the sigil for the same reason every compiler-provided name does: so
+#: that no program has to give up the names `ord` and `chr`.
+ORD_NAME: Final[str] = "".join((BUILTIN_GLYPH, "ord"))
+CHR_NAME: Final[str] = "".join((BUILTIN_GLYPH, "chr"))
+
 #: The tolerance the approximate comparisons read, and what it holds until a
 #: program sets it.  APL's own tolerance defaults to the same number.
 TOLERANCE_NAME: Final[str] = "".join((BUILTIN_GLYPH, "tolerance"))
@@ -208,6 +217,7 @@ class TokKind(StrEnum):
     INT = "integer literal"
     FLOAT = "floating-point literal"
     STRING = "string literal"
+    CHAR = "character literal"
 
     KW_FN = "'fn'"
     KW_RETURN = "'return'"

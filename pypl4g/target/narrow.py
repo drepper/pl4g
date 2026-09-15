@@ -46,11 +46,12 @@ def normalize(asm: Assembler, ty: Type, destination: Reg,
     Does nothing where there are no such bits -- a signed value, or one as wide
     as the register it is in -- which is most of the time.
     """
-    from ..ir.types import EnumType, IntType
+    from ..ir.types import CharType, EnumType, IntType
 
-    if isinstance(ty, EnumType):
-        # A value of an enumeration is held the way a value of the type that
-        # holds it is, so the same question and the same answer.
+    if isinstance(ty, (CharType, EnumType)):
+        # A code point and a value of an enumeration are each held the way a
+        # value of the type that holds it is, so the same question and the same
+        # answer.
         ty = ty.holder
     if not isinstance(ty, IntType) or ty.signed or ty.bits >= register_bits:
         return

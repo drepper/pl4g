@@ -319,6 +319,15 @@ To Do List for the PL4g language
     runs it is a loop, and the language has no way to write one, so the loop would have to be emitted -- or the operator
     restricted to constant exponents, which is what every language that has an integer `**` other than Python effectively does.
 
+[ ] decide what a string is, now that there is a character.  `char` is one code point; a string is a sequence of something,
+    and which something is the question -- code points, as Python has it, or grapheme clusters, as Swift does.  The second is
+    what a reader means by "character" and is not a fixed-width thing, so it is a decision about the type and not about the
+    encoding.  `mut str` is already declared and refused by the code generator, so this is what unblocks it.
+
+[ ] decide whether `char` may be a key of a set or a dictionary, and whether it may be the tag of an enumeration.  Both are
+    questions about which types are alike enough to be hashed and compared, and a code point is a number as far as either is
+    concerned -- but a type that is deliberately not an integer type should say so once rather than have every such place ask.
+
 [ ] the same arithmetic on floating-point values, where IEEE infinity and IEEE not-a-number are what an overflow or an underflow
     produces and are what the check looks for.  Waits on the float entry above.
 

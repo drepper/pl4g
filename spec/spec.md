@@ -945,6 +945,49 @@ value the compiler works out for itself.  Nothing is truncated and nothing wraps
 numbers -- a program that stored 300 in a `u8` and read back 44 would not be behaving as it reads, and no rule about which bits
 survive would make it so.
 
+#### Characters
+
+**`char` is one Unicode code point.**  A literal of one is written between apostrophes, with the escapes a string takes.
+
+```
+let a: char = 'A'
+let omega: char = 'ω'
+let newline: char = '\n'
+let named: char = '\u0041'          ※ the same code point as 'A'
+let last: char = 0x10ffff        ※ a number written where a code point is wanted
+```
+
+**A value of one is held in thirty-two bits**, which is where every code point fits with room to spare.  That says how much room
+one takes and not which numbers are values of it: **the last code point is U+10FFFF** (4493), which is as far as UTF-16's
+surrogate pairs reach and which every encoding has had to agree with since.  A number above it, or below zero, is not a code
+point; one written down is reported, and one worked out while the program runs stops the program.
+
+**It is not an integer type.**  Adding two of them is not a character and neither is a third of one, so the arithmetic is not
+defined on them.  The comparisons are: what the ordering means is the order Unicode numbered them in, which is a real order and
+the one every collation in the world starts from before it does anything else.  That is the difference from an enumeration, whose
+order is the order somebody happened to write the values in and which therefore answers equality and nothing more.
+
+**`⎕ord` and `⎕chr` cross between a code point and its number**, and they are not each other's mirror image:
+
+| Written | Takes | Gives | Can it fail |
+|---|---|---|---|
+| `⎕ord(c)` | `char` | `u32` | no -- every code point is a number |
+| `⎕chr(n)` | `u32` | `char` | yes -- not every number is a code point |
+
+Which of the two can fail is why neither is written as an assignment and why nothing converts on its own.  A conversion that may
+stop the program is a thing a reader should be able to see, and one that cannot is still a thing a reader should be told is
+happening.  The two carry the quad for the reason every compiler-provided name does: so that no program has to give up the names
+`ord` and `chr`.
+
+Compare: **C**, whose `char` is an integer type of the width of a byte, which is neither a character nor one code point;
+**C++20**'s `char32_t`, which is this and is still an integer type, so `c + 1` compiles; **Rust**'s `char`, which is exactly
+this -- a code point, thirty-two bits, not an integer, with `as u32` free and `char::from_u32` checked and answering an
+`Option`; **Go**'s `rune`, which is an alias for `int32` and therefore arithmetic; **Python**, whose `chr` and `ord` these are
+named after and whose characters are strings of length one; and **Swift**, whose `Character` is a grapheme cluster rather than a
+code point, which is the other place the line could have been drawn and is a much larger thing to carry in thirty-two bits.
+
+What is not decided here is what a *string* is, which is the question a grapheme cluster belongs to.
+
 #### Product and sum types
 
 A program defines a type by writing

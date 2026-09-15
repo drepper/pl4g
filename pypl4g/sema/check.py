@@ -14,7 +14,8 @@ from typing import Callable, Final, Sequence
 from ..diag import ids as D
 from ..diag.engine import DiagEngine, Expectation
 from ..front import ast
-from ..front.token import (BOTTOM_GLYPH, BUILTIN_GLYPH, EMPTY_ARENA_NAME,
+from ..front.token import (BOTTOM_GLYPH, BUILTIN_GLYPH, CHR_NAME,
+                          EMPTY_ARENA_NAME, ORD_NAME,
                           WRAP_NAME,
                           HEAP_NAME, TOLERANCE_DEFAULT,
                           TOLERANCE_NAME, WILDCARD_NAME)
@@ -31,13 +32,15 @@ from ..ir.module import GlobalVar, Module
 from ..ir.types import (ARENA, ArrayType, BOOL, BoolType, BUILTIN_TYPES,
                         DictType,
                         ERROR, EnumType,
-                        U64,
+                        U32, U64,
                         F64,
                         FloatType, IntType, MEM, ProductType, ResultType,
-                        SetType, SumType, TupleType, Type, VecType, VOID)
+                        SetType, SumType, TupleType, Type, VecType, VOID,
+                        CHAR, MAX_CODE_POINT)
 from .modules import (ImportCycle, LoadedModule, ModuleNotFound, ModuleRegistry,
                       base_name)
-from ..ir.value import (Const, EnumConst, FloatConst, IntConst, UndefConst,
+from ..ir.value import (CharConst, Const, EnumConst, FloatConst, IntConst,
+                        UndefConst,
                         Value)
 from pathlib import Path
 
@@ -956,6 +959,8 @@ class Checker:
                 return found
             case ast.BoolLit():
                 return BOOL
+            case ast.CharLit():
+                return CHAR
             case ast.FloatLit():
                 return BUILTIN_TYPES.get(expr.type_name) if expr.type_name else None
             case ast.NameRef():
@@ -1001,6 +1006,21 @@ class Checker:
                 return None
             return self._module.result_const(ty, answer)
         match node.value:
+            case ast.IntLit() if ty is CHAR and node.value.type_name is None:
+                # A number written where a code point is wanted is that code
+                # point, and the one thing about it that can be wrong is that
+                # there is no such code point.
+                if not 0 <= node.value.value <= MAX_CODE_POINT:
+                    self._diags.emit(
+                        D.LANG_CHAR_OUTSIDE_UNICODE, node.value.span,
+                        value=str(node.value.value),
+                        last=format(MAX_CODE_POINT, "X"))
+                    return None
+                return self._module.char_const(node.value.value)
+            case ast.CharLit():
+                if ty is not CHAR:
+                    return self._wrong_initializer(node, ty, CHAR.render())
+                return self._module.char_const(node.value.value)
             case ast.IntLit():
                 if not isinstance(ty, IntType):
                     # A suffix names the literal's type outright; without one it
@@ -4534,6 +4554,13 @@ class Checker:
                     expected: Type | None) -> Value:
         """Lower an expression, checking it against the expected type."""
         match expr:
+            case ast.IntLit() if self._aiming_at(expected) is CHAR \
+                    and expr.type_name is None:
+                # A number written where a code point is wanted is that code
+                # point, and the one thing that has to be checked about it is
+                # the one thing a code point can fail to be: there is a last
+                # one, and it is not the last thirty-two bit number.
+                return self._code_point(builder, expr.value, expr.span)
             case ast.IntLit():
                 ty = self._literal_type(expr, expected)
                 if ty is None:
@@ -4543,6 +4570,11 @@ class Checker:
                                      literal=str(expr.value), type=ty.render())
                     return builder.int_const(ty, 0)
                 return builder.int_const(ty, expr.value)
+            case ast.CharLit():
+                if not self._accepts(expected, CHAR):
+                    self._report_mismatch(expr.span, CHAR, expected)
+                    return UndefConst(ERROR)
+                return builder.module.char_const(expr.value)
             case ast.FloatLit():
                 ty = self._float_literal_type(expr, expected)
                 if ty is None:
@@ -5023,6 +5055,13 @@ class Checker:
             return ERROR
         if isinstance(ty, (IntType, FloatType)):
             return ty
+        if ty is CHAR:
+            # Code points are ordered, and the order is a real one: Unicode
+            # numbers them, and every collation in the world starts from that
+            # numbering before it does anything else.  So both questions are
+            # asked of them, unlike an enumeration, whose order is the order
+            # somebody happened to write the values in.
+            return ty
         if isinstance(ty, (SetType, DictType)) and op not in _ORDERINGS:
             # Two collections are one collection or they are not.  Whether one
             # is part of another is a question Python answers with `<=`; here
@@ -5488,6 +5527,66 @@ class Checker:
             return None
         return chosen
 
+    def _lower_code_point(self, builder: IRBuilder, expr: ast.Call,
+                          expected: Type | None) -> Value:
+        """Lower `\N{APL FUNCTIONAL SYMBOL QUAD}ord(C)` and `\N{APL FUNCTIONAL SYMBOL QUAD}chr(N)`: the two conversions between a code
+        point and the number Unicode gave it.
+
+        The two are not each other's mirror image and that is the whole of what
+        they are about.  Every code point is a number, so `\N{APL FUNCTIONAL SYMBOL QUAD}ord` cannot fail and
+        is the same bits read as another type; not every number is a code point,
+        so `\N{APL FUNCTIONAL SYMBOL QUAD}chr` checks and stops the program where what it was given is not
+        one.  Which of the two directions can fail is why neither is written as
+        an assignment: a conversion that stops the program is a thing a reader
+        should be able to see.
+        """
+        name = expr.callee.name if isinstance(expr.callee, ast.NameRef) else ""
+        to_a_number = name == ORD_NAME
+        if len(expr.args) != 1:
+            self._diags.emit(D.LANG_CHAR_TAKES_ONE, expr.span, name=name,
+                             found=len(expr.args))
+            return UndefConst(ERROR)
+        wanted = CHAR if to_a_number else U32
+        given = self._lower_expr(builder, expr.args[0], wanted)
+        found = self._value_type_of(given)
+        if found is ERROR:
+            return UndefConst(ERROR)
+        if found is not wanted:
+            self._report_mismatch(expr.args[0].span, wanted, found)
+            return UndefConst(ERROR)
+        answer = U32 if to_a_number else CHAR
+        if not self._accepts(expected, answer):
+            self._report_mismatch(expr.span, answer, expected)
+            return UndefConst(ERROR)
+        if isinstance(given, CharConst) and to_a_number:
+            return builder.int_const(U32, given.value)
+        if not to_a_number:
+            # There is a last code point and it is not the last number, so every
+            # number that is not written down has to be asked.  One written down
+            # is asked here instead, and a program that cannot answer is one
+            # that need not be built.
+            if isinstance(given, IntConst):
+                return self._code_point(builder, given.value, expr.args[0].span)
+            builder.check(
+                builder.compare(CmpPred.ULE, given,
+                                builder.int_const(U32, MAX_CODE_POINT), expr.span),
+                "a number that is not a code point", expr.span)
+        return builder.cast(CastKind.BITCAST, given, answer, expr.span)
+
+    def _code_point(self, builder: IRBuilder, value: int, span: Span) -> Value:
+        """The code point *value*, or a report where there is no such code point.
+
+        Both ends are checked and neither is about how wide the type is.  The
+        last code point is U+10FFFF, which is where UTF-16's surrogate pairs
+        stop and which every encoding has had to agree with since; below zero
+        there are none at all.
+        """
+        if not 0 <= value <= MAX_CODE_POINT:
+            self._diags.emit(D.LANG_CHAR_OUTSIDE_UNICODE, span,
+                             value=str(value), last=format(MAX_CODE_POINT, "X"))
+            return builder.module.char_const(0)
+        return builder.module.char_const(value)
+
     def _lower_wrap(self, builder: IRBuilder, expr: ast.Call,
                     expected: Type | None) -> Value:
         """Lower `⎕wrap(EXPR)`: the expression, with its operators wrapping.
@@ -5527,6 +5626,9 @@ class Checker:
         """
         if isinstance(expr.callee, ast.NameRef) and expr.callee.name == WRAP_NAME:
             return self._lower_wrap(builder, expr, expected)
+        if isinstance(expr.callee, ast.NameRef) \
+                and expr.callee.name in (ORD_NAME, CHR_NAME):
+            return self._lower_code_point(builder, expr, expected)
         func = self._callee(expr.callee)
         if func is None:
             return UndefConst(ERROR)

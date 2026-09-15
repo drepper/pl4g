@@ -164,6 +164,13 @@ class StringLit(Expr):
 
 
 @dataclass(frozen=True, slots=True)
+class CharLit(Expr):
+    """A character literal: the one code point it was written with."""
+
+    value: int
+
+
+@dataclass(frozen=True, slots=True)
 class NameRef(Expr):
     """A reference to something by name."""
 

@@ -1973,11 +1973,12 @@ def _width_of(ty: Type) -> int:
     A truth value is a byte, which is what the layout says it is.  Reading or
     writing one any wider would touch whatever is laid out beside it.
     """
-    from ...ir.types import BoolType, EnumType, FloatType, IntType
+    from ...ir.types import (BoolType, CharType, EnumType, FloatType,
+                             IntType)
 
     if isinstance(ty, (IntType, FloatType)):
         return ty.bits
-    if isinstance(ty, EnumType):
+    if isinstance(ty, (CharType, EnumType)):
         return ty.holder.bits
     return 8 if isinstance(ty, BoolType) else 64
 
@@ -1990,9 +1991,11 @@ def _number_of(value: object) -> tuple[int, Type] | None:
     every instruction on this architecture that produces one produces, and what
     the byte in the image already holds.
     """
-    from ...ir.value import BoolConst, EnumConst, IntConst
+    from ...ir.value import BoolConst, CharConst, EnumConst, IntConst
 
-    if isinstance(value, IntConst):
+    if isinstance(value, (IntConst, CharConst)):
+        # A code point is the number Unicode gave it, which is what is compared
+        # and what is stored; its type says how wide that number is held.
         return value.value, value.ty
     if isinstance(value, BoolConst):
         return (1 if value.value else 0), value.ty
@@ -2006,9 +2009,9 @@ def _number_of(value: object) -> tuple[int, Type] | None:
 
 def _is_signed(ty: Type) -> bool:
     """Whether a narrow value of *ty* is widened by its sign when it is read."""
-    from ...ir.types import EnumType, IntType
+    from ...ir.types import CharType, EnumType, IntType
 
-    if isinstance(ty, EnumType):
+    if isinstance(ty, (CharType, EnumType)):
         return ty.holder.signed
     return isinstance(ty, IntType) and ty.signed
 

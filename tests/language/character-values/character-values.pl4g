@@ -1,0 +1,48 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ `char` is one Unicode code point, held as an unsigned thirty-two bit number
+※ -- which is where every code point fits with room to spare, the last of them
+※ being U+10FFFF.  Those spare bits are not used for anything: a type whose
+※ values are code points and a type whose values are numbers are two different
+※ types, and `⎕ord` and `⎕chr` are how a program crosses between them.
+※
+※ It is deliberately not an integer type.  Adding two of them is not a
+※ character.  What the ordering means is the order Unicode numbered them in,
+※ which is a real order and the one every collation starts from, so the
+※ comparisons are defined and nothing else is.
+
+let a: char = 'A'
+let z: char = 'z'
+let omega: char = 'ω'
+let newline: char = '\n'
+let quoted: char = '\''
+let named: char = '\u0041'
+※ a number written where a code point is wanted is that code point
+let last: char = 0x10ffff
+let nul: char = 0
+let letters: char⟦3⟧ = ⟦'A', 'z', 'ω'⟧
+
+@[startup]
+fn main() → u8:
+    if ⎕ord(a) ≠ 65u32 ∨ ⎕ord(z) ≠ 122u32:
+        1u8
+    elif ⎕ord(omega) ≠ 0x3c9u32:
+        2u8
+    elif ⎕ord(newline) ≠ 10u32 ∨ ⎕ord(quoted) ≠ 39u32:
+        3u8
+    ※ an escape naming a code point by number is the character it names
+    elif named ≠ a:
+        4u8
+    elif ⎕ord(last) ≠ 0x10ffffu32 ∨ ⎕ord(nul) ≠ 0u32:
+        5u8
+    ※ the comparisons, both kinds
+    elif a ≥ z ∨ z ≥ omega:
+        6u8
+    ※ and back again, which is the direction that can fail and is checked
+    elif ⎕chr(65u32) ≠ a ∨ ⎕chr(⎕ord(omega)) ≠ omega:
+        7u8
+    ※ one held in an array of them
+    elif ⎕ord(letters⟦0⟧) ≠ 65u32 ∨ ⎕ord(letters⟦2⟧) ≠ 0x3c9u32:
+        8u8
+    else:
+        0u8

@@ -1343,6 +1343,10 @@ class Parser:
                 self._advance()
                 assert token.str_value is not None
                 return ast.StringLit(span=token.span, value=token.str_value)
+            case TokKind.CHAR:
+                self._advance()
+                assert token.int_value is not None
+                return ast.CharLit(span=token.span, value=token.int_value)
             case TokKind.KW_TRUE | TokKind.KW_FALSE:
                 self._advance()
                 return ast.BoolLit(span=token.span, value=token.kind is TokKind.KW_TRUE)

@@ -52,6 +52,35 @@ class BoolType(Type):
 
 
 @dataclass(frozen=True, slots=True)
+class CharType(Type):
+    """One Unicode code point, whatever it takes to write it down elsewhere.
+
+    Held as an unsigned thirty-two bit number, which is what every code point
+    fits in with room to spare -- the last of them is U+10FFFF, so eleven of the
+    thirty-two bits are always zero.  Those bits are not used for anything: a
+    type whose values are code points and a type whose values are numbers are
+    two different types, and the room is what makes every code point one value
+    rather than a pair.
+
+    It is deliberately not an integer type.  Adding two of them is not a
+    character, and neither is a third of one; what the ordering means is the
+    order the code points are numbered in, which is a real order and the one
+    every collation starts from, so the comparisons are defined and nothing else
+    is.  `\N{APL FUNCTIONAL SYMBOL QUAD}ord` is how a program reaches the number, which it has to ask for.
+    """
+
+    def render(self) -> str:
+        """The name of this type in the textual form of the IR."""
+        return "char"
+
+    @property
+    def holder(self) -> IntType:
+        """The integer type one is held as, which is what says how it is stored
+        and how it is read out of a register."""
+        return U32
+
+
+@dataclass(frozen=True, slots=True)
 class IntType(Type):
     """An integer of a given width and signedness."""
 
@@ -460,6 +489,13 @@ U64: Final[IntType] = IntType(64, False)
 F32: Final[FloatType] = FloatType(32)
 F64: Final[FloatType] = FloatType(64)
 
+CHAR: Final[CharType] = CharType()
+
+#: The last code point there is.  Unicode says so and will not say otherwise:
+#: the range was fixed at this when UTF-16 was given its surrogate pairs, which
+#: can reach no further, and every encoding has had to agree with it since.
+MAX_CODE_POINT: Final[int] = 0x10FFFF
+
 #: The types the language names directly, in the order they are documented.
 #: What the allocator's own record holds: the first byte not yet handed out,
 #: one past the end of the chunk it is in, and the head of the chunk list.  It
@@ -476,7 +512,7 @@ BUILTIN_TYPES: Final[dict[str, Type]] = {
     "i8": I8, "i16": I16, "i32": I32, "i64": I64,
     "u8": U8, "u16": U16, "u32": U32, "u64": U64,
     "f32": F32, "f64": F64,
-    "bool": BOOL, "void": VOID,
+    "bool": BOOL, "char": CHAR, "void": VOID,
     ARENA_NAME: ARENA,
 }
 

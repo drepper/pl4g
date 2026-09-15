@@ -16,7 +16,7 @@ from .inst import (BinaryInst, BlockTarget, BrInst, CastInst, CmpInst, CondBrIns
                    SwitchInst, Terminator, UnaryInst, UnreachableInst)
 from .module import Module
 from .types import VOID
-from .value import (BoolConst, FloatConst, IntConst, ResultConst,
+from .value import (BoolConst, CharConst, FloatConst, IntConst, ResultConst,
                     UndefConst, Value)
 
 #: Bumped whenever the textual form changes, so that a stale golden file is
@@ -53,7 +53,7 @@ def render_operand(value: Value, numbers: Numbering) -> str:
 
     if isinstance(value, GlobalVar):
         return "".join(("@", value.name))
-    if isinstance(value, IntConst):
+    if isinstance(value, (IntConst, CharConst)):
         return str(value.value)
     if isinstance(value, BoolConst):
         return "true" if value.value else "false"
@@ -172,10 +172,11 @@ def render_function(func: Function, out: list[str]) -> None:
 
 def _rendered_constant(value: object) -> str:
     """Render a constant that stands outside any function."""
-    from .value import (BoolConst as _BoolConst, FloatConst as _FloatConst,
+    from .value import (BoolConst as _BoolConst, CharConst as _CharConst,
+                        FloatConst as _FloatConst,
                         IntConst as _IntConst, ResultConst as _ResultConst)
 
-    if isinstance(value, _IntConst):
+    if isinstance(value, (_IntConst, _CharConst)):
         return str(value.value)
     if isinstance(value, _BoolConst):
         return "true" if value.value else "false"

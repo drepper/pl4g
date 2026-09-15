@@ -230,7 +230,8 @@ module.exports = grammar({
     ),
 
     _attribute_value: $ => choice(
-      $.integer_literal, $.string_literal, $.boolean_literal, $.identifier,
+      $.integer_literal, $.string_literal, $.character_literal,
+      $.boolean_literal, $.identifier,
     ),
 
     // -- blocks and statements ---------------------------------------------
@@ -524,6 +525,7 @@ module.exports = grammar({
       $.float_literal,
       $.integer_literal,
       $.string_literal,
+      $.character_literal,
       $.boolean_literal,
       $.identifier,
     ),
@@ -714,6 +716,16 @@ module.exports = grammar({
       '"',
       repeat(choice(/[^"\\\n]/, seq('\\', /[^\n]/))),
       '"',
+    )),
+
+    // One code point between apostrophes, with the escapes a string takes.  An
+    // escape that names a code point by number carries its digits with it,
+    // which is why the backslash is followed by a character and then by however
+    // many hexadecimal digits that character called for.
+    character_literal: _ => token(seq(
+      "'",
+      choice(/[^'\\\n]/, seq('\\', /[^\n]/, repeat(/[0-9a-fA-F]/))),
+      "'",
     )),
 
     boolean_literal: _ => choice('true', 'false'),

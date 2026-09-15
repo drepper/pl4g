@@ -303,6 +303,9 @@ class Lexer:
         if ch == '"':
             self._lex_string(start)
             return True
+        if ch == "'":
+            self._lex_character(start)
+            return True
         self._pos += 1
         self._diags.emit(D.LANG_SYNTAX_UNEXPECTED_CHAR, self._span(start, self._pos),
                          char="".join(("'", ch, "' (U+", format(ord(ch), "04X"), ")")))
@@ -483,6 +486,43 @@ class Lexer:
             parts.append(ch)
             self._pos += 1
         self._emit(TokKind.STRING, start, str_value="".join(parts))
+
+    def _lex_character(self, start: int) -> None:
+        """Lex a character literal, which is one code point between apostrophes.
+
+        The same escapes a string takes, for the same reason: what may be
+        written down is one thing however it is quoted.  A code point is one
+        character to this compiler because Python strings are sequences of code
+        points, which is what makes "exactly one" a thing to count rather than a
+        thing to decode.
+        """
+        self._pos += 1
+        found: list[str] = []
+        closed = False
+        while True:
+            ch = self._peek()
+            if ch == "" or ch == "\n":
+                break
+            if ch == "'":
+                self._pos += 1
+                closed = True
+                break
+            if ch == "\\":
+                found.append(self._lex_escape())
+                continue
+            found.append(ch)
+            self._pos += 1
+        if not closed:
+            self._diags.emit(D.LANG_SYNTAX_UNTERMINATED_CHARACTER,
+                             self._span(start, self._pos))
+            self._emit(TokKind.CHAR, start, int_value=0)
+            return
+        if len(found) != 1:
+            self._diags.emit(D.LANG_SYNTAX_CHARACTER_IS_ONE,
+                             self._span(start, self._pos), found=len(found))
+            self._emit(TokKind.CHAR, start, int_value=0)
+            return
+        self._emit(TokKind.CHAR, start, int_value=ord(found[0]))
 
     def _lex_escape(self) -> str:
         """Lex one escape sequence and return the character it denotes."""

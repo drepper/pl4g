@@ -3531,6 +3531,53 @@ lazy, neither of which is a fixed-shape array.
 
 ---
 
+## 2026-09-16T02:10+02:00 — language
+
+**`char`, which is one code point and not a number**
+
+Decided on the user's direction: a character type holding a UCS-4 value in thirty-two bits, with the maximum checked, and a
+conversion to `u32`.
+
+**The decision inside it is that it is not an integer type.**  Holding a code point in thirty-two bits is a representation, and
+representation was never the question -- C's `char` is an integer type of the width of a byte and is therefore neither a
+character nor one code point, Go's `rune` is an alias for `int32` so `r + 1` compiles and means nothing, and C++20's `char32_t`
+has the width right and the type wrong.  What makes this type worth having is that the arithmetic is *not* defined on it: the sum
+of two characters is not a character, and a language that lets it be written has given up the thing the type was for.  Rust
+reached the same answer and is the model here.
+
+**The comparisons are defined, and that is not an inconsistency.**  Unicode numbers the code points, and that numbering is a real
+order -- it is where every collation in the world starts before it does anything else.  So both questions are asked of a `char`,
+unlike an enumeration, whose order is the order somebody happened to write the values in and which therefore answers equality and
+nothing more.
+
+**The two conversions are not each other's mirror image, and neither is an assignment.**  Every code point is a number, so `⎕ord`
+cannot fail; not every number is a code point, so `⎕chr` checks and stops the program.  A conversion that may stop the program is
+a thing a reader should be able to see, which is why it is not a rule about what may be assigned to what -- and the one that
+cannot fail is written out too, because a language with no implicit conversions does not get one exception for the easy
+direction.
+
+**A number written where a code point is wanted is that code point.**  `let last: char = 0x10ffff` is how the last one is
+written, there being no character to type; it is checked where it stands, and so is the same number given to `⎕chr`.  That is
+the same rule an unsuffixed literal already follows everywhere -- it takes the type that is wanted -- with the one extra thing a
+code point can fail to be.
+
+**The names carry the quad.**  The instruction said `ord`; the project's own rule reserves compiler-provided names with `⎕` so
+that no program has to give up a name, and `ord` and `chr` are exactly the names a program working with text would want.  They
+are `⎕ord` and `⎕chr` for that reason and the bare spelling is one line away if it is wanted instead.
+
+**`⎕chr` was added, and was not asked for.**  "Assignments have to check for the maximum value" has run-time force only if a
+number the program worked out can become a code point, and `⎕ord` goes the other way; without a checked way in, the check would
+have been a compile-time one about literals and nothing more.
+
+Compare, beyond the above: **Python**, whose `chr` and `ord` these are named after, and whose characters are strings of length
+one -- which works there because a string is the only sequence type that matters and does not here; **Haskell**'s `Char` with
+`ord` and `chr` in `Data.Char`, where `chr` is partial and throws; **Java**, whose `char` is sixteen bits and therefore cannot
+hold a code point at all, which is the mistake this type exists to not make; and **Swift**, whose `Character` is a grapheme
+cluster -- the other place the line could be drawn, and a much larger thing to carry in thirty-two bits.  What a *string* is
+stays open, and the grapheme question belongs to it.
+
+---
+
 ---
 
 Open questions

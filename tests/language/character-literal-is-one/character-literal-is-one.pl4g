@@ -1,0 +1,10 @@
+※ pl4g-test: compile=error diag=2010
+
+※ A value of `char` is one code point, so a literal of one is written with
+※ exactly one between the apostrophes.  Several of them are a string, which is
+※ written between quotation marks.
+
+@[startup]
+fn main() → u8:
+    let c: char = 'ab'
+    0u8

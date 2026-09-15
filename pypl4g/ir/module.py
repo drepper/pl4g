@@ -8,11 +8,12 @@ from typing import Sequence
 from ..source.location import INVALID_SPAN, Span
 from .decisions import DecisionLog
 from .function import Function, Linkage
-from .types import (ArrayType, BoolType, EnumType, FloatType, IntType, MEM,
+from .types import (ArrayType, BoolType, CHAR, CharType, EnumType, FloatType,
+                    IntType, MEM,
                     PtrType, ResultType, Type,
                     TypeContext)
-from .value import (ArrayConst, BoolConst, Const, EnumConst, FloatConst,
-                    IntConst, ResultConst, Value)
+from .value import (ArrayConst, BoolConst, CharConst, Const, EnumConst,
+                    FloatConst, IntConst, ResultConst, Value)
 
 
 class GlobalVar(Value):
@@ -100,6 +101,7 @@ class Module:
     _result_consts: dict[tuple[int, int, bool], ResultConst] = field(
         default_factory=dict)
     _enum_consts: dict[tuple[int, int], EnumConst] = field(default_factory=dict)
+    _char_consts: dict[int, CharConst] = field(default_factory=dict)
 
     def add_function(self, func: Function, key: str | None = None) -> Function:
         """Register *func* in this module.
@@ -138,6 +140,14 @@ class Module:
         if found is None:
             found = FloatConst(ty, value)
             self._float_consts[key] = found
+        return found
+
+    def char_const(self, value: int) -> CharConst:
+        """Return the interned constant naming the code point *value*."""
+        found = self._char_consts.get(value)
+        if found is None:
+            found = CharConst(CHAR, value)
+            self._char_consts[value] = found
         return found
 
     def enum_const(self, ty: EnumType, index: int) -> EnumConst:
