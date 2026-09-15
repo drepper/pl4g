@@ -1577,10 +1577,22 @@ product meaning exactly what it would have meant without it.
 
 **A type definition may name a type defined below it**, and may name one another module exports (`m.Point`), for which the
 definition there needs `@[export]` as a function or a variable does.  What it may not do is reach itself (4408), through its own
-fields or through a chain of other definitions: a value of such a type would have to hold a value of itself.  The indirection that
-makes that finite elsewhere is now written -- a field may be a reference, `next : &Node` -- but the compiler cannot yet build a
-type that reaches itself even through one, so the rule still holds where it need not.  **A field may be a reference to some other
-type**, which is what `&` in a product is for today.
+fields or through a chain of other definitions -- **unless a reference stands somewhere on the way round**.  A value of such a
+type would otherwise have to hold a value of itself and there would be no size that fitted; what a reference occupies is the same
+whatever it names, so a definition may reach itself through one and a value of it is as big as its other fields and one address.
+
+```
+type Node = value : u8 ; next : &mut Node       ※ a list
+type Tree = leaf : u8 ; left : &Tree ; right : &Tree
+type Pair = n : u8 ; other : &Other             ※ and two that reach each other
+type Other = m : u16 ; back : &Pair
+```
+
+The rule is about the way round and not about the length of it: a chain with a reference anywhere on it is finite, and one with
+none on it is not, however many definitions it passes through.  So `type A = b : B` beside `type B = a : A` is still refused.
+
+That is the list, the tree and the graph -- every shape whose definition says "and another one of me" -- and it is what a
+reference in a product is for.
 
 **A defined type is nominal.**  Two definitions with the same parts are two types, because a definition is what says what a value
 *is*, and two things that happen to be laid out alike are not one thing.  Two files each defining `Point` define two types, even
@@ -1645,7 +1657,7 @@ is a way to write it.
 is why the mark is not a prefix as C's is.  Written after anything that is not a reference there is no place to read (4534).
 
 **A reference names a place holding one value** (4536): a number, a truth value, a code point, a value of an enumeration, a
-record, and a reference itself.  An array, a list, a string, a set, a dictionary, a tuple and a result are each already several
+record, a choice between records, and a reference itself.  An array, a list, a string, a set, a dictionary, a tuple and a result are each already several
 values or already a place, so a reference to one would be a second way of writing what a value of it already is.  A reference
 takes the whole of what follows it, so `&u8⟦4⟧` is a reference to an array of four -- which is refused -- and never an array of
 four references.

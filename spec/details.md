@@ -1861,6 +1861,31 @@ that came in as a parameter is a block parameter and not a frame, so writing thr
 own local is a frame, so it is not.
 
 
+A type that reaches itself
+--------------------------
+
+`_resolved` works a definition out on first ask and sets `resolving` while it does, so a definition that reaches itself is caught
+where the second ask arrives.  A reference is the one indirection that makes such a type finite, and making that work needed two
+things.
+
+**The type object exists before its parts are known.**  `_shell_for` makes an empty `ProductType` or `SumType` and `_resolved`
+publishes it as `defined.shell` before resolving a single field, so a `&Node` among those fields has something to point at.
+`_filled_in` puts the resolved parts into that same object once they are all in hand -- one `object.__setattr__` on a frozen type,
+at the one moment nothing has read the parts yet, because the only thing that had the object was a `PtrType` and what a pointer
+occupies does not depend on what it names.
+
+**A product and a sum are equal only to themselves.**  Both were dataclasses comparing by structure, which for a type that
+reaches itself would walk round the circle for ever -- and hashing one would too, which matters because `TypeContext` interns
+pointer types in a dictionary keyed by what they point at.  Identity is what nominal already means, so the two now define `__eq__`
+and `__hash__` themselves.  The base `Type` has no fields, so inheriting its generated `__eq__` would have made all products
+equal; that is why they are written out rather than `eq=False` alone.
+
+**What says a cycle is allowed is `_behind_a_reference`**, a depth raised while a reference's pointee is resolved.  Where the
+second ask arrives with the depth at zero the definition is refused as before; where it arrives with the depth above zero a
+reference stands somewhere on the way round, and the shell is handed back.  That is exactly the question -- not whether the field
+in hand is a reference, but whether one is open anywhere between the type and itself.
+
+
 Expectations
 ------------
 

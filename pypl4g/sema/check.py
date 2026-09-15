@@ -142,8 +142,13 @@ class _NamedType:
     What it is made of is worked out on first ask rather than where it is
     written, so that one definition may name another written below it.  The
     `resolving` flag is what catches a type that reaches itself: a value of such
-    a type would have to hold a value of it, and there is no way to write the
+    a type would have to hold a value of it, and a reference is the one
     indirection that makes that finite.
+
+    `shell` is the type object, made before its parts are known so that a
+    reference written in those parts has something to point at.  The parts are
+    filled into it once they are all resolved, which is the only moment the
+    object changes and is over before anything reads them.
     """
 
     name: str
@@ -152,6 +157,7 @@ class _NamedType:
     exported: bool = False
     ty: Type | None = None
     resolving: bool = False
+    shell: Type | None = None
 
 
 @dataclass(slots=True)
@@ -235,18 +241,50 @@ def _addressed_in(node: object, into: set[str]) -> None:
             _addressed_in(one, into)
 
 
+def _shell_for(defined: _NamedType) -> Type | None:
+    """The type object a definition's parts will be filled into.
+
+    It exists before the parts are known so that a reference written among them
+    has something to point at.  Only a product and a sum have one: an
+    enumeration's values are numbers and nothing can reach back into it.
+    """
+    if not isinstance(defined.node, ast.TypeDef):
+        return None
+    if defined.node.kind is ast.TypeKind.SUM:
+        return SumType((), name=defined.name, origin=defined.origin)
+    return ProductType((), name=defined.name, origin=defined.origin)
+
+
+def _filled_in(shell: Type | None, made: Type) -> Type:
+    """Put the parts that were resolved into the object that was handed out.
+
+    The object is the one a reference among those parts already points at, so
+    the parts have to land in *it* and not in the one that was built beside it.
+    It is frozen, as every type is, and this is the one moment it changes -- a
+    moment that is over before anything reads the parts.
+    """
+    if isinstance(shell, ProductType) and isinstance(made, ProductType):
+        object.__setattr__(shell, "fields", made.fields)
+        return shell
+    if isinstance(shell, SumType) and isinstance(made, SumType):
+        object.__setattr__(shell, "variants", made.variants)
+        return shell
+    return made
+
+
 def _can_be_referred_to(ty: Type) -> bool:
     """Whether a reference may name a place holding a value of this type.
 
     One value in one place is what a reference names, so what it may name is
     what a place holds as one: a number, a truth value, a code point, a value of
-    an enumeration, a record, and a reference itself.  What it may not name is
-    everything that is already several values or already a place -- an array, a
-    list, a string, a set, a dictionary, a tuple, a result -- because a
-    reference to one of those would be a second way of writing what a value of
-    it already is.
+    an enumeration, a record, a choice between records, and a reference itself.
+    What it may not name is everything that is already several values or already
+    a place -- an array, a list, a string, a set, a dictionary, a tuple, a
+    result -- because a reference to one of those would be a second way of
+    writing what a value of it already is.
     """
-    return (isinstance(ty, (IntType, FloatType, EnumType, PtrType, ProductType))
+    return (isinstance(ty, (IntType, FloatType, EnumType, PtrType, ProductType,
+                            SumType))
             or ty is BOOL or ty is CHAR)
 
 
@@ -728,6 +766,10 @@ class Checker:
         #: names given storage of their own rather than standing for a value.
         #: Gathered once per body, before any of it is lowered.
         self._addressed: set[str] = set()
+        #: How many references are open around the type being resolved.  A
+        #: definition that reaches itself is refused, unless a reference stands
+        #: somewhere on the way round.
+        self._behind_a_reference: int = 0
         #: Whether an array stands where one of its elements is wanted, which
         #: is so while the arguments of a call to a function marked `listable`
         #: are lowered and nowhere else.
@@ -1776,17 +1818,26 @@ class Checker:
         if defined.ty is not None:
             return defined.ty
         if defined.resolving:
-            self._diags.emit(D.LANG_TYPEDEF_CONTAINS_ITSELF,
-                             defined.node.name_span, name=defined.name)
-            defined.ty = ERROR
-            return ERROR
+            if self._behind_a_reference == 0 or defined.shell is None:
+                self._diags.emit(D.LANG_TYPEDEF_CONTAINS_ITSELF,
+                                 defined.node.name_span, name=defined.name)
+                defined.ty = ERROR
+                return ERROR
+            # A reference stands between the type and itself, which is the
+            # indirection that makes such a type finite: what a reference
+            # occupies is the same whatever it names, so the parts need not be
+            # known to point at it.  The object being built is what is handed
+            # back, and its parts are filled in before anything reads them.
+            return defined.shell
         defined.resolving = True
+        defined.shell = _shell_for(defined)
         try:
-            defined.ty = (self._values_of(defined)
-                          if isinstance(defined.node, ast.EnumDef)
-                          else self._parts_of(defined))
+            made = (self._values_of(defined)
+                    if isinstance(defined.node, ast.EnumDef)
+                    else self._parts_of(defined))
         finally:
             defined.resolving = False
+        defined.ty = _filled_in(defined.shell, made)
         return defined.ty
 
     def _values_of(self, defined: _NamedType) -> Type:
@@ -1997,7 +2048,14 @@ class Checker:
         variable or a parameter carries, that says only that the name may be
         bound to something else.
         """
-        pointee = self._resolve_type(ref.pointee)
+        # What a reference occupies does not depend on what it names, so a
+        # definition may reach itself through one.  The depth is what says so
+        # where the cycle is found, which is in the middle of resolving it.
+        self._behind_a_reference += 1
+        try:
+            pointee = self._resolve_type(ref.pointee)
+        finally:
+            self._behind_a_reference -= 1
         if pointee is ERROR:
             return ERROR
         if not _can_be_referred_to(pointee):

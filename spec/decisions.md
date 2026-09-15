@@ -4361,6 +4361,32 @@ which is the rule about one meaning and one spelling, applied to a type.
 **There is no null reference**, because every one is made from a place that exists.  That is Rust's arrangement and C++'s intent,
 and it is what lets reading through one need no check.
 
+---
+
+## 2026-09-16T11:55+02:00 — language
+
+**A type may reach itself through a reference**
+
+Follows from references, and is what a reference in a product is for.  A definition reaching itself was refused (4408) because a
+value of such a type would have to hold a value of itself; a reference occupies the same room whatever it names, so a definition
+may reach itself through one, and `type Node = value : u8 ; next : &mut Node` is a list.
+
+**The rule is about the way round, not about the field.**  A depth is raised while a reference's pointee is resolved, and a
+definition that reaches itself with that depth above zero is allowed.  So a chain of definitions with a reference anywhere on it
+is finite, and one with none on it is refused however long it is -- which is the question a value's size actually asks.
+
+**A product and a sum are now equal only to themselves.**  They were nominal in the specification and structural in the
+implementation, which nobody had noticed because nothing compared two.  A type that reaches itself makes the difference matter:
+comparing by structure walks round the circle for ever.  Rust, Go, Zig and C++ all give a named record its own identity for the
+same reason, and Haskell's `data` likewise; only a structural type system -- OCaml's objects, TypeScript -- does otherwise, and
+this language decided for nominal long ago.
+
+Compare: **C** and **C++**, where a structure may hold a pointer to itself and an incomplete type is the mechanism; **Rust**,
+where `Box<Self>` or `&Self` does it and a bare `Self` is refused with the same reasoning; **Haskell** and **ML**, where every
+value is behind an indirection so the question never arises; **Go**, where a struct may hold a pointer to itself and not a value
+of itself.  What is decided here is the one thing those all share -- an indirection is what makes it finite -- with the depth
+rather than the field as the test, so that a cycle through several definitions is judged by the same rule as a cycle through one.
+
 Open questions
 --------------
 

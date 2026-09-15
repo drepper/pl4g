@@ -1,0 +1,38 @@
+※ pl4g-test: compile=ok run=native,qemu exit=0 diag=none
+
+※ A type may not reach itself (4408), because a value of one would have to hold
+※ a value of itself and there would be no size that fitted.  **A reference is
+※ the indirection that makes it finite**: what a reference occupies is the same
+※ whatever it names, so a definition may reach itself through one and a value
+※ of it is as big as its other fields and one address.
+※
+※ That is the list, the tree and the graph -- every shape whose definition says
+※ "and another one of me" -- and it is what a reference in a product is for.
+※
+※ The rule is about the way round and not about the length of it: a chain of
+※ definitions with a reference anywhere on it is finite, and one with none on
+※ it is not, however many types it passes through.  So `A = b : B` beside
+※ `B = a : A` is still refused, and the test beside this one shows it.
+※
+※ Nothing here makes a *value* of one yet: the language has no syntax for
+※ writing a product, which is a question of its own.  What is settled is that
+※ the type is a type.
+
+※ The list: one of these, and where the next one is.
+type Node = value : u8 ; next : &mut Node
+
+※ The tree, which reaches itself twice and through a reference that does not
+※ allow writing.
+type Tree = leaf : u8 ; left : &Tree ; right : &Tree
+
+※ Two definitions that reach each other, with a reference on the way round.
+type Pair = n : u8 ; other : &Other
+type Other = m : u16 ; back : &Pair
+
+※ And a sum, which is nominal for the same reason and reaches itself the same
+※ way.
+type Chain = nothing : void | more : &Chain
+
+@[startup]
+fn main() → u6:
+    0u6

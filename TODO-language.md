@@ -573,11 +573,6 @@ Runtime
     first(a: &mut u8) → &mut u8` among them -- to refuse every dangling one.  Rust's lifetimes are the design to compare against,
     and what to decide is how much of one a language emitted by a generator needs written down.
 
-[ ] let a product reach itself through a reference.  `type Node = value : u8 ; next : &Node` is refused by 4408, though a
-    reference is exactly the indirection that makes such a type finite.  What stops it is that the type object has to exist before
-    it is complete for the reference to point at, and a product's equality would have to be its identity rather than its fields --
-    which is what nominal already means, so the change is principled and is not made here.
-
 [ ] let a reference name an array, a list or a string.  A reference names a place holding one value (4536); those are already
     several values or already a place, and what a reference to one would mean -- the place the value is, or the place the elements
     are -- is a question worth answering rather than guessing.

@@ -239,7 +239,7 @@ class ErrorType(Type):
         return "<error>"
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, eq=False)
 class ProductType(Type):
     """A record.  The field order here is the declaration order, not a layout.
 
@@ -248,6 +248,12 @@ class ProductType(Type):
     and two things that happen to be laid out alike are not one thing.  That is
     what `name` and `origin` are for -- the name as the source wrote it, and the
     file that wrote it, so that two files each defining `Point` define two.
+
+    Being nominal is why two of these are the same one only where they are the
+    same object.  What that buys is a type that reaches itself through a
+    reference: the object exists before its fields are known, so a field may
+    name it, and asking whether two are equal never has to walk round the
+    circle.
     """
 
     fields: tuple[tuple[str, Type], ...]
@@ -256,6 +262,20 @@ class ProductType(Type):
     #: The file the definition is in, which is part of which type this is and
     #: no part of what it is called.
     origin: str = ""
+
+    def __eq__(self, other: object) -> bool:
+        """Nominal, so one of these is the same type only as itself.
+
+        The base compares by structure, which for a type that reaches itself
+        through a reference would walk round the circle for ever -- and would
+        answer the wrong question anyway, two definitions with the same parts
+        being two types.
+        """
+        return self is other
+
+    def __hash__(self) -> int:
+        """By identity, since that is what equality is."""
+        return id(self)
 
     def render(self) -> str:
         """The name of this type in the textual form of the IR."""
@@ -547,11 +567,12 @@ class EnumType(Type):
             return None
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, eq=False)
 class SumType(Type):
     """A choice between named variants, the basis of the language's error model.
 
-    Nominal for the same reason a product is, and by the same two fields.
+    Nominal for the same reason a product is, and by the same two fields -- and
+    the same one object, for the same reason.
     """
 
     variants: tuple[tuple[str, Type], ...]
@@ -559,6 +580,20 @@ class SumType(Type):
     name: str = ""
     #: The file the definition is in, which is part of which type this is.
     origin: str = ""
+
+    def __eq__(self, other: object) -> bool:
+        """Nominal, so one of these is the same type only as itself.
+
+        The base compares by structure, which for a type that reaches itself
+        through a reference would walk round the circle for ever -- and would
+        answer the wrong question anyway, two definitions with the same parts
+        being two types.
+        """
+        return self is other
+
+    def __hash__(self) -> int:
+        """By identity, since that is what equality is."""
+        return id(self)
 
     def render(self) -> str:
         """The name of this type in the textual form of the IR."""
