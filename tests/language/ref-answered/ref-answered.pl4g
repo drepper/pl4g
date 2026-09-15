@@ -1,0 +1,19 @@
+※ pl4g-test: compile=error diag=4531
+
+※ What a reference names has to outlive the reference, and nothing in the
+※ language yet says how long anything lives.  Handing one back to the caller is
+※ exactly the case where the compiler cannot tell: the place may be this call's
+※ own storage, which is gone the moment it answers.  So a reference may be a
+※ parameter, a local and a field, and may not leave the call.
+※
+※ Rust answers the same question with lifetimes, which say that what comes back
+※ lives as long as what went in; C and Odin do not ask it at all, and a
+※ reference to a local that has gone is a program nobody notices is wrong.
+※ Lifetime annotations are what will lift this.
+
+@[startup]
+fn main() → u6:
+    0u6
+
+fn first(a: &mut u8) → &mut u8:
+    a

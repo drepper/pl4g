@@ -1,0 +1,11 @@
+※ pl4g-test: compile=error diag=4534
+
+※ The mark after a value says to read what is at the place it names, and only a
+※ reference names a place.  Written after anything else there is nothing to
+※ read through.
+
+@[startup]
+fn main() → u6:
+    let n: u8 = 1u8
+    let m: u8 = n⌖
+    0u6

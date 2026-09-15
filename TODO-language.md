@@ -568,6 +568,20 @@ Runtime
     substitutes, the brace notation, an omitted type and a named argument all differ in meaning or in what they are for, so none
     of them is a second spelling of one thing.
 
+[ ] design lifetime annotations, which are what say how long what a reference names lives.  Until they exist a reference may not
+    be what a function answers with (4531) and may not be held at the top level (4532), which refuses good programs -- `fn
+    first(a: &mut u8) → &mut u8` among them -- to refuse every dangling one.  Rust's lifetimes are the design to compare against,
+    and what to decide is how much of one a language emitted by a generator needs written down.
+
+[ ] let a product reach itself through a reference.  `type Node = value : u8 ; next : &Node` is refused by 4408, though a
+    reference is exactly the indirection that makes such a type finite.  What stops it is that the type object has to exist before
+    it is complete for the reference to point at, and a product's equality would have to be its identity rather than its fields --
+    which is what nominal already means, so the change is principled and is not made here.
+
+[ ] let a reference name an array, a list or a string.  A reference names a place holding one value (4536); those are already
+    several values or already a place, and what a reference to one would mean -- the place the value is, or the place the elements
+    are -- is a question worth answering rather than guessing.
+
 [ ] widen what a parameter's default may be.  Today it is a literal or a value of an enumeration, which is what a call can hand
     over in registers.  A run of elements, a string or a collection is a value in memory, so a default of one would have to say
     whose memory -- the caller's, or one copy the image holds -- and nothing yet needs it.

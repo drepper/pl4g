@@ -1,0 +1,12 @@
+※ pl4g-test: compile=error diag=4532
+
+※ A variable at the top level lasts as long as the program does, so what it
+※ named would have to as well, and a reference put there by one call would
+※ outlive whatever that call was pointing at.  It is the rule about answering
+※ with one, asked at the other place a value can escape to.
+
+let kept: &mut u8 = ⊥
+
+@[startup]
+fn main() → u6:
+    0u6

@@ -8,7 +8,7 @@ compilation be parallelized and what makes a forward reference legal.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field, fields as fields_of, replace
 from typing import Callable, Final, Sequence
 
 from ..diag import ids as D
@@ -35,7 +35,8 @@ from ..ir.types import (ARENA, ArrayType, BOOL, BoolType, BUILTIN_TYPES,
                         ERROR, EnumType,
                         I64, U32, U64,
                         F64,
-                        FloatType, IntType, MEM, ProductType, ResultType,
+                        FloatType, IntType, MEM, ProductType, PtrType,
+                        ResultType,
                         ListType, SetType, STR, SumType, TupleType, Type,
                         VecType, VOID,
                         CHAR, MAX_CODE_POINT, U8, parts_of)
@@ -108,6 +109,12 @@ class _Local:
     #: definition itself is being read.
     expectation: Expectation | None = None
     expected_pairs: list[_Expected] = field(default_factory=list)
+    #: Whether the name stands for a place rather than for a value.  A local is
+    #: ordinarily a value and has no address; one a reference is taken of is
+    #: given storage of its own, and `value` is then where that storage is.
+    placed: bool = False
+    #: What that storage holds, which is the type the name has.
+    held: Type | None = None
 
 
 @dataclass(slots=True)
@@ -201,6 +208,72 @@ def _collect_assigned(block: ast.Block, into: list[str]) -> None:
                     _collect_assigned(arm.body, into)
             case _:
                 pass
+
+
+def _addressed_in(node: object, into: set[str]) -> None:
+    """Add to *into* every name `&` is written in front of, anywhere below *node*.
+
+    A local is ordinarily a value and has no address at all, so a name a
+    reference is taken of has to be given storage of its own -- and that has to
+    be settled before the body is lowered, because a name given storage in one
+    arm of a branch and not in another would be two different things where the
+    arms meet.
+
+    The walk is over the fields of the tree itself rather than over a list of
+    the kinds of node there are, so a kind added later is looked through without
+    anything here being told about it.  It goes by name and takes no notice of
+    scope, so a name shadowed somewhere may give storage to a binding that never
+    needed it; what that costs is a load, and never an answer.
+    """
+    if isinstance(node, ast.AddressOf) and isinstance(node.operand, ast.NameRef):
+        into.add(node.operand.name)
+    if isinstance(node, ast.Node):
+        for one in fields_of(node):
+            _addressed_in(getattr(node, one.name), into)
+    elif isinstance(node, (list, tuple)):
+        for one in node:
+            _addressed_in(one, into)
+
+
+def _can_be_referred_to(ty: Type) -> bool:
+    """Whether a reference may name a place holding a value of this type.
+
+    One value in one place is what a reference names, so what it may name is
+    what a place holds as one: a number, a truth value, a code point, a value of
+    an enumeration, a record, and a reference itself.  What it may not name is
+    everything that is already several values or already a place -- an array, a
+    list, a string, a set, a dictionary, a tuple, a result -- because a
+    reference to one of those would be a second way of writing what a value of
+    it already is.
+    """
+    return (isinstance(ty, (IntType, FloatType, EnumType, PtrType, ProductType))
+            or ty is BOOL or ty is CHAR)
+
+
+def _holds_a_reference(ty: Type, seen: frozenset[int] = frozenset()) -> bool:
+    """Whether a value of *ty* holds a reference anywhere inside it."""
+    if isinstance(ty, PtrType):
+        return True
+    if id(ty) in seen:
+        return False
+    deeper = seen | {id(ty)}
+    match ty:
+        case TupleType():
+            return any(_holds_a_reference(m, deeper) for m in ty.members)
+        case ResultType():
+            return (_holds_a_reference(ty.ok, deeper)
+                    or (ty.err is not None and _holds_a_reference(ty.err, deeper)))
+        case ProductType():
+            return any(_holds_a_reference(t, deeper) for _, t in ty.fields)
+        case SumType():
+            return any(_holds_a_reference(t, deeper) for _, t in ty.variants)
+        case ArrayType() | ListType() | SetType() | VecType():
+            return _holds_a_reference(ty.element, deeper)
+        case DictType():
+            return (_holds_a_reference(ty.key, deeper)
+                    or _holds_a_reference(ty.value, deeper))
+        case _:
+            return False
 
 
 def _lets_go_of(found: ArrayType, wanted: ArrayType) -> bool:
@@ -651,6 +724,10 @@ class Checker:
         #: arms, and about which the unread-value rule therefore says nothing
         #: while the arms are being checked.
         self._carried: set[int] = set()
+        #: The names the body being lowered takes a reference to, which are the
+        #: names given storage of their own rather than standing for a value.
+        #: Gathered once per body, before any of it is lowered.
+        self._addressed: set[str] = set()
         #: Whether an array stands where one of its elements is wanted, which
         #: is so while the arguments of a call to a function marked `listable`
         #: are lowered and nowhere else.
@@ -824,6 +901,13 @@ class Checker:
         expectation = self._begin_expecting(pairs)
         try:
             ty = self._variable_type(node)
+            if ty is not None and _holds_a_reference(ty):
+                # A variable here lasts as long as the program, so what it named
+                # would have to as well, and nothing yet says how long anything
+                # lives.  Asked before the value is looked at, since there is no
+                # value such a variable could be given.
+                self._diags.emit(D.LANG_REF_AT_TOP_LEVEL, node.span)
+                ty = ERROR
             initializer = self._constant_value(node, ty) if ty is not None else None
         finally:
             self._end_expecting(expectation)
@@ -1012,6 +1096,10 @@ class Checker:
             case ast.FloatLit():
                 return BUILTIN_TYPES.get(expr.type_name) if expr.type_name else None
             case ast.NameRef():
+                placed = self._find_local(expr.name)
+                if placed is not None and placed.placed:
+                    placed.read = True
+                    return placed.held
                 resolved = self._lookup(expr)
                 return None if resolved is None else self._value_type_of(resolved)
             case _:
@@ -1264,8 +1352,18 @@ class Checker:
 
     def _bind_local(self, name: str, value: Value, span: Span,
                     mutable: bool = False, value_span: Span = INVALID_SPAN,
-                    is_parameter: bool = False) -> None:
-        """Bind a name in the innermost scope, reporting one already bound there."""
+                    is_parameter: bool = False,
+                    builder: IRBuilder | None = None) -> None:
+        """Bind a name in the innermost scope, reporting one already bound there.
+
+        A name the body takes a reference to is given storage of its own here
+        and stands for that storage from the start, so that it is one thing
+        everywhere in the function: reading it is then a load and assigning to
+        it a store, as they are for a variable at the top level.  Which names
+        those are was settled before the body was walked, because a name given
+        storage in one arm of a branch and not in another would be two different
+        things where the arms meet.
+        """
         scope = self._scopes[-1]
         previous = scope.get(name)
         if previous is not None:
@@ -1273,9 +1371,24 @@ class Checker:
                              name=name).note(
                 D.LANG_FILESTRUCT_PREVIOUS_DEFINITION, previous.span, name=name)
             return
+        held = self._value_type_of(value)
+        placed = (builder is not None and name in self._addressed
+                  and _can_be_referred_to(held))
+        if placed:
+            assert builder is not None
+            place = builder.frame(held, span)
+            builder.store(place, value, span)
+            value = place
         scope[name] = _Local(name=name, value=value, span=span, mutable=mutable,
                              value_span=value_span if value_span.is_valid else span,
-                             is_parameter=is_parameter)
+                             is_parameter=is_parameter,
+                             placed=placed, held=held if placed else None)
+
+    def _held_by(self, local: _Local) -> Type:
+        """The type a name has, whether it stands for a value or for a place."""
+        if local.placed and local.held is not None:
+            return local.held
+        return self._value_type_of(local.value)
 
     def _find_local(self, name: str) -> _Local | None:
         """The innermost binding of *name*, if there is one."""
@@ -1324,6 +1437,14 @@ class Checker:
         try:
             params = tuple(self._resolve_type(p.type) for p in node.params)
             ret = self._return_type(node.ret_type)
+            if _holds_a_reference(ret):
+                # What a reference names has to outlive the reference, and
+                # handing one back is the case where the compiler cannot tell:
+                # the place may be this call's own storage, gone the moment it
+                # answers.  Lifetime annotations are what will say when it may.
+                self._diags.emit(D.LANG_REF_ANSWERED,
+                                 node.ret_type.span if node.ret_type is not None
+                                 else node.name_span)
             func_attrs, linkage = self._function_attrs(attrs)
             func = Function(name=node.name,
                             ty=self._module.types.func_type(params, ret),
@@ -1863,7 +1984,27 @@ class Checker:
             if any(m is ERROR for m in members):
                 return ERROR
             return self._module.types.tuple_type(members)
+        if isinstance(ref, ast.RefTypeRef):
+            return self._reference_type(ref)
         return self._named_type(ref)
+
+    def _reference_type(self, ref: ast.RefTypeRef) -> Type:
+        """Resolve `&T` or `&mut T`, checking that a place can hold a `T`.
+
+        What `mut` says is what may be done to the place, and it is part of the
+        type because the one who wrote the reference and the one who reads it
+        both reach that place -- which is what distinguishes it from the `mut` a
+        variable or a parameter carries, that says only that the name may be
+        bound to something else.
+        """
+        pointee = self._resolve_type(ref.pointee)
+        if pointee is ERROR:
+            return ERROR
+        if not _can_be_referred_to(pointee):
+            self._diags.emit(D.LANG_REF_TYPE_NOT_ALLOWED, ref.span,
+                             found=pointee.render())
+            return ERROR
+        return self._module.types.ptr_type(pointee, ref.mutable)
 
     def _array_type(self, ref: ast.ArrayTypeRef) -> Type:
         """Resolve `T\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}N\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}` or `T\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}`.
@@ -1991,13 +2132,22 @@ class Checker:
         outer_answer, self._answering = self._answering, func.ty.ret
         outer_impure, self._impure = self._impure, func.attrs.impure
         self._push_scope()
-        for index, param in enumerate(node.params):
-            value = block.add_param(func.ty.params[index], param.name)
-            self._bind_local(param.name, value, node.params[index].span,
-                             param.mutable, is_parameter=True)
+        outer_addressed = self._addressed
+        self._addressed = set()
+        if node.body is not None:
+            _addressed_in(node.body, self._addressed)
+        # Every parameter gets its register before any of them is given storage:
+        # a block's parameters are what it is entered with, and the storage is
+        # written by instructions that follow them.
+        arriving = [block.add_param(func.ty.params[index], param.name)
+                    for index, param in enumerate(node.params)]
+        for param, value in zip(node.params, arriving):
+            self._bind_local(param.name, value, param.span,
+                             param.mutable, is_parameter=True, builder=builder)
         assert node.body is not None
         self._lower_block(builder, node.body, func)
         self._pop_scope()
+        self._addressed = outer_addressed
         self._answering = outer_answer
         self._impure = outer_impure
         if not builder.is_terminated:
@@ -2130,6 +2280,8 @@ class Checker:
                 self._lower_entry_assign(builder, stmt)
             case ast.ElementAssign():
                 self._lower_element_assign(builder, stmt)
+            case ast.DerefAssign():
+                self._lower_deref_assign(builder, stmt)
             case ast.Break():
                 self._lower_break(builder, stmt)
             case ast.Continue():
@@ -2889,6 +3041,155 @@ class Checker:
         builder.store(
             self._element_place(builder, start, ty.element, offset, stmt.span),
             value, stmt.span)
+
+    def _lower_deref_assign(self, builder: IRBuilder,
+                            stmt: ast.DerefAssign) -> None:
+        """Lower `r\N{POSITION INDICATOR} \N{LEFTWARDS ARROW} v`, which writes the place a reference names.
+
+        Assigning to the name binds the name to another place, which is what
+        assigning to a name does everywhere else; this writes what is *at* the
+        place, and the mark is what says which of the two was meant.
+        """
+        target = self._lower_expr(builder, stmt.target, None)
+        ty = self._value_type_of(target)
+        if ty is ERROR:
+            return
+        if not isinstance(ty, PtrType):
+            self._diags.emit(D.LANG_DEREF_NOT_A_REFERENCE, stmt.target.span,
+                             found=ty.render())
+            return
+        if not ty.mutable:
+            self._diags.emit(D.LANG_REF_NOT_WRITABLE, stmt.span, found=ty.render())
+            return
+        if not self._made_here(target):
+            # The place may be the caller's -- there is no telling which from
+            # the type -- so writing through it is a change that outlives the
+            # call unless the storage is this call's own.  That is the rule an
+            # array written through already follows, asked here of a reference.
+            self._an_effect(D.LANG_PURE_WRITES_ELSEWHERE, stmt.span)
+        value = self._lower_into(builder, stmt.value, ty.pointee, stmt.span)
+        if self._value_type_of(value) is ERROR:
+            return
+        builder.store(target, value, stmt.span)
+
+    def _lower_deref(self, builder: IRBuilder, expr: ast.Deref,
+                     expected: Type | None) -> Value:
+        """Lower `r\N{POSITION INDICATOR}`: what is at the place a reference names."""
+        value = self._lower_expr(builder, expr.operand, None)
+        ty = self._value_type_of(value)
+        if ty is ERROR:
+            return UndefConst(ERROR)
+        if not isinstance(ty, PtrType):
+            self._diags.emit(D.LANG_DEREF_NOT_A_REFERENCE, expr.span,
+                             found=ty.render())
+            return UndefConst(ERROR)
+        answer = builder.load(value, expr.span)
+        if not self._accepts(expected, answer.ty):
+            self._report_mismatch(expr.span, answer.ty, expected)
+        return answer
+
+    def _lower_address(self, builder: IRBuilder, expr: ast.AddressOf,
+                       expected: Type | None) -> Value:
+        """Lower `&x` and `&mut x`: a reference to the place *x* names."""
+        found = self._place_written(builder, expr.operand)
+        if found is None:
+            return UndefConst(ERROR)
+        address, held, may_change, what = found
+        if not _can_be_referred_to(held):
+            self._diags.emit(D.LANG_REF_TYPE_NOT_ALLOWED, expr.span,
+                             found=held.render())
+            return UndefConst(ERROR)
+        if expr.mutable and not may_change:
+            self._diags.emit(D.LANG_REF_PLACE_NOT_MUTABLE, expr.span, name=what)
+            return UndefConst(ERROR)
+        ty = self._module.types.ptr_type(held, expr.mutable)
+        answer = (address if address.ty is ty
+                  else builder.cast(CastKind.BITCAST, address, ty, expr.span))
+        if not self._accepts(expected, answer.ty):
+            self._report_mismatch(expr.span, answer.ty, expected)
+        return answer
+
+    def _place_written(self, builder: IRBuilder, expr: ast.Expr
+                       ) -> tuple[Value, Type, bool, str] | None:
+        """Where what *expr* names is, what it holds, whether it may be written,
+        and what to call it in a message.
+
+        Three things are somewhere: a name, which is storage of its own because
+        a reference is taken of it; a variable at the top level, which is an
+        address already; and an element of an array, whose elements are a run in
+        memory.  Everything else is a value the program worked out, and a value
+        is in no particular place.
+        """
+        match expr:
+            case ast.NameRef():
+                return self._place_of_a_name(builder, expr)
+            case ast.Element():
+                return self._place_of_an_element(builder, expr)
+            case ast.Deref():
+                # `&r\N{POSITION INDICATOR}` is the place `r` already names, so it is `r` -- with
+                # whatever this asks for about writing, which the reference in
+                # hand has to allow.
+                value = self._lower_expr(builder, expr.operand, None)
+                ty = self._value_type_of(value)
+                if ty is ERROR:
+                    return None
+                if not isinstance(ty, PtrType):
+                    self._diags.emit(D.LANG_DEREF_NOT_A_REFERENCE, expr.span,
+                                     found=ty.render())
+                    return None
+                return (value, ty.pointee, ty.mutable, "what it names")
+            case _:
+                self._diags.emit(D.LANG_REF_NOT_A_PLACE, expr.span)
+                return None
+
+    def _place_of_a_name(self, builder: IRBuilder, expr: ast.NameRef
+                         ) -> tuple[Value, Type, bool, str] | None:
+        """Where the name *expr* is, for a reference being taken of it."""
+        local = self._find_local(expr.name)
+        if local is not None:
+            local.read = True
+            if not local.placed:
+                # Every name a reference is taken of anywhere in the body was
+                # given storage before the body was walked, so a name that has
+                # none is one whose type a place cannot hold.
+                self._diags.emit(D.LANG_REF_TYPE_NOT_ALLOWED, expr.span,
+                                 found=self._held_by(local).render())
+                return None
+            assert local.held is not None
+            return (local.value, local.held, local.mutable, expr.name)
+        found = self._provided(expr.name)
+        if isinstance(found, GlobalVar):
+            if found.value_type is ERROR:
+                return None
+            return (builder.address(found, expr.span), found.value_type,
+                    found.mutable, expr.name)
+        self._diags.emit(D.LANG_FILESTRUCT_UNDEFINED_NAME, expr.span,
+                         name=expr.name)
+        return None
+
+    def _place_of_an_element(self, builder: IRBuilder, expr: ast.Element
+                             ) -> tuple[Value, Type, bool, str] | None:
+        """Where one element of an array is, for a reference being taken of it."""
+        base = self._lower_expr(builder, expr.base, None)
+        ty = self._value_type_of(base)
+        if ty is ERROR:
+            return None
+        if not isinstance(ty, ArrayType):
+            self._diags.emit(D.LANG_ARRAY_NOT_AN_ARRAY, expr.base.span,
+                             found=ty.render())
+            return None
+        if len(expr.indices) != ty.rank:
+            # One element, so every index: a run of them is several places and
+            # a reference names one.
+            self._diags.emit(D.LANG_ARRAY_WRONG_RANK, expr.span,
+                             given=len(expr.indices), wanted=ty.rank)
+            return None
+        start, lengths = self._shape_of(builder, base, ty, expr.span)
+        offset = self._offset_of(builder, expr.indices, ty, lengths, expr.span)
+        if offset is None:
+            return None
+        place = self._element_place(builder, start, ty.element, offset, expr.span)
+        return (place, ty.element, True, "an element")
 
     def _lower_collection(self, builder: IRBuilder,
                           expr: ast.SetLit | ast.DictLit,
@@ -3929,7 +4230,7 @@ class Checker:
             return
         self._name_value(value, stmt.name, stmt.name_span)
         self._bind_local(stmt.name, value, stmt.name_span,
-                         value_span=stmt.iterable.span)
+                         value_span=stmt.iterable.span, builder=builder)
 
     # -- what a loop can take its values from ----------------------------------
 
@@ -3970,7 +4271,7 @@ class Checker:
             self._push_scope()
             self._bind_local(stmt.name, builder.extract(value, at, member,
                                                         stmt.span),
-                             stmt.name_span)
+                             stmt.name_span, builder=builder)
             self._lower_block(builder, stmt.body, func, as_result=False)
             self._pop_scope()
         return UndefConst(VOID)
@@ -4397,7 +4698,10 @@ class Checker:
             names.extend(_assigned_in(alternative))
         for name in names:
             local = self._find_local(name)
-            if local is not None:
+            # A name with storage of its own stands for the same place at every
+            # turn: what a turn changes is what is in the place, which is read
+            # where it is read and carried nowhere.
+            if local is not None and not local.placed:
                 found.setdefault(id(local), local)
         return list(found.values())
 
@@ -4657,7 +4961,8 @@ class Checker:
                          if arm.carried
                          else builder.unwrap(value, answer_ty, where_span))
                 self._name_value(bound, name, name_span)
-                self._bind_local(name, bound, name_span, value_span=where_span)
+                self._bind_local(name, bound, name_span, value_span=where_span,
+                                 builder=builder)
             given = self._lower_block(builder, arm.body, func, as_result=False,
                                       wanted=answer, produces=produces)
             if produces and given is not None and answer is None:
@@ -4845,7 +5150,7 @@ class Checker:
         bound = self._as_declared(value, declared)
         self._name_value(bound, node.name, node.name_span)
         self._bind_local(node.name, bound, node.name_span, node.mutable,
-                         value_span=node.span)
+                         value_span=node.span, builder=builder)
 
     def _lower_derived(self, builder: IRBuilder, node: ast.VarDef) -> None:
         """Lower a variable whose type is whatever its value turns out to be."""
@@ -4859,7 +5164,7 @@ class Checker:
             return
         self._name_value(value, node.name, node.name_span)
         self._bind_local(node.name, value, node.name_span, node.mutable,
-                         value_span=node.span)
+                         value_span=node.span, builder=builder)
 
     def _bind_apart(self, builder: IRBuilder,
                     node: ast.VarDef | ast.ForEach, value: Value) -> None:
@@ -4878,7 +5183,8 @@ class Checker:
                 continue
             part = builder.extract(value, index, members[index], node.span)
             self._name_value(part, name, where)
-            self._bind_local(name, part, where, mutable, value_span=node.span)
+            self._bind_local(name, part, where, mutable, value_span=node.span,
+                             builder=builder)
 
     def _name_value(self, value: Value, name: str,
                     where: Span = INVALID_SPAN) -> None:
@@ -4921,6 +5227,17 @@ class Checker:
         if node.name == WILDCARD_NAME:
             return self._dropped(builder, node, wants_value)
         local = self._find_local(node.name)
+        if local is not None and local.placed:
+            # A name with storage of its own is written the way a variable at
+            # the top level is.  What `mut` asks about is still the name: it
+            # says the program may put something else there.
+            if not self._check_mutable(node, local.mutable, local.span):
+                return None
+            assert local.held is not None
+            value = self._checked_value(builder, node, local.held)
+            builder.store(local.value, value, node.span)
+            local.is_parameter = False
+            return builder.load(local.value, node.span) if wants_value else None
         if local is not None:
             if not self._check_mutable(node, local.mutable, local.span):
                 return None
@@ -5150,6 +5467,10 @@ class Checker:
                 # reaching this is standing where a value stands.
                 self._diags.emit(D.LANG_ENUMERATE_IS_NOT_A_VALUE, expr.span)
                 return UndefConst(ERROR)
+            case ast.AddressOf():
+                return self._lower_address(builder, expr, expected)
+            case ast.Deref():
+                return self._lower_deref(builder, expr, expected)
             case ast.Failure():
                 return self._lower_failure(builder, expr, expected)
             case ast.Lifted():
@@ -7320,7 +7641,7 @@ class Checker:
         """
         local = self._find_local(name)
         if local is not None:
-            return self._value_type_of(local.value)
+            return self._held_by(local)
         found = self._provided(name)
         return (self._value_type_of(found) if isinstance(found, GlobalVar)
                 else None)
@@ -8202,6 +8523,16 @@ class Checker:
             # value could stand for.
             self._diags.emit(D.LANG_WRAP_IS_NOT_A_VALUE, ref.span)
             return UndefConst(ERROR)
+        local = self._find_local(ref.name)
+        if local is not None and local.placed:
+            # The name stands for storage of its own, because somewhere in this
+            # body a reference to it is taken.  Reading it is therefore a load,
+            # exactly as reading a variable at the top level is.
+            local.read = True
+            found = builder.load(local.value, ref.span)
+            if not self._accepts(expected, found.ty):
+                self._report_mismatch(ref.span, found.ty, expected)
+            return found
         resolved = self._lookup(ref)
         if resolved is None:
             return UndefConst(ERROR)

@@ -1,0 +1,13 @@
+※ pl4g-test: compile=error diag=4535
+
+※ Whether the place may be written is part of a reference's type, because the
+※ one who wrote the reference and the one who reads it both reach that place.
+※ `&mut T` allows it and `&T` does not -- and the name being `mut` says nothing
+※ about it, since that is about the name and a name is not shared.
+
+@[startup]
+fn main() → u6:
+    let n: mut u8 = 1u8
+    let r: mut &u8 = &n
+    r⌖ ← 2u8
+    0u6

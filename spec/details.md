@@ -1822,6 +1822,45 @@ binary operator, after the `=` of a definition, after the `fn` keyword.  The gra
 which is the safe direction for a grammar an editor colours with, and the compiler remains what decides whether a program is one.
 
 
+A name that has to be somewhere
+-------------------------------
+
+A local in this compiler is a value: `let n: mut u8 = 0u8` binds a name to an SSA value, and assigning to it binds the name to
+another.  Nothing of it is in memory, so there is no address to give -- which is the one thing `&n` needs.
+
+**A name a reference is taken of is given storage of its own, before the body is walked.**  `_addressed_in` collects every name
+written after `&` anywhere below a node, and `_lower_body` runs it over the body before binding a single parameter.  A name in
+that set is bound to a `frame` with its value stored into it, and `_Local.placed` says so; reading it is then a `load` and
+assigning to it a `store`, exactly as for a variable at the top level, and `_Local.held` carries the type the name has since
+`value.ty` is now a pointer.
+
+It has to be settled before the body is lowered rather than at the `&`: a name given storage inside one arm of a branch and not in
+another would be two different things where the arms meet, and the arms carry their locals to the join as block parameters.
+
+The walk is over the fields of the tree itself -- `dataclasses.fields` on anything that is an `ast.Node` -- rather than over a list
+of the kinds of node there are, so a node kind added later is looked through without this being told about it.  It goes by name and
+takes no notice of scope, so a name shadowed somewhere may give storage to a binding that never needed it; what that costs is a
+load, and never an answer.
+
+A placed local is left out of what a loop carries round.  The name stands for the same place at every turn, so there is nothing to
+carry: what a turn changes is what is *in* the place, which is read where it is read.
+
+**Everything under it was already there.**  `PtrType`, `AddressInst`, `LoadInst` and `StoreInst` are in the IR; `place_of` in each
+of the three instruction selectors already reads and writes through an address held in a register as well as through a symbol; and
+`parts_of` answers that a pointer is one value, so a reference travels in one register as a parameter and needs nothing of the
+calling convention. What was missing was entirely in the front end.
+
+**Where a reference may go is one question asked in two places.**  `_holds_a_reference` looks through tuples, results, products,
+sums, arrays, lists, sets and dictionaries -- with a set of what it has seen, because a type may reach itself -- and is asked of a
+function's return type and of a variable's type at the top level.  Those are the two places a value escapes to, so closing both is
+the whole of the interim rule.
+
+**Purity needed no rule of its own.**  `_made_here` answers whether an address is storage this call made by walking back through
+casts and offsets to a `frame`, and `LANG_PURE_WRITES_ELSEWHERE` is what an array written through already reports.  A reference
+that came in as a parameter is a block parameter and not a frame, so writing through it is an effect; one taken of this function's
+own local is a frame, so it is not.
+
+
 Expectations
 ------------
 

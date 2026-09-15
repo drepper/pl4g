@@ -1577,8 +1577,10 @@ product meaning exactly what it would have meant without it.
 
 **A type definition may name a type defined below it**, and may name one another module exports (`m.Point`), for which the
 definition there needs `@[export]` as a function or a variable does.  What it may not do is reach itself (4408), through its own
-fields or through a chain of other definitions: a value of such a type would have to hold a value of itself, and the indirection
-that makes that finite elsewhere -- a pointer, a reference, a box -- is not something this language can yet write.
+fields or through a chain of other definitions: a value of such a type would have to hold a value of itself.  The indirection that
+makes that finite elsewhere is now written -- a field may be a reference, `next : &Node` -- but the compiler cannot yet build a
+type that reaches itself even through one, so the rule still holds where it need not.  **A field may be a reference to some other
+type**, which is what `&` in a product is for today.
 
 **A defined type is nominal.**  Two definitions with the same parts are two types, because a definition is what says what a value
 *is*, and two things that happen to be laid out alike are not one thing.  Two files each defining `Point` define two types, even
@@ -1606,6 +1608,82 @@ alignment allows; the compiler is free to choose their order, and the order it c
 sum is its largest variant with a one-byte tag after it, the tag last rather than first because a tag ahead of a payload wanting
 eight bytes is seven bytes of padding and behind it is often none.  The whole of either is rounded up to its own alignment, which
 is the largest of its parts'.
+
+#### References
+
+**`&T` is a name for a place someone else holds**, and `&mut T` one the place may be written through.  `&x` makes one out of a
+place, and `x⌖` reads what is at the place one names.
+
+```
+let n: mut i8 = 1i8
+let r: &mut i8 = &mut n
+r⌖ ← 3i8                     ※ writes n
+let seen: i8 = r⌖ + 1i8      ※ reads n, which is 3
+```
+
+**Whether the place may be written is part of the type**, because the one who wrote the reference and the one who reads it both
+reach that place: what a caller may do to its own variable is not a thing the callee can be left to guess.  That is exactly where
+it differs from the `mut` a variable or a parameter carries, which says only that the *name* may be bound to something else and is
+no part of any type.  Both may be written, and each half is then decided by its own word:
+
+```
+let moving: mut &mut i8 = &mut n
+moving⌖ ← 20i8               ※ writes the place
+moving ← &mut m               ※ binds the name to another place
+```
+
+`mut` before the type says the name may move; `mut` inside the reference says the place may be written.  A `&T` refuses the first
+line (4535) and a name without `mut` refuses the second.
+
+**`&` is written before a place** (4533): a name, a variable at the top level, an element of an array.  A value the program worked
+out is in no particular place -- it may be in a register and it may be nowhere at all -- so there is nothing for a reference to
+name.  `&mut` further needs a place the program could have written where it stands (4537), since a reference that allows writing
+is a way to write it.
+
+**`⌖` is written after what it reads through**, so reaching further into what it answers reads left to right without brackets:
+`rows⌖⟦2⟧` is an element of what `rows` names.  That is what Pascal, Modula, Ada and Odin put a mark after a pointer for, and it
+is why the mark is not a prefix as C's is.  Written after anything that is not a reference there is no place to read (4534).
+
+**A reference names a place holding one value** (4536): a number, a truth value, a code point, a value of an enumeration, a
+record, and a reference itself.  An array, a list, a string, a set, a dictionary, a tuple and a result are each already several
+values or already a place, so a reference to one would be a second way of writing what a value of it already is.  A reference
+takes the whole of what follows it, so `&u8⟦4⟧` is a reference to an array of four -- which is refused -- and never an array of
+four references.
+
+**A reference does not leave the call that made it.**  What it names has to outlive it, and nothing in the language yet says how
+long anything lives, so the two places a value escapes to are closed: a function may not answer with one (4531) and a variable at
+the top level may not hold one (4532).  What is left is where a reference earns its keep -- a parameter, a local, and a field of a
+product -- and it is enough for the thing references are mostly for:
+
+```
+fn main() → u6:
+    let n: mut i8 = 1i8
+    bump(&mut n)                 ※ the call says a place is handed over
+    …
+
+@[impure]
+fn bump(at: &mut i8):
+    at⌖ ← at⌖ + 1i8
+```
+
+**A function that writes through a reference is impure** unless the place is storage the call itself made.  That is not a rule of
+its own: it is the rule about writing memory the function did not make, asked of a reference, and the compiler answers it by
+looking at where the address came from.  A reference handed in by a caller names the caller's storage, so writing through it is a
+change that outlives the call (4479).
+
+Compare: **C++**'s `T&`, which is made by writing the place and read by writing the name -- no mark at either end -- and can never
+be pointed elsewhere; a reader of a C++ call cannot see that the callee will write the variable, which is the cost of the marks
+this language keeps.  **Rust**'s `&T` and `&mut T`, whose spelling this is, with `&x` at the call and `*r` to read through; what
+Rust has beside it is lifetimes and the borrow rules, which say how long what is named lives and that a `&mut` is the only
+reference to it at that moment.  This language has neither yet, and closes the escapes instead -- a blunter rule that refuses some
+good programs and no dangling ones.  **Go**'s `*T` with `&x` and `*p`, garbage-collected, so a pointer to a local is simply
+allowed and the local outlives the call.  **Odin**'s `^T` with `&x` and `p^`, where the mark after the pointer is the one this
+follows.  **Zig**'s `*T`, with `&x` and `p.*`.  **C**'s `T *`, where nothing says whether a pointer may be null, whether it names
+one value or many, or how long what it names lives; the three things `&T` here answers by construction are the three C leaves to
+a comment.
+
+**A reference is never nothing.**  There is no null reference and no way to write one, because every one is made from a place that
+exists.  That is Rust's arrangement and C++'s intent, and it is what lets `r⌖` need no check.
 
 #### Enumerations
 

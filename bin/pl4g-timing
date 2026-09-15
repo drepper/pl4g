@@ -172,6 +172,7 @@ GROUPS: tuple[Group, ...] = (
            "divides": "dividing without a remainder, both forms and over an array",
            "failure-written-out": "failures written out, carrying a value and not",
            "named-arguments": "defaults, arguments named at the call, and one across a module",
+           "references": "references made, read, written, rebound and handed to three calls",
            "line-breaks-inside-brackets": "every kind of bracket written down the page",
            "loop-break-nested": "two loops and all four jumps between them",
            "loop-continue": "two loops each begun again from inside the body",

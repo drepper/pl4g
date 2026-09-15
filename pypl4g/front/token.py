@@ -245,6 +245,17 @@ NOT_DIVIDES_GLYPH: Final[str] = "\N{DOES NOT DIVIDE}"
 LIFT_OPEN_GLYPH: Final[str] = "\N{TOP LEFT CORNER}"
 LIFT_CLOSE_GLYPH: Final[str] = "\N{TOP RIGHT CORNER}"
 
+#: What reads through a reference, written after it.  `&` says a type is a
+#: reference and `⌖` says what is at the place one names, which are the two
+#: halves of the same idea and the only two marks a reference needs: `r ← &n`
+#: binds the name to a place, `r⌖ ← 3` writes that place.  It stands after its
+#: operand so that reaching further into what it answers -- an element of it, a
+#: field of it -- reads left to right without brackets, which is what Pascal,
+#: Modula, Ada and Odin put a mark after a pointer for.  U+2316 is the one
+#: glyph in Unicode whose name says "position", which is what a reference
+#: holds, and it is in no family with the arrows the roundings use.
+DEREF_GLYPH: Final[str] = "\N{POSITION INDICATOR}"
+
 #: The digits written raised, which is how an exponent that *is* a number is
 #: written.  The first three are where Latin-1 put them and the rest are where
 #: Unicode put the ones Latin-1 had not got, which is why this is a table and
@@ -391,6 +402,7 @@ class TokKind(StrEnum):
     NOT_DIVIDES = "'\N{DOES NOT DIVIDE}'"
     LIFT_OPEN = "'\N{TOP LEFT CORNER}'"
     LIFT_CLOSE = "'\N{TOP RIGHT CORNER}'"
+    DEREF = "'\N{POSITION INDICATOR}'"
     #: A number written raised, which is an exponent and its operator at once.
     EXPONENT = "a raised number"
 

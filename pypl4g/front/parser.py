@@ -177,6 +177,7 @@ _STARTS_AN_EXPRESSION: Final[frozenset[TokKind]] = frozenset((
     TokKind.BOTTOM, TokKind.TILDE, TokKind.LOGIC_NOT, TokKind.LENGTH,
     TokKind.SHAPE, TokKind.MAX, TokKind.MIN, TokKind.FLOOR, TokKind.CEILING,
     TokKind.NEAREST, TokKind.ROUNDED, TokKind.DIVIDES, TokKind.NOT_DIVIDES,
+    TokKind.AMPERSAND,
 ))
 
 
@@ -483,6 +484,15 @@ class Parser:
         because that is the order it is read in: four of these, not an array of
         four whose elements are these.
         """
+        if self._check(TokKind.AMPERSAND):
+            # A reference to a place someone else holds.  `mut` here says what
+            # may be done to that place, which is part of the type because both
+            # the one who wrote the reference and the one who reads it reach it.
+            start = self._advance().span
+            mutable = self._accept(TokKind.KW_MUT) is not None
+            pointee = self._parse_type_ref()
+            return ast.RefTypeRef(span=start.to(pointee.span), pointee=pointee,
+                                  mutable=mutable)
         if self._check(TokKind.SET_OPEN):
             found: ast.TypeExpr = self._parse_collection_type()
         elif self._check(TokKind.TUPLE_OPEN):
@@ -532,13 +542,14 @@ class Parser:
     def _begins_a_type(self) -> bool:
         """Whether a type is written here rather than left out.
 
-        Four things begin one: a name, a collection, a tuple and a list.  It is
-        asked wherever a type may be written and may equally be absent, which is
-        a variable and a binding in a loop.
+        Five things begin one: a name, a collection, a tuple, a list and the
+        mark of a reference.  It is asked wherever a type may be written and may
+        equally be absent, which is a variable and a binding in a loop.
         """
         return (self._check(TokKind.IDENT) or self._check(TokKind.SET_OPEN)
                 or self._check(TokKind.TUPLE_OPEN)
-                or self._check(TokKind.LBRACKET))
+                or self._check(TokKind.LBRACKET)
+                or self._check(TokKind.AMPERSAND))
 
     def _parse_list_type(self) -> ast.ListTypeRef:
         """Parse ``'[' TYPE ']'``, which is written the way a value of one is."""
@@ -1205,6 +1216,9 @@ class Parser:
             return ast.ElementAssign(span=target.span.to(value.span),
                                      base=target.base, indices=target.indices,
                                      value=value)
+        if isinstance(target, ast.Deref):
+            return ast.DerefAssign(span=target.span.to(value.span),
+                                   target=target.operand, value=value)
         self._diags.emit(D.LANG_ASSIGN_NOT_A_PLACE, target.span)
         raise _Bail()
 
@@ -1263,6 +1277,15 @@ class Parser:
 
     def _parse_unary(self) -> ast.Expr:
         """Parse an operand, with any operators written before it."""
+        if self._check(TokKind.AMPERSAND):
+            # `&` before an operand asks for a reference to the place it names;
+            # `&` between two asks for their bits in common.  Which it is, is
+            # decided by where it stands and by nothing else, as it is in C.
+            token = self._advance()
+            mutable = self._accept(TokKind.KW_MUT) is not None
+            operand = self._parse_unary()
+            return ast.AddressOf(span=token.span.to(operand.span),
+                                 operand=operand, mutable=mutable)
         operator = _UNARY_OPERATORS.get(self._current.kind)
         if operator is None:
             return self._parse_primary()
@@ -1315,6 +1338,13 @@ class Parser:
                                    D.LANG_SYNTAX_EXPECTED_CLOSING_ARRAY).span
                 found = ast.Element(span=found.span.to(end), base=found,
                                     indices=tuple(indices))
+                continue
+            if self._check(TokKind.DEREF):
+                # What is at the place a reference names.  It stands after its
+                # operand, so reaching further into what it answers -- an
+                # element of it, a field of it -- reads left to right.
+                end = self._advance().span
+                found = ast.Deref(span=found.span.to(end), operand=found)
                 continue
             if self._check(TokKind.EXPONENT):
                 # A number written raised is a power whose exponent is

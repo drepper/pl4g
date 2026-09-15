@@ -1,0 +1,108 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ `&T` is a name for a place someone else holds, and `&mut T` one the place may
+※ be written through.  `&x` makes one out of a place, and `x⌖` reads what is at
+※ the place one names.
+※
+※ **Two `mut`s that say two things.**  `mut` before a type says the *name* may
+※ be bound to something else, which is what it has always said here; `mut`
+※ inside a reference type says the *place* may be written.  So
+※ `let r: mut &mut i8` is a reference that may be pointed elsewhere at a place
+※ that may be written, and each half of that is decided by its own word.  A
+※ reference is part of a type because both the one who wrote it and the one who
+※ reads it reach the place; a name is not shared, so what may be done to a name
+※ is no part of anything.
+※
+※ **The mark stands after what it reads through**, so reaching further into
+※ what it answers -- an element of it -- reads left to right without brackets.
+※ That is what Pascal, Modula, Ada and Odin put a mark after a pointer for.
+※
+※ **What a reference names has to outlive it**, and nothing yet says how long
+※ anything lives.  So a reference may be a parameter, a local and a field, and
+※ may not be what a function answers with nor what a variable at the top level
+※ holds; lifetime annotations are what will say when it may.
+
+let counter: mut u16 = 0u16
+
+enum Colour:
+    red ;
+    green
+
+@[startup, impure]
+fn main() → u6:
+    let n: mut i8 = 1i8
+    ※ a reference to a name, read and written through
+    let r: &mut i8 = &mut n
+    r⌖ ← 3i8
+    let seen: i8 = r⌖ + 1i8
+    ※ one that may be pointed elsewhere, which is what mut on the binding says
+    let m: mut i8 = 10i8
+    let moving: mut &mut i8 = &mut n
+    let first: i8 = moving⌖
+    moving ← &mut m
+    moving⌖ ← 20i8
+    ※ a parameter, which is what a reference is mostly for: the callee writes
+    ※ the caller's variable and the call says so
+    bump(&mut n)
+    ※ one that may not be written through, which the type refuses
+    let only: &i8 = &n
+    ※ an element of an array, which is a place like any other
+    let v: u8⟦4⟧ = ⟦1u8, 2u8, 3u8, 4u8⟧
+    let e: &mut u8 = &mut v⟦2⟧
+    e⌖ ← 9u8
+    ※ a variable at the top level, which is an address already
+    let g: &mut u16 = &mut counter
+    g⌖ ← 7u16
+    ※ a reference to a reference, which is a place holding a place
+    let deep: mut &mut i8 = &mut n
+    let over: &mut &mut i8 = &mut deep
+    over⌖⌖ ← 30i8
+    ※ every other kind of value a place holds as one
+    let c: mut char = 'a'
+    let t: mut bool = false
+    let f: mut f64 = 1.5
+    let hue: mut Colour = Colour.red
+    set(&mut c, &mut t, &mut f, &mut hue)
+    if n ≠ 30i8:
+        1u6
+    elif seen ≠ 4i8:
+        2u6
+    elif first ≠ 3i8 ∨ m ≠ 20i8:
+        3u6
+    elif only⌖ ≠ 30i8:
+        4u6
+    elif v⟦2⟧ ≠ 9u8:
+        5u6
+    elif counter ≠ 7u16:
+        6u6
+    elif c ≠ 'z' ∨ ¬t ∨ f ≇ 2.5 ∨ hue ≠ Colour.green:
+        7u6
+    ※ handed on from one call to the next, still naming the same place
+    elif twice(&mut counter) ≠ 9u16:
+        8u6
+    else:
+        0u6
+
+※ The callee writes what the caller named, which is the whole point.
+@[impure]
+fn bump(at: &mut i8):
+    at⌖ ← at⌖ + 1i8
+
+@[impure]
+fn set(c: &mut char, t: &mut bool, f: &mut f64, hue: &mut Colour):
+    c⌖ ← 'z'
+    t⌖ ← true
+    f⌖ ← f⌖ + 1.0
+    hue⌖ ← Colour.green
+
+※ A reference handed on names the same place however many calls it passes
+※ through: it is the place and not a copy of what is in it.
+@[impure]
+fn twice(at: &mut u16) → u16:
+    bump_by(at, 1u16)
+    bump_by(at, 1u16)
+    at⌖
+
+@[impure]
+fn bump_by(at: &mut u16, by: u16):
+    at⌖ ← at⌖ + by

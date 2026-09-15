@@ -140,7 +140,24 @@ class ArrayTypeRef(Node):
     shape: tuple[Expr | None, ...] = (None,)
 
 
-type TypeExpr = TypeRef | CollectionTypeRef | TupleTypeRef | ArrayTypeRef
+@dataclass(frozen=True, slots=True)
+class RefTypeRef(Node):
+    """`&T` and `&mut T`: a name for a place someone else holds.
+
+    What `mut` says here is what may be done to the place, which is part of the
+    type because the one who wrote the reference and the one who reads it both
+    reach that place.  That is where it differs from the `mut` a variable or a
+    parameter carries, which says only that the *name* may be bound to
+    something else and is no part of any type.
+    """
+
+    pointee: TypeExpr
+    #: Whether the place may be written through this reference.
+    mutable: bool = False
+
+
+type TypeExpr = (TypeRef | CollectionTypeRef | TupleTypeRef | ArrayTypeRef
+                 | ListTypeRef | RefTypeRef)
 
 
 @dataclass(frozen=True, slots=True)
@@ -482,6 +499,33 @@ class Unary(Expr):
     operand: Expr
 
 
+@dataclass(frozen=True, slots=True)
+class AddressOf(Expr):
+    """`&x` and `&mut x`: a reference to the place *x* names.
+
+    What follows it is a place and not a value -- a name, an element of an
+    array -- because a value has no address to give.  `mut` says the place may
+    be written through what this answers with, which the place itself has to
+    allow.
+    """
+
+    operand: Expr
+    #: Whether what is asked for may be written through.
+    mutable: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class Deref(Expr):
+    """`r⌖`: what is at the place a reference names.
+
+    It stands after its operand so that reaching further into what it answers
+    reads left to right: `rows⌖⟦2⟧` is an element of what `rows` names, and
+    needs no brackets to say so.
+    """
+
+    operand: Expr
+
+
 # -- statements ----------------------------------------------------------------
 
 @dataclass(frozen=True, slots=True)
@@ -623,6 +667,19 @@ class AssignStmt(Stmt):
     value: Expr
     #: The names after the first, where the assignment takes a tuple apart.
     more: tuple[tuple[str, Span], ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class DerefAssign(Stmt):
+    """`r⌖ ← v`: the place a reference names, written.
+
+    Assigning to the name itself binds the name to another place, which is what
+    assigning to a name does everywhere; this writes what is at the place, which
+    is the only thing the mark after it ever means.
+    """
+
+    target: Expr
+    value: Expr
 
 
 @dataclass(frozen=True, slots=True)

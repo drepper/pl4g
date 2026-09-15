@@ -1,0 +1,13 @@
+※ pl4g-test: compile=error diag=4537
+
+※ A reference that allows writing is a way to write the place, so the place has
+※ to be one the program could have written where it stands.  A name defined
+※ without `mut` is not one of those, and asking for `&mut` of it is asking to
+※ get round its definition.
+
+@[startup]
+fn main() → u6:
+    let n: u8 = 1u8
+    let r: &mut u8 = &mut n
+    let m: u8 = r⌖
+    0u6

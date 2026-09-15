@@ -4324,6 +4324,43 @@ What the extra costs is that the grammar also admits a line break after a binary
 safe direction for one an editor colours with -- the opposite, refusing programs that are perfectly good, is what this fixes -- and
 the compiler remains what decides whether a program is one.
 
+---
+
+## 2026-09-16T11:30+02:00 — language
+
+**References: `&T`, `&mut T`, `&x` and `x⌖`**
+
+Decided on the user's direction, with three of the four sub-decisions chosen by the user from proposals.
+
+**A reference is made explicitly, with `&x`.**  The alternative was C++'s, where writing the place is enough and the parameter's
+type is the only thing that says a place was handed over.  `&` at the call is what lets a reader see that the callee reaches the
+caller's variable, which is the criticism C++ has never answered; Rust, C, Zig and Odin all write the mark.  It costs `&` a second
+meaning beside bitwise and, told apart by position exactly as C tells them apart.
+
+**The value is reached explicitly, and a reference may be rebound.**  The alternative was the transparent reference, where `r` is
+the referent and nothing can point it elsewhere.  Explicit wins because it keeps `mut` meaning one thing: `mut` before a type says
+the name may be bound to something else, which is what it already said, and `&mut` inside the type says the place may be written.
+With a transparent reference `mut &mut T` would have had no meaning at all.
+
+**The mark is `⌖`, U+2316 POSITION INDICATOR, written after its operand.**  Postfix so that reaching further into what it answers
+reads left to right, which is what Pascal, Modula, Ada and Odin put a mark after a pointer for; `↑` was proposed first and
+rejected by the user, being the ceiling rounding already.  U+2316 is the one glyph in Unicode whose name says "position", which is
+what a reference holds, and it is in no family with the arrows the roundings use.  Considered beside it: `‸` U+2038 CARET, the
+mark Pascal's family uses, as a codepoint of its own so that `^` stays exclusive-or; `!r`, Standard ML's and OCaml's; and `⊃r`,
+APL's disclose.
+
+**A reference does not leave the call that made it** -- not answered with (4531), not held at the top level (4532).  What it names
+has to outlive it and nothing yet says how long anything lives, so the two escapes are closed rather than guessed at.  Rust
+answers the same question with lifetimes; C, Zig and Odin do not ask it.  Lifetime annotations are the next thing to be designed,
+and they are what will lift both rules; nothing built here has to be undone when they arrive.
+
+**A reference names a place holding one value** (4536).  An array, a list, a string, a set, a dictionary, a tuple and a result are
+each already several values or already a place, so a reference to one would be a second way of writing what a value of it is --
+which is the rule about one meaning and one spelling, applied to a type.
+
+**There is no null reference**, because every one is made from a place that exists.  That is Rust's arrangement and C++'s intent,
+and it is what lets reading through one need no check.
+
 Open questions
 --------------
 

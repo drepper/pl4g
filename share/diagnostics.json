@@ -5197,6 +5197,142 @@
       "option": null
     },
     {
+      "number": 4531,
+      "name": "LANG_REF_ANSWERED",
+      "severity": "error",
+      "message": "a function may not answer with something that holds a reference",
+      "args": [],
+      "cause": "What a reference names has to outlive the reference, and nothing yet says how long anything lives.  Handing one back to the caller is exactly the case where the compiler cannot tell -- the place may be this call's own storage, which is gone the moment it answers.  A reference may therefore be a parameter, a local and a field, and may not leave the call; lifetime annotations are what will say when it may.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / References",
+        "requirement": "A reference does not leave the call that made it."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4532,
+      "name": "LANG_REF_AT_TOP_LEVEL",
+      "severity": "error",
+      "message": "a variable at the top level may not hold a reference",
+      "args": [],
+      "cause": "A variable at the top level lasts as long as the program, so what it names would have to as well, and a reference put there by one call would outlive whatever that call was pointing at.  It is the same rule as the one about answering with one, at the other place a value can escape to.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / References",
+        "requirement": "A reference does not leave the call that made it."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4533,
+      "name": "LANG_REF_NOT_A_PLACE",
+      "severity": "error",
+      "message": "'&' needs a place, and this is a value",
+      "args": [],
+      "cause": "A reference names somewhere, so what follows `&` has to be something that is somewhere: a name, a variable at the top level, an element of an array.  A value the program worked out is in no particular place -- it may be in a register and it may be nowhere at all -- so there is nothing for a reference to name.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / References",
+        "requirement": "'&' is written before a place."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4534,
+      "name": "LANG_DEREF_NOT_A_REFERENCE",
+      "severity": "error",
+      "message": "'\u2316' reads through a reference, and '{found}' is not one",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type of what was written"
+        }
+      ],
+      "cause": "The mark after a value says to read what is at the place it names, which only a reference names.  Written after anything else there is no place to read.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / References",
+        "requirement": "'\u2316' is written after a reference."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4535,
+      "name": "LANG_REF_NOT_WRITABLE",
+      "severity": "error",
+      "message": "'{found}' does not allow what it names to be written",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type of the reference"
+        }
+      ],
+      "cause": "Whether the place may be written is part of a reference's type, because the one who wrote the reference and the one who reads it both reach that place: `&mut T` allows it and `&T` does not.  That is where it differs from the `mut` a variable carries, which says only that the name may be bound to something else.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / References",
+        "requirement": "Writing through a reference needs '&mut'."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4536,
+      "name": "LANG_REF_TYPE_NOT_ALLOWED",
+      "severity": "error",
+      "message": "a reference may not name a place holding '{found}'",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type written"
+        }
+      ],
+      "cause": "One value in one place is what a reference names.  An array, a list, a string, a set, a dictionary, a tuple and a result are each already several values or already a place, so a reference to one would be a second way of writing what a value of it is.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / References",
+        "requirement": "A reference names a place holding one value."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4537,
+      "name": "LANG_REF_PLACE_NOT_MUTABLE",
+      "severity": "error",
+      "message": "'&mut' needs a place that may be changed, and '{name}' may not be",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the place"
+        }
+      ],
+      "cause": "A reference that allows writing is a way to write the place, so the place has to be one the program could have written where it stands.  A name defined without `mut` is not, and neither is a variable at the top level defined without it.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / References",
+        "requirement": "'&mut' is written before a place that may be changed."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 5001,
       "name": "LANG_STMT_UNREACHABLE",
       "severity": "warning",

@@ -1,0 +1,13 @@
+※ pl4g-test: compile=error diag=4533
+
+※ A reference names somewhere, so what follows `&` has to be something that is
+※ somewhere: a name, a variable at the top level, an element of an array.  A
+※ value the program worked out is in no particular place -- it may be in a
+※ register and it may be nowhere at all -- so there is nothing to name.
+
+@[startup]
+fn main() → u6:
+    let n: u8 = 1u8
+    let r: &u8 = &(n + 2u8)
+    let m: u8 = r⌖
+    0u6

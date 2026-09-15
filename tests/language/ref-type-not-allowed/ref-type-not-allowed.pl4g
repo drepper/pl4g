@@ -1,0 +1,16 @@
+※ pl4g-test: compile=error diag=4536
+
+※ One value in one place is what a reference names.  An array, a list, a
+※ string, a set, a dictionary, a tuple and a result are each already several
+※ values or already a place, so a reference to one would be a second way of
+※ writing what a value of it is.
+※
+※ A reference takes the whole of what follows it, so `&u8⟦4⟧` is a reference to
+※ an array of four and never an array of four references.
+
+@[startup]
+fn main() → u6:
+    let v: u8⟦4⟧ = ⟦1u8, 2u8, 3u8, 4u8⟧
+    let r: &u8⟦4⟧ = &v
+    let e: u8 = v⟦0⟧
+    0u6

@@ -211,7 +211,16 @@ module.exports = grammar({
     // One entry per dimension, separated by commas: `i32\u27e63,4\u27e7` is a table.
     // An entry left out says the type does not carry how many there are along
     // that dimension, so `i32\u27e6,\u27e7` is a table of no stated shape.
-    type: $ => seq($._plain_type, repeat($._array_suffix)),
+    //
+    // A reference takes the whole of what follows it, array suffixes and all,
+    // so `&u8\u27e64\u27e7` is a reference to an array of four and never an array of
+    // four references.  Nothing may follow one, which is what makes it
+    // unambiguous: a suffix after it would have two readings and no way to
+    // choose.
+    type: $ => choice(
+      seq($._plain_type, repeat($._array_suffix)),
+      seq('&', optional($.mutable), field('pointee', $.type)),
+    ),
 
     _array_suffix: $ => seq('\u27e6', sepBy(',', optional(field('length', $._expression))),
                             '\u27e7'),
@@ -481,7 +490,7 @@ module.exports = grammar({
     // or an element of an array, each written the way one is read.
     assignment: $ => seq(
       field('target', choice($.identifier, $.index_expression,
-                             $.element_expression)),
+                             $.element_expression, $.deref_expression)),
       // Targets next to each other take a tuple apart, one name per member.
       repeat(seq(',', field('target', $.identifier))),
       '←', field('value', $._expression),
@@ -557,6 +566,8 @@ module.exports = grammar({
       $.raised_expression,
       $.binary_expression,
       $.unary_expression,
+      $.address_expression,
+      $.deref_expression,
       $.call_expression,
       $.member_expression,
       $.parenthesized_expression,
@@ -649,6 +660,19 @@ module.exports = grammar({
                                '\u2193', '\u2191', '\u2195', '\u21d5',
                                '\u2223', '\u2224')),
       $._non_comparison,
+    )),
+
+    // `&` before an operand asks for a reference to the place it names; `&`
+    // between two asks for their bits in common.  Which it is, is decided by
+    // where it stands and by nothing else, as it is in C.
+    address_expression: $ => prec(13, seq(
+      '&', optional($.mutable), field('place', $._non_comparison),
+    )),
+
+    // What is at the place a reference names, written after it so that
+    // reaching further into what it answers reads left to right.
+    deref_expression: $ => prec(14, seq(
+      field('reference', $._non_comparison), '\u2316',
     )),
 
     // A call and a member both bind tighter than any operator, and to whatever
