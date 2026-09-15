@@ -273,8 +273,7 @@ class Parser:
         # the variable keeps whatever it was given.
         mutable = self._accept(TokKind.KW_MUT) is not None
         declared: ast.TypeExpr | None = None
-        if self._check(TokKind.IDENT) or self._check(TokKind.SET_OPEN) \
-                or self._check(TokKind.TUPLE_OPEN):
+        if self._begins_a_type():
             declared = self._parse_type_ref()
         if self._accept(TokKind.EQUALS) is None:
             self._diags.emit(D.LANG_VARDEF_MISSING_INITIALIZER, name_token.span,
@@ -443,6 +442,8 @@ class Parser:
             found: ast.TypeExpr = self._parse_collection_type()
         elif self._check(TokKind.TUPLE_OPEN):
             found = self._parse_tuple_type()
+        elif self._check(TokKind.LBRACKET):
+            found = self._parse_list_type()
         else:
             found = self._parse_named_type()
         while self._check(TokKind.ARRAY_OPEN):
@@ -482,6 +483,25 @@ class Parser:
             value = self._parse_type_ref()
         end = self._expect(TokKind.SET_CLOSE, D.LANG_SYNTAX_EXPECTED_CLOSING_SET).span
         return ast.CollectionTypeRef(span=start.to(end), element=element, value=value)
+
+    def _begins_a_type(self) -> bool:
+        """Whether a type is written here rather than left out.
+
+        Four things begin one: a name, a collection, a tuple and a list.  It is
+        asked wherever a type may be written and may equally be absent, which is
+        a variable and a binding in a loop.
+        """
+        return (self._check(TokKind.IDENT) or self._check(TokKind.SET_OPEN)
+                or self._check(TokKind.TUPLE_OPEN)
+                or self._check(TokKind.LBRACKET))
+
+    def _parse_list_type(self) -> ast.ListTypeRef:
+        """Parse ``'[' TYPE ']'``, which is written the way a value of one is."""
+        start = self._expect(TokKind.LBRACKET).span
+        element = self._parse_type_ref()
+        end = self._expect(TokKind.RBRACKET,
+                           D.LANG_SYNTAX_EXPECTED_CLOSING_LIST).span
+        return ast.ListTypeRef(span=start.to(end), element=element)
 
     def _parse_named_type(self) -> ast.TypeRef:
         """Parse a type: a name, and whatever says what else it may be.
@@ -964,8 +984,7 @@ class Parser:
             more.append((written.text, written.span))
         declared: ast.TypeExpr | None = None
         if self._accept(TokKind.COLON) is not None:
-            if self._check(TokKind.IDENT) or self._check(TokKind.SET_OPEN) \
-                    or self._check(TokKind.TUPLE_OPEN):
+            if self._begins_a_type():
                 declared = self._parse_type_ref()
         if self._accept(TokKind.EQUALS) is None:
             self._diags.emit(D.LANG_VARDEF_MISSING_INITIALIZER, name_token.span,
@@ -1326,6 +1345,22 @@ class Parser:
                            D.LANG_SYNTAX_EXPECTED_CLOSING_ARRAY).span
         return ast.ArrayLit(span=start.to(end), elements=tuple(elements))
 
+    def _parse_list(self) -> ast.ListLit:
+        """Parse ``'[' a, b, c ']'``: a list written down.
+
+        One written with nothing in it is written all the same; what it holds is
+        then the type it is wanted as, there being nothing in it to say.
+        """
+        start = self._expect(TokKind.LBRACKET).span
+        elements: list[ast.Expr] = []
+        if not self._check(TokKind.RBRACKET):
+            elements.append(self._parse_expression())
+            while self._accept(TokKind.COMMA) is not None:
+                elements.append(self._parse_expression())
+        end = self._expect(TokKind.RBRACKET,
+                           D.LANG_SYNTAX_EXPECTED_CLOSING_LIST).span
+        return ast.ListLit(span=start.to(end), elements=tuple(elements))
+
     def _parse_atom(self) -> ast.Expr:
         """Parse an expression with nothing binding it to what is around it."""
         token = self._current
@@ -1360,6 +1395,8 @@ class Parser:
                 return self._parse_tuple()
             case TokKind.SET_OPEN:
                 return self._parse_collection()
+            case TokKind.LBRACKET:
+                return self._parse_list()
             case TokKind.ARRAY_OPEN:
                 return self._parse_array()
             case TokKind.SPREAD:

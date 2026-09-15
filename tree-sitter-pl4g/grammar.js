@@ -207,6 +207,8 @@ module.exports = grammar({
           optional(seq(':', field('value', $.type))), '\u2e29'),
       // And a tuple likewise.
       seq('\u3008', sepBy1(',', field('member', $.type)), '\u3009'),
+      // And a list, whose type is written the way a value of one is.
+      seq('[', field('element', $.type), ']'),
     ),
 
     // -- attributes --------------------------------------------------------
@@ -508,6 +510,7 @@ module.exports = grammar({
     // Everything an expression can be except a range.
     _non_range: $ => choice(
       $.array_literal,
+      $.list_literal,
       $.element_expression,
       $.match_expression,
       $.if_expression,
@@ -622,6 +625,10 @@ module.exports = grammar({
     // An array written down, and a lookup in one.  The same brackets: a type,
     // a value of it and a lookup in it all look alike, as a collection's do.
     array_literal: $ => seq('\u27e6', sepBy(',', $._expression), '\u27e7'),
+
+    // A list, whose elements need not be of one type once there is boxing
+    // and which for now must be.  It is written the way its type is.
+    list_literal: $ => seq('[', sepBy(',', $._expression), ']'),
 
     // Which element is wanted, or -- where a range stands there -- which run
     // of them.  One index per dimension, in the order the shape was written

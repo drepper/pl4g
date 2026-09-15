@@ -391,6 +391,16 @@ the walk `foreach` uses: what counting needs of each character is only how long 
 else -- every byte that is not a continuation byte begins a character, which is one `and` and one comparison per byte and no
 decoding at all.
 
+**A list is two words and no new runtime.**  The value is where the elements are and how many there are, which `parts_of`
+answers as it does for a string and for an array of unstated length -- so a list travels in two registers and needed nothing of
+the calling convention's own.  Its elements come from the arena, one allocation per literal, and a join uses the very function a
+string's join uses: a join of two runs of bytes is a join of two runs of bytes whatever the bytes mean, and what a list adds is
+one multiplication apiece to turn a count of elements into a count of bytes.
+
+The element type lives in the type and not beside the value.  That is the whole of what "store the common element type" needs
+today, and it is the shape the boxed case will be told apart from: a list whose type says what it holds is the one that needs no
+tag per element, and one whose type does not would carry the tags.
+
 **A string is two words and two generated functions.**  The value is where the bytes are and how many there are, which
 `parts_of` answers exactly as it answers for an array whose type does not say its length -- so a string travels in two registers,
 is passed and answered with in two, and needed nothing of the calling convention's own.

@@ -1,0 +1,10 @@
+※ pl4g-test: compile=error diag=4500
+
+※ A list is the sequence whose elements need not be of one type.  What makes
+※ that work is boxing -- a value held with enough beside it to say what it is
+※ -- which this compiler does not do yet, so for now they must agree.
+
+@[startup, impure]
+fn main() → u8:
+    let mixed: [u8] = [1u8, 2u16]
+    0u8

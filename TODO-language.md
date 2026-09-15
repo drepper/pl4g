@@ -323,6 +323,16 @@ To Do List for the PL4g language
     well-formed UTF-8, walked by `foreach` a character at a time and joined with `⧺`.  There is no index, the n-th byte of
     UTF-8 not being the n-th character; a grapheme cluster is the larger question and stays open.
 
+[ ] box a list's elements, so that they need not be of one type.  The type records what they agree on today, which is what
+    makes the agreeing case the one worth not boxing; what is missing is the boxed value -- a value held with enough beside it
+    to say what it is -- and the rule for which of the two a list is.
+
+[ ] index a list.  What `l[i]` means where `i` is past the end has three answers -- stop the program, answer a result, or refuse
+    to compile -- and the array's (check and stop) is not obviously the list's, a list's length not being in its type.
+
+[ ] decide whether a list may be changed in place: an element assigned, one appended.  Everything a list has today makes a new
+    one, which is why nothing about ownership has had to be decided; appending is where it would.
+
 [ ] compare two strings.  `"a" = "a"` is refused today, which is honest and not enough: what two strings being equal means is
     that their bytes are equal, UTF-8 being a one-to-one encoding of a sequence of code points -- so it is a length test and a
     comparison of the bytes, and the run-at-a-time machinery is what would do the second.  Ordering is a different question and

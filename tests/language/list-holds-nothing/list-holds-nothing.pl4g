@@ -1,0 +1,10 @@
+※ pl4g-test: compile=error diag=4501
+
+※ A list carries the type of what it holds, and one with nothing in it has
+※ nothing to say it with.  Where something wants a particular list that is
+※ what it holds; where nothing does, there is nothing to take it from.
+
+@[startup, impure]
+fn main() → u8:
+    let nothing = []
+    0u8

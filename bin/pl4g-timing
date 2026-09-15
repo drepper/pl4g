@@ -70,7 +70,9 @@ GROUPS: tuple[Group, ...] = (
            "string-walk": "a walk over every length a UTF-8 sequence has",
            "string-join": "four joins, and the arena they come out of",
            "length-operator": "how many, asked of all five kinds of thing",
-           "shape-operator": "shapes answered and shapes made, filled three ways"}),
+           "shape-operator": "shapes answered and shapes made, filled three ways",
+           "list-values": "lists made, walked and counted",
+           "list-join": "four joins of lists, two element widths"}),
     Group("Variables and memory",
           "Reading and writing variables, including one of every width.  These "
           "move when the loads and stores of a backend do.",

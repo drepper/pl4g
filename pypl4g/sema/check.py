@@ -35,7 +35,8 @@ from ..ir.types import (ARENA, ArrayType, BOOL, BoolType, BUILTIN_TYPES,
                         U32, U64,
                         F64,
                         FloatType, IntType, MEM, ProductType, ResultType,
-                        SetType, STR, SumType, TupleType, Type, VecType, VOID,
+                        ListType, SetType, STR, SumType, TupleType, Type,
+                        VecType, VOID,
                         CHAR, MAX_CODE_POINT, U8, parts_of)
 from . import strings, tables
 from .modules import (ImportCycle, LoadedModule, ModuleNotFound, ModuleRegistry,
@@ -1762,6 +1763,14 @@ class Checker:
             return self._collection_type(ref)
         if isinstance(ref, ast.ArrayTypeRef):
             return self._array_type(ref)
+        if isinstance(ref, ast.ListTypeRef):
+            element = self._resolve_type(ref.element)
+            if element is ERROR:
+                return ERROR
+            if element is VOID:
+                self._diags.emit(D.LANG_ARRAY_ELEMENT_IS_NOTHING, ref.span)
+                return ERROR
+            return self._module.types.list_type(element)
         if isinstance(ref, ast.TupleTypeRef):
             members = [self._resolve_type(m) for m in ref.members]
             if any(m is ERROR for m in members):
@@ -3694,6 +3703,8 @@ class Checker:
         found: _Iteration | None
         if isinstance(ty, ArrayType):
             found = self._over_an_array(builder, value, ty, stmt.span)
+        elif isinstance(ty, ListType):
+            found = self._over_a_list(builder, value, ty, stmt.span)
         elif ty is STR:
             found = self._over_a_string(builder, value, stmt.span)
         elif isinstance(ty, (SetType, DictType)):
@@ -3752,6 +3763,24 @@ class Checker:
             element=element, start=(builder.int_const(U64, 0),),
             more=lambda b, s: b.compare(CmpPred.ULT, s[0], lengths[0], span),
             take=take,
+            step=lambda b, s: (b.binary(BinOp.WRAP_ADD, s[0],
+                                        b.int_const(U64, 1), span),))
+
+    def _over_a_list(self, builder: IRBuilder, value: Value, ty: ListType,
+                     span: Span) -> _Iteration:
+        """Walk the elements of a list, which is what walking one means.
+
+        The same walk an array of unstated length gets, and for the same reason:
+        where the elements are and how many there are do not change from turn to
+        turn, so they are read once here and a turn is a comparison and a read.
+        """
+        elements = builder.extract(value, 0, parts_of(ty)[0], span)
+        length = builder.extract(value, 1, U64, span)
+        return _Iteration(
+            element=ty.element, start=(builder.int_const(U64, 0),),
+            more=lambda b, s: b.compare(CmpPred.ULT, s[0], length, span),
+            take=lambda b, s: b.load(
+                self._element_place(b, elements, ty.element, s[0], span), span),
             step=lambda b, s: (b.binary(BinOp.WRAP_ADD, s[0],
                                         b.int_const(U64, 1), span),))
 
@@ -4688,6 +4717,8 @@ class Checker:
                 return self._lower_unary(builder, expr, expected)
             case ast.Member():
                 return self._lower_member(builder, expr, expected)
+            case ast.ListLit():
+                return self._lower_list(builder, expr, expected)
             case ast.StringLit():
                 if not self._accepts(expected, STR):
                     self._report_mismatch(expr.span, STR, expected)
@@ -5248,9 +5279,19 @@ class Checker:
         type, which is what it would have done anyway.
         """
         left = self._lower_expr(builder, expr.left, None)
-        right = self._lower_expr(builder, expr.right, None)
+        # What is wanted of the right is what the left turned out to be, where
+        # that type says nothing about how many there are -- a list and a string
+        # do not, so `a ⧺ []` has something to take its type from; an array
+        # does, and two arrays being joined are of two different lengths and so
+        # of two different types.
+        held = self._value_type_of(left)
+        want = held if held is STR or isinstance(held, ListType) else None
+        right = self._lower_expr(builder, expr.right, want)
         if self._value_type_of(left) is STR or self._value_type_of(right) is STR:
             return self._joined_text(builder, expr, left, right, expected)
+        if isinstance(self._value_type_of(left), ListType) \
+                or isinstance(self._value_type_of(right), ListType):
+            return self._joined_list(builder, expr, left, right, expected)
         joined = self._joined_type(expr, left, right)
         if joined is None:
             return UndefConst(ERROR)
@@ -5266,6 +5307,62 @@ class Checker:
             self._report_mismatch(expr.span, joined, expected)
             return UndefConst(ERROR)
         return found
+
+    def _joined_list(self, builder: IRBuilder, expr: ast.Binary, left: Value,
+                     right: Value, expected: Type | None) -> Value:
+        """Lower `A \N{DOUBLE PLUS} B` where the two are lists.
+
+        The same shape a join of two strings has, and the same bytes moved: how
+        long the answer is, is not known while compiling, so room for it comes
+        from the arena.  What differs is only that a list's elements are as wide
+        as its type says rather than one byte -- so the two lengths are in
+        elements and the copy is in bytes, which is one multiplication apiece.
+        """
+        holds: Type | None = None
+        for side, value in ((expr.left, left), (expr.right, right)):
+            found = self._value_type_of(value)
+            if not isinstance(found, ListType):
+                if found is not ERROR:
+                    self._diags.emit(D.LANG_CONCAT_NEEDS_AN_ARRAY, side.span,
+                                     found=found.render())
+                return UndefConst(ERROR)
+            if holds is None:
+                holds = found.element
+            elif found.element is not holds:
+                self._diags.emit(D.LANG_CONCAT_ELEMENTS_DIFFER, expr.span,
+                                 left=self._value_type_of(left).render(),
+                                 right=self._value_type_of(right).render())
+                return UndefConst(ERROR)
+        assert holds is not None
+        answer = self._module.types.list_type(holds)
+        if not self._accepts(expected, answer):
+            self._report_mismatch(expr.span, answer, expected)
+            return UndefConst(ERROR)
+        self._an_effect(D.LANG_PURE_CALLS_IMPURE, expr.span,
+                        name=strings.JOIN_SYMBOL)
+        stride = builder.int_const(U64, stride_of(holds, _LAYOUT))
+        pointer = parts_of(answer)[0]
+        bytes_ = self._module.types.ptr_type(U8, mutable=True)
+        counts = [builder.extract(side, 1, U64, expr.span)
+                  for side in (left, right)]
+        heap = self._provided(HEAP_NAME)
+        assert isinstance(heap, GlobalVar)
+        made = builder.call(
+            strings.join_function(self._module),
+            (builder.address(heap, expr.span),
+             builder.cast(CastKind.BITCAST,
+                          builder.extract(left, 0, pointer, expr.span),
+                          bytes_, expr.span),
+             builder.binary(BinOp.WRAP_MUL, counts[0], stride, expr.span),
+             builder.cast(CastKind.BITCAST,
+                          builder.extract(right, 0, pointer, expr.span),
+                          bytes_, expr.span),
+             builder.binary(BinOp.WRAP_MUL, counts[1], stride, expr.span)),
+            bytes_, expr.span)
+        return builder.make_tuple(
+            (builder.cast(CastKind.BITCAST, made, pointer, expr.span),
+             builder.binary(BinOp.WRAP_ADD, counts[0], counts[1], expr.span)),
+            answer, expr.span)
 
     def _joined_text(self, builder: IRBuilder, expr: ast.Binary, left: Value,
                      right: Value, expected: Type | None) -> Value:
@@ -5654,6 +5751,8 @@ class Checker:
             # The outermost dimension, which such an array carries beside where
             # its elements are -- the first count of however many it has.
             return builder.extract(value, 1, U64, span)
+        if isinstance(ty, ListType):
+            return builder.extract(value, 1, U64, span)
         if ty is STR:
             return builder.call(
                 strings.length_function(self._module),
@@ -5868,6 +5967,73 @@ class Checker:
                                 builder.int_const(U32, MAX_CODE_POINT), expr.span),
                 "a number that is not a code point", expr.span)
         return builder.cast(CastKind.BITCAST, given, answer, expr.span)
+
+    def _lower_list(self, builder: IRBuilder, expr: ast.ListLit,
+                    expected: Type | None) -> Value:
+        """Lower `[a, b, c]`: a list written down.
+
+        What it holds is what its elements turned out to be, or what is wanted
+        of it where nothing is written inside.  For now they must all be of one
+        type: a list is the sequence whose elements need not be, and what makes
+        that work is boxing, which this compiler does not do yet.  The type it
+        holds is recorded all the same -- when boxing arrives, the case where
+        they do agree is the one worth not boxing, and a compiler that had
+        thrown the type away could not find it.
+
+        The elements go in an arena, because how many there are is not in the
+        type and room for them cannot be taken where the list is written.  So
+        making one is a change that outlives the call, as making a collection
+        is.
+        """
+        wanted = self._aiming_at(expected)
+        holds = wanted.element if isinstance(wanted, ListType) else None
+        values: list[Value] = []
+        for written in expr.elements:
+            one = self._lower_expr(builder, written, holds)
+            found = self._value_type_of(one)
+            if found is ERROR:
+                return UndefConst(ERROR)
+            if holds is None:
+                holds = found
+            elif found is not holds:
+                self._diags.emit(D.LANG_LIST_ELEMENTS_DIFFER, written.span,
+                                 found=found.render(), wanted=holds.render())
+                return UndefConst(ERROR)
+            values.append(one)
+        if holds is None:
+            self._diags.emit(D.LANG_LIST_HOLDS_NOTHING, expr.span)
+            return UndefConst(ERROR)
+        answer = self._module.types.list_type(holds)
+        if not self._accepts(expected, answer):
+            self._report_mismatch(expr.span, answer, expected)
+            return UndefConst(ERROR)
+        self._an_effect(D.LANG_PURE_CALLS_IMPURE, expr.span,
+                        name=tables.ALLOC_SYMBOL)
+        elements = self._room_for(builder, holds, len(values), expr.span)
+        for at, one in enumerate(values):
+            builder.store(
+                self._element_place(builder, elements, holds,
+                                    builder.int_const(U64, at), expr.span),
+                one, expr.span)
+        return builder.make_tuple(
+            (elements, builder.int_const(U64, len(values))), answer, expr.span)
+
+    def _room_for(self, builder: IRBuilder, element: Type, count: Value | int,
+                  span: Span) -> Value:
+        """Room in the arena for *count* elements, as a place to put them."""
+        stride = stride_of(element, _LAYOUT)
+        room = (builder.int_const(U64, count * stride) if isinstance(count, int)
+                else builder.binary(BinOp.WRAP_MUL, count,
+                                    builder.int_const(U64, stride), span))
+        heap = self._provided(HEAP_NAME)
+        assert isinstance(heap, GlobalVar)
+        tables.ensure_runtime(self._module)
+        return builder.cast(
+            CastKind.BITCAST,
+            builder.call(self._module.functions[tables.ALLOC_SYMBOL],
+                         (builder.address(heap, span), room),
+                         self._module.types.ptr_type(U8, mutable=True), span),
+            self._module.types.ptr_type(element, mutable=True), span)
 
     def _written_text(self, builder: IRBuilder, text: str, span: Span) -> Value:
         """A string written down: where its bytes are, and how many there are.

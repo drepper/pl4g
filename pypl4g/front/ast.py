@@ -116,6 +116,17 @@ class CollectionTypeRef(Node):
 
 
 @dataclass(frozen=True, slots=True)
+class ListTypeRef(Node):
+    """`[T]`: however many of them there turn out to be.
+
+    Written the way a value of one is, so that a type and a value of it look
+    alike -- which is what a collection type already does.
+    """
+
+    element: TypeExpr
+
+
+@dataclass(frozen=True, slots=True)
 class ArrayTypeRef(Node):
     """`T\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}N\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}`, several values of one type, or `T\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}`, as many as there turn out to be.
 
@@ -335,6 +346,13 @@ class DictLit(Expr):
 @dataclass(frozen=True, slots=True)
 class ArrayLit(Expr):
     """`\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}a, b, c\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}`: an array written down."""
+
+    elements: tuple[Expr, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class ListLit(Expr):
+    """`[a, b, c]`: a list written down."""
 
     elements: tuple[Expr, ...]
 

@@ -3684,6 +3684,38 @@ references.
 
 ---
 
+## 2026-09-16T08:30+02:00 — language
+
+**Lists, whose elements will not have to agree and for now must**
+
+Decided on the user's direction: `[a, b, c]`, a sequence of however many values there turn out to be, with the common element
+type recorded so that the case where they agree stays recognisable once boxing exists, and `⧺` joining two.
+
+**The decision that matters is where the element type is kept.**  It is in the *type* -- `[u8]` -- and not beside the value.
+That is what makes today's restriction temporary rather than structural: a list whose type says what it holds is the one that
+needs no tag per element, and the heterogeneous list that boxing will bring is one whose type does not say.  Keeping it in the
+value instead would have meant every list paying for the tag today to buy nothing, and keeping it nowhere would have meant the
+fast case being unrecoverable later -- which is the position JavaScript engines are in, spending a great deal of effort at run
+time recognising arrays that a type could have said something about.
+
+**A list is not an array, and the difference is not length.**  An array carries its shape in its type and takes no room of its
+own; a list carries how many beside where its elements are and puts them in an arena.  So the two answer different questions --
+"I know how many" and "I do not" -- and having both is worth more than one that tries to be either.  That is Rust's `[T; N]`
+against `Vec<T>` and Go's array against slice, and it is the same line.
+
+**Making one is impure**, because it allocates.  That is the rule a collection already follows and stating it the same way is
+worth more than an exception.
+
+**No index yet.**  What `l[i]` means where `i` is past the end is a question with three answers -- stop the program, answer a
+result, or refuse to compile -- and the array's answer (check and stop) is not obviously the list's, a list's length not being
+in its type.  The to-do list records it rather than this deciding it in passing.
+
+Compare, beyond the above: **Python**, whose lists are heterogeneous and boxed always, which is the shape this aims at and the
+cost it means to avoid where it can; **Lisp**, where the list is the type and the cons cell is the price; and **Java**, whose
+generics box every element of a `List<Integer>` and whose value types exist to undo exactly that.
+
+---
+
 ---
 
 Open questions

@@ -1211,6 +1211,22 @@
       "option": null
     },
     {
+      "number": 3034,
+      "name": "LANG_SYNTAX_EXPECTED_CLOSING_LIST",
+      "severity": "error",
+      "message": "expected ']'",
+      "args": [],
+      "cause": "A list and the type of one are both written between `[` and `]`, and the closing one is missing here.  What is usually behind it is a comma left out between two elements.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Lists",
+        "requirement": "A list is closed with `]`."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 3031,
       "name": "LANG_SYNTAX_SPREAD_OUTSIDE_A_CALL",
       "severity": "error",
@@ -4489,6 +4505,49 @@
         "document": "spec/spec.md",
         "section": "The Language / Expressions / Arrays",
         "requirement": "'⍴' written before one thing is written before an array."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4500,
+      "name": "LANG_LIST_ELEMENTS_DIFFER",
+      "severity": "error",
+      "message": "a list holds one type for now, and '{found}' is not '{wanted}'",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type of the element that does not agree"
+        },
+        {
+          "name": "wanted",
+          "type": "string",
+          "description": "the type the list turned out to hold"
+        }
+      ],
+      "cause": "A list is the sequence whose elements need not be of one type.  What makes that work is boxing -- a value held with enough beside it to say what it is -- which this compiler does not do yet, so for now they must agree.  The type a list holds is recorded so that when boxing arrives, the case where they do agree is the one worth not boxing and is still there to be found.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Lists",
+        "requirement": "Every element of a list is of one type, until boxing."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4501,
+      "name": "LANG_LIST_HOLDS_NOTHING",
+      "severity": "error",
+      "message": "a list written with nothing in it does not say what it holds",
+      "args": [],
+      "cause": "A list carries the type of what it holds, and one with nothing in it has nothing to say it with.  Where such a list stands somewhere that wants a particular one -- the value of a name whose type is written, an argument, what a function answers with -- that is what it holds; where nothing wants one, there is nothing to take it from.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Lists",
+        "requirement": "A list with nothing in it takes the type wanted where it stands."
       },
       "since": "0.1",
       "default_enabled": true,

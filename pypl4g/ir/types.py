@@ -400,6 +400,34 @@ class StrType(Type):
 
 
 @dataclass(frozen=True, slots=True)
+class ListType(Type):
+    """Several values one after another, however many there turn out to be.
+
+    A value of one is where the elements are and how many there are -- two
+    words, the shape a string and an array of unstated length both have.  The
+    elements live in an arena, because how many there are is not a property of
+    the type and room for them cannot be taken where the list is written.
+
+    **The element type is in the type, and that is temporary and deliberate.**
+    A list is the sequence whose elements need not be of one type; what makes
+    that work is boxing, which this compiler does not do yet, so for now they
+    must be.  Recording the one type they are is what makes the case where they
+    happen to agree recognisable later: a list of one type is the case worth not
+    boxing, and a compiler that had thrown the type away could not find it.
+    """
+
+    element: Type
+
+    def render(self) -> str:
+        """The name of this type in the textual form of the IR."""
+        return "".join(("[", self.element.render(), "]"))
+
+    def mangled(self) -> str:
+        """The normalized name of this type, for use inside a symbol name."""
+        return "".join(("list<", self.element.mangled(), ">"))
+
+
+@dataclass(frozen=True, slots=True)
 class SetType(Type):
     """A set: the keys it holds, and nothing said about them beyond membership."""
 
@@ -554,6 +582,7 @@ class TypeContext:
         self._tuples: dict[tuple[Type, ...], TupleType] = {}
         self._arrays: dict[tuple[Type, tuple[int | None, ...]], ArrayType] = {}
         self._vectors: dict[tuple[Type, int], VecType] = {}
+        self._lists: dict[Type, ListType] = {}
         self._sets: dict[Type, SetType] = {}
         self._dicts: dict[tuple[Type, Type], DictType] = {}
         self._pointers: dict[tuple[Type, bool], PtrType] = {}
@@ -600,6 +629,14 @@ class TypeContext:
         if found is None:
             found = VecType(element, lanes)
             self._vectors[key] = found
+        return found
+
+    def list_type(self, element: Type) -> ListType:
+        """Return the list type over *element*."""
+        found = self._lists.get(element)
+        if found is None:
+            found = ListType(element)
+            self._lists[element] = found
         return found
 
     def set_type(self, element: Type) -> SetType:
@@ -694,6 +731,11 @@ def parts_of(ty: Type) -> tuple[Type, ...]:
         return ty.members
     if isinstance(ty, ArrayType) and not ty.fixed:
         return (_pointer_to(ty.element), *(U64 for _ in ty.shape))
+    if isinstance(ty, ListType):
+        # Where the elements are and how many there are, which is the shape a
+        # string and an array of unstated length both have and for the same
+        # reason: how many is not in the type.
+        return (_pointer_to(ty.element), U64)
     if isinstance(ty, StrType):
         # Where the bytes are and how many there are, which is what an array
         # whose type does not say its length is as well -- the difference

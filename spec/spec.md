@@ -1610,6 +1610,49 @@ this language has that reading too -- `u8⟦3⟧⟦2⟧` is two arrays of three 
 The difference shows where a program says what it means: a table is indexed with one pair of brackets, and an array of arrays with
 two.
 
+#### Lists
+
+**`[a, b, c]` is a list**: however many values there turn out to be, one after another.  The type is written the way a value of
+one is, so `[u8]` is a list of bytes.
+
+```
+let a: [u8] = [1u8, 2u8, 3u8]
+let empty: [u8] = []
+let plain: [u16] = [1, 2, 3, 4]      ※ the elements take the list's type
+```
+
+**A list is not an array.**  An array carries its shape in its type and takes no room of its own; a list carries how many there
+are beside where the elements are, and the elements live in an arena.  So an array is what a program reaches for when it knows
+how many, and a list when it does not -- and **making a list is a change that outlives the call**, so a function that makes one
+says `@[impure]`, the same as one that makes a collection.
+
+**Its elements must all be of one type, for now.**  A list is the sequence whose elements need not be: what makes that work is
+*boxing* -- a value held with enough beside it to say what it is -- which this compiler does not do yet, so until it does, they
+must agree (4500).  **The type they agree on is recorded in the list's type**, and that is the part worth saying out loud: when
+boxing arrives, a list whose elements are all of one type is the case worth *not* boxing, and a compiler that had thrown the type
+away could not find it again.
+
+**A list written with nothing in it takes the type wanted where it stands** (4501) -- the value of a name whose type is written,
+an argument, what a function answers with.  Where nothing wants one there is nothing to take it from.
+
+**`#` answers how many** it holds, **`foreach` walks its elements** in order, and **`⧺` joins two**:
+
+```
+#a                                   ※ 3
+foreach x = a:                       ※ 1, then 2, then 3
+a ⧺ [4u8]                            ※ [u8] holding four
+```
+
+Both sides of a join hold the same type, which today is every list's rule and will later be the case worth not boxing.
+
+There is no index yet, and the to-do list records it rather than this deciding what `l⟦i⟧` would mean where the list is empty.
+
+Compare: **Python**, whose lists are heterogeneous and boxed always, which is the shape this is aiming at and the cost it means
+to avoid where it can; **Lisp**, where a list is the type and a cons cell the cost; **Rust**'s `Vec<T>` and **Go**'s slices,
+which are this without the heterogeneous future and which therefore need no boxing at all; and **JavaScript**, whose arrays are
+heterogeneous and whose engines spend a great deal of effort recognising the case where they are not -- which is the case this
+language records in the type instead of recovering at run time.
+
 #### Arenas
 
 An **arena** is where a program's memory comes from.  It is a type like any other, and a program makes as many as it wants:
