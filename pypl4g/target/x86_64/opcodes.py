@@ -520,6 +520,20 @@ X86_INSTRS: Final[tuple[X86InstDesc, ...]] = (
                 mandatory_prefix=0xF2, modrm=ModRMUse.REG_RM,
                 reg_op=0, rm_op=1, est_size=4,
                 roles=_ACCUMULATE),
+    # The whole number a floating-point number rounds to.  These are SSE4.1,
+    # which is what the architecture's second level promises and the first does
+    # not; the immediate says which way to go, and the value four says to ask
+    # the processor's own rounding mode rather than to name one.
+    # roundss xmm, xmm/m32, imm8        66 0F 3A 0A /r ib
+    X86InstDesc("roundss", (_x(), _xm(32), _imm(8)), opcode=0x0A, map=OpMap.M0F3A,
+                mandatory_prefix=0x66, modrm=ModRMUse.REG_RM,
+                reg_op=0, rm_op=1, imm_op=2, imm_bits=8, est_size=6,
+                roles=(OperandRole.DEF, OperandRole.USE, OperandRole.USE)),
+    # roundsd xmm, xmm/m64, imm8        66 0F 3A 0B /r ib
+    X86InstDesc("roundsd", (_x(), _xm(64), _imm(8)), opcode=0x0B, map=OpMap.M0F3A,
+                mandatory_prefix=0x66, modrm=ModRMUse.REG_RM,
+                reg_op=0, rm_op=1, imm_op=2, imm_bits=8, est_size=6,
+                roles=(OperandRole.DEF, OperandRole.USE, OperandRole.USE)),
     X86InstDesc("subss", (_x(), _xm(32)), opcode=0x5C, map=OpMap.M0F,
                 mandatory_prefix=0xF3, modrm=ModRMUse.REG_RM,
                 reg_op=0, rm_op=1, est_size=4,

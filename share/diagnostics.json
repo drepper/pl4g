@@ -4648,6 +4648,49 @@
       "option": null
     },
     {
+      "number": 4507,
+      "name": "LANG_TYPE_OPERAND_NOT_FLOAT",
+      "severity": "error",
+      "message": "'{operator}' rounds floating-point numbers, not '{found}'",
+      "args": [
+        {
+          "name": "operator",
+          "type": "string",
+          "description": "the operator as written"
+        },
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type of the operand"
+        }
+      ],
+      "cause": "The four roundings answer the whole number a floating-point number rounds to, in the type it was given.  An integer is already a whole number, so rounding one would answer with what it was handed; a value of any other type is not a number and has nothing to round.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Rounding",
+        "requirement": "The four rounding operators are defined on floating-point values only."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4508,
+      "name": "LANG_PURE_READS_THE_ROUNDING_MODE",
+      "severity": "error",
+      "message": "'⇕' rounds by the processor's own rounding mode, and a pure function does not read it",
+      "args": [],
+      "cause": "Three of the four roundings say which way they go, and two of one with the same value answer alike wherever the program runs.  The fourth asks the processor what it is doing just now, which is state outside the function and outside the language, so a function that writes it can answer differently in two places for the same argument -- which is the one thing a pure function promises not to do.  Where reading the mode is the point, `@[impure]` on the function says so; where it is not, one of the other three says which way to go.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Rounding",
+        "requirement": "A function writing '⇕' is marked '@[impure]'."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 5001,
       "name": "LANG_STMT_UNREACHABLE",
       "severity": "warning",

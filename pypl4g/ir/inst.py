@@ -83,6 +83,13 @@ class UnOp(Enum):
     #: sign cleared.  There is no integer form: the magnitude of the smallest
     #: signed number is not a number of its type.
     FABS = "fabs"
+    #: The four roundings of a floating-point number to a whole one: the one
+    #: below it, the one above it, the nearer of the two with a tie going to
+    #: the even one, and whichever the processor's own rounding mode names.
+    FLOOR = "floor"
+    CEIL = "ceil"
+    NEAREST = "nearest"
+    ROUNDED = "rounded"
 
 
 class CmpPred(Enum):

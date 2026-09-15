@@ -260,6 +260,13 @@ class UnaryOp(StrEnum):
     #: The largest and the smallest of what something holds.
     MAX = "\N{LEFT CEILING}"
     MIN = "\N{LEFT FLOOR}"
+    #: The four roundings of a floating-point number to a whole one.  The last
+    #: of them asks the processor what it is doing just now, so a function that
+    #: writes it depends on something outside itself.
+    FLOOR = "\N{DOWNWARDS ARROW}"
+    CEILING = "\N{UPWARDS ARROW}"
+    NEAREST = "\N{UP DOWN ARROW}"
+    ROUNDED = "\N{UP DOWN DOUBLE ARROW}"
 
 
 @dataclass(frozen=True, slots=True)

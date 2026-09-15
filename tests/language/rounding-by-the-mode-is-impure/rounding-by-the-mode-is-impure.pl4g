@@ -1,0 +1,15 @@
+※ pl4g-test: compile=error diag=4508
+
+※ Three of the four roundings say which way they go, and two of one with the
+※ same value answer alike wherever the program runs.  The fourth asks the
+※ processor what it is doing just now, which is state outside the function and
+※ outside the language -- so a function that writes it is not pure, and says so
+※ with `@[impure]`.
+
+fn rounded(x: f64) → f64:
+    ⇕x
+
+@[startup]
+fn main() → u8:
+    ⎕ord('a')
+    0u8

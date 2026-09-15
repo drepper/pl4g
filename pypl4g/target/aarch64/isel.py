@@ -14,7 +14,7 @@ from ...mc.asmbuilder import InstructionSelector
 from ...mc.desc import InstrTable, SelectionError
 from ...mc.inst import MCInst
 from ...mc.operand import MCImm, MCMem, MCOperand, MCReg, MCSymRef
-from ...mc.ops import Condition, Op
+from ...mc.ops import Condition, Op, Rounding
 from ...ir.inst import BinOp, UnOp
 from ...mc.reg import PhysReg, Reg, RegUnit, VirtReg
 from ...mc.operand import SymExpr
@@ -131,6 +131,12 @@ _FLOAT_OPERATIONS: Final[dict[BinOp, Op]] = {
 #: anything the program did not have already -- there is nothing to ask about
 #: what they came to.
 _KEEPS_A_NUMBER: Final[frozenset[Op]] = frozenset((ops.LARGER, ops.SMALLER))
+
+#: Which rounding each of the four operations asks for.
+_ROUNDINGS: Final[dict[UnOp, Rounding]] = {
+    UnOp.FLOOR: Rounding.DOWN, UnOp.CEIL: Rounding.UP,
+    UnOp.NEAREST: Rounding.NEAREST, UnOp.ROUNDED: Rounding.CURRENT,
+}
 
 #: What each operation of the representation is called in the assembler.
 _OPERATIONS: Final[dict[BinOp, Op]] = {
@@ -787,6 +793,22 @@ class A64Selector(InstructionSelector):
         ops.TIMES.name: "fmul", ops.DIVIDE.name: "fdiv",
         ops.LARGER.name: "fmax", ops.SMALLER.name: "fmin",
     }
+
+    #: Which instruction each rounding is.  This architecture has seven of them
+    #: and four are wanted: three that name a direction and one that asks the
+    #: processor's own mode.  `frinti` rather than `frintx` for the last, the
+    #: two differing only in whether an inexact answer is signalled, which
+    #: nothing here looks at.
+    _ROUNDS: Final[dict[Rounding, str]] = {
+        Rounding.DOWN: "frintm", Rounding.UP: "frintp",
+        Rounding.NEAREST: "frintn", Rounding.CURRENT: "frinti",
+    }
+
+    def select_float_round(self, how: Rounding, dst: Reg, src: MCOperand,
+                           bits: int, span: Span) -> Sequence[MCInst]:
+        """Instructions that put the whole number *src* rounds to into *dst*."""
+        return (self._inst(self._ROUNDS[how],
+                           (MCReg(dst, bits=bits), _at(src, bits)), span),)
 
     def select_float_abs(self, dst: Reg, src: MCOperand, bits: int,
                          span: Span) -> Sequence[MCInst]:
@@ -1633,6 +1655,15 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                     held[id(inst)] = operands.register_of(inst.operands[0], span)
                 case FailedInst():
                     held[id(inst)] = operands.flag_of(inst.operands[0], span)
+                case UnaryInst() if inst.op in _ROUNDINGS:
+                    destination = _new_value(
+                        inst.ty, registers,
+                        hint=(_result_register(inst.ty, cconv, registers)
+                              if inst is returned else None))
+                    held[id(inst)] = destination
+                    asm.float_round(_ROUNDINGS[inst.op], destination,
+                                    operands.in_register(inst.operands[0], inst.span),
+                                    _bits_of(inst.ty), inst.span)
                 case UnaryInst() if inst.op is UnOp.FABS:
                     destination = _new_value(
                         inst.ty, registers,

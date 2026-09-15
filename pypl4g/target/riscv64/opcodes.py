@@ -64,6 +64,12 @@ def _shamt() -> OperandSpec:
     return OperandSpec(OperandKind.IMM, imm_min=0, imm_max=63)
 
 
+def _rm() -> OperandSpec:
+    """Which way a conversion rounds, as the three-bit field the architecture
+    puts it in."""
+    return OperandSpec(OperandKind.IMM, imm_min=0, imm_max=7)
+
+
 def _sym() -> OperandSpec:
     """A branch target, given as a symbol reference."""
     return OperandSpec(OperandKind.REL | OperandKind.SYM)
@@ -77,6 +83,11 @@ def _reg(operand: int, lsb: int) -> Field:
 def _imm(operand: int, lsb: int, width: int) -> Field:
     """A signed immediate held in one run of bits."""
     return Field(FieldKind.IMMEDIATE, operand, lsb, width, signed=True)
+
+
+def _mode(operand: int) -> Field:
+    """The three-bit rounding-mode field, which is not a number to be signed."""
+    return Field(FieldKind.IMMEDIATE, operand, 12, 3, signed=False)
 
 
 def _store_fields() -> tuple[Field, ...]:
@@ -269,6 +280,26 @@ RISCV_INSTRS: Final[tuple[RVInstDesc, ...]] = (
     # fcvt.d.s: a single-precision value in the double-precision format, which
     # holds every one of them exactly, so the rounding mode says nothing.
     RVInstDesc("fcvt.d.s", (_f(), _f()), template=0x42000053,
+               fields=(_reg(0, _RD), _reg(1, _RS1)),
+               est_size=INSTRUCTION_SIZE),
+    # Converting between a floating-point number and an integer.  The rounding
+    # is an operand here rather than baked into the mnemonic, because the whole
+    # reason these are wanted is the four different roundings: the field is the
+    # architecture's own, and `rne`, `rdn`, `rup` and `dyn` are what the
+    # assembler writes for the four this compiler asks for.
+    RVInstDesc("fcvt.l.d", (_r(), _f(), _rm()), template=0xC2200053,
+               fields=(_reg(0, _RD), _reg(1, _RS1), _mode(2)),
+               est_size=INSTRUCTION_SIZE),
+    RVInstDesc("fcvt.w.s", (_r(), _f(), _rm()), template=0xC0000053,
+               fields=(_reg(0, _RD), _reg(1, _RS1), _mode(2)),
+               est_size=INSTRUCTION_SIZE),
+    # Back again, where no rounding can happen: every integer this compiler
+    # converts back came out of a value smaller than the format's own limit for
+    # whole numbers, so it is representable exactly.
+    RVInstDesc("fcvt.d.l", (_f(), _r()), template=0xD2207053,
+               fields=(_reg(0, _RD), _reg(1, _RS1)),
+               est_size=INSTRUCTION_SIZE),
+    RVInstDesc("fcvt.s.w", (_f(), _r()), template=0xD0007053,
                fields=(_reg(0, _RD), _reg(1, _RS1)),
                est_size=INSTRUCTION_SIZE),
     RVInstDesc("fsgnj.s", (_f(), _f(), _f()), template=0x20000053,

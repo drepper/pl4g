@@ -362,6 +362,20 @@ To Do List for the pypl4g compiler
     treatment joining two arrays got: the elements are already a run whose length is written down, so what is missing is the
     entry in each target's `Vectors` table and a reduction over the lanes at the end.
 
+[ ] round a floating-point number at the oldest x86-64 level.  Refused today: `roundsd` is SSE4.1, which the second level
+    promises and the first does not.  What the first needs is the round trip through an integer the RISC-V backend already does,
+    plus a correction per direction -- `cvttsd2si` truncates towards zero, so the floor is one less where the answer came out
+    above the value and the ceiling one more where it came out below.  The nearest and the current mode are `cvtsd2si`, which
+    rounds by `MXCSR`, so the first of those needs the mode set and put back or a different sequence again.
+
+[ ] fold the four roundings of a value written down.  `\N{DOWNWARDS ARROW}2.5f64` reaches the code generator as an instruction, where the
+    arithmetic on two written-down floating-point values is folded away.  Three of the four are settled while compiling; the
+    fourth is not, which is the whole of why it is impure.
+
+[ ] round a whole run at once.  All three machines round a register of lanes in one instruction, and the operators are listable,
+    so rounding an array is an element at a time where it could be one instruction per register's worth.  It wants a `unary`
+    entry in each target's `Vectors` table, which today holds only the complement.
+
 [ ] answer `\N{LEFT CEILING}` and `\N{LEFT FLOOR}` over strings.  Strings are ordered now, so the largest of a list of them is a
     question with an answer, and it is refused (4506): the fold is one of four instructions chosen by the type, and a string's
     comparison is a call.  What it wants is the walk carrying which of the two it has seen rather than the larger of them, which

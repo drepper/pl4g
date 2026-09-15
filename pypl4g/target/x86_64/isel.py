@@ -15,7 +15,7 @@ from ...mc.asmbuilder import InstructionSelector
 from ...mc.desc import InstrTable, SelectionError
 from ...mc.inst import MCInst
 from ...mc.operand import MCImm, MCMem, MCOperand, MCReg, MCSymRef
-from ...mc.ops import Condition, Op
+from ...mc.ops import Condition, Op, Rounding
 from ...ir.inst import BinOp, UnOp
 from ...mc.reg import Reg, VirtReg
 from ...mc.operand import SymExpr
@@ -128,6 +128,12 @@ _FLOAT_OPERATIONS: Final[dict[BinOp, Op]] = {
 #: what they came to.
 _KEEPS_A_NUMBER: Final[frozenset[Op]] = frozenset((ops.LARGER, ops.SMALLER))
 
+#: Which rounding each of the four operations asks for.
+_ROUNDINGS: Final[dict[UnOp, Rounding]] = {
+    UnOp.FLOOR: Rounding.DOWN, UnOp.CEIL: Rounding.UP,
+    UnOp.NEAREST: Rounding.NEAREST, UnOp.ROUNDED: Rounding.CURRENT,
+}
+
 #: What each operation of the representation is called in the assembler.
 _OPERATIONS: Final[dict[BinOp, Op]] = {
     BinOp.ADD: ops.PLUS, BinOp.SUB: ops.MINUS, BinOp.MUL: ops.TIMES,
@@ -165,8 +171,14 @@ class UnsupportedOperation(Exception):
 class X86Selector(InstructionSelector):
     """Turns builder calls into x86-64 instructions."""
 
-    def __init__(self, table: InstrTable | None = None) -> None:
+    def __init__(self, table: InstrTable | None = None,
+                 rounds: bool = True) -> None:
         self.table = table if table is not None else InstrTable(X86_INSTRS)
+        #: Whether the level this is generating for has the rounding
+        #: instruction.  It is SSE4.1, which the second level promises and the
+        #: first does not, and there is nothing else on this architecture that
+        #: rounds without going through an integer.
+        self.rounds = rounds
 
     def _inst(self, mnemonic: str, operands: Sequence[MCOperand], span: Span) -> MCInst:
         """Select the shortest encoding of *mnemonic* for *operands*."""
@@ -782,6 +794,29 @@ class X86Selector(InstructionSelector):
                 self._inst(self._FLOAT_COMPARE[bits],
                            (MCReg(held, bits=128), MCReg(held, bits=128)), span),
                 self._inst("jnp", (target,), span))
+
+    #: What the immediate says.  Bits zero and one name a direction and bit two
+    #: says to ignore them and ask `MXCSR` instead, which is the architecture's
+    #: own arrangement and the reason one instruction does all four.
+    _ROUNDS: Final[dict[Rounding, int]] = {
+        Rounding.NEAREST: 0x00, Rounding.DOWN: 0x01, Rounding.UP: 0x02,
+        Rounding.CURRENT: 0x04,
+    }
+
+    def select_float_round(self, how: Rounding, dst: Reg, src: MCOperand,
+                           bits: int, span: Span) -> Sequence[MCInst]:
+        """Instructions that put the whole number *src* rounds to into *dst*."""
+        if not self.rounds:
+            # The instruction is SSE4.1, which the second level promises and
+            # the first does not.  Doing it without one is a round trip through
+            # an integer and a correction, which is a to-do line and not a
+            # silently different answer.
+            raise UnsupportedOperation(
+                "rounding a floating-point number at the oldest x86-64 level",
+                span)
+        return (self._inst("roundss" if bits == 32 else "roundsd",
+                           (MCReg(dst, bits=128), src,
+                            MCImm(self._ROUNDS[how], 8, signed=False)), span),)
 
     def select_float_op(self, op: Op, dst: Reg, left: MCOperand, right: MCOperand,
                         bits: int, span: Span) -> Sequence[MCInst]:
@@ -1659,6 +1694,15 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                     held[id(inst)] = operands.register_of(inst.operands[0], span)
                 case FailedInst():
                     held[id(inst)] = operands.flag_of(inst.operands[0], span)
+                case UnaryInst() if inst.op in _ROUNDINGS:
+                    destination = _new_value(
+                        inst.ty, registers,
+                        hint=(_result_register(inst.ty, cconv, registers)
+                              if inst is returned else None))
+                    held[id(inst)] = destination
+                    asm.float_round(_ROUNDINGS[inst.op], destination,
+                                    operands.in_register(inst.operands[0], inst.span),
+                                    _bits_of(inst.ty), inst.span)
                 case UnaryInst() if inst.op is UnOp.FABS:
                     # Nothing here clears one bit of a vector register, so the
                     # magnitude is an `and` with a mask that has every bit but

@@ -18,7 +18,7 @@ from ...mc.asmbuilder import InstructionSelector
 from ...mc.desc import InstrTable, SelectionError
 from ...mc.inst import MCInst
 from ...mc.operand import MCImm, MCMem, MCOperand, MCReg, MCSymRef
-from ...mc.ops import Condition, Op
+from ...mc.ops import Condition, Op, Rounding
 from ...ir.inst import BinOp, UnOp
 from ...mc.reg import Reg, VirtReg
 from ...mc.operand import SymExpr
@@ -107,6 +107,17 @@ _FLOAT_OPERATIONS: Final[dict[BinOp, Op]] = {
 #: anything the program did not have already -- there is nothing to ask about
 #: what they came to.
 _KEEPS_A_NUMBER: Final[frozenset[Op]] = frozenset((ops.LARGER, ops.SMALLER))
+
+#: Which rounding each of the four operations asks for.
+_ROUNDINGS: Final[dict[UnOp, Rounding]] = {
+    UnOp.FLOOR: Rounding.DOWN, UnOp.CEIL: Rounding.UP,
+    UnOp.NEAREST: Rounding.NEAREST, UnOp.ROUNDED: Rounding.CURRENT,
+}
+
+#: Above this, a floating-point value of each width is a whole number already:
+#: the format has no room left for a fraction.  It is also where the conversion
+#: through an integer would stop being exact, so one number answers both.
+_WHOLE_ABOVE: Final[dict[int, float]] = {32: float(1 << 23), 64: float(1 << 52)}
 
 #: What each operation of the representation is called in the assembler.
 _OPERATIONS: Final[dict[BinOp, Op]] = {
@@ -607,6 +618,48 @@ class RVSelector(InstructionSelector):
                            (held, MCReg(value), MCReg(value)), span),
                 self._inst("".join(("feq", suffix)), (answer, held, held), span),
                 self._inst("bne", (answer, MCReg(ZERO), target), span))
+
+    #: What the architecture's three-bit rounding field says.  The fourth is
+    #: the one that says "whatever the rounding-mode register names", which is
+    #: what makes the dynamic field worth having.
+    _ROUNDS: Final[dict[Rounding, int]] = {
+        Rounding.NEAREST: 0b000, Rounding.DOWN: 0b010, Rounding.UP: 0b011,
+        Rounding.CURRENT: 0b111,
+    }
+
+    def select_float_to_int(self, how: Rounding, dst: Reg, src: MCOperand,
+                            bits: int, span: Span) -> Sequence[MCInst]:
+        """Instructions that put *src* into *dst* as a whole number.
+
+        A word for the narrower format and a doubleword for the wider, which in
+        both cases is more than enough: this is only ever asked of a value below
+        the point where the format has no room for a fraction, and that point is
+        far below what the integer holds.
+        """
+        return (self._inst("fcvt.w.s" if bits == 32 else "fcvt.l.d",
+                           (MCReg(dst), src,
+                            MCImm(self._ROUNDS[how], 3, signed=False)), span),)
+
+    def select_int_to_float(self, dst: Reg, src: MCOperand, bits: int,
+                            span: Span) -> Sequence[MCInst]:
+        """Instructions that put the whole number *src* into *dst*.
+
+        No rounding is named because none can happen: every number this is
+        handed came out of a value the format holds exactly.
+        """
+        return (self._inst("fcvt.s.w" if bits == 32 else "fcvt.d.l",
+                           (MCReg(dst), src), span),)
+
+    def select_float_copysign(self, dst: Reg, magnitude: MCOperand,
+                              sign: MCOperand, bits: int,
+                              span: Span) -> Sequence[MCInst]:
+        """Instructions that put *magnitude* into *dst* with *sign*'s sign.
+
+        One instruction, this architecture having made the sign-injection the
+        thing a move, a magnitude and a negation are all written as.
+        """
+        return (self._inst("".join(("fsgnj", ".s" if bits == 32 else ".d")),
+                           (MCReg(dst), magnitude, sign), span),)
 
     def select_float_op(self, op: Op, dst: Reg, left: MCOperand, right: MCOperand,
                         bits: int, span: Span) -> Sequence[MCInst]:
@@ -1327,6 +1380,46 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                     held[id(inst)] = operands.register_of(inst.operands[0], span)
                 case FailedInst():
                     held[id(inst)] = operands.flag_of(inst.operands[0], span)
+                case UnaryInst() if inst.op in _ROUNDINGS:
+                    # No instruction here rounds a floating-point number where
+                    # it stands, so it goes out to a whole number and back --
+                    # and the conversion is what carries the rounding, the
+                    # architecture having put the mode in the instruction.
+                    #
+                    # That works below the point where the format has room for
+                    # a fraction and nowhere else, so a value at or above it is
+                    # answered with itself: it is a whole number already, and it
+                    # is also where the integer would not hold it.
+                    bits = _bits_of(inst.ty)
+                    destination = _new_value(
+                        inst.ty, registers,
+                        hint=(_result_register(inst.ty, cconv, registers)
+                              if inst is returned else None))
+                    held[id(inst)] = destination
+                    source = operands.in_register(inst.operands[0], inst.span)
+                    asm.loadreg(destination, source, inst.span)
+                    magnitude = registers.new_virtual(FPR, _FLOAT_REGISTER_BITS)
+                    asm.float_abs(magnitude, source, bits, inst.span)
+                    small = registers.new_virtual(GPR, 64)
+                    asm.float_compare(
+                        Condition.SLT, small, MCReg(magnitude),
+                        MCReg(operands.floating(
+                            FloatConst(inst.ty, _WHOLE_ABOVE[bits]), inst.span)),
+                        bits, inst.span)
+                    whole = asm.reserve_label("already.whole")
+                    asm.branch(Condition.EQ, MCReg(small), ZERO_IMMEDIATE,
+                               whole, inst.span)
+                    counted = registers.new_virtual(GPR, 64)
+                    asm.float_to_int(_ROUNDINGS[inst.op], counted, source, bits,
+                                     inst.span)
+                    back = registers.new_virtual(FPR, _FLOAT_REGISTER_BITS)
+                    asm.int_to_float(back, MCReg(counted), bits, inst.span)
+                    # Rounding never changes a sign and the round trip through
+                    # an integer loses one: a value between minus one and zero
+                    # rounds up to minus zero and comes back as zero.
+                    asm.float_copysign(destination, MCReg(back), source, bits,
+                                       inst.span)
+                    asm.block(whole)
                 case UnaryInst() if inst.op is UnOp.FABS:
                     destination = _new_value(
                         inst.ty, registers,

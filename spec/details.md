@@ -479,6 +479,31 @@ the same width, so the conversion is a bitcast -- which the verifier now allows 
 type it is held as, beside the addresses it already allowed.  `⎕chr` puts a check in front of it and `⎕ord` does not, and a code
 point written down is settled while compiling either way.
 
+**Rounding is one instruction on two of the three machines and eight on the other.**  x86-64 has `roundss`/`roundsd`, whose
+immediate names the direction and whose value four says to ask `MXCSR` instead -- one instruction for all four operators.
+AArch64 has `frintm`, `frintp`, `frintn` and `frinti`, one apiece.  RISC-V has none: rounding a floating-point number where it
+stands is in the Zfa extension and not in the base D, so it goes out to an integer and back, the conversion carrying the rounding
+because the architecture put the mode in the instruction.
+
+That round trip is right only below the point where the format has room for a fraction -- 2²³ for `f32` and 2⁵² for `f64` -- so a
+value at or above it is answered with itself.  That is not an approximation: such a value *is* a whole number already, and the
+same limit is where the integer would stop holding it, so one comparison settles both questions.  The branch is over five
+instructions and is not taken for the values a program that rounds is usually rounding.
+
+The conversion loses a sign that the rounding keeps: a value between minus one and zero rounds up to minus zero and comes back as
+zero.  So the answer is put back together with `fsgnj`, which costs nothing and is the instruction RISC-V writes a move with
+anyway.
+
+**x86-64 refuses to round at the oldest level.**  `roundsd` is SSE4.1, which the architecture's second level promises and the
+first does not, and what the first would need instead is the same round trip through an integer plus a correction for each
+direction.  The level is asked for and the default is the newest, so this is a refusal a program has to go out of its way to
+meet; a to-do line records it.
+
+**The three roundings that name a direction are pure and the fourth is not.**  What `⇕` reads is a register of the processor's
+that nothing in the language writes, so two of them with the same value answer alike within one run and need not between two --
+which is exactly the line `@[impure]` draws.  Nothing in the representation records it: purity is the front end's question, asked
+where the operator is written, and what reaches the backends is an ordinary instruction.
+
 **Comparing two strings is a third generated function, and it is `memcmp`.**  UTF-8 orders by bytes exactly as it orders by
 code points, so the comparison neither decodes nor needs to know where a character begins: it walks to the shorter of the two
 lengths comparing bytes, answers with the difference at the first that differs, and answers by the lengths where it runs out.

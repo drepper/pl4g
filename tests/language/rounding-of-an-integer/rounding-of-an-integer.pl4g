@@ -1,0 +1,12 @@
+※ pl4g-test: compile=error diag=4507
+
+※ The four roundings answer the whole number a floating-point number rounds to.
+※ An integer is a whole number already, so rounding one would answer with what
+※ it was handed -- which is a question nobody asks and an operator nobody
+※ writes on purpose.
+
+@[startup]
+fn main() → u8:
+    let n: u8 = 5u8
+    let rounded: u8 = ↓n
+    0u8

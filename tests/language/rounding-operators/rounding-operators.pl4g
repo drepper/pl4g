@@ -1,0 +1,74 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ Four operators round a floating-point number to a whole one: `↓` to the
+※ number below it, `↑` to the one above, `↕` to the nearer of the two, and `⇕`
+※ to whichever the processor's own rounding mode says.  The arrows say which
+※ way each goes, and the double one says to go and ask.
+※
+※ What comes back is of the type it was given: a rounded `f64` is an `f64` and
+※ not an integer.  That is the arrangement every machine's instruction has, and
+※ it is the honest one -- which integer type the answer would fit in is a
+※ question about the value and not about the type.
+※
+※ A tie goes to the even number, which is what IEEE 754 calls round-to-nearest
+※ and what all three of these machines do: 2.5 rounds to 2 and 3.5 to 4.
+
+@[startup, impure]
+fn main() → u8:
+    let half: f64 = 2.5f64
+    let other: f64 = 3.5f64
+    let down: f64 = ⁻2.5f64
+    let small: f64 = 0.3f64
+    ※ big enough that the format has no room for a fraction, which is where
+    ※ the answer is the number itself
+    let huge: f64 = 1.0e300f64
+    let narrow: f32 = ⁻1.5f32
+    let v: f64⟦4⟧ = ⟦1.2f64, ⁻1.2f64, 2.5f64, 3.5f64⟧
+    let walked: f64⟦4⟧ = ↓v
+    if ¬(↓half ≅ 2.0f64) ∨ ¬(↑half ≅ 3.0f64) ∨ ¬(↕half ≅ 2.0f64):
+        1u8
+    ※ a tie goes to the even one, so this goes up where the one above went down
+    elif ¬(↕other ≅ 4.0f64):
+        2u8
+    ※ down is towards minus infinity and not towards zero, which is the whole
+    ※ difference between a floor and a truncation
+    elif ¬(↓down ≅ ⁻3.0f64) ∨ ¬(↑down ≅ ⁻2.0f64) ∨ ¬(↕down ≅ ⁻2.0f64):
+        3u8
+    elif ¬(↓small ≅ 0.0f64) ∨ ¬(↑small ≅ 1.0f64) ∨ ¬(↕small ≅ 0.0f64):
+        4u8
+    ※ a number with no room for a fraction is already whole
+    elif ¬(↓huge ≅ huge) ∨ ¬(↑huge ≅ huge) ∨ ¬(↕huge ≅ huge):
+        5u8
+    ※ the narrower format rounds the same way
+    elif ¬(↓narrow ≅ ⁻2.0f32) ∨ ¬(↑narrow ≅ ⁻1.0f32) ∨ ¬(↕narrow ≅ ⁻2.0f32):
+        6u8
+    ※ the mode a program is started with is round-to-nearest, and nothing in
+    ※ the language changes it
+    elif ¬(⇕half ≅ 2.0f64) ∨ ¬(⇕other ≅ 4.0f64) ∨ ¬(⇕down ≅ ⁻2.0f64):
+        7u8
+    ※ they are listable: written before an array, they reach every element
+    elif ¬(walked⟦0⟧ ≅ 1.0f64) ∨ ¬(walked⟦1⟧ ≅ ⁻2.0f64):
+        8u8
+    elif ¬(walked⟦2⟧ ≅ 2.0f64) ∨ ¬(walked⟦3⟧ ≅ 3.0f64):
+        9u8
+    ※ they bind as tightly as the other operators written before their operand
+    elif ¬(↓half + 1.0f64 ≅ 3.0f64):
+        10u8
+    ※ and what they answer is a value like any other
+    elif ¬(↑(half × 2.0f64) ≅ 5.0f64):
+        11u8
+    ※ several of them alive at once and round a loop, which is what makes the
+    ※ answer a register the allocator has to keep
+    elif ¬(summed(v) ≅ 6.0f64):
+        12u8
+    else:
+        0u8
+
+
+※ Rounding inside a loop, so that what a turn computes and what it carries are
+※ both live across the branch backwards.
+fn summed(v: f64⟦4⟧) → f64:
+    let total: mut f64 = 0.0f64
+    foreach x: f64 = v:
+        total ← total + ↓x + ↑x - ↕x
+    total

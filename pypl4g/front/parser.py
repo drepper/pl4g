@@ -144,6 +144,10 @@ _UNARY_OPERATORS: Final[dict[TokKind, ast.UnaryOp]] = {
     TokKind.SHAPE: ast.UnaryOp.SHAPE,
     TokKind.MAX: ast.UnaryOp.MAX,
     TokKind.MIN: ast.UnaryOp.MIN,
+    TokKind.FLOOR: ast.UnaryOp.FLOOR,
+    TokKind.CEILING: ast.UnaryOp.CEILING,
+    TokKind.NEAREST: ast.UnaryOp.NEAREST,
+    TokKind.ROUNDED: ast.UnaryOp.ROUNDED,
 }
 
 

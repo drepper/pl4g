@@ -89,7 +89,9 @@ class X86_64Target:
     def selector(self, streamer: MCStreamer) -> X86Selector:
         """The instruction selector for this target."""
         del streamer
-        return X86Selector(self.table)
+        # Whether the level has SSE4.1, which is what rounds a floating-point
+        # number without going through an integer.
+        return X86Selector(self.table, rounds=self._mclevel != "v1")
 
     def image_defaults(self) -> ImageDefaults:
         """The layout constants the image writer needs."""

@@ -29,6 +29,22 @@ class Op:
         return "".join(("Op(", self.name, ")"))
 
 
+class Rounding(Enum):
+    """Which whole number a floating-point number is rounded to.
+
+    Four, and three of them say which way they go.  The fourth asks the
+    processor what it is doing just now, which every one of these machines holds
+    in a register of its own and which nothing in the language can change -- so
+    it is a question about where the program is running and not about the
+    program.
+    """
+
+    DOWN = "down"
+    UP = "up"
+    NEAREST = "nearest"
+    CURRENT = "current"
+
+
 class Condition(Enum):
     """What a conditional branch tests.
 

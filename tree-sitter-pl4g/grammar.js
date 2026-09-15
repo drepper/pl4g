@@ -610,7 +610,8 @@ module.exports = grammar({
     // `\u00ac ready \u2227 seen` is `(\u00ac ready) \u2227 seen` and `\u00ac (a < b)` needs its parentheses --
     // the same rule '!' follows in C, Go and Rust.
     unary_expression: $ => prec(12, seq(
-      field('operator', choice('~', '\u00ac', '#', '\u2374', '\u2308', '\u230a')),
+      field('operator', choice('~', '\u00ac', '#', '\u2374', '\u2308', '\u230a',
+                               '\u2193', '\u2191', '\u2195', '\u21d5')),
       $._non_comparison,
     )),
 

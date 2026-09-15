@@ -776,6 +776,56 @@ several lint tools offer and no compiler turns on.  This language turns it on be
 rule is the language's way of stating a rule the reader may not know, and because a generator that emits an exact comparison has
 almost certainly emitted the wrong one.
 
+#### Rounding
+
+**Four operators answer the whole number a floating-point number rounds to.**  Three name a direction and the fourth asks the
+processor.
+
+| Written | Rounds | Compare |
+|---|---|---|
+| `↓x` | to the whole number **below** it, towards −∞ | C's `floor` |
+| `↑x` | to the whole number **above** it, towards +∞ | C's `ceil` |
+| `↕x` | to the **nearer** of the two, a tie going to the even one | C's `nearbyint` under the default mode |
+| `⇕x` | by **whichever way the processor is rounding just now** | C's `nearbyint` |
+
+```
+↓ 2.5f64                        ※ 2.0
+↑ 2.5f64                        ※ 3.0
+↕ 2.5f64                        ※ 2.0 -- a tie goes to the even one
+↕ 3.5f64                        ※ 4.0 -- which is why this goes the other way
+↓ ⁻2.5f64                       ※ -3.0 -- towards minus infinity, not towards zero
+```
+
+**The answer is of the type it was given.**  A rounded `f64` is an `f64`, not an integer.  That is what every machine's
+instruction does and it is the honest answer: which integer type the value would fit in is a question about the value and not
+about its type, and an answer that turned out not to fit would have to stop the program.  A program that wants an integer says so,
+and the conversion is written where it happens.
+
+**A tie goes to the even number**, which is what IEEE 754 calls round-to-nearest and what all three of these machines do.  So
+`↕2.5` is 2 and `↕3.5` is 4.  The other rule -- a tie going away from zero, which is C's `round` and what most people are taught
+-- has a bias that shows up as soon as many values are rounded and added, which is the thing this operator is usually part of.
+
+**`⇕` reads the processor's rounding mode**, which is state outside the function and outside the language: two of them with the
+same value can answer differently in two places.  So **a function that writes `⇕` is marked `@[impure]`** (4508).  Nothing in the
+language sets the mode -- a program starts in round-to-nearest and stays there unless something outside it says otherwise -- so
+this operator is for a program that is called from one that does.
+
+**They are defined on floating-point values and on nothing else** (4507).  An integer is a whole number already.
+
+**They are listable**, so written before an array they reach every element, and they bind as tightly as every other operator
+written before its operand.
+
+Compare: **C**, whose `floor`, `ceil`, `round`, `trunc`, `rint` and `nearbyint` are these plus two more, as six library functions
+whose names say nothing about which is which; **C#** and **Python**, whose `round` is banker's rounding as `↕` is, which
+surprises people every time; **Rust**, whose `f64::floor`, `ceil` and `round` are methods and whose `round` is ties-away, with no
+way to reach the current mode at all; **Go**, the same through `math`; **APL**, whose `⌈` and `⌊` *are* ceiling and floor of a
+number, which this language spends on the largest and the smallest instead -- there being no ceiling of an integer to want, and
+the arrows saying which way a value moves at least as plainly; and **Zig**, whose `@floor`, `@ceil` and `@round` are builtins and
+which likewise offers no way to ask the mode.
+
+What is not here is a truncation towards zero, and it is not an omission: it is `↓` where the value is positive and `↑` where it
+is negative, and the operator that would say it in one glyph is the binary form these four do not have yet.
+
 #### Approximate comparisons
 
 Six more operators compare two floating-point values, allowing for the small errors such a computation accumulates.  Each is one

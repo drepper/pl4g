@@ -207,6 +207,15 @@ SHAPE_GLYPH: Final[str] = "\N{APL FUNCTIONAL SYMBOL RHO}"
 MAX_GLYPH: Final[str] = "\N{LEFT CEILING}"
 MIN_GLYPH: Final[str] = "\N{LEFT FLOOR}"
 
+#: The four roundings of a floating-point number, written before it.  The arrows
+#: say which way the value moves: down to the whole number below it, up to the
+#: one above, either way to whichever is nearer, and the double arrow to
+#: whichever the processor's own rounding mode says.
+FLOOR_GLYPH: Final[str] = "\N{DOWNWARDS ARROW}"
+CEILING_GLYPH: Final[str] = "\N{UPWARDS ARROW}"
+NEAREST_GLYPH: Final[str] = "\N{UP DOWN ARROW}"
+ROUNDED_GLYPH: Final[str] = "\N{UP DOWN DOUBLE ARROW}"
+
 #: Accepted substitute for the arrow.  Two characters, so it claims nothing.
 ARROW_ASCII: Final[str] = "->"
 
@@ -332,6 +341,10 @@ class TokKind(StrEnum):
     SHAPE = "'\N{APL FUNCTIONAL SYMBOL RHO}'"
     MAX = "'\N{LEFT CEILING}'"
     MIN = "'\N{LEFT FLOOR}'"
+    FLOOR = "'\N{DOWNWARDS ARROW}'"
+    CEILING = "'\N{UPWARDS ARROW}'"
+    NEAREST = "'\N{UP DOWN ARROW}'"
+    ROUNDED = "'\N{UP DOWN DOUBLE ARROW}'"
 
     DOC_COMMENT = "documentation comment"
     NEWLINE = "end of line"

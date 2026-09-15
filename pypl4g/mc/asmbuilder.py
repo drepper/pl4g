@@ -32,7 +32,7 @@ from .inst import MCInst
 from .desc import InstFlags
 from .machine import MachineBasicBlock, MachineFunction, MalformedGraph
 from .operand import MCImm, MCMem, MCOperand, MCReg, MCSymRef, RelocKind, SymExpr
-from .ops import Condition, Op
+from .ops import Condition, Op, Rounding
 from collections.abc import Mapping
 
 from .reg import PhysReg, Reg, RegisterInfo, RegUnit
@@ -128,6 +128,29 @@ class InstructionSelector(Protocol):
     def select_float_abs(self, dst: Reg, src: MCOperand, bits: int,
                          span: Span) -> Sequence[MCInst]:
         """Instructions that put the magnitude of *src* into *dst*."""
+        ...
+
+    def select_float_round(self, how: Rounding, dst: Reg, src: MCOperand,
+                           bits: int, span: Span) -> Sequence[MCInst]:
+        """Instructions that put the whole number *src* rounds to into *dst*."""
+        ...
+
+    def select_float_to_int(self, how: Rounding, dst: Reg, src: MCOperand,
+                            bits: int, span: Span) -> Sequence[MCInst]:
+        """Instructions that put *src* into *dst* as a whole number, rounded the
+        stated way."""
+        ...
+
+    def select_int_to_float(self, dst: Reg, src: MCOperand, bits: int,
+                            span: Span) -> Sequence[MCInst]:
+        """Instructions that put the whole number *src* into *dst* as a
+        floating-point value of *bits*."""
+        ...
+
+    def select_float_copysign(self, dst: Reg, magnitude: MCOperand,
+                              sign: MCOperand, bits: int,
+                              span: Span) -> Sequence[MCInst]:
+        """Instructions that put *magnitude* into *dst* with *sign*'s sign."""
         ...
 
     def select_float_extend(self, dst: Reg, src: MCOperand, from_bits: int,
@@ -719,6 +742,27 @@ class Assembler:
                   span: Span = INVALID_SPAN) -> None:
         """Put the magnitude of *src* into *dst*."""
         self._emit(self._selector.select_float_abs(dst, src, bits, span))
+
+    def float_round(self, how: Rounding, dst: Reg, src: MCOperand, bits: int,
+                    span: Span = INVALID_SPAN) -> None:
+        """Put the whole number *src* rounds to into *dst*."""
+        self._emit(self._selector.select_float_round(how, dst, src, bits, span))
+
+    def float_to_int(self, how: Rounding, dst: Reg, src: MCOperand, bits: int,
+                     span: Span = INVALID_SPAN) -> None:
+        """Put *src* into *dst* as a whole number, rounded the stated way."""
+        self._emit(self._selector.select_float_to_int(how, dst, src, bits, span))
+
+    def int_to_float(self, dst: Reg, src: MCOperand, bits: int,
+                     span: Span = INVALID_SPAN) -> None:
+        """Put the whole number *src* into *dst* as a floating-point value."""
+        self._emit(self._selector.select_int_to_float(dst, src, bits, span))
+
+    def float_copysign(self, dst: Reg, magnitude: MCOperand, sign: MCOperand,
+                       bits: int, span: Span = INVALID_SPAN) -> None:
+        """Put *magnitude* into *dst* with *sign*'s sign."""
+        self._emit(self._selector.select_float_copysign(dst, magnitude, sign,
+                                                        bits, span))
 
     def float_extend(self, dst: Reg, src: MCOperand, from_bits: int, to_bits: int,
                      span: Span = INVALID_SPAN) -> None:

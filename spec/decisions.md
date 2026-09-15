@@ -3866,6 +3866,48 @@ other end of the range and is a much larger promise to keep.
 
 ---
 
+## 2026-09-15T20:10+02:00 — language
+
+**Four rounding operators, written with arrows**
+
+Decided on the user's direction: `↓` to the whole number below, `↑` to the one above, `↕` to the nearer of the two, `⇕` by the
+processor's own rounding mode, all four listable, and a function that writes the fourth marked `@[impure]`.
+
+**The arrows rather than APL's `⌈` and `⌊`.**  Those are ceiling and floor in APL and would have been the obvious glyphs, and
+they are already spent here on the largest and the smallest — which is the better use of them, there being no ceiling of an
+*integer* to want and APL itself writing the reduction as `⌈/`.  What the arrows buy is that all four roundings are one family
+with one shape, which two ceiling-brackets and two more glyphs would not have been; and a double arrow for "go and ask" beside a
+single one for "go either way" says the difference between the two without a word.
+
+**The answer is of the type it was given.**  Every machine's instruction does this, and the alternative — answering an integer —
+would have to pick a width, and then stop the program whenever the value did not fit in it.  Rounding is a question about the
+*value*; converting is a question about the *type*; a language that ran the two together would make the cheap one able to fail.
+C, Rust, Go, Zig and APL all answer in the floating-point type as well.
+
+**A tie goes to the even number.**  IEEE 754's round-to-nearest, and what `roundsd`, `frintn` and RISC-V's `rne` all do without
+being asked twice — so it is both the principled answer and the free one.  The other rule, a tie going away from zero, is C's
+`round` and what most people are taught, and it has a bias that shows the moment many rounded values are added, which is what this
+operator is usually part of.  Python and C# made the same choice and are asked about it constantly; that is a cost in surprise,
+paid once, against a cost in accuracy paid every time.
+
+**A function that writes `⇕` is impure.**  What it reads is a register of the processor's, which nothing in the language sets, so
+two of them with the same argument can answer differently in two places — which is precisely what `@[impure]` already means here.
+It also keeps the other three honestly pure, so a compiler may fold them and move them about.  C's `nearbyint` is inside
+`#pragma STDC FENV_ACCESS`, which almost no compiler implements and almost no program writes, so in practice C lets the mode be
+read with no marking at all and optimizes as though it had not been; Rust and Go do not offer the mode at all.  Marking it is the
+smaller of the three answers and the only honest one.
+
+**No truncation towards zero.**  It is `↓` for a positive value and `↑` for a negative one, which the binary form these operators
+do not have yet would say in one glyph; adding a fifth glyph for it now would be the spelling that has to be unlearned later.
+
+Compare: **C**, six library functions whose names say nothing about which is which and whose `rint` and `nearbyint` differ only in
+whether an inexact answer is signalled; **Rust** and **Go**, three methods each and no way to reach the mode; **Zig**, three
+builtins, likewise; **Python** and **C#**, one function with banker's rounding; **APL**, whose `⌈` and `⌊` are these two of the
+four and whose glyphs this language spends elsewhere; and **Common Lisp**, whose `floor`, `ceiling`, `round` and `truncate` answer
+two values, the quotient and the remainder, which is the one design here that answers more than this does.
+
+---
+
 Open questions
 --------------
 

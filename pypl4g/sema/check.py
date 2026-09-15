@@ -441,6 +441,15 @@ _UNARY_OPS: Final[dict[ast.UnaryOp, UnOp]] = {
     ast.UnaryOp.BIT_NOT: UnOp.NOT,
 }
 
+#: The four roundings, and the operation each is.  Three of them name a
+#: direction and the fourth asks the processor which it is using.
+_ROUNDINGS: Final[dict[ast.UnaryOp, UnOp]] = {
+    ast.UnaryOp.FLOOR: UnOp.FLOOR,
+    ast.UnaryOp.CEILING: UnOp.CEIL,
+    ast.UnaryOp.NEAREST: UnOp.NEAREST,
+    ast.UnaryOp.ROUNDED: UnOp.ROUNDED,
+}
+
 
 #: What the tolerance is called in the image.  The name a program writes it by
 #: is not a name an assembler or a debugger would take, so the two differ; the
@@ -5944,6 +5953,8 @@ class Checker:
             return self._lower_shape(builder, expr, expected)
         if expr.op in (ast.UnaryOp.MAX, ast.UnaryOp.MIN):
             return self._lower_extremum(builder, expr, expected)
+        if expr.op in _ROUNDINGS:
+            return self._lower_rounding(builder, expr, expected)
         outer, self._operand_of = self._operand_of, expr.op.value
         was_listing, self._listing = self._listing, True
         try:
@@ -5968,6 +5979,51 @@ class Checker:
                              operator=expr.op.value, found=ty.render())
             return UndefConst(ERROR)
         return builder.unary(_UNARY_OPS[expr.op], operand, expr.span)
+
+    def _lower_rounding(self, builder: IRBuilder, expr: ast.Unary,
+                        expected: Type | None) -> Value:
+        """Lower one of the four roundings: the whole number a number goes to.
+
+        What comes back is of the type it was given -- a rounded `f64` is an
+        `f64` and not an integer.  That is the arrangement every machine's
+        instruction has, and it is the honest one: which integer type the answer
+        would fit in is a question about the value and not about the type, and
+        one that turned out wrong would have to stop the program.  A program
+        that wants an integer says so, and the conversion is where it is
+        written.
+
+        Three of the four say which way they go.  The fourth asks the processor,
+        which is state outside the function, so a function that writes it says
+        `@[impure]`.
+
+        They are listable, and it costs nothing to say so: the walk over an
+        array is the one every operator written before its operand already has,
+        and what is different about these is only what they are defined on.
+        """
+        if expr.op is ast.UnaryOp.ROUNDED:
+            self._an_effect(D.LANG_PURE_READS_THE_ROUNDING_MODE, expr.span)
+        outer, self._operand_of = self._operand_of, expr.op.value
+        was_listing, self._listing = self._listing, True
+        try:
+            operand = self._lower_expr(builder, expr.operand,
+                                       self._scalar_of(expected))
+        finally:
+            self._operand_of = outer
+            self._listing = was_listing
+        walked = self._walk_operands(builder, expr, (("operand", operand),),
+                                     expected)
+        if walked is not None:
+            return walked
+        # What it is defined on is never a run of values, so the question is
+        # asked of what a run of them is a run of.
+        ty = self._scalar_of(self._value_type_of(operand))
+        if ty is ERROR or ty is None:
+            return UndefConst(ERROR)
+        if not isinstance(ty, FloatType):
+            self._diags.emit(D.LANG_TYPE_OPERAND_NOT_FLOAT, expr.operand.span,
+                             operator=expr.op.value, found=ty.render())
+            return UndefConst(ERROR)
+        return builder.unary(_ROUNDINGS[expr.op], operand, expr.span)
 
     def _lower_length(self, builder: IRBuilder, expr: ast.Unary,
                       expected: Type | None) -> Value:
