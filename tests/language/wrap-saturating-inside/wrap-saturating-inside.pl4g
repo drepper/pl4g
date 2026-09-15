@@ -1,0 +1,15 @@
+※ pl4g-test: compile=error diag=4488
+
+※ A wrap says one thing about every operator written inside it: that going past
+※ the end of the type is what was meant and the low bits are the answer.  A
+※ saturating operator says the opposite about itself.  Only one of the two can be
+※ what the program meant, and which one is not something to guess at -- so it is
+※ reported, and the saturating step that really was meant is written outside the
+※ wrap with its answer handed in.
+
+let a: u8 = 200u8
+let b: u8 = 100u8
+
+@[startup]
+fn main() → u8:
+    ⎕wrap(a ⊞ b)

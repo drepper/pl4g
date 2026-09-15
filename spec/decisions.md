@@ -3453,13 +3453,17 @@ and changes what the operators in it mean.  There is nothing for it to stand for
 expression is an error of its own rather than a type mismatch.  The `⎕` sigil is what makes that possible without taking a name
 away from any program.
 
-**The saturating operators wrap inside it too.**  This is the one part that could have gone the other way: `⊞` is a program
-explicitly asking to stop at the end of the type, and a wrap silently turning it into an addition that runs round could be called
-a contradiction the compiler ought to report.  It is decided the other way because a wrap has to mean one thing: *every operator
-in here keeps the low bits*.  A reader checking whether a region is safe to wrap should not have to also check which operators in
-it were exempt, and a rule with an exception in it is a rule that gets the exception wrong.  Refusing the saturating glyphs
-inside a wrap was the alternative considered; it is a smaller language and a worse one, because the program that wants a
-saturating step inside a mostly-wrapping expression can write it outside the wrap and hand it in.
+**A saturating operator inside a wrap is an error.**  This is the part that was decided twice.  The first answer was that `⊞`
+inside a wrap becomes an addition that runs round, on the grounds that a wrap has to mean one thing and a rule with an exception
+in it is a rule that gets the exception wrong.  The user reversed it, and the reversal is right: the two are not a rule and an
+exception to it, they are a contradiction.  `⊞` is a program saying *the end of the type is the answer* and a wrap is the same
+program saying *the low bits are*.  Silently keeping one of them makes the compiler pick which half of a sentence its author
+meant, which is the thing a compiler should never do quietly -- and the cost of picking wrong is a program that computes
+something plausible and wrong rather than one that fails to build.
+
+The reason it is not merely a lint is that there is nothing to warn about: neither reading is defensible enough to emit code for.
+And the program that wants a saturating step inside a mostly-wrapping expression loses nothing, since it writes that step outside
+the wrap and hands the answer in -- which also reads better, the two different intentions being on two different lines.
 
 **Shifts take their distance modulo the width rather than being undefined.**  C leaves a shift by the width or more undefined,
 which is where this language otherwise stops the program; inside a wrap it cannot stop the program, so the question is what it

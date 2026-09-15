@@ -348,7 +348,8 @@ past -- and it is why every such test names the ordinary operation.
 
 **`⎕wrap` is a flag on the lowering and not a node in the graph.**  The checker carries one bit saying whether what is being
 lowered stands inside one, and every operator asks it before choosing which instruction it is: `+` becomes `wrap.add` rather than
-`add`, `⊞` becomes `wrap.add` rather than `sat.add`, `«` becomes `wrap.shl` rather than `shl`.  Nothing survives into the IR
+`add`, and `«` becomes `wrap.shl` rather than `shl`.  A saturating operator asks it too and reports rather than choosing,
+which is the one place the bit is read for something other than an opcode.  Nothing survives into the IR
 saying that a wrap was written: what survives is which operations it chose, which is all anything after the checker needs.  That
 is what makes it lexical for free, and what makes it stop at a call -- a callee's body is lowered with the bit as its own
 definition left it.

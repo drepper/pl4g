@@ -363,24 +363,29 @@ _ALL_AT_ONCE_UNARY: Final[frozenset[ast.UnaryOp]] = frozenset((
 #: ones that would have stopped the program do not, and the ones that would have
 #: stopped at the end of the type do not either.
 #:
-#: The saturating three are here for the second of those reasons, which is the
-#: part worth saying out loud: `⨁` inside a wrap is an addition that wraps and not
-#: one that saturates.  A wrap says what every operator inside it means, and an
-#: operator that meant something else would make that untrue of the one place a
-#: reader most needs it to hold.
+#: The saturating three are not here, and not because a wrapping form of them
+#: would be hard to emit.  They are reported instead: a saturating operator says
+#: the end of the type is the answer and a wrap says the low bits are, only one
+#: of the two can be what the program meant, and which one is not something to
+#: guess at.  Where the saturating step really was meant it is written outside
+#: the wrap and its answer handed in.
 #:
-#: Dividing and taking a remainder are not here.  Neither of them can go past
-#: the end of a type by arithmetic -- what they have is a pair with no answer at
-#: all, a divisor of zero -- so there is nothing about them for a wrap to say.
+#: Dividing and taking a remainder are not here either.  Neither of them can go
+#: past the end of a type by arithmetic -- what they have is a pair with no
+#: answer at all, a divisor of zero -- so there is nothing about them for a wrap
+#: to say, and nothing to contradict.
 _WRAPPED: Final[dict[BinOp, BinOp]] = {
     BinOp.ADD: BinOp.WRAP_ADD, BinOp.SUB: BinOp.WRAP_SUB,
     BinOp.MUL: BinOp.WRAP_MUL,
-    BinOp.SAT_ADD: BinOp.WRAP_ADD, BinOp.SAT_SUB: BinOp.WRAP_SUB,
-    BinOp.SAT_MUL: BinOp.WRAP_MUL,
     BinOp.SHL: BinOp.WRAP_SHL, BinOp.ASHR: BinOp.WRAP_ASHR,
     BinOp.LSHR: BinOp.WRAP_LSHR,
     BinOp.ROTL: BinOp.WRAP_ROTL, BinOp.ROTR: BinOp.WRAP_ROTR,
 }
+
+#: The three that say of themselves that they stop at the end of the type, which
+#: is what a wrap says its operators do not do.
+_SATURATES: Final[frozenset[ast.BinaryOp]] = frozenset((
+    ast.BinaryOp.SAT_ADD, ast.BinaryOp.SAT_SUB, ast.BinaryOp.SAT_MUL))
 
 _BINARY_OPS: Final[dict[ast.BinaryOp, BinOp]] = {
     ast.BinaryOp.BIT_AND: BinOp.AND,
@@ -5068,6 +5073,13 @@ class Checker:
         finally:
             self._operand_of = outer
             self._listing = was_listing
+        if self._wrapping and expr.op in _SATURATES:
+            # Both halves have been lowered, so a mistake in either is reported
+            # as well; what is reported here is the one thing that is about the
+            # operator rather than about its operands.
+            self._diags.emit(D.LANG_WRAP_SATURATING_INSIDE, expr.span,
+                             operator=expr.op.value)
+            return UndefConst(ERROR)
         if ty is not ERROR:
             walked = self._walk_operands(builder, expr,
                                          (("left", left), ("right", right)),

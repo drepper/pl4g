@@ -4161,6 +4161,28 @@
       "option": null
     },
     {
+      "number": 4488,
+      "name": "LANG_WRAP_SATURATING_INSIDE",
+      "severity": "error",
+      "message": "'{operator}' stops at the end of its type, and '⎕wrap' says the operators inside it do not",
+      "args": [
+        {
+          "name": "operator",
+          "type": "string",
+          "description": "the saturating operator that was written"
+        }
+      ],
+      "cause": "A wrap says one thing about every operator written inside it: that going past the end of the type is what was meant and the low bits are the answer.  A saturating operator says the opposite about itself, that the end of the type is the answer.  Only one of the two can be what the program meant, and which one is not something to guess at.  Where the saturating step really was meant, it is written outside the wrap and its answer handed in.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Arithmetic",
+        "requirement": "The saturating operators are not written inside '⎕wrap'."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 4487,
       "name": "LANG_WRAP_IS_NOT_A_VALUE",
       "severity": "error",

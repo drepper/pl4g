@@ -7,9 +7,10 @@
 ※ with -- so an unsuffixed literal inside takes its type from outside exactly as
 ※ it would have without it.
 ※
-※ Every operator inside it wraps, and that includes the saturating three: a
-※ wrap says what every operator inside it means, and one that went on saturating
-※ would make that untrue in the one place a reader most needs it to hold.
+※ Every operator that can go past the end of its type wraps inside it.  The
+※ saturating three are not among them: they say the opposite about themselves,
+※ so writing one inside a wrap is reported rather than resolved, which is what
+※ `wrap-saturating-inside` holds.
 ※
 ※ A shift or a rotation inside one takes its distance modulo the width of the
 ※ type rather than stopping the program.  Every width is a power of two, so that
@@ -39,10 +40,10 @@ fn main() → u8:
         6u8
     elif ⎕wrap(wide + wide) ≠ 17553255926290448384u64:
         7u8
-    ※ the saturating operators wrap here too
-    elif ⎕wrap(a ⊞ b) ≠ 44u8:
+    ※ outside the wrap they still saturate, which is what they are for
+    elif a ⊞ b ≠ 255u8:
         8u8
-    elif ⎕wrap(b ⊟ a) ≠ 156u8:
+    elif b ⊟ a ≠ 0u8:
         9u8
     ※ a distance of the width or more, taken modulo the width
     elif ⎕wrap(n « 9u8) ≠ 2u8:

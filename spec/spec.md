@@ -499,14 +499,23 @@ bits, which is what C does and what this language otherwise refuses.
 because there is no other notation that says "this far and no further" about an expression, and because parentheses are where a
 reader already looks for that.
 
-**Every operator written inside it wraps.**  `+`, `-` and `×` keep the low bits instead of stopping the program.  `⊞`, `⊟` and
-`⊠` keep them instead of stopping at the end of the type: a wrap says what every operator inside it means, and one that went
-on saturating would make that untrue in the one place a reader most needs it to hold.  `«`, `»`, `↺` and `↻` take their distance modulo the
-width of the type instead of stopping the program where it is the width or more -- every width is a power of two, so that is
-exact.  The bitwise operators and the comparisons are unchanged, having nothing to go past.
+**Every operator written inside it that could go past the end wraps.**  `+`, `-` and `×` keep the low bits instead of
+stopping the program.  `«`, `»`, `↺` and `↻` take their distance modulo the width of the type instead of stopping the
+program where it is the width or more -- every width is a power of two, so that is exact.  The bitwise operators and the
+comparisons are unchanged, having nothing to go past.
 
-**Dividing and taking a remainder are unchanged too.**  Neither can go past the end of a type by arithmetic; what they have is a
-pair with no answer at all, and a wrap has nothing to say about that.
+**`⊞`, `⊟` and `⊠` inside a wrap are an error.**  A wrap says the low bits are the answer; a saturating operator says the
+end of the type is.  Only one of the two can be what the program meant, and which one is not something for a compiler to guess
+at -- so it is reported rather than resolved.  Where the saturating step really was meant, it is written outside the wrap and its
+answer handed in:
+
+```
+let held: u8 = a ⊞ b               ※ this one stops at 255
+⎕wrap(held × 3u8)                ※ and this one runs round
+```
+
+**Dividing and taking a remainder are unchanged.**  Neither can go past the end of a type by arithmetic; what they have is a
+pair with no answer at all, and a wrap has nothing to say about that, so there is nothing for them to contradict either.
 
 **It reaches what is written inside it and no further.**  A function called from inside one was written somewhere else and says
 for itself what its operators mean:
@@ -522,7 +531,8 @@ fn summed(x: u8, y: u8) → u8:
 an array asks the same question of every element, and a wrap is what says that question is not being asked at all.
 
 Compare: **C and C++**, where unsigned arithmetic wraps and signed arithmetic is undefined, so there is no way to ask for one
-without the other and no way to ask for neither; **Rust**, whose `wrapping_add` and relatives are methods, one per operation,
+without the other and no way to ask for neither, and where nothing contradicts anything because nothing is said; **Rust**, whose
+`wrapping_add` and relatives are methods, one per operation,
 which reads as a different program rather than as the same program with one thing said about it; **Zig**, whose `+%`, `-%` and
 `*%` are operators of their own -- the closest of the three, with the difference that there every operator in an expression has
 to carry the mark and here the expression carries it once; **Go**, which wraps always and offers nothing else; and **Swift**,
