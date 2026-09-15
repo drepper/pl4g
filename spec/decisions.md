@@ -4430,6 +4430,43 @@ Compare: **Ada**, whose dimension checking applies a conversion factor, which is
 in error messages; **Java** and **Swift** libraries that carry the unit at run time, which costs a word and a check per quantity;
 **C**, **Go** and **Zig**, which have nothing.
 
+---
+
+## 2026-09-16T15:10+02:00 — compiler
+
+**A bill of materials in every image**
+
+Decided on the user's direction, with three sub-decisions chosen by the user.
+
+**The tokens are hashed and not the text.**  That is the whole of what makes the thing worth having: a hash over the bytes moves
+when somebody reformats a file, and a hash that moves for no reason is one nobody checks.  So the token stream is normalized --
+a block's begin and end become one mark each whichever notation wrote them, the layout colon goes away, a statement separator is
+one mark whether a newline or a semicolon said so, and a literal is the value rather than the characters.  Two spellings of one
+program have one hash.
+
+**SHA-256, all sixty-four hex digits**, chosen by the user from three.  It is what every SBOM format names first and what
+`sha256sum` prints, so a row can be checked by hand; the truncated and BLAKE2 alternatives saved bytes in a section that is
+already the smallest thing in the file.
+
+**The compiler's row is the hash of a version string**, chosen by the user over hashing the compiler's own sources.  It is a
+constant the project bumps, which is what a released compiler would report anyway; hashing the sources would have made every
+binary depend on the working tree, which is more truthful and less useful.
+
+**`.sbomstr` is loaded with `.sbom`**, chosen by the user.  The table holds offsets into it, so loading one without the other
+gives a running program a table it cannot read -- and a program that can report its own bill of materials is the reason to load
+either.
+
+**It is always emitted.**  A bill of materials behind a flag is one nobody can rely on being there.  What it costs is two
+sections, about two hundred bytes of headers, and a second loadable segment, which is the price of the sections being read-only
+while the code is not.
+
+Compare: **SPDX** and **CycloneDX**, which are documents beside the artifact and describe dependencies rather than sources --
+what is here is narrower and is *in* the artifact, which is the property neither has.  **Go**'s `runtime/debug.BuildInfo`, which
+is the closest thing: module versions and build settings, embedded in the binary and readable by the program itself; it records
+what was depended on rather than a hash of what was compiled.  **Rust**'s `cargo auditable`, which embeds the dependency tree as
+compressed JSON.  What is unusual here is the per-definition row: it is a hash of what each function *means*, which nothing else
+in that list carries, and it is only meaningful because the hash is over normalized tokens.
+
 Open questions
 --------------
 

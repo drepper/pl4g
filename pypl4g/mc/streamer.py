@@ -30,12 +30,14 @@ class MCStreamer:
 
     def get_section(self, name: str, *, executable: bool = False, writable: bool = False,
                     alignment: int = 1, alloc: bool = True,
-                    sh_type: int = 1) -> MCSection:
+                    sh_type: int = 1, sh_link_to: str = "",
+                    sh_entsize: int = 0) -> MCSection:
         """Return the named section, creating it if necessary."""
         found = self.sections.get(name)
         if found is None:
             found = MCSection(name=name, executable=executable, writable=writable,
-                              alignment=alignment, alloc=alloc, sh_type=sh_type)
+                              alignment=alignment, alloc=alloc, sh_type=sh_type,
+                              sh_link_to=sh_link_to, sh_entsize=sh_entsize)
             self.sections[name] = found
         return found
 

@@ -210,9 +210,10 @@ class ElfWriter:
         start = offset
         for section in sections:
             offset = align_up(offset, max(section.alignment, 1))
-            plan = SectionPlan(name=section.name, sh_type=SHT_PROGBITS,
+            plan = SectionPlan(name=section.name, sh_type=section.sh_type,
                                sh_flags=self._section_flags(section),
-                               sh_addralign=max(section.alignment, 1), alloc=True)
+                               sh_addralign=max(section.alignment, 1), alloc=True,
+                               sh_entsize=section.sh_entsize)
             plan.offset = offset
             plan.addr = offset + bias
             plan.size = section.size
@@ -275,6 +276,14 @@ class ElfWriter:
             if plan.name == ".symtab":
                 plan.sh_link = indices[".strtab"]
                 plan.sh_info = first_global
+        # A section that said which other one its contents point into is linked
+        # to it here, where the indices are finally known.  The bill of
+        # materials is a table of offsets and is unreadable without it.
+        for section in self._sections:
+            if section.sh_link_to:
+                for plan in layout.sections:
+                    if plan.name == section.name:
+                        plan.sh_link = indices.get(section.sh_link_to, 0)
 
     def _place_symbols(self) -> None:
         """Give every defined symbol the address its section and offset imply."""

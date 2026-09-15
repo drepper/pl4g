@@ -1116,7 +1116,12 @@ class Checker:
             self._diags.emit(D.LANG_IMPORT_UNREADABLE, node.source_span,
                              name=node.source, reason=str(exc))
             return None
-        return parse(tokenize(source, self._diags), path.as_posix(), self._diags)
+        tokens = tokenize(source, self._diags)
+        found = parse(tokens, path.as_posix(), self._diags)
+        # A module read here is a source of the program like any other, and the
+        # bill of materials has to name it.
+        self._sources.record(path, tokens, found)
+        return found
 
     def _lower_member(self, builder: IRBuilder, expr: ast.Member,
                       expected: Type | None) -> Value:

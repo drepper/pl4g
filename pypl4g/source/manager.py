@@ -32,6 +32,20 @@ class SourceDecodeError(Exception):
 
 
 @dataclass(slots=True)
+class ReadUnit:
+    """One file that was read, its tokens and what they parsed to.
+
+    The types are left open here on purpose: the source layer is below the
+    front end and does not know what a token or a syntax tree is, and what
+    keeps this list is that it is the one place that sees every file.
+    """
+
+    path: Path
+    tokens: object
+    unit: object
+
+
+@dataclass(slots=True)
 class SourceFile:
     """One source file and the data needed to resolve positions inside it."""
 
@@ -73,6 +87,15 @@ class SourceManager:
         self._files: list[SourceFile] = []
         self._bases: list[Loc] = []
         self._next_base: Loc = 0
+        #: What was read and what it parsed to, in the order it was read.  The
+        #: bill of materials is written from this, and this is where it is kept
+        #: because the files are read from two places -- the command line and an
+        #: import -- and neither knows about the other.
+        self.read_units: list[ReadUnit] = []
+
+    def record(self, path: Path, tokens: object, unit: object) -> None:
+        """Record that *path* was read and what came of reading it."""
+        self.read_units.append(ReadUnit(path=path, tokens=tokens, unit=unit))
 
     @property
     def files(self) -> list[SourceFile]:

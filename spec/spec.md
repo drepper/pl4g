@@ -3633,6 +3633,47 @@ A constructor and a destructor take no parameters and return `void`, because the
 nowhere to put a result.
 
 
+#### What the Image Says It Was Built From
+
+**Every image carries a bill of materials**, in two sections that are always emitted.  There is no flag: one that a flag turns
+off is one nobody can rely on being there, and the question it answers -- what is this built from -- is asked of binaries nobody
+thought to ask about at the time.
+
+`.sbom` is a table of rows, three four-byte fields each: where the hash is, what kind of thing the row is about, and where the
+name is.  The two offsets are into `.sbomstr`, which the table's `sh_link` names.  Both are loaded and read-only: the table holds
+offsets into the strings, so one without the other would be a table a running program could not read.
+
+The hashes are **SHA-256, written out as all sixty-four hex digits**, so that a row can be checked against what `sha256sum`
+prints.  There are five kinds:
+
+| tag | what it is about |
+| --- | --- |
+| 1 | the compiler, by the name it calls itself |
+| 2 | one source file |
+| 3 | every source, in the order they were read |
+| 4 | one function |
+| 5, 6, 7 | one type, one variable, one unit |
+
+The hash of every source together is the hash of *their hashes*, in order -- which says the same thing as reading them all again
+and is what lets the whole be checked without the parts.
+
+**What is hashed is the tokens and not the text.**  A program means the same thing written with indentation or with braces, with
+one space or four, with a comment in the middle or without, and `0x10` and `16` are one number; a hash over the bytes would call
+all of those different programs.  So the token stream is normalized first:
+
+- the marks that say a block begins and ends become one mark each, whichever notation was used -- an indent and a brace are one
+  thing, and so are a dedent and the closing brace;
+- the colon that introduces a layout block goes away, because the mark after it already said a block begins;
+- a statement separator is one mark whether a newline or a semicolon was written;
+- a literal is written as the value it stands for rather than as the characters it was written with.
+
+Two spellings of one program therefore have one hash, which is the only thing that makes a hash of a definition worth recording:
+a definition whose hash moves when somebody reformats it says nothing about whether the program changed.
+
+A definition's hash covers its attributes as well as its body, because what a definition says about itself is part of what it is.
+Every definition of every source read is named, including one the image did not need and dropped: what the bill of materials is
+about is what went in.
+
 #### Names in the Generated Program
 
 The name a function is known by in the generated program is its signature written out: the name, the parameter types in

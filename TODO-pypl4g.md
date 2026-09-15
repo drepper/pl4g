@@ -411,6 +411,14 @@ To Do List for the pypl4g compiler
     several has nowhere to go.  It is what stops `\N{APL FUNCTIONAL SYMBOL QUAD}enumerate` counting the turns of a dictionary, whose turn is already a
     pair, and it is the same gap as the array below.
 
+[ ] make the bill of materials the same in two directories.  A source's row names the path it was read from, so the same program
+    built from two places gives two images.  What should be recorded instead -- a path relative to something, or only the name --
+    is a question about what a consumer of the table wants to match on, and nothing consumes it yet.
+
+[ ] leave the definitions that were dropped out of the bill of materials, or say in the table that they were dropped.  Every
+    definition of every source read gets a row, including one the image did not need and the reachability pass removed, so the
+    table names things the binary does not contain.  Which of the two a reader wants is the question.
+
 [ ] narrow what the tree-sitter grammar admits where the compiler ends a statement.  An end of line is an extra there, which is
     what lets a line break inside brackets be read; it also admits one after a binary operator, after the `=` of a definition and
     after `fn`, which the compiler refuses.  Closing it means the scanner counting open brackets, which means the brackets

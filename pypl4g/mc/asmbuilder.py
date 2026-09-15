@@ -415,7 +415,8 @@ class Assembler:
 
     def section(self, name: str, *, executable: bool = False, writable: bool = False,
                 alignment: int = 1, alloc: bool = True,
-                sh_type: int = 1) -> MCSection:
+                sh_type: int = 1, sh_link_to: str = "",
+                sh_entsize: int = 0) -> MCSection:
         """Select the section subsequent emission goes into.
 
         A section that is not `alloc` takes no room when the program runs: it is
@@ -425,7 +426,9 @@ class Assembler:
         section = self._streamer.get_section(name, executable=executable,
                                              writable=writable,
                                              alignment=alignment, alloc=alloc,
-                                             sh_type=sh_type)
+                                             sh_type=sh_type,
+                                             sh_link_to=sh_link_to,
+                                             sh_entsize=sh_entsize)
         self._streamer.switch_section(section)
         return section
 

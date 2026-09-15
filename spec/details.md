@@ -1924,6 +1924,35 @@ that wants to index with a count writes `unit ¤size → ¤idx` once.  `_stands_
 backwards.
 
 
+The bill of materials
+---------------------
+
+`pypl4g/sbom.py` holds all of it: the normalization, the hashing and the two sections' bytes.  What it needed from elsewhere was
+small.
+
+**Somebody had to know every file that was read.**  The driver reads what the command line named and the checker reads what an
+import named, and neither knows about the other; `SourceManager` is the one thing both go through, so it keeps the list --
+`record(path, tokens, unit)` from each of the two places.  It holds the tokens and the tree as `object`, because the source layer
+is below the front end and does not know what either is.
+
+**A definition's tokens are the ones inside its span**, with the attributes folded in because what a definition says about itself
+is part of what it is.  One wrinkle fell out of that and is worth stating: a dedent stands at the first column of the line that
+follows the block it closes, which is the line the *next* definition begins on -- so one definition's blocks close inside the
+next one's span.  `normalized` therefore drops leading block-ends, since nothing begins by ending a block.
+
+**The sections are emitted from the driver** rather than from each of the three targets, because nothing about them is
+target-specific, and after the assembly dump rather than before it: the dump is for reading what the code generator produced, and
+this names the sources by the paths they were read from, which are one machine's directories and not a program's.
+
+`MCSection` grew `sh_link_to` and `sh_entsize`, and the writer stopped assuming that every loaded section is `SHT_PROGBITS` --
+`.sbomstr` is a loaded `SHT_STRTAB`, which is what `.dynstr` is in any dynamically linked program.  `sh_link` is resolved by name
+once the section indices are known, beside where `.symtab` is linked to `.strtab`.
+
+**It costs every image a second loadable segment**, since the two sections are read-only and the code is not, and sections are
+grouped by what may be done to them.  That is about two hundred bytes of headers on top of the table and its strings, and the
+size test subtracts it: a fixed cost of carrying the thing is not a fact about the code generator.
+
+
 Expectations
 ------------
 

@@ -84,6 +84,12 @@ class MCSection:
     #: format gives a meaning of its own -- the build attributes, say -- says
     #: which, because nothing below here could work it out from the bytes.
     sh_type: int = 1
+    #: The section this one's contents point into, by name.  A table of offsets
+    #: is unreadable without it, and the format has a field for exactly this.
+    sh_link_to: str = ""
+    #: How big one entry of a section that holds a table of them is, which is
+    #: what lets a reader step through it without knowing the format.
+    sh_entsize: int = 0
     fragments: list[object] = field(default_factory=list)
     #: Offset within the section of the end of the last fragment laid out.
     size: int = 0

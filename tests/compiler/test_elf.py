@@ -193,8 +193,12 @@ def test_sections_and_symbols_are_present(built: Built) -> None:
     # architecture has to say in the file because its base is small and
     # everything else is an extension.
     extra = [".riscv.attributes"] if built.arch == "riscv64" else []
+    # The bill of materials comes before the code because it is read-only and
+    # the code is not: sections are grouped by what may be done to them, and a
+    # group is one mapping.
     assert [s.name for s in built.image.sections] == \
-        ["", ".text", *extra, ".shstrtab", ".symtab", ".strtab"]
+        ["", ".sbom", ".sbomstr", ".text", *extra,
+         ".shstrtab", ".symtab", ".strtab"]
     start = built.image.symbol("_start")
     main = built.image.symbol(MAIN)
     assert start is not None and main is not None
@@ -277,9 +281,17 @@ def test_the_image_is_small(built: Built) -> None:
     count.  It is as long as the normalized ISA string is, it is not code, and
     nothing about the code generator moves it -- so counting it here would make
     a number about the program into a number about the default profile.
+
+    The bill of materials is left out for a sharper reason: it holds the paths
+    the sources were read from, so its size is a fact about one machine's
+    directories and about nothing else.  What it costs beyond its own bytes is
+    left out with it -- a section header each for the table and its strings,
+    and the program header for the read-only mapping they need -- because that
+    too is fixed and is not code.
     """
-    said = sum(s.sh_size for s in built.image.sections
-               if s.name == ".riscv.attributes")
+    apart = (".riscv.attributes", ".sbom", ".sbomstr")
+    said = sum(s.sh_size for s in built.image.sections if s.name in apart)
+    said += 2 * elfcheck.SHDR.size + elfcheck.PHDR.size
     assert built.path.stat().st_size - said < 1024
 
 
@@ -311,12 +323,13 @@ def test_asking_the_processor_is_what_a_level_costs(tmp_path: Path) -> None:
 def test_a_group_with_nothing_in_it_costs_no_segment(built: Built) -> None:
     """An empty segment would still take a page, so it is not produced.
 
-    The program above has neither constants nor variables, so the code is all
-    there is to map and one loadable segment covers it.
+    The program above has no variables, so nothing is writable and there is no
+    writable segment.  Two remain: the bill of materials, which every image
+    carries and which is read-only, and the code.
     """
     loads = [s for s in built.image.segments if s.p_type == elfcheck.PT_LOAD]
-    assert len(loads) == 1
-    assert loads[0].p_flags == elfcheck.PF_R | elfcheck.PF_X
+    assert [s.p_flags for s in loads] == \
+        [elfcheck.PF_R, elfcheck.PF_R | elfcheck.PF_X]
 
 
 def test_a_section_both_writable_and_executable_is_refused() -> None:

@@ -98,7 +98,9 @@ class Driver:
                 self.diags.emit(D.LANG_SYNTAX_INVALID_UTF8, offset=exc.byte_offset)
                 continue
             tokens = tokenize(source, self.diags)
-            units.append(parse(tokens, path.as_posix(), self.diags))
+            unit = parse(tokens, path.as_posix(), self.diags)
+            self.sources.record(path, tokens, unit)
+            units.append(unit)
             self._timed("".join(("parse ", path.as_posix())), start)
         return units
 
@@ -198,6 +200,11 @@ class Driver:
                 resolve_symbol_offsets(section, symbols)
             return self._write_text(dump_sections(list(streamer.sections.values()),
                                                   symbols))
+        # After the dump above and not before it: the dump is for reading what
+        # the code generator produced, and this is about the file rather than
+        # about the code -- it names the sources by the paths they were read
+        # from, which are one machine's and not a program's.
+        self._emit_sbom(asm)
         start = perf_counter()
         defaults = target.image_defaults()
         settings = ImageSettings(machine=defaults.machine, base_vaddr=defaults.base_vaddr,
@@ -222,6 +229,29 @@ class Driver:
         return self._write_binary(image)
 
     # -- output ----------------------------------------------------------------
+
+    def _emit_sbom(self, asm: object) -> None:
+        """Write what the image was built from into the image.
+
+        Always, and not behind a flag: a bill of materials that a flag turns off
+        is one nobody can rely on being there, and the question it answers --
+        what is this built from -- is asked of binaries nobody thought to ask
+        about at the time.
+
+        The table is loaded and read-only, and so are its strings: the table
+        holds offsets into them, so one without the other would be a table a
+        running program could not read.  A tool reading the file finds them
+        through the section's link either way.
+        """
+        from ..elf.const import SHT_PROGBITS, SHT_STRTAB
+        from ..sbom import ROW_SIZE, SECTION, STRINGS, build, entries_for
+
+        table = build(entries_for(self.sources.read_units), little_endian=True)
+        asm.section(SECTION, alloc=True, alignment=4, sh_type=SHT_PROGBITS,
+                    sh_link_to=STRINGS, sh_entsize=ROW_SIZE)
+        asm.bytes(table.rows)
+        asm.section(STRINGS, alloc=True, alignment=1, sh_type=SHT_STRTAB)
+        asm.bytes(table.strings)
 
     def _write_text(self, text: str) -> int:
         """Write a textual result to the output file."""
