@@ -143,25 +143,27 @@ class Driver:
     def _settle_mclevel(self, target: object) -> bool:
         """Tell the target which of its microarchitecture levels to generate for.
 
-        What the levels are is each architecture's own business -- they are the
-        names its own documentation gives to what a processor of a given age can
-        do -- so there is no set of them all the targets share, and a name from
-        one means nothing to another.  A target that has none says so by having
-        none, and asking for a level of it is asking for something with no
-        meaning rather than for the only thing there is.
+        What may be asked for is each architecture's own business -- x86-64 has
+        four named levels and RISC-V has a string naming extensions or a profile
+        naming a published set of them -- so the name is handed to the target
+        and the target says what is wrong with it.  A target that can be built
+        for only one thing says so by having no such method at all, and asking
+        for a level of it is asking for something with no meaning rather than
+        for the only thing there is.
         """
         wanted = self.options.mclevel
-        known: tuple[str, ...] = getattr(target, "mclevels", ())
         if wanted is None:
             return True
-        if not known:
+        settle = getattr(target, "use_mclevel", None)
+        if settle is None:
             self.diags.emit(D.IMPL_CLI_NO_MCLEVELS, triple=self.options.triple)
             return False
-        if wanted not in known:
+        try:
+            settle(wanted)
+        except ValueError as exc:
             self.diags.emit(D.IMPL_CLI_UNKNOWN_MCLEVEL, level=wanted,
-                            triple=self.options.triple, known=", ".join(known))
+                            triple=self.options.triple, detail=str(exc))
             return False
-        target.use_mclevel(wanted)  # type: ignore[attr-defined]
         return True
 
     def _generate(self, module: Module) -> int:

@@ -293,6 +293,16 @@ RISCV_INSTRS: Final[tuple[RVInstDesc, ...]] = (
     RVInstDesc("fcvt.w.s", (_r(), _f(), _rm()), template=0xC0000053,
                fields=(_reg(0, _RD), _reg(1, _RS1), _mode(2)),
                est_size=INSTRUCTION_SIZE),
+    # Rounding a floating-point number where it stands, which is the Zfa
+    # extension and not the base -- the application profiles have had it since
+    # 2023, and what a program built for a base without it pays instead is the
+    # round trip through an integer above.
+    RVInstDesc("fround.s", (_f(), _f(), _rm()), template=0x40400053,
+               fields=(_reg(0, _RD), _reg(1, _RS1), _mode(2)),
+               est_size=INSTRUCTION_SIZE),
+    RVInstDesc("fround.d", (_f(), _f(), _rm()), template=0x42400053,
+               fields=(_reg(0, _RD), _reg(1, _RS1), _mode(2)),
+               est_size=INSTRUCTION_SIZE),
     # Back again, where no rounding can happen: every integer this compiler
     # converts back came out of a value smaller than the format's own limit for
     # whole numbers, so it is representable exactly.

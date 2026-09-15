@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Final
 
 from ...diag import ids as D
 from ...diag.engine import DiagEngine
-from ...ir.function import SYSTEM_CCONV
+from ...ir.function import SYSTEM_CCONV, Function
 from ...ir.mangle import symbol_name
 from ...ir.module import Module
 from ...mc.asmbuilder import Assembler
@@ -20,6 +21,8 @@ from ...mc.machine import clobbered_units
 from ...mc.reg import RegUnit
 from ...mc.streamer import MCStreamer
 from ...ir.layout import DataLayout
+from ...ir.types import (ArrayType, FloatType, ListType, PtrType, ResultType,
+                         TupleType, Type, VecType)
 from ..allocator import OUT_OF_MEMORY, emit_allocator, wanted_by
 from ..faults import Messages
 from ..pool import Constants
@@ -29,6 +32,7 @@ from ..target import ImageDefaults
 from .abi import CC_PL4G, lookup as lookup_cconv
 from .encoder import EncodingError, encode
 from .fixups import apply_fixup
+from . import isa
 from .isel import RVSelector, UnsupportedOperation, lower_function
 from .opcodes import PAD_BYTE, RISCV_INSTRS
 from .regs import FPR, GPR, INFO
@@ -50,7 +54,9 @@ FLOAT_ABI_SINGLE: Final[int] = 0x2
 FLOAT_ABI_DOUBLE: Final[int] = 0x4
 COMPRESSED: Final[int] = 0x1
 
-#: EM_RISCV.
+#: EM_RISCV.  The flag word is settled per build, the floating-point convention
+#: being a property of what the program was built for rather than of the
+#: architecture; this is the shape of it and the default it carries.
 IMAGE_DEFAULTS: Final[ImageDefaults] = ImageDefaults(
     machine=243, base_vaddr=0x400000, page_size=0x1000, text_alignment=16,
     function_alignment=16, header_flags=FLOAT_ABI_DOUBLE)
@@ -64,6 +70,20 @@ class RISCV64Target:
         self.pointer_bits: int = 64
         self.registers: RegisterInfo = INFO
         self.table = InstrTable(RISCV_INSTRS)
+        #: What a program is built for: the base and every extension of it.
+        #: Unlike the levels the other architectures have, this is a list rather
+        #: than a name, and what the code generator asks of it is which of a
+        #: handful of extensions are there.
+        self.isa: isa.ISA = isa.parse(isa.DEFAULT)
+
+    def use_mclevel(self, name: str) -> None:
+        """Build for this from now on, which here is an ISA string or a profile.
+
+        What is wrong with a name that is neither is what comes back, since
+        whoever asked has the name already and what a reader needs is the part
+        they got wrong.
+        """
+        self.isa = isa.parse(name)
 
     def encode(self, inst: MCInst) -> tuple[bytes, list[MCFixup]]:
         """Encode one instruction."""
@@ -77,11 +97,21 @@ class RISCV64Target:
     def selector(self, streamer: MCStreamer) -> RVSelector:
         """The instruction selector for this target."""
         del streamer
-        return RVSelector(self.table)
+        return RVSelector(self.table, self.isa)
 
     def image_defaults(self) -> ImageDefaults:
-        """The layout constants the image writer needs."""
-        return IMAGE_DEFAULTS
+        """The layout constants the image writer needs.
+
+        The floating-point convention is the one thing here that a build settles
+        rather than the architecture: the field says which registers a function
+        passes and answers floating-point values in, and a program built for a
+        base without them passes none.
+        """
+        if self.isa.has("d"):
+            return IMAGE_DEFAULTS
+        return replace(IMAGE_DEFAULTS,
+                       header_flags=(FLOAT_ABI_SINGLE if self.isa.has("f")
+                                     else FLOAT_ABI_SOFT))
 
     def new_assembler(self, streamer: MCStreamer, opt_level: int) -> Assembler:
         """Build an assembler that emits for this target."""
@@ -127,6 +157,14 @@ class RISCV64Target:
         for func in module.functions.values():
             if func.is_declaration:
                 continue
+            if not self.isa.floats and _touches_floats(func):
+                # Not a limit of this compiler but of what it was asked to
+                # build for.  Emitting the instructions anyway is a program
+                # that does not run, and doing it in software is a different
+                # calling convention and so a different ABI.
+                diags.emit(D.IMPL_BACKEND_NEEDS_AN_EXTENSION, func.span,
+                           extension="F and D", level=self.isa.named)
+                return
             try:
                 lower_function(asm, func, lookup_cconv(func.cconv), self.registers,
                                messages, sources, constants, clobbers)
@@ -168,3 +206,33 @@ class RISCV64Target:
     def entry_symbol(self) -> str:
         """The symbol the image's entry point uses."""
         return ENTRY_SYMBOL
+
+
+def _touches_floats(func: Function) -> bool:
+    """Whether anything about a function is a floating-point value.
+
+    Its own type and every value it computes, since a function may pass one
+    through without an instruction of its own doing arithmetic on it -- and
+    passing one through is exactly what needs the floating-point registers the
+    convention names.
+    """
+    seen: list[Type] = [*func.ty.params, func.ty.ret]
+    for block in func.blocks:
+        seen.extend(param.ty for param in block.params)
+        seen.extend(inst.ty for inst in block.insts)
+    return any(_is_floating(ty) for ty in seen)
+
+
+def _is_floating(ty: Type) -> bool:
+    """Whether a type is a floating-point one or is built out of them."""
+    if isinstance(ty, FloatType):
+        return True
+    if isinstance(ty, (ArrayType, ListType, VecType)):
+        return _is_floating(ty.element)
+    if isinstance(ty, PtrType):
+        return _is_floating(ty.pointee)
+    if isinstance(ty, ResultType):
+        return _is_floating(ty.ok)
+    if isinstance(ty, TupleType):
+        return any(_is_floating(member) for member in ty.members)
+    return False

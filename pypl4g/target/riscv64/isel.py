@@ -19,6 +19,7 @@ from ...mc.desc import InstrTable, SelectionError
 from ...mc.inst import MCInst
 from ...mc.operand import MCImm, MCMem, MCOperand, MCReg, MCSymRef
 from ...mc.ops import Condition, Op, Rounding
+from . import isa
 from ...ir.inst import BinOp, UnOp
 from ...mc.reg import Reg, VirtReg
 from ...mc.operand import SymExpr
@@ -156,8 +157,14 @@ class UnsupportedOperation(Exception):
 class RVSelector(InstructionSelector):
     """Turns builder calls into RISC-V instructions."""
 
-    def __init__(self, table: InstrTable | None = None) -> None:
+    def __init__(self, table: InstrTable | None = None,
+                 built_for: isa.ISA | None = None) -> None:
         self.table = table if table is not None else InstrTable(RISCV_INSTRS)
+        #: What the program is built for.  Unlike the other architectures, what
+        #: this machine can do is a list rather than a name, and the few
+        #: extensions the code generator can use today are asked of it here.
+        self.isa: isa.ISA = (built_for if built_for is not None
+                             else isa.parse(isa.DEFAULT))
 
     def _inst(self, mnemonic: str, operands: Sequence[MCOperand], span: Span) -> MCInst:
         """Select the encoding of *mnemonic* for *operands*."""
@@ -627,6 +634,25 @@ class RVSelector(InstructionSelector):
         Rounding.CURRENT: 0b111,
     }
 
+    def select_float_round(self, how: Rounding, dst: Reg, src: MCOperand,
+                           bits: int, span: Span) -> Sequence[MCInst]:
+        """Instructions that put the whole number *src* rounds to into *dst*.
+
+        One instruction where the program is built for something that has the
+        Zfa extension, which is what the application profiles have had since
+        2023 and what this compiler builds for unless told otherwise.  Without
+        it there is nothing here that rounds a floating-point number where it
+        stands, and the answer costs a round trip through an integer and a
+        branch -- which the caller emits, since it needs a label and a selector
+        has none.
+        """
+        if not self.isa.has("zfa"):
+            raise UnsupportedOperation(
+                "rounding a floating-point number in one instruction", span)
+        return (self._inst("fround.s" if bits == 32 else "fround.d",
+                           (MCReg(dst), src,
+                            MCImm(self._ROUNDS[how], 3, signed=False)), span),)
+
     def select_float_to_int(self, how: Rounding, dst: Reg, src: MCOperand,
                             bits: int, span: Span) -> Sequence[MCInst]:
         """Instructions that put *src* into *dst* as a whole number.
@@ -784,6 +810,12 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
     from ...ir.layout import encode_float
     from ..globals import symbol_of
 
+    # What the program is built for, asked once: this architecture says what a
+    # machine can do with a list of extensions rather than with a name, and the
+    # one the code generator chooses a lowering by is whether rounding is an
+    # instruction here or a round trip through an integer.
+    selector = asm.selector
+    rounds_in_one = isinstance(selector, RVSelector) and selector.isa.has("zfa")
     # The convention is the function's and not the image's: which registers may
     # be given out and which have to be handed back as they were found are two
     # of the things a convention settles, and the specification lets two
@@ -1397,6 +1429,10 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                               if inst is returned else None))
                     held[id(inst)] = destination
                     source = operands.in_register(inst.operands[0], inst.span)
+                    if rounds_in_one:
+                        asm.float_round(_ROUNDINGS[inst.op], destination,
+                                        source, bits, inst.span)
+                        continue
                     asm.loadreg(destination, source, inst.span)
                     magnitude = registers.new_virtual(FPR, _FLOAT_REGISTER_BITS)
                     asm.float_abs(magnitude, source, bits, inst.span)

@@ -35,12 +35,12 @@ OBJDUMP = ARCH_TOOLS["riscv64"]["objdump"]
 ASSEMBLER = "/usr/bin/riscv64-linux-gnu-as"
 
 #: What the compiler emits for.  The base integer set, the multiply and divide
-#: extension, and single and double precision floating point -- which together
-#: are what the standard sixty-four bit Linux ABI requires, and what every
-#: Linux-capable RISC-V implementation has.  The compressed encoding is
-#: deliberately not included: nothing emits it, and the header flag that would
-#: announce it stays clear.
-MARCH = "rv64imfd"
+#: extension, single and double precision floating point, and the rounding
+#: instructions of Zfa -- which is what the application profile this compiler
+#: builds for by default has, and what the rows below need to assemble.  The
+#: compressed encoding is deliberately not included: nothing emits it, and the
+#: header flag that would announce it stays clear.
+MARCH = "rv64imfd_zfa"
 
 
 def assemble(mnemonic: str, *operands: object) -> bytes:
@@ -107,6 +107,12 @@ SAMPLES = [
      MCReg(reg("f2"))),
     ("fadd.d f0, f1, f2", "fadd.d", MCReg(reg("f0")), MCReg(reg("f1")),
      MCReg(reg("f2"))),
+    ("fround.s f0, f1, rdn", "fround.s", MCReg(reg("f0")), MCReg(reg("f1")),
+     MCImm(0b010, 3, signed=False)),
+    ("fround.d f0, f1, rdn", "fround.d", MCReg(reg("f0")), MCReg(reg("f1")),
+     MCImm(0b010, 3, signed=False)),
+    ("fround.d f0, f1, dyn", "fround.d", MCReg(reg("f0")), MCReg(reg("f1")),
+     MCImm(0b111, 3, signed=False)),
     ("fcvt.l.d a0, f1, rdn", "fcvt.l.d", MCReg(reg("a0")), MCReg(reg("f1")),
      MCImm(0b010, 3, signed=False)),
     ("fcvt.l.d a0, f1, rup", "fcvt.l.d", MCReg(reg("a0")), MCReg(reg("f1")),

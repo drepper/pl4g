@@ -3908,6 +3908,52 @@ two values, the quotient and the remainder, which is the one design here that an
 
 ---
 
+## 2026-09-15T21:30+02:00 — implementation
+
+**RISC-V is built for an ISA string or a profile, and `rva23` by default**
+
+Decided on the user's direction: `--mclevel` on RISC-V takes a string written the way the architecture's naming convention says
+to write one, or the name of a published profile, and the default is RVA23 — which brings F and D with it, among much else.
+
+**The option is one option and the answer is three answers.**  x86-64 has four named levels because its own documentation has
+four; RISC-V has no such list because its base is small and everything else is an extension, so what a program is built for is a
+*set*.  The alternative was a second option, `--march`, beside `--mclevel`; it was rejected because the question is the same
+question — what may the code generator use — and two options for one question is two things to learn and one of them always
+wrong for the architecture in front of you.  What changes is who interprets the name, and that was already the target's job.
+
+**Profiles as well as strings, and a profile as the default.**  A string is precise and nobody wants to type one; a profile is a
+name a person can hold in their head, and the architecture publishes them for exactly that reason.  Making `rva23` the default
+rather than `rv64gc` is the decision that does the most work here: this architecture's Linux ABI has required F and D from the
+beginning, so a default of the bare base would have had the compiler refuse the arithmetic every program on it actually uses —
+and it brings Zfa, which turns rounding from eight instructions into one.
+
+**An extension the compiler does not know is refused** rather than ignored.  The argument for ignoring is that a program naming
+an extension this compiler cannot use loses nothing by it; the argument against is `zfaa`, which is a typo, and which under the
+lenient rule silently builds the slower program.  GCC and LLVM both refuse, and for the same reason.  What it costs is a table
+row per extension, which the profiles needed anyway.
+
+**Extensions in any order.**  The convention states a canonical order and the specification calls it a convention for *writing* a
+name; the same set is the same ISA however it was spelled, so enforcing the order would reject `rv64gc_zbb_zba` — which says
+exactly what it means — for the sake of catching a mistake nobody makes.  The canonical form is what the compiler writes back.
+
+**A name ending in digits is a name.**  `sv39` and `zic64b` are extensions whose names end in or contain digits, and `zfa1p0` is
+an extension with a version after it; the architecture's own rule that a name never ends in a digit is younger than `sv39`.  What
+settles it is which of the two readings is a name the compiler knows, tried longest-first — which is the same thing the refusal
+of unknown names buys, used twice.
+
+**Floating point without the extension is refused, not emulated** (8503).  A software floating-point convention is a different
+ABI, not a slower one: values go in different registers and the header's flag word says so.  Emitting the hardware instructions
+anyway is a program that does not run.  So the two ways out are to build for something that has F and D, or to write a program
+that does not use them — and a program that does not use them builds for `rv64imc` today.
+
+Compare: **GCC** and **LLVM**, whose `-march` takes the string and whose `-mcpu` takes a name, with profile names arriving late
+and separately — this folds the two into the one option the compiler already had; **Go**, whose `GORISCV64` takes exactly the
+profile names `rva20u64`, `rva22u64`, `rva23u64` and nothing else, which is the readable half of this without the precise half;
+and **Rust**, whose target features are a list per target with no profile names at all, which is the precise half without the
+readable one.
+
+---
+
 Open questions
 --------------
 

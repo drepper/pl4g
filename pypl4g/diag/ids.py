@@ -250,6 +250,7 @@ LANG_STMT_ASSIGNMENT_IS_AN_ARROW: Final[DiagID] = 5006
 # 8500-8999: code generation and inline assembly
 IMPL_BACKEND_UNSUPPORTED: Final[DiagID] = 8501
 IMPL_BACKEND_UNENCODABLE: Final[DiagID] = 8502
+IMPL_BACKEND_NEEDS_AN_EXTENSION: Final[DiagID] = 8503
 
 # 9000-9499: image generation and incremental compilation
 IMPL_IMAGE_UNDEFINED_SYMBOL: Final[DiagID] = 9001

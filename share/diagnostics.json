@@ -361,7 +361,7 @@
       "number": 1011,
       "name": "IMPL_CLI_UNKNOWN_MCLEVEL",
       "severity": "error",
-      "message": "'{level}' is not a microarchitecture level of '{triple}'; it has {known}",
+      "message": "'{level}' is not something '{triple}' can be built for; {detail}",
       "args": [
         {
           "name": "level",
@@ -374,16 +374,16 @@
           "description": "the target being generated for"
         },
         {
-          "name": "known",
+          "name": "detail",
           "type": "string",
-          "description": "the levels that target has"
+          "description": "what the target says is wrong with it"
         }
       ],
-      "cause": "What the levels are is each architecture's own business: they are the names that architecture's own documentation gives to what a processor of a given age can do, so there is no set of them all the targets share and no meaning to a name from one used with another.",
+      "cause": "What may be asked for is each architecture's own business.  x86-64 has four levels, which are the names its own documentation gives to what a processor of a given age can do, so a name is one of four.  RISC-V has no such list: its base is small and everything else is an extension, so what may be asked for is a string naming them -- `rv64gc` -- or a profile, which is a published set of them under one name -- `rva23`.  A name from one architecture means nothing to another.",
       "spec": {
         "document": "spec/details.md",
         "section": "Targets",
-        "requirement": "'--mclevel' names one of the levels the target has."
+        "requirement": "'--mclevel' names something the target can be built for."
       },
       "since": "0.1",
       "default_enabled": true,
@@ -4822,6 +4822,33 @@
         "document": "spec/details.md",
         "section": "Implementation",
         "requirement": "It does not have to be able to handle the entire language as per the specification as long as it can compile the code of the actual compiler."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 8503,
+      "name": "IMPL_BACKEND_NEEDS_AN_EXTENSION",
+      "severity": "error",
+      "message": "this needs the {extension} extension, and the program is built for '{level}', which has not got it",
+      "args": [
+        {
+          "name": "extension",
+          "type": "string",
+          "description": "what the code generator would have needed"
+        },
+        {
+          "name": "level",
+          "type": "string",
+          "description": "what the program was asked to be built for"
+        }
+      ],
+      "cause": "On an architecture whose base is small and whose every capability is an extension, what a program may use is what it was built for.  Where it uses something the extensions do not cover, the answer is not to emit it anyway -- that is a program that does not run -- and not to emulate it either, since an emulation of a floating-point convention is a different calling convention and a different ABI.  So it is refused, and the two ways out are to build for something that has the extension, with '--mclevel', or to write the program without whatever wanted it.",
+      "spec": {
+        "document": "spec/details.md",
+        "section": "Targets",
+        "requirement": "A program uses only what the ISA it is built for provides."
       },
       "since": "0.1",
       "default_enabled": true,

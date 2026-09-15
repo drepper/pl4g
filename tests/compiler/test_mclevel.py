@@ -1,8 +1,14 @@
-"""The microarchitecture levels, and the check a program makes of the processor.
+"""What a program is built for, and the check it makes of the processor.
+
+Two architectures answer the question differently and the option is the same
+option.  x86-64 names four sets of features and asking for one is asking for the
+whole of it; RISC-V has no such list, its base being small and everything else
+an extension, so what is asked for is a string naming them or a profile naming a
+published set of them.  AArch64 has nothing to ask for at all.
 
 x86-64 has meant several quite different machines over twenty-five years, and its
-own documentation names four sets of features for saying which one a program was
-built for.  What this compiler does with a level is let code generation use what
+own documentation names the four sets for saying which one a program was built
+for.  What this compiler does with a level is let code generation use what
 the level allows -- nothing does yet -- and have the program ask the processor,
 at its own entry point, whether it can run at all.
 
@@ -21,7 +27,7 @@ from pathlib import Path
 import pytest
 
 from pypl4g.target import statuses
-from conftest import describe, run_compiler
+from conftest import describe, run_compiler, runner_for
 
 SOURCE = "".join((
     "@[startup]\nfn main() \N{RIGHTWARDS ARROW} u8:\n    42u8\n"))
@@ -110,15 +116,29 @@ def test_a_level_that_is_not_one_is_refused(tmp_path: Path) -> None:
 
 
 def test_an_architecture_without_levels_says_so(tmp_path: Path) -> None:
-    """They are each architecture's own, so a name from one means nothing
-    to another, and an architecture that defines none has none to name."""
+    """They are each architecture's own, so an architecture that has nothing to
+    ask for says so rather than quietly taking any name."""
+    source = tmp_path / "t.pl4g"
+    source.write_text(SOURCE, encoding="utf-8")
+    proc = run_compiler(["-o", str(tmp_path / "out"),
+                         "--target=aarch64-linux-none", "--mclevel=v2",
+                         str(source)])
+    assert proc.returncode != 0
+    assert "PL4G-1012" in proc.stderr, proc.stderr
+
+
+def test_a_name_from_one_architecture_means_nothing_to_another(
+        tmp_path: Path) -> None:
+    """RISC-V has something to ask for and `v2` is not one of them, so what
+    comes back says what one of them looks like."""
     source = tmp_path / "t.pl4g"
     source.write_text(SOURCE, encoding="utf-8")
     proc = run_compiler(["-o", str(tmp_path / "out"),
                          "--target=riscv64-linux-none", "--mclevel=v2",
                          str(source)])
     assert proc.returncode != 0
-    assert "PL4G-1012" in proc.stderr, proc.stderr
+    assert "PL4G-1011" in proc.stderr, proc.stderr
+    assert "rv32" in proc.stderr and "rva23" in proc.stderr, proc.stderr
 
 
 def test_an_architecture_without_levels_is_built_without_one(tmp_path: Path) -> None:
@@ -126,7 +146,84 @@ def test_an_architecture_without_levels_is_built_without_one(tmp_path: Path) -> 
     source = tmp_path / "t.pl4g"
     source.write_text(SOURCE, encoding="utf-8")
     proc = run_compiler(["-o", str(tmp_path / "out"),
-                         "--target=riscv64-linux-none", str(source)])
+                         "--target=aarch64-linux-none", str(source)])
+    assert proc.returncode == 0, describe(proc)
+
+
+RISCV = "riscv64-linux-none"
+
+
+@pytest.mark.parametrize("level", ["rva23", "rva23u64", "rva23s64", "rv64gc",
+                                   "rv64g", "rv64imafd", "RV64GC_Zba_Zbb",
+                                   "rv64gc_zfa", "rv64i_m_a_f_d"])
+def test_risc_v_takes_an_isa_string_or_a_profile(tmp_path: Path,
+                                                 level: str) -> None:
+    """Every spelling the naming convention allows for what this program needs
+    builds it."""
+    source = tmp_path / "t.pl4g"
+    source.write_text(SOURCE, encoding="utf-8")
+    proc = run_compiler(["-o", str(tmp_path / "out"), "--target=" + RISCV,
+                         "".join(("--mclevel=", level)), str(source)])
+    assert proc.returncode == 0, describe(proc)
+
+
+FLOATS = "".join((
+    "@[startup]\nfn main() \N{RIGHTWARDS ARROW} u8:\n",
+    "    let x: f64 = 1.5f64\n",
+    "    if x \N{APPROXIMATELY EQUAL TO} 1.5f64:\n        0u8\n",
+    "    else:\n        1u8\n"))
+
+
+def test_floating_point_needs_the_extension_that_has_it(tmp_path: Path) -> None:
+    """A base without the floating-point extensions cannot run floating-point
+    instructions, and there is no software convention here to fall back on."""
+    source = tmp_path / "t.pl4g"
+    source.write_text(FLOATS, encoding="utf-8")
+    proc = run_compiler(["-o", str(tmp_path / "out"), "--target=" + RISCV,
+                         "--mclevel=rv64imc", str(source)])
+    assert proc.returncode != 0
+    assert "PL4G-8503" in proc.stderr, proc.stderr
+
+
+#: Rounding written four ways, whose answers are the same whichever of the two
+#: lowerings the backend chose.
+ROUNDS = "".join((
+    "@[startup, impure]\nfn main() \N{RIGHTWARDS ARROW} u8:\n",
+    "    let x: f64 = \N{SUPERSCRIPT MINUS}2.5f64\n",
+    "    let y: f32 = 2.5f32\n",
+    "    if \N{DOWNWARDS ARROW}x \N{APPROXIMATELY EQUAL TO} \N{SUPERSCRIPT MINUS}3.0f64 ",
+    "\N{LOGICAL AND} \N{UPWARDS ARROW}x \N{APPROXIMATELY EQUAL TO} \N{SUPERSCRIPT MINUS}2.0f64 ",
+    "\N{LOGICAL AND} \N{UP DOWN ARROW}x \N{APPROXIMATELY EQUAL TO} \N{SUPERSCRIPT MINUS}2.0f64 ",
+    "\N{LOGICAL AND} \N{UP DOWN DOUBLE ARROW}y \N{APPROXIMATELY EQUAL TO} 2.0f32:\n",
+    "        0u8\n    else:\n        1u8\n"))
+
+
+@pytest.mark.parametrize("level", ["rva23", "rv64gc"])
+def test_rounding_answers_alike_with_and_without_the_instruction(
+        tmp_path: Path, level: str) -> None:
+    """Zfa has an instruction that rounds where the number stands and the base
+    has none, so the backend has two lowerings -- and what they answer has to be
+    the same answer.  The profile has Zfa; `rv64gc` is the same machine without
+    it, and is the only way the round trip through an integer is reached now
+    that the default profile has the instruction."""
+    source = tmp_path / "t.pl4g"
+    source.write_text(ROUNDS, encoding="utf-8")
+    built = tmp_path / "out"
+    proc = run_compiler(["-o", str(built), "--target=" + RISCV,
+                         "".join(("--mclevel=", level)), str(source)])
+    assert proc.returncode == 0, describe(proc)
+    runner = runner_for(RISCV)
+    if runner and shutil.which(runner[0]) is None:
+        pytest.skip("no emulator for this target")
+    assert subprocess.run([*runner, str(built)], check=False).returncode == 0
+
+
+def test_a_program_with_no_floats_needs_no_floating_point(tmp_path: Path) -> None:
+    """What is refused is using it, not building for a base without it."""
+    source = tmp_path / "t.pl4g"
+    source.write_text(SOURCE, encoding="utf-8")
+    proc = run_compiler(["-o", str(tmp_path / "out"), "--target=" + RISCV,
+                         "--mclevel=rv64imc", str(source)])
     assert proc.returncode == 0, describe(proc)
 
 

@@ -362,6 +362,15 @@ To Do List for the pypl4g compiler
     treatment joining two arrays got: the elements are already a run whose length is written down, so what is missing is the
     entry in each target's `Vectors` table and a reduction over the lanes at the end.
 
+[ ] use what the RISC-V extensions offer beyond the two the code generator asks about today.  `b` brings Zbb, whose `min`,
+    `max`, `minu` and `maxu` are one instruction where `\N{LEFT CEILING}` and `\N{LEFT FLOOR}` are a comparison and a conditional move, and whose
+    `rol` and `ror` are the rotations; `v` brings the vector extension, which is what `Vectors` is empty for on this target.
+    Both are mandatory in the profile that is now the default, so the strings are already saying they are there.
+
+[ ] know the older RISC-V profiles.  `rva20u64` and `rva22u64` are published sets like `rva23u64` and are each one row in the
+    profile table; they are left out because what this compiler would learn from them is what `rv64gc` already says, and a row
+    written from memory rather than from the document is a row that is wrong.
+
 [ ] round a floating-point number at the oldest x86-64 level.  Refused today: `roundsd` is SSE4.1, which the second level
     promises and the first does not.  What the first needs is the round trip through an integer the RISC-V backend already does,
     plus a correction per direction -- `cvttsd2si` truncates towards zero, so the floor is one less where the answer came out

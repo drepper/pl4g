@@ -71,10 +71,13 @@ class X86_64Target:
     def use_mclevel(self, name: str) -> None:
         """Generate for this level from now on.
 
-        Checked before it is set, by whoever read the command line: what a name
-        means is this target's business, so what is and is not a name is too.
+        What a name means is this target's business, so what is and is not a
+        name is too: whoever read the command line hands the name over and is
+        told what is wrong with it.
         """
-        assert name in levels.NAMES, name
+        if name not in levels.NAMES:
+            raise ValueError("".join(("its levels are ",
+                                      ", ".join(levels.NAMES))))
         self._mclevel = name
 
     def encode(self, inst: MCInst) -> tuple[bytes, list[MCFixup]]:

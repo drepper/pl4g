@@ -400,6 +400,17 @@ class Assembler:
         """The streamer the built representation lands in."""
         return self._streamer
 
+    @property
+    def selector(self) -> InstructionSelector:
+        """What turns a call here into instructions.
+
+        Read by a backend that has to choose between two lowerings of one
+        operation and whose selector holds what decides -- which of RISC-V's
+        extensions the program is built for, say.  Nothing else reaches it: a
+        backend that only emits goes through the calls below.
+        """
+        return self._selector
+
     # -- placement -------------------------------------------------------------
 
     def section(self, name: str, *, executable: bool = False, writable: bool = False,

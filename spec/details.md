@@ -918,17 +918,46 @@ claiming the program meant it.
 
 **The message is still written first**, so nothing is lost either way; what the trap gave up was never the message.
 
-Microarchitecture levels
-------------------------
+What a program is built for
+---------------------------
 
-"x86-64" has meant several quite different machines over twenty-five years, and the architecture's own documentation names four
-sets of features -- `x86-64-v1` through `x86-64-v4` -- for saying which one a program was built for.  `--mclevel=LEVEL` says which
-one to build for, and `v4` is what a program gets unless it says otherwise.
+One option, `--mclevel=NAME`, and three architectures that answer the question in three different ways.  **The name is
+interpreted by the target and by nothing else**: what may be asked for is that architecture's own business, so the driver hands
+the name over and is told what is wrong with it (1011).  A target that can be built for only one thing has no such method at all,
+and asking it for a level is reported as asking for something with no meaning (1012) rather than for the only thing there is.
+AArch64 is that target today.
 
-**The name is interpreted by the target and by nothing else.**  The levels are each architecture's own: they are the names that
-architecture's documentation gives to what a processor of a given age can do, so there is no set of them the targets share and a
-name from one means nothing to another.  A target says which it has, by having them; asking for a level of one that has none is
-reported (1012), and asking for a name that is not one of its is reported with the list (1011).  AArch64 and RISC-V have none here.
+**x86-64 has four names.**  "x86-64" has meant several quite different machines over twenty-five years, and the architecture's own
+documentation names four sets of features -- `x86-64-v1` through `x86-64-v4` -- for saying which one a program was built for.
+`v4` is what a program gets unless it says otherwise, because a program that will not run says so the moment it is started while
+one built for the oldest machine quietly leaves everything on the table.  Two things depend on it: how wide a register holding a
+run of elements is, and whether the instruction that rounds a floating-point number is there at all.
+
+**RISC-V has a list.**  Its base is deliberately small and everything else is an extension a particular implementation may or may
+not have, so there is no list of four to choose from -- what a program is built for is the set of extensions it may use, and the
+architecture gives that set a spelling: `rv64gc`, `rv64imafd_zicsr`, `rv64gc_zba_zbb_zbs`.  `--mclevel` takes one of those, and
+`isa.py` reads it: the base and its width, a version after anything that wants one, single-letter extensions in any order with
+underscores between them meaning nothing, multi-letter ones separated by underscores because `zbazbb` would otherwise be a name,
+and `g` standing for the general-purpose seven.
+
+Writing the list out is precise and nobody wants to do it, so the architecture also publishes **profiles**: `rva23u64` is "what a
+64-bit application processor of 2023 has", under a name a person can hold in their head.  Those are taken too, with the short
+`rva23` meaning the user-mode one -- which is the one a program is built for.  **`rva23` is the default**, and that is what
+settles that floating point is there: this architecture's Linux ABI has required the F and D extensions since the beginning, and
+a default of the bare base would have had the compiler refuse the arithmetic every program on it actually uses.
+
+**An extension the compiler does not know is refused.**  That is what every other compiler's `-march` does and the reason is a
+typo: `zfaa` is not an extension, and a compiler that shrugged at it would silently build the slower program.  The table holds
+the single letters, everything the profiles name, and everything the code generator asks about; a new extension is one row.
+
+**What the code generator asks it is a much shorter list than what it reads**, and that is deliberate -- a program naming an
+extension for the sake of a later compiler is not refused by this one.  Today it asks two things.  **`d`**, without which
+floating point is refused outright (8503): emitting the instructions anyway is a program that does not run, and doing it in
+software is a different calling convention and so a different ABI.  The header's flag word follows the same answer, saying the
+double convention where the extension is there, the single one where only `f` is, and the soft one where neither is -- which is
+what that field is for.  And **`zfa`**, which has the instruction that rounds a floating-point number where it stands; without it
+the same answer costs a round trip through an integer, a comparison and a branch, which is eight instructions where the profile
+gets one.
 
 **A program says at its own entry point whether the processor can run it.**  Before the constructors, before the startup function,
 a program built for anything but the oldest level asks the processor what it has; where it has not got it, the program writes one
@@ -952,9 +981,11 @@ middle of somebody else's afternoon.
 tests that are about how small an image can be, and the golden assembly dumps, are built at v1 for the same reason: what they are
 about is the program, and the same forty lines repeated in each of them would bury it.
 
-**Nothing generated uses a level yet.**  Every instruction this compiler emits is in v1, so today the level is a promise about
-what the code generator may do rather than a description of what it does.  The check is worth having before the code that needs
-it: it is what makes adding such code a change to one place.
+**The check is what makes a level mean something.**  It was written before anything generated depended on a level, so that when
+something did -- the width of a run register, and now the rounding instruction -- there was one place for it to go rather than a
+new question to answer.  RISC-V has no such check and can have none: there is no instruction a program in user mode can ask what
+the processor has, which is why what a RISC-V program is built for has to be told to the compiler and cannot be found out by the
+program.
 
 
 Variables
