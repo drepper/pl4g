@@ -1,0 +1,55 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ A comparison of floating-point values, standing where a condition stands.
+※
+※ Every other comparison is absorbed by the branch that reads it: the machine
+※ compares and then branches on what the comparison wrote, so there is no truth
+※ value anywhere and nothing to hold it.  A floating-point comparison is not.
+※ What these machines write for one is a different set of flags, on which a
+※ value that is not a number is a fourth answer and takes more than one reading
+※ to tell from the other three -- so the comparison is computed into a register
+※ and the branch tests that register.
+※
+※ All three selectors said so and the one function all three ask did not, so a
+※ floating-point comparison written as a condition was refused by the code
+※ generator and the same comparison handed to a function was not.  Which is why
+※ this is here: what it is about is the *place* the comparison stands in, and
+※ nothing before it tested that place.
+
+@[startup, impure]
+fn main() → u8:
+    let a: f64 = 1.0f64
+    let b: f64 = 2.0f64
+    let n: f32 = 1.0f32
+    let m: f32 = 2.0f32
+    ※ the exact orderings
+    if ¬(a < b) ∨ a > b ∨ ¬(a ≤ b) ∨ a ≥ b:
+        1u8
+    ※ the same in the narrower format
+    elif ¬(n < m) ∨ n > m:
+        2u8
+    ※ the approximate six, which are a subtraction and one of these
+    elif a ≅ b ∨ ¬(a ≇ b):
+        3u8
+    elif ¬(a ⪅ b) ∨ a ⪆ b ∨ ¬(a ⪉ b) ∨ a ⪊ b:
+        4u8
+    ※ one that is true of a value and itself, where the two sides are the one
+    ※ value and no flag reading is in doubt
+    elif ¬(a ≅ a) ∨ ¬(a ⪅ a) ∨ ¬(a ⪆ a):
+        5u8
+    ※ a comparison of what two operations came to, so that the operands are in
+    ※ registers rather than written down
+    elif ¬(a + b < b × b):
+        6u8
+    ※ and the same comparison read as a value, which is the path that worked
+    ※ all along and has to go on working
+    elif told(a < b) ≠ 1u8:
+        7u8
+    else:
+        0u8
+
+fn told(answer: bool) → u8:
+    if answer:
+        1u8
+    else:
+        0u8

@@ -538,6 +538,19 @@ that nothing in the language writes, so two of them with the same value answer a
 which is exactly the line `@[impure]` draws.  Nothing in the representation records it: purity is the front end's question, asked
 where the operator is written, and what reaches the backends is an ordinary instruction.
 
+**A comparison is absorbed by the branch that reads it, except a floating-point one.**  Read once, and read by a branch as its
+condition, an ordinary comparison emits nothing of its own: the machine compares and the branch tests what the comparison wrote,
+so there is no truth value anywhere and no register holding one.  Read any other number of times, or read by anything else, its
+answer is a value like any other and goes in a register.
+
+A floating-point comparison is never absorbed.  What these machines write for one is a different set of flags, on which a value
+that is not a number is a fourth answer and takes more than one reading to tell from the other three -- so it is computed into a
+register and the branch tests that register.  All three selectors said so and `folded_into_branch`, which is the one function all
+three ask, did not: it answered that the branch would absorb the comparison, the selector materialized it anyway, and the branch
+then emitted an integer compare of two floating-point registers, which no encoder has.  The effect was that `if a < b:` on two
+`f64` was refused by the code generator while `f(a < b)` was not, and every approximate comparison with it.  The knowledge now
+lives in the one place, which is what makes the three of them right.
+
 **Comparing two strings is a third generated function, and it is `memcmp`.**  UTF-8 orders by bytes exactly as it orders by
 code points, so the comparison neither decodes nor needs to know where a character begins: it walks to the shorter of the two
 lengths comparing bytes, answers with the difference at the first that differs, and answers by the lengths where it runs out.

@@ -115,6 +115,7 @@ GROUPS: tuple[Group, ...] = (
            "shift-operators": "two shifts, each with its distance checked",
            "float-arithmetic": "ten floating-point answers, each asserted",
            "float-approximate": "every approximate comparison, in both widths",
+           "float-comparison-as-a-condition": "floating-point comparisons where a condition stands",
            "extremum-of-floats": "the larger and smaller of floating-point values, in both widths",
            "rounding-operators": "all four roundings, in both widths, over values and an array",
            "power-operator": "powers written raised and worked out, and one over an array",

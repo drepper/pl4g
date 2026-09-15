@@ -35,7 +35,7 @@ from typing import Callable, Protocol, Sequence
 from ..ir.function import BasicBlock, Function
 from ..ir.inst import (BlockTarget, BrInst, CmpInst, CmpPred, CondBrInst,
                        Instruction, Terminator)
-from ..ir.types import MEM, parts_of
+from ..ir.types import FloatType, MEM, parts_of
 from ..ir.value import BlockParam
 from ..mc.asmbuilder import Assembler
 from ..mc.operand import MCImm, MCOperand, MCReg
@@ -134,7 +134,18 @@ def folded_into_branch(func: Function, value: Instruction) -> bool:
     that branch's condition.  A comparison read once by anything else -- a
     return, a store, one day a call -- is a value that something wants, and a
     value something wants has to be somewhere, which means a register.
+
+    **A comparison of floating-point values is never absorbed.**  What a branch
+    would read is the flags an integer comparison writes, and none of these
+    machines writes those for a floating-point comparison -- what they write is
+    a different set, on which a not-a-number is a fourth answer that takes more
+    than one reading to tell from the other three.  So every selector computes
+    such a comparison into a register and the branch tests that register, which
+    is what the three of them already say in so many words; saying it here as
+    well is what makes them right, since this is the one function all three ask.
     """
+    if isinstance(value, CmpInst) and isinstance(value.operands[0].ty, FloatType):
+        return False
     if not condition_used_once(func, value):
         return False
     for block in func.blocks:
