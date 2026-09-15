@@ -422,6 +422,55 @@ different things depending on how it was built; Zig, which faults in both and ha
 has `&+`.  Zig's and Swift's position is the one taken here, with `⊞` and its relatives in place of `+%` -- and with no wrapping
 operator at all, wrapping being a thing to ask for by writing the wrap rather than by writing an operator that hides it.
 
+#### Raising to a power
+
+**`a ⁿ b` raises `a` to the power of `b`**, and **a number written raised is the same thing**: `a²` and `a ⁿ 2` are one
+operation written the two ways it is written on paper.  The glyph is the letter mathematics writes an exponent that is not a
+number with, raised the way an exponent is written.
+
+```
+a ⁿ b                          ※ a raised to whatever b is
+a²                             ※ the same as a ⁿ 2
+a¹⁴                            ※ a raised to the fourteenth
+1.5f64³                        ※ 3.375: what is raised is a number, what it is raised by is a count
+```
+
+**Its two sides are not of one type**, and it is the only operator here of which that is true.  What is raised is a number of
+whatever type it is, and what it is raised by is a **count** -- how many times to multiply the one by itself.  So the answer has
+the type of the left side and the right side is an integer of its own, which is what makes `1.5f64³` the natural thing to write.
+A raised number with nothing to say what width it is, is a `u64`, since an exponent is never the thing a program is being careful
+about.
+
+**The exponent is a whole number** (4510) **and is not negative** (4511).  A fractional power is a root, which no instruction on
+any of these machines computes; a negative one is one divided by the positive power, which for an integer has no answer of the
+type and for a floating-point value has a divisor that may be zero and so an answer that is a result.  Neither is what this
+operator gives, and a program that wants either writes what it wants.  A negative exponent written down is refused where it is
+written; one the program works out stops the program, and only where the exponent's type is signed -- an unsigned one cannot be
+negative, and asking would be asking a question the type has already answered.
+
+**What is raised is a number** (4509), which is what may be multiplied: an integer or a floating-point value.
+
+**Anything raised to no power at all is one**, including zero.  The empty product is one, and that is what every polynomial
+written anywhere means by it.
+
+**It binds tighter than multiplying and is right associative**, as it is on paper: `2 × a²` squares `a` first, and `a ⁿ b ⁿ c`
+is `a` raised to what `b ⁿ c` came to -- the only reading that is not a longer way of writing `a ⁿ (b × c)`.  A number written
+raised binds where a call and an index bind, which is to whatever stands immediately before it: `f(x)²` squares what the call
+answered with.
+
+**Every multiplication it does is a multiplication**, with the check that one carries: an answer that will not fit stops the
+program, and inside `⎕wrap` it goes past the end of the type instead.  Where both sides are written down the answer is worked
+out while compiling and one that will not fit is refused there (4214).
+
+Compare: **Python**, whose `**` this is and which answers a float for a negative exponent, which a language with an integer type
+that says what it holds cannot do; **Fortran** and **Ada**, whose `**` likewise raises an integer by a non-negative integer and
+whose negative exponent is an error for the same reason this one is; **APL** and **BQN**, whose `⍟` and `⋆` are power and take a
+float exponent, having a float everything; **C**, which has no operator and whose `pow` is a floating-point library function, so
+that `x*x` is what everyone writes and `pow(x, 2)` is a famous performance mistake; **Rust**, **Go** and **Zig**, which have no
+operator either and whose `pow`/`powi` name the integer and floating-point cases separately; and **Haskell**, which has three
+operators -- `^`, `^^` and `**` -- one per combination of integer and fractional, which is the most honest arrangement and the
+hardest to remember.
+
 #### Moving bits
 
 Four operators move the bits of a number sideways.  They bind where multiplication does.
@@ -1097,6 +1146,12 @@ who has not been told.  A label is written by a generator, which has the glyph.
 `⁂` has none, and the first rule is what decides it: `**` is the only spelling anyone would reach for, being what Python
 writes the same idea's sibling with, and it is two copies of the character multiplication deliberately left free.  Spending it
 here would spend it for the one meaning this language has already decided not to give it.
+
+`ⁿ` and the raised digits have none, and it is the first rule that decides it: `^` and `**` are what anyone would reach for,
+and `^` is one character and already the exclusive or.  `**` passes both rules and is what Python, Fortran and Ada write, and it
+is not taken here for the reason `⁂` was not: two asterisks are two copies of the character multiplication was deliberately left
+free of, and spending them here would spend them for a meaning this language has already declined to give.  The raised digits
+could have no substitute in any case -- what makes them what they are is that they are raised.
 
 `⌈` and `⌊` have none, and the second rule is what decides it.  `><` and `<>` are two characters and say nothing about
 which of the two is which, and `<>` is one of the three spellings of `≠` this language declined to bless; `|^` and `|_` are

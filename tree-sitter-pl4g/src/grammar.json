@@ -2502,6 +2502,10 @@
         },
         {
           "type": "SYMBOL",
+          "name": "raised_expression"
+        },
+        {
+          "type": "SYMBOL",
           "name": "binary_expression"
         },
         {
@@ -3038,12 +3042,37 @@
               }
             ]
           }
+        },
+        {
+          "type": "PREC_RIGHT",
+          "value": 12,
+          "content": {
+            "type": "SEQ",
+            "members": [
+              {
+                "type": "SYMBOL",
+                "name": "_non_comparison"
+              },
+              {
+                "type": "FIELD",
+                "name": "operator",
+                "content": {
+                  "type": "STRING",
+                  "value": "ⁿ"
+                }
+              },
+              {
+                "type": "SYMBOL",
+                "name": "_non_comparison"
+              }
+            ]
+          }
         }
       ]
     },
     "unary_expression": {
       "type": "PREC",
-      "value": 12,
+      "value": 13,
       "content": {
         "type": "SEQ",
         "members": [
@@ -3103,9 +3132,38 @@
         ]
       }
     },
+    "raised_expression": {
+      "type": "PREC",
+      "value": 14,
+      "content": {
+        "type": "SEQ",
+        "members": [
+          {
+            "type": "FIELD",
+            "name": "value",
+            "content": {
+              "type": "SYMBOL",
+              "name": "_non_comparison"
+            }
+          },
+          {
+            "type": "FIELD",
+            "name": "exponent",
+            "content": {
+              "type": "SYMBOL",
+              "name": "exponent_literal"
+            }
+          }
+        ]
+      }
+    },
+    "exponent_literal": {
+      "type": "PATTERN",
+      "value": "\\u207b?[\\u2070\\u00b9\\u00b2\\u00b3\\u2074-\\u2079]+"
+    },
     "try_expression": {
       "type": "PREC",
-      "value": 13,
+      "value": 14,
       "content": {
         "type": "SEQ",
         "members": [
@@ -3285,7 +3343,7 @@
     },
     "element_expression": {
       "type": "PREC",
-      "value": 13,
+      "value": 14,
       "content": {
         "type": "SEQ",
         "members": [
@@ -3510,7 +3568,7 @@
     },
     "index_expression": {
       "type": "PREC",
-      "value": 13,
+      "value": 14,
       "content": {
         "type": "SEQ",
         "members": [
@@ -3543,7 +3601,7 @@
     },
     "call_expression": {
       "type": "PREC",
-      "value": 13,
+      "value": 14,
       "content": {
         "type": "SEQ",
         "members": [
@@ -3639,7 +3697,7 @@
     },
     "member_expression": {
       "type": "PREC",
-      "value": 13,
+      "value": 14,
       "content": {
         "type": "SEQ",
         "members": [

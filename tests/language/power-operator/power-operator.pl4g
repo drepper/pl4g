@@ -1,0 +1,74 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ `a ⁿ b` raises `a` to the power of `b`, and a number written raised is the
+※ same operator with that number on the right: `a²` and `a ⁿ 2` are one thing
+※ written the two ways it is written on paper.  The glyph is the letter
+※ mathematics writes an exponent that is not a number with, raised the way an
+※ exponent is written.
+※
+※ Its two sides are not of one type, which is what keeps it off the arithmetic
+※ path every other operator takes.  What is raised is a number of whatever type
+※ it is; what it is raised by is a *count*, how many times to multiply the one
+※ by itself -- so `1.5f64³` is the natural thing to write, and a rule that made
+※ the two agree would have refused it.
+※
+※ Squaring and multiplying, so a fourteenth power is five multiplications and
+※ not thirteen.  Each carries the check every multiplication carries, and a
+※ square this computes is always a power the answer itself contains -- so what
+※ the check reports is the answer and never a step towards it.
+
+@[startup, impure]
+fn main() → u8:
+    let a: u32 = 3u32
+    let n: u32 = 5u32
+    let s: i16 = ⁻3i16
+    let z: u32 = 0u32
+    let f: f64 = 1.5f64
+    let v: u32⟦3⟧ = ⟦2u32, 3u32, 4u32⟧
+    let squared: u32⟦3⟧ = v²
+    if a³ ≠ 27u32 ∨ a² ≠ 9u32:
+        1u8
+    ※ the exponent worked out while the program runs, which is a loop
+    elif a ⁿ n ≠ 243u32 ∨ a ⁿ (n - 2u32) ≠ 27u32:
+        2u8
+    ※ raised to no power at all is one, as an empty product is -- including for
+    ※ a base of zero, which is what every polynomial written anywhere means
+    elif a⁰ ≠ 1u32 ∨ a¹ ≠ 3u32 ∨ z⁰ ≠ 1u32 ∨ z⁵ ≠ 0u32:
+        3u8
+    ※ a negative base, raised to an odd power and to an even one
+    elif s³ ≠ ⁻27i16 ∨ s⁴ ≠ 81i16:
+        4u8
+    ※ a floating-point base, whose exponent is still a count
+    elif ¬(f² ≅ 2.25f64) ∨ ¬(f ⁿ 3u8 ≅ 3.375f64):
+        5u8
+    ※ a raised number of more than one digit
+    elif 2u32¹⁴ ≠ 16384u32:
+        6u8
+    ※ it is listable, and the exponent is not walked: one count serves every
+    ※ element, which is what being listable means where the two sides are of
+    ※ two different types
+    elif squared⟦0⟧ ≠ 4u32 ∨ squared⟦1⟧ ≠ 9u32 ∨ squared⟦2⟧ ≠ 16u32:
+        7u8
+    ※ it binds tighter than multiplying, as it does on paper
+    elif 2u32 × 3u32² ≠ 18u32:
+        8u8
+    ※ and it is right associative: two raised to the ninth, not eight squared
+    elif 2u32 ⁿ 3u8 ⁿ 2u8 ≠ 512u32:
+        9u8
+    ※ it binds to whatever stands immediately before it, as a call does
+    elif twice(3u32)² ≠ 36u32 ∨ v⟦1⟧² ≠ 9u32:
+        10u8
+    ※ inside a wrap it goes past the end of its type rather than stopping, both
+    ※ ways of writing it
+    elif ⎕wrap(200u8 ⁿ 2u8) ≠ 64u8 ∨ ⎕wrap(200u8²) ≠ 64u8:
+        11u8
+    ※ and an operator written before its operand binds tighter still: this
+    ※ squares and then rounds down, which is three, rather than rounding down
+    ※ to one and squaring it
+    elif ¬(↓f² ≅ 2.0f64):
+        12u8
+    else:
+        0u8
+
+fn twice(x: u32) → u32:
+    2u32 × x

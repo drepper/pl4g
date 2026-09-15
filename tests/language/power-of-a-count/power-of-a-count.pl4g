@@ -1,0 +1,11 @@
+※ pl4g-test: compile=error diag=4510
+
+※ An exponent is how many times a value is multiplied by itself, which is a
+※ count and therefore an integer.  A fractional power is a root, which no
+※ instruction on any of these machines computes and which this language does
+※ not offer; one is written as a call to whatever computes it.
+
+@[startup]
+fn main() → u8:
+    let x: f64 = 2.0f64 ⁿ 0.5f64
+    0u8

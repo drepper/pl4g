@@ -117,6 +117,7 @@ GROUPS: tuple[Group, ...] = (
            "float-approximate": "every approximate comparison, in both widths",
            "extremum-of-floats": "the larger and smaller of floating-point values, in both widths",
            "rounding-operators": "all four roundings, in both widths, over values and an array",
+           "power-operator": "powers written raised and worked out, and one over an array",
            "result-type": "a result made, propagated with ? and read with ??",
            "result-as-an-argument": "results passed and answered with, both kinds",
            "result-from-a-plain-value": "a result wanted in nine places, and no suffix written",

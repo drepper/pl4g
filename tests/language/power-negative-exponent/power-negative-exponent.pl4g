@@ -1,0 +1,13 @@
+※ pl4g-test: compile=error diag=4511
+
+※ A negative exponent means one divided by the positive power, which is a
+※ division and not a multiplication: for an integer it has no answer of the
+※ type, and for a floating-point value it has a divisor that may be zero and so
+※ an answer that is a result.  Neither is what this operator gives, so a
+※ program that wants the reciprocal writes the division -- where what happens
+※ when the divisor is zero is written down as well.
+
+@[startup]
+fn main() → u8:
+    let x: u32 = 2u32⁻³
+    0u8

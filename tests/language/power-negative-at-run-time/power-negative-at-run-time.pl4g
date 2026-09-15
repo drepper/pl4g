@@ -1,0 +1,19 @@
+※ pl4g-test: compile=ok run=native,qemu exit=64 diag=none
+
+※ A negative exponent written down is refused where it is written.  One the
+※ program works out is the same mistake arriving later, so it stops the program
+※ the way every other answer that cannot exist does -- and the check is one
+※ comparison made once, before the loop rather than in it.
+※
+※ Only a signed exponent is asked about.  An unsigned one cannot be negative,
+※ so asking would be asking a question whose answer is a property of the type.
+
+@[startup, impure]
+fn main() → u8:
+    raised(2u32, ⁻2i32)
+
+fn raised(x: u32, n: i32) → u8:
+    if x ⁿ n ≠ 4u32:
+        1u8
+    else:
+        0u8

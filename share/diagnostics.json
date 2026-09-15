@@ -4691,6 +4691,72 @@
       "option": null
     },
     {
+      "number": 4509,
+      "name": "LANG_POWER_BASE_NOT_A_NUMBER",
+      "severity": "error",
+      "message": "'ⁿ' raises a number to a power, and '{found}' is not a number",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type of what was to be raised"
+        }
+      ],
+      "cause": "Raising something to a power is multiplying it by itself, so what may be raised is what may be multiplied: an integer or a floating-point number.  A raised number written after something is this operator with that number on the right, so it asks the same of what stands before it.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Raising to a power",
+        "requirement": "The left side of 'ⁿ' is a number."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4510,
+      "name": "LANG_POWER_EXPONENT_NOT_A_COUNT",
+      "severity": "error",
+      "message": "'ⁿ' raises something a whole number of times, and '{found}' is not a whole number",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type of the exponent"
+        }
+      ],
+      "cause": "An exponent here is how many times a value is multiplied by itself, which is a count and therefore an integer.  A fractional power is a different operation -- a root -- which no instruction on any of these machines computes and which this language does not offer; one is written as the call to whatever computes it.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Raising to a power",
+        "requirement": "The right side of 'ⁿ' is an integer."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4511,
+      "name": "LANG_POWER_EXPONENT_NEGATIVE",
+      "severity": "error",
+      "message": "'{value}' is not a number of times to multiply something by itself",
+      "args": [
+        {
+          "name": "value",
+          "type": "string",
+          "description": "the exponent that was written"
+        }
+      ],
+      "cause": "A negative exponent means one divided by the positive power, which is a division and not a multiplication: for an integer it has no answer of the type, and for a floating-point value it has a divisor that may be zero and so an answer that is a result.  Neither is what this operator gives, so a program that wants the reciprocal writes the division, where what happens when the divisor is zero is written down as well.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Raising to a power",
+        "requirement": "An exponent is not negative."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 5001,
       "name": "LANG_STMT_UNREACHABLE",
       "severity": "warning",

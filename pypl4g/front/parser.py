@@ -134,6 +134,11 @@ _BINARY_OPERATORS: Final[dict[TokKind, _Operator]] = {
     TokKind.ROTATE_LEFT: _Operator(ast.BinaryOp.ROTATE_LEFT, 50),
     TokKind.ROTATE_RIGHT: _Operator(ast.BinaryOp.ROTATE_RIGHT, 50),
     TokKind.SAT_MUL: _Operator(ast.BinaryOp.SAT_MUL, 50),
+    # Raising to a power binds tighter than multiplying, as it does on paper and
+    # in every language that has it, and it is right associative for the same
+    # reason: `a ⁿ b ⁿ c` is `a` raised to what `b ⁿ c` came to, which is the
+    # only reading that is not a longer way of writing `a ⁿ (b × c)`.
+    TokKind.POWER: _Operator(ast.BinaryOp.POWER, 60, right_associative=True),
 }
 
 #: What may stand before an operand.  These bind tighter than anything above.
@@ -1273,6 +1278,19 @@ class Parser:
                                    D.LANG_SYNTAX_EXPECTED_CLOSING_ARRAY).span
                 found = ast.Element(span=found.span.to(end), base=found,
                                     indices=tuple(indices))
+                continue
+            if self._check(TokKind.EXPONENT):
+                # A number written raised is the power operator with that
+                # number on the right, which is the whole of what it is.  It
+                # binds where a call and an index bind, which is to whatever
+                # stands immediately before it: `a²×b` squares `a`, and
+                # `f(x)²` squares what the call answered with.
+                raised = self._advance()
+                assert raised.int_value is not None
+                found = ast.Binary(
+                    span=found.span.to(raised.span), op=ast.BinaryOp.POWER,
+                    left=found,
+                    right=ast.IntLit(span=raised.span, value=raised.int_value))
                 continue
             if self._check(TokKind.QUESTION):
                 mark = self._advance()

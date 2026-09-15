@@ -44,7 +44,8 @@
 ["+" "-" "×" "÷" "%" "⊞" "⊟" "⊠"] @operator
 ["«" "»" "↺" "↻"] @operator
 ["#" "⍴" "⧺" "++" "⌈" "⌊"] @operator
-["↓" "↑" "↕" "⇕"] @operator
+["↓" "↑" "↕" "⇕" "ⁿ"] @operator
+(exponent_literal) @number
 ["and" "or"] @keyword.operator
 ["←"] @operator
 ["→" "->"] @punctuation.delimiter

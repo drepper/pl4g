@@ -4002,6 +4002,51 @@ nothing of the kind and does not need it, its levels being four points on a line
 
 ---
 
+## 2026-09-15T23:50+02:00 — language
+
+**Raising to a power, written `ⁿ` and written raised**
+
+Decided on the user's direction: `ⁿ` is the operator and a number written raised — `a¹⁴` — is that operator with that number on
+the right.
+
+**Two spellings of one thing, which this language otherwise refuses.**  What makes it not a second spelling is that neither
+covers the other's case: raised digits can only be a number, there being no raised spelling of a variable, and `ⁿ` is the only
+way to raise by something worked out.  Where both can be written they mean the same thing, as `⁻3` and `0 - 3` do — the raised
+number is how the exponent is *written*, not a second name for the operation.  The alternative was to have only `ⁿ`, which would
+have made the notation every reader already knows unavailable; or only the raised digits, which would have left a constant
+exponent as the only kind there is.
+
+**The two sides are not of one type**, and this is the only operator here of which that is true.  What is raised is a number;
+what it is raised by is a *count*.  Making them agree would have refused `1.5f64³`, which is the thing anyone writes first.  It
+is also why the operator is not on the arithmetic path with the others: that path's whole shape is "both sides have one type and
+the answer has it too".
+
+**The exponent is a whole number and is not negative.**  A fractional power is a root, which none of these machines has an
+instruction for and which would need a library this compiler does not have.  A negative one is one divided by the positive power:
+for an integer there is no answer of the type, and for a floating-point value the divisor may be zero, so the answer would be a
+result — which would put a `?` on `x⁻²` and on nothing else.  Refusing it is what keeps the operator's type simple, and the
+program that wants a reciprocal writes the division, where the zero divisor is written down too.  Python answers a float for a
+negative integer exponent, which a language whose integer types say what they hold cannot copy; Fortran and Ada refuse it exactly
+as this does.
+
+**Anything raised to no power at all is one, including zero.**  The empty product is one, and every polynomial written anywhere
+means that.  The alternative, a special case for `0⁰`, would make the operator answer differently for a value the program may not
+know at the point it writes it.
+
+**Squaring and multiplying, not multiplying out.**  A fourteenth power is five multiplications instead of thirteen, and the
+saving is free: a square this computes is always a power the answer contains, so no square overflows where the answer does not,
+and the check each multiplication already carries is the whole of the checking.  The loop form pays one thing for that — it must
+not square on the last turn, which is the one case the argument does not cover — and that is why its test sits between the two
+multiplications.
+
+Compare: **Python**, whose `**` this is; **Fortran** and **Ada**, whose `**` has the same integer rule including the refusal of a
+negative exponent; **Haskell**, whose `^`, `^^` and `**` are one operator per combination of integer and fractional, which is the
+most honest arrangement anyone has and the hardest to remember; **APL** and **BQN**, whose power takes a float exponent because
+everything there is a float; and **C**, **Rust**, **Go** and **Zig**, which have no operator at all — where `pow(x, 2)` instead
+of `x*x` is a performance mistake famous enough to have its own compiler optimization.
+
+---
+
 Open questions
 --------------
 

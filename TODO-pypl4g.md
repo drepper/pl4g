@@ -362,6 +362,18 @@ To Do List for the pypl4g compiler
     treatment joining two arrays got: the elements are already a run whose length is written down, so what is missing is the
     entry in each target's `Vectors` table and a reduction over the lanes at the end.
 
+[ ] fix the approximate comparisons where the answer is the condition of an `if`.  All six of `\N{APPROXIMATELY EQUAL TO}`, `\N{NEITHER APPROXIMATELY NOR ACTUALLY EQUAL TO}`, `\N{LESS-THAN OR APPROXIMATE}`, `\N{GREATER-THAN OR APPROXIMATE}`,
+    `\N{LESS-THAN AND NOT APPROXIMATE}` and `\N{GREATER-THAN AND NOT APPROXIMATE}` are refused by every backend there (8501, "no encoding of 'cmp' accepts ...") for
+    `let a: f64 = 1.0f64` and `if a \N{APPROXIMATELY EQUAL TO} b:`.  The checker lowers the tolerance test as `icmp.sgt.f64`, an integer
+    predicate over two floating-point values, and what selects a comparison feeding a branch does not look at the operand type
+    before choosing the integer instruction.  It goes unnoticed because the one test that covers these hands the answer to a
+    function rather than to an `if`, which takes the other path.  Found while writing the exponentiation tests and older than
+    every commit of that session.
+
+[ ] raise a whole run at once, and fold a power of a value written down.  `v\N{SUPERSCRIPT TWO}` over an array is one element at a time, where
+    each multiplication could be one instruction per register's worth; and `2u32\N{SUPERSCRIPT THREE}` reaches the code generator as two
+    multiplications, where the same arithmetic written out is folded.
+
 [ ] use what the RISC-V extensions offer beyond the two the code generator asks about today.  `b` brings Zbb, whose `min`,
     `max`, `minu` and `maxu` are one instruction where `\N{LEFT CEILING}` and `\N{LEFT FLOOR}` are a comparison and a conditional move, and whose
     `rol` and `ror` are the rotations; `v` brings the vector extension, which is what `Vectors` is empty for on this target.

@@ -532,6 +532,7 @@ module.exports = grammar({
       $.index_expression,
       $.or_else_expression,
       $.try_expression,
+      $.raised_expression,
       $.binary_expression,
       $.unary_expression,
       $.call_expression,
@@ -604,12 +605,18 @@ module.exports = grammar({
                        field('operator', choice('\u00d7', '\u00f7', '%', '\u22a0',
                                                 '\u00ab', '\u00bb', '\u21ba', '\u21bb')),
                        $._non_comparison)),
+      // Raising to a power binds tighter than multiplying, as it does on paper
+      // and in every language that has it, and is right associative for the
+      // same reason: `a \u207f b \u207f c` is `a` raised to what `b \u207f c` came to, which
+      // is the only reading that is not a longer way of writing `a \u207f (b \u00d7 c)`.
+      prec.right(12, seq($._non_comparison, field('operator', '\u207f'),
+                         $._non_comparison)),
     ),
 
     // Both bind tighter than every operator written between two operands, so
     // `\u00ac ready \u2227 seen` is `(\u00ac ready) \u2227 seen` and `\u00ac (a < b)` needs its parentheses --
     // the same rule '!' follows in C, Go and Rust.
-    unary_expression: $ => prec(12, seq(
+    unary_expression: $ => prec(13, seq(
       field('operator', choice('~', '\u00ac', '#', '\u2374', '\u2308', '\u230a',
                                '\u2193', '\u2191', '\u2195', '\u21d5')),
       $._non_comparison,
@@ -621,7 +628,20 @@ module.exports = grammar({
     // `EXPR?` hands back the answer inside a result and leaves the function
     // with the error where there is none.  It binds as tightly as a call does,
     // to whatever stands immediately before it.
-    try_expression: $ => prec(13, seq(
+    // A number written raised is the power operator with that number on the
+    // right.  It binds where a call and an index bind, which is to whatever
+    // stands immediately before it: `a\u00b2\u00d7b` squares `a`, and `f(x)\u00b2` squares
+    // what the call answered with.
+    raised_expression: $ => prec(14, seq(
+      field('value', $._non_comparison), field('exponent', $.exponent_literal),
+    )),
+
+    // The digits written raised, with a raised minus where one is written --
+    // which is refused for what it would mean and not for how it is written,
+    // so the grammar takes it.
+    exponent_literal: _ => /\u207b?[\u2070\u00b9\u00b2\u00b3\u2074-\u2079]+/,
+
+    try_expression: $ => prec(14, seq(
       field('value', $._non_comparison), '?',
     )),
 
@@ -655,7 +675,7 @@ module.exports = grammar({
     // of them.  One index per dimension, in the order the shape was written
     // in.  It binds as tightly as a call does, and to whatever stands
     // immediately before it.
-    element_expression: $ => prec(13, seq(
+    element_expression: $ => prec(14, seq(
       field('array', $._non_comparison),
       '\u27e6', sepBy1(',', field('index', $._expression)), '\u27e7',
     )),
@@ -678,12 +698,12 @@ module.exports = grammar({
 
     // Whether a set holds a key, or what a dictionary has for one.  It binds
     // as tightly as a call does, and to whatever stands immediately before it.
-    index_expression: $ => prec(13, seq(
+    index_expression: $ => prec(14, seq(
       field('collection', $._non_comparison),
       '\u2e28', field('key', $._expression), '\u2e29',
     )),
 
-    call_expression: $ => prec(13, seq(
+    call_expression: $ => prec(14, seq(
       field('function', $._non_comparison),
       '(', sepBy(',', field('argument', $._spreadable)), ')',
     )),
@@ -698,7 +718,7 @@ module.exports = grammar({
 
     // Something named through the module it belongs to, which binds tighter
     // than any operator: `a.b & c` is `(a.b) & c`.
-    member_expression: $ => prec(13, seq(
+    member_expression: $ => prec(14, seq(
       field('base', $._non_comparison), '.', field('name', $.identifier),
     )),
 

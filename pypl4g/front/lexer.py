@@ -20,7 +20,8 @@ from .token import (ABOVE_NOT_ALIKE_GLYPH, ABOVE_OR_ALIKE_GLYPH, ALIKE_GLYPH,
                     BELOW_NOT_ALIKE_GLYPH, BELOW_OR_ALIKE_GLYPH,
                     COMMENT_GLYPH, CONCAT_GLYPH, FLOAT_TYPE_NAMES,
                     CEILING_GLYPH, FLOOR_GLYPH, MAX_GLYPH, MIN_GLYPH,
-                    NEAREST_GLYPH, ROUNDED_GLYPH, SHAPE_GLYPH,
+                    NEAREST_GLYPH, POWER_GLYPH, ROUNDED_GLYPH,
+                    SHAPE_GLYPH, SUPERSCRIPT_DIGITS,
                     GREATER_EQUAL_GLYPH,
                     INTEGER_TYPE_NAMES,
                     KEYWORDS, LESS_EQUAL_GLYPH, NAND_GLYPH, NEGATIVE_GLYPH,
@@ -78,6 +79,7 @@ _SIMPLE: Final[dict[str, TokKind]] = {
     CEILING_GLYPH: TokKind.CEILING,
     NEAREST_GLYPH: TokKind.NEAREST,
     ROUNDED_GLYPH: TokKind.ROUNDED,
+    POWER_GLYPH: TokKind.POWER,
     SAT_ADD_GLYPH: TokKind.SAT_ADD,
     SAT_SUB_GLYPH: TokKind.SAT_SUB,
     SAT_MUL_GLYPH: TokKind.SAT_MUL,
@@ -137,8 +139,16 @@ def _is_ident_start(ch: str) -> bool:
 
 
 def _is_ident_continue(ch: str) -> bool:
-    """Whether *ch* may continue an identifier."""
-    return ch.isalnum() or ch == "_"
+    """Whether *ch* may continue an identifier.
+
+    A digit written raised does not, although it is a digit as far as the
+    character tables are concerned: a raised number after a name is what that
+    name is raised to the power of, and a name that could swallow it would make
+    `a²` a name rather than a square.  The same goes for the letter written
+    raised, which is the operator itself.
+    """
+    return (ch.isalnum() or ch == "_") \
+        and ch not in SUPERSCRIPT_DIGITS and ch != POWER_GLYPH
 
 
 class Lexer:
@@ -304,11 +314,21 @@ class Lexer:
         if _is_ident_start(ch):
             self._lex_identifier(start)
             return True
+        if ch in SUPERSCRIPT_DIGITS:
+            self._lex_exponent(start)
+            return True
         if ch.isdigit():
             self._lex_number(start)
             return True
         if ch == NEGATIVE_GLYPH:
-            self._lex_number(start)
+            # A raised minus begins a negative number where digits follow it and
+            # a negative exponent where raised digits do.  Which it is, is the
+            # next character and nothing else: the two are written alike and
+            # stand in different places.
+            if self._peek(1) in SUPERSCRIPT_DIGITS:
+                self._lex_exponent(start)
+            else:
+                self._lex_number(start)
             return True
         if ch == '"':
             self._lex_string(start)
@@ -348,6 +368,26 @@ class Lexer:
             self._pos += 1
         text = self._text[start:self._pos]
         self._emit(KEYWORDS.get(text, TokKind.IDENT), start)
+
+    def _lex_exponent(self, start: int) -> None:
+        """Lex a number written raised, which is an exponent.
+
+        There is no radix and no type suffix, and neither is an omission: an
+        exponent is a count of how many times something is multiplied by
+        itself, so it is a number of no particular width, and a raised `0x` is
+        not a thing anybody writes.  A raised minus makes it negative, which is
+        read here and refused where it is checked -- what is wrong with it is
+        what it would mean and not how it is written.
+        """
+        negative = self._peek() == NEGATIVE_GLYPH
+        if negative:
+            self._pos += 1
+        value = 0
+        while self._peek() in SUPERSCRIPT_DIGITS:
+            value = value * 10 + SUPERSCRIPT_DIGITS[self._peek()]
+            self._pos += 1
+        self._emit(TokKind.EXPONENT, start,
+                   int_value=-value if negative else value)
 
     def _lex_number(self, start: int) -> None:
         """Lex an integer literal, in decimal or with a base prefix.

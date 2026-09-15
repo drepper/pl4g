@@ -245,6 +245,9 @@ class BinaryOp(StrEnum):
     #: The larger and the smaller of two, element by element.
     MAX = "\N{LEFT CEILING}"
     MIN = "\N{LEFT FLOOR}"
+    #: Raising something to a power.  A number written raised is this with the
+    #: number on the right, which is why there is one operator and not two.
+    POWER = "\N{SUPERSCRIPT LATIN SMALL LETTER N}"
 
 
 class UnaryOp(StrEnum):

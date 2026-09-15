@@ -1,0 +1,11 @@
+※ pl4g-test: compile=error diag=4509
+
+※ Raising something to a power is multiplying it by itself, so what may be
+※ raised is what may be multiplied.  A raised number written after something
+※ asks the same of what stands before it as the operator does of its left side,
+※ being that operator.
+
+@[startup]
+fn main() → u8:
+    let x: str = "ab"²
+    0u8

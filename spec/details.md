@@ -479,6 +479,26 @@ the same width, so the conversion is a bitcast -- which the verifier now allows 
 type it is held as, beside the addresses it already allowed.  `⎕chr` puts a check in front of it and `⎕ord` does not, and a code
 point written down is settled while compiling either way.
 
+**Raising to a power is squaring and multiplying, and there are two of it.**  Where the exponent is written down there is no
+loop at all: the bits of it are known, so the multiplications are written out -- one per bit and one more per bit that is set,
+which is five for a fourteenth power where multiplying it out would be thirteen.  Where it is not, the same algorithm runs with
+the exponent in a register, at most sixty-four turns and as many as it has bits.
+
+**The squaring cannot report an overflow the answer does not have.**  Every square the written-down form computes is a power the
+answer itself contains, and for an integer of magnitude at least two a smaller power is a smaller number; for the three integers
+where that is not so, and for a floating-point value of magnitude below one, every power is at most one.  So the check each
+multiplication already carries is the whole of the checking, and nothing had to be written to keep a step towards the answer from
+stopping a program whose answer was fine.
+
+The loop needs one thing of its own for the same reason: **it does not square on the last turn**.  Squaring once more than the
+answer needs is exactly the case the paragraph above does not cover, so the test for another turn comes between the two
+multiplications rather than at the top of the loop -- which is why the loop is nine blocks of one instruction rather than four.
+Two of those nine are there only because a branch that asks a question carries nothing with it: what the loop starts from is
+handed over by a block after the test, not by the test.
+
+The exponent is not walked where what is raised is an array.  One count serves every element, which is what being listable means
+for the one operator here whose two sides are of two different types.
+
 **Rounding is one instruction on two of the three machines and eight on the other.**  x86-64 has `roundss`/`roundsd`, whose
 immediate names the direction and whose value four says to ask `MXCSR` instead -- one instruction for all four operators.
 AArch64 has `frintm`, `frintp`, `frintn` and `frinti`, one apiece.  RISC-V has none: rounding a floating-point number where it

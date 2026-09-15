@@ -216,6 +216,24 @@ CEILING_GLYPH: Final[str] = "\N{UPWARDS ARROW}"
 NEAREST_GLYPH: Final[str] = "\N{UP DOWN ARROW}"
 ROUNDED_GLYPH: Final[str] = "\N{UP DOWN DOUBLE ARROW}"
 
+#: Raising something to a power.  The glyph is the letter mathematics writes an
+#: exponent that is not a number with, raised the way an exponent is written --
+#: so `a \N{SUPERSCRIPT LATIN SMALL LETTER N} b` and `a\N{SUPERSCRIPT TWO}` are the same operation written the two ways it is
+#: written on paper.
+POWER_GLYPH: Final[str] = "\N{SUPERSCRIPT LATIN SMALL LETTER N}"
+
+#: The digits written raised, which is how an exponent that *is* a number is
+#: written.  The first three are where Latin-1 put them and the rest are where
+#: Unicode put the ones Latin-1 had not got, which is why this is a table and
+#: not a range.
+SUPERSCRIPT_DIGITS: Final[dict[str, int]] = {
+    "\N{SUPERSCRIPT ZERO}": 0, "\N{SUPERSCRIPT ONE}": 1,
+    "\N{SUPERSCRIPT TWO}": 2, "\N{SUPERSCRIPT THREE}": 3,
+    "\N{SUPERSCRIPT FOUR}": 4, "\N{SUPERSCRIPT FIVE}": 5,
+    "\N{SUPERSCRIPT SIX}": 6, "\N{SUPERSCRIPT SEVEN}": 7,
+    "\N{SUPERSCRIPT EIGHT}": 8, "\N{SUPERSCRIPT NINE}": 9,
+}
+
 #: Accepted substitute for the arrow.  Two characters, so it claims nothing.
 ARROW_ASCII: Final[str] = "->"
 
@@ -345,6 +363,9 @@ class TokKind(StrEnum):
     CEILING = "'\N{UPWARDS ARROW}'"
     NEAREST = "'\N{UP DOWN ARROW}'"
     ROUNDED = "'\N{UP DOWN DOUBLE ARROW}'"
+    POWER = "'\N{SUPERSCRIPT LATIN SMALL LETTER N}'"
+    #: A number written raised, which is an exponent and its operator at once.
+    EXPONENT = "a raised number"
 
     DOC_COMMENT = "documentation comment"
     NEWLINE = "end of line"
