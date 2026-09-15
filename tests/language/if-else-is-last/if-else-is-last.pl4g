@@ -7,4 +7,4 @@
 let n: mut u8 = 3u8
 
 @[startup]
-fn main() → u8 { if n < 4u8 { return 2u8 } else { return 3u8 } elif n = 1u8 { return 4u8 } }
+fn main() → u6 { if n < 4u8 { return 2u6 } else { return 3u6 } elif n = 1u8 { return 4u6 } }

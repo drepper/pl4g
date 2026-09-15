@@ -12,7 +12,7 @@
 ※ only thing that could say and having been asked first.
 
 @[startup, impure]
-fn main() → u8:
+fn main() → u6:
     ※ a list, whose elements the declared type settles
     let summed: mut u8 = 0u8
     foreach x: u8 = [1, 2, 3]:
@@ -41,10 +41,10 @@ fn main() → u8:
     foreach r: u8⟦2⟧ = ⟦⟦1, 2⟧, ⟦3, 4⟧⟧:
         rows ← rows + r⟦0⟧ + r⟦1⟧
     if summed ≠ 6u8 ∨ wide ≠ 60u16:
-        1u8
+        1u6
     elif keys ≠ 7u8 ∨ counted ≠ 6u8:
-        2u8
+        2u6
     elif plain ≠ 15u8 ∨ rows ≠ 10u8:
-        3u8
+        3u6
     else:
-        0u8
+        0u6

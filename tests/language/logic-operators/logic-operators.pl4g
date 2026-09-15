@@ -20,11 +20,11 @@ let neither: mut bool = false
 let opposite: mut bool = false
 
 @[startup, impure]
-fn main() → u8:
+fn main() → u6:
     both ← yes ∧ no
     either ← yes ∨ no
     one_of ← yes ⊕ no
     not_both ← yes ⊼ no
     neither ← yes ⊽ no
     opposite ← ¬ yes
-    0u8
+    0u6

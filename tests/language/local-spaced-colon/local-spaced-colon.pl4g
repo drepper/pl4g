@@ -4,6 +4,6 @@
 
 ※ ':=' is not one token, so it may be written apart.
 @[startup]
-fn main() → u8:
-    let status : = 3u8
+fn main() → u6:
+    let status : = 3u6
     status

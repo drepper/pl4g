@@ -17,6 +17,6 @@ fn twice():
     bump()
 
 @[startup, impure]
-fn main() → u8:
+fn main() → u6:
     twice()
     counter

@@ -16,17 +16,17 @@ ROOT = Path(__file__).resolve().parent.parent.parent
 VIEWER = ROOT / "bin" / "pl4g-decisions"
 
 SOURCE = """\N{REFERENCE MARK} A program with things to decide about.
-let used: u8 = 7u8
+let used: u6 = 7u6
 
-let only_by_dropped: u8 = 9u8
+let only_by_dropped: u6 = 9u6
 
-fn unreached() \N{RIGHTWARDS ARROW} u8:
+fn unreached() \N{RIGHTWARDS ARROW} u6:
     only_by_dropped
 
 @[startup, impure]
-fn main() \N{RIGHTWARDS ARROW} u8:
+fn main() \N{RIGHTWARDS ARROW} u6:
     @[ignore(4006)]
-    let unread: u8 = used
+    let unread: u6 = used
     used
 """
 
@@ -203,9 +203,9 @@ def test_the_mark_stands_over_the_column_the_record_gives(tmp_path: Path) -> Non
     """
     source = tmp_path / "show.pl4g"
     source.write_text("".join((
-        "fn worked_out() \N{RIGHTWARDS ARROW} u8:\n    1u8\n\n",
-        "@[startup]\nfn main() \N{RIGHTWARDS ARROW} u8:\n",
-        "    _ \N{LEFTWARDS ARROW} worked_out()\n    0u8\n")), encoding="utf-8")
+        "fn worked_out() \N{RIGHTWARDS ARROW} u6:\n    1u6\n\n",
+        "@[startup]\nfn main() \N{RIGHTWARDS ARROW} u6:\n",
+        "    _ \N{LEFTWARDS ARROW} worked_out()\n    0u6\n")), encoding="utf-8")
     log = tmp_path / "decisions.json"
     proc = run_compiler(["-o", str(tmp_path / "out"),
                          "".join(("--decision-log=", str(log))), str(source)])
@@ -227,10 +227,10 @@ def test_the_mark_counts_a_glyph_as_the_terminal_draws_it(tmp_path: Path) -> Non
     """
     source = tmp_path / "show.pl4g"
     source.write_text("".join((
-        "fn worked_out() \N{RIGHTWARDS ARROW} u8:\n    1u8\n\n",
-        "@[startup]\nfn main() \N{RIGHTWARDS ARROW} u8:\n",
-        "    let t: \N{LEFT ANGLE BRACKET}u8, u8\N{RIGHT ANGLE BRACKET} = ",
-        "\N{LEFT ANGLE BRACKET}1u8, 2u8\N{RIGHT ANGLE BRACKET}\n",
+        "fn worked_out() \N{RIGHTWARDS ARROW} u6:\n    1u6\n\n",
+        "@[startup]\nfn main() \N{RIGHTWARDS ARROW} u6:\n",
+        "    let t: \N{LEFT ANGLE BRACKET}u6, u6\N{RIGHT ANGLE BRACKET} = ",
+        "\N{LEFT ANGLE BRACKET}1u6, 2u6\N{RIGHT ANGLE BRACKET}\n",
         "    _ \N{LEFTWARDS ARROW} worked_out()\n",
         "    t\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}0",
         "\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}\n")), encoding="utf-8")

@@ -9,5 +9,5 @@ fn f(n: u8) → u8:
     n
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     f(3u8)

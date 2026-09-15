@@ -7,5 +7,5 @@
 type Twice = x : u8 ; x : u16
 
 @[startup]
-fn main() → u8:
-    0u8
+fn main() → u6:
+    0u6

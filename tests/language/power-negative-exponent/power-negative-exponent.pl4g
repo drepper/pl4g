@@ -15,7 +15,7 @@
 ※ `a ⁿ 2u8` carries a mark that `a²` does not.
 
 @[startup, impure]
-fn main() → u8:
+fn main() → u6:
     let f: f64 = 2.0f64
     let a: u32 = 3u32
     let one: u32 = 1u32
@@ -23,27 +23,27 @@ fn main() → u8:
     let neg: i32 = ⁻3i32
     ※ one over a power, in the format where that is the useful thing
     if ¬((f⁻¹ ?? 0.0f64) ≅ 0.5f64) ∨ ¬((f⁻² ?? 0.0f64) ≅ 0.25f64):
-        1u8
+        1u6
     ※ one divided by a whole number greater than one is nothing, and that is
     ※ the answer and not a mistake
     elif (a⁻² ?? 9u32) ≠ 0u32 ∨ (one⁻⁵ ?? 9u32) ≠ 1u32:
-        2u8
+        2u6
     ※ there is no answer where what was raised is zero, which is the one pair
     ※ the operator has none for
     elif (z⁻¹ ?? 7u32) ≠ 7u32 ∨ (z⁻³ ?? 7u32) ≠ 7u32:
-        3u8
+        3u6
     ※ the same, with the exponent worked out while the program runs
     elif (a ⁿ neg ?? 9u32) ≠ 0u32 ∨ (z ⁿ neg ?? 7u32) ≠ 7u32:
-        4u8
+        4u6
     elif (one ⁿ neg ?? 9u32) ≠ 1u32:
-        5u8
+        5u6
     ※ the most negative exponent there is, whose magnitude the type has not got
     ※ -- what the loop walks is a magnitude and not a signed number, so it
     ※ comes out right
     elif (one ⁿ ⁻2147483648i32 ?? 9u32) ≠ 1u32:
-        6u8
+        6u6
     ※ and a negative exponent of zero magnitude is not negative
     elif ¬((f ⁿ 0i32 ?? 0.0f64) ≅ 1.0f64):
-        7u8
+        7u6
     else:
-        0u8
+        0u6

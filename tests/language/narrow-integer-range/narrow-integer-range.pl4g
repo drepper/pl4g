@@ -1,0 +1,20 @@
+※ pl4g-test: compile=ok run=native,qemu exit=64 diag=none
+
+※ An answer that will not fit stops the program, and what it has to fit is the
+※ type and not the byte holding it.  Five plus six is eleven, which a byte
+※ holds easily and a `u3` does not.
+※
+※ The operands come from outside the function so that the compiler cannot work
+※ the answer out: written down, it would be refused where it was written,
+※ which is the other half of the same rule and is what the error test beside
+※ this one covers.
+
+@[startup, impure]
+fn main() → u6:
+    added(5u3, 6u3)
+
+fn added(a: u3, b: u3) → u6:
+    if a + b ≠ 0u3:
+        1u6
+    else:
+        0u6

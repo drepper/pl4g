@@ -21,8 +21,8 @@ ASSIGN = "\N{LEFTWARDS ARROW}"
 
 #: A value given and replaced before anything reads it.
 WASTEFUL = "".join((
-    "@[startup, impure]\nfn main() ", ARROW, " u8:\n",
-    "    let a: mut u8 = 5u8\n    a ", ASSIGN, " 4u8\n"))
+    "@[startup, impure]\nfn main() ", ARROW, " u6:\n",
+    "    let a: mut u6 = 5u6\n    a ", ASSIGN, " 4u6\n"))
 
 
 def test_the_engine_absorbs_what_is_expected() -> None:
@@ -96,8 +96,8 @@ def test_a_parameter_is_not_reported(compile_source) -> None:  # noqa: ANN001
     """A parameter arrives with a value the caller chose; not reading it says
     nothing about this function."""
     proc, _ = compile_source("".join((
-        "fn ignore(x: u8) ", ARROW, " u8:\n    1u8\n\n",
-        "@[startup, impure]\nfn main() ", ARROW, " u8:\n    1u8\n")))
+        "fn ignore(x: u6) ", ARROW, " u6:\n    1u6\n\n",
+        "@[startup, impure]\nfn main() ", ARROW, " u6:\n    1u6\n")))
     assert proc.returncode == 0, describe(proc)
     assert "[PL4G-4006]" not in proc.stderr, proc.stderr
 
@@ -105,8 +105,8 @@ def test_a_parameter_is_not_reported(compile_source) -> None:  # noqa: ANN001
 def test_an_expected_error_discards_the_function(compile_source) -> None:  # noqa: ANN001
     """There is nothing to generate code from, and half of one would be worse."""
     proc, _ = compile_source("".join((
-        "@[startup, impure]\nfn main() ", ARROW, " u8:\n    1u8\n\n",
-        "@[expect(4201)]\nfn helper() ", ARROW, " nosuch:\n    1u8\n")))
+        "@[startup, impure]\nfn main() ", ARROW, " u6:\n    1u6\n\n",
+        "@[expect(4201)]\nfn helper() ", ARROW, " nosuch:\n    1u6\n")))
     assert proc.returncode == 0, describe(proc)
     assert proc.stderr.strip() == "", proc.stderr
 
@@ -114,8 +114,8 @@ def test_an_expected_error_discards_the_function(compile_source) -> None:  # noq
 def test_an_expected_error_discards_the_variable(compile_source) -> None:  # noqa: ANN001
     """A variable whose definition made no sense is not put in the image."""
     proc, output = compile_source("".join((
-        "@[expect(2006)]\nlet big: u8 = 300u8\n\n",
-        "@[startup, impure]\nfn main() ", ARROW, " u8:\n    1u8\n")), "--emit=ir")
+        "@[expect(2006)]\nlet big: u6 = 300u6\n\n",
+        "@[startup, impure]\nfn main() ", ARROW, " u6:\n    1u6\n")), "--emit=ir")
     assert proc.returncode == 0, describe(proc)
     assert "big" not in output.read_text(encoding="utf-8")
 
@@ -123,7 +123,7 @@ def test_an_expected_error_discards_the_variable(compile_source) -> None:  # noq
 def test_discarding_the_startup_function_is_then_reported(compile_source) -> None:  # noqa: ANN001
     """What follows from discarding a definition is not itself hidden."""
     proc, _ = compile_source("".join((
-        "@[startup, expect(4201)]\nfn main() ", ARROW, " nosuch:\n    1u8\n")))
+        "@[startup, expect(4201)]\nfn main() ", ARROW, " nosuch:\n    1u6\n")))
     assert proc.returncode != 0
     assert "[PL4G-4401]" in proc.stderr, proc.stderr
 
@@ -138,9 +138,9 @@ def test_the_number_must_be_one_that_exists(compile_source) -> None:  # noqa: AN
 def test_it_may_be_given_more_than_once(compile_source) -> None:  # noqa: ANN001
     """One expectation names one diagnostic, and a construct may raise several."""
     proc, _ = compile_source("".join((
-        "@[startup, impure]\nfn main() ", ARROW, " u8:\n",
-        "    @[expect(4006)]\n    @[expect(4006)]\n    let a: mut u8 = 5u8\n",
-        "    a ", ASSIGN, " 4u8\n")))
+        "@[startup, impure]\nfn main() ", ARROW, " u6:\n",
+        "    @[expect(4006)]\n    @[expect(4006)]\n    let a: mut u6 = 5u6\n",
+        "    a ", ASSIGN, " 4u6\n")))
     assert "[PL4G-3202]" not in proc.stderr, "repeating it was refused"
 
 
@@ -177,8 +177,8 @@ def test_ignore_keeps_it_quiet(compile_source) -> None:  # noqa: ANN001
 def test_ignore_says_nothing_when_the_diagnostic_does_not_arise(compile_source) -> None:  # noqa: ANN001
     """This is the whole difference between the two attributes."""
     quiet = "".join((
-        "@[startup, impure]\nfn main() ", ARROW, " u8:\n",
-        "    @[ignore(4006)]\n    let a: u8 = 5u8\n    a\n"))
+        "@[startup, impure]\nfn main() ", ARROW, " u6:\n",
+        "    @[ignore(4006)]\n    let a: u6 = 5u6\n    a\n"))
     proc, _ = compile_source(quiet)
     assert proc.returncode == 0, describe(proc)
     assert proc.stderr.strip() == "", proc.stderr
@@ -187,8 +187,8 @@ def test_ignore_says_nothing_when_the_diagnostic_does_not_arise(compile_source) 
 def test_expect_is_an_error_when_the_diagnostic_does_not_arise(compile_source) -> None:  # noqa: ANN001
     """It asserts, so a stale one says something about the program that is false."""
     asserted = "".join((
-        "@[startup, impure]\nfn main() ", ARROW, " u8:\n",
-        "    @[expect(4006)]\n    let a: u8 = 5u8\n    a\n"))
+        "@[startup, impure]\nfn main() ", ARROW, " u6:\n",
+        "    @[expect(4006)]\n    let a: u6 = 5u6\n    a\n"))
     proc, _ = compile_source(asserted)
     assert proc.returncode != 0
     assert "[PL4G-3206]" in proc.stderr, proc.stderr
@@ -198,8 +198,8 @@ def test_expect_is_an_error_when_the_diagnostic_does_not_arise(compile_source) -
 def test_ignore_also_discards_on_an_error(compile_source) -> None:  # noqa: ANN001
     """What is kept quiet still cannot be compiled."""
     proc, output = compile_source("".join((
-        "@[ignore(4201)]\nfn helper() ", ARROW, " nosuch:\n    1u8\n\n",
-        "@[startup, impure]\nfn main() ", ARROW, " u8:\n    1u8\n")), "--emit=ir")
+        "@[ignore(4201)]\nfn helper() ", ARROW, " nosuch:\n    1u6\n\n",
+        "@[startup, impure]\nfn main() ", ARROW, " u6:\n    1u6\n")), "--emit=ir")
     assert proc.returncode == 0, describe(proc)
     assert "helper" not in output.read_text(encoding="utf-8")
 
@@ -209,9 +209,9 @@ def test_both_attributes_may_be_mixed(compile_source) -> None:  # noqa: ANN001
     times, and may assert some while merely allowing others -- in one list, as
     everything attached to one thing is written."""
     proc, _ = compile_source("".join((
-        "@[startup, impure]\nfn main() ", ARROW, " u8:\n",
-        "    @[ignore(5002), expect(4006)]\n    let a: mut u8 = 5u8\n",
-        "    a ", ASSIGN, " 4u8\n")))
+        "@[startup, impure]\nfn main() ", ARROW, " u6:\n",
+        "    @[ignore(5002), expect(4006)]\n    let a: mut u6 = 5u6\n",
+        "    a ", ASSIGN, " 4u6\n")))
     assert proc.returncode == 0, describe(proc)
     assert proc.stderr.strip() == "", proc.stderr
 
@@ -244,8 +244,8 @@ def test_ignoring_a_rule_about_writing_keeps_the_function(compile_source) -> Non
     leave it in the program, or the attribute would be a way to delete code.
     """
     proc, _ = compile_source("".join((
-        "let count: u8 = 7u8\n\n@[startup, impure]\nfn main() ", ARROW, " u8:\n",
-        "    @[ignore(5005)]\n    count\n    0u8\n")))
+        "let count: u6 = 7u6\n\n@[startup, impure]\nfn main() ", ARROW, " u6:\n",
+        "    @[ignore(5005)]\n    count\n    0u6\n")))
     assert proc.returncode == 0, describe(proc)
     assert proc.stderr.strip() == "", proc.stderr
 
@@ -257,7 +257,7 @@ def test_ignoring_an_error_that_leaves_nothing_still_discards_it(compile_source)
     and with it the startup function, which is what the remaining report is.
     """
     proc, _ = compile_source("".join((
-        "@[startup, impure]\n@[ignore(4203)]\nfn main() ", ARROW, " u8:\n",
-        "    @[ignore(4006)]\n    let wrong: bool = 1u8\n    0u8\n")))
+        "@[startup, impure]\n@[ignore(4203)]\nfn main() ", ARROW, " u6:\n",
+        "    @[ignore(4006)]\n    let wrong: bool = 1u6\n    0u6\n")))
     assert proc.returncode != 0, describe(proc)
     assert "[PL4G-4401]" in proc.stderr, describe(proc)

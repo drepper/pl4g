@@ -4,6 +4,6 @@
 
 ※ A variable inside a function, with its type stated.
 @[startup]
-fn main() → u8:
-    let status: u8 = 7u8
+fn main() → u6:
+    let status: u6 = 7u6
     status

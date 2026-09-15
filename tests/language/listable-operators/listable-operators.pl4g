@@ -1,4 +1,4 @@
-※ pl4g-test: compile=ok run=native,qemu exit=42 diag=none
+※ pl4g-test: compile=ok run=native,qemu exit=0 diag=none
 
 ※ The operators walk an array the way a `listable` function does, and it is the
 ※ same rule: the sides that are arrays are walked in step, the sides that are
@@ -15,7 +15,7 @@
 ※ comparison over an array of numbers gives an array of truth values.
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     let v: u8⟦3⟧ = ⟦1u8, 2u8, 3u8⟧
     let w: u8⟦3⟧ = ⟦10u8, 20u8, 30u8⟧
     ※ both sides walked, in step
@@ -36,8 +36,10 @@ fn main() → u8:
     let col: u8⟦2⟧ = ⟦10u8, 20u8⟧
     let raised: u8⟦2,3⟧ = m + col
     let counted: u8 = sum⟦0⟧ + up⟦0⟧ + down⟦2⟧ + bits⟦2⟧ + wide⟦0⟧
-    if over⟦2⟧ ∧ ¬over⟦0⟧ ∧ ¬both⟦1⟧ ∧ held⟦2⟧ = 255u8 ∧ raised⟦1,0⟧ = 24u8:
-        ※ 11 + 11 + 37 + 12 + 4 = 75, less what the checks stand for
-        counted - 33u8
+    ※ 11 + 11 + 37 + 12 + 4 = 75, and what this used to say through the exit
+    ※ status, which is six bits now
+    let masked: bool = over⟦2⟧ ∧ ¬over⟦0⟧ ∧ ¬both⟦1⟧
+    if masked ∧ held⟦2⟧ = 255u8 ∧ raised⟦1,0⟧ = 24u8 ∧ counted = 75u8:
+        0u6
     else:
-        0u8
+        1u6

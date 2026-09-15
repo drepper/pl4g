@@ -4,6 +4,6 @@
 ※ Nothing but `true` and `false` is a boolean.  A number is not one spelled
 ※ differently, so it is refused rather than taken to mean the same thing.
 @[startup]
-fn main() → u8:
+fn main() → u6:
     let flag: bool = 1u8
-    1u8
+    1u6

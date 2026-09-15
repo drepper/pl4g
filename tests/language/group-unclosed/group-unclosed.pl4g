@@ -3,5 +3,5 @@
 
 ※ A group that is opened has to be closed.
 @[startup]
-fn main() → u8:
+fn main() → u6:
     (1u8 & 2u8

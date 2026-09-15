@@ -15,10 +15,10 @@
 ※ turn reads, and the value the last turn leaves is what follows the loop reads.
 
 @[startup]
-fn main() → u8:
-    let total: mut u8 = 0u8
-    let n: mut u8 = 5u8
-    while n > 0u8:
+fn main() → u6:
+    let total: mut u6 = 0u6
+    let n: mut u6 = 5u6
+    while n > 0u6:
         total ← total + n
-        n ← n - 1u8
+        n ← n - 1u6
     total

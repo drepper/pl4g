@@ -1,4 +1,4 @@
-※ pl4g-test: compile=ok run=native,qemu exit=97 diag=none
+※ pl4g-test: compile=ok run=native,qemu exit=0 diag=none
 
 ※ A set and a dictionary are iterators too.  A set gives each key it holds; a
 ※ dictionary gives a key and what it stands for, together as a tuple, and two
@@ -11,7 +11,7 @@
 ※ there gives the same number whatever order the walk finds it in.
 
 @[startup, impure]
-fn main() → u8:
+fn main() → u6:
     let s: ⸨u8⸩ = ⸨1u8, 2u8, 4u8, 8u8, 16u8⸩
     let held: mut u8 = 0u8
     foreach k := s:
@@ -31,7 +31,8 @@ fn main() → u8:
         pairs ← pairs + key + value
 
     ※ 31 + 6 + 60 = 97, and the pair walk agrees with the two-name one
-    if pairs = keys + values:
-        held + keys + values
+    ※ what this used to say through the exit status, which is six bits now
+    if pairs = keys + values ∧ held + keys + values = 97u8:
+        0u6
     else:
-        0u8
+        1u6

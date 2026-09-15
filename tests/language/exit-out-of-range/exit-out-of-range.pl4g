@@ -4,5 +4,5 @@
 ※ A status wider than the type can hold is an error, not a truncation: the
 ※ program would otherwise exit with a value it never named.
 @[startup]
-fn main() → u8:
+fn main() → u6:
     256

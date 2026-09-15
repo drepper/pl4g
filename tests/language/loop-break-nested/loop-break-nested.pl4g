@@ -14,15 +14,15 @@
 ※ reads what the way out of them left.
 
 @[startup]
-fn main() → u8:
-    let found: mut u8 = 0u8
-    foreach §rows r := 0u8…4u8:
-        foreach §cols c := 0u8…4u8:
-            if c = 0u8:
+fn main() → u6:
+    let found: mut u6 = 0u6
+    foreach §rows r := 0u6…4u6:
+        foreach §cols c := 0u6…4u6:
+            if c = 0u6:
                 ※ the inner loop's own next turn
                 continue §cols
-            if r × c = 6u8:
-                found ← r × 10u8 + c
+            if r × c = 6u6:
+                found ← r × 10u6 + c
                 ※ leaves both loops at once
                 break §rows
             if c > r:

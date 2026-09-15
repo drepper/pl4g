@@ -7,5 +7,5 @@ fn twice(n: u8) → u8:
     n ⊞ n
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     twice(1u8, 2u8)

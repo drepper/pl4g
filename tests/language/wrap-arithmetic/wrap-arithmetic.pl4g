@@ -25,40 +25,40 @@ let wide: u64 = 18000000000000000000u64
 let n: u8 = 1u8
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     if ⎕wrap(a + b) ≠ 44u8:
-        1u8
+        1u6
     elif ⎕wrap(b - a) ≠ 156u8:
-        2u8
+        2u6
     elif ⎕wrap(a × b) ≠ 32u8:
-        3u8
+        3u6
     elif ⎕wrap(s - t) ≠ 56i8:
-        4u8
+        4u6
     elif ⎕wrap(t + t) ≠ ⁻56i8:
-        5u8
+        5u6
     elif ⎕wrap(big + big) ≠ 3705032704u32:
-        6u8
+        6u6
     elif ⎕wrap(wide + wide) ≠ 17553255926290448384u64:
-        7u8
+        7u6
     ※ outside the wrap they still saturate, which is what they are for
     elif a ⊞ b ≠ 255u8:
-        8u8
+        8u6
     elif b ⊟ a ≠ 0u8:
-        9u8
+        9u6
     ※ a distance of the width or more, taken modulo the width
     elif ⎕wrap(n « 9u8) ≠ 2u8:
-        10u8
+        10u6
     elif ⎕wrap(a » 8u8) ≠ 200u8:
-        11u8
+        11u6
     elif ⎕wrap(a ↺ 8u8) ≠ 200u8:
-        12u8
+        12u6
     elif ⎕wrap(a ↻ 9u8) ≠ 100u8:
-        13u8
+        13u6
     ※ both sides written down, which the folder settles rather than reporting
     elif ⎕wrap(200u8 + 100u8) ≠ 44u8:
-        14u8
+        14u6
     ※ and it is lexical: what a function called from inside does is its own
     elif ⎕wrap(a + b) ≠ 44u8:
-        15u8
+        15u6
     else:
-        0u8
+        0u6

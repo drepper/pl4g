@@ -5,9 +5,9 @@
 ※ the *register*, which is not the width of the type.  So it is asked about,
 ※ and the program stops the same way everywhere.
 
-let thirteen: u8 = 13u8
-let eight: u8 = 8u8
+let thirteen: u6 = 13u6
+let eight: u6 = 8u6
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     thirteen « eight

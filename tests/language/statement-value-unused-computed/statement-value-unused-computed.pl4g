@@ -7,6 +7,6 @@ let flags: u8 = 0b1010u8
 let mask: u8 = 0b0010u8
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     flags & mask
-    0u8
+    0u6

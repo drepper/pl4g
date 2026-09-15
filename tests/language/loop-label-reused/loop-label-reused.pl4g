@@ -6,8 +6,8 @@
 ※ says less than it appears to.
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     while §counting true:
         while §counting true:
             break §counting
-    0u8
+    0u6

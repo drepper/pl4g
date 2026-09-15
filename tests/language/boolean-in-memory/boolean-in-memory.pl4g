@@ -17,9 +17,9 @@ let seen: mut bool = false
 let after: mut u8 = 6u8
 
 @[startup, impure]
-fn main() → u8:
+fn main() → u6:
     seen ← ready
     ※ Nothing here can look at the guards yet -- there is no way to compare --
     ※ so what this asserts is that the program runs to its end and exits
     ※ cleanly; the widths themselves are asserted in tests/compiler.
-    0u8
+    0u6

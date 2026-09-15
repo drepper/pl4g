@@ -8,22 +8,22 @@
 ※ where the ones before it did not hold.  An `else` may follow them, and is
 ※ the last arm there is.
 
-let a: mut u8 = 3u8
-let b: mut u8 = 9u8
+let a: mut u6 = 3u6
+let b: mut u6 = 9u6
 
 @[visible]
-let kept: mut u8 = 0u8
+let kept: mut u6 = 0u6
 
 @[startup, impure]
-fn main() → u8:
+fn main() → u6:
     ※ a statement of its own, with no else
     if a < b:
-        kept ← 1u8
+        kept ← 1u6
     ※ a chain
     if a > b:
-        kept ← kept + 10u8
+        kept ← kept + 10u6
     elif a = b:
-        kept ← kept + 20u8
+        kept ← kept + 20u6
     else:
-        kept ← kept + 30u8
+        kept ← kept + 30u6
     kept

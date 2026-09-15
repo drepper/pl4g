@@ -3,9 +3,9 @@
 ※ Several arguments, taken in the order they are written.  Subtraction is not
 ※ symmetric, so the order is visible in the answer.
 
-fn difference(a: u8, b: u8) → u8:
+fn difference(a: u6, b: u6) → u6:
     a ⊟ b
 
 @[startup]
-fn main() → u8:
-    difference(50u8, 8u8)
+fn main() → u6:
+    difference(50u6, 8u6)

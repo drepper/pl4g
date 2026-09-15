@@ -6,9 +6,9 @@
 let counter: mut u8 = 0u8
 
 @[startup, impure]
-fn main() → u8:
+fn main() → u6:
     let s: ⸨u8⸩ = ⸨1u8⸩ in counter
     if s⸨1u8⸩:
-        1u8
+        1u6
     else:
-        0u8
+        0u6

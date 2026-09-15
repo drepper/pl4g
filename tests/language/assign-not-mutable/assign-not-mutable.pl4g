@@ -4,7 +4,7 @@
 
 ※ A variable can be changed only where its definition said so.
 @[startup]
-fn main() → u8:
+fn main() → u6:
     let status: u8 = 3u8
     status ← 5u8
     status

@@ -10,7 +10,7 @@
 ※ is why the walk below needs no more care than the walk over a literal does.
 
 @[startup, impure]
-fn main() → u8:
+fn main() → u6:
     let a: str = "ab"
     let b: str = "cω"
     let both: str = a ⧺ b
@@ -19,15 +19,15 @@ fn main() → u8:
     ※ and joining anything to nothing, which gives what it was
     let still: str = a ⧺ ""
     if total(both) ≠ 1263u32:
-        1u8
+        1u6
     elif total(three) ≠ 1296u32:
-        2u8
+        2u6
     elif total(still) ≠ 195u32:
-        3u8
+        3u6
     elif total("" ⧺ "") ≠ 0u32:
-        4u8
+        4u6
     else:
-        0u8
+        0u6
 
 fn total(s: str) → u32:
     let found: mut u32 = 0u32

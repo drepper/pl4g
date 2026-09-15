@@ -6,9 +6,9 @@
 ※ wanted and never has to exist.
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     let n: u8 = 5u8
     if ⎕typeof(n) = u8:
-        1u8
+        1u6
     else:
-        0u8
+        0u6

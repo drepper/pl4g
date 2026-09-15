@@ -5,17 +5,17 @@
 ※ Compilation covers the whole program, so a function that is not exported and
 ※ that nothing reaches is one nothing can ever call.  It is left out of the
 ※ binary entirely; the program says the same thing without it.
-let g: mut u8 = 0u8
+let g: mut u6 = 0u6
 
 ※ Reached, because the entry point calls the constructors itself.
 @[constructor, impure]
 fn prepare():
-    g ← 7u8
+    g ← 7u6
 
 ※ Not reached from anywhere, and not exported.
-fn unreached() → u8:
-    2u8
+fn unreached() → u6:
+    2u6
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     g

@@ -4,6 +4,6 @@
 ※ A truth value is not a one-bit integer: `bool` has two values and no
 ※ representation the language promises, so there is nothing for `&` to work on.
 @[startup]
-fn main() → u8:
+fn main() → u6:
     let flag: bool = true
     ~flag

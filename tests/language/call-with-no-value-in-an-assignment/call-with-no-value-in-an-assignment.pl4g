@@ -8,6 +8,6 @@ fn prepare():
     return
 
 @[startup, impure]
-fn main() → u8:
+fn main() → u6:
     kept ← prepare()
     kept

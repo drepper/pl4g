@@ -1,4 +1,4 @@
-※ pl4g-test: compile=ok run=native,qemu exit=60 diag=none
+※ pl4g-test: compile=ok run=native,qemu exit=0 diag=none
 
 ※ An array holds several values of one type, one after another.  Its type is
 ※ written after what it holds -- `u8⟦4⟧` is four of them -- because that is the
@@ -13,10 +13,14 @@
 ※ with, so that a type, a value of it and a lookup in it all look alike.
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     let a: mut u8⟦4⟧ = ⟦10u8, 20u8, 30u8, 40u8⟧
     a⟦0⟧ ← 5u8
     ※ an index written down is checked while compiling, and one worked out
     ※ while the program runs is checked while it runs
     let at: u8 = 2u8
-    a⟦0⟧ + a⟦1⟧ + a⟦at⟧ + a⟦3⟧ - 35u8
+    ※ what this used to say through the exit status, which is six bits now
+    if a⟦0⟧ + a⟦1⟧ + a⟦at⟧ + a⟦3⟧ - 35u8 ≠ 60u8:
+        1u6
+    else:
+        0u6

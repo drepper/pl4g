@@ -9,9 +9,9 @@ let hundred: mut u8 = 100u8
 let seven: mut u8 = 7u8
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     match hundred ÷ seven:
         u8(q):
             return q
         _(rest):
-            return 1u8
+            return 1u6

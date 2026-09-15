@@ -7,7 +7,7 @@ let value: i8 = 13i8
 let one: i8 = 1i8
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     @[ignore(5005)]
     value ↺ one
-    0u8
+    0u6

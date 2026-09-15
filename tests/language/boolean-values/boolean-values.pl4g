@@ -11,6 +11,6 @@ let ready: bool = true
 let seen: mut bool = false
 
 @[startup, impure]
-fn main() → u8:
+fn main() → u6:
     seen ← ready
-    1u8
+    1u6

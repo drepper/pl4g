@@ -5,7 +5,7 @@
 ※ 'ignore' keeps a diagnostic quiet without saying anything about whether it
 ※ arises.
 @[startup]
-fn main() → u8:
+fn main() → u6:
     @[ignore(4006)]
-    let a: mut u8 = 5u8
-    a ← 4u8
+    let a: mut u6 = 5u6
+    a ← 4u6

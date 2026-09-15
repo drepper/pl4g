@@ -7,24 +7,24 @@
 ※ may name the definition.  Nothing here imports this file, so what is only
 ※ exported is something nothing reaches, and it is not in the image at all.
 @[visible]
-let shared: u8 = 7u8
+let shared: u6 = 7u6
 
 @[export]
-let lent: u8 = 8u8
+let lent: u6 = 8u6
 
-let private: u8 = 9u8
+let private: u6 = 9u6
 
 @[visible]
-fn reachable() → u8:
-    1u8
+fn reachable() → u6:
+    1u6
 
 @[export]
-fn lendable() → u8:
-    2u8
+fn lendable() → u6:
+    2u6
 
-fn unreachable() → u8:
-    3u8
+fn unreachable() → u6:
+    3u6
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     shared

@@ -5,6 +5,6 @@
 ※ meet, here as anywhere else.
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     let mixed: ⸨u8⸩ = ⸨1u8, 2u16⸩
-    0u8
+    0u6

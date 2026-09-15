@@ -5,10 +5,10 @@
 ※ A variable that is not `mut` cannot change while the program runs, so it is
 ※ put where the hardware refuses a write rather than beside the ones that can.
 ※ The two kinds therefore live in different sections and different segments.
-let limit: u8 = 42u8
+let limit: u6 = 42u6
 
-let counter: mut u8 = 1u8
+let counter: mut u6 = 1u6
 
 @[startup, impure]
-fn main() → u8:
+fn main() → u6:
     counter ← limit

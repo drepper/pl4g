@@ -6,7 +6,7 @@ fn prepare():
     return
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     @[ignore(4006)]
     let kept: u8 = prepare()
-    0u8
+    0u6

@@ -8,7 +8,7 @@ is a property computed late and held beside the type, never inside it.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Final, Sequence
+from typing import ClassVar, Final, Sequence
 
 
 @dataclass(frozen=True, slots=True)
@@ -82,14 +82,60 @@ class CharType(Type):
 
 @dataclass(frozen=True, slots=True)
 class IntType(Type):
-    """An integer of a given width and signedness."""
+    """An integer of a given width and signedness.
+
+    The width is any number of bits up to sixty-four and not only the four a
+    machine has registers for.  What that costs is stated once, here: a value
+    of such a type is *held* in the narrowest machine width that contains it,
+    with every bit above its own width equal to the zero- or sign-extension of
+    the value.  Everything else follows -- what it takes in memory, which
+    instruction operates on it, and where the check that an answer fits has to
+    come from, since the flags a machine writes are about the width it worked
+    at and not about the width the type has.
+    """
 
     bits: int
     signed: bool
 
+    #: Every one of them that has been made, so that two asks for one width
+    #: answer with the one type.  `TypeContext` interns the types that are
+    #: built out of others for the same reason and says why: identity
+    #: comparison is what the rest of the compiler asks these with, and there
+    #: are now sixty-odd of these rather than eight.
+    _made: ClassVar[dict[tuple[int, bool], IntType]] = {}
+
+    def __new__(cls, bits: int, signed: bool = False) -> IntType:
+        found = cls._made.get((bits, signed))
+        if found is None:
+            found = super().__new__(cls)
+            cls._made[(bits, signed)] = found
+        return found
+
     def render(self) -> str:
         """The name of this type in the textual form of the IR."""
         return "".join(("i" if self.signed else "u", str(self.bits)))
+
+    @property
+    def held(self) -> int:
+        """How many bits the register and the place in memory holding one have.
+
+        The narrowest a machine has that contains the type: a byte for anything
+        up to eight bits, and then doubling.  There is no width below a byte
+        because there is no register and no load below a byte, and a type that
+        occupied part of one would be a bit field -- a different thing, with a
+        different question about what lies beside it.
+        """
+        for width in (8, 16, 32, 64):
+            if self.bits <= width:
+                return width
+        raise AssertionError(self.bits)
+
+    @property
+    def whole(self) -> bool:
+        """Whether it fills what holds it, which is where nothing has to be put
+        back after an operation and where a machine's own flags answer whether
+        an answer fits."""
+        return self.bits == self.held
 
     @property
     def low(self) -> int:
@@ -565,9 +611,16 @@ ARENA: Final[ProductType] = ProductType(
     (("next", U64), ("limit", U64), ("chunk", U64)), name=ARENA_NAME)
 
 
+#: Which widths each signedness has a type for.  Unsigned from one bit, signed
+#: from two: a signed type of one bit holds zero and minus one, which is a pair
+#: of values no program wants and a name every reader would misread.
+UNSIGNED_WIDTHS: Final[tuple[int, ...]] = (*range(1, 33), 64)
+SIGNED_WIDTHS: Final[tuple[int, ...]] = (*range(2, 33), 64)
+
 BUILTIN_TYPES: Final[dict[str, Type]] = {
-    "i8": I8, "i16": I16, "i32": I32, "i64": I64,
-    "u8": U8, "u16": U16, "u32": U32, "u64": U64,
+    **{"".join(("u", str(bits))): IntType(bits, False)
+       for bits in UNSIGNED_WIDTHS},
+    **{"".join(("i", str(bits))): IntType(bits, True) for bits in SIGNED_WIDTHS},
     "f32": F32, "f64": F64,
     "bool": BOOL, "char": CHAR, "str": STR, "void": VOID,
     ARENA_NAME: ARENA,

@@ -12,6 +12,6 @@ let minus_one: i8 = ⁻1i8
 let kept: mut i8 = 0i8
 
 @[startup, impure]
-fn main() → u8:
+fn main() → u6:
     kept ← smallest ÷ minus_one ?? ⁻7i8
-    0u8
+    0u6

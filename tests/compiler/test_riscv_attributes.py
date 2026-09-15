@@ -24,7 +24,7 @@ TRIPLE = "riscv64-linux-none"
 ASSEMBLER = "/usr/bin/riscv64-linux-gnu-as"
 READELF = ARCH_TOOLS["riscv64"]["readelf"]
 
-SOURCE = "@[startup]\nfn main() \N{RIGHTWARDS ARROW} u8:\n    0u8\n"
+SOURCE = "@[startup]\nfn main() \N{RIGHTWARDS ARROW} u6:\n    0u6\n"
 
 
 def test_the_section_is_what_the_format_says() -> None:

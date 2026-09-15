@@ -2,6 +2,6 @@
 ※ pl4g-test: expect-diag 4003 LANG_FILESTRUCT_UNDEFINED_NAME
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     nothing ← 5u8
-    1u8
+    1u6

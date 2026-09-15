@@ -16,7 +16,7 @@
 ※ `#v + 1u64` asks about `v` and adds one, and `#v⟦0⟧` asks about the element.
 
 @[startup, impure]
-fn main() → u8:
+fn main() → u6:
     let v: u8⟦3⟧ = ⟦1u8, 2u8, 3u8⟧
     let m: u8⟦2,4⟧ = ⟦⟦1u8, 2u8, 3u8, 4u8⟧, ⟦5u8, 6u8, 7u8, 8u8⟧⟧
     let t: 〈u8, u16, u32〉 = 〈1u8, 2u16, 3u32〉
@@ -25,33 +25,33 @@ fn main() → u8:
     let d: ⸨u8: u16⸩ = ⸨1u8: 10u16, 2u8: 20u16⸩
     let run: u8⟦⟧ = v⟦0…2⟧
     if #v ≠ 3u64:
-        1u8
+        1u6
     ※ a table answers its outermost dimension and not how many elements in all
     elif #m ≠ 2u64:
-        2u8
+        2u6
     elif #t ≠ 3u64:
-        3u8
+        3u6
     ※ four characters and ten bytes, which is what makes this the useful one
     elif #text ≠ 4u64:
-        4u8
+        4u6
     elif #s ≠ 3u64:
-        5u8
+        5u6
     elif #d ≠ 2u64:
-        6u8
+        6u6
     ※ a run taken out of an array carries its own count
     elif #run ≠ 2u64:
-        7u8
+        7u6
     ※ it binds tighter than every operator written between two operands
     elif #v + 1u64 ≠ 4u64:
-        8u8
+        8u6
     ※ and looser than an index, so this asks about the row and not the table
     elif #m⟦1⟧ ≠ 4u64:
-        9u8
+        9u6
     ※ a string made by joining two is a string, and is counted the same way
     elif #("ab" ⧺ text) ≠ 6u64:
-        10u8
+        10u6
     ※ and what it answers is a number like any other
     elif #text + #v ≠ 7u64:
-        11u8
+        11u6
     else:
-        0u8
+        0u6

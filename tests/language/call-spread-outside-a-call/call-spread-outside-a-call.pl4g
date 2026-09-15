@@ -7,7 +7,7 @@
 ※ than the checker.
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     let p: 〈u8, u8〉 = 〈1u8, 2u8〉
     let q: 〈u8, u8〉 = ⁂p
     q⟦0⟧

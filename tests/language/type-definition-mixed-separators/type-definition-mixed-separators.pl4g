@@ -8,5 +8,5 @@
 type Confused = a : u8 ; b : u8 | c : u8
 
 @[startup]
-fn main() → u8:
-    0u8
+fn main() → u6:
+    0u6

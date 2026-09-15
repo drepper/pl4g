@@ -3,7 +3,7 @@
 ※ pl4g-test: expect-diag 4002 LANG_FILESTRUCT_PREVIOUS_DEFINITION
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     let status := 1u8
     let status := 2u8
     status

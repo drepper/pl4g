@@ -125,13 +125,13 @@ def test_every_shape_says_for_itself_whether_it_has_effects() -> None:
 
 # -- through the compiler ------------------------------------------------------
 
-UNREAD = """let g: u8 = 3u8
+UNREAD = """let g: u6 = 3u6
 
 @[startup, impure]
-fn main() \N{RIGHTWARDS ARROW} u8:
+fn main() \N{RIGHTWARDS ARROW} u6:
     @[ignore(4006)]
-    let unread: u8 = g
-    5u8
+    let unread: u6 = g
+    5u6
 """
 
 
@@ -140,7 +140,7 @@ def test_a_local_nothing_refers_to_leaves_nothing_behind(compile_source) -> None
     proc, output = compile_source(UNREAD, "-O1", "--emit=ir")
     assert proc.returncode == 0, describe(proc)
     text = output.read_text(encoding="utf-8")
-    assert "ret.u8 5" in text, text
+    assert "ret.u6 5" in text, text
     assert "load" not in text and "mem.start" not in text, text
 
 
@@ -152,7 +152,7 @@ def test_it_is_kept_where_nothing_asked_for_it_to_be_dropped(compile_source) -> 
     """
     proc, output = compile_source(UNREAD, "--emit=ir")
     assert proc.returncode == 0, describe(proc)
-    assert "load.u8" in output.read_text(encoding="utf-8")
+    assert "load.u6" in output.read_text(encoding="utf-8")
 
 
 def test_dropping_it_does_not_take_the_warning_with_it(compile_source) -> None:  # noqa: ANN001
@@ -290,17 +290,17 @@ def test_a_declaration_nothing_calls_goes_too() -> None:
     assert list(module.functions) == ["main"]
 
 
-UNREACHED = """let g: mut u8 = 0u8
+UNREACHED = """let g: mut u6 = 0u6
 
 @[constructor, impure]
 fn prepare():
-    g \N{LEFTWARDS ARROW} 7u8
+    g \N{LEFTWARDS ARROW} 7u6
 
-fn unreached() \N{RIGHTWARDS ARROW} u8:
-    2u8
+fn unreached() \N{RIGHTWARDS ARROW} u6:
+    2u6
 
 @[startup, impure]
-fn main() \N{RIGHTWARDS ARROW} u8:
+fn main() \N{RIGHTWARDS ARROW} u6:
     g
 """
 
@@ -404,14 +404,14 @@ def test_a_variable_the_image_offers_is_a_root() -> None:
     assert list(module.globals) == ["shared"]
 
 
-UNREACHED_VAR = """let used: u8 = 7u8
-let only_by_dropped: u8 = 9u8
+UNREACHED_VAR = """let used: u6 = 7u6
+let only_by_dropped: u6 = 9u6
 
-fn unreached() \N{RIGHTWARDS ARROW} u8:
+fn unreached() \N{RIGHTWARDS ARROW} u6:
     only_by_dropped
 
 @[startup, impure]
-fn main() \N{RIGHTWARDS ARROW} u8:
+fn main() \N{RIGHTWARDS ARROW} u6:
     used
 """
 

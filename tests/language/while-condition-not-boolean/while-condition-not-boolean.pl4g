@@ -6,7 +6,7 @@
 ※ a number has reached zero, `n ≠ 0u8` asks it.
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     let n: mut u8 = 3u8
     while n:
         n ← n - 1u8

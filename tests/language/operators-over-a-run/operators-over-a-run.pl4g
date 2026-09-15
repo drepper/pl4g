@@ -15,7 +15,7 @@ fn total(v: u8⟦3⟧) → u8:
     v⟦0⟧ + v⟦1⟧ + v⟦2⟧
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     ※ Shorter than the smallest piece.
     let three: u8⟦3⟧ = ⟦1u8, 2u8, 3u8⟧
     let raised: u8⟦3⟧ = three + 10u8
@@ -32,16 +32,16 @@ fn main() → u8:
     ※ And the bitwise operators, which never fault.
     let bits: u8⟦16⟧ = ~sixteen & 3u8
     if total(raised) ≠ 36u8:
-        1u8
+        1u6
     elif doubled⟦0⟧ ≠ 2u32 ∨ doubled⟦3⟧ ≠ 8u32:
-        2u8
+        2u6
     elif twice⟦0⟧ ≠ 2u8 ∨ twice⟦15⟧ ≠ 2u8:
-        3u8
+        3u6
     elif less⟦0⟧ ≠ 0u16 ∨ less⟦16⟧ ≠ 16u16 ∨ less⟦18⟧ ≠ 18u16:
-        4u8
+        4u6
     elif over⟦8⟧ ∨ ¬over⟦9⟧ ∨ ¬over⟦18⟧:
-        5u8
+        5u6
     elif bits⟦0⟧ ≠ 2u8 ∨ bits⟦15⟧ ≠ 2u8:
-        6u8
+        6u6
     else:
-        0u8
+        0u6

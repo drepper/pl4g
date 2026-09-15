@@ -6,6 +6,6 @@
 ※ can be passed about.
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     let held: u8 = ⎕wrap
     held

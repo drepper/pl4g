@@ -10,15 +10,15 @@ let wide: u8⟦32⟧ = ⟦1u8, 2u8, 3u8, 4u8, 5u8, 6u8, 7u8, 1u8, 2u8, 3u8, 4u8,
 let odd: u8⟦17⟧ = ⟦1u8, 2u8, 3u8, 4u8, 5u8, 1u8, 2u8, 3u8, 4u8, 5u8, 1u8, 2u8, 3u8, 4u8, 5u8, 1u8, 2u8⟧
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     let up: u8⟦32⟧ = wide + 100u8
     let masked: u8⟦17⟧ = odd & 3u8
     let down: u8⟦17⟧ = odd - 1u8
     if up⟦0⟧ ≠ 101u8 ∨ up⟦31⟧ ≠ 104u8:
-        1u8
+        1u6
     elif masked⟦0⟧ ≠ 1u8 ∨ masked⟦16⟧ ≠ 2u8:
-        2u8
+        2u6
     elif down⟦0⟧ ≠ 0u8 ∨ down⟦16⟧ ≠ 1u8:
-        3u8
+        3u6
     else:
-        0u8
+        0u6

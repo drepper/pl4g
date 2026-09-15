@@ -1,4 +1,4 @@
-※ pl4g-test: compile=ok run=native,qemu exit=134 diag=none
+※ pl4g-test: compile=ok run=native,qemu exit=0 diag=none
 
 ※ A rotation puts back at the other end what a shift would have dropped, and
 ※ it turns the bits of the *type* rather than of the register the value is
@@ -9,5 +9,9 @@ let thirteen: u8 = 13u8
 let one: u8 = 1u8
 
 @[startup]
-fn main() → u8:
-    thirteen ↻ one
+fn main() → u6:
+    ※ what this used to say through the exit status, which is six bits now
+    if thirteen ↻ one ≠ 134u8:
+        1u6
+    else:
+        0u6

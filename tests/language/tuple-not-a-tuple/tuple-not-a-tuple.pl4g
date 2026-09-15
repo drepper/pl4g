@@ -8,6 +8,6 @@
 let n: mut u8 = 3u8
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     let a, b := n
     a + b

@@ -30,7 +30,7 @@ from pypl4g.target import statuses
 from conftest import describe, run_compiler, runner_for
 
 SOURCE = "".join((
-    "@[startup]\nfn main() \N{RIGHTWARDS ARROW} u8:\n    42u8\n"))
+    "@[startup]\nfn main() \N{RIGHTWARDS ARROW} u6:\n    42u6\n"))
 
 X86 = "x86_64-linux-none"
 
@@ -168,10 +168,10 @@ def test_risc_v_takes_an_isa_string_or_a_profile(tmp_path: Path,
 
 
 FLOATS = "".join((
-    "@[startup]\nfn main() \N{RIGHTWARDS ARROW} u8:\n",
+    "@[startup]\nfn main() \N{RIGHTWARDS ARROW} u6:\n",
     "    let x: f64 = 1.5f64\n",
-    "    if x \N{APPROXIMATELY EQUAL TO} 1.5f64:\n        0u8\n",
-    "    else:\n        1u8\n"))
+    "    if x \N{APPROXIMATELY EQUAL TO} 1.5f64:\n        0u6\n",
+    "    else:\n        1u6\n"))
 
 
 def test_floating_point_needs_the_extension_that_has_it(tmp_path: Path) -> None:
@@ -188,14 +188,14 @@ def test_floating_point_needs_the_extension_that_has_it(tmp_path: Path) -> None:
 #: Rounding written four ways, whose answers are the same whichever of the two
 #: lowerings the backend chose.
 ROUNDS = "".join((
-    "@[startup, impure]\nfn main() \N{RIGHTWARDS ARROW} u8:\n",
+    "@[startup, impure]\nfn main() \N{RIGHTWARDS ARROW} u6:\n",
     "    let x: f64 = \N{SUPERSCRIPT MINUS}2.5f64\n",
     "    let y: f32 = 2.5f32\n",
     "    if \N{DOWNWARDS ARROW}x \N{APPROXIMATELY EQUAL TO} \N{SUPERSCRIPT MINUS}3.0f64 ",
     "\N{LOGICAL AND} \N{UPWARDS ARROW}x \N{APPROXIMATELY EQUAL TO} \N{SUPERSCRIPT MINUS}2.0f64 ",
     "\N{LOGICAL AND} \N{UP DOWN ARROW}x \N{APPROXIMATELY EQUAL TO} \N{SUPERSCRIPT MINUS}2.0f64 ",
     "\N{LOGICAL AND} \N{UP DOWN DOUBLE ARROW}y \N{APPROXIMATELY EQUAL TO} 2.0f32:\n",
-    "        0u8\n    else:\n        1u8\n"))
+    "        0u6\n    else:\n        1u6\n"))
 
 
 @pytest.mark.parametrize("level", ["rva23", "rv64gc"])

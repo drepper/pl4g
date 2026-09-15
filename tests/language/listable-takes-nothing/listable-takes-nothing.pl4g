@@ -9,5 +9,5 @@ fn nothing() → u8:
     1u8
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     nothing()

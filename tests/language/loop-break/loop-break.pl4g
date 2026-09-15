@@ -11,10 +11,10 @@
 ※ and from every `break`, and what it reads has to be right down all of them.
 
 @[startup]
-fn main() → u8:
-    let total: mut u8 = 0u8
-    foreach §counting i := 0u8…10u8:
-        if i = 5u8:
+fn main() → u6:
+    let total: mut u6 = 0u6
+    foreach §counting i := 0u6…10u6:
+        if i = 5u6:
             break §counting
         total ← total + i
     ※ 0 + 1 + 2 + 3 + 4, the turn for 5 having left instead of adding

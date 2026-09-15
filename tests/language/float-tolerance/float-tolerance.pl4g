@@ -18,10 +18,10 @@ fn stop_unless(ok: bool):
     ok or (two_hundred + two_hundred = 0u8)
 
 @[startup, impure]
-fn main() → u8:
+fn main() → u6:
     ※ half apart, which the tolerance it starts with does not allow for
     stop_unless(one_value ≇ other)
     ⎕tolerance ← 1f64
     ※ and does once the program says how much error it is willing to see
     stop_unless(one_value ≅ other)
-    0u8
+    0u6

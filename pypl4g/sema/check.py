@@ -54,10 +54,13 @@ from .attributes import (AttrSpec, AttrTarget, BoundAttr, SPECIAL_OF_TEST_KIND,
 
 #: The type every startup function must return.
 #:
-#: The exit status of a process is eight bits wide: what a program passes to the
-#: system is truncated to that before anything can observe it.  A wider type
-#: would let a program state a status that cannot arrive.
-STARTUP_RETURN_TYPE_NAME = "u8"
+#: Six bits, which is the range that is the program's own: the exit status of a
+#: process is eight bits wide, and of those the runtime reserves 64 through 127
+#: for the stops it reports and a shell spends 128 through 255 on signals.  So
+#: a program may exit with 0 through 63 and the type it answers with is the one
+#: that holds exactly those -- which makes a status outside its own range a
+#: thing the compiler refuses rather than a thing a reader has to know.
+STARTUP_RETURN_TYPE_NAME = "u6"
 
 
 @dataclass(slots=True)

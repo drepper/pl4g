@@ -6,6 +6,6 @@
 ※ does not have.
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     let m: u8⟦2,3⟧ = ⟦⟦1u8,2u8,3u8⟧,⟦4u8,5u8,6u8⟧⟧
     m⟦1⟧

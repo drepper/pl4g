@@ -13,18 +13,18 @@ let v: u8⟦16⟧ = ⟦240u8, 241u8, 242u8, 243u8, 244u8, 245u8, 246u8, 247u8, 2
 let h: u16⟦8⟧ = ⟦30000u16, 30001u16, 30002u16, 30003u16, 30004u16, 30005u16, 30006u16, 30007u16⟧
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     let up: u8⟦16⟧ = ⎕wrap(v + 100u8)
     let down: u8⟦16⟧ = ⎕wrap(v - 250u8)
     let times: u16⟦8⟧ = ⎕wrap(h × 3u16)
     let both: u8⟦16⟧ = ⎕wrap(v + v)
     if up⟦0⟧ ≠ 84u8 ∨ up⟦15⟧ ≠ 99u8:
-        1u8
+        1u6
     elif down⟦0⟧ ≠ 246u8 ∨ down⟦15⟧ ≠ 5u8:
-        2u8
+        2u6
     elif times⟦0⟧ ≠ 24464u16 ∨ times⟦7⟧ ≠ 24485u16:
-        3u8
+        3u6
     elif both⟦0⟧ ≠ 224u8 ∨ both⟦15⟧ ≠ 254u8:
-        4u8
+        4u6
     else:
-        0u8
+        0u6

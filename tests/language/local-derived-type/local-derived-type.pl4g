@@ -6,6 +6,6 @@
 ※ the type is taken from.  Written without a space the two characters read
 ※ as ':=', but they are the same two tokens either way.
 @[startup]
-fn main() → u8:
-    let status := 9u8
+fn main() → u6:
+    let status := 9u6
     status

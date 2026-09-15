@@ -23,26 +23,26 @@ let nul: char = 0
 let letters: char⟦3⟧ = ⟦'A', 'z', 'ω'⟧
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     if ⎕ord(a) ≠ 65u32 ∨ ⎕ord(z) ≠ 122u32:
-        1u8
+        1u6
     elif ⎕ord(omega) ≠ 0x3c9u32:
-        2u8
+        2u6
     elif ⎕ord(newline) ≠ 10u32 ∨ ⎕ord(quoted) ≠ 39u32:
-        3u8
+        3u6
     ※ an escape naming a code point by number is the character it names
     elif named ≠ a:
-        4u8
+        4u6
     elif ⎕ord(last) ≠ 0x10ffffu32 ∨ ⎕ord(nul) ≠ 0u32:
-        5u8
+        5u6
     ※ the comparisons, both kinds
     elif a ≥ z ∨ z ≥ omega:
-        6u8
+        6u6
     ※ and back again, which is the direction that can fail and is checked
     elif ⎕chr(65u32) ≠ a ∨ ⎕chr(⎕ord(omega)) ≠ omega:
-        7u8
+        7u6
     ※ one held in an array of them
     elif ⎕ord(letters⟦0⟧) ≠ 65u32 ∨ ⎕ord(letters⟦2⟧) ≠ 0x3c9u32:
-        8u8
+        8u6
     else:
-        0u8
+        0u6

@@ -3,7 +3,7 @@
 
 ※ A variable keeps the type it was defined with.
 @[startup]
-fn main() → u8:
+fn main() → u6:
     let status: mut = 3u8
     status ← true
     status

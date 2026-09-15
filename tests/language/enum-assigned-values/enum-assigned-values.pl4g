@@ -18,21 +18,21 @@ enum Code:
 let seen: mut Code = Code.retry
 
 @[startup, impure]
-fn main() → u8:
-    let first: u8 = match seen:
+fn main() → u6:
+    let first: u6 = match seen:
         ok:
-            1u8
+            1u6
         again:
-            2u8
+            2u6
         other:
-            4u8
+            4u6
     seen ← Code.other
     ※ `other` follows `retry`, whose number is five, so it is six
-    let second: u8 = match seen:
+    let second: u6 = match seen:
         ok:
-            1u8
+            1u6
         retry:
-            2u8
+            2u6
         other:
-            6u8
+            6u6
     first + second

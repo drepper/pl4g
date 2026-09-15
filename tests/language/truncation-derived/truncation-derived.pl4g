@@ -3,6 +3,6 @@
 
 ※ The type comes from the suffix, and the value still has to fit it.
 @[startup]
-fn main() → u8:
+fn main() → u6:
     let status := 999u8
     status

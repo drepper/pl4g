@@ -11,5 +11,5 @@ type Twice = first : u8 | second : u8
 type Fine = a : u8 ; b : u8
 
 @[startup]
-fn main() → u8:
-    0u8
+fn main() → u6:
+    0u6

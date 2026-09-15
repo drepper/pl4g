@@ -5,6 +5,6 @@
 let count: u8 = 7u8
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     count
-    0u8
+    0u6

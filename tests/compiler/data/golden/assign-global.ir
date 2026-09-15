@@ -1,12 +1,12 @@
 ; pl4g-ir 1
 module "assign-global.pl4g" triple "x86_64-linux-none"
 
-let @counter: mut u8 internal = 1
+let @counter: mut u6 internal = 1
 
-fn @main() → u8 internal cconv(pl4g) special(startup) impure {
+fn @main() → u6 internal cconv(pl4g) special(startup) impure {
 block0:
   %0 = mem.start
-  %1 = store.u8 %0, @counter, 7
-  %2 = load.u8 %1, @counter
-  ret.u8 %2
+  %1 = store.u6 %0, @counter, 7
+  %2 = load.u6 %1, @counter
+  ret.u6 %2
 }

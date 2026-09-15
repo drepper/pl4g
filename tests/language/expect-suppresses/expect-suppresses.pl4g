@@ -5,7 +5,7 @@
 ※ The same program, saying what it raises.  The attribute stands on its own
 ※ line, indented with the statement it belongs to.
 @[startup]
-fn main() → u8:
+fn main() → u6:
     @[expect(4006)]
-    let a: mut u8 = 5u8
-    a ← 4u8
+    let a: mut u6 = 5u6
+    a ← 4u6

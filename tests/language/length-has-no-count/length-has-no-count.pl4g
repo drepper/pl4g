@@ -5,7 +5,7 @@
 ※ answering a question nobody asked.
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     let n: u8 = 5u8
     let how_many: u64 = #n
-    0u8
+    0u6

@@ -8,7 +8,7 @@
 let g: u8 = 3u8
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     @[ignore(4006)]
     let unread: u8 = g
-    5u8
+    5u6

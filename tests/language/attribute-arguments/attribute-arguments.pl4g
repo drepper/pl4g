@@ -4,7 +4,7 @@
 ※ An attribute's arguments are checked against its declared signature; 'test'
 ※ selects one of the three kinds of test function.
 @[startup]
-fn main() → u8:
+fn main() → u6:
     0
 
 @[test(sideways)]

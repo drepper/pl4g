@@ -11,7 +11,7 @@
 ※ anyone uses says, and it is the only answer that makes the order a total one.
 
 @[startup, impure]
-fn main() → u8:
+fn main() → u6:
     let a: str = "abc"
     let b: str = "abd"
     let c: str = "ab"
@@ -21,30 +21,30 @@ fn main() → u8:
     let far: str = "a\U00010000"
     let empty: str = ""
     if ¬(a < b) ∨ ¬(b > a) ∨ a = b ∨ ¬(a ≠ b):
-        1u8
+        1u6
     ※ a prefix comes first
     elif ¬(c < a) ∨ ¬(a > c) ∨ ¬(c ≤ a) ∨ ¬(a ≥ c):
-        2u8
+        2u6
     ※ two that say the same thing are the one string
     elif ¬(a = d) ∨ a ≠ d ∨ ¬(a ≤ d) ∨ ¬(a ≥ d) ∨ a < d ∨ a > d:
-        3u8
+        3u6
     ※ the bytes sort as the code points do, which is the whole point of the
     ※ encoding: U+00A3 before U+20AC before U+10000, in two, three and four
     ※ bytes
     elif ¬(pound < euro) ∨ ¬(euro < far) ∨ ¬(pound < far):
-        4u8
+        4u6
     ※ a string with nothing in it comes before every other, being a prefix of
     ※ all of them
     elif ¬(empty < a) ∨ ¬(empty ≤ empty) ∨ empty ≠ "":
-        5u8
+        5u6
     ※ a string made by joining is a string like any other
     elif ¬(("ab" ⧺ "c") = a) ∨ ¬(a < "abc" ⧺ "d"):
-        6u8
+        6u6
     ※ a literal stands on either side
     elif ¬("abb" < a) ∨ ¬(a < "abd") ∨ ¬("abc" = a):
-        7u8
+        7u6
     ※ and the answer is a truth value like any other
     elif (a < b) ≠ true:
-        8u8
+        8u6
     else:
-        0u8
+        0u6

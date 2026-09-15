@@ -10,6 +10,6 @@ fn picked(xs: u8⟦⟧, want: bool⟦4⟧) → u8:
     got⟦0⟧
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     let v: u8⟦4⟧ = ⟦1u8, 2u8, 3u8, 4u8⟧
     picked(v, ⟦true, false, false, false⟧)

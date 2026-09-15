@@ -13,6 +13,6 @@ fn spread_them(xs: u8⟦⟧) → u8:
     two(⁂xs)
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     let v: u8⟦2⟧ = ⟦1u8, 2u8⟧
     spread_them(v)

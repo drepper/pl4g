@@ -1,6 +1,6 @@
 ※ pl4g-test: compile=ok run=native,qemu exit=30 diag=none
 
-※ An array whose type does not say how long it is, `u8⟦⟧`, is where its elements
+※ An array whose type does not say how long it is, `u6⟦⟧`, is where its elements
 ※ are and how many there are.  It owns nothing: the elements are an array's, or
 ※ part of one.
 ※
@@ -13,14 +13,14 @@
 ※ type said.  That goes one way only, since nothing that has lost its count can
 ※ promise to have four.
 
-fn total(xs: u8⟦⟧, n: u8) → u8:
-    let sum: mut u8 = 0u8
-    foreach i := 0u8…n:
+fn total(xs: u6⟦⟧, n: u6) → u6:
+    let sum: mut u6 = 0u6
+    foreach i := 0u6…n:
         sum ← sum + xs⟦i⟧
     sum
 
 @[startup]
-fn main() → u8:
-    let a: u8⟦6⟧ = ⟦1u8, 2u8, 4u8, 8u8, 16u8, 32u8⟧
+fn main() → u6:
+    let a: u6⟦6⟧ = ⟦1u6, 2u6, 4u6, 8u6, 16u6, 32u6⟧
     ※ four of them, starting at one
-    total(a⟦1…5⟧, 4u8)
+    total(a⟦1…5⟧, 4u6)

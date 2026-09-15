@@ -11,5 +11,5 @@ let a: u8 = 200u8
 let b: u8 = 100u8
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     ⎕wrap(a ⊞ b)

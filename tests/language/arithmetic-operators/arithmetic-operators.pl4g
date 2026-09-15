@@ -3,9 +3,9 @@
 ※ The ordinary arithmetic.  Multiplication binds tighter than addition, as it
 ※ does in writing, so this is (20 × 3) + 1.
 
-let twenty: u8 = 20u8
-let three: u8 = 3u8
+let twenty: u6 = 20u6
+let three: u6 = 3u6
 
 @[startup]
-fn main() → u8:
-    twenty × three + 1u8
+fn main() → u6:
+    twenty × three + 1u6

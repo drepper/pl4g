@@ -4,17 +4,17 @@
 ※ answers with nothing, where it means the call and then returning.  No value
 ※ is carried in it, which is why it is an abbreviation and not an exception.
 
-let counter: mut u8 = 0u8
+let counter: mut u6 = 0u6
 
 @[impure]
 fn prepare():
-    counter ← 7u8
+    counter ← 7u6
 
 @[impure]
 fn also_prepare():
     return prepare()
 
 @[startup, impure]
-fn main() → u8:
+fn main() → u6:
     also_prepare()
     counter

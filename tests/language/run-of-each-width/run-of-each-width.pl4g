@@ -6,7 +6,7 @@
 ※ bytes it covers -- four, eight or sixteen -- so each of the three is here, and
 ※ each element width is here so that the lanes are counted right.
 @[startup]
-fn main() → u8:
+fn main() → u6:
     let a: u8⟦4⟧ = ⟦1u8, 2u8, 3u8, 4u8⟧
     let b: u8⟦8⟧ = ⟦1u8, 2u8, 3u8, 4u8, 5u8, 6u8, 7u8, 8u8⟧
     let c: u32⟦4⟧ = ⟦1u32, 2u32, 3u32, 4u32⟧
@@ -18,14 +18,14 @@ fn main() → u8:
     let md: u64⟦2⟧ = d | 16u64
     let me: u16⟦2⟧ = e & 1u16
     if ma⟦0⟧ ≠ 9u8 ∨ ma⟦3⟧ ≠ 12u8:
-        1u8
+        1u6
     elif mb⟦0⟧ ≠ 0u8 ∨ mb⟦7⟧ ≠ 9u8:
-        2u8
+        2u6
     elif mc⟦0⟧ ≠ 1u32 ∨ mc⟦3⟧ ≠ 0u32:
-        3u8
+        3u6
     elif md⟦0⟧ ≠ 17u64 ∨ md⟦1⟧ ≠ 18u64:
-        4u8
+        4u6
     elif me⟦0⟧ ≠ 1u16 ∨ me⟦1⟧ ≠ 0u16:
-        5u8
+        5u6
     else:
-        0u8
+        0u6

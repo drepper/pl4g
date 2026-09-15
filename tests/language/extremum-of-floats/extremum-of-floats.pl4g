@@ -15,7 +15,7 @@
 ※ the operation that would have produced one having stopped the program.
 
 @[startup, impure]
-fn main() → u8:
+fn main() → u6:
     let f: [f64] = [1.5f64, ⁻2.5f64, 0.5f64]
     let g: f32⟦3⟧ = ⟦1.5f32, ⁻2.5f32, 0.5f32⟧
     let a: f64 = 3.0f64
@@ -23,10 +23,10 @@ fn main() → u8:
     ※ `≅` asks whether two are the same within the tolerance, which is how a
     ※ floating-point value is compared
     if ¬(⌈f ≅ 1.5f64) ∨ ¬(⌊f ≅ ⁻2.5f64):
-        1u8
+        1u6
     elif ¬(⌈g ≅ 1.5f32) ∨ ¬(⌊g ≅ ⁻2.5f32):
-        2u8
+        2u6
     elif ¬((a ⌈ b) ≅ 7.5f64) ∨ ¬((a ⌊ b) ≅ 3.0f64):
-        3u8
+        3u6
     else:
-        0u8
+        0u6

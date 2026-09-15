@@ -13,6 +13,6 @@ let big: u64 = 4294967296u64
 let answer: mut u64 = 0u64
 
 @[startup, impure]
-fn main() → u8:
+fn main() → u6:
     answer ← big ⊠ big
-    0u8
+    0u6

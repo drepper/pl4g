@@ -11,15 +11,15 @@
 ※ turn for each value there is and the value itself is not wanted.
 
 @[startup]
-fn main() → u8:
-    let total: mut u8 = 0u8
+fn main() → u6:
+    let total: mut u6 = 0u6
     ※ a step, with the type written rather than taken from the ends
-    foreach i : u8 = 0…10…2:
+    foreach i : u6 = 0…10…2:
         total ← total + i
     ※ counting down, over an unsigned type, with the value not wanted
-    while _ : u8 = 5…0…⁻1:
-        total ← total + 1u8
+    while _ : u6 = 5…0…⁻1:
+        total ← total + 1u6
     ※ the other spelling, with the type taken from the ends
-    foreach k := 1u8…4u8:
+    foreach k := 1u6…4u6:
         total ← total + k
     total

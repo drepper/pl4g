@@ -8,6 +8,6 @@ let m: u8⟦2,3⟧ = ⟦⟦1u8, 2u8, 3u8⟧, ⟦4u8, 5u8, 6u8⟧⟧
 let k: u8⟦2,2⟧ = ⟦⟦1u8, 2u8⟧, ⟦3u8, 4u8⟧⟧
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     let both: u8⟦4,3⟧ = m ⧺ k
-    0u8
+    0u6

@@ -1,4 +1,4 @@
-※ pl4g-test: compile=ok run=native,qemu exit=174 diag=none
+※ pl4g-test: compile=ok run=native,qemu exit=0 diag=none
 
 ※ The four a set answers, written with the characters a number's bits use and
 ※ meaning what Python's set operators mean: what is in either, what is in both,
@@ -9,7 +9,7 @@
 ※ a set is no different for being a place in memory.
 
 @[startup, impure]
-fn main() → u8:
+fn main() → u6:
     let a: ⸨u8⸩ = ⸨1u8, 2u8, 3u8⸩
     let b: ⸨u8⸩ = ⸨3u8, 4u8⸩
     let joined: ⸨u8⸩ = a | b
@@ -26,4 +26,8 @@ fn main() → u8:
             total ← total + 20u8
         if without⸨i⸩:
             total ← total + 50u8
-    total
+    ※ what this used to say through the exit status, which is six bits now
+    if total ≠ 174u8:
+        1u6
+    else:
+        0u6

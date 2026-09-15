@@ -1,11 +1,11 @@
 ; pl4g-ir 1
 module "global-variable.pl4g" triple "x86_64-linux-none"
 
-let @counter: u8 internal = 42
+let @counter: u6 internal = 42
 
-fn @main() → u8 internal cconv(pl4g) special(startup) {
+fn @main() → u6 internal cconv(pl4g) special(startup) {
 block0:
   %0 = mem.start
-  %1 = load.u8 %0, @counter
-  ret.u8 %1
+  %1 = load.u6 %0, @counter
+  ret.u6 %1
 }

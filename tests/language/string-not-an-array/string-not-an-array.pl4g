@@ -8,6 +8,6 @@
 let v: u8⟦2⟧ = ⟦1u8, 2u8⟧
 
 @[startup, impure]
-fn main() → u8:
+fn main() → u6:
     let both: str = "ab" ⧺ v
-    0u8
+    0u6

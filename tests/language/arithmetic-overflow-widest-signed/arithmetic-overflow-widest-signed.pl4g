@@ -9,8 +9,8 @@
 let big: i64 = 9000000000000000000i64
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     if big + big = big:
-        1u8
+        1u6
     else:
-        2u8
+        2u6

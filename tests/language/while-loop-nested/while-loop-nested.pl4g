@@ -8,11 +8,11 @@
 ※ defined afresh on every turn of the outer one.
 
 @[startup]
-fn main() → u8:
-    let total: mut u8 = 0u8
-    let i: mut u8 = 0u8
-    while i < 4u8:
-        let j: mut u8 = 0u8
-        while j < 3u8 { total ← total + 1u8; j ← j + 1u8 }
-        i ← i + 1u8
+fn main() → u6:
+    let total: mut u6 = 0u6
+    let i: mut u6 = 0u6
+    while i < 4u6:
+        let j: mut u6 = 0u6
+        while j < 3u6 { total ← total + 1u6; j ← j + 1u6 }
+        i ← i + 1u6
     total

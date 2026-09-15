@@ -5,5 +5,5 @@
 ※※ exit status of the process.
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     0

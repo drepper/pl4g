@@ -2,8 +2,8 @@
 ※ pl4g-test: run=native,qemu exit=17
 ※ pl4g-test: diag=none
 
-let counter := 17u8
+let counter := 17u6
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     counter

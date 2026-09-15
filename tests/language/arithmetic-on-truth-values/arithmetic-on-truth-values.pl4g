@@ -6,7 +6,7 @@ let ready: bool = true
 let seen: bool = false
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     @[ignore(5005)]
     ready + seen
-    0u8
+    0u6

@@ -5,4 +5,4 @@
 ※ In the brace notation there is no indentation to place it, so it simply
 ※ precedes the statement.
 @[startup]
-fn main() → u8 { @[expect(4006)] let a: mut u8 = 5u8; a ← 4u8 }
+fn main() → u6 { @[expect(4006)] let a: mut u6 = 5u6; a ← 4u6 }

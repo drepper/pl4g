@@ -15,24 +15,24 @@
 ※ separately, so spreading one is a matter of which registers the call is handed,
 ※ not of taking anything apart.
 
-fn three(a: u8, b: u8, c: u8) → u8:
+fn three(a: u6, b: u6, c: u6) → u6:
     a + b + c
 
-fn four(a: u8, b: u16, c: u8, d: u16) → u8:
+fn four(a: u6, b: u16, c: u6, d: u16) → u6:
     if b = 4u16 ∧ d = 4u16:
         a + c
     else:
-        0u8
+        0u6
 
 @[startup]
-fn main() → u8:
-    let pair: 〈u8, u8〉 = 〈1u8, 2u8〉
+fn main() → u6:
+    let pair: 〈u6, u6〉 = 〈1u6, 2u6〉
     ※ the members of the tuple, then an argument written out
-    let head: u8 = three(⁂pair, 4u8)
+    let head: u6 = three(⁂pair, 4u6)
     ※ an argument written out, then the members
-    let tail: u8 = three(4u8, ⁂pair)
+    let tail: u6 = three(4u6, ⁂pair)
     ※ one tuple's members and then another's, each landing on its own type
-    let mixed: 〈u8, u16〉 = 〈14u8, 4u16〉
-    let both: u8 = four(⁂mixed, ⁂mixed)
+    let mixed: 〈u6, u16〉 = 〈14u6, 4u16〉
+    let both: u6 = four(⁂mixed, ⁂mixed)
     ※ 7 + 7 + 28 = 42
     head + tail + both

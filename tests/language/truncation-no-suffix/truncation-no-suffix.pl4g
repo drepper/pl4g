@@ -3,6 +3,6 @@
 
 ※ The type comes from the declaration, and the value still has to fit it.
 @[startup]
-fn main() → u8:
+fn main() → u6:
     let status: u8 = 300
     status

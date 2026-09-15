@@ -18,7 +18,7 @@
 ※ counted at run time.  A string, a list, a set and a dictionary are a walk.
 
 @[startup, impure]
-fn main() → u8:
+fn main() → u6:
     let v: u8⟦4⟧ = ⟦3u8, 9u8, 2u8, 7u8⟧
     let m: u8⟦2,3⟧ = ⟦⟦1u8, 8u8, 3u8⟧, ⟦5u8, 2u8, 9u8⟧⟧
     let c: i16⟦2,2,2⟧ = ⟦⟦⟦1i16, ⁻8i16⟧, ⟦4i16, 5i16⟧⟧, ⟦⟦⁻9i16, 0i16⟧, ⟦1i16, 6i16⟧⟧⟧
@@ -37,42 +37,42 @@ fn main() → u8:
     ※ listable means
     let both: u8⟦4⟧ = v ⌈ ⟦5u8, 5u8, 5u8, 5u8⟧
     if ⌈v ≠ 9u8 ∨ ⌊v ≠ 2u8:
-        1u8
+        1u6
     elif row⟦0⟧ ≠ 5u8 ∨ row⟦1⟧ ≠ 8u8 ∨ row⟦2⟧ ≠ 9u8:
-        2u8
+        2u6
     elif page⟦0,0⟧ ≠ 1i16 ∨ page⟦0,1⟧ ≠ 0i16 ∨ page⟦1,0⟧ ≠ 4i16 ∨ page⟦1,1⟧ ≠ 6i16:
-        3u8
+        3u6
     ※ a signed type is compared the way a signed type is, which is the whole
     ※ reason there are four instructions behind the two operators
     elif ⌈t ≠ 5i16 ∨ ⌊t ≠ ⁻3i16:
-        4u8
+        4u6
     ※ a string answers a character, the largest code point in it
     elif ⌈text ≠ '€' ∨ ⌊text ≠ 'a':
-        5u8
+        5u6
     elif ⌈l ≠ 6u8 ∨ ⌊l ≠ 1u8:
-        6u8
+        6u6
     elif ⌈s ≠ 5u8 ∨ ⌊s ≠ 1u8:
-        7u8
+        7u6
     ※ a dictionary is asked about its keys, there being no comparing a key
     ※ with what it stands for
     elif ⌈d ≠ 7u8 ∨ ⌊d ≠ 1u8:
-        8u8
+        8u6
     ※ an array whose type does not say how many there are is walked
     elif ⌈run ≠ 9u8 ∨ ⌊run ≠ 2u8:
-        9u8
+        9u6
     elif both⟦0⟧ ≠ 5u8 ∨ both⟦1⟧ ≠ 9u8 ∨ both⟦2⟧ ≠ 5u8 ∨ both⟦3⟧ ≠ 7u8:
-        10u8
+        10u6
     ※ the two-sided form on two values, and one side of it a scalar against a
     ※ whole array is what listable means
     elif (3u8 ⌈ 8u8) ≠ 8u8 ∨ (3u8 ⌊ 8u8) ≠ 3u8:
-        11u8
+        11u6
     ※ it binds looser than the arithmetic, so this is the larger of the sum
     ※ and the other side and not a sum of the larger
     elif 3u8 + 2u8 ⌈ 4u8 ≠ 5u8:
-        12u8
+        12u6
     ※ and the one-sided form binds as tightly as the other operators written
     ※ before their operand, so this asks about the row
     elif ⌈m⟦1⟧ ≠ 9u8:
-        13u8
+        13u6
     else:
-        0u8
+        0u6

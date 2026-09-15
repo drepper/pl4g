@@ -3,6 +3,6 @@
 
 ※ There is no form that leaves a variable without a value.
 @[startup]
-fn main() → u8:
+fn main() → u6:
     let status: u8
     status

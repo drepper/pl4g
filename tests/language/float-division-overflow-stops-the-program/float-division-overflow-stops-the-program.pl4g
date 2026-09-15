@@ -10,7 +10,7 @@ let huge: mut f64 = 1e308f64
 let tiny: mut f64 = 1e-308f64
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     @[ignore(5005)]
     huge ÷ tiny ?? 0f64
-    0u8
+    0u6

@@ -3,9 +3,9 @@
 ※ Nothing below zero for an unsigned type either.  This is what '⊟' is for
 ※ where going below zero is meant.
 
-let five: u8 = 5u8
-let nine: u8 = 9u8
+let five: u6 = 5u6
+let nine: u6 = 9u6
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     five - nine

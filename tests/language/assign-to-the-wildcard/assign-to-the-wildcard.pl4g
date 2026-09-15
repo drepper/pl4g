@@ -1,4 +1,4 @@
-※ pl4g-test: compile=ok run=native,qemu exit=9 diag=none
+※ pl4g-test: compile=ok run=native,qemu exit=0 diag=none
 
 ※ `_` is where a value goes when the program means to work it out and not use
 ※ it.  It is not a variable: it needs no definition, it is the same `_`
@@ -18,11 +18,15 @@ fn bump() → u8:
     counter
 
 @[startup, impure]
-fn main() → u8:
+fn main() → u6:
     ※ this call is made for what it does
     _ ← bump()
     ※ and this one for what it answers with
     let seen: u8 = bump()
     ※ anything with a value may be dropped, not only a call
     _ ← seen + 100u8
-    seen + counter + 5u8
+    ※ what this used to say through the exit status, which is six bits now
+    if seen + counter + 5u8 ≠ 9u8:
+        1u6
+    else:
+        0u6

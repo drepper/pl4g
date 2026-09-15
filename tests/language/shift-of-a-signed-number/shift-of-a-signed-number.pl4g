@@ -10,6 +10,6 @@ let one: i8 = 1i8
 let halved: mut i8 = 0i8
 
 @[startup, impure]
-fn main() → u8:
+fn main() → u6:
     halved ← minus_eight » one
-    0u8
+    0u6

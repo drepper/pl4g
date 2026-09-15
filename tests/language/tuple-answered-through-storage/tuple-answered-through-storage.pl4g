@@ -14,26 +14,26 @@
 ※ None of that is written down by the program -- the pointer is not an argument
 ※ any program can pass -- and none of it differs between the three targets.
 
-fn five(base: u8) → 〈u8, u16, u8, u8, u8〉:
-    〈base, 300u16, base + 1u8, base + 2u8, base + 3u8〉
+fn five(base: u6) → 〈u6, u16, u6, u6, u6〉:
+    〈base, 300u16, base + 1u6, base + 2u6, base + 3u6〉
 
-fn three_of_five() → 〈u8, u8, u8〉:
+fn three_of_five() → 〈u6, u6, u6〉:
     ※ a function that answers this way and calls another that does
-    let inner: 〈u8, u16, u8, u8, u8〉 = five(1u8)
+    let inner: 〈u6, u16, u6, u6, u6〉 = five(1u6)
     〈inner⟦0⟧, inner⟦2⟧, inner⟦4⟧〉
 
-fn two(a: u8) → 〈u8, u8〉:
+fn two(a: u6) → 〈u6, u6〉:
     ※ two still travels in registers, which is what the style says
-    〈a, a + 1u8〉
+    〈a, a + 1u6〉
 
 @[startup]
-fn main() → u8:
-    let t: 〈u8, u8, u8〉 = three_of_five()
-    let w: 〈u8, u16, u8, u8, u8〉 = five(10u8)
-    let p: 〈u8, u8〉 = two(5u8)
+fn main() → u6:
+    let t: 〈u6, u6, u6〉 = three_of_five()
+    let w: 〈u6, u16, u6, u6, u6〉 = five(10u6)
+    let p: 〈u6, u6〉 = two(5u6)
     ※ a member wider than a byte keeps its own size and alignment in the place
     if w⟦1⟧ = 300u16:
         ※ (1+2+4) + 10 + 13 + (5+6) = 41
-        t⟦0⟧ + t⟦1⟧ + t⟦2⟧ + w⟦0⟧ + w⟦4⟧ + p⟦0⟧ + p⟦1⟧ + 1u8
+        t⟦0⟧ + t⟦1⟧ + t⟦2⟧ + w⟦0⟧ + w⟦4⟧ + p⟦0⟧ + p⟦1⟧ + 1u6
     else:
-        0u8
+        0u6

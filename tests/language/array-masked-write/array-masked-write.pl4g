@@ -12,23 +12,23 @@
 ※ already owns is a write of what was already there.
 
 @[startup]
-fn main() → u8:
-    let v: mut u8⟦4⟧ = ⟦10u8, 20u8, 30u8, 40u8⟧
+fn main() → u6:
+    let v: mut u6⟦4⟧ = ⟦10u6, 20u6, 30u6, 40u6⟧
     let want: bool⟦4⟧ = ⟦false, true, false, true⟧
-    v⟦want⟧ ← 1u8
+    v⟦want⟧ ← 1u6
     ※ a mask worked out on the spot, over the array being written
-    let w: mut u8⟦4⟧ = ⟦10u8, 20u8, 30u8, 40u8⟧
-    w⟦w > 25u8⟧ ← 1u8
+    let w: mut u6⟦4⟧ = ⟦10u6, 20u6, 30u6, 40u6⟧
+    w⟦w > 25u6⟧ ← 1u6
     ※ whole rows of a table
-    let m: mut u8⟦3,2⟧ = ⟦⟦1u8, 2u8⟧, ⟦3u8, 4u8⟧, ⟦5u8, 6u8⟧⟧
+    let m: mut u6⟦3,2⟧ = ⟦⟦1u6, 2u6⟧, ⟦3u6, 4u6⟧, ⟦5u6, 6u6⟧⟧
     let middle: bool⟦3⟧ = ⟦false, true, false⟧
-    m⟦middle⟧ ← 9u8
+    m⟦middle⟧ ← 9u6
     ※ and an array of truth values, whose elements are one bit wide
     let b: mut bool⟦3⟧ = ⟦false, false, false⟧
     b⟦⟦true, false, true⟧⟧ ← true
-    let counted: u8 = v⟦0⟧ + v⟦1⟧ + w⟦2⟧ + w⟦3⟧ + m⟦1,0⟧ + m⟦1,1⟧ + m⟦2,1⟧
+    let counted: u6 = v⟦0⟧ + v⟦1⟧ + w⟦2⟧ + w⟦3⟧ + m⟦1,0⟧ + m⟦1,1⟧ + m⟦2,1⟧
     if b⟦0⟧ ∧ ¬b⟦1⟧ ∧ b⟦2⟧:
         ※ 10 + 1 + 1 + 1 + 9 + 9 + 6 = 37
-        counted + 5u8
+        counted + 5u6
     else:
-        0u8
+        0u6

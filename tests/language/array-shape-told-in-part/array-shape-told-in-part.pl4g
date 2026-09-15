@@ -1,7 +1,7 @@
 ※ pl4g-test: compile=ok run=native,qemu exit=42 diag=none
 
 ※ A dimension the type states and one it does not may stand side by side:
-※ `u8⟦,3⟧` is however many rows of three columns, and `u8⟦2,⟧` is two rows of
+※ `u6⟦,3⟧` is however many rows of three columns, and `u6⟦2,⟧` is two rows of
 ※ however many.  What makes that worth having is what picking rows out of a
 ※ table produces -- however many were picked, each still as wide as the table
 ※ was -- which is a type of exactly that shape and nothing else.
@@ -12,17 +12,17 @@
 ※ length: a table of three columns is not a table of four, however little
 ※ either says about its rows.
 
-fn wide(rows: u8⟦,3⟧) → u8:
+fn wide(rows: u6⟦,3⟧) → u6:
     rows⟦0,0⟧ + rows⟦1,2⟧
 
-fn loose(m: u8⟦,⟧) → u8:
+fn loose(m: u6⟦,⟧) → u6:
     m⟦1,1⟧
 
-fn tall(m: u8⟦2,⟧) → u8:
+fn tall(m: u6⟦2,⟧) → u6:
     m⟦1,0⟧
 
 @[startup]
-fn main() → u8:
-    let m: u8⟦2,3⟧ = ⟦⟦1u8, 2u8, 3u8⟧, ⟦4u8, 5u8, 6u8⟧⟧
+fn main() → u6:
+    let m: u6⟦2,3⟧ = ⟦⟦1u6, 2u6, 3u6⟧, ⟦4u6, 5u6, 6u6⟧⟧
     ※ 7 + 5 + 4, and the rest written out
-    wide(m) + loose(m) + tall(m) + 26u8
+    wide(m) + loose(m) + tall(m) + 26u6

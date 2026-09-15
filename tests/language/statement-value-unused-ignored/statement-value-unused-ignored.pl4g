@@ -8,11 +8,11 @@
 let count: u8 = 7u8
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     @[ignore(5005)]
-    1u8
+    1u6
     @[ignore(5005)]
     count
     @[ignore(5005)]
     count & 3u8
-    0u8
+    0u6

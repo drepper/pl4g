@@ -270,23 +270,23 @@ def test_the_move_flag_is_what_marks_one() -> None:
 
 # -- through the compiler -------------------------------------------------------
 
-PRESSURE = """let a: u8 = 1u8
-let b: u8 = 2u8
-let c: u8 = 3u8
+PRESSURE = """let a: u6 = 1u6
+let b: u6 = 2u6
+let c: u6 = 3u6
 
-let wa: mut u8 = 0u8
-
-@[expect(4007)]
-let wb: mut u8 = 0u8
+let wa: mut u6 = 0u6
 
 @[expect(4007)]
-let wc: mut u8 = 0u8
+let wb: mut u6 = 0u6
+
+@[expect(4007)]
+let wc: mut u6 = 0u6
 
 @[startup, impure]
-fn main() \N{RIGHTWARDS ARROW} u8:
-    let va: u8 = a
-    let vb: u8 = b
-    let vc: u8 = c
+fn main() \N{RIGHTWARDS ARROW} u6:
+    let va: u6 = a
+    let vb: u6 = b
+    let vc: u6 = c
     wc \N{LEFTWARDS ARROW} vc
     wb \N{LEFTWARDS ARROW} vb
     wa \N{LEFTWARDS ARROW} va
@@ -317,14 +317,14 @@ def test_far_more_values_than_registers_still_runs(triple: str, tmp_path) -> Non
     it cannot have stayed in a register.
     """
     names = [f"v{n}" for n in range(40)]
-    lines = ["".join(("let g", n, ": u8 = 1u8")) for n in names]
+    lines = ["".join(("let g", n, ": u6 = 1u6")) for n in names]
     # The one the program returns is read, so it is the one with no warning
     # about nothing reading it; every other is written and never looked at.
-    lines += ["".join(("let w", n, ": mut u8 = 0u8") if n == names[0]
-                      else ("@[expect(4007)]\nlet w", n, ": mut u8 = 0u8"))
+    lines += ["".join(("let w", n, ": mut u6 = 0u6") if n == names[0]
+                      else ("@[expect(4007)]\nlet w", n, ": mut u6 = 0u6"))
               for n in names]
-    lines += ["@[startup, impure]", "fn main() \N{RIGHTWARDS ARROW} u8:"]
-    lines += ["".join(("    let ", n, ": u8 = g", n)) for n in names]
+    lines += ["@[startup, impure]", "fn main() \N{RIGHTWARDS ARROW} u6:"]
+    lines += ["".join(("    let ", n, ": u6 = g", n)) for n in names]
     lines += ["".join(("    w", n, " \N{LEFTWARDS ARROW} ", n))
               for n in reversed(names)]
     lines.append("    wv0")

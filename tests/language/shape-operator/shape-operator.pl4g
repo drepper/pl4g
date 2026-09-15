@@ -14,7 +14,7 @@
 ※ where they run out.  One value goes everywhere.
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     let v: u8⟦4⟧ = ⟦1u8, 2u8, 3u8, 4u8⟧
     ※ one value everywhere
     let filled: u8⟦3⟧ = 3 ⍴ 7u8
@@ -34,27 +34,27 @@ fn main() → u8:
     let again: u8⟦2,3⟧ = (⍴m) ⍴ v
     let joined: u8⟦6⟧ = 2 ⍴ 3u8 + 4u8 ⧺ v
     if filled⟦0⟧ ≠ 7u8 ∨ filled⟦2⟧ ≠ 7u8:
-        1u8
+        1u6
     elif cycled⟦0⟧ ≠ 0u8 ∨ cycled⟦1⟧ ≠ 1u8 ∨ cycled⟦4⟧ ≠ 0u8 ∨ cycled⟦5⟧ ≠ 1u8:
-        2u8
+        2u6
     elif same⟦0⟧ ≠ 1u8 ∨ same⟦3⟧ ≠ 4u8:
-        3u8
+        3u6
     ※ the innermost dimension moves quickest, so the second row begins at 4
     elif m⟦0,0⟧ ≠ 1u8 ∨ m⟦0,2⟧ ≠ 3u8 ∨ m⟦1,0⟧ ≠ 4u8 ∨ m⟦1,2⟧ ≠ 2u8:
-        4u8
+        4u6
     elif cube⟦0,0,0⟧ ≠ 9u16 ∨ cube⟦1,1,1⟧ ≠ 9u16:
-        5u8
+        5u6
     elif one ≠ 4u64:
-        6u8
+        6u6
     elif two⟦0⟧ ≠ 2u64 ∨ two⟦1⟧ ≠ 3u64:
-        7u8
+        7u6
     elif three⟦0⟧ ≠ 2u64 ∨ three⟦2⟧ ≠ 2u64:
-        8u8
+        8u6
     elif again⟦1,2⟧ ≠ 2u8:
-        9u8
+        9u6
     ※ it binds tighter than joining and looser than the arithmetic, so this
     ※ is `(2 ⍴ (3u8 + 4u8)) ⧺ v` and not either of the other readings
     elif joined⟦0⟧ ≠ 7u8 ∨ joined⟦1⟧ ≠ 7u8 ∨ joined⟦2⟧ ≠ 1u8 ∨ joined⟦5⟧ ≠ 4u8:
-        10u8
+        10u6
     else:
-        0u8
+        0u6

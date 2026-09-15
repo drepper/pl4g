@@ -4,5 +4,5 @@
 
 ※ The value the startup function returns becomes the process exit status.
 @[startup]
-fn main() → u8:
+fn main() → u6:
     42

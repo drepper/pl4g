@@ -55,7 +55,14 @@ WIDE_ENOUGH: Final[int] = 16
 def size_of(ty: Type, layout: DataLayout) -> int:
     """The number of bytes a value of *ty* occupies."""
     match ty:
-        case IntType() | FloatType():
+        case IntType():
+            # What holds it and not what it is: a `u3` is three bits of
+            # information in the one byte that is the narrowest thing a machine
+            # loads and stores.  Packing several of them into one byte would be
+            # a bit field, which is a different thing with a different question
+            # about what lies beside it.
+            return ty.held // 8
+        case FloatType():
             return ty.bits // 8
         case BoolType():
             return 1
@@ -133,7 +140,9 @@ def size_of(ty: Type, layout: DataLayout) -> int:
 def align_of(ty: Type, layout: DataLayout) -> int:
     """The boundary a value of *ty* must start on."""
     match ty:
-        case IntType() | FloatType():
+        case IntType():
+            return ty.held // 8
+        case FloatType():
             return ty.bits // 8
         case BoolType():
             return 1

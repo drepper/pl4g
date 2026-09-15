@@ -6,7 +6,7 @@
 ※ writes on purpose.
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     let n: u8 = 5u8
     let rounded: u8 = ↓n
-    0u8
+    0u6

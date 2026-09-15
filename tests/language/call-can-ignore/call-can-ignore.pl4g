@@ -10,19 +10,19 @@
 ※ call made for what it does, which is what standing as a statement says, and
 ※ there is no answer for anything to take.
 
-let counter: mut u8 = 0u8
+let counter: mut u6 = 0u6
 
 @[can_ignore, impure]
-fn bump() → u8:
-    counter ← counter + 1u8
+fn bump() → u6:
+    counter ← counter + 1u6
     counter
 
 @[impure]
 fn prepare():
-    counter ← 5u8
+    counter ← 5u6
 
 @[startup, impure]
-fn main() → u8:
+fn main() → u6:
     ※ nothing takes what it answers with, and the attribute says that is meant
     prepare()
     bump()

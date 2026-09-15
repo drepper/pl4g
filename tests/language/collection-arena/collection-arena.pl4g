@@ -16,12 +16,12 @@
 let scratch: mut arena = ⎕arena
 
 @[startup, impure]
-fn main() → u8:
-    let a: ⸨u8⸩ = ⸨1u8, 2u8⸩ in scratch
-    let b: ⸨u8⸩ = ⸨2u8, 3u8⸩ in ⎕heap
-    let joined: ⸨u8⸩ = a | b
-    let total: mut u8 = 0u8
-    foreach i := 0u8…5u8:
+fn main() → u6:
+    let a: ⸨u6⸩ = ⸨1u6, 2u6⸩ in scratch
+    let b: ⸨u6⸩ = ⸨2u6, 3u6⸩ in ⎕heap
+    let joined: ⸨u6⸩ = a | b
+    let total: mut u6 = 0u6
+    foreach i := 0u6…5u6:
         if joined⸨i⸩:
-            total ← total + 1u8
+            total ← total + 1u6
     total

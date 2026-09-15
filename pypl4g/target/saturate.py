@@ -585,12 +585,30 @@ def _whole(operand: MCReg) -> MCReg:
 
 def _back_into_the_type(asm: Assembler, ty: IntType, destination: Reg,
                         span: Span) -> None:
-    """Put the bits above the type back to what the type says they are."""
+    """Put the bits above the type back to what the type says they are.
+
+    Unsigned is an `and` with the bits the type has, whatever its width.  Signed
+    is a widening where the type is one of the widths a machine widens from, and
+    where it is not -- a type of five bits has no instruction that reads five
+    bits -- it is a pair of shifts: up until the top bit of the type is the top
+    bit of the register, and back down with the sign coming in behind it.
+    """
     if ty.bits >= 64:
         return
-    if ty.signed:
+    if not ty.signed:
+        asm.op(ops.AND, destination, MCReg(destination),
+               MCImm((1 << ty.bits) - 1, 32 if ty.bits < 32 else 64,
+                     signed=False),
+               span=span)
+        return
+    if ty.whole:
         asm.widen(destination, MCReg(destination), ty.bits, True, span)
         return
-    asm.op(ops.AND, destination, MCReg(destination),
-           MCImm((1 << ty.bits) - 1, 32 if ty.bits < 32 else 64, signed=False),
-           span=span)
+    # Across the whole register, which is what the widening instruction the
+    # other branch uses does: the bits above the type are the sign as far up as
+    # the register goes, and nothing below has to know where the type ended.
+    over = MCImm(64 - ty.bits, 32, signed=False)
+    asm.shift(ops.SHIFT_LEFT, destination, MCReg(destination, bits=64), over,
+              64, span)
+    asm.shift(ops.SHIFT_RIGHT_SIGNED, destination, MCReg(destination, bits=64),
+              over, 64, span)

@@ -4,6 +4,6 @@
 ※ one index to name it with.  An array is what takes one index per dimension.
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     let p: 〈u8, u8〉 = 〈1u8, 2u8〉
     p⟦0,1⟧

@@ -4,8 +4,8 @@
 ※ which are bytes in the image like any other variable's value.  Every element
 ※ has to be one the compiler knows, for the same reason.
 
-let table: u8⟦5⟧ = ⟦1u8, 2u8, 4u8, 8u8, 16u8⟧
+let table: u6⟦5⟧ = ⟦1u6, 2u6, 4u6, 8u6, 16u6⟧
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     table⟦0⟧ + table⟦2⟧ + table⟦4⟧

@@ -11,20 +11,20 @@
 ※ an overflow inside a call nobody made cannot be reached.  That follows from
 ※ the call being removable at all, which is what purity was declared for.
 
-fn worked_out(n: u8) → u8:
+fn worked_out(n: u6) → u6:
     n + n
 
-let seen: mut u8 = 0u8
+let seen: mut u6 = 0u6
 
 @[impure]
-fn notes(n: u8) → u8:
+fn notes(n: u6) → u6:
     ※ this one changes something, so it is made whether or not anyone looks
     seen ← n
     n
 
 @[startup, impure]
-fn main() → u8:
+fn main() → u6:
     ※ nothing reads this, and nothing else depends on it having happened
-    _ ← worked_out(3u8)
-    _ ← notes(42u8)
+    _ ← worked_out(3u6)
+    _ ← notes(42u6)
     seen

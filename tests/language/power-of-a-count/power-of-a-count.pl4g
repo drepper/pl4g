@@ -6,6 +6,6 @@
 ※ not offer; one is written as a call to whatever computes it.
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     let x: f64 = 2.0f64 ⁿ 0.5f64
-    0u8
+    0u6

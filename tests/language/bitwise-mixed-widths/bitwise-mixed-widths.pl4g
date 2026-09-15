@@ -3,5 +3,5 @@
 
 ※ Nothing is widened to make two types meet, here as anywhere else.
 @[startup]
-fn main() → u8:
+fn main() → u6:
     1u8 & 2u16

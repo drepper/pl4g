@@ -8,16 +8,16 @@
 ※ `else` arm alike.  The block the loop ends at is reached down all of those
 ※ ways and reads one thing, so there is one type for that thing to have.
 
-fn cell_where(product: u8) → u8:
-    foreach §rows r := 1u8…5u8:
-        foreach c := 1u8…5u8:
+fn cell_where(product: u6) → u6:
+    foreach §rows r := 1u6…5u6:
+        foreach c := 1u6…5u6:
             if r × c = product:
                 ※ hands the outer loop its value from inside the inner one
-                break §rows r × 10u8 + c
+                break §rows r × 10u6 + c
     else:
-        0u8
+        0u6
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     ※ 2 × 3 is the first pair found, so 23; and nothing makes 29
-    cell_where(6u8) + cell_where(29u8) + 19u8
+    cell_where(6u6) + cell_where(29u6) + 19u6

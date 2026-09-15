@@ -83,11 +83,11 @@ def test_a_variable_is_named_by_its_own_name() -> None:
     assert symbol_of(var) == "text.utf8.counter"
 
 
-SOURCE = """let counter: u8 = 42u8
-let touched: mut u8 = 7u8
+SOURCE = """let counter: u6 = 42u6
+let touched: mut u6 = 7u6
 
 @[startup, impure]
-fn main() \N{RIGHTWARDS ARROW} u8:
+fn main() \N{RIGHTWARDS ARROW} u6:
     touched \N{LEFTWARDS ARROW} counter
 """
 
@@ -183,10 +183,10 @@ def test_more_than_one_value_at_a_time_now_works(triple: str, tmp_path) -> None:
     wrongly.  The allocator is what lifted that, and this is the case it lifted.
     """
     source = tmp_path / "t.pl4g"
-    source.write_text("let a: u8 = 1u8\nlet b: u8 = 2u8\n"
-                      "@[startup, impure]\nfn main() \N{RIGHTWARDS ARROW} u8:\n"
-                      "    @[ignore(4006)]\n    let first: u8 = a\n"
-                      "    @[ignore(4006)]\n    let second: u8 = b\n    first\n",
+    source.write_text("let a: u6 = 1u6\nlet b: u6 = 2u6\n"
+                      "@[startup, impure]\nfn main() \N{RIGHTWARDS ARROW} u6:\n"
+                      "    @[ignore(4006)]\n    let first: u6 = a\n"
+                      "    @[ignore(4006)]\n    let second: u6 = b\n    first\n",
                       encoding="utf-8")
     output = tmp_path / "out"
     proc = run_compiler(["-o", str(output), "".join(("--target=", triple)), str(source)])
@@ -257,8 +257,8 @@ def test_an_oversized_initializer_is_refused(compile_source, declared: str,  # n
                                              value: str) -> None:
     """No value is quietly narrowed to fit the variable it is given to."""
     proc, _ = compile_source("".join((
-        "@[startup, impure]\nfn main() \N{RIGHTWARDS ARROW} u8:\n    let v: ", declared,
-        " = ", value, "\n    1u8\n")))
+        "@[startup, impure]\nfn main() \N{RIGHTWARDS ARROW} u6:\n    let v: ", declared,
+        " = ", value, "\n    1u6\n")))
     assert proc.returncode != 0, proc.stdout
     assert "[PL4G-2006]" in proc.stderr, proc.stderr
     assert "does not fit" in proc.stderr
@@ -273,17 +273,17 @@ def test_the_largest_value_of_a_type_is_accepted(compile_source, declared: str, 
     """The boundary is where the type says, not one short of it."""
     proc, _ = compile_source("".join((
         "let v: ", declared, " = ", value,
-        "\n@[startup, impure]\nfn main() \N{RIGHTWARDS ARROW} u8:\n    1u8\n")))
+        "\n@[startup, impure]\nfn main() \N{RIGHTWARDS ARROW} u6:\n    1u6\n")))
     assert proc.returncode == 0, describe(proc)
 
 
 # -- changing a variable -------------------------------------------------------
 
-ASSIGN = """let counter: mut u8 = 1u8
+ASSIGN = """let counter: mut u6 = 1u6
 
 @[startup, impure]
-fn main() \N{RIGHTWARDS ARROW} u8:
-    counter \N{LEFTWARDS ARROW} 7u8
+fn main() \N{RIGHTWARDS ARROW} u6:
+    counter \N{LEFTWARDS ARROW} 7u6
     counter
 """
 
@@ -294,12 +294,12 @@ def test_a_local_assignment_writes_nothing(compile_source, tmp_path) -> None:  #
     Nothing reaches memory, and the whole function folds to its result.
     """
     proc, output = compile_source(
-        "@[startup, impure]\nfn main() \N{RIGHTWARDS ARROW} u8:\n"
-        "    let x: mut u8 = 3u8\n    x \N{LEFTWARDS ARROW} 5u8\n    x\n",
+        "@[startup, impure]\nfn main() \N{RIGHTWARDS ARROW} u6:\n"
+        "    let x: mut u6 = 3u6\n    x \N{LEFTWARDS ARROW} 5u6\n    x\n",
         "--emit=ir")
     assert proc.returncode == 0, describe(proc)
     text = output.read_text(encoding="utf-8")
-    assert "ret.u8 5" in text, text
+    assert "ret.u6 5" in text, text
     assert "store" not in text and "mem.start" not in text, text
 
 
@@ -309,10 +309,10 @@ def test_a_global_assignment_is_a_store_the_token_orders(compile_source,  # noqa
     proc, output = compile_source(ASSIGN, "--emit=ir")
     assert proc.returncode == 0, describe(proc)
     text = output.read_text(encoding="utf-8")
-    assert "let @counter: mut u8" in text, text
+    assert "let @counter: mut u6" in text, text
     assert "%0 = mem.start" in text, text
-    assert "%1 = store.u8 %0, @counter, 7" in text, text
-    assert "%2 = load.u8 %1, @counter" in text, "the read is not ordered after the write"
+    assert "%1 = store.u6 %0, @counter, 7" in text, text
+    assert "%2 = load.u6 %1, @counter" in text, "the read is not ordered after the write"
 
 
 @pytest.mark.parametrize("triple", compiler_targets())
@@ -360,68 +360,68 @@ def test_the_verifier_refuses_a_store_into_something_immutable() -> None:
 def test_an_assignment_is_the_result_when_it_is_last(compile_source) -> None:  # noqa: ANN001
     """A read follows the write, and the token is what puts it after."""
     proc, output = compile_source(
-        "let counter: mut u8 = 1u8\n@[startup, impure]\n"
-        "fn main() \N{RIGHTWARDS ARROW} u8:\n    counter \N{LEFTWARDS ARROW} 42u8\n",
+        "let counter: mut u6 = 1u6\n@[startup, impure]\n"
+        "fn main() \N{RIGHTWARDS ARROW} u6:\n    counter \N{LEFTWARDS ARROW} 42u6\n",
         "--emit=ir")
     assert proc.returncode == 0, describe(proc)
     text = output.read_text(encoding="utf-8")
-    assert "%1 = store.u8 %0, @counter, 42" in text, text
-    assert "%2 = load.u8 %1, @counter" in text, text
-    assert "ret.u8 %2" in text, text
+    assert "%1 = store.u6 %0, @counter, 42" in text, text
+    assert "%2 = load.u6 %1, @counter" in text, text
+    assert "ret.u6 %2" in text, text
 
 
 def test_a_discarded_assignment_reads_nothing_back(compile_source) -> None:  # noqa: ANN001
     """Reading a place nothing looks at would be an instruction nobody asked for."""
     proc, output = compile_source(
-        "let counter: mut u8 = 1u8\n@[startup, impure]\n"
-        "fn main() \N{RIGHTWARDS ARROW} u8:\n    counter \N{LEFTWARDS ARROW} 42u8\n"
-        "    3u8\n", "--emit=ir")
+        "let counter: mut u6 = 1u6\n@[startup, impure]\n"
+        "fn main() \N{RIGHTWARDS ARROW} u6:\n    counter \N{LEFTWARDS ARROW} 42u6\n"
+        "    3u6\n", "--emit=ir")
     assert proc.returncode == 0, describe(proc)
     text = output.read_text(encoding="utf-8")
-    assert "store.u8" in text, text
+    assert "store.u6" in text, text
     assert "load" not in text, text
 
 
 def test_a_local_assignment_as_the_result_touches_no_memory(compile_source) -> None:  # noqa: ANN001
     """A local is a value, so there is nothing to read back."""
     proc, output = compile_source(
-        "@[startup, impure]\nfn main() \N{RIGHTWARDS ARROW} u8:\n"
-        "    let status: mut u8 = 3u8\n    status \N{LEFTWARDS ARROW} 9u8\n",
+        "@[startup, impure]\nfn main() \N{RIGHTWARDS ARROW} u6:\n"
+        "    let status: mut u6 = 3u6\n    status \N{LEFTWARDS ARROW} 9u6\n",
         "--emit=ir")
     assert proc.returncode == 0, describe(proc)
     text = output.read_text(encoding="utf-8")
-    assert "ret.u8 9" in text, text
+    assert "ret.u6 9" in text, text
     assert "store" not in text and "load" not in text, text
 
 
 @pytest.mark.parametrize("source", [
-    "let v: mut u8 = 1u8",
-    "let v: mut = 1u8",
+    "let v: mut u6 = 1u6",
+    "let v: mut = 1u6",
 ])
 def test_mut_stands_where_the_type_does(compile_source, source: str) -> None:  # noqa: ANN001
     """Either part after the colon may be left out; the qualifier has a place."""
     proc, _ = compile_source("".join((
-        source, "\n@[startup, impure]\nfn main() \N{RIGHTWARDS ARROW} u8:\n"
-        "    v \N{LEFTWARDS ARROW} 5u8\n")))
+        source, "\n@[startup, impure]\nfn main() \N{RIGHTWARDS ARROW} u6:\n"
+        "    v \N{LEFTWARDS ARROW} 5u6\n")))
     assert proc.returncode == 0, describe(proc)
 
 
 def test_mut_before_the_name_is_no_longer_the_syntax(compile_source) -> None:  # noqa: ANN001
     """It qualifies the type, so it does not stand before the name."""
     proc, _ = compile_source(
-        "@[startup, impure]\nfn main() \N{RIGHTWARDS ARROW} u8:\n"
-        "    let mut v: u8 = 1u8\n    v\n")
+        "@[startup, impure]\nfn main() \N{RIGHTWARDS ARROW} u6:\n"
+        "    let mut v: u6 = 1u6\n    v\n")
     assert proc.returncode != 0
 
 
 # -- a variable the whole program never reads -----------------------------------
 
-WRITTEN_ONLY = """let counter: mut u8 = 1u8
+WRITTEN_ONLY = """let counter: mut u6 = 1u6
 
 @[startup, impure]
-fn main() \N{RIGHTWARDS ARROW} u8:
-    counter \N{LEFTWARDS ARROW} 7u8
-    3u8
+fn main() \N{RIGHTWARDS ARROW} u6:
+    counter \N{LEFTWARDS ARROW} 7u6
+    3u6
 """
 
 
@@ -437,10 +437,10 @@ def test_reading_it_anywhere_is_enough(compile_source) -> None:  # noqa: ANN001
     """A variable at the top level can be named from any function, so one read
     from anywhere answers the question for the whole program."""
     proc, _ = compile_source(
-        "let counter: mut u8 = 1u8\n\n"
-        "@[export]\nfn peek() \N{RIGHTWARDS ARROW} u8:\n    counter\n\n"
-        "@[startup, impure]\nfn main() \N{RIGHTWARDS ARROW} u8:\n"
-        "    counter \N{LEFTWARDS ARROW} 7u8\n    3u8\n")
+        "let counter: mut u6 = 1u6\n\n"
+        "@[export]\nfn peek() \N{RIGHTWARDS ARROW} u6:\n    counter\n\n"
+        "@[startup, impure]\nfn main() \N{RIGHTWARDS ARROW} u6:\n"
+        "    counter \N{LEFTWARDS ARROW} 7u6\n    3u6\n")
     assert proc.returncode == 0, describe(proc)
     assert "[PL4G-4007]" not in proc.stderr, proc.stderr
 
@@ -449,9 +449,9 @@ def test_an_exported_variable_is_never_reported(compile_source) -> None:  # noqa
     """Something outside this compilation may read it, so nothing here can say
     that nothing does."""
     proc, _ = compile_source(
-        "@[export]\nlet counter: mut u8 = 1u8\n\n"
-        "@[startup, impure]\nfn main() \N{RIGHTWARDS ARROW} u8:\n"
-        "    counter \N{LEFTWARDS ARROW} 7u8\n    3u8\n")
+        "@[export]\nlet counter: mut u6 = 1u6\n\n"
+        "@[startup, impure]\nfn main() \N{RIGHTWARDS ARROW} u6:\n"
+        "    counter \N{LEFTWARDS ARROW} 7u6\n    3u6\n")
     assert proc.returncode == 0, describe(proc)
     assert "[PL4G-4007]" not in proc.stderr, proc.stderr
 
@@ -459,8 +459,8 @@ def test_an_exported_variable_is_never_reported(compile_source) -> None:  # noqa
 def test_a_variable_nothing_writes_either_is_not_reported(compile_source) -> None:  # noqa: ANN001
     """It is dropped rather than reported: there is no write to call pointless."""
     proc, output = compile_source(
-        "let unused: u8 = 1u8\n\n"
-        "@[startup, impure]\nfn main() \N{RIGHTWARDS ARROW} u8:\n    3u8\n", "--emit=ir")
+        "let unused: u6 = 1u6\n\n"
+        "@[startup, impure]\nfn main() \N{RIGHTWARDS ARROW} u6:\n    3u6\n", "--emit=ir")
     assert proc.returncode == 0, describe(proc)
     assert "[PL4G-4007]" not in proc.stderr, proc.stderr
     assert "@unused" not in output.read_text(encoding="utf-8")
@@ -478,9 +478,9 @@ def test_the_definition_may_say_it_expects_it(compile_source) -> None:  # noqa: 
 def test_an_assertion_nothing_meets_is_still_reported(compile_source) -> None:  # noqa: ANN001
     """Carrying the expectation that far must not make it impossible to fail."""
     proc, _ = compile_source(
-        "@[expect(4007)]\nlet counter: mut u8 = 1u8\n\n"
-        "@[startup, impure]\nfn main() \N{RIGHTWARDS ARROW} u8:\n"
-        "    counter \N{LEFTWARDS ARROW} 7u8\n")
+        "@[expect(4007)]\nlet counter: mut u6 = 1u6\n\n"
+        "@[startup, impure]\nfn main() \N{RIGHTWARDS ARROW} u6:\n"
+        "    counter \N{LEFTWARDS ARROW} 7u6\n")
     assert proc.returncode != 0
     assert "[PL4G-3206]" in proc.stderr, proc.stderr
 
@@ -511,7 +511,7 @@ def test_nothing_but_true_and_false_is_a_boolean(compile_source, source: str,  #
     unfinished where the program was simply wrong.
     """
     proc, _ = compile_source("".join((
-        source, "@[startup, impure]\nfn main() \N{RIGHTWARDS ARROW} u8:\n    1u8\n")))
+        source, "@[startup, impure]\nfn main() \N{RIGHTWARDS ARROW} u6:\n    1u6\n")))
     assert proc.returncode != 0, proc.stdout
     assert "[PL4G-4203]" in proc.stderr, proc.stderr
     assert "".join(("of type '", found, "'")) in proc.stderr, proc.stderr
@@ -520,8 +520,8 @@ def test_nothing_but_true_and_false_is_a_boolean(compile_source, source: str,  #
 def test_a_type_already_reported_says_nothing_more_about_the_value(compile_source) -> None:  # noqa: ANN001
     """One mistake, one message: the unknown type is not also a bad initializer."""
     proc, _ = compile_source(
-        "let v: nosuchtype = 1u8\n"
-        "@[startup, impure]\nfn main() \N{RIGHTWARDS ARROW} u8:\n    1u8\n")
+        "let v: nosuchtype = 1u6\n"
+        "@[startup, impure]\nfn main() \N{RIGHTWARDS ARROW} u6:\n    1u6\n")
     assert proc.returncode != 0
     assert proc.stderr.count("[PL4G-") == 1, proc.stderr
     assert "[PL4G-4201]" in proc.stderr, proc.stderr
@@ -532,8 +532,8 @@ def test_a_boolean_constant_is_read_only_and_a_mutable_one_is_not(tmp_path) -> N
     source = tmp_path / "t.pl4g"
     source.write_text("let ready: bool = true\n"
                       "let seen: mut bool = false\n"
-                      "@[startup, impure]\nfn main() \N{RIGHTWARDS ARROW} u8:\n"
-                      "    seen \N{LEFTWARDS ARROW} ready\n    1u8\n", encoding="utf-8")
+                      "@[startup, impure]\nfn main() \N{RIGHTWARDS ARROW} u6:\n"
+                      "    seen \N{LEFTWARDS ARROW} ready\n    1u6\n", encoding="utf-8")
     output = tmp_path / "out"
     proc = run_compiler(["-o", str(output), str(source)])
     assert proc.returncode == 0, describe(proc)
@@ -556,11 +556,11 @@ def test_the_memory_chain_starts_in_the_entry_block(compile_source,  # noqa: ANN
     into a loop among them, would be reading something that does not dominate it.
     """
     proc, output = compile_source(
-        "@[startup, impure]\nfn main() \N{RIGHTWARDS ARROW} u8:\n"
-        "    let k: u8 = if true { 5u8 } else { 6u8 }\n"
-        "    let a: u8? = while \N{SECTION SIGN}x true:\n"
-        "        break \N{SECTION SIGN}x 1u8\n"
-        "    k + (a ?? 0u8)\n",
+        "@[startup, impure]\nfn main() \N{RIGHTWARDS ARROW} u6:\n"
+        "    let k: u6 = if true { 5u6 } else { 6u6 }\n"
+        "    let a: u6? = while \N{SECTION SIGN}x true:\n"
+        "        break \N{SECTION SIGN}x 1u6\n"
+        "    k + (a ?? 0u6)\n",
         "--emit=ir", "-O0")
     assert proc.returncode == 0, describe(proc)
     text = output.read_text(encoding="utf-8")
@@ -579,9 +579,9 @@ def test_an_answer_of_three_parts_goes_through_the_callers_storage(  # noqa: ANN
     proc, output = compile_source(
         "fn three() \N{RIGHTWARDS ARROW} \N{LEFT ANGLE BRACKET}u8, u8, u8\N{RIGHT ANGLE BRACKET}:\n"
         "    \N{LEFT ANGLE BRACKET}1u8, 2u8, 3u8\N{RIGHT ANGLE BRACKET}\n\n"
-        "@[startup, impure]\nfn main() \N{RIGHTWARDS ARROW} u8:\n"
+        "@[startup, impure]\nfn main() \N{RIGHTWARDS ARROW} u6:\n"
         "    let t: \N{LEFT ANGLE BRACKET}u8, u8, u8\N{RIGHT ANGLE BRACKET} = three()\n"
-        "    t\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}0\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}\n",
+        "    if t\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}0\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET} = 1u8:\n        0u6\n    else:\n        1u6\n",
         "--emit=ir", "-O0")
     assert proc.returncode == 0, describe(proc)
     text = output.read_text(encoding="utf-8")
@@ -600,9 +600,9 @@ def test_an_answer_of_two_parts_stays_in_registers(compile_source,  # noqa: ANN0
     proc, output = compile_source(
         "fn two() \N{RIGHTWARDS ARROW} \N{LEFT ANGLE BRACKET}u8, u8\N{RIGHT ANGLE BRACKET}:\n"
         "    \N{LEFT ANGLE BRACKET}1u8, 2u8\N{RIGHT ANGLE BRACKET}\n\n"
-        "@[startup, impure]\nfn main() \N{RIGHTWARDS ARROW} u8:\n"
+        "@[startup, impure]\nfn main() \N{RIGHTWARDS ARROW} u6:\n"
         "    let t: \N{LEFT ANGLE BRACKET}u8, u8\N{RIGHT ANGLE BRACKET} = two()\n"
-        "    t\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}0\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}\n",
+        "    if t\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}0\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET} = 1u8:\n        0u6\n    else:\n        1u6\n",
         "--emit=ir", "-O0")
     assert proc.returncode == 0, describe(proc)
     text = output.read_text(encoding="utf-8")

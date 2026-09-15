@@ -3,6 +3,6 @@
 
 ※ A literal that names its type must name the one the variable was declared.
 @[startup]
-fn main() → u8:
+fn main() → u6:
     let status: u8 = 3i32
     status

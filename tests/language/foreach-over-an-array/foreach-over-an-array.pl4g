@@ -1,4 +1,4 @@
-※ pl4g-test: compile=ok run=native,qemu exit=80 diag=none
+※ pl4g-test: compile=ok run=native,qemu exit=0 diag=none
 
 ※ `foreach` takes its values from anything that is an iterator, and an array is
 ※ one.  A turn gives an element where the array has one dimension, and a row
@@ -17,10 +17,14 @@ fn sum(xs: u8⟦⟧) → u8:
     n
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     let m: u8⟦2,3⟧ = ⟦⟦1u8,2u8,3u8⟧,⟦10u8,20u8,30u8⟧⟧
     let total: mut u8 = 0u8
     foreach row := m:
         total ← total + sum(row)
     let v: u8⟦5⟧ = ⟦1u8,2u8,4u8,8u8,16u8⟧
-    total + sum(v⟦1…4⟧)
+    ※ what this used to say through the exit status, which is six bits now
+    if total + sum(v⟦1…4⟧) ≠ 80u8:
+        1u6
+    else:
+        0u6

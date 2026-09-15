@@ -10,6 +10,6 @@ fn rounded(x: f64) → f64:
     ⇕x
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     ⎕ord('a')
-    0u8
+    0u6

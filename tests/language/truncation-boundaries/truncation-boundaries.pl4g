@@ -1,5 +1,5 @@
 ※ pl4g-test: compile=ok opt=0,1
-※ pl4g-test: run=native,qemu exit=255
+※ pl4g-test: run=native,qemu exit=0
 ※ pl4g-test: diag=none
 
 ※ The largest value of each type is accepted; one more would not be.
@@ -11,5 +11,9 @@ let signed_byte_max: i8 = 127i8
 let signed_wide_max: i64 = 9223372036854775807i64
 
 @[startup]
-fn main() → u8:
-    byte_max
+fn main() → u6:
+    ※ what this used to say through the exit status, which is six bits now
+    if byte_max ≠ 255u8:
+        1u6
+    else:
+        0u6

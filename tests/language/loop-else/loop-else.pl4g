@@ -1,4 +1,4 @@
-※ pl4g-test: compile=ok run=native,qemu exit=42 diag=none
+※ pl4g-test: compile=ok run=native,qemu exit=0 diag=none
 
 ※ An `else` arm is what runs where the loop ran out rather than being left by a
 ※ `break`.  It is what that way through the loop comes to, so a loop with one
@@ -16,7 +16,7 @@ fn root_of(square: u8) → u8:
         99u8
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     let n: mut u8 = 0u8
     ※ a `while` takes one too, and its else arm runs when the condition stops
     let counted: u8 = while §counting n < 10u8:
@@ -30,4 +30,8 @@ fn main() → u8:
         break §quiet 0u8
     else:
         0u8
-    counted - root_of(49u8) + ran_out + 7u8
+    ※ what this used to say through the exit status, which is six bits now
+    if counted - root_of(49u8) + ran_out + 7u8 ≠ 42u8:
+        1u6
+    else:
+        0u6

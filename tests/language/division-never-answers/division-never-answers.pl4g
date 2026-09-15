@@ -10,11 +10,11 @@
 let kept: mut u8 = 0u8
 
 @[startup, impure]
-fn main() → u8:
+fn main() → u6:
     @[expect(4215)]
     kept ← 100u8 ÷ 0u8 ?? 1u8
     @[expect(4215)]
     kept ← 100u8 % 0u8 ?? 2u8
     @[expect(4223), ignore(5005)]
     ⁻128i8 ÷ ⁻1i8 ?? ⁻3i8
-    0u8
+    0u6

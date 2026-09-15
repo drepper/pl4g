@@ -7,7 +7,7 @@
 let count: mut u8 = 3u8
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     match count:
         u8(v):
             return v

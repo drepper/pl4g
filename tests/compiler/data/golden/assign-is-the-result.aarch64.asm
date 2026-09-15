@@ -6,7 +6,7 @@ counter:
     01                       ※ data
 
 section .text executable
-main()u8:
+main()u6:
                              ※ align 16
     40 05 80 52              movz w0, 42
     01 00 00 90              adrp x1, counter   ※ fixup aarch64_adr_page21 → counter
@@ -20,7 +20,7 @@ _start:
                              ※ align 16
     fd 03 1f aa              mov x29, xzr
     fe 03 1f aa              mov x30, xzr
-    00 00 00 94              bl main()u8   ※ fixup aarch64_branch26 → main()u8
+    00 00 00 94              bl main()u6   ※ fixup aarch64_branch26 → main()u6
     c8 0b 80 d2              movz x8, 94
     01 00 00 d4              svc 0
     01 00 00 00              udf 1

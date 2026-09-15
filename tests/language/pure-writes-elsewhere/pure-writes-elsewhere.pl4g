@@ -9,7 +9,7 @@ fn clear(v: u8⟦⟧):
     v⟦0⟧ ← 0u8
 
 @[startup, impure]
-fn main() → u8:
+fn main() → u6:
     let room: mut u8⟦2⟧ = ⟦7u8, 8u8⟧
     clear(room)
     room⟦0⟧

@@ -12,7 +12,7 @@ let u: u8⟦16⟧ = ⟦1u8, 2u8, 3u8, 4u8, 5u8, 6u8, 7u8, 8u8, 9u8, 10u8, 11u8, 
 let i: i8⟦16⟧ = ⟦1i8, 2i8, 3i8, 4i8, 5i8, 6i8, 7i8, 8i8, 9i8, 10i8, 11i8, 12i8, 13i8, 14i8, 15i8, 16i8⟧
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     let up: u8⟦16⟧ = u + 200u8
     let down: u8⟦16⟧ = u - 1u8
     let si: i8⟦16⟧ = i + 100i8
@@ -26,20 +26,20 @@ fn main() → u8:
     let q: i64⟦2⟧ = ⟦1i64, ⁻2i64⟧
     let quad: i64⟦2⟧ = q - 1i64
     if up⟦0⟧ ≠ 201u8 ∨ up⟦15⟧ ≠ 216u8:
-        1u8
+        1u6
     elif down⟦0⟧ ≠ 0u8 ∨ down⟦15⟧ ≠ 15u8:
-        2u8
+        2u6
     elif si⟦0⟧ ≠ 101i8 ∨ si⟦15⟧ ≠ 116i8:
-        3u8
+        3u6
     elif sd⟦0⟧ ≠ ⁻99i8 ∨ sd⟦15⟧ ≠ ⁻84i8:
-        4u8
+        4u6
     elif held⟦0⟧ ≠ 251u8 ∨ held⟦15⟧ ≠ 255u8:
-        5u8
+        5u6
     elif floored⟦0⟧ ≠ 0u8 ∨ floored⟦15⟧ ≠ 0u8:
-        6u8
+        6u6
     elif wide⟦0⟧ ≠ 4000000001u32 ∨ wide⟦3⟧ ≠ 4000000004u32:
-        7u8
+        7u6
     elif quad⟦0⟧ ≠ 0i64 ∨ quad⟦1⟧ ≠ ⁻3i64:
-        8u8
+        8u6
     else:
-        0u8
+        0u6

@@ -12,6 +12,8 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Final
 
+from ..ir.types import BUILTIN_TYPES, IntType
+
 from ..source.location import Span
 
 #: Introduces a comment that runs to the end of the line.
@@ -381,8 +383,7 @@ FLOAT_TYPE_NAMES: Final[frozenset[str]] = frozenset(("f32", "f64"))
 #: The types an integer literal may name with its suffix.  Taken from the type
 #: table rather than listed again, so that the two cannot disagree.
 INTEGER_TYPE_NAMES: Final[frozenset[str]] = frozenset(
-    "".join((prefix, str(bits)))
-    for prefix in ("i", "u") for bits in (8, 16, 32, 64))
+    name for name, ty in BUILTIN_TYPES.items() if isinstance(ty, IntType))
 
 
 KEYWORDS: Final[dict[str, TokKind]] = {

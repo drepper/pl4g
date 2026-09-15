@@ -1,4 +1,4 @@
-※ pl4g-test: compile=ok run=native,qemu exit=106 diag=none
+※ pl4g-test: compile=ok run=native,qemu exit=0 diag=none
 
 ※ A table that fills up past three quarters is given twice as much room and
 ※ everything in it is put in the new room, which is what keeps a lookup taking
@@ -9,11 +9,15 @@
 ※ `??` reads: `d⸨200u8⸩ ?? 1u8` is one, and every key that is there is itself.
 
 @[startup, impure]
-fn main() → u8:
+fn main() → u6:
     let d: mut ⸨u8: u8⸩ = ⸨⸩
     foreach i := 0u8…40u8:
         d⸨i⸩ ← i
     let total: mut u8 = 0u8
     foreach k := 0u8…40u8…7u8:
         total ← total + (d⸨k⸩ ?? 0u8)
-    total + (d⸨200u8⸩ ?? 1u8)
+    ※ what this used to say through the exit status, which is six bits now
+    if total + (d⸨200u8⸩ ?? 1u8) ≠ 106u8:
+        1u6
+    else:
+        0u6

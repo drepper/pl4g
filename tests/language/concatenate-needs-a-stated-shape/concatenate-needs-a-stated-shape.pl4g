@@ -8,6 +8,6 @@
 let a: u8⟦3⟧ = ⟦1u8, 2u8, 3u8⟧
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     let both: u8⟦5⟧ = a ⧺ a⟦0…2⟧
     both⟦0⟧

@@ -27,26 +27,26 @@ from conftest import compiler_targets, describe, run_compiler, runner_for
 ARROW = "\N{RIGHTWARDS ARROW}"
 
 SOURCE = """@[visible]
-let shared: u8 = 7u8
+let shared: u6 = 7u6
 
-let private: mut u8 = 8u8
+let private: mut u6 = 8u6
 
 @[visible]
-fn reachable() \N{RIGHTWARDS ARROW} u8:
-    1u8
+fn reachable() \N{RIGHTWARDS ARROW} u6:
+    1u6
 
 \N{REFERENCE MARK} Not exported, but the entry point calls it, so it is in the image
 \N{REFERENCE MARK} and this says what a name that is kept in looks like.
 @[constructor, impure]
 fn prepare():
-    private \N{LEFTWARDS ARROW} 8u8
+    private \N{LEFTWARDS ARROW} 8u6
 
 \N{REFERENCE MARK} Neither exported nor reached from anywhere, so nothing can call it.
-fn unreached() \N{RIGHTWARDS ARROW} u8:
-    2u8
+fn unreached() \N{RIGHTWARDS ARROW} u6:
+    2u6
 
 @[startup, impure]
-fn main() \N{RIGHTWARDS ARROW} u8:
+fn main() \N{RIGHTWARDS ARROW} u6:
     shared
 """
 
@@ -79,7 +79,7 @@ def image(request: pytest.FixtureRequest,
     return Built(triple=triple, path=output, image=elfcheck.parse(output.read_bytes()))
 
 
-@pytest.mark.parametrize("name", ["shared", "reachable()u8"])
+@pytest.mark.parametrize("name", ["shared", "reachable()u6"])
 def test_what_is_visible_is_bound_globally_and_visible(image: Built, name: str) -> None:
     """A variable and a function alike: the attribute applies to both."""
     symbol = image.image.symbol(name)
@@ -88,7 +88,7 @@ def test_what_is_visible_is_bound_globally_and_visible(image: Built, name: str) 
     assert image.image.visibility_of(symbol) == STV_DEFAULT
 
 
-@pytest.mark.parametrize("name", ["private", "prepare()void", "main()u8"])
+@pytest.mark.parametrize("name", ["private", "prepare()void", "main()u6"])
 def test_what_is_not_exported_is_kept_in(image: Built, name: str) -> None:
     """Twice over: bound locally, and marked as not visible."""
     symbol = image.image.symbol(name)
@@ -104,13 +104,13 @@ def test_what_nothing_reaches_is_not_there_at_all(image: Built) -> None:
     program might do later: nothing can ever reach the function, and bytes no
     program can run do not belong in the image.
     """
-    assert image.image.symbol("unreached()u8") is None, \
+    assert image.image.symbol("unreached()u6") is None, \
         "a function nothing can reach is still in the image"
 
 
 def test_the_startup_function_is_not_exported_either(image: Built) -> None:
     """It is reached by the entry point, which is inside the same image."""
-    startup = image.image.symbol("main()u8")
+    startup = image.image.symbol("main()u6")
     assert startup is not None and startup.binding == STB_LOCAL
 
 
@@ -140,10 +140,10 @@ def test_it_still_runs(image: Built) -> None:
 def test_visible_is_the_only_thing_that_changes_it(compile_source) -> None:  # noqa: ANN001
     """Without the attribute a definition is kept in, whatever else it says."""
     proc, output = compile_source("".join((
-        "let g: mut u8 = 0u8\n\n",
+        "let g: mut u6 = 0u6\n\n",
         "@[align(16), constructor, impure]\nfn helper():\n",
-        "    g \N{LEFTWARDS ARROW} 1u8\n\n",
-        "@[startup, impure]\nfn main() ", ARROW, " u8:\n    1u8\n")))
+        "    g \N{LEFTWARDS ARROW} 1u6\n\n",
+        "@[startup, impure]\nfn main() ", ARROW, " u6:\n    1u6\n")))
     assert proc.returncode == 0, describe(proc)
     parsed = elfcheck.parse(output.read_bytes())
     symbol = parsed.symbol("helper()void")
@@ -153,16 +153,16 @@ def test_visible_is_the_only_thing_that_changes_it(compile_source) -> None:  # n
 # -- the two questions are not one ----------------------------------------------
 
 EITHER = """@[export]
-let lent: u8 = 1u8
+let lent: u6 = 1u6
 
 @[visible]
-let offered: u8 = 2u8
+let offered: u6 = 2u6
 
 @[export, visible]
-let both: u8 = 3u8
+let both: u6 = 3u6
 
 @[startup, impure]
-fn main() \N{RIGHTWARDS ARROW} u8:
+fn main() \N{RIGHTWARDS ARROW} u6:
     lent
 """
 
@@ -182,12 +182,12 @@ def test_exporting_a_definition_does_not_offer_its_symbol(compile_source) -> Non
 def test_offering_a_symbol_does_not_export_the_definition(tmp_path) -> None:  # noqa: ANN001
     """And the other way round: a module that only makes a symbol visible has
     not let anything in."""
-    (tmp_path / "lib.pl4g").write_text("@[visible]\nlet v: u8 = 1u8\n",
+    (tmp_path / "lib.pl4g").write_text("@[visible]\nlet v: u6 = 1u6\n",
                                        encoding="utf-8")
     source = tmp_path / "main.pl4g"
     source.write_text("".join((
         'let l := import("lib")\n\n@[startup, impure]\nfn main() ', ARROW,
-        " u8:\n    l.v\n")), encoding="utf-8")
+        " u6:\n    l.v\n")), encoding="utf-8")
     proc = run_compiler(["-o", str(tmp_path / "out"), str(source)])
     assert proc.returncode != 0
     assert "[PL4G-4104]" in proc.stderr, proc.stderr
@@ -211,7 +211,7 @@ def test_a_definition_a_module_only_lends_is_dropped_where_nothing_takes_it(
     nothing reaches, so it is not in the image.  Before the two were told apart
     a library module kept everything.
     """
-    proc, output = compile_source(EITHER.replace("    lent\n", "    3u8\n"))
+    proc, output = compile_source(EITHER.replace("    lent\n", "    3u6\n"))
     assert proc.returncode == 0, describe(proc)
     parsed = elfcheck.parse(output.read_bytes())
     assert parsed.symbol("lent") is None, "a definition nothing reaches was kept"

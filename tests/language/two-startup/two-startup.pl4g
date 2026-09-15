@@ -4,7 +4,7 @@
 
 ※ Exactly one function may be marked as the startup function.
 @[startup]
-fn first() → u8:
+fn first() → u6:
     0
 
 @[startup]

@@ -7,11 +7,11 @@
 ※ Where the array says its shape the row says its own, and where it does not the
 ※ row carries the counts that are left over.
 
-fn first(xs: u8⟦⟧) → u8:
+fn first(xs: u6⟦⟧) → u6:
     xs⟦0⟧
 
 @[startup]
-fn main() → u8:
-    let m: u8⟦2,3⟧ = ⟦⟦1u8,2u8,3u8⟧,⟦10u8,20u8,30u8⟧⟧
-    let row: u8⟦3⟧ = m⟦1⟧
+fn main() → u6:
+    let m: u6⟦2,3⟧ = ⟦⟦1u6,2u6,3u6⟧,⟦10u6,20u6,30u6⟧⟧
+    let row: u6⟦3⟧ = m⟦1⟧
     row⟦0⟧ + row⟦2⟧ + first(m⟦0⟧)

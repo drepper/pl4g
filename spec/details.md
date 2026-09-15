@@ -538,6 +538,25 @@ that nothing in the language writes, so two of them with the same value answer a
 which is exactly the line `@[impure]` draws.  Nothing in the representation records it: purity is the front end's question, asked
 where the operator is written, and what reaches the backends is an ordinary instruction.
 
+**An integer type narrower than a machine width is held in the width that contains it**, with every bit above its own equal to
+the zero- or sign-extension of the value.  That is the invariant `narrow.py` already stated for the four machine widths, and
+arbitrary widths are the same invariant with one more thing to say about it: a machine's flags answer whether the width *it*
+worked at overflowed, so for a type that does not fill that width they answer the wrong question.
+
+The code that decides was already written for the case where a type is narrower than the register holding it -- it computes at
+the register's width, where the exact answer always fits, and then compares against the type's own two ends.  A `u3` takes that
+path for the same reason a `u8` in a 32-bit register takes it, so checked and saturating arithmetic needed nothing at all: a sum
+of two `u3` values is computed in thirty-two bits, which cannot lose anything, and compared against seven.
+
+Two things did need saying.  **Putting a signed value back into a narrow type** has no instruction: a machine widens from eight,
+sixteen and thirty-two bits and not from five, so it is a shift up until the type's top bit is the register's top bit and an
+arithmetic shift back down, which brings the sign in behind it.  And **a run of narrow elements is not a run**: the lane
+operations check the width they work at, so a run of `u3` lanes would answer for the byte and let a sum of nine go unreported.
+Such an array comes apart into elements, where the check is the one the type asks for.
+
+What is not here is any conversion between widths, which the language has never had for the machine widths either.  It is what a
+program answering a `u6` status feels first, since the status then has to be worked out in `u6` from the start.
+
 **A comparison is absorbed by the branch that reads it, except a floating-point one.**  Read once, and read by a branch as its
 condition, an ordinary comparison emits nothing of its own: the machine compares and the branch tests what the comparison wrote,
 so there is no truth value anywhere and no register holding one.  Read any other number of times, or read by anything else, its

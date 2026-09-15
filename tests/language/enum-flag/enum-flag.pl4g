@@ -20,23 +20,23 @@ let mine: mut Perm = Perm.read
 let readable: mut bool = false
 
 @[startup, impure]
-fn main() → u8:
+fn main() → u6:
     mine ← mine | Perm.write
     readable ← (mine & Perm.read) = Perm.read
-    let kept: u8 = match mine & Perm.write:
+    let kept: u6 = match mine & Perm.write:
         write:
-            32u8
+            32u6
         _:
-            0u8
+            0u6
     ※ read is 1, write is 2, run is 4
-    let both: u8 = match mine ^ Perm.read:
+    let both: u6 = match mine ^ Perm.read:
         write:
-            4u8
+            4u6
         _:
-            1u8
-    let rest: u8 = match ~mine & Perm.run:
+            1u6
+    let rest: u6 = match ~mine & Perm.run:
         run:
-            1u8
+            1u6
         _:
-            0u8
+            0u6
     kept + both + rest

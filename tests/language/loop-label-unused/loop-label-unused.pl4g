@@ -6,9 +6,9 @@
 ※ It is a warning rather than an error because the program means what it says.
 
 @[startup]
-fn main() → u8:
-    let n: mut u8 = 0u8
+fn main() → u6:
+    let n: mut u6 = 0u6
     @[expect(4469)]
-    while §counting n < 3u8:
-        n ← n + 1u8
+    while §counting n < 3u6:
+        n ← n + 1u6
     n

@@ -3,10 +3,10 @@
 ※ Multiplication binds tighter than addition, as it does in writing, and both
 ※ bind tighter than the bitwise operators: this is (1 ⊞ (2 ⊠ 3)) and so 7.
 
-let one: u8 = 1u8
-let two: u8 = 2u8
-let three: u8 = 3u8
+let one: u6 = 1u6
+let two: u6 = 2u6
+let three: u6 = 3u6
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     one ⊞ two ⊠ three

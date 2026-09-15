@@ -5,13 +5,13 @@
 ※ A variable is reached when a function that is itself reached names it, so
 ※ dropping a function can be what leaves a variable unreachable.  Here the only
 ※ reader of `only_by_dropped` is a function nothing can call, and both go.
-let used: u8 = 7u8
+let used: u6 = 7u6
 
-let only_by_dropped: u8 = 9u8
+let only_by_dropped: u6 = 9u6
 
-fn unreached() → u8:
+fn unreached() → u6:
     only_by_dropped
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     used

@@ -3,11 +3,11 @@
 ※ An arm's body is written the way a function's is: a colon and an indented
 ※ block, or braces.  Both notations take the same arms.
 
-let a: mut u8 = 3u8
-let b: mut u8 = 9u8
+let a: mut u6 = 3u6
+let b: mut u6 = 9u6
 
 @[visible]
-let kept: mut u8 = 0u8
+let kept: mut u6 = 0u6
 
 @[startup, impure]
-fn main() → u8 { if a < b { kept ← 3u8 } elif a = b { kept ← 4u8 } else { kept ← 5u8 } ; kept + 4u8 }
+fn main() → u6 { if a < b { kept ← 3u6 } elif a = b { kept ← 4u6 } else { kept ← 5u6 } ; kept + 4u6 }

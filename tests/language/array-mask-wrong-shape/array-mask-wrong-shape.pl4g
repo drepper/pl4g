@@ -6,7 +6,7 @@
 ※ about, or says something about things that are not there.
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     let v: u8⟦4⟧ = ⟦1u8, 2u8, 3u8, 4u8⟧
     let want: bool⟦3⟧ = ⟦true, false, true⟧
     let got: u8⟦⟧ = v⟦want⟧

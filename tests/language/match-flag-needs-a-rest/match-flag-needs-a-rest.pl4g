@@ -11,9 +11,9 @@ enum Perm { read ; write }
 let mine: mut Perm = Perm.read
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     match mine:
         read:
-            return 1u8
+            return 1u6
         write:
-            return 2u8
+            return 2u6

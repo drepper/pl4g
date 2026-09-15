@@ -11,7 +11,7 @@ fn asking() → u8?:
     hundred?
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     @[ignore(5005)]
     hundred ?? 1u8
-    0u8
+    0u6

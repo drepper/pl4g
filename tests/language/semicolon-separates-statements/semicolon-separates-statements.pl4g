@@ -4,10 +4,10 @@
 ※ between braces, so that what a statement is does not depend on which
 ※ notation it is written in.
 
-let a: mut u8 = 0u8
-let b: mut u8 = 0u8
+let a: mut u6 = 0u6
+let b: mut u6 = 0u6
 
 @[startup, impure]
-fn main() → u8:
-    a ← 3u8; b ← 4u8
+fn main() → u6:
+    a ← 3u6; b ← 4u6
     a + b

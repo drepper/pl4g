@@ -9,7 +9,7 @@
 let n: mut u8 = 3u8
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     if n:
-        return 1u8
-    0u8
+        return 1u6
+    0u6

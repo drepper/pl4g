@@ -6,28 +6,28 @@
 ※ compiler could hold before there was a register allocator.  They are written
 ※ back in the reverse of the order they were read, so the one read first is
 ※ wanted longest, and returning it is what says it was still there.
-let a: u8 = 1u8
-let b: u8 = 2u8
-let c: u8 = 3u8
-let d: u8 = 4u8
+let a: u6 = 1u6
+let b: u6 = 2u6
+let c: u6 = 3u6
+let d: u6 = 4u6
 
-let wa: mut u8 = 0u8
-
-@[expect(4007)]
-let wb: mut u8 = 0u8
+let wa: mut u6 = 0u6
 
 @[expect(4007)]
-let wc: mut u8 = 0u8
+let wb: mut u6 = 0u6
 
 @[expect(4007)]
-let wd: mut u8 = 0u8
+let wc: mut u6 = 0u6
+
+@[expect(4007)]
+let wd: mut u6 = 0u6
 
 @[startup, impure]
-fn main() → u8:
-    let va: u8 = a
-    let vb: u8 = b
-    let vc: u8 = c
-    let vd: u8 = d
+fn main() → u6:
+    let va: u6 = a
+    let vb: u6 = b
+    let vc: u6 = c
+    let vd: u6 = d
     wd ← vd
     wc ← vc
     wb ← vb

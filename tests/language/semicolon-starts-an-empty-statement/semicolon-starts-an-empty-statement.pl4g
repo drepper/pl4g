@@ -5,6 +5,6 @@
 ※ a statement that is empty -- and an empty statement produces no value, so a
 ※ function declared to answer with one has not answered.
 @[startup]
-fn main() → u8:
+fn main() → u6:
     @[ignore(5005)]
     7u8;

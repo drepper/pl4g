@@ -40,5 +40,5 @@ type Outer = inner : Inner ; maybe : u8?
 type Inner = a : u8
 
 @[startup]
-fn main() → u8:
-    0u8
+fn main() → u6:
+    0u6

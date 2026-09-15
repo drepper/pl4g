@@ -12,7 +12,7 @@
 ※ which is what lets them be of types that would not otherwise agree.
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     let values: 〈u8, u16, u32, u8, u16〉 = 〈1u8, 2u16, 3u32, 4u8, 5u16〉
     let bytes: mut u8 = 0u8
     let halves: mut u16 = 0u16
@@ -41,16 +41,16 @@ fn main() → u8:
     comptime foreach b: u8 = alike:
         named ← named + b
     if bytes ≠ 5u8 ∨ halves ≠ 7u16 ∨ words ≠ 3u32:
-        1u8
+        1u6
     elif joined ≠ 4u8:
-        2u8
+        2u6
     elif summed ≠ 13u8 ∨ named ≠ 13u8:
-        3u8
+        3u6
     ※ and one that is settled outside a loop, with an arm that is not
     else:
         comptime if ⎕typeof(bytes) ≠ u8:
-            4u8
+            4u6
         elif halves = 7u16:
-            0u8
+            0u6
         else:
-            5u8
+            5u6

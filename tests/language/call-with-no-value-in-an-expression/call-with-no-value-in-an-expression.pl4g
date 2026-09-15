@@ -6,5 +6,5 @@ fn prepare():
     return
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     prepare() ⊞ 1u8

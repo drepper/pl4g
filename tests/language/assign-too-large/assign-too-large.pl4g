@@ -5,6 +5,6 @@
 let counter: mut u8 = 1u8
 
 @[startup, impure]
-fn main() → u8:
+fn main() → u6:
     counter ← 300u8
     counter

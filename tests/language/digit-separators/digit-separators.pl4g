@@ -18,8 +18,8 @@ let octal: mut u16 = 0o1_777u16
 let binary: mut u8 = 0b0010_1010u8
 
 @[startup, impure]
-fn main() → u8:
+fn main() → u6:
     hexadecimal ← decimal
     octal ← 0o52u16
     binary ← 0b101010u8
-    42u8
+    42u6

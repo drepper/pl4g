@@ -1,5 +1,5 @@
 ※ pl4g-test: compile=ok opt=0,1
-※ pl4g-test: run=native,qemu exit=200
+※ pl4g-test: run=native,qemu exit=0
 ※ pl4g-test: diag=none
 
 ※ A variable of every width is written, so that each store the backends know is
@@ -22,9 +22,13 @@ let word_value: mut u32 = 0u32
 let wide_value: mut u64 = 0u64
 
 @[startup, impure]
-fn main() → u8:
+fn main() → u6:
     byte_value ← 200u8
     half_value ← 1000u16
     word_value ← 2000u32
     wide_value ← 1500u64
-    byte_value
+    ※ what this used to say through the exit status, which is six bits now
+    if byte_value ≠ 200u8:
+        1u6
+    else:
+        0u6

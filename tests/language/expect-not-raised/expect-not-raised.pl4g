@@ -5,7 +5,7 @@
 ※ meets is a statement about the program that is not true.  Here the value is
 ※ read, so no warning was there to suppress.
 @[startup]
-fn main() → u8:
+fn main() → u6:
     @[expect(4006)]
     let a: u8 = 5u8
     a

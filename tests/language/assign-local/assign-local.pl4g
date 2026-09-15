@@ -5,8 +5,8 @@
 ※ A local that may be changed.  Nothing is written anywhere: a local is a value,
 ※ so the assignment binds the name to a new one.
 @[startup]
-fn main() → u8:
+fn main() → u6:
     @[expect(4006)]
-    let status: mut u8 = 3u8
-    status ← 5u8
+    let status: mut u6 = 3u6
+    status ← 5u6
     status

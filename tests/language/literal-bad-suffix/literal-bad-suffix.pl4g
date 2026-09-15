@@ -3,6 +3,6 @@
 
 ※ The suffix names an integer type; nothing else means anything there.
 @[startup]
-fn main() → u8:
+fn main() → u6:
     let status := 3bool
     status

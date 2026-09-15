@@ -1,9 +1,13 @@
-※ pl4g-test: compile=ok run=native,qemu exit=100 diag=none
+※ pl4g-test: compile=ok run=native,qemu exit=0 diag=none
 
 ※ A product that fits is the product.  10 × 10 is 100, which a u8 holds.
 
 let ten: u8 = 10u8
 
 @[startup]
-fn main() → u8:
-    ten ⊠ ten
+fn main() → u6:
+    ※ what this used to say through the exit status, which is six bits now
+    if ten ⊠ ten ≠ 100u8:
+        1u6
+    else:
+        0u6

@@ -6,9 +6,9 @@
 ※ than left to stop the program.
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     let c: char = 0x110000
     if ⎕ord(c) ≠ 0u32:
-        1u8
+        1u6
     else:
-        2u8
+        2u6

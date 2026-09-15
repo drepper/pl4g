@@ -1,4 +1,4 @@
-※ pl4g-test: compile=ok run=native,qemu exit=14 diag=none
+※ pl4g-test: compile=ok run=native,qemu exit=0 diag=none
 
 ※ The arms stand where the statements of a body would, in either of the two
 ※ notations the language has for a block.  An arm is a pattern and then a body
@@ -13,4 +13,4 @@ let seven: mut u8 = 7u8
 let kept: mut u8 = 0u8
 
 @[startup, impure]
-fn main() → u8 { match hundred ÷ seven { u8(q) { kept ← q } ⊥ { kept ← 9u8 } } ; kept }
+fn main() → u6 { match hundred ÷ seven { u8(q) { kept ← q } ⊥ { kept ← 9u8 } } ; if kept = 14u8 { 0u6 } else { 1u6 } }

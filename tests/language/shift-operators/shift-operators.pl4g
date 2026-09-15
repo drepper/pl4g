@@ -4,13 +4,13 @@
 ※ off the end is gone: that is what a shift is, and it is why this does not
 ※ fault on bits lost the way an addition faults on a sum that does not fit.
 
-let thirteen: u8 = 13u8
-let one: u8 = 1u8
+let thirteen: u6 = 13u6
+let one: u6 = 1u6
 
 @[visible]
-let halved: mut u8 = 0u8
+let halved: mut u6 = 0u6
 
 @[startup, impure]
-fn main() → u8:
+fn main() → u6:
     halved ← thirteen » one
     thirteen « one

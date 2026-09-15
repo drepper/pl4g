@@ -10,6 +10,10 @@
 let v: u8⟦16⟧ = ⟦1u8, 2u8, 3u8, 4u8, 5u8, 6u8, 7u8, 8u8, 9u8, 10u8, 11u8, 12u8, 13u8, 14u8, 250u8, 16u8⟧
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     let up: u8⟦16⟧ = v + 10u8
-    up⟦0⟧
+    ※ which stops the program, so nothing below it runs
+    if up⟦0⟧ ≠ 0u8:
+        1u6
+    else:
+        0u6

@@ -6,16 +6,16 @@
 ※ A `while` has no step; its next turn is its condition again.
 
 @[startup]
-fn main() → u8:
-    let total: mut u8 = 0u8
-    foreach §counting i := 0u8…10u8:
-        if i > 4u8:
+fn main() → u6:
+    let total: mut u6 = 0u6
+    foreach §counting i := 0u6…10u6:
+        if i > 4u6:
             continue §counting
         total ← total + i
     ※ 0 + 1 + 2 + 3 + 4, the later turns going straight round again
-    let stopped: mut u8 = 0u8
-    while §waiting stopped < 10u8:
-        stopped ← stopped + 1u8
-        if stopped < 9u8:
+    let stopped: mut u6 = 0u6
+    while §waiting stopped < 10u6:
+        stopped ← stopped + 1u6
+        if stopped < 9u6:
             continue §waiting
-    total + stopped - 10u8
+    total + stopped - 10u6

@@ -12,7 +12,7 @@ let a: f64 = 1.5f64
 let b: f64 = 0.5f64
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     @[ignore(5005)]
     a & b
     @[ignore(5005)]
@@ -21,4 +21,4 @@ fn main() → u8:
     a ⊞ b
     @[ignore(5005)]
     a « 2u8
-    0u8
+    0u6

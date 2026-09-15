@@ -112,13 +112,13 @@ def test_an_index_is_multiplied_by_the_width_of_an_element(
         triple: str, tmp_path) -> None:  # noqa: ANN001
     """Four arrays of four widths, each read at the same index."""
     source = "".join((
-        "@[startup, impure]\nfn main() ", ARROW, " u8:\n",
-        "    let a: u8", OPEN, "3", CLOSE, " = ", OPEN, "1u8, 2u8, 4u8", CLOSE, "\n",
+        "@[startup, impure]\nfn main() ", ARROW, " u6:\n",
+        "    let a: u6", OPEN, "3", CLOSE, " = ", OPEN, "1u6, 2u6, 4u6", CLOSE, "\n",
         "    let b: u16", OPEN, "3", CLOSE, " = ", OPEN, "1u16, 2u16, 8u16", CLOSE, "\n",
         "    let c: u32", OPEN, "3", CLOSE, " = ", OPEN, "1u32, 2u32, 16u32", CLOSE, "\n",
         "    let d: u64", OPEN, "3", CLOSE, " = ", OPEN, "1u64, 2u64, 32u64", CLOSE, "\n",
-        "    let at: u8 = 2u8\n",
-        "    a", OPEN, "at", CLOSE, " + 8u8\n"))
+        "    let at: u6 = 2u6\n",
+        "    a", OPEN, "at", CLOSE, " + 8u6\n"))
     assert run_it(tmp_path, triple, source) == 12
 
 
@@ -128,9 +128,9 @@ def test_an_index_outside_the_array_stops_the_program(
     """Where the index is not written down the check is one comparison and a
     branch that does not come back, which is the shape every fault here has."""
     source = "".join((
-        "@[startup, impure]\nfn main() ", ARROW, " u8:\n",
-        "    let a: u8", OPEN, "4", CLOSE, " = ", OPEN, "1u8, 2u8, 4u8, 8u8", CLOSE, "\n",
-        "    let at: u8 = 9u8\n",
+        "@[startup, impure]\nfn main() ", ARROW, " u6:\n",
+        "    let a: u6", OPEN, "4", CLOSE, " = ", OPEN, "1u6, 2u6, 4u6, 8u6", CLOSE, "\n",
+        "    let at: u6 = 9u6\n",
         "    a", OPEN, "at", CLOSE, "\n"))
     assert run_it(tmp_path, triple, source) == statuses.GENERAL, \
         "it should stop with the status the runtime reserves"
@@ -145,10 +145,10 @@ def test_a_table_is_read_in_row_major_order(triple: str, tmp_path) -> None:  # n
     different is enough to see it.
     """
     source = "".join((
-        "@[startup, impure]\nfn main() ", ARROW, " u8:\n",
-        "    let m: u8", OPEN, "2,3", CLOSE, " = ",
-        OPEN, OPEN, "1u8,2u8,4u8", CLOSE, ",", OPEN, "8u8,16u8,32u8", CLOSE, CLOSE, "\n",
-        "    let r: u8 = 1u8\n    let c: u8 = 2u8\n",
+        "@[startup, impure]\nfn main() ", ARROW, " u6:\n",
+        "    let m: u6", OPEN, "2,3", CLOSE, " = ",
+        OPEN, OPEN, "1u6,2u6,4u6", CLOSE, ",", OPEN, "8u6,16u6,32u6", CLOSE, CLOSE, "\n",
+        "    let r: u6 = 1u6\n    let c: u6 = 2u6\n",
         "    m", OPEN, "r,c", CLOSE, " + m", OPEN, "0,1", CLOSE, "\n"))
     assert run_it(tmp_path, triple, source) == 34
 
@@ -163,10 +163,10 @@ def test_every_dimension_is_checked_against_its_own(triple: str,
     single check would amount to.
     """
     source = "".join((
-        "@[startup, impure]\nfn main() ", ARROW, " u8:\n",
-        "    let m: u8", OPEN, "2,3", CLOSE, " = ",
-        OPEN, OPEN, "1u8,2u8,4u8", CLOSE, ",", OPEN, "8u8,16u8,32u8", CLOSE, CLOSE, "\n",
-        "    let c: u8 = 5u8\n",
+        "@[startup, impure]\nfn main() ", ARROW, " u6:\n",
+        "    let m: u6", OPEN, "2,3", CLOSE, " = ",
+        OPEN, OPEN, "1u6,2u6,4u6", CLOSE, ",", OPEN, "8u6,16u6,32u6", CLOSE, CLOSE, "\n",
+        "    let c: u6 = 5u6\n",
         "    m", OPEN, "0,c", CLOSE, "\n"))
     assert run_it(tmp_path, triple, source) == statuses.GENERAL, \
         "it should stop with the status the runtime reserves"

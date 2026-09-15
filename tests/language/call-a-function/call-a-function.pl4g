@@ -3,9 +3,9 @@
 ※ A function is called by writing its arguments after its name.  They are
 ※ positional: what they are is decided by where they stand.
 
-fn twice(n: u8) → u8:
+fn twice(n: u6) → u6:
     n ⊞ n
 
 @[startup]
-fn main() → u8:
-    twice(21u8)
+fn main() → u6:
+    twice(21u6)

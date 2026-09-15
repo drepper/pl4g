@@ -11,7 +11,7 @@
 ※ number of turns.
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     let text: str = "a£€𐀀"
     let at: mut u8 = 0u8
     let wrong: mut u8 = 0u8
@@ -32,8 +32,8 @@ fn main() → u8:
             wrong ← wrong + 1u8
         at ← at + 1u8
     if at ≠ 4u8:
-        1u8
+        1u6
     elif wrong ≠ 0u8:
-        2u8
+        2u6
     else:
-        0u8
+        0u6

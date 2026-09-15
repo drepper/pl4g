@@ -5,6 +5,6 @@
 ※ rather than a shape, and `#` is what asks for it.
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     let how_many: u64 = ⍴"hi"
-    0u8
+    0u6

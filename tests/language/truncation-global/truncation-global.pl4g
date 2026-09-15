@@ -6,5 +6,5 @@
 let counter: u8 = 300u8
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     counter

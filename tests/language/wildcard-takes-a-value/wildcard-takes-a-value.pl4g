@@ -11,6 +11,6 @@ fn prepare():
     counter ← 5u8
 
 @[startup, impure]
-fn main() → u8:
+fn main() → u6:
     _ ← prepare()
     counter

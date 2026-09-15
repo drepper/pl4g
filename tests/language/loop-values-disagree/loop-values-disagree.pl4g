@@ -6,7 +6,7 @@
 ※ to make two of them meet.
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     let found: u8 = while §counting true:
         break §counting 1u8
     else:

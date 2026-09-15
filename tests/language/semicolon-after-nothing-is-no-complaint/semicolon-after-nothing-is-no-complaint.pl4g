@@ -3,12 +3,12 @@
 ※ The same semicolon after the last statement of a function that answers with
 ※ nothing asks for nothing, so there is nothing to complain about.
 
-let counter: mut u8 = 0u8
+let counter: mut u6 = 0u6
 
 @[constructor, impure]
 fn prepare():
-    counter ← 7u8;
+    counter ← 7u6;
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     counter

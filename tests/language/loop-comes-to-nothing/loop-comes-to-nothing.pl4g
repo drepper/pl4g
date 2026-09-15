@@ -5,7 +5,7 @@
 ※ is a statement until something in it says otherwise.
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     let found: u8? = while §counting true:
         let n: u8 = 1u8
         n + 1u8

@@ -3,12 +3,12 @@
 ※ A call is an expression, so it may stand wherever one may -- including as
 ※ the argument of another call, and on either side of an operator.
 
-fn add_one(n: u8) → u8:
-    n ⊞ 1u8
+fn add_one(n: u6) → u6:
+    n ⊞ 1u6
 
-fn add_two(n: u8) → u8:
+fn add_two(n: u6) → u6:
     add_one(add_one(n))
 
 @[startup]
-fn main() → u8:
-    add_two(40u8) ⊞ add_two(0u8) ⊟ 2u8
+fn main() → u6:
+    add_two(40u6) ⊞ add_two(0u6) ⊟ 2u6

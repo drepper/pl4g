@@ -9,6 +9,6 @@ fn one(a: u8) → u8:
     a
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     let n: u8 = 7u8
     one(⁂n)

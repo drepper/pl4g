@@ -3,7 +3,7 @@
 
 ※ The number must be one the compiler can emit, for either attribute.
 @[startup]
-fn main() → u8:
+fn main() → u6:
     @[ignore(1234)]
     let a: u8 = 5u8
     a

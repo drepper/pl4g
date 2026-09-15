@@ -5,5 +5,5 @@
 ※ Writing 'return' on the last statement is accepted but warned about: the
 ※ canonical form of the language omits it.
 @[startup]
-fn main() → u8:
+fn main() → u6:
     return 0

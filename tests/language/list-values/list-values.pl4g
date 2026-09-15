@@ -12,7 +12,7 @@
 ※ the case where they do agree the one worth not boxing.
 
 @[startup, impure]
-fn main() → u8:
+fn main() → u6:
     let a: [u8] = [1u8, 2u8, 3u8]
     let wide: [u32] = [100u32, 200u32]
     ※ one written with nothing in it takes the type wanted where it stands
@@ -20,19 +20,19 @@ fn main() → u8:
     ※ the elements take their type from the list's where nothing says theirs
     let plain: [u16] = [1, 2, 3, 4]
     if #a ≠ 3u64 ∨ #wide ≠ 2u64 ∨ #empty ≠ 0u64 ∨ #plain ≠ 4u64:
-        1u8
+        1u6
     elif total(a) ≠ 6u8:
-        2u8
+        2u6
     elif widest(wide) ≠ 300u32:
-        3u8
+        3u6
     elif total(empty) ≠ 0u8:
-        4u8
+        4u6
     ※ a list may be handed over and answered with, being two words like a
     ※ string and an array of unstated length
     elif total(made()) ≠ 30u8:
-        5u8
+        5u6
     else:
-        0u8
+        0u6
 
 fn total(l: [u8]) → u8:
     let found: mut u8 = 0u8

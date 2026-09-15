@@ -7,7 +7,7 @@
 let n: mut u8 = 3u8
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     let kept: u8 = if n = 3u8:
-        1u8
+        1u6
     kept

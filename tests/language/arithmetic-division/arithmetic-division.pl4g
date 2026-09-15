@@ -1,4 +1,4 @@
-※ pl4g-test: compile=ok run=native,qemu exit=14 diag=none
+※ pl4g-test: compile=ok run=native,qemu exit=0 diag=none
 
 ※ Division truncates toward zero, which is what all three architectures do and
 ※ what every language in this family says it does.  '%' is what is left over
@@ -14,6 +14,10 @@ let seven: u8 = 7u8
 let rest: mut u8 = 0u8
 
 @[startup, impure]
-fn main() → u8:
+fn main() → u6:
     rest ← hundred % seven ?? 0u8
-    hundred ÷ seven ?? 0u8
+    ※ what this used to say through the exit status, which is six bits now
+    if hundred ÷ seven ?? 0u8 ≠ 14u8:
+        1u6
+    else:
+        0u6

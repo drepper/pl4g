@@ -1,4 +1,4 @@
-※ pl4g-test: compile=ok run=native,qemu exit=255 diag=none
+※ pl4g-test: compile=ok run=native,qemu exit=0 diag=none
 
 ※ The saturating operations answer with the nearest value their type can hold
 ※ rather than going past it.  200 ⊞ 100 is 300, which a u8 cannot hold, so the
@@ -8,5 +8,9 @@ let two_hundred: u8 = 200u8
 let one_hundred: u8 = 100u8
 
 @[startup]
-fn main() → u8:
-    two_hundred ⊞ one_hundred
+fn main() → u6:
+    ※ what this used to say through the exit status, which is six bits now
+    if two_hundred ⊞ one_hundred ≠ 255u8:
+        1u6
+    else:
+        0u6

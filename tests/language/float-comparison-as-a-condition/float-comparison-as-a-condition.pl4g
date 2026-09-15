@@ -17,36 +17,36 @@
 ※ nothing before it tested that place.
 
 @[startup, impure]
-fn main() → u8:
+fn main() → u6:
     let a: f64 = 1.0f64
     let b: f64 = 2.0f64
     let n: f32 = 1.0f32
     let m: f32 = 2.0f32
     ※ the exact orderings
     if ¬(a < b) ∨ a > b ∨ ¬(a ≤ b) ∨ a ≥ b:
-        1u8
+        1u6
     ※ the same in the narrower format
     elif ¬(n < m) ∨ n > m:
-        2u8
+        2u6
     ※ the approximate six, which are a subtraction and one of these
     elif a ≅ b ∨ ¬(a ≇ b):
-        3u8
+        3u6
     elif ¬(a ⪅ b) ∨ a ⪆ b ∨ ¬(a ⪉ b) ∨ a ⪊ b:
-        4u8
+        4u6
     ※ one that is true of a value and itself, where the two sides are the one
     ※ value and no flag reading is in doubt
     elif ¬(a ≅ a) ∨ ¬(a ⪅ a) ∨ ¬(a ⪆ a):
-        5u8
+        5u6
     ※ a comparison of what two operations came to, so that the operands are in
     ※ registers rather than written down
     elif ¬(a + b < b × b):
-        6u8
+        6u6
     ※ and the same comparison read as a value, which is the path that worked
     ※ all along and has to go on working
     elif told(a < b) ≠ 1u8:
-        7u8
+        7u6
     else:
-        0u8
+        0u6
 
 fn told(answer: bool) → u8:
     if answer:

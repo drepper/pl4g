@@ -24,7 +24,7 @@ fn stop_unless(ok: bool):
     ok or (two_hundred + two_hundred = 0u8)
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     ※ alike, though not equal
     stop_unless(tenth × three ≅ three_tenths)
     @[ignore(4217)]
@@ -49,4 +49,4 @@ fn main() → u8:
     stop_unless(half ⪆ quarter)
     stop_unless(quarter ⪉ half)
     stop_unless(half ⪊ quarter)
-    0u8
+    0u6

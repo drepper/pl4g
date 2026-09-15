@@ -9,9 +9,9 @@ enum Colour { red ; green }
 let chosen: mut Colour = Colour.mauve
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     match chosen:
         red:
-            return 1u8
+            return 1u6
         mauve:
-            return 2u8
+            return 2u6

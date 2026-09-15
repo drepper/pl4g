@@ -16,7 +16,7 @@ from conftest import run_compiler
 from pypl4g.driver.options import ExitCode, load_option_table
 
 GOOD = """@[startup, impure]
-fn main() \N{RIGHTWARDS ARROW} u8:
+fn main() \N{RIGHTWARDS ARROW} u6:
     0
 """
 
@@ -108,7 +108,7 @@ def test_unknown_warning_name_is_reported(source: Path, tmp_path: Path) -> None:
 def test_warnings_can_be_turned_off_and_made_errors(tmp_path: Path) -> None:
     """A warning is controlled by the option its catalog entry declares."""
     source = tmp_path / "t.pl4g"
-    source.write_text("@[startup, impure]\nfn main() \N{RIGHTWARDS ARROW} u8:\n    return 0\n",
+    source.write_text("@[startup, impure]\nfn main() \N{RIGHTWARDS ARROW} u6:\n    return 0\n",
                       encoding="utf-8")
     output = tmp_path / "out"
     plain = run_compiler(["-o", str(output), str(source)])
@@ -159,14 +159,14 @@ def test_decision_log_is_written(source: Path, tmp_path: Path) -> None:
     assert Path(document["directory"]).is_absolute()
 
 
-DROPPED = """let used: u8 = 7u8
-let only_by_dropped: u8 = 9u8
+DROPPED = """let used: u6 = 7u6
+let only_by_dropped: u6 = 9u6
 
-fn unreached() \N{RIGHTWARDS ARROW} u8:
+fn unreached() \N{RIGHTWARDS ARROW} u6:
     only_by_dropped
 
 @[startup, impure]
-fn main() \N{RIGHTWARDS ARROW} u8:
+fn main() \N{RIGHTWARDS ARROW} u6:
     used
 """
 
@@ -214,9 +214,9 @@ def test_nothing_the_image_offers_is_ever_logged_as_dropped(tmp_path: Path) -> N
     """
     source = tmp_path / "t.pl4g"
     source.write_text("".join((
-        "@[visible]\nlet shared: u8 = 1u8\n\n",
-        "@[visible]\nfn reachable() \N{RIGHTWARDS ARROW} u8:\n    1u8\n\n",
-        "@[startup, impure]\nfn main() \N{RIGHTWARDS ARROW} u8:\n    1u8\n")),
+        "@[visible]\nlet shared: u6 = 1u6\n\n",
+        "@[visible]\nfn reachable() \N{RIGHTWARDS ARROW} u6:\n    1u6\n\n",
+        "@[startup, impure]\nfn main() \N{RIGHTWARDS ARROW} u6:\n    1u6\n")),
         encoding="utf-8")
     log = tmp_path / "decisions.json"
     proc = run_compiler(["-o", str(tmp_path / "out"),
@@ -233,13 +233,13 @@ def test_time_report(source: Path, tmp_path: Path) -> None:
     assert "image generation" in proc.stderr
 
 
-DROPPED_LOCAL = """let g: u8 = 3u8
+DROPPED_LOCAL = """let g: u6 = 3u6
 
 @[startup, impure]
-fn main() \N{RIGHTWARDS ARROW} u8:
+fn main() \N{RIGHTWARDS ARROW} u6:
     @[ignore(4006)]
-    let unread: u8 = g
-    let kept: u8 = g
+    let unread: u6 = g
+    let kept: u6 = g
     kept
 """
 
@@ -280,9 +280,9 @@ def test_nothing_is_dropped_where_nothing_asked_for_it(tmp_path: Path) -> None:
 
 
 DROPPED_CALL = "".join((
-    "fn worked_out(n: u8) \N{RIGHTWARDS ARROW} u8:\n    n + n\n\n",
-    "@[startup]\nfn main() \N{RIGHTWARDS ARROW} u8:\n",
-    "    _ \N{LEFTWARDS ARROW} worked_out(3u8)\n    0u8\n"))
+    "fn worked_out(n: u6) \N{RIGHTWARDS ARROW} u6:\n    n + n\n\n",
+    "@[startup]\nfn main() \N{RIGHTWARDS ARROW} u6:\n",
+    "    _ \N{LEFTWARDS ARROW} worked_out(3u6)\n    0u6\n"))
 
 
 def test_a_call_that_is_not_made_reaches_the_log(tmp_path: Path) -> None:
@@ -328,10 +328,10 @@ def test_a_call_that_is_not_made_goes_at_every_level(tmp_path: Path) -> None:
 MANY_GLYPHS = "".join((
     "\N{REFERENCE MARK} \N{RIGHTWARDS ARROW} \N{LEFTWARDS ARROW} ",
     "\N{SECTION SIGN} \N{HORIZONTAL ELLIPSIS} glyphs before anything\n",
-    "fn worked_out() \N{RIGHTWARDS ARROW} u8:\n    1u8\n\n",
-    "@[startup]\nfn main() \N{RIGHTWARDS ARROW} u8:\n",
+    "fn worked_out() \N{RIGHTWARDS ARROW} u6:\n    1u6\n\n",
+    "@[startup]\nfn main() \N{RIGHTWARDS ARROW} u6:\n",
     "    \N{REFERENCE MARK} \N{RIGHTWARDS ARROW} and here too\n",
-    "    _ \N{LEFTWARDS ARROW} worked_out()\n    0u8\n"))
+    "    _ \N{LEFTWARDS ARROW} worked_out()\n    0u6\n"))
 
 
 def test_a_column_counts_characters_and_not_bytes(tmp_path: Path) -> None:

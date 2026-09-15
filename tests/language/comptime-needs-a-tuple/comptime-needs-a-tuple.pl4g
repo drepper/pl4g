@@ -6,8 +6,8 @@
 ※ type, and a loop over one of those is an ordinary loop.
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     let v: u8⟦3⟧ = ⟦1u8, 2u8, 3u8⟧
     comptime foreach x := v:
-        0u8
-    0u8
+        0u6
+    0u6

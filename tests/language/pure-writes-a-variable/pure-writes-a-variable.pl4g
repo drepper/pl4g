@@ -10,6 +10,6 @@ fn bump():
     counter ← counter + 1u8
 
 @[startup, impure]
-fn main() → u8:
+fn main() → u6:
     bump()
     counter

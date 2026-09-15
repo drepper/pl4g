@@ -14,6 +14,6 @@ let ready: bool = true
 let answer: mut bool = false
 
 @[startup, impure]
-fn main() → u8:
+fn main() → u6:
     answer ← a < b ∧ ¬ ready ∨ c ≠ d
-    0u8
+    0u6

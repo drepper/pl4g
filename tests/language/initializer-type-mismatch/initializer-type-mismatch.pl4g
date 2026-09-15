@@ -3,6 +3,6 @@
 
 ※ There is no conversion that would hide the difference between the two.
 @[startup]
-fn main() → u8:
+fn main() → u6:
     let flag: bool = 3
-    1u8
+    1u6

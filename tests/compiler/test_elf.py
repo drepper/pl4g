@@ -20,7 +20,7 @@ from conftest import (ARCH_TOOLS, ELFLINT, architecture_of, check_conformance,
 
 SOURCE = """\N{REFERENCE MARK} A program that exits with status 0.
 @[startup, impure]
-fn main() \N{RIGHTWARDS ARROW} u8:
+fn main() \N{RIGHTWARDS ARROW} u6:
     0
 """
 
@@ -29,7 +29,7 @@ READELF = "eu-readelf"
 #: The symbol the startup function above is known by.  A mangled name is the
 #: signature written out, so it needs no demangler to read -- which is the point
 #: of it, and is why the expectations below can simply state it.
-MAIN = "main()u8"
+MAIN = "main()u6"
 
 #: What each backend is expected to emit for the program above, and the machine
 #: number the image must carry.  Writing the instructions out is the point: a

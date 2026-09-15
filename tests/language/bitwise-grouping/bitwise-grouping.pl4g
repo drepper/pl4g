@@ -6,5 +6,5 @@
 ※ symbols without them are 1 | (6 ^ (3 & 2)), which is 5; with them they are
 ※ 1 | ((6 ^ 3) & 2), which is 1.
 @[startup]
-fn main() → u8:
-    1u8 | (6u8 ^ 3u8) & 2u8
+fn main() → u6:
+    1u6 | (6u6 ^ 3u6) & 2u6

@@ -5,5 +5,5 @@
 let counter: mut u16 = 1u16
 
 @[startup, impure]
-fn main() → u8:
+fn main() → u6:
     counter ← 7u16

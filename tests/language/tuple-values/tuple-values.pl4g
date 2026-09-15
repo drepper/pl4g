@@ -10,18 +10,18 @@
 ※ same thing `auto[a, b]` and `std::tie` do in C++, with nothing written to
 ※ say so beyond the comma.
 
-let a: mut u8 = 3u8
-let b: mut u8 = 9u8
+let a: mut u6 = 3u6
+let b: mut u6 = 9u6
 
-fn both(x: u8, y: u8) → 〈u8, u8〉:
+fn both(x: u6, y: u6) → 〈u6, u6〉:
     〈x + y, x × y〉
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     ※ the type of the names comes from what the call answered with
     let sum, product := both(a, b)
     ※ and a tuple may be written down and named like any other value
-    let pair: 〈u8, u8〉 = 〈1u8, 2u8〉
+    let pair: 〈u6, u6〉 = 〈1u6, 2u6〉
     let one, two := pair
     ※ 12 + 27 - 1 - 2
     sum + product - one - two

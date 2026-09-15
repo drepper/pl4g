@@ -24,5 +24,5 @@ let whole: f64 = 3f64
 let negative: f32 = ⁻2.5f32
 
 @[startup]
-fn main() → u8:
-    0u8
+fn main() → u6:
+    0u6

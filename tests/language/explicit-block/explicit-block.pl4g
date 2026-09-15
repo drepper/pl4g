@@ -5,4 +5,4 @@
 ※ The same program in the explicit notation: a brace-enclosed block whose
 ※ statements are separated by semicolons.
 @[startup]
-fn main() → u8 { 7 }
+fn main() → u6 { 7 }

@@ -35,11 +35,11 @@ fn onward(q: u8?) → u8?:
     q? + 1u8
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     stop_unless(alike(six ÷ two, five, one, twelve ÷ three))
     stop_unless(¬ alike(six ÷ nought, five, one, twelve ÷ three))
     stop_unless(onward(twelve ÷ three) ?? 0u8 = 5u8)
     ※ an error handed to a function, propagated out of it by `?`, and
     ※ answered for by `??` at the end of the chain
     stop_unless(onward(twelve ÷ zero) ?? 7u8 = 7u8)
-    0u8
+    0u6

@@ -1,14 +1,14 @@
 ※ symbolic assembler dump; internal form, not a syntax
 
 section .text executable
-main()u8:
+main()u6:
                              ※ align 16
     b8 07 00 00 00           mov eax, 7
     c3                       ret
     cc cc cc cc cc cc cc cc cc cc ※ align 16
 _start:
     31 ed                    xor ebp, ebp
-    e8 00 00 00 00           call main()u8   ※ fixup pcrel32 → main()u8
+    e8 00 00 00 00           call main()u6   ※ fixup pcrel32 → main()u6
     89 c7                    mov edi, eax
     b8 e7 00 00 00           mov eax, 231
     0f 05                    syscall

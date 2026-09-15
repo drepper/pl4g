@@ -1,5 +1,5 @@
 ※ pl4g-test: compile=ok opt=0,1
-※ pl4g-test: run=native,qemu exit=65
+※ pl4g-test: run=native,qemu exit=0
 ※ pl4g-test: diag=none
 
 ※ A module is found beside the file importing it, read while this one is being
@@ -7,5 +7,9 @@
 let limits := import("limits")
 
 @[startup]
-fn main() → u8:
-    limits.ceiling & limits.floor
+fn main() → u6:
+    ※ what this used to say through the exit status, which is six bits now
+    if (limits.ceiling & limits.floor) = 65u8:
+        0u6
+    else:
+        1u6

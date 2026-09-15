@@ -1,7 +1,7 @@
 ; pl4g-ir 1
 module "explicit-block.pl4g" triple "x86_64-linux-none"
 
-fn @main() → u8 internal cconv(pl4g) special(startup) {
+fn @main() → u6 internal cconv(pl4g) special(startup) {
 block0:
-  ret.u8 7
+  ret.u6 7
 }

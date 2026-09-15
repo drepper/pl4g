@@ -4057,6 +4057,46 @@ of `x*x` is a performance mistake famous enough to have its own compiler optimiz
 
 ---
 
+## 2026-09-16T01:20+02:00 — language
+
+**Integer types of any width, and a status that is a `u6`**
+
+Decided on the user's direction: `u1` through `u31` and `i2` through `i31` beside the four machine widths each already had, with
+every rule about range unchanged; and the startup function answers a `u6`.
+
+**No `i1`.**  A signed type of one bit holds zero and minus one.  There is no program that wants that pair and no reader who
+would guess it, so the name is not given out.  `u1` is kept: nothing and one is a pair programs want constantly.
+
+**What holds a value is the narrowest machine width that contains it**, and not some number of bits packed against its
+neighbours.  Packing is what a bit field is, and a bit field is a property of a *field* -- what lies beside it, in what order,
+with what padding -- rather than of a type.  A `u3` local, parameter and return type is the thing that was wanted, and each of
+those is a register or a byte whatever the width says.  Zig draws the line in the same place.
+
+**Almost none of it reached the code generator**, which is the part worth recording.  The rule for a type narrower than the
+register holding it was already written -- compute at the register's width, where the exact answer cannot be lost, then compare
+against the type's two ends -- because a `u8` in a thirty-two bit register is that case already.  Three bits took the same path.
+What had to be added was a way to put a *signed* narrow value back, there being no instruction that widens from five bits, and a
+rule that keeps narrow elements out of the run-at-a-time machinery, whose lane operations check the width they work at rather
+than the width the program wrote.
+
+**The startup function answers a `u6`.**  The specification already said that 0 through 63 is the program's own range and that
+64 through 127 are the runtime's; the type now says it, so a program that tries to exit with 200 is refused where it writes it
+instead of quietly arriving somewhere in the runtime's range.  It is also the first thing in the language that uses a width that
+is not a machine width, which is worth something on its own: a feature nothing uses is a feature nobody has checked.
+
+What it costs is that a status has to be *worked out* in `u6`, there being no conversion between integer widths in this language
+yet.  Every test that used the exit status as a channel for a number above 63 had to say what it meant some other way, which is
+an improvement in each case: a test that asserts inside itself and exits zero says what it checked, and one that exits 174 says
+it to whoever remembers what 174 was.
+
+Compare: **Zig**, whose `u3`/`i5` these are and which goes to 65535 bits; **LLVM**'s `iN`, which is where that comes from and
+which has no signedness at all in the type; **Ada**, whose range types say the bounds instead of the width and check them exactly
+as these do, which is the better notation for the cases where the bound is not a power of two; **C**, whose bit fields are the
+nearest thing and cannot be a local or a parameter; and **Rust**, **Go** and **Odin**, which have only the machine widths, so
+that a number known to be one of eight things is written as a byte and checked against two hundred and fifty-six.
+
+---
+
 Open questions
 --------------
 

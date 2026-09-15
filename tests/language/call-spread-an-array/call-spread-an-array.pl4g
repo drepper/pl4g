@@ -11,18 +11,18 @@
 ※ the rule `foreach` already follows over one: what a table is several of, is
 ※ rows.  A row is a run of elements, so naming one is arithmetic and no copy.
 
-fn three(a: u8, b: u8, c: u8) → u8:
+fn three(a: u6, b: u6, c: u6) → u6:
     a + b + c
 
-fn ends(top: u8⟦3⟧, bottom: u8⟦3⟧) → u8:
+fn ends(top: u6⟦3⟧, bottom: u6⟦3⟧) → u6:
     top⟦0⟧ + bottom⟦2⟧
 
 @[startup]
-fn main() → u8:
-    let v: u8⟦3⟧ = ⟦10u8, 19u8, 20u8⟧
+fn main() → u6:
+    let v: u6⟦3⟧ = ⟦10u6, 19u6, 20u6⟧
     ※ every element an argument of its own
-    let whole: u8 = three(⁂v)
+    let whole: u6 = three(⁂v)
     ※ a table spreads into its rows, each an array in its own right
-    let m: u8⟦2,3⟧ = ⟦⟦1u8, 2u8, 3u8⟧, ⟦4u8, 5u8, 6u8⟧⟧
+    let m: u6⟦2,3⟧ = ⟦⟦1u6, 2u6, 3u6⟧, ⟦4u6, 5u6, 6u6⟧⟧
     ※ 49 - (1 + 6) = 42
     whole - ends(⁂m)

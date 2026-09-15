@@ -4,12 +4,12 @@
 ※ to write for that: writing one out would be a second way of saying what the
 ※ absence already says.
 
-let counter: mut u8 = 0u8
+let counter: mut u6 = 0u6
 
 @[constructor, impure]
 fn prepare():
-    counter ← 7u8
+    counter ← 7u6
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     counter

@@ -8,7 +8,7 @@
 ※ several types -- what is refused is not the writing but the question.
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     let t: 〈u8, u16〉 = 〈1u8, 2u16〉
     let largest: u8 = ⌈t
-    0u8
+    0u6

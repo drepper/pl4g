@@ -1,4 +1,4 @@
-※ pl4g-test: compile=ok run=native,qemu exit=42 diag=none
+※ pl4g-test: compile=ok run=native,qemu exit=0 diag=none
 
 ※ Everything an expression is made of is worked out in the order it is written,
 ※ left to right.  Nothing in the language shows this except a call, since a call
@@ -30,7 +30,7 @@ fn four(a: u8, b: u8, c: u8, d: u8) → u8:
     a + b + c + d
 
 @[startup, impure]
-fn main() → u8:
+fn main() → u6:
     ※ 1, then the two the spread stands for, then 4
     let sum: u8 = four(note(1u8), ⁂pair_of(2u8), note(4u8))
     let arguments: u8 = order
@@ -44,8 +44,10 @@ fn main() → u8:
     let worked: u8 = note(3u8) + v⟦0⟧ × note(4u8)
     let elements: u8 = order
     ※ 1,2,3,4 pushed in turn is ((1×5+2)×5+3)×5+4 = 194
-    if arguments = 194u8 ∧ members = 194u8 ∧ elements = 194u8:
-        ※ 10 + 4 + (3 + 1×4) = 21
-        sum + made⟦3⟧ + worked + 21u8
+    let counted: u8 = sum + made⟦3⟧ + worked + 21u8
+    ※ 10 + 4 + (3 + 1×4) = 21, and what this used to say through the exit
+    ※ status, which is six bits now
+    if arguments = 194u8 ∧ members = 194u8 ∧ elements = 194u8 ∧ counted = 42u8:
+        0u6
     else:
-        0u8
+        1u6

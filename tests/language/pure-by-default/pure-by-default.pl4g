@@ -10,22 +10,22 @@
 ※ it may call other pure functions.  What it may not do is change anything that
 ※ was there before the call or is there after it.
 
-let base: u8 = 20u8
+let base: u6 = 20u6
 
-fn doubled(n: u8) → u8:
+fn doubled(n: u6) → u6:
     n + n
 
-fn summed(v: u8⟦3⟧) → u8:
+fn summed(v: u6⟦3⟧) → u6:
     ※ reading an array it was handed is not changing it
     v⟦0⟧ + v⟦1⟧ + v⟦2⟧
 
-fn worked_out() → u8:
+fn worked_out() → u6:
     ※ its own storage, written and then read, all inside one call
-    let room: mut u8⟦3⟧ = ⟦1u8, 0u8, 0u8⟧
-    room⟦1⟧ ← 0u8
+    let room: mut u6⟦3⟧ = ⟦1u6, 0u6, 0u6⟧
+    room⟦1⟧ ← 0u6
     ※ reading a variable at the top level, and calling another pure function
     summed(room) + doubled(base)
 
 @[startup]
-fn main() → u8:
-    worked_out() + 1u8
+fn main() → u6:
+    worked_out() + 1u6

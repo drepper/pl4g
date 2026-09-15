@@ -1,0 +1,69 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ An integer type is any width up to sixty-four bits and not only the four a
+※ machine has registers for.  `u3` holds 0 through 7, `i5` holds -16 through
+※ 15, `u1` holds nothing and one -- and everything true of `u8` is true of
+※ them: an answer that will not fit stops the program, and a value given to one
+※ is checked against its range.
+※
+※ What holds one is the narrowest machine width that contains it, with every
+※ bit above the type's own equal to what its sign says.  That is the invariant
+※ every other width already rested on; what these add is that a machine's flags
+※ then answer about the width *it* worked at and not about the width the type
+※ has, so the check is a comparison against the type's two ends.
+
+@[startup, impure]
+fn main() → u6:
+    let a: u3 = 5u3
+    let b: u3 = 2u3
+    let one: u1 = 1u1
+    let zero: u1 = 0u1
+    let c: i5 = ⁻12i5
+    let d: i5 = 3i5
+    let wide: u31 = 2000000000u31
+    let odd: u17 = 131071u17
+    let v: u3⟦4⟧ = ⟦1u3, 2u3, 3u3, 4u3⟧
+    let w: u3⟦4⟧ = ⟦1u3, 1u3, 1u3, 1u3⟧
+    let sum: u3⟦4⟧ = v + w
+    if a + b ≠ 7u3 ∨ a - b ≠ 3u3 ∨ b × b ≠ 4u3:
+        1u6
+    ※ a signed narrow type, whose bits above its own are its sign
+    elif c + d ≠ ⁻9i5 ∨ c < ⁻16i5 ∨ ¬(c < d):
+        2u6
+    ※ one bit, which is the narrowest there is
+    elif one + zero ≠ 1u1 ∨ (one & zero) ≠ 0u1 ∨ ~zero ≠ 1u1:
+        3u6
+    ※ the complement, which is the operation that has to put the bits above the
+    ※ type back where they were
+    elif ~a ≠ 2u3 ∨ ~b ≠ 5u3:
+        4u6
+    ※ going past the end on purpose, which wraps at the type's width and not at
+    ※ the byte's
+    elif ⎕wrap(a + a) ≠ 2u3 ∨ ⎕wrap(c + d + d + d + d) ≠ 0i5:
+        5u6
+    ※ and stopping at the end of the type, which is not the end of the byte
+    elif a ⊞ a ≠ 7u3 ∨ a ⊠ a ≠ 7u3:
+        6u6
+    ※ widths that are not powers of two at all
+    elif wide + 1u31 ≠ 2000000001u31 ∨ odd ≠ 131071u17:
+        7u6
+    ※ a whole array of them, which comes apart into elements: a run of them
+    ※ would be checked at the width the lane is and not at the width the type is
+    elif sum⟦0⟧ ≠ 2u3 ∨ sum⟦3⟧ ≠ 5u3:
+        8u6
+    ※ handed to a function, answered with, and kept at the top level
+    elif twice(3u3) ≠ 6u3 ∨ kept ≠ 5u3:
+        9u6
+    ※ the largest and the smallest of several
+    elif ⌈v ≠ 4u3 ∨ ⌊v ≠ 1u3:
+        10u6
+    ※ dividing and shifting, where the width is the type's
+    elif (c ÷ d ?? 0i5) ≠ ⁻4i5 ∨ a « 1u3 ≠ 2u3 ∨ a ↺ 1u3 ≠ 3u3:
+        11u6
+    else:
+        0u6
+
+let kept: u3 = 5u3
+
+fn twice(x: u3) → u3:
+    2u3 × x

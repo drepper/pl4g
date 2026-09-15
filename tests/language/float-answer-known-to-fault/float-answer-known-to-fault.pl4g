@@ -8,11 +8,11 @@
 ※ rule the integers get, and for the same reason.
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     @[ignore(5005)]
     1f64 ÷ 0f64
     @[ignore(5005)]
     1e308f64 × 10f64
     @[ignore(5005)]
     ⁻1e308f64 - 1e308f64
-    0u8
+    0u6

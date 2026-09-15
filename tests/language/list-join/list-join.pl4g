@@ -9,7 +9,7 @@
 ※ later be the case worth not boxing.
 
 @[startup, impure]
-fn main() → u8:
+fn main() → u6:
     let a: [u8] = [1u8, 2u8, 3u8]
     let b: [u8] = [4u8, 5u8]
     let both: [u8] = a ⧺ b
@@ -20,17 +20,17 @@ fn main() → u8:
     ※ and elements wider than a byte, where the multiplication matters
     let wide: [u32] = [1u32, 2u32] ⧺ [3u32]
     if #both ≠ 5u64 ∨ #more ≠ 6u64 ∨ #still ≠ 3u64 ∨ #wide ≠ 3u64:
-        1u8
+        1u6
     elif total(both) ≠ 15u8:
-        2u8
+        2u6
     elif total(more) ≠ 21u8:
-        3u8
+        3u6
     elif total(still) ≠ 6u8:
-        4u8
+        4u6
     elif widest(wide) ≠ 6u32:
-        5u8
+        5u6
     else:
-        0u8
+        0u6
 
 fn total(l: [u8]) → u8:
     let found: mut u8 = 0u8

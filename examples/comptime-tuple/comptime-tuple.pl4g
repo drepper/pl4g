@@ -17,7 +17,7 @@
 ※※ what they should be, and with the number of the check that failed otherwise.
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     ※ five members, of three different types
     let values: 〈u8, u16, u32, u8, u16〉 = 〈1u8, 2u16, 3u32, 4u8, 5u16〉
 
@@ -38,10 +38,10 @@ fn main() → u8:
             words ← words
 
     if bytes ≠ 5u8:
-        1u8
+        1u6
     elif halves ≠ 7u16:
-        2u8
+        2u6
     elif words ≠ 3u32:
-        3u8
+        3u6
     else:
-        0u8
+        0u6

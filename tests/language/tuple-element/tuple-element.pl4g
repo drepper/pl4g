@@ -18,18 +18,18 @@
 
 ※ a name bound at the top level to something that cannot change is a number
 ※ the compiler knows, so it may say which member is wanted
-let FIRST: u8 = 0u8
+let FIRST: u6 = 0u6
 
-fn both(x: u8, y: u16) → 〈u8, u16〉:
+fn both(x: u6, y: u16) → 〈u6, u16〉:
     〈x, y〉
 
 @[startup]
-fn main() → u8:
-    let pair: 〈u8, u16〉 = both(7u8, 300u16)
+fn main() → u6:
+    let pair: 〈u6, u16〉 = both(7u6, 300u16)
     ※ a bare literal, a literal with a suffix, and a name that cannot change
-    let low: u8 = pair⟦0⟧ + pair⟦0u8⟧ + pair⟦FIRST⟧
+    let low: u6 = pair⟦0⟧ + pair⟦0u6⟧ + pair⟦FIRST⟧
     ※ each index gives a value of its own member's type
     if pair⟦1⟧ = 300u16:
-        low + 21u8
+        low + 21u6
     else:
-        0u8
+        0u6

@@ -1,4 +1,4 @@
-※ pl4g-test: compile=ok run=native,qemu exit=42 diag=none
+※ pl4g-test: compile=ok run=native,qemu exit=0 diag=none
 
 ※ `@[listable]` says what it means to hand the function an array where one of
 ※ its elements is wanted: the function is called for each, and what the call
@@ -33,7 +33,7 @@ fn total(xs: u8⟦3⟧) → u8:
     xs⟦0⟧ + xs⟦1⟧ + xs⟦2⟧
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     let v: u8⟦3⟧ = ⟦1u8, 2u8, 3u8⟧
     ※ one array walked, giving one of the same shape
     let d: u8⟦3⟧ = doubled(v)
@@ -50,7 +50,8 @@ fn main() → u8:
     let sums: u8⟦2⟧ = total(m)
     ※ 6 + 33 + 11 + 2 + 6 + 15 = 73, less the 31 the truth values stand for
     let counted: u8 = d⟦2⟧ + s⟦2⟧ + raised⟦0⟧ + twice⟦0,0⟧ + sums⟦0⟧ + sums⟦1⟧
-    if big⟦2⟧ ∧ ¬big⟦0⟧:
-        counted - 31u8
+    ※ what this used to say through the exit status, which is six bits now
+    if big⟦2⟧ ∧ ¬big⟦0⟧ ∧ counted = 73u8:
+        0u6
     else:
-        0u8
+        1u6

@@ -4,9 +4,9 @@
 
 ※ A definition is introduced by 'let', at the top level and inside a function
 ※ alike.
-let stored: u8 = 11u8
+let stored: u6 = 11u6
 
 @[startup]
-fn main() → u8:
-    let status: u8 = stored
+fn main() → u6:
+    let status: u6 = stored
     status

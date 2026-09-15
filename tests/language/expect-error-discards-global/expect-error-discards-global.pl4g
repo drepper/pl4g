@@ -8,5 +8,5 @@
 let too_big: u8 = 300u8
 
 @[startup]
-fn main() → u8:
-    1u8
+fn main() → u6:
+    1u6

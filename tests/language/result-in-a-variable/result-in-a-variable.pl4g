@@ -1,4 +1,4 @@
-※ pl4g-test: compile=ok run=native,qemu exit=64 diag=none
+※ pl4g-test: compile=ok run=native,qemu exit=0 diag=none
 
 ※ A variable at the top level may hold a result.  What one looks like in
 ※ memory is the answer where an answer goes and one byte beside it saying
@@ -22,10 +22,14 @@ let kept: mut u8? = 1u8
 let fixed: u8? = 9u8
 
 @[startup, impure]
-fn main() → u8:
+fn main() → u6:
     ※ a division with no answer, kept and then read back
     kept ← hundred ÷ none
     let after: u8 = kept ?? 50u8
     ※ and one with an answer
     kept ← hundred ÷ seven
-    after + (kept ?? 0u8) + (fixed ?? 0u8) - 9u8
+    ※ what this used to say through the exit status, which is six bits now
+    if after + (kept ?? 0u8) + (fixed ?? 0u8) - 9u8 ≠ 64u8:
+        1u6
+    else:
+        0u6

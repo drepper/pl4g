@@ -22,7 +22,7 @@ fn twice(x: f64) → f64:
     x + x
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     @[ignore(4217)]
     stop_unless(twice(three) = 6f64)
     @[ignore(4217)]
@@ -40,4 +40,4 @@ fn main() → u8:
     stop_unless(three ≤ 3f64)
     @[ignore(4217)]
     stop_unless(quarter ≠ 0.5f32)
-    0u8
+    0u6

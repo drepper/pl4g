@@ -7,7 +7,7 @@
 ※ the world starts from that numbering before it does anything else.
 
 @[startup, impure]
-fn main() → u8:
+fn main() → u6:
     let a: char = 'a'
     let b: char = 'b'
     let pound: char = '£'
@@ -15,17 +15,17 @@ fn main() → u8:
     let far: char = '\U00010000'
     let last: char = '\U0010FFFF'
     if ¬(a < b) ∨ ¬(b > a) ∨ a = b ∨ ¬(a ≠ b):
-        1u8
+        1u6
     elif ¬(a ≤ a) ∨ ¬(a ≥ a) ∨ ¬(a = a) ∨ a ≠ a:
-        2u8
+        2u6
     ※ the order is the numbering, across every width the encoding has
     elif ¬(a < pound) ∨ ¬(pound < euro) ∨ ¬(euro < far) ∨ ¬(far < last):
-        3u8
+        3u6
     ※ and it agrees with what the numbers say
     elif ¬(⎕ord(euro) < ⎕ord(far)):
-        4u8
+        4u6
     ※ a character taken out of a string is compared like any other
     elif ¬(⌊"bca" = a) ∨ ¬(⌈"bca" < far):
-        5u8
+        5u6
     else:
-        0u8
+        0u6

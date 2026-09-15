@@ -1,0 +1,14 @@
+※ pl4g-test: compile=error diag=4201
+
+※ There is no `i1`.  A signed type of one bit holds zero and minus one, which
+※ is a pair of values no program wants and a name every reader would misread --
+※ so the name is not given out, and what a program that writes it is told is
+※ that there is no such type.  `u1` is there: nothing and one is a pair
+※ programs want constantly.
+
+@[startup]
+fn main() → u6:
+    held(0u1)
+
+fn held(x: i1) → u6:
+    0u6

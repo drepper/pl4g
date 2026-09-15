@@ -6,7 +6,7 @@ let a: u8 = 1u8
 let b: u8 = 2u8
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     @[ignore(4006)]
     let answer: u8 = a < b
-    0u8
+    0u6

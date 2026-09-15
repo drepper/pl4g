@@ -5,7 +5,7 @@
 ※ give, and there is no value for the block after the loop to read down it.
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     let found: u8? = while §counting true:
         if true:
             break §counting

@@ -1083,11 +1083,11 @@ does nothing at all, so it is refused.
 
 ```
 @[startup]
-fn main() → u8:
-    1u8                    ※ refused: this value is not used
+fn main() → u6:
+    1u6                    ※ refused: this value is not used
     count = 1u8            ※ refused, and the same mistake C makes easy
     count & mask           ※ refused
-    0u8                    ※ the result of the function
+    0u6                    ※ the result of the function
 ```
 
 It is an error and not a warning, and it applies to a bare literal and a bare name as much as to anything computed.  The reason is
@@ -1183,14 +1183,42 @@ The primitive types are:
 
 | Type | Meaning |
 |---|---|
-| `i8` `i16` `i32` `i64` | signed integers of the stated width |
-| `u8` `u16` `u32` `u64` | unsigned integers of the stated width |
+| `u1` … `u32`, `u64` | unsigned integers of the stated width |
+| `i2` … `i32`, `i64` | signed integers of the stated width |
 | `f32` `f64` | binary floating-point numbers of the stated width |
 | `bool` | truth values |
 | `void` | the unit type: one value, no information |
 
 The width is always part of the name.  There is no type whose size depends on the target, because that would be exactly the kind
 of surprising interpretation of a program that this language does not admit.
+
+**The width is any number of bits and not only the four a machine has registers for.**  `u3` holds 0 through 7, `i5` holds −16
+through 15, `u1` holds nothing and one.  Everything that is true of `u8` is true of them: an answer that will not fit stops the
+program, a value given to one is checked against its range, and a literal outside it is refused where it is written.
+
+```
+let small: u3 = 5u3            ※ 0 through 7
+let tiny: i2 = ⁻2i2            ※ -2 through 1
+let flag: u1 = 1u1             ※ nothing and one
+let wide: u31 = 2000000000u31
+```
+
+**There is no `i1`.**  A signed type of one bit holds zero and minus one, which is a pair of values no program wants and a name
+every reader would misread.
+
+**What one takes in memory is what holds it**, which is the narrowest machine width that contains it: a byte up to eight bits,
+then doubling.  A `u3` is three bits of information in one byte, and several of them side by side are several bytes.  Packing
+them would make them bit fields, which are a different thing with a different question about what lies beside them, and the
+language does not have those.
+
+**What they are for is saying what a value is.**  A number that is one of eight things is a `u3`, and writing it so makes the
+compiler check every arithmetic answer against those eight rather than against two hundred and fifty-six.  The exit status of a
+program is the example the language uses itself: it is a `u6`, because 0 through 63 is what a program may exit with.
+
+Compare: **Zig**, whose `u3` and `i5` these are, up to 65535 bits; **LLVM**'s own `iN`, which is where that comes from; **Ada**,
+whose range types say the bounds rather than the width and check them the same way; **VHDL** and **Verilog**, where an arbitrary
+width is what the whole language is about; and **C**, whose bit fields are the nearest thing and are a property of a *field* in a
+structure rather than a type, so that there is no way to write one as a local, a parameter or a return type.
 
 Considered were `int32`/`uint32`/`float64` (Go, C#, D, Java), `s32`/`u32` (the Linux kernel and much embedded code), and the
 unsized `int`/`long` of C.  The chosen spelling is that of Rust, Zig, Odin, WebAssembly and LLVM's own IR; it is the shortest
@@ -2635,7 +2663,7 @@ happens when the diagnostic does not arise.
 
 ```
 @[startup]
-fn main() → u8:
+fn main() → u6:
     @[expect(4006)]
     let a: mut u8 = 5u8
     a ← 4u8
@@ -2783,8 +2811,8 @@ last statement is:
 let counter: mut u8 = 1u8
 
 @[startup]
-fn main() → u8:
-    counter ← 42u8     ※ the program exits with status 42
+fn main() → u6:
+    counter ← 42u6     ※ the program exits with status 42
 ```
 
 That it refers to the variable rather than to the written value is what makes this the same rule as everywhere else rather than a
@@ -3115,7 +3143,7 @@ The startup function takes no parameters and returns `u8`:
 
 ```
 @[startup]
-fn main() → u8:
+fn main() → u6:
     0
 ```
 
@@ -3142,7 +3170,7 @@ know to look for it.  A program that dies of a signal really did die of one, and
 
 | Range | Whose |
 |---|---|
-| 0–63 | the program's own, the startup function's result |
+| 0–63 | the program's own, the startup function's result, which is a `u6` |
 | 64–127 | the runtime's, for a stop it reports |
 | 128–255 | a signal the program really died of, as the shell reports it |
 
@@ -3153,6 +3181,11 @@ because what went wrong is in the message, which names the operation, the functi
 **65 is the processor not being the one the program was built for**, which has a number of its own because it is the one stop that
 happens before the program has run at all, and because what to do about it -- build for an older microarchitecture level, or find
 a newer machine -- is a different thing to do.
+
+**The startup function answers a `u6`**, which is that first range and nothing else.  The type is what says the rule rather than
+a paragraph a reader has to have read: a program that tries to exit with 200 is refused where it writes it, and one that works
+its status out arrives at a number that is already in range.  It also means the status has to be *worked out* in `u6` -- there is
+no conversion between integer widths yet -- so a program that computes something wider says so and answers with something else.
 
 **The reservation is what makes a status enough to say it with.**  Without it, a runtime stop and a program that chose to fail
 would be the same number, which is the objection that used to argue for the signal; with it, a caller can tell the three cases

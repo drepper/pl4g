@@ -9,7 +9,7 @@ let first: mut u8 = 1u8
 let second: mut = 2u8
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     @[expect(4006)]
-    let third: mut = 3u8
-    third ← 12u8
+    let third: mut = 3u6
+    third ← 12u6

@@ -12,18 +12,18 @@
 ※ out again -- which is what keeps a call written as an element from being made
 ※ twice.
 
-fn first(xs: u8⟦⟧) → u8:
+fn first(xs: u6⟦⟧) → u6:
     xs⟦0⟧
 
-fn forty() → u8:
-    40u8
+fn forty() → u6:
+    40u6
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     ※ given to a name whose type does not say the length
-    let named: u8⟦⟧ = ⟦40u8, 2u8⟧
+    let named: u6⟦⟧ = ⟦40u6, 2u6⟧
     ※ handed to a parameter whose type does not say it
-    let handed: u8 = first(⟦1u8, 2u8⟧)
+    let handed: u6 = first(⟦1u6, 2u6⟧)
     ※ an element that is a call, which is made once
-    let called: u8 = first(⟦forty(), 2u8⟧)
-    named⟦1⟧ + handed - named⟦1⟧ + called + 1u8
+    let called: u6 = first(⟦forty(), 2u6⟧)
+    named⟦1⟧ + handed - named⟦1⟧ + called + 1u6

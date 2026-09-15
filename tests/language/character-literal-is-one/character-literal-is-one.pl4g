@@ -5,6 +5,6 @@
 ※ written between quotation marks.
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     let c: char = 'ab'
-    0u8
+    0u6

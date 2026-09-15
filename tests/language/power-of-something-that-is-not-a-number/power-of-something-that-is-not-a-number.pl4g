@@ -6,6 +6,6 @@
 ※ being that operator.
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     let x: str = "ab"²
-    0u8
+    0u6

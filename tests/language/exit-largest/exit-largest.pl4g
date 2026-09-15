@@ -1,0 +1,17 @@
+※ pl4g-test: compile=ok opt=0,1
+※ pl4g-test: run=native,qemu exit=63
+※ pl4g-test: diag=none
+
+※ The largest status a program may choose.  It used to be 255, the width of the
+※ field the system passes it in; it is 63 now, because the startup function
+※ answers a `u6` and 0 through 63 is the range that is the program's own -- 64
+※ through 127 being the runtime's and 128 through 255 a shell's way of reporting
+※ a signal.
+※
+※ What this checks is that the whole of that range arrives: a status is not
+※ masked, shifted or otherwise interfered with between the program answering
+※ and whoever started it asking.
+
+@[startup]
+fn main() → u6:
+    63u6

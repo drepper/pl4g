@@ -3,9 +3,9 @@
 ※ pl4g-test: diag=none
 
 ※ A variable at the top level is an address, so changing it writes memory.
-let counter: mut u8 = 1u8
+let counter: mut u6 = 1u6
 
 @[startup, impure]
-fn main() → u8:
-    counter ← 7u8
+fn main() → u6:
+    counter ← 7u6
     counter

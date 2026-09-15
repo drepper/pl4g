@@ -5,7 +5,7 @@
 ※ Where the diagnostic does not arise, 'ignore' says nothing -- which is the
 ※ whole difference between it and 'expect'.
 @[startup]
-fn main() → u8:
+fn main() → u6:
     @[ignore(4006)]
-    let a: u8 = 5u8
+    let a: u6 = 5u6
     a

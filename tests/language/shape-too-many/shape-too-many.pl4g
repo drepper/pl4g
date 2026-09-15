@@ -7,6 +7,6 @@
 let v: u8⟦4⟧ = ⟦1u8, 2u8, 3u8, 4u8⟧
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     let made: u8⟦2⟧ = 2 ⍴ v
     made⟦0⟧

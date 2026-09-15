@@ -2111,7 +2111,12 @@ def _width_of(ty: Type) -> int:
     from ...ir.types import (BoolType, CharType, EnumType, FloatType,
                              IntType)
 
-    if isinstance(ty, (IntType, FloatType)):
+    if isinstance(ty, IntType):
+        # What holds it: a type narrower than a machine width is read and
+        # written at the width that contains it, with the bits above its own
+        # saying what its sign says.
+        return ty.held
+    if isinstance(ty, FloatType):
         return ty.bits
     if isinstance(ty, (CharType, EnumType)):
         return ty.holder.bits

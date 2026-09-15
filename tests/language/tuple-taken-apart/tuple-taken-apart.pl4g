@@ -4,15 +4,15 @@
 ※ assigned as it would be on its own -- so a name that is not a variable, or
 ※ one nothing may change, is reported where it is written.
 
-let a: mut u8 = 3u8
-let b: mut u8 = 9u8
+let a: mut u6 = 3u6
+let b: mut u6 = 9u6
 
 @[visible]
-let low: mut u8 = 0u8
+let low: mut u6 = 0u6
 @[visible]
-let high: mut u8 = 0u8
+let high: mut u6 = 0u6
 
-fn sorted(x: u8, y: u8) → 〈u8, u8〉:
+fn sorted(x: u6, y: u6) → 〈u6, u6〉:
     ※ a tuple carried out of an `if`, which the block the arms join at holds
     ※ as as many parameters as the tuple has members
     if x < y:
@@ -21,12 +21,12 @@ fn sorted(x: u8, y: u8) → 〈u8, u8〉:
         〈y, x〉
 
 @[startup, impure]
-fn main() → u8:
+fn main() → u6:
     ※ into variables at the top level
     low, high ← sorted(b, a)
     ※ and into names inside the body
-    let first: mut u8 = 0u8
-    let second: mut u8 = 0u8
+    let first: mut u6 = 0u6
+    let second: mut u6 = 0u6
     @[ignore(4006)]
     first, second ← sorted(a, b)
     low + high + first + second

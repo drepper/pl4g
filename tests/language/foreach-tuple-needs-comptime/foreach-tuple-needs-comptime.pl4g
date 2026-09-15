@@ -5,8 +5,8 @@
 ※ written with, so a loop over one has to be written out.
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     let t: 〈u8, u16〉 = 〈1u8, 2u16〉
     foreach x := t:
-        0u8
-    0u8
+        0u6
+    0u6

@@ -6,6 +6,6 @@
 ※ assigned to again -- which is a second meaning for one spelling.
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     let _: u8 = 1u8
-    0u8
+    0u6

@@ -8,10 +8,10 @@ enum Colour { red ; green }
 let chosen: mut Colour = Colour.red
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     let kept: u8 = match chosen:
         red:
-            1u8
+            1u6
         green:
             let nothing: u8 = 2u8
     kept

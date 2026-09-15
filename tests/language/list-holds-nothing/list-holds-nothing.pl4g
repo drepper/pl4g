@@ -5,6 +5,6 @@
 ※ what it holds; where nothing does, there is nothing to take it from.
 
 @[startup, impure]
-fn main() → u8:
+fn main() → u6:
     let nothing = []
-    0u8
+    0u6

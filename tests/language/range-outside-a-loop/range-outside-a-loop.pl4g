@@ -5,6 +5,6 @@
 ※ that.
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     let r: u8 = 0u8…5u8
     r

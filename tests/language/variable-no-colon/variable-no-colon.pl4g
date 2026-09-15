@@ -3,6 +3,6 @@
 
 ※ The colon is what marks the construct as a definition, and is always there.
 @[startup]
-fn main() → u8:
+fn main() → u6:
     let status = 3u8
     status

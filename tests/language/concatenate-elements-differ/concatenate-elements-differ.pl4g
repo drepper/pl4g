@@ -9,6 +9,6 @@ let a: u8⟦3⟧ = ⟦1u8, 2u8, 3u8⟧
 let w: u16⟦2⟧ = ⟦4u16, 5u16⟧
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     let both: u16⟦5⟧ = a ⧺ w
-    0u8
+    0u6

@@ -6,6 +6,6 @@
 ※ nowhere for an assignment to put anything.
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     3u8 ← 4u8
-    0u8
+    0u6

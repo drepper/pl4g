@@ -4,6 +4,6 @@
 ※ No unsigned type has a negative value to hold, so this is the ordinary rule
 ※ about a value a type cannot represent and not a special case.
 @[startup]
-fn main() → u8:
+fn main() → u6:
     let n: u8 = ⁻1u8
-    1u8
+    1u6

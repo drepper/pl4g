@@ -11,22 +11,22 @@
 ※ characters and a walk over it runs no turns.
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     let empty: str = ""
     let one: str = "x"
     let same: str = "x"
     ※ the escapes a character literal takes, a string takes
     let escaped: str = "a\tb\u00a3"
     if total(empty) ≠ 0u32 ∨ counted(empty) ≠ 0u8:
-        1u8
+        1u6
     elif total(one) ≠ 120u32 ∨ total(same) ≠ 120u32:
-        2u8
+        2u6
     elif counted(escaped) ≠ 4u8:
-        3u8
+        3u6
     elif total(escaped) ≠ 367u32:
-        4u8
+        4u6
     else:
-        0u8
+        0u6
 
 ※ The two a test needs and the language does not have yet: what a string's
 ※ characters add up to, and how many there are.  Both are a walk, which is the

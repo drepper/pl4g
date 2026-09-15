@@ -1,4 +1,4 @@
-※ pl4g-test: compile=ok run=native,qemu exit=16 diag=none
+※ pl4g-test: compile=ok run=native,qemu exit=0 diag=none
 
 ※ Where a value is wanted of a `match`, every arm ends in a statement that has
 ※ one and they are all of one type; the block the arms join at carries it out.
@@ -10,7 +10,7 @@ let hundred: mut u8 = 100u8
 let seven: mut u8 = 7u8
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     let kept: u8 = match chosen:
         red:
             1u8
@@ -23,4 +23,8 @@ fn main() → u8:
             q
         ⊥:
             0u8
-    kept + more
+    ※ what this used to say through the exit status, which is six bits now
+    if kept + more ≠ 16u8:
+        1u6
+    else:
+        0u6

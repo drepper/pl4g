@@ -15,5 +15,5 @@ let word: i32 = ⁻2i32
 let hexadecimal: i16 = ⁻0x1fi16
 
 @[startup]
-fn main() → u8:
-    5u8
+fn main() → u6:
+    5u6

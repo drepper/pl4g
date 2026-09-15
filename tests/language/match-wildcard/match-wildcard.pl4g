@@ -1,4 +1,4 @@
-※ pl4g-test: compile=ok run=native,qemu exit=64 diag=none
+※ pl4g-test: compile=ok run=native,qemu exit=0 diag=none
 
 ※ `_` takes every alternative no earlier arm took, and binds nothing: the
 ※ alternatives it takes may carry different things or nothing at all, so there
@@ -10,7 +10,7 @@ let none: mut u8 = 0u8
 let seven: mut u8 = 7u8
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     let kept: mut u8 = 0u8
     ※ a wildcard beside a named arm
     match hundred ÷ seven:
@@ -22,4 +22,8 @@ fn main() → u8:
     match hundred ÷ none:
         _:
             kept ← kept + 50u8
-    kept
+    ※ what this used to say through the exit status, which is six bits now
+    if kept ≠ 64u8:
+        1u6
+    else:
+        0u6

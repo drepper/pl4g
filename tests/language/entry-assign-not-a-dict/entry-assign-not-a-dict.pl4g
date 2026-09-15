@@ -8,5 +8,5 @@ fn put(s: ⸨u8⸩):
     s⸨1u8⸩ ← true
 
 @[startup]
-fn main() → u8:
-    0u8
+fn main() → u6:
+    0u6

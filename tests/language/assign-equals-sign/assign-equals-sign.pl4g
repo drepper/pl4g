@@ -7,7 +7,7 @@
 ※ The last statement of a body is the function's result, so a comparison there
 ※ is the point of the line and is not reported; this one is not the last.
 @[startup]
-fn main() → u8:
+fn main() → u6:
     let status: mut = 3u8
     status = 5u8
     status

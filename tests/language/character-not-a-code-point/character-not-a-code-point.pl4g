@@ -9,9 +9,9 @@
 let beyond: u32 = 0x110000u32
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     let c: char = ⎕chr(beyond)
     if ⎕ord(c) ≠ 0u32:
-        1u8
+        1u6
     else:
-        2u8
+        2u6

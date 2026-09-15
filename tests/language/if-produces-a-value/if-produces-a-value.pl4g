@@ -9,16 +9,16 @@ let a: mut u8 = 3u8
 let b: mut u8 = 9u8
 
 @[startup]
-fn main() → u8:
-    let first: u8 = if a < b:
-        4u8
+fn main() → u6:
+    let first: u6 = if a < b:
+        4u6
     elif a = b:
-        5u8
+        5u6
     else:
-        6u8
+        6u6
     ※ an arm may leave the function instead of producing a value
-    let second: u8 = if a > b:
-        return 1u8
+    let second: u6 = if a > b:
+        return 1u6
     else:
-        15u8
+        15u6
     first + second

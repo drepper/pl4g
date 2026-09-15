@@ -4,5 +4,5 @@
 
 ※ The smallest conforming program: it exits with status 0.
 @[startup]
-fn main() → u8:
+fn main() → u6:
     0

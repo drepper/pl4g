@@ -133,9 +133,9 @@ def values(text: str) -> list[tuple[int | None, str | None]]:
     ("1_000_000u32", 1000000),
     ("0x_dead_beefu32", 0xdeadbeef),
     ("0o1_777u16", 0o1777),
-    ("0b0010_1010u8", 0b00101010),
-    ("4_2u8", 42),
-    ("1___0u8", 10),
+    ("0b0010_1010u6", 0b00101010),
+    ("4_2u6", 42),
+    ("1___0u6", 10),
     ("10_u8", 10),
 ])
 def test_underscores_are_ignored_wherever_they_stand(written: str, value: int) -> None:

@@ -27,13 +27,13 @@ TIMES = "\N{MULTIPLICATION SIGN}"
 STOPPED = statuses.GENERAL
 
 OVERFLOWS = "".join((
-    "let two_hundred: u8 = 200u8\nlet one_hundred: u8 = 100u8\n\n",
-    "@[startup, impure]\nfn main() ", ARROW, " u8:\n",
-    "    two_hundred + one_hundred\n"))
+    "let fifty: u6 = 50u6\nlet forty: u6 = 40u6\n\n",
+    "@[startup, impure]\nfn main() ", ARROW, " u6:\n",
+    "    fifty + forty\n"))
 
 FITS = "".join((
-    "let twenty: u8 = 20u8\nlet three: u8 = 3u8\n\n",
-    "@[startup, impure]\nfn main() ", ARROW, " u8:\n",
+    "let twenty: u6 = 20u6\nlet three: u6 = 3u6\n\n",
+    "@[startup, impure]\nfn main() ", ARROW, " u6:\n",
     "    twenty ", TIMES, " three\n"))
 
 
@@ -81,7 +81,7 @@ def test_a_program_that_cannot_fault_carries_nothing(triple: str, tmp_path) -> N
     """The helper and the messages are emitted only where something asked for
     them, so a program with no arithmetic in it is the size it always was."""
     path = tmp_path / "t.pl4g"
-    path.write_text("".join(("@[startup, impure]\nfn main() ", ARROW, " u8:\n    0u8\n")),
+    path.write_text("".join(("@[startup, impure]\nfn main() ", ARROW, " u6:\n    0u6\n")),
                     encoding="utf-8")
     output = tmp_path / "out"
     proc = run_compiler(["-o", str(output), "".join(("--target=", triple)), str(path)])
@@ -96,12 +96,12 @@ def test_each_fault_names_its_own_place(triple: str, tmp_path) -> None:  # noqa:
     than assembled from parts at the moment of the fault."""
     path = tmp_path / "t.pl4g"
     path.write_text("".join((
-        "let a: u8 = 200u8\nlet b: u8 = 100u8\n\n",
-        "@[visible]\nlet first: mut u8 = 0u8\n",
-        "@[visible]\nlet second: mut u8 = 0u8\n\n",
-        "@[startup, impure]\nfn main() ", ARROW, " u8:\n",
+        "let a: u6 = 50u6\nlet b: u6 = 40u6\n\n",
+        "@[visible]\nlet first: mut u6 = 0u6\n",
+        "@[visible]\nlet second: mut u6 = 0u6\n\n",
+        "@[startup, impure]\nfn main() ", ARROW, " u6:\n",
         "    first \N{LEFTWARDS ARROW} a + b\n",
-        "    second \N{LEFTWARDS ARROW} a + b\n    0u8\n")), encoding="utf-8")
+        "    second \N{LEFTWARDS ARROW} a + b\n    0u6\n")), encoding="utf-8")
     output = tmp_path / "out"
     proc = run_compiler(["-o", str(output), "".join(("--target=", triple)), str(path)])
     assert proc.returncode == 0, describe(proc)

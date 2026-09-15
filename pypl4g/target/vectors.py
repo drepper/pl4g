@@ -43,7 +43,7 @@ from ..ir.inst import (AnyLaneInst, BinaryInst, BinOp, CastInst, CastKind,
                        UnaryInst, UnOp)
 from ..ir.layout import DataLayout, stride_of
 from ..ir.module import Module
-from ..ir.types import BOOL, Type, TypeContext, U64, VecType
+from ..ir.types import IntType, BOOL, Type, TypeContext, U64, VecType
 from ..ir.value import IntConst, Value
 from ..source.location import Span
 
@@ -77,6 +77,15 @@ class Vectors:
         """How many elements of this type fit in one of its registers, where an
         operation it has at *widths* is what is being asked about."""
         if self.bits == 0 or not widths:
+            return 0
+        if isinstance(element, IntType) and not element.whole:
+            # A type narrower than what holds it is not a lane.  The lane
+            # operations are the machine's own and what they check is the width
+            # they work at, so a run of them would answer for the byte and not
+            # for the three bits the program wrote -- and a sum of two values
+            # of three bits that came to nine would go unreported.  Such a run
+            # comes apart into elements, where the check is the one the type
+            # asks for.
             return 0
         wide = stride_of(element, layout) * 8
         if wide not in widths:

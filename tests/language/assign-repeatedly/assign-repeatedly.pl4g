@@ -3,11 +3,11 @@
 ※ pl4g-test: diag=none
 
 ※ Each assignment supersedes the one before it.
-let counter: mut u8 = 1u8
+let counter: mut u6 = 1u6
 
 @[startup, impure]
-fn main() → u8:
-    counter ← 10u8
-    counter ← 20u8
-    counter ← 30u8
+fn main() → u6:
+    counter ← 10u6
+    counter ← 20u6
+    counter ← 30u6
     counter

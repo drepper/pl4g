@@ -740,8 +740,10 @@ module.exports = grammar({
       // Only a real type name is a suffix.  The compiler reads any identifier
       // there and then reports one that is not a type, but it reports it as an
       // error, so a literal with a wrong suffix is not a program either way.
-      // This list grows with the types the language has.
-      optional(/[iu](8|16|32|64)/),
+      // Any width up to thirty-two, and sixty-four: `u1` through `u32`, `i2`
+      // through `i32`, and the two widest.  Which of those the signed side has
+      // is the compiler's to refuse -- `i1` parses here and is not a type.
+      optional(/[iu]([1-9]|[12][0-9]|3[0-2]|64)/),
     )),
 
     // A floating-point literal is written as C writes one: a decimal with a

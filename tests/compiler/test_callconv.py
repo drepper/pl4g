@@ -77,8 +77,8 @@ def _is_byte(word: str) -> bool:
 # -- what the language's own convention buys ------------------------------------
 
 #: The function the whole arrangement is for: it answers with what it was given.
-IDENTITY = "".join(("fn f(p: u8) ", ARROW, " u8:\n    p\n\n",
-                    "@[startup, impure]\nfn main() ", ARROW, " u8:\n    f(42u8)\n"))
+IDENTITY = "".join(("fn f(p: u6) ", ARROW, " u6:\n    p\n\n",
+                    "@[startup, impure]\nfn main() ", ARROW, " u6:\n    f(42u6)\n"))
 
 
 @pytest.mark.parametrize("triple", compiler_targets())
@@ -92,7 +92,7 @@ def test_a_function_that_answers_with_what_it_was_given_is_a_bare_return(
     taken, and the register the argument arrives in has to be seen as free once
     the value has been read out of it.
     """
-    assert body_of(listing(tmp_path, triple, IDENTITY), "f(u8)u8") == ["ret"]
+    assert body_of(listing(tmp_path, triple, IDENTITY), "f(u6)u6") == ["ret"]
 
 
 @pytest.mark.parametrize("triple", compiler_targets())
@@ -104,10 +104,10 @@ def test_and_it_runs(triple: str, tmp_path) -> None:  # noqa: ANN001
 # -- a call is placed by the callee's convention --------------------------------
 
 TWO_CONVENTIONS = "".join((
-    "@[cdecl]\nfn theirs(a: u8, b: u8) ", ARROW, " u8:\n    a | b\n\n",
-    "fn ours(a: u8, b: u8) ", ARROW, " u8:\n    a | b\n\n",
-    "@[startup, impure]\nfn main() ", ARROW, " u8:\n",
-    "    theirs(32u8, 8u8) | ours(2u8, 0u8)\n"))
+    "@[cdecl]\nfn theirs(a: u6, b: u6) ", ARROW, " u6:\n    a | b\n\n",
+    "fn ours(a: u6, b: u6) ", ARROW, " u6:\n    a | b\n\n",
+    "@[startup, impure]\nfn main() ", ARROW, " u6:\n",
+    "    theirs(32u6, 8u6) | ours(2u6, 0u6)\n"))
 
 
 @pytest.mark.parametrize("triple", compiler_targets())
@@ -122,7 +122,7 @@ def test_a_cdecl_function_keeps_its_plain_name(tmp_path) -> None:  # noqa: ANN00
     know how a name is mangled."""
     dump = listing(tmp_path, "x86_64-linux-none", TWO_CONVENTIONS)
     assert "\ntheirs:\n" in dump
-    assert "\nours(u8,u8)u8:\n" in dump
+    assert "\nours(u6,u6)u6:\n" in dump
 
 
 # -- what a caller has to save --------------------------------------------------
@@ -131,13 +131,13 @@ def test_a_cdecl_function_keeps_its_plain_name(tmp_path) -> None:  # noqa: ANN00
 #: convention leaves a caller once it has given up everything a call may
 #: destroy.  The callee destroys almost nothing, so nothing has to be saved.
 ACROSS_A_CALL = "".join((
-    "".join("".join(("let v", str(n), ": u8 = ", str(1 << n), "u8\n"))
+    "".join("".join(("let v", str(n), ": u6 = ", str(1 << n), "u6\n"))
             for n in range(5)),
-    "\nfn twice(p: u8) ", ARROW, " u8:\n    p | p\n\n",
-    "@[startup, impure]\nfn main() ", ARROW, " u8:\n",
-    "    let a: u8 = v0\n    let b: u8 = v1\n    let c: u8 = v2\n",
-    "    let d: u8 = v3\n    let e: u8 = v4\n",
-    "    let got: u8 = twice(32u8)\n",
+    "\nfn twice(p: u6) ", ARROW, " u6:\n    p | p\n\n",
+    "@[startup, impure]\nfn main() ", ARROW, " u6:\n",
+    "    let a: u6 = v0\n    let b: u6 = v1\n    let c: u6 = v2\n",
+    "    let d: u6 = v3\n    let e: u6 = v4\n",
+    "    let got: u6 = twice(32u6)\n",
     "    a | b | c | d | e | got\n"))
 
 
@@ -153,7 +153,7 @@ def test_nothing_is_saved_across_a_call_that_destroys_nothing(
     registers, take five it has to hand back, and save and restore all five.
     """
     dump = listing(tmp_path, triple, ACROSS_A_CALL, "-O1")
-    inside = dump.split("main()u8:")[1].split("\n_start")[0]
+    inside = dump.split("main()u6:")[1].split("\n_start")[0]
     named = _handed_back(triple)
     assert not [n for n in named if "".join((" ", n, ",")) in inside
                 or "".join((" ", n, "\n")) in inside], inside

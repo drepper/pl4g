@@ -5,6 +5,6 @@
 ※ whenever it is started is one that need not be started.
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     let a: u8⟦4⟧ = ⟦1u8, 2u8, 4u8, 8u8⟧
     a⟦9⟧

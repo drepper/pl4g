@@ -10,7 +10,7 @@ let same: mut bool = false
 let different: mut bool = false
 
 @[startup, impure]
-fn main() → u8:
+fn main() → u6:
     same ← ready = seen
     different ← ready ≠ seen
-    0u8
+    0u6

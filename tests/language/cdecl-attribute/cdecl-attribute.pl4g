@@ -13,19 +13,19 @@
 ※ function being called says, and not what the caller follows.
 
 @[cdecl]
-fn system_way(a: u8, b: u8) → u8:
+fn system_way(a: u6, b: u6) → u6:
     a | b
 
-fn our_way(a: u8, b: u8) → u8:
+fn our_way(a: u6, b: u6) → u6:
     a | b
 
 @[cdecl]
-fn asks_ours(a: u8, b: u8) → u8:
+fn asks_ours(a: u6, b: u6) → u6:
     our_way(a, b)
 
-fn asks_theirs(a: u8, b: u8) → u8:
+fn asks_theirs(a: u6, b: u6) → u6:
     system_way(a, b)
 
 @[startup]
-fn main() → u8:
-    asks_ours(32u8, 8u8) | asks_theirs(2u8, 0u8)
+fn main() → u6:
+    asks_ours(32u6, 8u6) | asks_theirs(2u6, 0u6)

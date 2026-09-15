@@ -17,7 +17,7 @@ let unsigned_wide: u64 = 42u64
 let signed_wide: i64 = 42i64
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     ※ Each of these exists to make the backend emit one load; nothing reads
     ※ them afterwards, and the attribute says so rather than the program
     ※ being written round the warning.
@@ -37,4 +37,4 @@ fn main() → u8:
     let g: u64 = unsigned_wide
     @[expect(4006)]
     let h: i64 = signed_wide
-    1u8
+    1u6

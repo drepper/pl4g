@@ -5,7 +5,7 @@
 ※ loop whose value is wanted is written where one is wanted.
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     while §counting true:
         break §counting 5u8
-    0u8
+    0u6

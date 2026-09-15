@@ -4,6 +4,6 @@
 ※ With neither a suffix nor a context to take a type from, the literal is an
 ※ untyped value.  The specification describes those; this compiler has none yet.
 @[startup]
-fn main() → u8:
+fn main() → u6:
     let status := 42
     status

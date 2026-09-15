@@ -11,7 +11,7 @@
 let outer: u64 = 2u64
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     let inner: u64 = outer
     ※ this one is fine, the name being a number the compiler knows
     let known: u8⟦2⟧ = outer ⍴ 0u8

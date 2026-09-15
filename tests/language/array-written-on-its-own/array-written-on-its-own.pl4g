@@ -7,9 +7,9 @@
 ※ down.
 
 @[startup]
-fn main() → u8:
+fn main() → u6:
     ※ looked in where it stands, with no name and no type anywhere
-    let one: u8 = ⟦42u8, 2u8⟧⟦0⟧
+    let one: u6 = ⟦42u6, 2u6⟧⟦0⟧
     ※ the same, a dimension deep
-    let two: u8 = ⟦⟦1u8, 2u8⟧, ⟦3u8, 4u8⟧⟧⟦1, 1⟧
-    one - two + 4u8
+    let two: u6 = ⟦⟦1u6, 2u6⟧, ⟦3u6, 4u6⟧⟧⟦1, 1⟧
+    one - two + 4u6

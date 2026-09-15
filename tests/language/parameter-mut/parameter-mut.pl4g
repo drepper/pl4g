@@ -14,17 +14,17 @@
 ※ in a register, and a name bound to a new value is the same register put to
 ※ the same use, so nothing is copied to make room for it.
 
-fn total(n: mut u8) → u8:
-    let sum: mut u8 = 0u8
-    while n > 0u8:
+fn total(n: mut u6) → u6:
+    let sum: mut u6 = 0u6
+    while n > 0u6:
         sum ← sum + n
-        n ← n - 1u8
+        n ← n - 1u6
     sum
 
 ※ one that is not `mut` is what it was given, and stays so
-fn twice(n: u8) → u8:
+fn twice(n: u6) → u6:
     n + n
 
 @[startup]
-fn main() → u8:
-    total(5u8) + twice(10u8)
+fn main() → u6:
+    total(5u6) + twice(10u6)

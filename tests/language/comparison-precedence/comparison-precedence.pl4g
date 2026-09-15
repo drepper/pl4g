@@ -11,6 +11,6 @@ let mask: u8 = 0b0000_1010u8
 let set: mut bool = false
 
 @[startup, impure]
-fn main() → u8:
+fn main() → u6:
     set ← flags & mask = mask
-    0u8
+    0u6
