@@ -3954,6 +3954,54 @@ readable one.
 
 ---
 
+## 2026-09-15T22:40+02:00 — implementation
+
+**A RISC-V image says what it was built for, and the string is normalized**
+
+Decided on the user's direction: `--mclevel=rv32…` is an error on the sixty-four bit target, and every image carries
+`.riscv.attributes` with `Tag_RISCV_arch`.
+
+**The width is checked against the target and not against a constant.**  `rv32gc` names a different machine, not a different
+level of this one.  Writing the check as "this target's addresses are sixty-four bits wide, and the string says thirty-two" is
+one line that also refuses `rv64` on a thirty-two bit target of the same family the day there is one — which the instruction
+asked for and which a constant would have made a second thing to remember.  `rv64e` is refused beside it for a different reason:
+sixteen registers and a calling convention of its own, neither of which this compiler has.  The *parser* still reads both, since
+reading a name and being able to build for it are different questions.
+
+**The attribute is not optional on this architecture.**  Every other target this compiler has says what it needs by being what it
+is: an x86-64 image runs on x86-64, and a program built for a newer level asks the processor itself at its own entry point.
+RISC-V can do neither — its base is small, everything else is an extension, and there is no instruction a program in user mode can
+ask.  Without the section, an image built for RVA23 and one built for the bare base are indistinguishable until one of them hits
+an instruction the processor has not got.  So it is written always rather than under an option: the cost is as long as the string
+is, and the thing it buys cannot be bought any other way.
+
+**Normalized, not merely canonical.**  Two forms were possible: the short one a person writes, `rv64gc`, and the long one with
+every implied extension spelled out and every version stated.  The long one is what the attribute wants, because the reader is a
+program comparing two images and not a person reading one — and the comparison only works if both toolchains write the same
+string.  So the compiler keeps only the long form and drops the short one entirely: a second spelling that nothing reads is a
+second thing to keep right.
+
+**It is checked against the GNU assembler**, over a corpus, the way the instruction encodings are.  The normalization rules are
+spread over the naming convention, the profile documents and forty years of accumulated extension names — which extension implies
+which, what version each is at, what order they go in — and no amount of reading gets that right on the first try.  Asking a
+toolchain that already implements it, and keeping the question in the test suite, is what the encoding tables already do.
+
+The corpus leaves out `rva23s64`, where the two disagree by exactly one extension: the profile document makes Zifencei mandatory
+for it and binutils' table leaves it out.  The document is what this follows, and what they disagree about is the privileged
+half, which no program this compiler builds can use.
+
+**The dump stops showing sections that are not mapped.**  A golden assembly dump is about what instruction selection produced,
+and four hundred bytes of hex saying which extensions the profile has would bury five small files that exist to be read.  The
+rule is not "skip the attributes" but "skip what is not part of the running program", which is the honest form of it and which
+will be right for debug information and notes as well.
+
+Compare: **ARM**, whose `.ARM.attributes` this format is and which has carried it since 2005 for the same reason — a `.o` built
+for one floating-point convention linked against another is a silent disaster; **GCC** and **LLVM** on RISC-V, which write this
+section and this tag with the same normalization, which is what makes the differential test possible; and **x86-64**, which has
+nothing of the kind and does not need it, its levels being four points on a line every processor sits somewhere on.
+
+---
+
 Open questions
 --------------
 

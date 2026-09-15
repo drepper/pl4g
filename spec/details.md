@@ -946,6 +946,14 @@ Writing the list out is precise and nobody wants to do it, so the architecture a
 settles that floating point is there: this architecture's Linux ABI has required the F and D extensions since the beginning, and
 a default of the bare base would have had the compiler refuse the arithmetic every program on it actually uses.
 
+**What the string may say that this target cannot be is refused** (1011), and there are two such things.  The **width**:
+`rv32gc` names a machine whose addresses are half as wide, and that is a different target rather than a different level of this
+one.  The comparison is against what the target says its own addresses are, so the one line refuses `rv64` on a thirty-two bit
+target of the same family the day there is one, without anything being written twice.  The **reduced base**: `rv64e` has sixteen
+registers and a calling convention of its own, and this compiler's register file and convention are the full ones.  The parser
+understands both, because reading a name and being able to build for it are different questions and a compiler that confused them
+would report the wrong one.
+
 **An extension the compiler does not know is refused.**  That is what every other compiler's `-march` does and the reason is a
 typo: `zfaa` is not an extension, and a compiler that shrugged at it would silently build the slower program.  The table holds
 the single letters, everything the profiles name, and everything the code generator asks about; a new extension is one row.
@@ -980,6 +988,30 @@ middle of somebody else's afternoon.
 `test_asking_the_processor_is_what_a_level_costs` states as a number so that a change to it is something somebody chose.  The
 tests that are about how small an image can be, and the golden assembly dumps, are built at v1 for the same reason: what they are
 about is the program, and the same forty lines repeated in each of them would bury it.
+
+**A RISC-V image says what it was built for, in a section of its own.**  It has to: "a RISC-V binary" says almost nothing about
+what a processor must have to run it, and unlike x86-64 there is no instruction a program in user mode can ask the processor
+with.  So the answer has to be in the file, for a debugger working out which instructions to expect, a linker checking that two
+objects were built for the same machine, a packager checking that what it ships will run.
+
+The section is `.riscv.attributes`, of the architecture's own section type, and it is not mapped -- it is for whatever reads the
+file and takes no room when the program runs.  The format is the one ARM invented for the same job: a byte naming the format,
+then a sub-section per vendor, then a sub-sub-section per scope, with **every length counting itself**, which is what lets a
+reader step over a vendor or a tag it does not know rather than give up.  That is why it is built from the inside out, each length
+written once what it measures is there.
+
+One tag is written, `Tag_RISCV_arch`, and its value is the **normalized** string: every extension spelled out, in the
+architecture's order, each carrying the version it is at -- `rv64i2p1_m2p0_a2p1_f2p2_d2p2_c2p0_zicsr2p0_…`.  Normalized rather
+than canonical, and the difference is the point: nothing is left implicit, so an extension another brings with it is written
+beside it, and nothing is left to a reader's idea of which version was current.  A reader comparing two images only works if the
+two agree exactly, so **the string is checked against what the GNU assembler writes for the same request**, over a corpus of
+thirty strings including the default profile.  That is the same differential test the instruction encodings get and for the same
+reason: the rules are spread over a specification, a profile document and forty years of extension names, and the only way to be
+sure of them is to ask something that already implements them.
+
+The other tags are not written.  The stack alignment and whether unaligned access is fast are things this compiler does not vary;
+which privileged specification the system follows is a thing about the system.  Writing a value nobody chose would be stating
+something nobody said.
 
 **The check is what makes a level mean something.**  It was written before anything generated depended on a level, so that when
 something did -- the width of a run register, and now the rounding instruction -- there was one place for it to go rather than a

@@ -32,7 +32,7 @@ from ..target import ImageDefaults
 from .abi import CC_PL4G, lookup as lookup_cconv
 from .encoder import EncodingError, encode
 from .fixups import apply_fixup
-from . import isa
+from . import attributes, isa
 from .isel import RVSelector, UnsupportedOperation, lower_function
 from .opcodes import PAD_BYTE, RISCV_INSTRS
 from .regs import FPR, GPR, INFO
@@ -82,8 +82,26 @@ class RISCV64Target:
         What is wrong with a name that is neither is what comes back, since
         whoever asked has the name already and what a reader needs is the part
         they got wrong.
+
+        Two things the string may say that this target cannot be.  **The
+        width**: `rv32gc` names a machine whose addresses are half as wide, and
+        it is a different target rather than a different level of this one --
+        the comparison is against what this target says its addresses are, so a
+        thirty-two bit target of the same family refuses `rv64` by the same
+        line.  **The reduced base**: `rv64e` has sixteen registers and a calling
+        convention of its own, and this compiler's register file and convention
+        are the full ones.
         """
-        self.isa = isa.parse(name)
+        found = isa.parse(name)
+        if found.bits != self.pointer_bits:
+            raise ValueError("".join((
+                "it names a base whose addresses are ", str(found.bits),
+                " bits wide, and this target's are ", str(self.pointer_bits))))
+        if found.embedded:
+            raise ValueError(
+                "it names the reduced base, which has sixteen registers and a "
+                "calling convention of its own, and this compiler has neither")
+        self.isa = found
 
     def encode(self, inst: MCInst) -> tuple[bytes, list[MCFixup]]:
         """Encode one instruction."""
@@ -201,6 +219,14 @@ class RISCV64Target:
         emit_start(asm, module, lookup_cconv(module.startup.cconv))
         messages.emit(asm)
         constants.emit(asm)
+        # What the image was built for, said in the file for whatever reads the
+        # file.  It has to be said: this architecture's base is small and
+        # everything else is an extension, so "a RISC-V binary" says almost
+        # nothing about what a processor must have to run it -- and unlike
+        # x86-64, there is no instruction a program in user mode can ask.
+        asm.section(attributes.SECTION, alloc=False, alignment=1,
+                    sh_type=attributes.SHT_RISCV_ATTRIBUTES)
+        asm.bytes(attributes.build(self.isa.normalized()))
 
     @property
     def entry_symbol(self) -> str:

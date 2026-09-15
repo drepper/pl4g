@@ -24,7 +24,8 @@ def test_the_base_says_how_wide_an_address_is() -> None:
 def test_the_strings_are_case_insensitive() -> None:
     """The convention says so, and a build script that shouts is still a build
     script."""
-    assert isa.parse("RV64GC_Zba").render() == isa.parse("rv64gc_zba").render()
+    assert isa.parse("RV64GC_Zba").normalized() == \
+        isa.parse("rv64gc_zba").normalized()
 
 
 def test_g_is_the_general_purpose_set() -> None:
@@ -65,7 +66,8 @@ def test_a_name_ending_in_digits_is_a_name() -> None:
 
 def test_underscores_between_single_letters_mean_nothing() -> None:
     """They are allowed for readability and say nothing."""
-    assert isa.parse("rv64i_m_a_f_d").render() == isa.parse("rv64imafd").render()
+    assert isa.parse("rv64i_m_a_f_d").normalized() == \
+        isa.parse("rv64imafd").normalized()
 
 
 def test_a_multi_letter_extension_needs_its_underscore() -> None:
@@ -108,10 +110,11 @@ def test_the_profiles_are_the_published_sets() -> None:
         assert found.floats, name
         assert found.has("zfa"), name
         assert found.has("v") and found.has("b"), name
-    assert isa.parse("rva23").render() == isa.parse("rva23u64").render()
-    # The supervisor profile is the user one and the privileged half beside it.
-    assert isa.parse("rva23s64").has("sv39")
-    assert not isa.parse("rva23u64").has("sv39")
+    assert isa.parse("rva23").normalized() == isa.parse("rva23u64").normalized()
+    # The supervisor profile is the user one and the privileged half beside it,
+    # and `Sha` is a name for eight of those rather than an extension itself.
+    assert isa.parse("rva23s64").has("shgatpa")
+    assert not isa.parse("rva23u64").has("shgatpa")
 
 
 def test_a_profile_it_does_not_know_says_which_it_knows() -> None:
@@ -129,8 +132,12 @@ def test_the_default_is_the_newest_application_profile() -> None:
     assert isa.parse(isa.DEFAULT).floats
 
 
-def test_the_canonical_form_is_the_architecture_s_order() -> None:
+def test_the_normalized_form_is_the_architecture_s_order() -> None:
     """A set is a set however it was spelled, and this is how it is written
-    back: the single letters in the architecture's own order, then the rest."""
-    assert isa.parse("rv64i_zba_c_m").render() == "rv64imc_zba"
-    assert isa.parse("rv64idfam").render() == "rv64imafd_zicsr"
+    back: the base, the single letters in the architecture's own order, then
+    the multi-letter ones by the letter each belongs under -- with nothing left
+    implicit and every one carrying the version it is at."""
+    assert isa.parse("rv64i_zba_c_m").normalized() == \
+        "rv64i2p1_m2p0_c2p0_zmmul1p0_zca1p0_zba1p0"
+    assert isa.parse("rv64idfam").normalized() == \
+        "rv64i2p1_m2p0_a2p1_f2p2_d2p2_zicsr2p0_zmmul1p0_zaamo1p0_zalrsc1p0"

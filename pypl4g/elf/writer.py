@@ -151,6 +151,15 @@ class ElfWriter:
         layout.symbols = symbols
 
         if settings.with_symbols:
+            # Sections that take no room when the program runs, and that
+            # something emitted rather than this writer: they are in the file
+            # for whatever reads the file.  They go before the tables so that
+            # their names are among the names the table of names holds.
+            for section in self._sections:
+                if not section.alloc:
+                    offset = self._add_nonalloc(
+                        layout, section.name, section.sh_type, section.size,
+                        max(section.alignment, 1), offset)
             for name in (".shstrtab", ".symtab", ".strtab"):
                 shstrtab.add(name)
             for plan in layout.sections:

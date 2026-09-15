@@ -80,11 +80,60 @@ _IMPLIES: Final[dict[str, tuple[str, ...]]] = {
     "zk": ("zkn", "zkr", "zkt"),
     "zkn": ("zbkb", "zbkc", "zbkx", "zkne", "zknd", "zknh"),
     "zks": ("zbkb", "zbkc", "zbkx", "zksed", "zksh"),
-    "v": ("zve64d",),
+    "v": ("zve64d", "zvl128b"),
     "zve64d": ("zve64f",),
-    "zve64f": ("zve32f",),
+    "zve64f": ("zve64x", "zve32f"),
+    "zve64x": ("zve32x", "zvl64b"),
     "zve32f": ("zve32x",),
-    "zve64x": ("zve32x",),
+    "zve32x": ("zvl32b",),
+    "zvl128b": ("zvl64b",),
+    "zvl64b": ("zvl32b",),
+    "zvbb": ("zvkb",),
+    "zvfhmin": ("zve32f",),
+    "zvfh": ("zve32f", "zvfhmin", "zfhmin"),
+    # What `Sha` comprises, which the profile document states as a list: it is
+    # a name for the hypervisor half rather than an extension of its own.
+    "sha": ("h", "ssstateen", "shcounterenw", "shvstvala", "shtvala",
+            "shvstvecd", "shvsatpa", "shgatpa"),
+    "zvkng": ("zvkb",),
+    "zvksg": ("zvkb",),
+    # The multiply-and-divide letter is the multiply half and the divide half,
+    # and the atomic letter the two halves of what an atomic operation is.
+    "m": ("zmmul",),
+    "a": ("zaamo", "zalrsc"),
+    # The compressed letter is the base of the compressed encoding plus
+    # whichever of the two floating-point halves the program has -- which is
+    # the one implication here that depends on something else being there.
+    "c": ("zca",),
+    "zcb": ("zca",),
+    "zcd": ("zca",),
+    "zcf": ("zca",),
+    "zcmop": ("zca",),
+    "zfhmin": ("f",),
+}
+
+#: What an extension brings only where something else is there too, and only at
+#: the stated width where one is stated.  The compressed encoding covers the
+#: floating-point loads and stores of whichever format the program has, and of
+#: neither where it has none -- and the single-precision half of it exists only
+#: at the narrower width, the wider one having spent those encodings on
+#: something else.
+_IMPLIES_WITH: Final[tuple[tuple[str, str, str, int | None], ...]] = (
+    ("c", "d", "zcd", None),
+    ("c", "f", "zcf", 32),
+)
+
+#: What version each extension is at, where it is not the first.  An extension
+#: is at 1.0 until somebody revises it, and most never are, so what is written
+#: down is the exceptions -- the base and the extensions old enough to have been
+#: through a revision.  The numbers are the ones the architecture's own
+#: documentation gives, and a test checks every one of them against what the GNU
+#: assembler writes for the same string.
+_VERSIONS: Final[dict[str, tuple[int, int]]] = {
+    "i": (2, 1), "e": (2, 0), "m": (2, 0), "a": (2, 1), "f": (2, 2),
+    "d": (2, 2), "q": (2, 2), "c": (2, 0),
+    "zicsr": (2, 0), "zifencei": (2, 0), "zicntr": (2, 0), "zihpm": (2, 0),
+    "zihintpause": (2, 0),
 }
 
 #: Every extension name this compiler knows.  It is not every extension there
@@ -103,6 +152,8 @@ KNOWN: Final[frozenset[str]] = frozenset((
     "zba", "zbb", "zbs", "zbc", "zbkb", "zbkc", "zbkx",
     "zk", "zkn", "zknd", "zkne", "zknh", "zkr", "zks", "zksed", "zksh", "zkt",
     "zve32x", "zve32f", "zve64x", "zve64f", "zve64d",
+    "zvl32b", "zvl64b", "zvl128b", "zvl256b", "zvl512b", "zvl1024b", "zvkb",
+    "zmmul", "zaamo", "zalrsc", "zca",
     "zvbb", "zvbc", "zvfh", "zvfhmin", "zvfbfmin", "zvfbfwma", "zvkt",
     "zvkng", "zvksg",
     "zicfilp", "zicfiss",
@@ -138,7 +189,12 @@ _PROFILES: Final[dict[str, tuple[int, tuple[str, ...]]]] = {
         "zicclsm", "za64rs", "zihintpause", "zic64b", "zicbom", "zicbop",
         "zicboz", "zfhmin", "zkt", "zvfhmin", "zvbb", "zvkt", "zihintntl",
         "zicond", "zimop", "zcmop", "zcb", "zfa", "zawrs", "supm",
-        "zifencei", "ss", "svbare", "sv39", "svade", "ssccptr", "sstvecd",
+        # `Ss1p13` and `Sv39`, which the document also lists, are not here: the
+        # first says which privileged specification the system follows and the
+        # second which page-table mode it uses, and neither is a thing a
+        # program may be built to use -- they belong to the other attributes
+        # the format has for saying them.
+        "zifencei", "svbare", "svade", "ssccptr", "sstvecd",
         "sstvala", "sscounterenw", "svpbmt", "svinval", "svnapot", "sstc",
         "sscofpmf", "ssnpm", "ssu64xl", "sha")),
 }
@@ -163,6 +219,16 @@ _PROFILE_SHAPE: Final[re.Pattern[str]] = re.compile(
 
 #: A version, which is a major number and optionally a minor one after a `p`.
 _VERSION: Final[re.Pattern[str]] = re.compile(r"(\d+)(?:p(\d+))?\Z")
+
+
+def version_of(extension: str) -> tuple[int, int]:
+    """What version an extension is at where nothing says otherwise."""
+    return _VERSIONS.get(extension, (1, 0))
+
+
+def _spelled(version: tuple[int, int]) -> str:
+    """A version written the way the convention writes one."""
+    return "".join((str(version[0]), "p", str(version[1])))
 
 
 class BadName(ValueError):
@@ -203,16 +269,42 @@ class ISA:
         this compiler can build a program that uses it."""
         return self.has("d")
 
-    def render(self) -> str:
-        """The canonical spelling: the base, the single letters in the
-        architecture's order, then the rest alphabetically within each class."""
-        parts = ["rv", str(self.bits), "e" if self.embedded else "i"]
-        parts.extend(letter for letter in SINGLE
-                     if letter != "i" and letter in self.versions)
+    def normalized(self) -> str:
+        """The spelling the ELF attribute wants: every extension, in order,
+        each with the version it is at.
+
+        It is the same order as the short form and differs in two ways, both of
+        which are what makes it *normal* rather than merely canonical: nothing
+        is left implicit, so an extension another brings with it is written out
+        beside it, and every one carries its version, so that a reader of the
+        file need know nothing about which version was current when it was
+        built.
+        """
+        base = "".join(("rv", str(self.bits), "e" if self.embedded else "i",
+                        _spelled(version_of("e" if self.embedded else "i"))))
+        rest = [*(letter for letter in SINGLE
+                  if letter != "i" and letter in self.versions),
+                *self._multi()]
+        return "_".join((base, *("".join((name, _spelled(version_of(name))))
+                                 for name in rest)))
+
+    def _multi(self) -> list[str]:
+        """The multi-letter extensions, in the order the convention states.
+
+        The standard unprivileged ones first, ordered by the single letter they
+        belong under -- the one right after the `z` -- and alphabetically within
+        that; then the privileged ones; then whatever is nobody's standard.
+        """
+        found: list[str] = []
         for prefix in "zsx":
-            parts.extend("".join(("_", name)) for name in sorted(self.versions)
-                         if len(name) > 1 and name.startswith(prefix))
-        return "".join(parts)
+            here = [name for name in self.versions
+                    if len(name) > 1 and name.startswith(prefix)]
+            if prefix == "z":
+                here.sort(key=lambda name: (SINGLE.find(name[1]), name))
+            else:
+                here.sort()
+            found.extend(here)
+        return found
 
 
 def parse(text: str) -> ISA:
@@ -240,7 +332,7 @@ def _profile(lowered: str, written: str) -> ISA:
             "knows; it knows ", ", ".join(sorted(_PROFILES)))))
     bits, extensions = found
     return ISA(bits=bits, embedded=False, named=written,
-               versions=_closed({name: None for name in extensions}))
+               versions=_closed({name: None for name in extensions}, bits))
 
 
 def _string(lowered: str, written: str) -> ISA:
@@ -267,7 +359,7 @@ def _string(lowered: str, written: str) -> ISA:
         if name in found:
             raise BadName("".join(("'", name, "' is written twice")))
         found[name] = version
-    versions = _closed(found)
+    versions = _closed(found, int(lowered[2:4]))
     if "i" not in versions and "e" not in versions:
         raise BadName("an ISA string names its base, which is 'i' or 'e' -- or "
                       "'g', which brings 'i' with it")
@@ -326,7 +418,7 @@ def _version(text: str) -> tuple[int, int] | None:
     return int(split.group(1)), int(minor) if minor else 0
 
 
-def _closed(found: dict[str, tuple[int, int] | None]
+def _closed(found: dict[str, tuple[int, int] | None], bits: int
             ) -> Mapping[str, tuple[int, int] | None]:
     """*found* with everything its extensions imply, and with `g` spelled out.
 
@@ -339,6 +431,12 @@ def _closed(found: dict[str, tuple[int, int] | None]
         name = waiting.pop()
         for implied in _IMPLIES.get(name, ()):
             if implied not in found:
+                found[implied] = None
+                waiting.append(implied)
+        for one, other, implied, only_at in _IMPLIES_WITH:
+            if only_at is not None and only_at != bits:
+                continue
+            if one in found and other in found and implied not in found:
                 found[implied] = None
                 waiting.append(implied)
     # `g` is an abbreviation and not an extension: what it stands for is in the

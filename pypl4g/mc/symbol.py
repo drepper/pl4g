@@ -79,6 +79,11 @@ class MCSection:
     writable: bool = False
     executable: bool = False
     alignment: int = 1
+    #: What kind of section it is, as the object format numbers those kinds.
+    #: Almost everything is ordinary contents and says nothing; a section the
+    #: format gives a meaning of its own -- the build attributes, say -- says
+    #: which, because nothing below here could work it out from the bytes.
+    sh_type: int = 1
     fragments: list[object] = field(default_factory=list)
     #: Offset within the section of the end of the last fragment laid out.
     size: int = 0

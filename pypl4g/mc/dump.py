@@ -22,9 +22,17 @@ def _symbols_at(symbols: Sequence[MCSymbol], section: MCSection,
 
 def dump_sections(sections: Sequence[MCSection],
                   symbols: Sequence[MCSymbol]) -> str:
-    """Render the built representation of every section."""
+    """Render the built representation of every section the program is made of.
+
+    A section that is not mapped when the program runs is left out.  What such a
+    section holds is for a reader of the *file* -- what the image was built for,
+    where its symbols are -- and not for the machine, so it is not part of what
+    instruction selection produced and showing it here would bury what is.
+    """
     out: list[str] = ["\N{REFERENCE MARK} symbolic assembler dump; internal form, not a syntax"]
     for section in sections:
+        if not section.alloc:
+            continue
         out.append("")
         out.append("".join(("section ", section.name,
                             " executable" if section.executable else "",

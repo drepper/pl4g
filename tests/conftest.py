@@ -38,7 +38,11 @@ ARCH_TOOLS: dict[str, dict[str, str]] = {
     "aarch64": {"objdump": "/usr/bin/aarch64-linux-gnu-objdump", "machine": "aarch64",
                 "qemu": "qemu-aarch64", "flavour": ""},
     "riscv64": {"objdump": "/usr/bin/riscv64-linux-gnu-objdump", "machine": "riscv:rv64",
-                "qemu": "qemu-riscv64", "flavour": ""},
+                "qemu": "qemu-riscv64", "flavour": "",
+                # This architecture puts what an image was built for in a
+                # section of its own, and reading one back wants the reader
+                # that knows the format.
+                "readelf": "/usr/bin/riscv64-linux-gnu-readelf"},
 }
 
 HOST_ARCH = platform.machine()

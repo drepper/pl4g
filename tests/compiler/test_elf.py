@@ -189,8 +189,12 @@ def test_sections_and_symbols_are_present(built: Built) -> None:
     The function appears under its mangled name, which is readable as it stands:
     a symbol table listing shows the signature without a demangler.
     """
+    # RISC-V images carry one more: what the program was built for, which that
+    # architecture has to say in the file because its base is small and
+    # everything else is an extension.
+    extra = [".riscv.attributes"] if built.arch == "riscv64" else []
     assert [s.name for s in built.image.sections] == \
-        ["", ".text", ".shstrtab", ".symtab", ".strtab"]
+        ["", ".text", *extra, ".shstrtab", ".symtab", ".strtab"]
     start = built.image.symbol("_start")
     main = built.image.symbol(MAIN)
     assert start is not None and main is not None
@@ -267,8 +271,16 @@ def test_disassembles_to_the_expected_code(built: Built) -> None:
 
 
 def test_the_image_is_small(built: Built) -> None:
-    """Generating small code is a stated priority; this notices a regression."""
-    assert built.path.stat().st_size < 1024
+    """Generating small code is a stated priority; this notices a regression.
+
+    What a RISC-V image says about what it was built for is left out of the
+    count.  It is as long as the normalized ISA string is, it is not code, and
+    nothing about the code generator moves it -- so counting it here would make
+    a number about the program into a number about the default profile.
+    """
+    said = sum(s.sh_size for s in built.image.sections
+               if s.name == ".riscv.attributes")
+    assert built.path.stat().st_size - said < 1024
 
 
 def test_asking_the_processor_is_what_a_level_costs(tmp_path: Path) -> None:

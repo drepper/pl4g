@@ -414,10 +414,18 @@ class Assembler:
     # -- placement -------------------------------------------------------------
 
     def section(self, name: str, *, executable: bool = False, writable: bool = False,
-                alignment: int = 1) -> MCSection:
-        """Select the section subsequent emission goes into."""
+                alignment: int = 1, alloc: bool = True,
+                sh_type: int = 1) -> MCSection:
+        """Select the section subsequent emission goes into.
+
+        A section that is not `alloc` takes no room when the program runs: it is
+        in the file for whatever reads the file, which is what the build
+        attributes and the tables at the end of one are.
+        """
         section = self._streamer.get_section(name, executable=executable,
-                                             writable=writable, alignment=alignment)
+                                             writable=writable,
+                                             alignment=alignment, alloc=alloc,
+                                             sh_type=sh_type)
         self._streamer.switch_section(section)
         return section
 
