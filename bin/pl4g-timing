@@ -69,6 +69,8 @@ GROUPS: tuple[Group, ...] = (
            "character-values": "code points written eight ways, and both conversions",
            "string-walk": "a walk over every length a UTF-8 sequence has",
            "string-join": "four joins, and the arena they come out of",
+           "string-compare": "all six comparisons of strings, and the one walk behind them",
+           "character-compare": "all six comparisons of code points",
            "length-operator": "how many, asked of all five kinds of thing",
            "shape-operator": "shapes answered and shapes made, filled three ways",
            "extremum-operators": "the largest and smallest, asked of all seven kinds of thing",

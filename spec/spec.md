@@ -675,9 +675,44 @@ written as a statement is what someone writes who has spent years in a language 
 line that quietly does nothing.  The last statement of a body is the body's result, so a comparison there is the point of the
 line and is not reported.
 
-**Equality is defined on numbers and on truth values**; ordering is defined on numbers alone.  Two truth values can be the same or
-different, but neither comes before the other, so `ready < seen` is refused rather than given an answer by way of the
-representation.  Strings will be added to both when there are strings.
+**What each of the six is defined on:**
+
+| Type | Equality | Ordering |
+|---|---|---|
+| numbers | yes | yes |
+| `char` | yes | yes, by code point |
+| `str` | yes | yes, by code point, character by character |
+| truth values | yes | no |
+| an enumeration | yes | no |
+| a set or a dictionary | yes | no |
+
+Two truth values can be the same or different, but neither comes before the other, so `ready < seen` is refused rather than given
+an answer by way of the representation.  An enumeration's order is the order somebody happened to write the values in, and the
+language promises nothing about it.  Two collections are one collection or they are not; whether one is part of another is a
+question Python answers with `≤`, and here ordering asks which comes first, which neither does.
+
+**A `char` is ordered by its code point**, which is a real order and not one of the representation's making: Unicode numbers the
+code points, and every collation in the world starts from that numbering before it does anything else.
+
+**A `str` is ordered by its characters**, the first one that differs deciding, and a string that is a prefix of another comes
+first.
+
+```
+"abc" < "abd"                  ※ true: 'c' before 'd'
+"ab" < "abc"                   ※ true: a prefix comes first
+"a£" < "a€"                    ※ true: U+00A3 before U+20AC
+"" < "a"                       ※ true: a prefix of everything
+```
+
+**Nothing is decoded to answer it.**  UTF-8 was designed so that comparing the bytes of two strings gives the same answer as
+comparing the code points they stand for, so the ordering above is a walk of bytes -- which is both the definition and the
+implementation, and the cheapest thing either could have been.  That is what the encoding was *for*, and a language that decoded
+first would be paying to arrive at the same answer.
+
+This is an ordering of code points and not a collation.  `"Z" < "a"` and `"ä" > "z"`, because U+005A comes before U+0061 and
+U+00E4 after U+007A; which words come first in a dictionary is a question about a language and a locale, and it is not a question
+`<` can answer.  What `<` answers is a total order that is the same everywhere, which is what a program sorting or keying by
+strings needs.
 
 **The comparisons do not chain.**  `a < b < c` is refused, because a comparison answers with a truth value and a second one beside
 it would be comparing that answer with a number.  Where that is what was meant, parentheses say so: `(a < b) = ready` compares two
@@ -1081,7 +1116,7 @@ surrogate pairs reach and which every encoding has had to agree with since.  A n
 point; one written down is reported, and one worked out while the program runs stops the program.
 
 **It is not an integer type.**  Adding two of them is not a character and neither is a third of one, so the arithmetic is not
-defined on them.  The comparisons are: what the ordering means is the order Unicode numbered them in, which is a real order and
+defined on them.  All six comparisons are: what the ordering means is the order Unicode numbered them in, which is a real order and
 the one every collation in the world starts from before it does anything else.  That is the difference from an enumeration, whose
 order is the order somebody happened to write the values in and which therefore answers equality and nothing more.
 
@@ -1137,6 +1172,21 @@ bytes it is and a turn moves it on by however many that character took.
 **There is no index and no length.**  The *n*-th byte of UTF-8 is not the *n*-th character, so an index whose obvious reading is
 wrong is worse than no index; a walk is what a string offers, and it reaches the characters in order because that is the order
 they are encoded in.
+
+**All six comparisons are defined on strings**, and the order is the order the code points are in -- the first character that
+differs deciding, and a string that is a prefix of another coming first.
+
+```
+"abc" < "abd"                    ※ true
+"ab" ≤ "abc"                      ※ true: a prefix comes first
+```
+
+**Nothing is decoded to answer one.**  UTF-8 was designed so that comparing the bytes of two strings gives the same answer as
+comparing the code points they stand for, so the comparison is a walk of bytes and not a walk of characters.  A string that
+carried its characters in four bytes apiece would compare no faster; it is the encoding that makes this cheap.
+
+It is an ordering of code points and not a collation, which is a question about a language and a locale and not one `<` can
+answer.  See [Comparisons](#comparisons).
 
 **`⧺` joins two strings**, as it joins two arrays.
 

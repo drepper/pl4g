@@ -3827,6 +3827,45 @@ always" because its arrays say their shape.
 
 ---
 
+## 2026-09-15T18:40+02:00 — language
+
+**Characters and strings compare, and strings compare by their bytes**
+
+Decided on the user's direction: all six comparisons are defined on `char` and on `str`, and a string comparison reads the bytes
+without decoding them.
+
+**The bytes are the definition and not an optimization.**  UTF-8 was designed so that the byte order and the code-point order are
+the same order -- a longer sequence begins with a higher leading byte than any shorter one, and within a length the bits of the
+code point go in in order -- so "compare the code points" and "compare the bytes" are two descriptions of one answer.  Writing
+the specification in terms of code points and the implementation in terms of bytes would have been a claim to check; writing both
+and saying they agree is what the encoding is *for*.  It is why UTF-8 won, and it is worth saying out loud in a language that
+stores text only that way.
+
+**A prefix comes first**, which decides what two strings that agree as far as the shorter one goes do.  It is what every ordering
+of strings anyone uses says, and it is the only answer that makes the order total.
+
+**It is an ordering of code points and not a collation.**  `"Z" < "a"`, and `"ä" > "z"`.  Which words come first in a
+dictionary is a question about a language and a locale; it wants tables, it wants to know which language, and its answer changes
+between releases of those tables.  A `<` that quietly did that would be an operator whose answer depends on where the program
+runs, which is the one thing no operator here does.  What `<` gives instead is a total order that is the same everywhere, which
+is what sorting and keying actually need.
+
+**The equal pair goes through the same walk as the other four.**  Checking the lengths first would answer without reading a byte
+where they differ -- but the walk answers on the first byte that differs, and two strings meant to be different nearly always
+differ early.  What the check would save is the case where one string is a prefix of the other, which is the case the walk has to
+do anyway.  One loop in the image for all six was worth more than a branch saved in a case that is rare.
+
+Compare: **Rust**, whose `Ord for str` is this exactly, byte order stated as the definition and `cmp` documented as *not* a
+collation; **Go**, the same, with `<` on `string` comparing bytes; **C**, whose `strcmp` is this and whose sign is likewise
+unspecified in magnitude -- and whose `strcoll` is the collation kept deliberately separate, which is the split this follows;
+**Python**, which compares by code point rather than by byte and so answers the same for any well-formed text, at the cost of
+choosing between four bytes a character and three representations; **Java** and **JavaScript**, which compare UTF-16 code units
+and therefore put U+E000..U+FFFF *before* the astral planes, an order that is neither the code points' nor any collation's and
+that UTF-8 cannot produce; and **Swift**, whose `<` on `String` compares grapheme clusters after normalisation, which is the
+other end of the range and is a much larger promise to keep.
+
+---
+
 Open questions
 --------------
 

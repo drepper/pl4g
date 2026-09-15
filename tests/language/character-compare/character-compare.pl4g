@@ -1,0 +1,31 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ All six comparisons are asked of characters, and the answer is the order the
+※ code points are in.  A `char` is held as a `u32` and its value is the code
+※ point, so each comparison is the one instruction the same comparison of two
+※ unsigned numbers is: Unicode numbers the code points, and every collation in
+※ the world starts from that numbering before it does anything else.
+
+@[startup, impure]
+fn main() → u8:
+    let a: char = 'a'
+    let b: char = 'b'
+    let pound: char = '£'
+    let euro: char = '€'
+    let far: char = '\U00010000'
+    let last: char = '\U0010FFFF'
+    if ¬(a < b) ∨ ¬(b > a) ∨ a = b ∨ ¬(a ≠ b):
+        1u8
+    elif ¬(a ≤ a) ∨ ¬(a ≥ a) ∨ ¬(a = a) ∨ a ≠ a:
+        2u8
+    ※ the order is the numbering, across every width the encoding has
+    elif ¬(a < pound) ∨ ¬(pound < euro) ∨ ¬(euro < far) ∨ ¬(far < last):
+        3u8
+    ※ and it agrees with what the numbers say
+    elif ¬(⎕ord(euro) < ⎕ord(far)):
+        4u8
+    ※ a character taken out of a string is compared like any other
+    elif ¬(⌊"bca" = a) ∨ ¬(⌈"bca" < far):
+        5u8
+    else:
+        0u8

@@ -362,6 +362,14 @@ To Do List for the pypl4g compiler
     treatment joining two arrays got: the elements are already a run whose length is written down, so what is missing is the
     entry in each target's `Vectors` table and a reduction over the lanes at the end.
 
+[ ] answer `\N{LEFT CEILING}` and `\N{LEFT FLOOR}` over strings.  Strings are ordered now, so the largest of a list of them is a
+    question with an answer, and it is refused (4506): the fold is one of four instructions chosen by the type, and a string's
+    comparison is a call.  What it wants is the walk carrying which of the two it has seen rather than the larger of them, which
+    is the same shape and a different body.
+
+[ ] fold a comparison of two strings written down.  `"a" < "b"` reaches the code generator as a call, where the same comparison
+    of two numbers is folded away.  Both sides are bytes the compiler put in the image, so there is nothing to wait for.
+
 [ ] answer `\N{LEFT CEILING}` and `\N{LEFT FLOOR}` for an array of more than one dimension whose type does not say its shape.  Refused
     today (8501): the answer is a row, and how long a row is, is not known until the program runs, so the room for it has to be
     taken while it runs and the walk has to be two loops rather than one written out.  It is the same piece of work walking such

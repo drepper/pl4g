@@ -35,7 +35,7 @@ from ..ir.builder import IRBuilder
 from ..ir.function import FuncAttrs, Function, Linkage
 from ..ir.inst import BinOp, CastKind, CmpPred
 from ..ir.module import Module
-from ..ir.types import ARENA, CHAR, MEM, PtrType, Type, U8, U32, U64
+from ..ir.types import ARENA, CHAR, I64, MEM, PtrType, Type, U8, U32, U64
 from ..ir.value import Value
 from .tables import ALLOC_SYMBOL
 
@@ -45,6 +45,7 @@ from .tables import ALLOC_SYMBOL
 NEXT_SYMBOL: Final[str] = "__pl4g_str_next"
 JOIN_SYMBOL: Final[str] = "__pl4g_str_join"
 LENGTH_SYMBOL: Final[str] = "__pl4g_str_length"
+COMPARE_SYMBOL: Final[str] = "__pl4g_str_compare"
 
 #: What the leading byte of a sequence says.  The first number is the value the
 #: byte must be below for the row to apply, the second how many bits of the code
@@ -118,6 +119,87 @@ def length_function(module: Module) -> Function:
     if fresh:
         _build_length(module, func)
     return func
+
+
+def compare_function(module: Module) -> Function:
+    """The one that says which of two strings comes first, built on first ask."""
+    func, fresh = _generated(
+        module, COMPARE_SYMBOL,
+        (bytes_type(module), U64, bytes_type(module), U64), I64, impure=False)
+    if fresh:
+        _build_compare(module, func)
+    return func
+
+
+def _build_compare(module: Module, func: Function) -> None:
+    """Build the one that says which of two strings comes first.
+
+    **Nothing is decoded.**  UTF-8 was designed so that comparing the bytes of
+    two strings gives the same answer as comparing the code points they stand
+    for -- a longer sequence begins with a higher leading byte than any shorter
+    one, and within a length the bits of the code point go in in order.  So the
+    comparison is a walk of bytes, which is what makes it the same loop C's
+    `memcmp` is and not the one `foreach` is.
+
+    Two strings that agree as far as the shorter one goes are ordered by their
+    lengths, which is what makes `"ab"` come before `"abc"` -- the shorter is a
+    prefix, and a prefix comes first.  Every ordering of strings anyone uses
+    says that, and it is the only answer that makes the order a total one.
+
+    What comes back is negative, zero or positive, and nothing about how far
+    from zero it is means anything.  The byte arm answers with the difference
+    because the two are already in registers; the length arm cannot, two lengths
+    being able to differ by more than a signed number holds, so it answers with
+    the two comparisons subtracted from each other, which is branch-free and
+    exactly as informative.
+    """
+    entry = func.add_block()
+    builder = IRBuilder(module, func)
+    builder.position_at(entry)
+    first = entry.add_param(bytes_type(module), "first")
+    first_len = entry.add_param(U64, "first.length")
+    second = entry.add_param(bytes_type(module), "second")
+    second_len = entry.add_param(U64, "second.length")
+    # As far as both go, which is where the bytes can be compared at all.
+    limit = builder.binary(BinOp.UMIN, first_len, second_len)
+    header = builder.new_block("comparing")
+    body = builder.new_block("compare")
+    differ = builder.new_block("differ")
+    ended = builder.new_block("alike")
+    builder.br(header, (builder.int_const(U64, 0),))
+    builder.position_at(header)
+    at = header.add_param(U64, "at")
+    builder.condbr(builder.compare(CmpPred.ULT, at, limit), body, ended)
+    builder.position_at(body)
+    here = _signed_byte_at(builder, first, at)
+    there = _signed_byte_at(builder, second, at)
+    again = builder.new_block("next")
+    builder.condbr(builder.compare(CmpPred.EQ, here, there), again, differ)
+    builder.position_at(again)
+    builder.br(header, (builder.binary(BinOp.WRAP_ADD, at,
+                                       builder.int_const(U64, 1)),))
+    builder.position_at(differ)
+    builder.ret(builder.binary(BinOp.WRAP_SUB, here, there))
+    builder.position_at(ended)
+    builder.ret(_which_way(builder, first_len, second_len))
+
+
+def _which_way(builder: IRBuilder, left: Value, right: Value) -> Value:
+    """Which of two counts is the greater, as a negative, zero or positive
+    number, without a branch and without a subtraction that could go past."""
+    return builder.binary(
+        BinOp.WRAP_SUB,
+        builder.cast(CastKind.ZEXT,
+                     builder.compare(CmpPred.UGT, left, right), I64),
+        builder.cast(CastKind.ZEXT,
+                     builder.compare(CmpPred.ULT, left, right), I64))
+
+
+def _signed_byte_at(builder: IRBuilder, bytes_: Value, at: Value) -> Value:
+    """The byte at an offset, widened into a signed word so that the difference
+    of two of them is the answer the comparison wants."""
+    place = builder.binary(BinOp.ADD, bytes_, at)
+    return builder.cast(CastKind.ZEXT, builder.load(place), I64)
 
 
 def _build_length(module: Module, func: Function) -> None:

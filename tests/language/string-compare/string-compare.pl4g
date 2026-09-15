@@ -1,0 +1,50 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ All six comparisons are asked of strings, and the answer is the order the
+※ code points are in.  Nothing is decoded to find it: UTF-8 was designed so
+※ that comparing the bytes of two strings answers what comparing the code
+※ points they stand for would, so the whole of the ordering is a walk of bytes
+※ -- the loop `memcmp` is and not the one `foreach` is.
+※
+※ Two strings that agree as far as the shorter one goes are ordered by their
+※ lengths, so a prefix comes first.  That is what every ordering of strings
+※ anyone uses says, and it is the only answer that makes the order a total one.
+
+@[startup, impure]
+fn main() → u8:
+    let a: str = "abc"
+    let b: str = "abd"
+    let c: str = "ab"
+    let d: str = "abc"
+    let pound: str = "a£"
+    let euro: str = "a€"
+    let far: str = "a\U00010000"
+    let empty: str = ""
+    if ¬(a < b) ∨ ¬(b > a) ∨ a = b ∨ ¬(a ≠ b):
+        1u8
+    ※ a prefix comes first
+    elif ¬(c < a) ∨ ¬(a > c) ∨ ¬(c ≤ a) ∨ ¬(a ≥ c):
+        2u8
+    ※ two that say the same thing are the one string
+    elif ¬(a = d) ∨ a ≠ d ∨ ¬(a ≤ d) ∨ ¬(a ≥ d) ∨ a < d ∨ a > d:
+        3u8
+    ※ the bytes sort as the code points do, which is the whole point of the
+    ※ encoding: U+00A3 before U+20AC before U+10000, in two, three and four
+    ※ bytes
+    elif ¬(pound < euro) ∨ ¬(euro < far) ∨ ¬(pound < far):
+        4u8
+    ※ a string with nothing in it comes before every other, being a prefix of
+    ※ all of them
+    elif ¬(empty < a) ∨ ¬(empty ≤ empty) ∨ empty ≠ "":
+        5u8
+    ※ a string made by joining is a string like any other
+    elif ¬(("ab" ⧺ "c") = a) ∨ ¬(a < "abc" ⧺ "d"):
+        6u8
+    ※ a literal stands on either side
+    elif ¬("abb" < a) ∨ ¬(a < "abd") ∨ ¬("abc" = a):
+        7u8
+    ※ and the answer is a truth value like any other
+    elif (a < b) ≠ true:
+        8u8
+    else:
+        0u8

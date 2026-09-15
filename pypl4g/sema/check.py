@@ -33,7 +33,7 @@ from ..ir.module import GlobalVar, Module
 from ..ir.types import (ARENA, ArrayType, BOOL, BoolType, BUILTIN_TYPES,
                         DictType,
                         ERROR, EnumType,
-                        U32, U64,
+                        I64, U32, U64,
                         F64,
                         FloatType, IntType, MEM, ProductType, ResultType,
                         ListType, SetType, STR, SumType, TupleType, Type,
@@ -4985,6 +4985,11 @@ class Checker:
             # this one quietly becoming approximate.
             self._diags.emit(D.LANG_TYPE_EXACT_FLOAT_COMPARISON, expr.span,
                              operator=expr.op.value, type=ty.render())
+        if ty is STR:
+            if not self._accepts(expected, BOOL):
+                self._report_mismatch(expr.span, BOOL, expected)
+                return UndefConst(ERROR)
+            return self._compared_text(builder, expr, left, right)
         signed, unsigned = _COMPARISONS[expr.op]
         # A truth value is one or zero, so where it is ordered at all it is
         # ordered as an unsigned number; a floating-point value is ordered the
@@ -4997,6 +5002,35 @@ class Checker:
             return UndefConst(ERROR)
         return builder.compare(signed if signed_reading else unsigned,
                                left, right, expr.span)
+
+    def _compared_text(self, builder: IRBuilder, expr: ast.Binary, left: Value,
+                       right: Value) -> Value:
+        """Lower a comparison of two strings.
+
+        **No decoding.**  UTF-8 was designed so that comparing the bytes of two
+        strings answers what comparing the code points they stand for would, so
+        the whole of the ordering is a walk of bytes -- the loop `memcmp` is and
+        not the one `foreach` is.  Every one of the six goes through it, and
+        each is what it always was, asked of which of the two came first rather
+        than of the strings.
+
+        The equal pair could be cheaper: two strings of different lengths are
+        different strings, so a comparison of the two counts would answer
+        without reading a byte.  It is not done, because the walk answers on the
+        first byte that differs and two strings that are meant to be different
+        nearly always differ early -- the case the check would save is two
+        strings where one is a prefix of the other, which is the case the walk
+        has to do anyway to know that it is.
+        """
+        which = builder.call(
+            strings.compare_function(self._module),
+            (builder.extract(left, 0, parts_of(STR)[0], expr.span),
+             builder.extract(left, 1, U64, expr.span),
+             builder.extract(right, 0, parts_of(STR)[0], expr.span),
+             builder.extract(right, 1, U64, expr.span)),
+            I64, expr.span)
+        return builder.compare(_COMPARISONS[expr.op][0], which,
+                               builder.int_const(I64, 0), expr.span)
 
     def _lower_approximate(self, builder: IRBuilder, expr: ast.Binary,
                            expected: Type | None) -> Value:
@@ -5346,6 +5380,13 @@ class Checker:
             # numbering before it does anything else.  So both questions are
             # asked of them, unlike an enumeration, whose order is the order
             # somebody happened to write the values in.
+            return ty
+        if ty is STR:
+            # Text is ordered, and the order is the one the bytes are already
+            # in: UTF-8 was built so that comparing the bytes of two strings
+            # gives the same answer as comparing the code points they stand
+            # for.  So the ordering is a real one and is the cheap one, which
+            # is not a coincidence -- it is what the encoding was designed for.
             return ty
         if isinstance(ty, (SetType, DictType)) and op not in _ORDERINGS:
             # Two collections are one collection or they are not.  Whether one

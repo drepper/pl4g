@@ -479,6 +479,24 @@ the same width, so the conversion is a bitcast -- which the verifier now allows 
 type it is held as, beside the addresses it already allowed.  `⎕chr` puts a check in front of it and `⎕ord` does not, and a code
 point written down is settled while compiling either way.
 
+**Comparing two strings is a third generated function, and it is `memcmp`.**  UTF-8 orders by bytes exactly as it orders by
+code points, so the comparison neither decodes nor needs to know where a character begins: it walks to the shorter of the two
+lengths comparing bytes, answers with the difference at the first that differs, and answers by the lengths where it runs out.
+All six operators go through it, each asked of which of the two came first rather than of the strings, so there is one loop in
+the image however many ways a program compares.
+
+What it answers is negative, zero or positive, and how far from zero means nothing.  The byte arm answers with the difference of
+the two bytes, which cannot go past a signed word, the bytes being in one already.  The length arm cannot do that -- two lengths
+can differ by more than a signed word holds -- so it answers with one comparison subtracted from the other, which is branch-free
+and says exactly as much.
+
+The equal pair could skip the walk where the lengths differ, and does not.  The walk answers on the first byte that differs, and
+two strings meant to be different nearly always differ early; the case a length check would save is the one where one string is a
+prefix of the other, which is the case the walk has to do anyway to find out that it is.
+
+A `char` needed nothing: it is held as a `u32` and its value is the code point, so each of the six is the instruction the same
+comparison of two unsigned numbers is.
+
 **Joining two arrays is two reads and two writes, and both are runs.**  `a ⧺ b` takes room for the answer where it stands and
 copies each side into its part of it -- and it asks for each copy as one value of as many lanes as that side has elements, which
 is the same shape an operator over a whole run asks for.  So the step in each backend that cuts a run into pieces cuts these too,
