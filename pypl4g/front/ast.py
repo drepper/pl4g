@@ -93,6 +93,11 @@ class TypeRef(Node):
     #: The name of the error type, where one was written.  Nothing means the
     #: error carries no value beyond the fact that there is one.
     error: str | None = None
+    #: What a value of it counts, written between the name and the mark that
+    #: makes it a result.  It belongs to the answer and not to the result, and
+    #: is written where it belongs: `u8 \N{CURRENCY SIGN}meter?E` is a result whose answer is
+    #: a length.
+    unit: UnitRef | None = None
 
 
 @dataclass(frozen=True, slots=True)

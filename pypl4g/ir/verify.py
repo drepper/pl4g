@@ -489,10 +489,18 @@ def _is_an_address(ty: Type) -> bool:
 
 
 def _held_as(one: Type, other: Type) -> bool:
-    """Whether one of these is a code point and the other the number it is held
-    as, which is the one pair whose bits are the same bits."""
-    return (isinstance(one, CharType) and other is one.holder) \
-        or (isinstance(other, CharType) and one is other.holder)
+    """Whether one of these is held as the other, which is where the bits are
+    the same bits.
+
+    A code point and the number it is held as, and a value of an enumeration
+    and the number it is held as.  Both are a number in a register whatever the
+    language says they mean -- which is what the widenings above already say of
+    an enumeration, asked here of reading one as the other rather than of making
+    one wider.  That an enumeration holds only its own values is the checker's
+    to keep; nothing structural about an instruction can say it.
+    """
+    return (isinstance(one, (CharType, EnumType)) and other is one.holder) \
+        or (isinstance(other, (CharType, EnumType)) and one is other.holder)
 
 
 def _counts(ty: Type) -> bool:

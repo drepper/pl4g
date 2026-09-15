@@ -795,6 +795,25 @@ ARENA: Final[ProductType] = ProductType(
 UNSIGNED_WIDTHS: Final[tuple[int, ...]] = (*range(1, 33), 64)
 SIGNED_WIDTHS: Final[tuple[int, ...]] = (*range(2, 33), 64)
 
+#: What went wrong when a value would not fit the type it was being narrowed
+#: to.  It is the compiler's rather than a program's because `\N{APL FUNCTIONAL SYMBOL QUAD}narrow` answers
+#: with it and every program that narrows anything needs the same three names:
+#: a condition each program spelled for itself would be three spellings of one
+#: thing, and a `match` over one would not carry from one file to the next.
+#:
+#: **Overflow is first, and so is numbered nought**, which is what makes it the
+#: condition a failure reports where neither of the others holds -- above the
+#: top of the type is the ordinary way not to fit.  `sign` is the case of
+#: underflow the language can say more about: a negative number put where an
+#: unsigned type wants one is not merely below the bottom, it is of the wrong
+#: kind, and a reader told "sign" knows which mistake was made.
+NARROWING_NAME: Final[str] = "\N{APL FUNCTIONAL SYMBOL QUAD}narrowing"
+
+NARROWING: Final[EnumType] = EnumType(
+    members=("overflow", "underflow", "sign"), values=(0, 1, 2),
+    holder=IntType(8, False), name=NARROWING_NAME)
+
+
 BUILTIN_TYPES: Final[dict[str, Type]] = {
     **{"".join(("u", str(bits))): IntType(bits, False)
        for bits in UNSIGNED_WIDTHS},
@@ -802,6 +821,7 @@ BUILTIN_TYPES: Final[dict[str, Type]] = {
     "f32": F32, "f64": F64,
     "bool": BOOL, "char": CHAR, "str": STR, "void": VOID,
     ARENA_NAME: ARENA,
+    NARROWING_NAME: NARROWING,
 }
 
 

@@ -16,7 +16,7 @@ from ..diag import ids as D
 from ..diag.engine import DiagEngine, Expectation
 from ..front import ast
 from ..front.token import (BOTTOM_GLYPH, BUILTIN_GLYPH, CHR_NAME,
-                           DROP_NAME, UNIT_NAME,
+                           DROP_NAME, NARROW_NAME, UNIT_NAME,
                           ENUMERATE_NAME, TYPEOF_NAME,
                           EMPTY_ARENA_NAME, ORD_NAME,
                           WRAP_NAME,
@@ -40,12 +40,14 @@ from ..ir.types import (ARENA, ArrayType, BOOL, BoolType, BUILTIN_TYPES,
                         FloatType, IntType, MEM, ProductType, PtrType,
                         ResultType,
                         ListType, SetType, STR, SumType, TupleType, Type,
-                        NO_UNIT, Unit, VecType, VOID, without_units,
+                        NARROWING, NO_UNIT, Unit, VecType, VOID,
+                        without_units,
                         CHAR, MAX_CODE_POINT, U8, parts_of)
 from . import strings, tables
 from .modules import (ImportCycle, LoadedModule, ModuleNotFound, ModuleRegistry,
                       base_name)
-from ..ir.value import (CharConst, Const, EnumConst, FloatConst, IntConst,
+from ..ir.value import (BoolConst, CharConst, Const, EnumConst, FloatConst,
+                        IntConst,
                         UndefConst,
                         Value)
 from pathlib import Path
@@ -1149,6 +1151,13 @@ class Checker:
             self._diags.emit(D.LANG_IMPORT_NOT_A_MODULE, expr.span,
                              name="an expression")
             return UndefConst(ERROR)
+        provided = BUILTIN_TYPES.get(base.name)
+        if isinstance(provided, EnumType):
+            # An enumeration the compiler provides.  Its values are written the
+            # way every other enumeration's are, which is the point of making it
+            # one: what `\N{APL FUNCTIONAL SYMBOL QUAD}narrow` failed for is matched and compared like anything
+            # else a program defined for itself.
+            return self._value_of_enum(provided, expr)
         held = self._top.get(base.name)
         if isinstance(held, _NamedType):
             return self._enum_value(held, expr)
@@ -1169,7 +1178,10 @@ class Checker:
 
     def _enum_value(self, defined: _NamedType, expr: ast.Member) -> Value:
         """The value of an enumeration written as `TYPE.NAME`."""
-        ty = self._resolved(defined)
+        return self._value_of_enum(self._resolved(defined), expr)
+
+    def _value_of_enum(self, ty: Type, expr: ast.Member) -> Value:
+        """The value *expr* names of the enumeration *ty*."""
         if ty is ERROR:
             return UndefConst(ERROR)
         if not isinstance(ty, EnumType):
@@ -2315,6 +2327,15 @@ class Checker:
             return ERROR
         if found is ERROR:
             return ERROR
+        if ref.unit is not None:
+            written = self._unit_written(ref.unit)
+            if written is None:
+                return ERROR
+            if not isinstance(found, (IntType, FloatType)):
+                self._diags.emit(D.LANG_UNIT_NOT_A_NUMBER, ref.span,
+                                 found=found.render())
+                return ERROR
+            found = _carrying(found, written)
         if not ref.result:
             return found
         if found is VOID:
@@ -2326,7 +2347,7 @@ class Checker:
         # answer is: the same lookup, and the same report where the name is not
         # one.
         carried = self._resolve_type(
-            replace(ref, name=ref.error, result=False, error=None))
+            replace(ref, name=ref.error, result=False, error=None, unit=None))
         if carried is ERROR:
             return ERROR
         if carried is VOID:
@@ -8245,6 +8266,9 @@ class Checker:
                 and expr.callee.name in (DROP_NAME, UNIT_NAME):
             return self._lower_unit_call(builder, expr, expected)
         if isinstance(expr.callee, ast.NameRef) \
+                and expr.callee.name == NARROW_NAME:
+            return self._lower_narrow(builder, expr, expected)
+        if isinstance(expr.callee, ast.NameRef) \
                 and expr.callee.name == TYPEOF_NAME:
             # Reaching here means it stood somewhere a value was wanted, since
             # a condition the compiler settles never lowers what is in it.
@@ -8473,6 +8497,147 @@ class Checker:
             case _:
                 self._diags.emit(D.LANG_SYNTAX_EXPECTED_UNIT, expr.span)
                 return None
+
+    def _lower_narrow(self, builder: IRBuilder, expr: ast.Call,
+                      expected: Type | None) -> Value:
+        """Lower `\N{APL FUNCTIONAL SYMBOL QUAD}narrow(EXPR, \N{TOP LEFT CORNER}TYPE\N{TOP RIGHT CORNER})`: a value of a narrower type, or why not.
+
+        Nothing in this language widens or narrows on its own, so a value that
+        is to become one of another type is written as becoming one -- and the
+        question that makes narrowing different from widening is that it can
+        fail.  So what it answers with is a result: the value where it fits, and
+        which way it did not where it does not.
+
+        **What went wrong is worth more than the fact that something did.**  The
+        error carries a value saying whether the number was above the top of the
+        type, below the bottom of it, or negative where the type has no negative
+        values at all -- which is a case of being below the bottom that the
+        language can say more about, a reader told "sign" knowing which mistake
+        was made.
+
+        The unit stays.  Narrowing a length gives a length: what changes is how
+        much room the number has, and a unit says nothing about that.
+        """
+        if len(expr.args) != 2:
+            self._diags.emit(D.LANG_UNIT_TAKES_TWO, expr.span, name=NARROW_NAME,
+                             wanted=2, found=len(expr.args))
+            return UndefConst(ERROR)
+        written = expr.args[1]
+        if not isinstance(written, ast.Lifted):
+            self._diags.emit(D.LANG_NARROW_NOT_A_TYPE, written.span)
+            return UndefConst(ERROR)
+        wanted = self._lifted_type(written)
+        if wanted is None:
+            self._diags.emit(D.LANG_NARROW_NOT_A_TYPE, written.span)
+            return UndefConst(ERROR)
+        if not isinstance(wanted, IntType):
+            self._diags.emit(D.LANG_NARROW_NOT_AN_INTEGER, written.span,
+                             found=wanted.render())
+            return UndefConst(ERROR)
+        given = self._lower_expr(builder, expr.args[0], None)
+        found = self._value_type_of(given)
+        if found is ERROR:
+            return UndefConst(ERROR)
+        if not isinstance(found, IntType):
+            self._diags.emit(D.LANG_NARROW_NOT_AN_INTEGER, expr.args[0].span,
+                             found=found.render())
+            return UndefConst(ERROR)
+        # What it counts is its own and travels with it; what the type says is
+        # how much room the number has.
+        into = _carrying(wanted, found.unit)
+        answer = self._module.types.result_type(into, NARROWING)
+        value, failed, why = self._fitted(builder, given, found, into, expr.span)
+        made = builder.wrap(value, failed, answer, expr.span, why)
+        if not self._accepts(expected, answer):
+            self._report_mismatch(expr.span, answer, expected)
+            return UndefConst(ERROR)
+        return made
+
+    def _fitted(self, builder: IRBuilder, given: Value, found: IntType,
+                into: IntType, span: Span) -> tuple[Value, Value, Value]:
+        """The value as the narrower type, whether it fits, and why it does not.
+
+        Each of the three conditions is asked only where it *can* hold: a type
+        whose every value the other one has cannot overflow into it, and a
+        source with no negative values cannot be negative.  So the comparisons
+        that are settled by the two types are settled here and none of them
+        reaches the program -- which is what makes narrowing to a wider type
+        cost nothing at all.
+
+        The conditions are exclusive by construction, so which one it was is
+        their numbers added up rather than a choice between them: `sign` is
+        asked only where the type has no negative values and `underflow` only
+        where it has, and `overflow` is nought, which is what makes it the one a
+        failure reports where neither of the others holds.
+        """
+        signed = found.signed
+        above = CmpPred.SGT if signed else CmpPred.UGT
+        below = CmpPred.SLT if signed else CmpPred.ULT
+        no = builder.bool_const(False)
+
+        def past(pred: CmpPred, bound: int, possible: bool) -> Value:
+            """Whether the value is past *bound*, where it can be."""
+            return builder.compare(pred, given, builder.int_const(found, bound),
+                                   span) if possible else no
+
+        over = past(above, into.high, found.high > into.high)
+        # A negative number put where there are no negative values is the case
+        # of being below the bottom that has a name of its own; where the type
+        # does have negative values, below the bottom is all it is.
+        wrong_sign = past(below, 0, signed and not into.signed)
+        under = past(below, into.low, into.signed and found.low < into.low)
+        failed = self._either(builder, self._either(builder, over, under, span),
+                              wrong_sign, span)
+        why = self._reason(builder, under, wrong_sign, span)
+        return (self._as_wide(builder, given, found, into, span), failed, why)
+
+    def _either(self, builder: IRBuilder, one: Value, other: Value,
+                span: Span) -> Value:
+        """Whether either holds, with a condition that cannot hold dropped."""
+        if isinstance(one, BoolConst) and not one.value:
+            return other
+        if isinstance(other, BoolConst) and not other.value:
+            return one
+        return builder.binary(BinOp.OR, one, other, span)
+
+    def _reason(self, builder: IRBuilder, under: Value, wrong_sign: Value,
+                span: Span) -> Value:
+        """Which condition it was, as a value of the enumeration.
+
+        Overflow is nought, so it needs no term: where neither of the other two
+        holds the sum is nought and that is what it was.  Each of the others is
+        its own number times whether it holds, and at most one of them can.
+        """
+        made: Value | None = None
+        for at, held in ((1, under), (2, wrong_sign)):
+            if isinstance(held, BoolConst) and not held.value:
+                continue
+            one = builder.cast(CastKind.ZEXT, held, NARROWING.holder, span)
+            if at != 1:
+                one = builder.binary(BinOp.WRAP_MUL, one,
+                                     builder.int_const(NARROWING.holder, at), span)
+            made = one if made is None else builder.binary(BinOp.WRAP_ADD, made,
+                                                           one, span)
+        if made is None:
+            return self._module.enum_const(NARROWING, 0)
+        return builder.cast(CastKind.BITCAST, made, NARROWING, span)
+
+    def _as_wide(self, builder: IRBuilder, given: Value, found: IntType,
+                 into: IntType, span: Span) -> Value:
+        """*given* read as *into*, the value having been checked to fit it.
+
+        What decides the instruction is how much room each is held in and not
+        how many bits the type says: a `u5` and a `u8` are one byte apiece, so
+        there is nothing to cut off between them -- and the value is in range by
+        the time this is reached, so the bits above its own width are already
+        what they should be.
+        """
+        if into.held == found.held:
+            return builder.cast(CastKind.TRUNC, given, into, span)
+        if into.held < found.held:
+            return builder.cast(CastKind.TRUNC, given, into, span)
+        return builder.cast(CastKind.SEXT if found.signed else CastKind.ZEXT,
+                            given, into, span)
 
     def _scalar_of(self, ty: Type | None) -> Type | None:
         """What an array is an array of, however many dimensions deep.

@@ -218,7 +218,7 @@ module.exports = grammar({
     // unambiguous: a suffix after it would have two readings and no way to
     // choose.
     type: $ => choice(
-      seq($._plain_type, optional($.unit_suffix), repeat($._array_suffix)),
+      seq($._plain_type, repeat($._array_suffix)),
       seq('&', optional($.mutable), field('pointee', $.type)),
     ),
 
@@ -263,16 +263,22 @@ module.exports = grammar({
       seq(
         field('module', optional(seq($.identifier, '.'))),
         $.identifier,
+        // The unit comes before the mark that makes it a result, because it
+        // belongs to the answer: a result of a length is a result whose answer
+        // is a length, and there is nothing about a result for a unit to say.
+        optional($.unit_suffix),
         optional(seq('?', optional($.identifier))),
       ),
       // A collection is written the way a value of one is, so that a type and
       // a value of it look alike -- which a parameter list and a call do.
       seq('\u2e28', field('element', $.type),
-          optional(seq(':', field('value', $.type))), '\u2e29'),
+          optional(seq(':', field('value', $.type))), '\u2e29',
+          optional($.unit_suffix)),
       // And a tuple likewise.
-      seq('\u3008', sepBy1(',', field('member', $.type)), '\u3009'),
+      seq('\u3008', sepBy1(',', field('member', $.type)), '\u3009',
+          optional($.unit_suffix)),
       // And a list, whose type is written the way a value of one is.
-      seq('[', field('element', $.type), ']'),
+      seq('[', field('element', $.type), ']', optional($.unit_suffix)),
     ),
 
     // -- attributes --------------------------------------------------------

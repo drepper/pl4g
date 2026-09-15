@@ -4489,6 +4489,43 @@ What is done here is the smallest thing that gives the same answer for literals:
 says, and lower everything with it.  A general inference pass would subsume it and is not wanted -- this language does not infer,
 it reads.
 
+---
+
+## 2026-09-16T17:40+02:00 — language
+
+**`⎕narrow`, and the enumeration that says why a value would not fit**
+
+Decided on the user's direction.
+
+**What it answers with is a result whose error carries a reason.**  A narrowing that answered only "no" would be an optional,
+which is Swift's `init?(exactly:)` and throws away the one thing worth knowing; Rust's `TryFrom` carries a `TryFromIntError`
+that says nothing more than that it failed.  Three conditions is the smallest set that is useful, and the user named them:
+overflow, underflow, and sign.
+
+**`sign` is a case of underflow with a name**, as the user put it.  A negative number put where an unsigned type wants one is not
+merely below the bottom -- it is of the wrong kind, and it is the mistake a generator makes by losing track of signedness rather
+than by losing track of magnitude.  Telling the two apart costs nothing: where the target is unsigned the bottom is nought, so
+the comparison that finds the sign case is the comparison that would have found underflow.
+
+**The enumeration is builtin and global**, on the user's direction.  Every program that narrows anything needs the same three
+names, and a condition each program spelled for itself would be three spellings of one thing that no `match` could carry from one
+file to the next.  It is written `⎕narrowing`, with the sigil every compiler-provided name carries, so no program has to give up
+the name.
+
+**Overflow is numbered nought.**  That makes it what a failure reports where neither of the other two holds, which is right --
+above the top is the ordinary way not to fit -- and it is what lets the reason be worked out as a sum rather than as a choice,
+there being no select in this IR and no reason to branch for it.
+
+**Each condition is asked only where the two types make it possible**, so the comparisons a narrowing needs are decided while
+compiling.  Narrowing to a wider type costs nothing; `u32` to `u8` costs one comparison; and the alternative -- always three
+comparisons and a branch -- would have made the checked form expensive enough that a generator would avoid it, which is the one
+thing a safe narrowing must not be.
+
+Compare: **C**'s implicit conversions, silent and a category of defect on their own; **C++20**'s braced initialization, which
+refuses what it can see and says nothing about what it cannot; **Rust**'s `as` beside `TryFrom`; **Go**, silent; **Ada**, whose
+`Constraint_Error` says which subtype was violated at the price of exceptions; **Swift**'s failable initializer.  What is here is
+Rust's shape with Ada's amount of detail and neither's cost.
+
 Open questions
 --------------
 

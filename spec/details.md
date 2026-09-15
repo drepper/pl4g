@@ -1978,6 +1978,39 @@ is expected of them now is what an entry said, falling back to what the type say
 `let s: \u2e28u8\u2e29 = \u2e281, 2\u2e29` works, which it did not.
 
 
+Narrowing, and the conditions that cannot hold
+----------------------------------------------
+
+`_fitted` builds three truth values -- above the top, below the bottom, negative where there are no negative values -- and each
+is asked only where the two types make it possible.  `found.high > into.high` decides whether overflow can happen at all,
+`into.signed and found.low < into.low` whether underflow can, and `signed and not into.signed` whether the sign case can.  Where
+one cannot, the constant `false` goes in its place and `_either` drops it from the disjunction, so nothing about it reaches the
+program.  Narrowing to a wider type comes out as a `wrap` of a value with a constant `false` beside it, and `u32` to `u8` as one
+comparison.
+
+**Which condition it was is their numbers added up rather than a choice between them.**  There is no select instruction in this
+IR, and building blocks for a three-way choice would be a branch where none is needed: the conditions are exclusive by
+construction -- `sign` is asked only where the type has no negative values and `underflow` only where it has -- so
+`underflow\u00d71 + sign\u00d72` is the answer whenever one of them holds.  `overflow` is nought, which is what makes it what the sum
+comes to when neither holds, and it is also what the sum comes to where nothing failed at all; the error of a result that
+succeeded is never read, so that costs nothing.
+
+The value itself is read as the narrower type by width of the *holder* and not by the width the type states: a `u5` and a `u8`
+are one byte apiece, so there is nothing to cut off between them, and by the time the cast is reached the value is in range and
+the bits above its own width are already what they should be.
+
+Two things elsewhere had to give a little.  The verifier's `_held_as` now covers an enumeration and its holder as well as a code
+point and its holder -- reading the one as the other is the same idea the widenings already allowed, and that an enumeration
+holds only its own values is the checker's to keep rather than anything an instruction can say structurally.  And `_lower_member`
+looks in `BUILTIN_TYPES` before the file's own names, so `\N{APL FUNCTIONAL SYMBOL QUAD}narrowing.overflow` is written the way every other enumeration's
+values are.
+
+**A unit on a result had been unwritable**, which `\N{APL FUNCTIONAL SYMBOL QUAD}narrow` found: the mark that makes a type a result was read before the unit,
+so `u8 \N{CURRENCY SIGN}meter?E` did not parse and `u8?E \N{CURRENCY SIGN}meter` would have put the unit on the result rather than on its answer.  `TypeRef`
+now carries the unit and the parser reads it between the name and the mark, which is where it belongs -- a result of a length is
+a result whose answer is a length, and there is nothing about a result for a unit to say.
+
+
 Expectations
 ------------
 

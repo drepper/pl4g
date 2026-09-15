@@ -1,0 +1,13 @@
+※ pl4g-test: compile=error diag=4548
+
+※ Whether a value fits is a question about the ends of a type, and the types
+※ that have ends a value can fall outside are the whole numbers.  A
+※ floating-point number narrowed to a whole one is a different question -- it
+※ asks what is to be done with what is after the point -- and nothing in the
+※ language answers it yet.
+
+@[startup]
+fn main() → u6:
+    let x: f64 = 1.5
+    let n: u8?⎕narrowing = ⎕narrow(x, ⌜u8⌝)
+    0u6

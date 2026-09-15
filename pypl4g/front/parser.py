@@ -690,17 +690,22 @@ class Parser:
             self._advance()
             module = name_token.text
             name_token = self._expect(TokKind.IDENT, D.LANG_SYNTAX_EXPECTED_MEMBER)
+        # The unit comes before the mark because it belongs to the answer: a
+        # result of a length is a result whose answer is a length, and there is
+        # nothing about a result for a unit to say.
+        unit = self._parse_unit_ref() if self._check(TokKind.UNIT) else None
+        last_name = unit.span if unit is not None else name_token.span
         mark = self._accept(TokKind.QUESTION)
         if mark is None:
-            return ast.TypeRef(span=first.span.to(name_token.span),
-                               name=name_token.text, module=module)
+            return ast.TypeRef(span=first.span.to(last_name),
+                               name=name_token.text, module=module, unit=unit)
         error: str | None = None
         last = mark
         if self._check(TokKind.IDENT):
             last = self._advance()
             error = last.text
         return ast.TypeRef(span=first.span.to(last.span), name=name_token.text,
-                           module=module, result=True, error=error)
+                           module=module, result=True, error=error, unit=unit)
 
     #: Which kind of definition each separator makes.
     _TYPE_SEPARATORS: Final[dict[TokKind, ast.TypeKind]] = {

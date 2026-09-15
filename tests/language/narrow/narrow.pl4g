@@ -1,0 +1,127 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ `⎕narrow(EXPR, ⌜TYPE⌝)` makes a value of a narrower type out of one of a
+※ wider, and says so where it will not fit.  Nothing in this language widens or
+※ narrows on its own, so a value that is to become one of another type is
+※ written as becoming one -- and what makes narrowing different from widening
+※ is that it can fail, so what it answers with is a result.
+※
+※ **What went wrong is worth more than the fact that something did.**  The
+※ error carries a value of `⎕narrowing`, which is `overflow` above the top of
+※ the type, `underflow` below the bottom, and `sign` for a negative number put
+※ where the type has no negative values -- a case of being below the bottom
+※ that the language can say more about, a reader told "sign" knowing which
+※ mistake was made rather than only that one was.
+※
+※ The enumeration is the compiler's, because every program that narrows
+※ anything needs the same three names: three spellings of one condition would
+※ not carry from one file to the next, and a `match` over one would have to be
+※ written again in each.
+※
+※ **Each condition is asked only where it can hold.**  A type whose every value
+※ the other one has cannot be overflowed into, and a source with no negative
+※ values cannot be negative, so those comparisons are settled while compiling
+※ and none of them reaches the program -- which is what makes narrowing to a
+※ wider type cost nothing at all.
+※
+※ A unit stays: narrowing a length gives a length, what changes being how much
+※ room the number has and a unit saying nothing about that.
+
+@[startup, impure]
+fn main() → u6:
+    ※ it fits
+    if (⎕narrow(given(42u32), ⌜u8⌝) ?? 0u8) ≠ 42u8:
+        1u6
+    ※ above the top of the type
+    elif code(⎕narrow(given(300u32), ⌜u8⌝)) ≠ 0u8:
+        2u6
+    ※ below the bottom of it, where the type has a bottom below nought
+    elif signed(⎕narrow(negative(⁻200i32), ⌜i8⌝)) ≠ 1u8:
+        3u6
+    ※ and negative where the type has no negative values at all
+    elif code(⎕narrow(negative(⁻5i32), ⌜u8⌝)) ≠ 2u8:
+        4u6
+    ※ an unsigned number into a signed type of the same width, which overflows
+    elif signed32(⎕narrow(given(3000000000u32), ⌜i32⌝)) ≠ 0u8:
+        5u6
+    ※ a width no machine has, whose ends are the type's and not a register's
+    elif (⎕narrow(given(31u32), ⌜u5⌝) ?? 0u5) ≠ 31u5 ∨ five(⎕narrow(given(32u32), ⌜u5⌝)) ≠ 0u8:
+        6u6
+    ※ to a wider type, which cannot fail and is checked for nothing
+    elif (⎕narrow(given(7u32), ⌜u64⌝) ?? 0u64) ≠ 7u64:
+        7u6
+    ※ the unit travels with the number
+    elif ⎕drop(length() ?? 0) ≠ 9u8:
+        8u6
+    ※ and what it answers with is a result like any other, taken with `?`
+    elif passed(42u32) ≠ 42u8:
+        9u6
+    elif passed(300u32) ≠ 0u8:
+        10u6
+    else:
+        0u6
+
+※ A value the compiler cannot see, so that the checks are made while the
+※ program runs and not before it.
+@[impure]
+fn given(n: u32) → u32:
+    n
+
+@[impure]
+fn negative(n: i32) → i32:
+    n
+
+@[impure]
+fn length() → u8 ¤meter?⎕narrowing:
+    let far: u32 ¤meter = 9
+    ⎕narrow(far, ⌜u8⌝)
+
+※ Which condition it was, written the way a value of any enumeration is.
+fn code(of: u8?⎕narrowing) → u8:
+    match of:
+        u8:
+            9u8
+        ⊥(why):
+            which(why)
+
+fn signed(of: i8?⎕narrowing) → u8:
+    match of:
+        i8:
+            9u8
+        ⊥(why):
+            which(why)
+
+fn signed32(of: i32?⎕narrowing) → u8:
+    match of:
+        i32:
+            9u8
+        ⊥(why):
+            which(why)
+
+fn five(of: u5?⎕narrowing) → u8:
+    match of:
+        u5:
+            9u8
+        ⊥(why):
+            which(why)
+
+fn which(why: ⎕narrowing) → u8:
+    if why = ⎕narrowing.overflow:
+        0u8
+    elif why = ⎕narrowing.underflow:
+        1u8
+    else:
+        2u8
+
+※ Propagated with `?`, which is what a result is for: where it did not fit this
+※ leaves carrying the same reason it was given.
+fn passed(n: u32) → u8:
+    match narrowed(n):
+        u8:
+            42u8
+        ⊥(why):
+            which(why)
+
+fn narrowed(n: u32) → u8?⎕narrowing:
+    let small: u8 = ⎕narrow(n, ⌜u8⌝)?
+    small

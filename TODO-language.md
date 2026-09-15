@@ -577,6 +577,14 @@ Runtime
     several values or already a place, and what a reference to one would mean -- the place the value is, or the place the elements
     are -- is a question worth answering rather than guessing.
 
+[ ] report a narrowing that is written down and cannot fit.  `⎕narrow(300u32, ⌜u8⌝)` is a result that is always the error, and
+    both operands are written down -- which is exactly the shape a division by a written zero is warned about in.  What stops it
+    being the same warning is that a generator emitting a constant narrow is not obviously making a mistake.
+
+[ ] decide what narrowing a floating-point number to a whole one means (4548).  The three conditions are about the ends of a
+    type; what is after the point is a fourth question, and which way it goes -- towards zero, to nearest, refused -- is a
+    decision of its own beside the four roundings the language already has.
+
 [ ] decide what converts between two units that measure the same thing.  `unit mph = 1609344 ÷ 3600000 × meter ÷ second` records
     the scale and nothing applies it, so a speed in miles an hour reaches metres a second through `⎕drop` and `⎕unit` and keeps
     its number.  A conversion would generate code, which is the one thing units do not do today, so what has to be settled is

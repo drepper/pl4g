@@ -175,6 +175,7 @@ GROUPS: tuple[Group, ...] = (
            "references": "references made, read, written, rebound and handed to three calls",
            "units": "units made, derived, dropped, put on and used as an index",
            "one-element-says-the-type": "seven literals whose type one entry settles",
+           "narrow": "every way a value can fail to fit, and the ones that cannot",
            "type-reaches-itself-through-a-reference": "four definitions that reach themselves through references",
            "line-breaks-inside-brackets": "every kind of bracket written down the page",
            "loop-break-nested": "two loops and all four jumps between them",

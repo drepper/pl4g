@@ -445,6 +445,64 @@ these do but belong to templates rather than to calls; and Lisp's `apply`, which
 function rather than a syntax.  This is the compile-time half only: what is spread is a type that counts, so the expansion
 happens in the checker and the generated code shows no trace of it.
 
+#### Narrowing
+
+**`\N{APL FUNCTIONAL SYMBOL QUAD}narrow(EXPR, \N{TOP LEFT CORNER}TYPE\N{TOP RIGHT CORNER})` makes a value of a narrower type out of one of a wider**, and says so where it will not fit.
+
+```
+let n: u8?\N{APL FUNCTIONAL SYMBOL QUAD}narrowing = \N{APL FUNCTIONAL SYMBOL QUAD}narrow(count, \N{TOP LEFT CORNER}u8\N{TOP RIGHT CORNER})
+let small: u8 = n ?? 0u8
+```
+
+Nothing in this language widens or narrows on its own, so a value that is to become one of another type is written as becoming
+one.  What makes narrowing different from widening is that it can fail, so **what it answers with is a result**: the value where
+it fits, and why not where it does not.
+
+**The error carries which way it did not fit**, as a value of `\N{APL FUNCTIONAL SYMBOL QUAD}narrowing`, an enumeration the compiler provides:
+
+| value | when |
+| --- | --- |
+| `overflow` | the number is above the top of the type |
+| `underflow` | it is below the bottom of the type |
+| `sign` | it is negative and the type has no negative values |
+
+`sign` is the case of underflow the language can say more about.  A negative number put where an unsigned type wants one is not
+merely below the bottom: it is of the wrong kind, and a reader told "sign" knows which mistake was made rather than only that one
+was.  `overflow` is numbered nought, which makes it the condition a failure reports where neither of the others holds -- above
+the top is the ordinary way not to fit.
+
+The enumeration is the compiler's rather than each program's because every program that narrows anything needs the same three
+names: three spellings of one condition would not carry from one file to the next, and a `match` over one would have to be
+written again in each.  Its values are written and matched the way any enumeration's are.
+
+**The type is lifted** (4547).  A type is not a value, so it is written between `\N{TOP LEFT CORNER}` and `\N{TOP RIGHT CORNER}` as it is everywhere the compiler is
+asked about one; without the marks a type's name and a value's name are both identifiers and which was meant would depend on what
+the name turned out to be.
+
+**Both types are whole numbers** (4548).  Whether a value fits is a question about the ends of a type, and those are the types
+with ends a value can fall outside.  A floating-point number narrowed to a whole one asks what is to be done with what is after
+the point, which is a different question and not one the language answers yet.
+
+**Each condition is asked only where it can hold.**  A type whose every value the other one has cannot be overflowed into, and a
+source with no negative values cannot be negative -- so those comparisons are settled by the two types while compiling and none
+of them reaches the program.  Narrowing to a wider type therefore costs nothing at all, and narrowing `u32` to `u8` costs one
+comparison.
+
+**A unit stays.**  Narrowing a length gives a length: what changes is how much room the number has, and a unit says nothing about
+that.  The unit is written where it belongs, before the mark that makes the type a result:
+
+```
+fn shorter(far: u32 \N{CURRENCY SIGN}meter) \N{RIGHTWARDS ARROW} u8 \N{CURRENCY SIGN}meter?\N{APL FUNCTIONAL SYMBOL QUAD}narrowing:
+    \N{APL FUNCTIONAL SYMBOL QUAD}narrow(far, \N{TOP LEFT CORNER}u8\N{TOP RIGHT CORNER})
+```
+
+Compare: **C**'s implicit conversions, which narrow silently and are the source of an entire category of defect; **C++20**'s
+`{}` initialization, which refuses a narrowing the compiler can see will not fit and says nothing about one it cannot;
+**Rust**'s `as`, which truncates silently, beside `TryFrom`, which answers a `Result<T, TryFromIntError>` -- this is that, with
+the error saying *which* way it did not fit rather than only that it did not.  **Go** truncates silently.  **Ada** raises
+`Constraint_Error`, which says which subtype was violated at the cost of an exception mechanism this language does not have.
+**Swift**'s `init?(exactly:)` answers an optional, which is Rust's answer with the reason thrown away.
+
 #### Arithmetic
 
 | Operator | Meaning |

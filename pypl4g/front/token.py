@@ -158,6 +158,13 @@ ENUMERATE_NAME: Final[str] = "".join((BUILTIN_GLYPH, "enumerate"))
 #: where a program says it means to cross from one to the other -- and they are
 #: the compiler's names because neither can be written in the language: what
 #: they do is change a type and no bits at all.
+#: Making a value of a narrower type out of one of a wider, and saying so
+#: where it will not fit.  It is the compiler's name because what it answers
+#: with is a result whose error is a type the compiler provides, and because
+#: nothing in the language can be written that checks a value against the ends
+#: of a type it is not yet of.
+NARROW_NAME: Final[str] = "".join((BUILTIN_GLYPH, "narrow"))
+
 DROP_NAME: Final[str] = "".join((BUILTIN_GLYPH, "drop"))
 UNIT_NAME: Final[str] = "".join((BUILTIN_GLYPH, "unit"))
 

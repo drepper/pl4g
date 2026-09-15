@@ -810,18 +810,6 @@
               "name": "_plain_type"
             },
             {
-              "type": "CHOICE",
-              "members": [
-                {
-                  "type": "SYMBOL",
-                  "name": "unit_suffix"
-                },
-                {
-                  "type": "BLANK"
-                }
-              ]
-            },
-            {
               "type": "REPEAT",
               "content": {
                 "type": "SYMBOL",
@@ -1189,6 +1177,18 @@
               "type": "CHOICE",
               "members": [
                 {
+                  "type": "SYMBOL",
+                  "name": "unit_suffix"
+                },
+                {
+                  "type": "BLANK"
+                }
+              ]
+            },
+            {
+              "type": "CHOICE",
+              "members": [
+                {
                   "type": "SEQ",
                   "members": [
                     {
@@ -1259,6 +1259,18 @@
             {
               "type": "STRING",
               "value": "⸩"
+            },
+            {
+              "type": "CHOICE",
+              "members": [
+                {
+                  "type": "SYMBOL",
+                  "name": "unit_suffix"
+                },
+                {
+                  "type": "BLANK"
+                }
+              ]
             }
           ]
         },
@@ -1305,6 +1317,18 @@
             {
               "type": "STRING",
               "value": "〉"
+            },
+            {
+              "type": "CHOICE",
+              "members": [
+                {
+                  "type": "SYMBOL",
+                  "name": "unit_suffix"
+                },
+                {
+                  "type": "BLANK"
+                }
+              ]
             }
           ]
         },
@@ -1326,6 +1350,18 @@
             {
               "type": "STRING",
               "value": "]"
+            },
+            {
+              "type": "CHOICE",
+              "members": [
+                {
+                  "type": "SYMBOL",
+                  "name": "unit_suffix"
+                },
+                {
+                  "type": "BLANK"
+                }
+              ]
             }
           ]
         }
