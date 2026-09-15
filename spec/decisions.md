@@ -3783,6 +3783,48 @@ messages for what these two keywords do plainly.
 
 ---
 
+## 2026-09-15T17:20+02:00 — language
+
+**`⌈` and `⌊`: the larger of two, and the largest of several**
+
+Decided on the user's direction: `⌈` for the maximum and `⌊` for the minimum, written between two operands or before one.
+
+**The one-sided form is the two-sided one applied along the thing**, which is why one glyph does both jobs.  That is APL's
+arrangement and the same arrangement `⍴` already has here; the alternative -- two names, `max` and `maximum`, as Haskell and
+Rust have them -- states the relationship nowhere and makes a reader learn two things where there is one.  APL itself writes the
+reduction `⌈/`, and this language has no ceiling of an integer to want, so the one-sided glyph was free to mean the reduction.
+
+**An array of more than one dimension answers a row.**  The outermost dimension is walked and what lies underneath is compared
+elementwise, so the answer has the shape of one of its rows and the rule applies to itself however deep the array goes.  The
+alternative -- the largest element anywhere in it -- was rejected because it is the one answer that cannot be built out of the
+others, while this one is: the largest element of a table is `⌈⌈m`.  It is also what APL, NumPy and every array language
+answer when told which axis to reduce along, and the outermost is the one a language with row-major layout can answer without a
+stride.
+
+That answer needs nested arrays to be regular -- every element at the same depth the same shape -- which the array types have
+always been.  Keeping that rule rather than weakening it costs nothing now that lists exist: a ragged collection has somewhere to
+live.
+
+**A dictionary is asked about its keys.**  Comparing a key with what it stands for is comparing two different things.  Python's
+`max` on a dictionary answers a key for the same reason, and it is what "the largest entry" means to anyone who says it out loud.
+
+**The largest of nothing stops the program.**  Rust answers `None` there, Haskell throws, Python raises, APL answers the identity
+of the operation -- the most negative value the type has.  APL's answer is the tempting one because it makes the fold total, and
+it is the one rejected hardest: it is a lie about what was in the collection, and a program that got it would go on to use a
+number nothing put there.  Answering a result instead would have put a `?` on `⌈v` for every `v`, including the arrays whose
+length is in their type and which cannot be empty.  Stopping is what every other question this language cannot answer does.
+
+**Floating-point values got an instruction rather than a refusal.**  All three machines have one, and adding four rows to each
+table was cheaper than explaining why the operator a program would most want on a list of measurements is the one it cannot have.
+It is also the only floating-point operation here with no check after it: it answers one of the two it was given.
+
+Compare: **APL** and **BQN**, whose `⌈` and `⌊` these are, both forms; **Python**, whose `max` is both forms *and* a third
+meaning -- the largest of several arguments -- under one name; **Rust**, whose `Ord::max` and `Iterator::max` are the two forms
+with the second answering an `Option`; **Haskell**, whose `max` and `maximum` are the two forms under two names; **C**, which has
+`fmax` for floating point and nothing for integers, so every C program writes the comparison out; and **NumPy**, whose `maximum`
+is the two-sided elementwise form and `max` the reduction, with an `axis` argument this language answers with "the outermost,
+always" because its arrays say their shape.
+
 ---
 
 Open questions

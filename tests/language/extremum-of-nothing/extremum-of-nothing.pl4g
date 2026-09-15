@@ -1,0 +1,15 @@
+※ pl4g-test: compile=ok run=native,qemu exit=64 diag=none
+
+※ The largest of nothing is not a value of any type, so a list with nothing in
+※ it stops the program rather than answering with the end of the type -- which
+※ is what a fold seeded with the smallest `u8` would have answered, and would
+※ have been a lie about what the list held.
+※
+※ It is asked once, before the walk, and not once a turn: the count is there to
+※ be read, and a walk that has to carry whether it has seen anything yet is a
+※ walk with a second value in it for the sake of a case that stops the program.
+
+@[startup, impure]
+fn main() → u8:
+    let empty: [u8] = []
+    ⌈empty

@@ -790,6 +790,26 @@ AARCH64_INSTRS: Final[tuple[A64InstDesc, ...]] = (
                 fields=(_reg_field(0, _RD), _reg_field(1, _RN),
                         _reg_field(2, _RM)),
                 est_size=INSTRUCTION_SIZE),
+    # The larger and the smaller of two, which these machines have as
+    # instructions of their own.  What they answer where one of the two is not
+    # a number differs between architectures; nothing here can be, an operation
+    # whose answer is not a number having stopped the program where it arose.
+    A64InstDesc("fmax", (_v(32), _v(32), _v(32)), template=0x1E204800,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN),
+                        _reg_field(2, _RM)),
+                est_size=INSTRUCTION_SIZE),
+    A64InstDesc("fmax", (_v(64), _v(64), _v(64)), template=0x1E604800,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN),
+                        _reg_field(2, _RM)),
+                est_size=INSTRUCTION_SIZE),
+    A64InstDesc("fmin", (_v(32), _v(32), _v(32)), template=0x1E205800,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN),
+                        _reg_field(2, _RM)),
+                est_size=INSTRUCTION_SIZE),
+    A64InstDesc("fmin", (_v(64), _v(64), _v(64)), template=0x1E605800,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN),
+                        _reg_field(2, _RM)),
+                est_size=INSTRUCTION_SIZE),
     A64InstDesc("fsub", (_v(32), _v(32), _v(32)), template=0x1E203800,
                 fields=(_reg_field(0, _RD), _reg_field(1, _RN),
                         _reg_field(2, _RM)),

@@ -500,6 +500,26 @@ X86_INSTRS: Final[tuple[X86InstDesc, ...]] = (
                 mandatory_prefix=0xF2, modrm=ModRMUse.REG_RM,
                 reg_op=0, rm_op=1, est_size=4,
                 roles=_ACCUMULATE),
+    # The larger and the smaller of two, which these machines have as
+    # instructions of their own.  What they answer where one of the two is not
+    # a number differs between architectures; nothing here can be, an operation
+    # whose answer is not a number having stopped the program where it arose.
+    X86InstDesc("maxss", (_x(), _xm(32)), opcode=0x5F, map=OpMap.M0F,
+                mandatory_prefix=0xF3, modrm=ModRMUse.REG_RM,
+                reg_op=0, rm_op=1, est_size=4,
+                roles=_ACCUMULATE),
+    X86InstDesc("maxsd", (_x(), _xm()), opcode=0x5F, map=OpMap.M0F,
+                mandatory_prefix=0xF2, modrm=ModRMUse.REG_RM,
+                reg_op=0, rm_op=1, est_size=4,
+                roles=_ACCUMULATE),
+    X86InstDesc("minss", (_x(), _xm(32)), opcode=0x5D, map=OpMap.M0F,
+                mandatory_prefix=0xF3, modrm=ModRMUse.REG_RM,
+                reg_op=0, rm_op=1, est_size=4,
+                roles=_ACCUMULATE),
+    X86InstDesc("minsd", (_x(), _xm()), opcode=0x5D, map=OpMap.M0F,
+                mandatory_prefix=0xF2, modrm=ModRMUse.REG_RM,
+                reg_op=0, rm_op=1, est_size=4,
+                roles=_ACCUMULATE),
     X86InstDesc("subss", (_x(), _xm(32)), opcode=0x5C, map=OpMap.M0F,
                 mandatory_prefix=0xF3, modrm=ModRMUse.REG_RM,
                 reg_op=0, rm_op=1, est_size=4,

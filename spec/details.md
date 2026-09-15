@@ -391,6 +391,42 @@ the walk `foreach` uses: what counting needs of each character is only how long 
 else -- every byte that is not a continuation byte begins a character, which is one `and` and one comparison per byte and no
 decoding at all.
 
+**`⌈` and `⌊` are four operations in the representation and three ways of using them.**  The four are the larger and the
+smaller at signed and at unsigned, which is what the two operators come to once the type says how its values are ordered; a
+`char` takes the unsigned pair, being the number it is stored as.
+
+The three ways are decided by what is known while compiling.  **A tuple's members and a fixed array's elements are known one by
+one**, so the comparisons are written out and nothing is counted while the program runs; for an array of more than one dimension
+the answer goes into a frame and comes back as an array of the row's shape, `answer[j]` being the largest of `a[i][j]` over every
+row -- which is one loop the compiler walks and no loop in the program, and which row-major makes plain arithmetic on one index
+rather than a walk of the shape.  **Everything whose count is not in its type is a loop**: a list, a string, a set, a dictionary
+and an array of unstated length all already have an iterator for `foreach`, and this is that iterator with one value carried
+beside the state.
+
+What the loop starts from is **the first thing there is, walked again**.  Comparing something with itself answers itself, so the
+first turn costs one instruction and saves needing a value of the type to start from -- and that value would have to be the end
+of the type, which every integer has, which a floating-point type has only as an infinity and which a character type has only by
+knowing what a code point may be.  A thing with nothing in it is what taking the first thing cannot do, so the count is asked
+once before the walk and the program stops where it is zero.  For a string the byte count is what is asked, not the character
+count: no bytes is no characters, and asking the other question would be a walk to find out whether to walk.
+
+**On integers it is a comparison and a conditional move**, which is the one thing every saturating operation is already made of
+-- `clamp` in the assembler, asked here of the other operand instead of a bound.  So no backend needed an instruction it did not
+have.  What it did need is a width: a register with no name of its own is a whole word wide, and moving a whole word into a byte
+is not an instruction any of these machines has, so an operand carried into one names the width of the *value* rather than the
+width of the register holding it.
+
+**On floating-point values it is one instruction** -- `maxsd` and `minsd`, `fmax` and `fmin`, `fmax.d` and `fmin.d` -- and it is
+the only floating-point operation the backends do not ask about afterwards.  Every other one can answer with an infinity or with
+something that is not a number and stops the program where it does; these two answer with one of the two they were given, which
+the program had already, so the comparison and branch that follow every other float operation are left out.  What the three
+machines answer where one side is not a number differs between them, and it cannot arise: the operation that would have made such
+a value stopped the program where it stood.
+
+The type of what the one-sided form answers is worked out twice, once off the syntax before anything is lowered and once from
+what was lowered.  That is not duplication for its own sake: a comparison lowers its left side with what the right side is wanted
+to be, so `⌈v ≠ 9u8` needs the answer's type before the answer exists.
+
 **Nothing settled while compiling is lowered, and that is the whole implementation.**  A condition after `comptime` is answered
 by walking the syntax -- `⎕typeof` of something is that thing's type, read off it without lowering it; a type's name is that
 type; and the two are compared and joined.  There is no value of a type at any point, which is why the representation of what

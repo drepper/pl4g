@@ -111,6 +111,11 @@ _BINARY_OPERATORS: Final[dict[TokKind, _Operator]] = {
     # what the addition came to and `s ⍴ v ⧺ w` joins what it made to `w`.
     TokKind.SHAPE: _Operator(ast.BinaryOp.SHAPE, 9),
     TokKind.PIPE: _Operator(ast.BinaryOp.BIT_OR, 10),
+    # The larger and the smaller of two bind looser than everything that works
+    # out a number and tighter than the bitwise operators, so `a + b \N{LEFT CEILING} c` takes
+    # the larger of what the addition came to and `c`.
+    TokKind.MAX: _Operator(ast.BinaryOp.MAX, 35),
+    TokKind.MIN: _Operator(ast.BinaryOp.MIN, 35),
     TokKind.CARET: _Operator(ast.BinaryOp.BIT_XOR, 20),
     TokKind.AMPERSAND: _Operator(ast.BinaryOp.BIT_AND, 30),
     TokKind.PLUS: _Operator(ast.BinaryOp.ADD, 40),
@@ -137,6 +142,8 @@ _UNARY_OPERATORS: Final[dict[TokKind, ast.UnaryOp]] = {
     TokKind.LOGIC_NOT: ast.UnaryOp.LOGIC_NOT,
     TokKind.LENGTH: ast.UnaryOp.LENGTH,
     TokKind.SHAPE: ast.UnaryOp.SHAPE,
+    TokKind.MAX: ast.UnaryOp.MAX,
+    TokKind.MIN: ast.UnaryOp.MIN,
 }
 
 

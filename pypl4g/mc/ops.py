@@ -126,6 +126,12 @@ SHIFT_RIGHT: Final[Op] = register(Op("shift_right", 2))
 #: a signed value wants and what an unsigned one must not have.
 SHIFT_RIGHT_SIGNED: Final[Op] = register(Op("shift_right_signed", 2))
 DIVIDE: Final[Op] = register(Op("divide", 2))
+#: The larger and the smaller of two.  Only the floating-point formats have
+#: an instruction for them on every one of these machines; an integer one is
+#: a comparison and a conditional move, which is what saturating arithmetic
+#: is built from already.
+LARGER: Final[Op] = register(Op("larger", 2))
+SMALLER: Final[Op] = register(Op("smaller", 2))
 COMPARE: Final[Op] = register(Op("compare", 2, has_result=False))
 CALL: Final[Op] = register(Op("call", 1, has_result=False))
 RETURN: Final[Op] = register(Op("return", 0, has_result=False, is_terminator=True))

@@ -1,0 +1,78 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ `⌈` and `⌊` are APL's ceiling and floor doing APL's other job: written before
+※ one operand they answer the largest or the smallest of what it holds, written
+※ between two they answer the larger or the smaller of the two.  One glyph for
+※ both is APL's arrangement and not an economy -- the one-sided form is the
+※ two-sided one applied along the thing, which is what makes `⌈v` and
+※ `v⟦0⟧ ⌈ v⟦1⟧` agree on an array of two.
+※
+※ What "what it holds" means is the thing's own business, as it is for `#`.
+※ The one that is not obvious is an array of more than one dimension, and APL
+※ settles it: the outermost dimension is walked and the elements underneath are
+※ compared with each other, so the answer has the shape of one of its rows.
+※ That works however deep the array goes, a row of a row being a row.
+※
+※ Three of them cost no loop.  A tuple's members and a fixed array's elements
+※ are known one by one, so the comparisons are written out and nothing is
+※ counted at run time.  A string, a list, a set and a dictionary are a walk.
+
+@[startup, impure]
+fn main() → u8:
+    let v: u8⟦4⟧ = ⟦3u8, 9u8, 2u8, 7u8⟧
+    let m: u8⟦2,3⟧ = ⟦⟦1u8, 8u8, 3u8⟧, ⟦5u8, 2u8, 9u8⟧⟧
+    let c: i16⟦2,2,2⟧ = ⟦⟦⟦1i16, ⁻8i16⟧, ⟦4i16, 5i16⟧⟧, ⟦⟦⁻9i16, 0i16⟧, ⟦1i16, 6i16⟧⟧⟧
+    let t: 〈i16, i16, i16〉 = 〈5i16, ⁻3i16, 4i16〉
+    let text: str = "a£€"
+    let l: [u8] = [4u8, 1u8, 6u8]
+    let s: ⸨u8⸩ = ⸨1u8, 2u8, 5u8⸩
+    let d: ⸨u8: u16⸩ = ⸨1u8: 10u16, 7u8: 20u16⸩
+    let run: u8⟦⟧ = v⟦1…3⟧
+    ※ an array of two dimensions answers a row, which is one of its own rows
+    ※ in shape and none of them in value
+    let row: u8⟦3⟧ = ⌈m
+    ※ and one of three answers a table, the same rule applied once more
+    let page: i16⟦2,2⟧ = ⌈c
+    ※ the two-sided form, elementwise over two arrays, which is what being
+    ※ listable means
+    let both: u8⟦4⟧ = v ⌈ ⟦5u8, 5u8, 5u8, 5u8⟧
+    if ⌈v ≠ 9u8 ∨ ⌊v ≠ 2u8:
+        1u8
+    elif row⟦0⟧ ≠ 5u8 ∨ row⟦1⟧ ≠ 8u8 ∨ row⟦2⟧ ≠ 9u8:
+        2u8
+    elif page⟦0,0⟧ ≠ 1i16 ∨ page⟦0,1⟧ ≠ 0i16 ∨ page⟦1,0⟧ ≠ 4i16 ∨ page⟦1,1⟧ ≠ 6i16:
+        3u8
+    ※ a signed type is compared the way a signed type is, which is the whole
+    ※ reason there are four instructions behind the two operators
+    elif ⌈t ≠ 5i16 ∨ ⌊t ≠ ⁻3i16:
+        4u8
+    ※ a string answers a character, the largest code point in it
+    elif ⌈text ≠ '€' ∨ ⌊text ≠ 'a':
+        5u8
+    elif ⌈l ≠ 6u8 ∨ ⌊l ≠ 1u8:
+        6u8
+    elif ⌈s ≠ 5u8 ∨ ⌊s ≠ 1u8:
+        7u8
+    ※ a dictionary is asked about its keys, there being no comparing a key
+    ※ with what it stands for
+    elif ⌈d ≠ 7u8 ∨ ⌊d ≠ 1u8:
+        8u8
+    ※ an array whose type does not say how many there are is walked
+    elif ⌈run ≠ 9u8 ∨ ⌊run ≠ 2u8:
+        9u8
+    elif both⟦0⟧ ≠ 5u8 ∨ both⟦1⟧ ≠ 9u8 ∨ both⟦2⟧ ≠ 5u8 ∨ both⟦3⟧ ≠ 7u8:
+        10u8
+    ※ the two-sided form on two values, and one side of it a scalar against a
+    ※ whole array is what listable means
+    elif (3u8 ⌈ 8u8) ≠ 8u8 ∨ (3u8 ⌊ 8u8) ≠ 3u8:
+        11u8
+    ※ it binds looser than the arithmetic, so this is the larger of the sum
+    ※ and the other side and not a sum of the larger
+    elif 3u8 + 2u8 ⌈ 4u8 ≠ 5u8:
+        12u8
+    ※ and the one-sided form binds as tightly as the other operators written
+    ※ before their operand, so this asks about the row
+    elif ⌈m⟦1⟧ ≠ 9u8:
+        13u8
+    else:
+        0u8

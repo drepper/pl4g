@@ -1,0 +1,14 @@
+※ pl4g-test: compile=error diag=4506
+
+※ `⌈` written before one operand answers the largest of what it holds, which
+※ needs it to hold several things and needs those things to be comparable with
+※ each other.  A tuple whose members are of different types is neither: there
+※ is no type for the answer to have, and nothing to compare a `u8` with a `str`
+※ by.  Lists have the same rule and will keep it when a list may hold values of
+※ several types -- what is refused is not the writing but the question.
+
+@[startup]
+fn main() → u8:
+    let t: 〈u8, u16〉 = 〈1u8, 2u16〉
+    let largest: u8 = ⌈t
+    0u8

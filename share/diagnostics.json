@@ -4621,6 +4621,33 @@
       "option": null
     },
     {
+      "number": 4506,
+      "name": "LANG_EXTREMUM_HAS_NONE",
+      "severity": "error",
+      "message": "'{operator}' answers the largest or smallest of several, and '{found}' is not several of one ordered thing",
+      "args": [
+        {
+          "name": "operator",
+          "type": "string",
+          "description": "which of the two was written"
+        },
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type of what was asked"
+        }
+      ],
+      "cause": "Written before one thing, these answer the largest or the smallest of what it holds -- the elements of an array or a list, the keys of a set or a dictionary, the characters of a string, the members of a tuple.  What they hold has to be something a comparison orders, which is a number or a code point; and a tuple's members have to be of one type, there being no comparing two things of two types.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Largest and smallest",
+        "requirement": "'⌈' and '⌊' written before one thing are written before several values of one ordered type."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 5001,
       "name": "LANG_STMT_UNREACHABLE",
       "severity": "warning",

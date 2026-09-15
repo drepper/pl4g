@@ -33,10 +33,11 @@ from ..narrow import normalize
 from ...ir.layout import DataLayout, align_of, size_of, tag_offset_of
 from ...ir.types import parts_of
 from ..callconv import TooManyArguments, argument_places, result_places
-from ..saturate import (DIVISION, NAMES, SATURATING, TRAPPING, Unsupported,
+from ..saturate import (DIVISION, EXTREMA, NAMES, SATURATING, TRAPPING,
+                        Unsupported,
                         SHIFTS, WRAPPING, lower_division_result,
-                        lower_saturating, lower_shift, lower_trapping,
-                        lower_wrapping)
+                        lower_extremum, lower_saturating, lower_shift,
+                        lower_trapping, lower_wrapping)
 from . import ops as rvops
 from ...ir.function import SYSTEM_CCONV
 from .abi import lookup as lookup_cconv
@@ -97,7 +98,15 @@ ZERO_IMMEDIATE: Final[MCImm] = MCImm(0, 12)
 _FLOAT_OPERATIONS: Final[dict[BinOp, Op]] = {
     BinOp.ADD: ops.PLUS, BinOp.SUB: ops.MINUS, BinOp.MUL: ops.TIMES,
     BinOp.FDIV: ops.DIVIDE,
+    # The larger and the smaller of two.  Only the signed pair of the four ever
+    # stands over a floating-point value: there is no unsigned float.
+    BinOp.SMAX: ops.LARGER, BinOp.SMIN: ops.SMALLER,
 }
+
+#: Which of them answer one of the two they were given, and so cannot answer
+#: anything the program did not have already -- there is nothing to ask about
+#: what they came to.
+_KEEPS_A_NUMBER: Final[frozenset[Op]] = frozenset((ops.LARGER, ops.SMALLER))
 
 #: What each operation of the representation is called in the assembler.
 _OPERATIONS: Final[dict[BinOp, Op]] = {
@@ -559,6 +568,8 @@ class RVSelector(InstructionSelector):
         (ops.MINUS.name, 32): "fsub.s", (ops.MINUS.name, 64): "fsub.d",
         (ops.TIMES.name, 32): "fmul.s", (ops.TIMES.name, 64): "fmul.d",
         (ops.DIVIDE.name, 32): "fdiv.s", (ops.DIVIDE.name, 64): "fdiv.d",
+        (ops.LARGER.name, 32): "fmax.s", (ops.LARGER.name, 64): "fmax.d",
+        (ops.SMALLER.name, 32): "fmin.s", (ops.SMALLER.name, 64): "fmin.d",
     }
 
     def select_float_abs(self, dst: Reg, src: MCOperand, bits: int,
@@ -1126,6 +1137,8 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                     asm.float_op(operation, destination,
                                  operands.in_register(inst.operands[0], inst.span),
                                  divisor, answer.bits, inst.span)
+                    if operation in _KEEPS_A_NUMBER:
+                        continue
                     # An answer that is an infinity or a not-a-number is an
                     # answer the operation did not have, the way a sum that
                     # will not fit is, and the program stops the same way.
@@ -1235,6 +1248,17 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                     except Unsupported as unsupported:
                         raise UnsupportedOperation(unsupported.what, span) \
                             from unsupported
+                case BinaryInst() if inst.op in EXTREMA:
+                    destination = _new_value(
+                        inst.ty, registers,
+                        hint=(_result_register(inst.ty, cconv, registers)
+                              if inst is returned else None))
+                    held[id(inst)] = destination
+                    lower_extremum(
+                        asm, inst.op,
+                        operands.value(inst.operands[0], inst.span),
+                        operands.value(inst.operands[1], inst.span),
+                        destination, operands, inst.span)
                 case BinaryInst() if inst.op in WRAPPING:
                     destination = _new_value(
                         inst.ty, registers,

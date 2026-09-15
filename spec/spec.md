@@ -579,6 +579,79 @@ string's is *bytes*, so counting characters is a different call and the easy one
 where `strlen` walks and `sizeof` does not and the two are spelled so differently that nobody confuses them, which is the one
 thing C got right here.
 
+#### The largest and the smallest
+
+**`⌈` and `⌊` are APL's ceiling and floor doing APL's other job.**  Written between two things they answer the larger or the
+smaller of the two; written before one thing they answer the largest or the smallest of what it holds.
+
+```
+a ⌈ b                          ※ the larger of the two
+a ⌊ b                          ※ the smaller
+
+⌈⟦3u8, 9u8, 2u8, 7u8⟧            ※ 9u8
+⌊"a£€"                         ※ 'a': the smallest code point in it
+⌈⸨1u8: 10u16, 7u8: 20u16⸩      ※ 7u8, a dictionary being asked about its keys
+```
+
+**One glyph for both forms is not an economy.**  The one-sided form is the two-sided one applied along the thing, so `⌈v` and
+`v⟦0⟧ ⌈ v⟦1⟧` agree on an array of two, and a reader who knows one form knows the other.
+
+**What "what it holds" means is the thing's own business**, as it is for `#`:
+
+| Written before | Answers |
+|---|---|
+| an array of one dimension | the largest or smallest of its elements |
+| an array of more | a **row**: its outermost dimension walked, the elements underneath compared |
+| a tuple | the largest or smallest of its members, which must all be of one type |
+| a string | a `char`: the highest or lowest code point in it |
+| a list | the largest or smallest of its elements |
+| a set | the largest or smallest it is holding |
+| a dictionary | the largest or smallest **key** it is holding |
+
+**An array of more than one dimension answers a row**, and that is APL's rule.  Its outermost dimension is walked and the
+elements underneath are compared with each other, so the *j*-th of the answer is the largest of the *j*-th of every row and the
+answer has the shape of one of its rows.  It works however deep the array goes, a row of a row being a row.
+
+```
+let m: u8⟦2,3⟧ = ⟦⟦1u8, 8u8, 3u8⟧, ⟦5u8, 2u8, 9u8⟧⟧
+
+⌈m                             ※ u8⟦3⟧ holding 5 8 9
+```
+
+Nested arrays have a regular shape -- every element at the same depth is the same shape -- which is what makes that answer a
+single type.  Now that lists exist there is somewhere for a ragged collection to live, so the array types can keep the rule
+rather than weaken it to admit one.
+
+**A dictionary is asked about its keys.**  Comparing a key with what it stands for is comparing two different things, and a
+dictionary that answered a pair would answer something no comparison had ordered.
+
+**Both operands must be comparable with each other** (4506).  A tuple whose members are of different types is not several of one
+thing: there is no type for the answer to have.  Lists keep the same rule and will keep it when a list may hold several types --
+what is refused is not the writing but the question.
+
+**The largest of nothing stops the program.**  It is not a value of any type, and answering with the end of the type -- the
+smallest `u8`, say -- would be a lie about what was there.  A list, a set, a dictionary, a string or an array whose length the
+type does not say is asked about its count once, before the walk, and never again.
+
+**The two-sided form is listable**, so one side may be a whole array and the answer is elementwise, the same rule every operator
+written between two operands follows.
+
+**It binds looser than the arithmetic and tighter than the bitwise operators**, so `3u8 + 2u8 ⌈ 4u8` is the larger of the sum
+and the other side.  The one-sided form binds as tightly as the other operators written before their operand, so `⌈m⟦1⟧` asks
+about the row.
+
+**On floating-point values it is one instruction**, all three of these machines having one, and it is the only arithmetic
+operator that asks nothing afterwards about what came out: it answers with one of the two it was given, which the program had
+already.
+
+Compare: **APL**, whose `⌈` and `⌊` these are, both forms, with the difference that reduction there is written `⌈/` and the
+one-sided glyph means ceiling -- this language has no ceiling of an integer to want, and `⌈` before a thing is free to mean the
+reduction; **BQN** and **Uiua**, which follow APL; **C**, whose `fmax` is the two-sided form as a function and which has no
+integer one; **Python**, whose `max` is both forms as one function and answers the largest of the *arguments* when there are
+several, which is a third meaning for the same name; **Rust**, whose `Ord::max` is the two-sided form and `Iterator::max` the
+one-sided, answering an `Option` where this stops the program; and **Haskell**, whose `max` and `maximum` are the two forms
+under two names.
+
 #### Comparisons
 
 Six operators compare two values.  All six bind equally, and looser than every other operator.
@@ -939,6 +1012,11 @@ who has not been told.  A label is written by a generator, which has the glyph.
 `⁂` has none, and the first rule is what decides it: `**` is the only spelling anyone would reach for, being what Python
 writes the same idea's sibling with, and it is two copies of the character multiplication deliberately left free.  Spending it
 here would spend it for the one meaning this language has already decided not to give it.
+
+`⌈` and `⌊` have none, and the second rule is what decides it.  `><` and `<>` are two characters and say nothing about
+which of the two is which, and `<>` is one of the three spellings of `≠` this language declined to bless; `|^` and `|_` are
+the shapes of the glyphs drawn in ASCII, which is a spelling to be told rather than one to see.  The glyphs themselves are what
+APL has used for these for fifty years, and a generator has them.
 
 Using an accepted substitute is not an error.  A warning reports it for anyone who wants their sources in canonical form; it is
 off by default, since the substitute is accepted usage and not a defect.

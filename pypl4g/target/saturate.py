@@ -97,6 +97,13 @@ NAMES = {
 #: they came to.  A program writes one by putting the operator inside `⎕wrap`.
 WRAPPING = frozenset((BinOp.WRAP_ADD, BinOp.WRAP_SUB, BinOp.WRAP_MUL))
 
+#: The larger and the smaller of two.  Which comparison each is asked with is
+#: the whole of the difference between them, so one lowering serves all four.
+EXTREMA: dict[BinOp, Condition] = {
+    BinOp.SMAX: Condition.SLT, BinOp.UMAX: Condition.ULT,
+    BinOp.SMIN: Condition.SGT, BinOp.UMIN: Condition.UGT,
+}
+
 #: Moving bits sideways.  A rotation is built from two shifts rather than from
 #: a rotate instruction, so that it means the same thing for a type narrower
 #: than the register it is held in -- which is most of them.
@@ -444,6 +451,40 @@ def lower_wrapping(asm: Assembler, op: BinOp, ty: Type, left: MCOperand,
     asm.op(_PLAIN[op], destination, left, right, span=span)
     if isinstance(ty, IntType) and ty.bits < register_bits:
         _back_into_the_type(asm, ty, destination, span)
+
+
+def lower_extremum(asm: Assembler, op: BinOp, left: MCOperand, right: MCOperand,
+                   destination: Reg, scratch: Scratch, span: Span) -> None:
+    """Emit the larger or the smaller of two values.
+
+    The left goes into the destination and the right replaces it where the
+    comparison says it should -- which is the one thing every saturating
+    operation is already made of, asked here of the other operand instead of a
+    bound.  So it is a comparison and a conditional move on every architecture
+    that has one, and a comparison and a branch on any that does not, and
+    neither of those decisions is made here.
+    """
+    held = _at_the_width(asm, left, scratch, destination.bits, span)
+    other = _at_the_width(asm, right, scratch, destination.bits, span)
+    asm.loadreg(destination, held, span)
+    asm.clamp(EXTREMA[op], destination, held, other, other, span)
+
+
+def _at_the_width(asm: Assembler, operand: MCOperand, scratch: Scratch,
+                  bits: int, span: Span) -> MCReg:
+    """*operand* in a register named at the width the answer is.
+
+    A register with no name of its own is a whole word wide whatever is put in
+    it, and moving a whole word into a byte is not an instruction any of these
+    machines has.  So what comes back names the width of the value rather than
+    the width of the register holding it, which is what every other operand of
+    a narrow operation does.
+    """
+    if isinstance(operand, MCReg):
+        return operand
+    carried = scratch.scratch()
+    asm.loadreg(carried, operand, span)
+    return MCReg(carried, bits=bits)
 
 
 #: The checked operation each wrapping one is the unchecked form of.

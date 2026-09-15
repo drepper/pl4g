@@ -1,0 +1,32 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ The larger and the smaller of two floating-point values are instructions all
+※ three of these machines have -- `maxsd`, `fmax`, `fmax.d` -- so this is the
+※ one arithmetic operator that costs one instruction on a `f64` and two on a
+※ `u64`, the integer form being a comparison and a conditional move.
+※
+※ Nothing is asked afterwards about what came out.  Every other floating-point
+※ operation can answer with something the type has no number for and stops the
+※ program where it does; these two answer with one of the two they were given,
+※ which the program had already.
+※
+※ What the three machines answer where one side is not a number differs between
+※ them, and it does not matter here: a value that is not a number cannot exist,
+※ the operation that would have produced one having stopped the program.
+
+@[startup, impure]
+fn main() → u8:
+    let f: [f64] = [1.5f64, ⁻2.5f64, 0.5f64]
+    let g: f32⟦3⟧ = ⟦1.5f32, ⁻2.5f32, 0.5f32⟧
+    let a: f64 = 3.0f64
+    let b: f64 = 7.5f64
+    ※ `≅` asks whether two are the same within the tolerance, which is how a
+    ※ floating-point value is compared
+    if ¬(⌈f ≅ 1.5f64) ∨ ¬(⌊f ≅ ⁻2.5f64):
+        1u8
+    elif ¬(⌈g ≅ 1.5f32) ∨ ¬(⌊g ≅ ⁻2.5f32):
+        2u8
+    elif ¬((a ⌈ b) ≅ 7.5f64) ∨ ¬((a ⌊ b) ≅ 3.0f64):
+        3u8
+    else:
+        0u8

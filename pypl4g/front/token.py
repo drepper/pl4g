@@ -201,6 +201,12 @@ CONCAT_GLYPH: Final[str] = "\N{DOUBLE PLUS}"
 #: out of the values on its right.
 SHAPE_GLYPH: Final[str] = "\N{APL FUNCTIONAL SYMBOL RHO}"
 
+#: The larger and the smaller of two things, and the largest and smallest of
+#: several.  They are APL's ceiling and floor, which do these two jobs there and
+#: whose shapes say which is which: the one open at the top takes the top.
+MAX_GLYPH: Final[str] = "\N{LEFT CEILING}"
+MIN_GLYPH: Final[str] = "\N{LEFT FLOOR}"
+
 #: Accepted substitute for the arrow.  Two characters, so it claims nothing.
 ARROW_ASCII: Final[str] = "->"
 
@@ -324,6 +330,8 @@ class TokKind(StrEnum):
     CONCAT = "'\N{DOUBLE PLUS}'"
     LENGTH = "'#'"
     SHAPE = "'\N{APL FUNCTIONAL SYMBOL RHO}'"
+    MAX = "'\N{LEFT CEILING}'"
+    MIN = "'\N{LEFT FLOOR}'"
 
     DOC_COMMENT = "documentation comment"
     NEWLINE = "end of line"

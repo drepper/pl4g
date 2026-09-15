@@ -358,7 +358,8 @@ _ALL_AT_ONCE: Final[frozenset[ast.BinaryOp]] = frozenset((
     ast.BinaryOp.LOGIC_AND, ast.BinaryOp.LOGIC_OR, ast.BinaryOp.LOGIC_XOR,
     ast.BinaryOp.LOGIC_NAND, ast.BinaryOp.LOGIC_NOR,
     ast.BinaryOp.SHIFT_LEFT, ast.BinaryOp.SHIFT_RIGHT,
-    ast.BinaryOp.ROTATE_LEFT, ast.BinaryOp.ROTATE_RIGHT))
+    ast.BinaryOp.ROTATE_LEFT, ast.BinaryOp.ROTATE_RIGHT,
+    ast.BinaryOp.MAX, ast.BinaryOp.MIN))
 
 #: The same, written before their operand.
 _ALL_AT_ONCE_UNARY: Final[frozenset[ast.UnaryOp]] = frozenset((
@@ -392,6 +393,14 @@ _WRAPPED: Final[dict[BinOp, BinOp]] = {
 #: is what a wrap says its operators do not do.
 _SATURATES: Final[frozenset[ast.BinaryOp]] = frozenset((
     ast.BinaryOp.SAT_ADD, ast.BinaryOp.SAT_SUB, ast.BinaryOp.SAT_MUL))
+
+#: The larger and the smaller of two, with the signed reading first.  Which of
+#: the two comparisons is asked is the type's business, exactly as it is for a
+#: division and for a shift to the right.
+_EXTREMA: Final[dict[ast.BinaryOp, tuple[BinOp, BinOp]]] = {
+    ast.BinaryOp.MAX: (BinOp.SMAX, BinOp.UMAX),
+    ast.BinaryOp.MIN: (BinOp.SMIN, BinOp.UMIN),
+}
 
 _BINARY_OPS: Final[dict[ast.BinaryOp, BinOp]] = {
     ast.BinaryOp.BIT_AND: BinOp.AND,
@@ -5730,6 +5739,15 @@ class Checker:
         if isinstance(ty, SetType):
             return self._lower_set_operation(builder, expr.op, ty, left, right,
                                              expr.span)
+        if expr.op in _EXTREMA:
+            # Which of the two are ordered is the same question a comparison
+            # asks, and the answer is the same: numbers and code points.
+            if self._comparable(expr.span, ast.BinaryOp.LESS, ty) is ERROR:
+                return UndefConst(ERROR)
+            signed = isinstance(ty, FloatType) or (isinstance(ty, IntType)
+                                                   and ty.signed)
+            return builder.binary(_EXTREMA[expr.op][0 if signed else 1],
+                                  left, right, expr.span)
         if expr.op in _SHIFTS:
             if expr.op in (ast.BinaryOp.ROTATE_LEFT, ast.BinaryOp.ROTATE_RIGHT) \
                     and isinstance(ty, IntType) and ty.signed:
@@ -5774,6 +5792,11 @@ class Checker:
 
     def _operand_type_stands(self, op: ast.BinaryOp, ty: Type) -> bool:
         """Whether a value of *ty* may stand on one side of *op*."""
+        if op in _EXTREMA:
+            # Whatever a comparison orders: the larger of two is the one a
+            # comparison would have put second, so the two ask the same thing of
+            # their operands.
+            return isinstance(ty, (IntType, FloatType)) or ty is CHAR
         if isinstance(ty, IntType):
             return True
         if isinstance(ty, SetType):
@@ -5878,6 +5901,8 @@ class Checker:
             return self._lower_length(builder, expr, expected)
         if expr.op is ast.UnaryOp.SHAPE:
             return self._lower_shape(builder, expr, expected)
+        if expr.op in (ast.UnaryOp.MAX, ast.UnaryOp.MIN):
+            return self._lower_extremum(builder, expr, expected)
         outer, self._operand_of = self._operand_of, expr.op.value
         was_listing, self._listing = self._listing, True
         try:
@@ -5962,6 +5987,235 @@ class Checker:
                                       tables.table_type(self._module), span))
         return None
 
+    def _lower_extremum(self, builder: IRBuilder, expr: ast.Unary,
+                        expected: Type | None) -> Value:
+        """Lower `\N{LEFT CEILING}x` and `\N{LEFT FLOOR}x`: the largest or the smallest of what it holds.
+
+        What "of what it holds" means is the thing's own business, and every
+        answer is the one a reader would give: the elements of a vector, the
+        characters of a string, the keys of a set or a dictionary, the members
+        of a tuple.  An array of more than one dimension is the one that is not
+        obvious and is the one APL settles: its outermost dimension is walked
+        and the elements underneath are compared with each other, so what comes
+        back has the shape of one of its rows.  That works however deep the
+        array goes, a row of a row being a row.
+
+        Three ways of doing it, decided by what is known while compiling.  A
+        tuple's members and a fixed array's elements are known one by one, so
+        the comparisons are written out.  Everything else is a loop, which is
+        also where a thing with nothing in it has to be reported: the largest of
+        nothing is not a value, so the program stops.
+        """
+        value = self._lower_expr(builder, expr.operand, None)
+        ty = self._value_type_of(value)
+        if ty is ERROR:
+            return UndefConst(ERROR)
+        found = self._extremum_of(builder, expr, value, ty)
+        if found is None:
+            self._diags.emit(D.LANG_EXTREMUM_HAS_NONE, expr.operand.span,
+                             operator=expr.op.value, found=ty.render())
+            return UndefConst(ERROR)
+        answer = self._value_type_of(found)
+        if not self._accepts(expected, answer):
+            self._report_mismatch(expr.span, answer, expected)
+            return UndefConst(ERROR)
+        return found
+
+    def _extremum_of(self, builder: IRBuilder, expr: ast.Unary, value: Value,
+                     ty: Type) -> Value | None:
+        """The largest or smallest of what a value holds, or nothing where it
+        holds nothing that can be compared."""
+        if isinstance(ty, TupleType):
+            if not ty.members or any(m is not ty.members[0] for m in ty.members):
+                return None
+            if not self._ordered(ty.members[0]):
+                return None
+            return self._folded(builder, expr,
+                                [builder.extract(value, at, member, expr.span)
+                                 for at, member in enumerate(ty.members)],
+                                ty.members[0])
+        if isinstance(ty, ArrayType):
+            # A type that says its shape is walked while compiling, whatever its
+            # rank; one that does not says neither how many there are nor how
+            # long a row is, so only the one-dimensional case is left and it is
+            # a loop like a list's.
+            if ty.fixed:
+                return self._extremum_of_array(builder, expr, value, ty)
+            if ty.rank > 1:
+                self._diags.emit(
+                    D.IMPL_UNIMPLEMENTED_FEATURE, expr.span,
+                    feature=("the largest or smallest of an array of more than "
+                             "one dimension whose type does not say its shape"))
+                return UndefConst(ERROR)
+            return self._extremum_walked(builder, expr, value, ty)
+        if isinstance(ty, (ListType, SetType, DictType)) or ty is STR:
+            return self._extremum_walked(builder, expr, value, ty)
+        return None
+
+    def _ordered(self, ty: Type) -> bool:
+        """Whether a comparison puts two of these in an order, which is what
+        being the largest of several means."""
+        return isinstance(ty, (IntType, FloatType)) or ty is CHAR
+
+    def _folded(self, builder: IRBuilder, expr: ast.Unary,
+                values: Sequence[Value], element: Type) -> Value:
+        """The largest or smallest of values known one by one."""
+        op = self._extremum_op(expr, element)
+        found = values[0]
+        for one in values[1:]:
+            found = builder.binary(op, found, one, expr.span)
+        return found
+
+    def _extremum_of_array(self, builder: IRBuilder, expr: ast.Unary,
+                           value: Value, ty: ArrayType) -> Value | None:
+        """The largest or smallest of an array whose shape its type states.
+
+        One dimension answers one value.  More than one answers a row: the
+        outermost dimension is walked and the elements underneath are compared
+        with each other, so the *j*-th of the answer is the largest of the
+        *j*-th of every row.  Nothing here is a loop -- both counts are in the
+        type -- and nothing is recursive either, row-major making a row of a row
+        a run of elements and every one of them reachable by one index.
+        """
+        if not self._ordered(ty.element):
+            return None
+        along = ty.shape[0]
+        assert along is not None
+        start, _ = self._shape_of(builder, value, ty, expr.span)
+        wide = 1
+        for further in ty.shape[1:]:
+            assert further is not None
+            wide *= further
+
+        def held(row: int, at: int) -> Value:
+            return builder.load(
+                self._element_place(builder, start, ty.element,
+                                    builder.int_const(U64, row * wide + at),
+                                    expr.span), expr.span)
+
+        if ty.rank == 1:
+            return self._folded(builder, expr,
+                                [held(0, at) for at in range(along)], ty.element)
+        answer = self._module.types.array_type(ty.element, ty.shape[1:])
+        place = builder.frame(answer, expr.span)
+        for at in range(wide):
+            builder.store(
+                self._element_place(builder, place, ty.element,
+                                    builder.int_const(U64, at), expr.span),
+                self._folded(builder, expr,
+                             [held(row, at) for row in range(along)],
+                             ty.element),
+                expr.span)
+        return builder.cast(CastKind.BITCAST, place, answer, expr.span)
+
+    def _extremum_walked(self, builder: IRBuilder, expr: ast.Unary, value: Value,
+                         ty: Type) -> Value | None:
+        """The largest or smallest of something whose count is not known while
+        compiling, which is a loop.
+
+        What it starts from is the first thing there is, and the walk then
+        includes that thing again -- comparing something with itself answering
+        itself, so a turn spent on it costs one instruction and saves needing a
+        value of the type to start from.  That matters more than it looks: the
+        value to start from would have to be the end of the type, which every
+        integer has and which a floating-point type has only as an infinity and
+        a character type only by knowing what a code point may be.
+
+        Taking the first thing is what a thing with nothing in it cannot do, so
+        that is asked before anything else and stops the program -- the largest
+        of nothing not being a value of any type.
+        """
+        if isinstance(ty, ListType):
+            found = self._over_a_list(builder, value, ty, expr.span)
+        elif ty is STR:
+            found = self._over_a_string(builder, value, expr.span)
+        elif isinstance(ty, ArrayType):
+            found = self._over_an_array(builder, value, ty, expr.span)
+        else:
+            assert isinstance(ty, (SetType, DictType))
+            found = self._over_a_table(builder, value, ty, expr.span)
+        element = found.element
+        if isinstance(ty, DictType):
+            # A turn of a dictionary gives a key and what it stands for; which
+            # of the two is being looked at is the key, as the instruction says.
+            assert isinstance(element, TupleType)
+            element = element.members[0]
+        if not self._ordered(element):
+            return None
+        # How many there are, except for a string, where that is a walk of its
+        # own and all this asks is whether there is one: no bytes is no
+        # characters, and any byte is at least one character.
+        count = (builder.extract(value, 1, U64, expr.span) if ty is STR
+                 else self._counted(builder, value, ty, expr.span))
+        assert count is not None
+        builder.check(
+            builder.compare(CmpPred.NE, count, builder.int_const(U64, 0),
+                            expr.span),
+            "".join(("the ", "largest" if expr.op is ast.UnaryOp.MAX
+                     else "smallest", " of nothing")), expr.span)
+        op = self._extremum_op(expr, element)
+        header = builder.new_block("finding")
+        body = builder.new_block("comparing")
+        done = builder.new_block("found")
+        builder.br(header, (*found.start,
+                            self._offered(builder, found, found.start, ty,
+                                          element, expr.span),
+                            builder.memory()), expr.span)
+        builder.position_at(header)
+        state = tuple(header.add_param(self._value_type_of(one), "at")
+                      for one in found.start)
+        best = header.add_param(element, "best")
+        builder.set_memory(header.add_param(MEM, "mem"))
+        builder.condbr(found.more(builder, state), body, done, span=expr.span)
+        builder.position_at(body)
+        one = self._offered(builder, found, state, ty, element, expr.span)
+        builder.br(header, (*found.step(builder, state),
+                            builder.binary(op, best, one, expr.span),
+                            builder.memory()), expr.span)
+        builder.position_at(done)
+        return best
+
+    def _offered(self, builder: IRBuilder, found: _Iteration,
+                 state: tuple[Value, ...], ty: Type, element: Type,
+                 span: Span) -> Value:
+        """What one turn of a walk offers to be compared."""
+        one = found.take(builder, state)
+        return (builder.extract(one, 0, element, span)
+                if isinstance(ty, DictType) else one)
+
+    def _extremum_type(self, of: Type | None) -> Type | None:
+        """What one of these operators answers with, given what it is asked of.
+
+        Said here and used before anything is lowered, so that a comparison
+        against what it answers knows what to want of the other side.  What it
+        does is state the rule the lowering follows: one of what was looked
+        through, except where what was looked through has rows, where it is one
+        of its rows.
+        """
+        if isinstance(of, TupleType):
+            return of.members[0] if of.members else None
+        if isinstance(of, ArrayType):
+            if of.rank == 1:
+                return of.element
+            return (self._module.types.array_type(of.element, of.shape[1:])
+                    if of.fixed else None)
+        if isinstance(of, ListType):
+            return of.element
+        if isinstance(of, SetType):
+            return of.element
+        if isinstance(of, DictType):
+            return of.key
+        return CHAR if of is STR else None
+
+    def _extremum_op(self, expr: ast.Unary, element: Type) -> BinOp:
+        """Which of the four instructions one of these operators is, over this
+        type: the two of them times signed and unsigned, a character being the
+        unsigned number it is stored as."""
+        signed = isinstance(element, FloatType) or (isinstance(element, IntType)
+                                                    and element.signed)
+        return _EXTREMA[ast.BinaryOp.MAX if expr.op is ast.UnaryOp.MAX
+                        else ast.BinaryOp.MIN][0 if signed else 1]
+
     def _lower_shape(self, builder: IRBuilder, expr: ast.Unary,
                      expected: Type | None) -> Value:
         """Lower `\N{APL FUNCTIONAL SYMBOL RHO}x`: how many there are along each of its dimensions.
@@ -6044,6 +6298,11 @@ class Checker:
             case ast.Unary() if expr.op is ast.UnaryOp.LENGTH:
                 # How many, which is a count and not whatever was counted.
                 return U64
+            case ast.Unary() if expr.op in (ast.UnaryOp.MAX, ast.UnaryOp.MIN):
+                # One of what was looked through, which is not what was looked
+                # through -- and where what was looked through has rows, one of
+                # its rows.
+                return self._extremum_type(self._hint_of(expr.operand))
             case ast.Binary() if expr.op is ast.BinaryOp.OR_ELSE:
                 # What `??` answers with is the answer inside the result, which
                 # is the left side's type with the mark taken off.

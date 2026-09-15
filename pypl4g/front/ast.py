@@ -242,6 +242,9 @@ class BinaryOp(StrEnum):
     CONCAT = "\N{DOUBLE PLUS}"
     #: Making something of the shape on the left out of the values on the right.
     SHAPE = "\N{APL FUNCTIONAL SYMBOL RHO}"
+    #: The larger and the smaller of two, element by element.
+    MAX = "\N{LEFT CEILING}"
+    MIN = "\N{LEFT FLOOR}"
 
 
 class UnaryOp(StrEnum):
@@ -254,6 +257,9 @@ class UnaryOp(StrEnum):
     LENGTH = "#"
     #: The shape of an array: how many along each of its dimensions.
     SHAPE = "\N{APL FUNCTIONAL SYMBOL RHO}"
+    #: The largest and the smallest of what something holds.
+    MAX = "\N{LEFT CEILING}"
+    MIN = "\N{LEFT FLOOR}"
 
 
 @dataclass(frozen=True, slots=True)

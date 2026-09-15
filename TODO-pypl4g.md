@@ -356,6 +356,21 @@ To Do List for the pypl4g compiler
     compiling.  Where the two counts are equal that is a plain copy and is the same thing joining two arrays does, so it wants
     the same treatment; where they are not, it is a copy of one run repeated, which is a different question.
 
+[ ] fold `\N{LEFT CEILING}` and `\N{LEFT FLOOR}` over a whole run.  The written-out form -- a tuple's members, a fixed array's elements --
+    is a chain of two-operand comparisons, one per element, where every one of these machines has a lane-at-a-time maximum
+    (`pmaxub` and friends, `umax`, and the vector extension) that would do a register's worth at a time.  It wants the same
+    treatment joining two arrays got: the elements are already a run whose length is written down, so what is missing is the
+    entry in each target's `Vectors` table and a reduction over the lanes at the end.
+
+[ ] answer `\N{LEFT CEILING}` and `\N{LEFT FLOOR}` for an array of more than one dimension whose type does not say its shape.  Refused
+    today (8501): the answer is a row, and how long a row is, is not known until the program runs, so the room for it has to be
+    taken while it runs and the walk has to be two loops rather than one written out.  It is the same piece of work walking such
+    an array wants (4482).
+
+[ ] leave out the comparison where one side of `\N{LEFT CEILING}` is a constant at the end of the type.  `x \N{LEFT CEILING} 0u8` is `x` and
+    `x \N{LEFT FLOOR} 255u8` is `x`, and both are what a generator writes when the bound comes from somewhere else.  Neither folds
+    today.
+
 [ ] report a tuple holding an array.  `〈⟦1u8, 2u8⟧〉` reaches the code generator and fails there (9901, "making a 〈u8⟦2⟧〉, which
     is one value and not several"), so what a reader is told is an internal error about a program the front end accepted.  Either
     an array is a thing a tuple may hold, in which case `parts_of` has to say what its parts are, or it is not and the checker

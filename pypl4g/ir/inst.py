@@ -57,6 +57,13 @@ class BinOp(Enum):
     WRAP_SUB = "wrap.sub"
     WRAP_MUL = "wrap.mul"
 
+    #: The larger and the smaller of two values, which is one question asked of
+    #: a signed and an unsigned number and is therefore two instructions.
+    SMAX = "smax"
+    UMAX = "umax"
+    SMIN = "smin"
+    UMIN = "umin"
+
     #: And the moving ones, whose distance is taken modulo the width of the type
     #: rather than being a question the program can get wrong.  Every width is a
     #: power of two, so that is a mask and not a division.

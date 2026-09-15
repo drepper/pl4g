@@ -230,6 +230,24 @@ RISCV_INSTRS: Final[tuple[RVInstDesc, ...]] = (
     RVInstDesc("fadd.d", (_f(), _f(), _f()), template=0x02007053,
                fields=(_reg(0, _RD), _reg(1, _RS1), _reg(2, _RS2)),
                est_size=INSTRUCTION_SIZE),
+    # The larger and the smaller of two, which these machines have as
+    # instructions of their own.  The rounding-mode field names which of the
+    # two the instruction is rather than a rounding, neither of them rounding
+    # anything.  What they answer where one of the two is not a number differs
+    # between architectures; nothing here can be, an operation whose answer is
+    # not a number having stopped the program where it arose.
+    RVInstDesc("fmin.s", (_f(), _f(), _f()), template=0x28000053,
+               fields=(_reg(0, _RD), _reg(1, _RS1), _reg(2, _RS2)),
+               est_size=INSTRUCTION_SIZE),
+    RVInstDesc("fmax.s", (_f(), _f(), _f()), template=0x28001053,
+               fields=(_reg(0, _RD), _reg(1, _RS1), _reg(2, _RS2)),
+               est_size=INSTRUCTION_SIZE),
+    RVInstDesc("fmin.d", (_f(), _f(), _f()), template=0x2A000053,
+               fields=(_reg(0, _RD), _reg(1, _RS1), _reg(2, _RS2)),
+               est_size=INSTRUCTION_SIZE),
+    RVInstDesc("fmax.d", (_f(), _f(), _f()), template=0x2A001053,
+               fields=(_reg(0, _RD), _reg(1, _RS1), _reg(2, _RS2)),
+               est_size=INSTRUCTION_SIZE),
     RVInstDesc("fsub.s", (_f(), _f(), _f()), template=0x08007053,
                fields=(_reg(0, _RD), _reg(1, _RS1), _reg(2, _RS2)),
                est_size=INSTRUCTION_SIZE),
