@@ -1,0 +1,15 @@
+※ pl4g-test: compile=error diag=4431
+
+※ One element says what an array holds and no other may disagree with it.  That
+※ is the other half of the rule: the type is settled by whichever element says
+※ it, and an element saying something else is not a value to be widened but a
+※ disagreement about what the array is.
+※
+※ The complaint is about the array and not about one element, which is why it
+※ says what the ones before it were: an element is only wrong here relative to
+※ the others.
+
+@[startup]
+fn main() → u6:
+    let a := ⟦1u8, 2u16⟧
+    0u6

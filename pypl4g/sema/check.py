@@ -397,6 +397,17 @@ def _says_its_type(expr: ast.Expr) -> bool:
             return False
 
 
+def _taken_from(written: ast.Expr, said: Type | None) -> Type | None:
+    """What to lower one entry of a literal with, given what the others said.
+
+    An entry that says what it is takes nothing from the rest: it says it, and
+    where what it says disagrees with what they said, that is a disagreement
+    between the entries -- which is one complaint about the whole literal and
+    not several about its parts.  Everything else takes the one type they hold.
+    """
+    return None if _says_its_type(written) else said
+
+
 def _can_be_a_key(ty: Type) -> bool:
     """Whether a value of *ty* may be a key of a set or a dictionary.
 
@@ -3620,12 +3631,41 @@ class Checker:
         to learn the type and would otherwise lower them a second time to use
         them.  What is collected is every one of them, including any whose type
         did not agree, so that the places line up with what was written.
+
+        Where nothing outside says what they are, what one of them says is what
+        they all are: they hold one type by definition, so one entry saying
+        which says it for the rest.  That is read off the writing before any of
+        it is lowered, which is what lets an entry take its type from one
+        written after it.
         """
-        values = [self._lower_expr(builder, entry, None)
+        aim = wanted if wanted is not None else self._said_by(written)
+        values = [self._lower_expr(builder, entry, _taken_from(entry, aim))
                   for entry in self._nothing_expected(written)]
         if into is not None:
             into.extend(values)
         return self._same_type(values, [entry.span for entry in written], wanted)
+
+    def _said_by(self, written: Sequence[ast.Expr]) -> Type | None:
+        """The type the entries of a literal say they hold, where one says.
+
+        An array, a list and a collection hold one type, so an entry that says
+        what it is says it for every other -- wherever that entry stands, and
+        however deep the writing goes.  `\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}1, 2u8\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}` therefore means what
+        `\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}1u8, 2\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}` means, and a row of a table may take its type from a row
+        written after it.
+
+        Only what an entry says on its own is read here, which is a literal
+        carrying a suffix.  An entry whose type is known only once it has been
+        lowered -- a name, a call -- is left to the lowering, where the first
+        one of them settles it for the rest as it always did.
+        """
+        for one in written:
+            found = (self._said_by(one.elements)
+                     if isinstance(one, (ast.ArrayLit, ast.ListLit))
+                     else self._type_of(one) if _says_its_type(one) else None)
+            if found is not None:
+                return found
+        return None
 
     def _nothing_expected(self, written: Sequence[ast.Expr]
                           ) -> Sequence[ast.Expr]:
@@ -3685,15 +3725,23 @@ class Checker:
         wanted_key = aim.element if isinstance(aim, SetType) else \
             aim.key if isinstance(aim, DictType) else None
         wanted_value = aim.value if isinstance(aim, DictType) else None
+        # What one entry says is what they all are: a collection holds one type
+        # of key and one of value, so one entry saying which says it for the
+        # rest wherever it stands, and what the collection was declared to hold
+        # says it where no entry does.
+        said_key = self._said_by([key for key, _ in written]) or wanted_key
+        said_value = self._said_by(
+            [v for _, v in written if v is not None]) or wanted_value
         keys: list[Value] = []
         values: list[Value] = []
         outer = self._initializing, self._assigning
         self._initializing, self._assigning = None, None
         try:
             for key, value in written:
-                keys.append(self._lower_expr(builder, key, None))
+                keys.append(self._lower_expr(builder, key, _taken_from(key, said_key)))
                 if value is not None:
-                    values.append(self._lower_expr(builder, value, None))
+                    values.append(self._lower_expr(
+                        builder, value, _taken_from(value, said_value)))
         finally:
             self._initializing, self._assigning = outer
         return _Entries(keys=keys, values=values, wanted_key=wanted_key,
@@ -8054,9 +8102,13 @@ class Checker:
         """
         wanted = self._aiming_at(expected)
         holds = wanted.element if isinstance(wanted, ListType) else None
+        if holds is None:
+            # What one of them says is what they all are, read off the writing
+            # so that an entry may take its type from one written after it.
+            holds = self._said_by(expr.elements)
         values: list[Value] = []
         for written in expr.elements:
-            one = self._lower_expr(builder, written, holds)
+            one = self._lower_expr(builder, written, _taken_from(written, holds))
             found = self._value_type_of(one)
             if found is ERROR:
                 return UndefConst(ERROR)

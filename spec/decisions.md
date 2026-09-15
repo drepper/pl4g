@@ -4467,6 +4467,28 @@ what was depended on rather than a hash of what was compiled.  **Rust**'s `cargo
 compressed JSON.  What is unusual here is the per-definition row: it is a hash of what each function *means*, which nothing else
 in that list carries, and it is only meaningful because the hash is over normalized tokens.
 
+---
+
+## 2026-09-16T16:20+02:00 — language
+
+**One entry of a literal says what they all are**
+
+Stated by the user as a correction: `let a := ⟦⟦1u8, 2⟧, ⟦2, 3⟧⟧` is a program, because an array holds one type, one element
+defines it and no other contradicts it.  The compiler refused it, and refused `⟦1u8, 2⟧` as well.
+
+**Which element says it makes no difference.**  The question is about the type of the array and there is only one of those, so
+reading it off the first element that happens to have a suffix is the same answer as reading it off any of them -- and reading it
+before anything is lowered is what makes the two the same.  The rule now holds however deep the writing goes and for a list, a
+set and a dictionary too, each of which holds one type.  A tuple is the exception and stays one: its members are independent, so
+there is nothing for one member to say about another.
+
+Compare: **C**, where an initializer takes the declared type and there is nothing to infer; **Go**'s composite literals, the same;
+**Rust**, whose `[1, 2u8]` is `[u8; 2]` because inference runs over the whole expression and a suffix anywhere constrains the
+element type -- which is this rule, arrived at by a much larger mechanism; **Swift** and **Haskell** likewise, by unification.
+What is done here is the smallest thing that gives the same answer for literals: look at what is written, take the one type it
+says, and lower everything with it.  A general inference pass would subsume it and is not wanted -- this language does not infer,
+it reads.
+
 Open questions
 --------------
 

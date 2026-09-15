@@ -1986,6 +1986,23 @@ however alike they read.  A type, a value of one and a lookup in one are written
 **The type is written after what it holds.**  `u8⟦4⟧` is four of them, which is the order it is read in: four of these, not an
 array of four whose elements are these.  More than one may follow -- `u8⟦4⟧⟦3⟧` is three arrays of four.
 
+**One element says what they all are.**  An array holds one type, so an element that says which says it for every other -- wherever
+that element stands, and however deep the writing goes:
+
+```
+let a := ⟦1u8, 2⟧                    ※ u8⟦2⟧: the first says it
+let b := ⟦1, 2u8⟧                    ※ the same, said by the second
+let c := ⟦⟦1u8, 2⟧, ⟦2, 3⟧⟧          ※ u8⟦2,2⟧: one element says it for the table
+```
+
+Which element is written down makes no difference, because the question is about the type of the array and there is only one of
+those.  An element that contradicts it is refused (4431), and a literal that says nothing takes it -- which is the rule a literal
+follows everywhere: a suffix says what it is, and without one it is whatever the place wants.  Where *nothing* says anything, as
+in `⟦1, 2⟧`, there is no type to take and the array is refused.
+
+The same holds for a list, a set and a dictionary, which each hold one type as well; a tuple does not, its members being
+independent, so each member of one says its own type or takes it from the type the tuple is written into.
+
 ##### Shape
 
 **An array has a shape: one entry per dimension, separated by commas.**  `u8⟦4⟧` is a vector of four, `u8⟦2,3⟧` a table of two

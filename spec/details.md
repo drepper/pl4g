@@ -1953,6 +1953,31 @@ grouped by what may be done to them.  That is about two hundred bytes of headers
 size test subtracts it: a fixed cost of carrying the thing is not a fact about the code generator.
 
 
+One entry says what a literal holds
+-----------------------------------
+
+An array, a list, a set and a dictionary each hold one type, so an entry that says which says it for every other.  The compiler
+used to get that only from the left: entries were lowered in order with nothing expected, and the first one that turned out to
+have a type settled it for the rest.  That refused `\u27e61, 2u8\u27e7`, which says its type perfectly well, and -- because an array
+literal was lowered with nothing expected whenever the variable had no written type -- it refused `\u27e61u8, 2\u27e7` too.
+
+**`_said_by` reads the type off the writing before any of it is lowered.**  It walks the entries, looking through nested array and
+list literals, and answers the first type an entry *says on its own* -- which is a literal carrying a suffix and nothing else.  An
+entry whose type is known only once it has been lowered, a name or a call, is left to the lowering, where the first of them
+settles it for the rest as it always did.
+
+What it answers becomes the expectation every entry is lowered with, so a literal with no suffix takes it, and `_same_type` still
+has the last word about whether they agree.  The one wrinkle is that an entry which says its own type must *not* be lowered into
+another one: `_literal_type` reports a suffix that disagrees with its context, and the complaint wanted here is the one about the
+literal as a whole -- "this entry is of type u16, and the ones before it are of type u8" -- rather than one about a value being
+handed somewhere.  `_taken_from` is that rule: an entry that says what it is takes nothing from the rest.
+
+The same call also settles the case a written type covers.  A collection's entries were deliberately lowered with nothing
+expected even where the type was written down, so that a disagreement with the type reads as a disagreement between entries; what
+is expected of them now is what an entry said, falling back to what the type says where no entry says anything -- so
+`let s: \u2e28u8\u2e29 = \u2e281, 2\u2e29` works, which it did not.
+
+
 Expectations
 ------------
 

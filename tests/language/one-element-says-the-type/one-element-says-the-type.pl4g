@@ -1,0 +1,74 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ An array holds one type, so an element that says which says it for every
+※ other.  Which element it is makes no difference: the question is about the
+※ type of the array and there is only one of those, so it is read off the
+※ writing before any of it is worked out -- which is what lets an element take
+※ its type from one written after it.
+※
+※ It goes as deep as the writing does.  In `⟦⟦1u8, 2⟧, ⟦2, 3⟧⟧` one element of
+※ one row says `u8`, and the whole table is a table of `u8`.
+※
+※ A list, a set and a dictionary hold one type as well and follow the same
+※ rule.  A tuple does not: its members are independent, so a member says its
+※ own type or takes it from what the tuple is written into.
+※
+※ An element that contradicts what another said is refused (4431), which is the
+※ other half of the rule: one element defines the type and no other may
+※ disagree with it.
+
+@[startup, impure]
+fn main() → u6:
+    ※ the first element says it
+    let a := ⟦1u8, 2⟧
+    ※ and so does the second, which is the same array
+    let b := ⟦1, 2u8⟧
+    ※ a table, where one element of one row says it for the whole
+    let c := ⟦⟦1u8, 2⟧, ⟦2, 3⟧⟧
+    ※ and where the one that says it is in the row written last
+    let d := ⟦⟦1, 2⟧, ⟦2, 3u8⟧⟧
+    ※ a list
+    let l := [1, 2u8, 3]
+    ※ a set, and a dictionary whose keys and values each hold one type
+    let s := ⸨1, 2u8⸩
+    let m := ⸨1: 2, 2u8: 3u16⸩
+    ※ floating point is no different
+    let f := ⟦1.0, 2.5f32⟧
+    let at: u64 ¤idx = 1
+    if a⟦0⟧ ≠ 1u8 ∨ a⟦at⟧ ≠ 2u8:
+        1u6
+    elif b⟦0⟧ ≠ 1u8 ∨ b⟦at⟧ ≠ 2u8:
+        2u6
+    elif c⟦1,1⟧ ≠ 3u8 ∨ c⟦0,0⟧ ≠ 1u8:
+        3u6
+    elif d⟦1,1⟧ ≠ 3u8 ∨ d⟦0,0⟧ ≠ 1u8:
+        4u6
+    elif #l ≠ 3 ∨ summed(l) ≠ 6u8:
+        5u6
+    elif #s ≠ 2 ∨ ¬s⸨2u8⸩:
+        6u6
+    elif #m ≠ 2:
+        7u6
+    elif f⟦at⟧ ≇ 2.5f32:
+        8u6
+    ※ every one of them holds what the element that said so said
+    elif widths(a⟦0⟧, b⟦0⟧, f⟦0⟧) ≠ 0u6:
+        9u6
+    else:
+        0u6
+
+※ Taking them as the types they are is what says the types are those: a value
+※ of another type would not be taken here at all.
+fn widths(one: u8, two: u8, three: f32) → u6:
+    if one = 1u8 ∧ two = 1u8 ∧ three ≅ 1.0f32:
+        0u6
+    else:
+        1u6
+
+※ A list has no index, so what says it holds `u8` is that its elements add up
+※ in one -- a list of anything else would not be walked into this at all.
+fn summed(of: [u8]) → u8:
+    let total: mut u8 = 0u8
+    foreach one := of:
+        total ← total + one
+    total
