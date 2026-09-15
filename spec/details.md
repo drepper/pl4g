@@ -433,6 +433,17 @@ worked out, the whole of it is the remainder, a comparison of the answer with no
 failure the remainder gave -- with the number the question was asked about carried as what the error holds.  Where the divisor is
 written down neither the result nor the test is built at all.
 
+**Writing a failure out is the `wrap` every other failure already is**, with a truth value of one and an answer half nothing may
+read.  The one thing it needed of its own is where its type comes from: it is what is wanted where it stands, and that is the one
+place in the checker that must *not* ask `_aiming_at` -- which unwraps a result, because a value of the answer type written where
+a result is wanted is the successful one.  A failure is the result and not its answer, so it asks for what is wanted as it
+stands.
+
+In the grammar it is an expression and never an operand.  `⊥ a ⊼ b` carries the whole of what follows, so there is no reading in
+which `⊥ a` is the left side of anything -- which is what `return` does and is why it sits at the top of the expression
+hierarchy rather than among the operands.  Written among them it was an unresolved conflict: whether the operator after it
+belonged to what it carried could not be decided until the operand after *that* had been read.
+
 **A result whose error carries a value is three parts**, and putting the truth value *between* the two is what made that a small
 change rather than a large one: everything that reads a result asks for the truth value by its place, and a part added after it
 changes nothing.  `parts_of` says so, which is the one place that had to; the register allocation, the calling convention and the

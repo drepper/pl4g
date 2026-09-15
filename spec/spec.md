@@ -1007,6 +1007,25 @@ computed only in that case, which is the rule `and` and `or` follow and for the 
 comparisons and looser than everything that computes a number, so `a ÷ b ?? c + d` takes the whole of each side; it is right
 associative, so `a ?? b ?? c` is "a, or else b, or else c", which is the only reading of it that is well typed.
 
+**`⊥` is the failure, written out**, and **`⊥ VALUE` is one whose error carries that value.
+
+```
+fn nothing() → u8?:          ⊥
+fn saying(why: u16) → u8?u16:  ⊥ why
+```
+
+What it is a failure *of* is not written with it: it is whatever stands where it stands, exactly as a value of the answer type
+written there is the successful result of the same type.  So it needs a place that wants a result -- the answer of a function
+that answers one, a variable whose type says one, an argument of a parameter that takes one -- and there is no reading of it
+anywhere else (4522).
+
+**Whether it carries a value is the type's to say and not the program's**: a value written where the error carries nothing is
+refused (4523), and a `⊥` written without one where the error carries something is refused too (4524), there being no failure of
+such a type that carries nothing.
+
+**It takes the whole of what follows it**, the way `return` does, so `⊥ a + b` carries the sum and there is no reading in which
+`⊥ a` is the left side of anything.
+
 **A value of the answer type, written where a result is wanted, is the successful result.**  That is how a function that answers
 with a result says it succeeded -- `fn share(a: u8, b: u8) → u8?` ending in `(a ÷ b)? + 1u8` answers with the sum -- and there is
 no other way to write one.  The reverse is not admitted: a result where a plain value is wanted is refused, since accepting it

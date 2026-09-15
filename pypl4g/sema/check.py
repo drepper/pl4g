@@ -5097,6 +5097,8 @@ class Checker:
                 # reaching this is standing where a value stands.
                 self._diags.emit(D.LANG_ENUMERATE_IS_NOT_A_VALUE, expr.span)
                 return UndefConst(ERROR)
+            case ast.Failure():
+                return self._lower_failure(builder, expr, expected)
             case ast.Lifted():
                 # Every place one may stand looks at it before it gets here:
                 # `\N{APL FUNCTIONAL SYMBOL QUAD}typeof`, a comparison the compiler settles, and the two
@@ -5714,6 +5716,52 @@ class Checker:
                 return None
             found.append(along)
         return tuple(found)
+
+    def _lower_failure(self, builder: IRBuilder, expr: ast.Failure,
+                       expected: Type | None) -> Value:
+        """Lower `\N{UP TACK}` and `\N{UP TACK} VALUE`: a result that has no answer, written out.
+
+        **What it is a failure of is what stands where it stands.**  That is
+        the same rule a value of the answer type follows -- `0u8` written where
+        a `u8?` is wanted is the successful result -- and it is why nothing is
+        written beside the glyph to say which result this is.  So it needs a
+        place that wants one, and there is no reading of it anywhere else.
+
+        Whether it carries a value is the type's to say and not the program's:
+        an error written `TYPE?` is the fact that there is no answer and nothing
+        more, and one written `TYPE?ERROR` is that fact and a value beside it.
+        """
+        # What is wanted as it stands, and not what a value of the answer type
+        # would be aimed at: a failure is the *result* and not its answer, so
+        # the one place that unwraps a result before looking at it is the one
+        # place this must not ask.
+        wanted = expected
+        if not isinstance(wanted, ResultType):
+            self._diags.emit(
+                D.LANG_FAILURE_NEEDS_A_RESULT, expr.span,
+                found="nothing in particular" if wanted is None
+                else "".join(("'", wanted.render(), "'")))
+            return UndefConst(ERROR)
+        if wanted.err is None:
+            if expr.value is not None:
+                self._diags.emit(D.LANG_FAILURE_CARRIES_NOTHING,
+                                 expr.value.span, found=wanted.render())
+                return UndefConst(ERROR)
+            carried: Value | None = None
+        else:
+            if expr.value is None:
+                self._diags.emit(D.LANG_FAILURE_NEEDS_A_VALUE, expr.span,
+                                 found=wanted.render(),
+                                 carried=wanted.err.render())
+                return UndefConst(ERROR)
+            carried = self._lower_into(builder, expr.value, wanted.err,
+                                       expr.value.span)
+            if self._value_type_of(carried) is ERROR:
+                return UndefConst(ERROR)
+        # The answer half is a value nothing may read, which is what the truth
+        # value beside it says.
+        return builder.wrap(UndefConst(wanted.ok), builder.bool_const(True),
+                            wanted, expr.span, carried)
 
     def _lower_divides(self, builder: IRBuilder, expr: ast.Expr,
                        written: ast.Expr | None, over: ast.Expr, name: str,

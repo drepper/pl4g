@@ -493,6 +493,7 @@ module.exports = grammar({
     // bare comparison to appear inside another one except within parentheses.
 
     _expression: $ => choice(
+      $.failure_expression,
       $.logical_expression,
       $._non_logical,
     ),
@@ -735,6 +736,18 @@ module.exports = grammar({
     )),
 
     parenthesized_expression: $ => seq('(', $._expression, ')'),
+
+    // `\u22a5` and `\u22a5 VALUE`: a result that has no answer, written out.  What it
+    // is a failure *of* is not written with it -- it is whatever stands where
+    // it stands -- so there is nothing here but the glyph and, where the
+    // error carries something, what it carries.  Read the way `return` is
+    // read, taking the whole of an expression where one begins there.
+    // It is an expression and never an operand: what follows the glyph is the
+    // whole of what comes after it, so `\u22a5 a + b` carries the sum and there is
+    // no reading in which `\u22a5 a` is the left side of anything.  That is the
+    // rule `return` follows, and it is why this stands at the top of the
+    // hierarchy rather than among the operands.
+    failure_expression: $ => prec.right(seq('\u22a5', optional($._expression))),
 
     // What is lifted out of the program and into the compiler.  The brackets
     // are what keeps this grammar context-free: a type's name and a value's

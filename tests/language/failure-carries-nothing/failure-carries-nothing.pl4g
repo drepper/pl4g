@@ -1,0 +1,12 @@
+※ pl4g-test: compile=error diag=4523
+
+※ A result written `TYPE?` has an error that is the fact that there is no
+※ answer and nothing more; one written `TYPE?ERROR` has an error that carries a
+※ value.  Which of the two is being made is the type it is being made as, and a
+※ value written for an error that has nowhere to put it is a value nothing
+※ would ever read.
+
+@[startup]
+fn main() → u6:
+    let n: u8? = ⊥ 7u16
+    0u6

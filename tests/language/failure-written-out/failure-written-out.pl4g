@@ -1,0 +1,91 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ `⊥` is a result that has no answer, written out, and `⊥ VALUE` is one whose
+※ error carries that value.  Until now the only way to make one was an
+※ operation that had no answer for what it was given -- a division by zero, a
+※ divisor that turned out to be zero -- so a program could read a failure and
+※ not produce one.
+※
+※ **What it is a failure of is what stands where it stands.**  That is the same
+※ rule a value of the answer type follows: `0u8` written where a `u8?` is
+※ wanted is the successful result of that type, and `⊥` written there is the
+※ failure of it.  So nothing is written beside the glyph to say which result it
+※ is, and there is no reading of it anywhere a result is not wanted (4522).
+※
+※ Whether it carries a value is the type's to say and not the program's: an
+※ error written `TYPE?` is the fact that there is no answer and nothing more,
+※ and one written `TYPE?ERROR` is that fact and a value beside it.
+※
+※ It takes the whole of what follows it, the way `return` does, so `⊥ a + b`
+※ carries the sum and there is no reading in which `⊥ a` is the left side of
+※ anything.
+
+@[startup, impure]
+fn main() → u6:
+    let plain: u8? = nothing()
+    let carried: u8?u16 = saying(700u16)
+    let summed: u8?u16 = adding(300u16, 400u16)
+    let held: mut u16 = 0u16
+    let also: mut u16 = 0u16
+    match carried:
+        u8:
+            held ← 1u16
+        ⊥(why):
+            held ← why
+    match summed:
+        u8:
+            also ← 1u16
+        ⊥(why):
+            also ← why
+    ※ an error that carries nothing is still an error, and `??` reads it
+    if (plain ?? 9u8) ≠ 9u8 ∨ (answered(false) ?? 9u8) ≠ 3u8:
+        1u6
+    elif (answered(true) ?? 9u8) ≠ 9u8:
+        2u6
+    ※ and one that carries something hands it to whoever matches
+    elif held ≠ 700u16:
+        3u6
+    ※ what follows the glyph is the whole of it, so this carried the sum
+    elif also ≠ 700u16:
+        4u6
+    ※ a failure written in one arm of an `if` and an answer in the other, which
+    ※ is the same type either way
+    elif (either(true) ?? 9u8) ≠ 9u8 ∨ (either(false) ?? 9u8) ≠ 4u8:
+        5u6
+    ※ and one propagated with `?`, carrying what it carried
+    elif passed(700u16) ≠ 700u16:
+        6u6
+    else:
+        0u6
+
+fn nothing() → u8?:
+    ⊥
+
+fn saying(why: u16) → u8?u16:
+    ⊥ why
+
+fn adding(a: u16, b: u16) → u8?u16:
+    ⊥ a + b
+
+fn answered(fail: bool) → u8?:
+    if fail:
+        ⊥
+    else:
+        3u8
+
+fn either(fail: bool) → u8?:
+    if fail:
+        ⊥
+    else:
+        4u8
+
+fn passed(why: u16) → u16:
+    match carrying(why):
+        u8:
+            0u16
+        ⊥(number):
+            number
+
+fn carrying(why: u16) → u8?u16:
+    let v: u8 = saying(why)?
+    v

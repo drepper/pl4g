@@ -1,0 +1,11 @@
+※ pl4g-test: compile=error diag=4522
+
+※ What `⊥` is a failure *of* is not written with it: it is whatever stands
+※ where it stands, exactly as a value of the answer type written there is the
+※ successful result of the same type.  So it needs somewhere that wants a
+※ result, and somewhere that wants anything else has nothing for it to be.
+
+@[startup]
+fn main() → u6:
+    let n: u8 = ⊥
+    0u6

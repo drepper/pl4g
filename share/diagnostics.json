@@ -4963,6 +4963,77 @@
       "option": null
     },
     {
+      "number": 4522,
+      "name": "LANG_FAILURE_NEEDS_A_RESULT",
+      "severity": "error",
+      "message": "'\u22a5' is a result that has no answer, and this is where {found} stands",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "what was wanted where it was written"
+        }
+      ],
+      "cause": "What it is a failure *of* is not written with it: it is whatever stands where it stands, exactly as a value of the answer type written there is the successful result of the same type.  So it needs somewhere that wants a result -- the answer of a function that answers one, a variable whose type says one, an argument of a parameter that takes one -- and somewhere that wants anything else has nothing for it to be.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Results",
+        "requirement": "'\u22a5' stands where a result is wanted."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4523,
+      "name": "LANG_FAILURE_CARRIES_NOTHING",
+      "severity": "error",
+      "message": "the error of '{found}' carries nothing, so there is nothing for this value to be",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the result being made"
+        }
+      ],
+      "cause": "A result written `TYPE?` has an error that is the fact that there is no answer and nothing more; one written `TYPE?ERROR` has an error that carries a value.  Which of the two is being made is the type it is being made as, and a value written for an error that has nowhere to put it is a value nothing would ever read.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Results",
+        "requirement": "'\u22a5' carries a value only where the error does."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4524,
+      "name": "LANG_FAILURE_NEEDS_A_VALUE",
+      "severity": "error",
+      "message": "the error of '{found}' carries a {carried}, and none is written here",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the result being made"
+        },
+        {
+          "name": "carried",
+          "type": "string",
+          "description": "what its error carries"
+        }
+      ],
+      "cause": "A result whose type says its error carries a value has one in every failure of it: there is no failure of such a type that carries nothing, so a `\u22a5` written without a value would be making a value with a hole in it.  What to write there is whatever the error is to say.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Results",
+        "requirement": "'\u22a5' carries a value where the error does."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 5001,
       "name": "LANG_STMT_UNREACHABLE",
       "severity": "warning",

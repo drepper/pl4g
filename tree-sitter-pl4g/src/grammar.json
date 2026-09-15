@@ -2365,6 +2365,10 @@
       "members": [
         {
           "type": "SYMBOL",
+          "name": "failure_expression"
+        },
+        {
+          "type": "SYMBOL",
           "name": "logical_expression"
         },
         {
@@ -3760,6 +3764,31 @@
           "value": ")"
         }
       ]
+    },
+    "failure_expression": {
+      "type": "PREC_RIGHT",
+      "value": 0,
+      "content": {
+        "type": "SEQ",
+        "members": [
+          {
+            "type": "STRING",
+            "value": "⊥"
+          },
+          {
+            "type": "CHOICE",
+            "members": [
+              {
+                "type": "SYMBOL",
+                "name": "_expression"
+              },
+              {
+                "type": "BLANK"
+              }
+            ]
+          }
+        ]
+      }
     },
     "lifted_expression": {
       "type": "SEQ",

@@ -1,0 +1,10 @@
+※ pl4g-test: compile=error diag=4524
+
+※ A result whose type says its error carries a value has one in every failure
+※ of it: there is no failure of such a type that carries nothing, so a `⊥`
+※ written without a value would be making a value with a hole in it.
+
+@[startup]
+fn main() → u6:
+    let n: u8?u16 = ⊥
+    0u6

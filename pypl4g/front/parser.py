@@ -165,6 +165,26 @@ _UNARY_OPERATORS: Final[dict[TokKind, ast.UnaryOp]] = {
 }
 
 
+#: The kinds of token an expression may begin with, which is what says whether
+#: `\N{UP TACK}` carries a value or stands on its own.  Listed rather than derived: what
+#: may begin one is a property of the grammar, and a rule that asked the parser
+#: to try and back out would read the whole of an expression to find out that
+#: there was not one.
+_STARTS_AN_EXPRESSION: Final[frozenset[TokKind]] = frozenset((
+    TokKind.INT, TokKind.FLOAT, TokKind.STRING, TokKind.CHAR, TokKind.IDENT,
+    TokKind.KW_TRUE, TokKind.KW_FALSE, TokKind.LPAREN, TokKind.ARRAY_OPEN,
+    TokKind.LBRACKET, TokKind.TUPLE_OPEN, TokKind.SET_OPEN, TokKind.LIFT_OPEN,
+    TokKind.BOTTOM, TokKind.TILDE, TokKind.LOGIC_NOT, TokKind.LENGTH,
+    TokKind.SHAPE, TokKind.MAX, TokKind.MIN, TokKind.FLOOR, TokKind.CEILING,
+    TokKind.NEAREST, TokKind.ROUNDED, TokKind.DIVIDES, TokKind.NOT_DIVIDES,
+))
+
+
+def _begins_an_expression(kind: TokKind) -> bool:
+    """Whether an expression may begin with a token of this kind."""
+    return kind in _STARTS_AN_EXPRESSION
+
+
 class _Bail(Exception):
     """Unwinds to the top-level recovery point after an unrecoverable error."""
 
@@ -1469,6 +1489,16 @@ class Parser:
             inner = self._parse_expression()
             self._expect(TokKind.RPAREN, D.LANG_SYNTAX_EXPECTED_CLOSING_PAREN)
             return inner
+        if token.kind is TokKind.BOTTOM:
+            # `\N{UP TACK}` and `\N{UP TACK} VALUE`, read the way `return` is read: what follows
+            # is the whole of an expression where one begins there, and nothing
+            # where the statement ends.
+            self._advance()
+            value = (self._parse_expression()
+                     if _begins_an_expression(self._current.kind) else None)
+            return ast.Failure(
+                span=token.span if value is None else token.span.to(value.span),
+                value=value)
         if token.kind is TokKind.LIFT_OPEN:
             return self._parse_lift()
         match token.kind:

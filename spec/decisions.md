@@ -4227,13 +4227,40 @@ instructions and the pass that takes an answer apart asks which shape it has.
 **The `⊥` arm binds it**, exactly as the answer's arm binds the answer.  The machinery was already written for it -- the table of
 a result's alternatives already gave the error's type -- and what was missing was passing it to the arm.
 
-What is still missing is a way to *write* a failure carrying a value; `∣` makes one and nothing else does.  A `⊥ value`
-expression is the obvious spelling and is not decided here.
+A way to *write* a failure followed in the commit after this one, `⊥` and `⊥ value`, which is the entry below.
 
 Compare: **Rust**'s `Result<T, E>`, which this is, with the difference that there the two are a real sum and here they are both
 present -- the answer and the error laid out beside each other rather than over each other, which makes reading either one read
 and no branch and costs the room of the smaller; **Go**'s pair of return values, which is this without the tag; **Haskell**'s
 `Either`; and **C++**'s `std::expected`, which unions them as Rust does.
+
+---
+
+## 2026-09-16T07:15+02:00 — language
+
+**`⊥` and `⊥ value`: a failure, written out**
+
+Decided on the user's direction.  Until now a result could only be *made* by an operation that had no answer for what it was
+given -- a division by zero, a divisor that turned out to be zero -- so a program could read a failure and not produce one, which
+made a function answering a result something only the compiler could write the interesting half of.
+
+**What it is a failure of is what stands where it stands**, and nothing is written beside the glyph to say.  That is the rule a
+value of the answer type already follows: `0u8` written where a `u8?` is wanted is the successful result of that type, and `⊥`
+written there is the failure of it.  The alternative -- naming the type, `u8?(⊥)` or some such -- would have been a second way of
+saying what the place already says, and would have been the only expression in the language that had to.
+
+**Whether it carries a value is the type's to say.**  A `⊥` with a value where the error carries nothing is refused, and one
+without where the error carries something is refused too: there is no failure of `u8?u16` that carries nothing, so allowing the
+shorter spelling would have been allowing a value with a hole in it.
+
+**It takes the whole of what follows**, the way `return` does.  In the grammar that made it an expression and never an operand,
+which is also the only way the ambiguity resolves: written among the operands, whether the operator after `⊥ a` belonged to what
+it carried could not be decided until the operand after *that* had been read.
+
+Compare: **Rust**'s `Err(e)` and `Ok(v)`, which name the variant and so need no context -- the cost being that the type must be
+inferred from the name and the value together; **Go**'s `return nil, err`, where the shape of the answer says which half is
+which; **Haskell**'s `Left`; and **C++**'s `std::unexpected(e)`, which is this with the variant named.  What this does instead is
+what it does for the successful half already, and having the two halves written the same way is worth more than a name on each.
 
 ---
 

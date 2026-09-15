@@ -170,6 +170,7 @@ GROUPS: tuple[Group, ...] = (
            "lifting": "types lifted out of the program, and the ends of six of them",
            "enumerate": "five kinds of thing walked with their turns counted",
            "divides": "dividing without a remainder, both forms and over an array",
+           "failure-written-out": "failures written out, carrying a value and not",
            "loop-break-nested": "two loops and all four jumps between them",
            "loop-continue": "two loops each begun again from inside the body",
            "loop-break-value": "a search whose loop comes to what it found",

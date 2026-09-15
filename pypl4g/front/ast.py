@@ -337,6 +337,21 @@ class Try(Expr):
 
 
 @dataclass(frozen=True, slots=True)
+class Failure(Expr):
+    """`\N{UP TACK}` and `\N{UP TACK} VALUE`: a result that has no answer, written out.
+
+    The other way one is made is by an operation that has no answer for what it
+    was given -- a division by zero, a divisor that turns out to be zero -- and
+    until now that was the only way.  What it is a failure *of* is not written
+    here: it is what stands where the failure stands, exactly as a value of the
+    answer type written there is the successful result of the same type.
+    """
+
+    #: What the error carries, where the result's error carries something.
+    value: Expr | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class Lifted(Expr):
     """`\N{TOP LEFT CORNER}x\N{TOP RIGHT CORNER}`: what is written, lifted out of the program and into the compiler.
 
