@@ -18,7 +18,8 @@ from .token import COMMENT_GLYPH, TokKind, Token, WILDCARD_NAME
 
 #: Tokens at which error recovery stops, because a new definition can begin there.
 _RECOVERY: Final[frozenset[TokKind]] = frozenset(
-    (TokKind.KW_FN, TokKind.KW_LET, TokKind.KW_TYPE, TokKind.AT_LBRACKET, TokKind.EOF))
+    (TokKind.KW_FN, TokKind.KW_LET, TokKind.KW_TYPE, TokKind.KW_UNIT,
+     TokKind.AT_LBRACKET, TokKind.EOF))
 
 
 @dataclass(frozen=True, slots=True)
@@ -292,6 +293,8 @@ class Parser:
             return self._parse_type_definition(attrs, doc)
         if self._check(TokKind.KW_ENUM):
             return self._parse_enum_definition(attrs, doc)
+        if self._check(TokKind.KW_UNIT):
+            return self._parse_unit_definition(doc)
         self._diags.emit(D.LANG_FILESTRUCT_UNEXPECTED_TOPLEVEL, self._current.span,
                          construct=self._current.describe())
         raise _Bail()
@@ -501,6 +504,13 @@ class Parser:
             found = self._parse_list_type()
         else:
             found = self._parse_named_type()
+        if self._check(TokKind.UNIT):
+            # A unit belongs to the type it is written after and not to an
+            # array of it, so it is read before the suffixes: `u8 \N{CURRENCY SIGN}meter\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}4\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}` is
+            # four lengths and not a length made of four numbers.
+            written = self._parse_unit_ref()
+            found = ast.UnitTypeRef(span=found.span.to(written.span), base=found,
+                                    unit=written)
         while self._check(TokKind.ARRAY_OPEN):
             self._advance()
             shape = [self._parse_dimension()]
@@ -511,6 +521,109 @@ class Parser:
             found = ast.ArrayTypeRef(span=found.span.to(end), element=found,
                                      shape=tuple(shape))
         return found
+
+    def _parse_unit_ref(self) -> ast.UnitRef:
+        """Parse `\N{CURRENCY SIGN}` and the unit after it.
+
+        Read left to right: the first name stands above the line, `\N{MULTIPLICATION SIGN}` puts the
+        next one above it too and `\N{DIVISION SIGN}` puts it below, and a number written raised
+        after one is what it is raised to.  That is how a unit is written in
+        physics, and it means `\N{CURRENCY SIGN}meter\N{DIVISION SIGN}second\N{SUPERSCRIPT TWO}` reads as it looks.
+
+        A name between quotation marks is a unit whose name is not an
+        identifier, which is what lets a program count things the language has
+        never heard of.
+        """
+        start = self._expect(TokKind.UNIT).span
+        factors = [self._parse_unit_factor(1)]
+        end = factors[-1].span
+        while True:
+            if self._accept(TokKind.TIMES) is not None:
+                sign = 1
+            elif self._accept(TokKind.DIVIDE) is not None:
+                sign = -1
+            else:
+                break
+            factors.append(self._parse_unit_factor(sign))
+            end = factors[-1].span
+        return ast.UnitRef(span=start.to(end), factors=tuple(factors))
+
+    def _parse_unit_factor(self, sign: int) -> ast.UnitFactor:
+        """Parse one base unit of a written unit, with whatever it is raised to."""
+        if self._check(TokKind.STRING):
+            token = self._advance()
+            name, quoted = token.text, True
+        else:
+            token = self._expect(TokKind.IDENT, D.LANG_SYNTAX_EXPECTED_UNIT)
+            name, quoted = token.text, False
+        exponent, end = 1, token.span
+        raised = self._accept(TokKind.EXPONENT)
+        if raised is not None:
+            assert raised.int_value is not None
+            exponent, end = raised.int_value, raised.span
+        return ast.UnitFactor(span=token.span.to(end), name=name, quoted=quoted,
+                              exponent=sign * exponent)
+
+    def _parse_unit_definition(self, doc: str | None = None) -> ast.UnitDef:
+        """Parse `unit NAME`, `unit NAME = VALUE` or `unit \N{CURRENCY SIGN}FROM \N{RIGHTWARDS ARROW} \N{CURRENCY SIGN}TO`.
+
+        A unit the language does not provide is introduced before it is used,
+        which is what keeps a mistyped unit from quietly becoming a unit of its
+        own.  Where the definition stands is how far it reaches: at the top
+        level, the whole file; inside a body, that body.
+        """
+        start = self._expect(TokKind.KW_UNIT).span
+        if self._check(TokKind.UNIT):
+            what = self._parse_unit_ref()
+            self._expect(TokKind.ARROW, D.LANG_SYNTAX_EXPECTED_UNIT_ARROW)
+            where = self._parse_unit_ref()
+            return ast.UnitDef(span=start.to(where.span), name="",
+                               name_span=what.span, stands=(what, where),
+                               doc=doc)
+        if self._check(TokKind.STRING):
+            token = self._advance()
+            quoted = True
+        else:
+            token = self._expect(TokKind.IDENT, D.LANG_SYNTAX_EXPECTED_UNIT)
+            quoted = False
+        if self._accept(TokKind.EQUALS) is None:
+            return ast.UnitDef(span=start.to(token.span), name=token.text,
+                               name_span=token.span, quoted=quoted, doc=doc)
+        over, under, factors = self._parse_unit_measure()
+        end = factors[-1].span if factors else token.span
+        return ast.UnitDef(span=start.to(end), name=token.text,
+                           name_span=token.span, quoted=quoted,
+                           measured=ast.UnitRef(span=token.span.to(end),
+                                                factors=tuple(factors)),
+                           scale=(over, under), doc=doc)
+
+    def _parse_unit_measure(self) -> tuple[int, int, list[ast.UnitFactor]]:
+        """Parse what one unit is in terms of others: numbers and names mixed.
+
+        `unit mph = 1609344 \N{DIVISION SIGN} 3600000 \N{MULTIPLICATION SIGN} meter \N{DIVISION SIGN} second` is one product read
+        left to right, in which the numbers say how many and the names say of
+        what.  Keeping them in one sequence is what lets it be written the way
+        the conversion is written down anywhere else.
+        """
+        over, under = 1, 1
+        factors: list[ast.UnitFactor] = []
+        sign = 1
+        while True:
+            if self._check(TokKind.INT):
+                token = self._advance()
+                assert token.int_value is not None
+                if sign > 0:
+                    over *= token.int_value
+                else:
+                    under *= token.int_value
+            else:
+                factors.append(self._parse_unit_factor(sign))
+            if self._accept(TokKind.TIMES) is not None:
+                sign = 1
+            elif self._accept(TokKind.DIVIDE) is not None:
+                sign = -1
+            else:
+                return (over, under, factors)
 
     def _parse_dimension(self) -> ast.Expr | None:
         """Parse how many there are along one dimension, or nothing for a
@@ -886,6 +999,10 @@ class Parser:
 
     def _parse_bare_statement(self) -> ast.Stmt:
         """Parse one statement."""
+        if self._check(TokKind.KW_UNIT):
+            # A unit introduced inside a body reaches as far as the body does,
+            # which is what every other name written in one does.
+            return self._parse_unit_definition()
         if self._check(TokKind.KW_LET):
             found = self._parse_variable()
             if isinstance(found, ast.ModuleImport):

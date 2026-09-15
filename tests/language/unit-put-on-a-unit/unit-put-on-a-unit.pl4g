@@ -1,0 +1,12 @@
+※ pl4g-test: compile=error diag=4544
+
+※ Nothing crosses from one unit to another in a single step, because a step
+※ that did would be the mistake units exist to catch written in one place
+※ instead of none.  A value that has a unit reaches another through `⎕drop` and
+※ then `⎕unit`, which is two things said out loud.
+
+@[startup]
+fn main() → u6:
+    let n: u32 ¤meter = 5
+    let m: u32 ¤second = ⎕unit(n, ⌜second⌝)
+    0u6

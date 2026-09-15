@@ -1,0 +1,11 @@
+※ pl4g-test: compile=error diag=4540
+
+※ A unit says what a number counts.  A truth value counts nothing and a code
+※ point counts nothing, so there is nothing for a unit on one to say.  An array
+※ is several of something, and the unit belongs to what it holds -- which is
+※ where it is written: `u8 ¤meter⟦4⟧` is four lengths.
+
+@[startup]
+fn main() → u6:
+    let flag: bool ¤meter = true
+    0u6

@@ -18,7 +18,7 @@ fn main() → u6:
     a⟦0⟧ ← 5u8
     ※ an index written down is checked while compiling, and one worked out
     ※ while the program runs is checked while it runs
-    let at: u8 = 2u8
+    let at: u8 ¤idx = 2
     ※ what this used to say through the exit status, which is six bits now
     if a⟦0⟧ + a⟦1⟧ + a⟦at⟧ + a⟦3⟧ - 35u8 ≠ 60u8:
         1u6

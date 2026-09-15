@@ -1,0 +1,10 @@
+※ pl4g-test: compile=error diag=4545
+
+※ `⎕drop` takes the value whose unit is to come off, and one thing is all there
+※ is to say.  `⎕unit` takes that value and the unit to put on it.
+
+@[startup]
+fn main() → u6:
+    let n: u32 ¤meter = 5
+    let m: u32 = ⎕drop(n, n)
+    0u6

@@ -17,14 +17,14 @@
 let grid: u8⟦3,3⟧ = ⟦⟦1u8,2u8,4u8⟧, ⟦8u8,16u8,32u8⟧, ⟦64u8,0u8,0u8⟧⟧
 
 ※ a table whose type does not say its shape carries one count per dimension
-fn corner(t: u8⟦,⟧, r: u8, c: u8) → u8:
+fn corner(t: u8⟦,⟧, r: u8 ¤idx, c: u8 ¤idx) → u8:
     t⟦r,c⟧
 
 @[startup]
 fn main() → u6:
     let cube: u8⟦2,2,2⟧ = ⟦⟦⟦1u8,2u8⟧,⟦4u8,8u8⟧⟧, ⟦⟦16u8,32u8⟧,⟦64u8,128u8⟧⟧⟧
     ※ what this used to say through the exit status, which is six bits now
-    if corner(grid, 2u8, 0u8) + cube⟦1,0,1⟧ + cube⟦0,1,0⟧ ≠ 100u8:
+    if corner(grid, 2, 0) + cube⟦1,0,1⟧ + cube⟦0,1,0⟧ ≠ 100u8:
         1u6
     else:
         0u6

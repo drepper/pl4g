@@ -1,0 +1,17 @@
+※ pl4g-test: compile=error diag=4541
+
+※ Which element of an array is wanted is not a length, a count of seconds or a
+※ number of apples, and an index worked out from one of those is nearly always
+※ a mistake.  The unit of the question -- which one -- is `¤idx`.
+※
+※ A literal is whatever it is asked to be and so is never wrong here: `v⟦2⟧`
+※ needs nothing written.  Anything else says what it counts, and a number
+※ counting something else reaches an index through `⎕drop` and `⎕unit`, or by
+※ a `unit ¤FROM → ¤idx` that says a whole kind of number may stand there.
+
+@[startup]
+fn main() → u6:
+    let v: u8⟦4⟧ = ⟦1u8, 2u8, 3u8, 4u8⟧
+    let at: u8 = 2u8
+    let e: u8 = v⟦at⟧
+    0u6

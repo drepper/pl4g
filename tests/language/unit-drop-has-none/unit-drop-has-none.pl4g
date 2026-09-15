@@ -1,0 +1,12 @@
+※ pl4g-test: compile=error diag=4543
+
+※ `⎕drop` crosses from a type with a unit to the one without it, and a value
+※ that has no unit is already there.  A call that does nothing is a line a
+※ generator emitted by mistake, which is what every rule here about a statement
+※ with no effect is for.
+
+@[startup]
+fn main() → u6:
+    let n: u32 = 5u32
+    let m: u32 = ⎕drop(n)
+    0u6

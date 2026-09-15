@@ -22,6 +22,7 @@ from .inst import (AddressInst, AnyLaneInst, AssertInst, BinaryInst, BinOp,
                    UnwrapInst, WrapInst)
 from .module import GlobalVar, Module
 from .types import (ArrayType, BOOL, BoolType, CharType, DictType, EnumType,
+                    without_units,
                     IntType,
                     MEM, PtrType, ResultType, SetType, TupleType, Type,
                     VecType, VOID, parts_of)
@@ -196,7 +197,9 @@ class Verifier:
                 # they are the same ones.
                 if not (_is_an_address(inst.ty)
                         and _is_an_address(inst.operands[0].ty)) \
-                        and not _held_as(inst.ty, inst.operands[0].ty):
+                        and not _held_as(inst.ty, inst.operands[0].ty) \
+                        and without_units(inst.ty) \
+                        is not without_units(inst.operands[0].ty):
                     self._fail(where, "".join((
                         "reading ", inst.operands[0].ty.render(), " as ",
                         inst.ty.render(), ", which is not the same kind of thing")))
@@ -218,14 +221,19 @@ class Verifier:
                         "the address of a ", inst.operands[0].ty.render(),
                         " read as ", inst.ty.render())))
             case BinaryInst():
-                if inst.operands[0].ty != inst.operands[1].ty:
+                # Up to units, which the bits know nothing about: multiplying a
+                # length by a time answers an area-per-time and is one
+                # multiplication, the same one it would have been with no units
+                # written anywhere.
+                if without_units(inst.operands[0].ty) \
+                        != without_units(inst.operands[1].ty):
                     self._fail(where, "".join(("'", inst.opcode,
                                                "' applied to operands of different types")))
                 # An operation that may have no answer says so in its type: the
                 # answer type is the operands' and the whole is a result.
                 answered = (inst.ty.ok if isinstance(inst.ty, ResultType)
                             else inst.ty)
-                if answered != inst.operands[0].ty:
+                if without_units(answered) != without_units(inst.operands[0].ty):
                     self._fail(where, "".join(("'", inst.opcode,
                                                "' result type differs from its operands")))
             case TupleInst():

@@ -13,9 +13,10 @@
 ※ type said.  That goes one way only, since nothing that has lost its count can
 ※ promise to have four.
 
-fn total(xs: u6⟦⟧, n: u6) → u6:
+fn total(xs: u6⟦⟧, n: u6 ¤idx) → u6:
     let sum: mut u6 = 0u6
-    foreach i := 0u6…n:
+    let first: u6 ¤idx = 0
+    foreach i := first…n:
         sum ← sum + xs⟦i⟧
     sum
 
@@ -23,4 +24,4 @@ fn total(xs: u6⟦⟧, n: u6) → u6:
 fn main() → u6:
     let a: u6⟦6⟧ = ⟦1u6, 2u6, 4u6, 8u6, 16u6, 32u6⟧
     ※ four of them, starting at one
-    total(a⟦1…5⟧, 4u6)
+    total(a⟦1…5⟧, 4)

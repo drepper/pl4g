@@ -577,6 +577,18 @@ Runtime
     several values or already a place, and what a reference to one would mean -- the place the value is, or the place the elements
     are -- is a question worth answering rather than guessing.
 
+[ ] decide what converts between two units that measure the same thing.  `unit mph = 1609344 ÷ 3600000 × meter ÷ second` records
+    the scale and nothing applies it, so a speed in miles an hour reaches metres a second through `⎕drop` and `⎕unit` and keeps
+    its number.  A conversion would generate code, which is the one thing units do not do today, so what has to be settled is
+    whether crossing between two units of one dimension is a different operation from crossing between two of different ones.
+
+[ ] let a unit stand on something that is not a number.  A unit belongs to a number (4540), so a `char` and a `bool` cannot carry
+    one; whether anything wants to is not clear, and an array carries its unit on what it holds already.
+
+[ ] decide whether a unit reaches across a module boundary.  A `unit` at the top level reaches the file, and a module that
+    exports a function taking `u32 ¤meter` names a unit the importing file may never have introduced.  Nothing tests it either
+    way yet.
+
 [ ] widen what a parameter's default may be.  Today it is a literal or a value of an enumeration, which is what a call can hand
     over in registers.  A run of elements, a string or a collection is a value in memory, so a default of one would have to say
     whose memory -- the caller's, or one copy the image holds -- and nothing yet needs it.

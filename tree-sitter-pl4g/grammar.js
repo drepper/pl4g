@@ -63,7 +63,7 @@ module.exports = grammar({
 
     _item: $ => seq(
       choice($.function_definition, $.variable_definition, $.module_import,
-             $.type_definition, $.enum_definition),
+             $.type_definition, $.enum_definition, $.unit_definition),
       repeat($._newline),
     ),
 
@@ -218,8 +218,42 @@ module.exports = grammar({
     // unambiguous: a suffix after it would have two readings and no way to
     // choose.
     type: $ => choice(
-      seq($._plain_type, repeat($._array_suffix)),
+      seq($._plain_type, optional($.unit_suffix), repeat($._array_suffix)),
       seq('&', optional($.mutable), field('pointee', $.type)),
+    ),
+
+    // What a number counts, written after the type it belongs to and before
+    // any array suffix: `u8 \u00a4meter\u27e64\u27e7` is four lengths and not a length made
+    // of four numbers.  Read left to right, `\u00d7` putting the next base unit above
+    // the line and `\u00f7` below it, with a raised number for a power.
+    unit_suffix: $ => seq('\u00a4', $._unit_product),
+
+    _unit_product: $ => seq(
+      $.unit_factor,
+      repeat(seq(choice('\u00d7', '\u00f7'), $.unit_factor)),
+    ),
+
+    unit_factor: $ => seq(
+      field('name', choice($.identifier, $.string_literal)),
+      optional(field('exponent', $.exponent_literal)),
+    ),
+
+    // `unit NAME` introduces one measured in nothing but itself; `unit NAME =`
+    // says what one of them is in terms of others, numbers and names in one
+    // product; and `unit \u00a4FROM \u2192 \u00a4TO` says a value written in one unit may
+    // stand where another is wanted, which is about what the program means and
+    // not about arithmetic.
+    unit_definition: $ => seq('unit', choice(
+      seq(field('name', choice($.identifier, $.string_literal)),
+          optional(seq('=', $._unit_measure))),
+      seq(field('from', $.unit_suffix), $._return_arrow,
+          field('to', $.unit_suffix)),
+    )),
+
+    _unit_measure: $ => seq(
+      choice($.integer_literal, $.unit_factor),
+      repeat(seq(choice('\u00d7', '\u00f7'),
+                 choice($.integer_literal, $.unit_factor))),
     ),
 
     _array_suffix: $ => seq('\u27e6', sepBy(',', optional(field('length', $._expression))),
@@ -421,6 +455,7 @@ module.exports = grammar({
 
     _bare_statement: $ => choice(
       $.variable_statement,
+      $.unit_definition,
       $.assignment,
       $.return_statement,
       $.break_statement,

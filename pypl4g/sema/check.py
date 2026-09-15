@@ -9,12 +9,14 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field, fields as fields_of, replace
+from fractions import Fraction
 from typing import Callable, Final, Sequence
 
 from ..diag import ids as D
 from ..diag.engine import DiagEngine, Expectation
 from ..front import ast
 from ..front.token import (BOTTOM_GLYPH, BUILTIN_GLYPH, CHR_NAME,
+                           DROP_NAME, UNIT_NAME,
                           ENUMERATE_NAME, TYPEOF_NAME,
                           EMPTY_ARENA_NAME, ORD_NAME,
                           WRAP_NAME,
@@ -38,7 +40,7 @@ from ..ir.types import (ARENA, ArrayType, BOOL, BoolType, BUILTIN_TYPES,
                         FloatType, IntType, MEM, ProductType, PtrType,
                         ResultType,
                         ListType, SetType, STR, SumType, TupleType, Type,
-                        VecType, VOID,
+                        NO_UNIT, Unit, VecType, VOID, without_units,
                         CHAR, MAX_CODE_POINT, U8, parts_of)
 from . import strings, tables
 from .modules import (ImportCycle, LoadedModule, ModuleNotFound, ModuleRegistry,
@@ -272,6 +274,42 @@ def _filled_in(shell: Type | None, made: Type) -> Type:
     return made
 
 
+#: The seven SI base units, which is what "a unit" means before a program says
+#: otherwise.  Written as the words rather than the symbols -- `meter` and not
+#: `m` -- because a program is read more often than it is written and because a
+#: single letter is a name a program might want.
+SI_UNITS: Final[tuple[str, ...]] = ("ampere", "candela", "gram", "kelvin",
+                                    "meter", "mole", "second")
+
+#: The two the compiler counts with.  `\N{CURRENCY SIGN}idx` is which one, and `\N{CURRENCY SIGN}size` is how
+#: many; they are units and not types because the whole point is that adding a
+#: length to a count of seconds is refused and so is indexing with either.
+COUNTING_UNITS: Final[tuple[str, ...]] = ("idx", "size")
+
+BUILTIN_UNITS: Final[dict[str, Unit]] = {
+    name: Unit(((name, 1),)) for name in (*SI_UNITS, *COUNTING_UNITS)}
+
+IDX_UNIT: Final[Unit] = BUILTIN_UNITS["idx"]
+SIZE_UNIT: Final[Unit] = BUILTIN_UNITS["size"]
+
+#: What `#` answers with: a count, in the unit of counting.
+SIZE_TYPE: Final[IntType] = IntType(64, False, SIZE_UNIT)
+
+
+def _unit_of(ty: Type) -> Unit:
+    """What a value of *ty* counts, which is nothing for everything but a number."""
+    return ty.unit if isinstance(ty, (IntType, FloatType)) else NO_UNIT
+
+
+def _carrying(ty: Type, unit: Unit) -> Type:
+    """*ty* with *unit* on it, where a unit is a thing it can carry."""
+    if isinstance(ty, IntType):
+        return IntType(ty.bits, ty.signed, unit)
+    if isinstance(ty, FloatType):
+        return FloatType(ty.bits, unit)
+    return ty
+
+
 def _can_be_referred_to(ty: Type) -> bool:
     """Whether a reference may name a place holding a value of this type.
 
@@ -387,6 +425,14 @@ def _is_exported(what: object) -> bool:
 #: because a signed and an unsigned ordering are different questions and the
 #: type of the operands is what says which one was asked; equality is the same
 #: question either way and names one predicate twice.
+#: The two operators that work a unit out from their operands' rather than
+#: demanding that the two agree.  Everything else relates quantities of one
+#: kind -- a sum of a length and a time is nothing -- and these two make a new
+#: kind out of the two they were given.
+_DERIVES: Final[frozenset[ast.BinaryOp]] = frozenset(
+    (ast.BinaryOp.MULTIPLY, ast.BinaryOp.DIVIDE))
+
+
 _COMPARISONS: Final[dict[ast.BinaryOp, tuple[CmpPred, CmpPred]]] = {
     ast.BinaryOp.EQUAL: (CmpPred.EQ, CmpPred.EQ),
     ast.BinaryOp.NOT_EQUAL: (CmpPred.NE, CmpPred.NE),
@@ -770,6 +816,17 @@ class Checker:
         #: definition that reaches itself is refused, unless a reference stands
         #: somewhere on the way round.
         self._behind_a_reference: int = 0
+        #: The units a program has introduced, innermost scope last.  A unit
+        #: reaches as far as where it was written does, so the stack is pushed
+        #: and popped with the names.
+        self._unit_scopes: list[dict[str, Unit]] = [{}]
+        #: What may stand where: each pair is one `unit \N{CURRENCY SIGN}FROM \N{RIGHTWARDS ARROW} \N{CURRENCY SIGN}TO`, and the
+        #: relation is followed as far as it goes but never backwards.
+        self._stands: list[tuple[Unit, Unit]] = []
+        #: Whether the operands being lowered belong to a product or a quotient,
+        #: which are the two operators that work a unit out rather than demand
+        #: that both sides carry the same one.
+        self._deriving: bool = False
         #: Whether an array stands where one of its elements is wanted, which
         #: is so while the arguments of a call to a function marked `listable`
         #: are lowered and nowhere else.
@@ -852,6 +909,12 @@ class Checker:
             for item in unit.items:
                 if isinstance(item, ast.ModuleImport):
                     self._collect_import(item)
+        # Units first of all: a type written anywhere may carry one, and what a
+        # unit is has to be known before any type is worked out.
+        for unit in units:
+            for item in unit.items:
+                if isinstance(item, ast.UnitDef):
+                    self._define_unit(item)
         for unit in units:
             for item in unit.items:
                 if isinstance(item, (ast.TypeDef, ast.EnumDef)):
@@ -867,7 +930,8 @@ class Checker:
                             collected.append(gathered)
                     case ast.VarDef():
                         self._collect_global(item)
-                    case ast.ModuleImport() | ast.TypeDef() | ast.EnumDef():
+                    case (ast.ModuleImport() | ast.TypeDef() | ast.EnumDef()
+                          | ast.UnitDef()):
                         pass
                     case _:
                         self._diags.internal("unknown kind of top-level definition")
@@ -1134,7 +1198,7 @@ class Checker:
             case ast.StringLit():
                 return STR
             case ast.Unary() if expr.op is ast.UnaryOp.LENGTH:
-                return U64
+                return SIZE_TYPE
             case ast.FloatLit():
                 return BUILTIN_TYPES.get(expr.type_name) if expr.type_name else None
             case ast.NameRef():
@@ -1362,9 +1426,11 @@ class Checker:
     def _push_scope(self) -> None:
         """Enter a nested scope."""
         self._scopes.append({})
+        self._unit_scopes.append({})
 
     def _pop_scope(self) -> None:
         """Leave the innermost scope, reporting values nothing read."""
+        self._unit_scopes.pop()
         for local in self._scopes.pop().values():
             self._report_unused(local)
             self._settle_local(local)
@@ -2037,7 +2103,113 @@ class Checker:
             return self._module.types.tuple_type(members)
         if isinstance(ref, ast.RefTypeRef):
             return self._reference_type(ref)
+        if isinstance(ref, ast.UnitTypeRef):
+            return self._united_type(ref)
         return self._named_type(ref)
+
+    # -- units -----------------------------------------------------------------
+
+    def _united_type(self, ref: ast.UnitTypeRef) -> Type:
+        """Resolve `TYPE \N{CURRENCY SIGN}UNIT`, checking that the type can carry one."""
+        base = self._resolve_type(ref.base)
+        if base is ERROR:
+            return ERROR
+        unit = self._unit_written(ref.unit)
+        if unit is None:
+            return ERROR
+        if not isinstance(base, (IntType, FloatType)):
+            self._diags.emit(D.LANG_UNIT_NOT_A_NUMBER, ref.span,
+                             found=base.render())
+            return ERROR
+        return _carrying(base, unit)
+
+    def _unit_written(self, ref: ast.UnitRef) -> Unit | None:
+        """The unit a program wrote, worked out into base units and exponents.
+
+        Read left to right, each factor raised to what was written after it and
+        put above or below the line by the sign it carries.  What comes of it is
+        a product of powers, so two units written differently are one unit where
+        they come to the same thing -- which is what makes the seconds cancel
+        when a speed is multiplied by a time.
+        """
+        made = NO_UNIT
+        for factor in ref.factors:
+            found = self._unit_named(factor.name, factor.span)
+            if found is None:
+                return None
+            made = made.times(found.raised(abs(factor.exponent))) \
+                if factor.exponent > 0 \
+                else made.over(found.raised(abs(factor.exponent)))
+        return made
+
+    def _unit_named(self, name: str, span: Span) -> Unit | None:
+        """The unit *name* stands for: one a program introduced, or a builtin."""
+        for scope in reversed(self._unit_scopes):
+            found = scope.get(name)
+            if found is not None:
+                return found
+        builtin = BUILTIN_UNITS.get(name)
+        if builtin is not None:
+            return builtin
+        self._diags.emit(D.LANG_UNIT_UNKNOWN, span, name=name)
+        return None
+
+    def _define_unit(self, node: ast.UnitDef) -> None:
+        """Introduce a unit, or say where one may stand.
+
+        A unit the language does not provide is written down before it is used,
+        which is what keeps a unit mistyped in one place from quietly becoming a
+        unit of its own -- the one mistake a language with no such rule cannot
+        tell from a new kind of quantity.
+        """
+        if node.stands is not None:
+            what = self._unit_written(node.stands[0])
+            where = self._unit_written(node.stands[1])
+            if what is not None and where is not None:
+                self._stands.append((what, where))
+            return
+        scope = self._unit_scopes[-1]
+        if node.name in scope or (not self._unit_scopes[1:]
+                                  and node.name in BUILTIN_UNITS):
+            self._diags.emit(D.LANG_UNIT_ALREADY_DEFINED, node.name_span,
+                             name=node.name)
+            return
+        if node.measured is None:
+            # A unit measured in nothing but itself, which is what every base
+            # unit is and what a program counting apples wants.
+            scope[node.name] = Unit(((node.name, 1),))
+            return
+        measured = self._unit_written(node.measured)
+        if measured is None:
+            return
+        assert node.scale is not None
+        over, under = node.scale
+        if under == 0:
+            # Nothing is so many of another divided by none of it.
+            self._diags.emit(D.LANG_TYPE_DIVISION_BY_ZERO, node.span)
+            return
+        scope[node.name] = Unit(measured.powers,
+                                measured.scale * Fraction(over, under))
+
+    def _stands_for(self, found: Unit, wanted: Unit) -> bool:
+        """Whether a value of *found* may stand where *wanted* is asked for.
+
+        Only where the program said so, and only the way round it said it: a
+        count of places may be told to stand where an index is wanted without
+        an index being allowed to stand for a count.  The relation is followed
+        as far as it goes, since a unit that may stand for one that may stand
+        for a third may stand for the third.
+        """
+        if found == wanted:
+            return True
+        reached = {found}
+        while True:
+            more = {w for f, w in self._stands if f in reached} - reached
+            if not more:
+                return False
+            if wanted in more:
+                return True
+            reached |= more
 
     def _reference_type(self, ref: ast.RefTypeRef) -> Type:
         """Resolve `&T` or `&mut T`, checking that a place can hold a `T`.
@@ -2336,6 +2508,11 @@ class Checker:
                     builder.ret(result, stmt.span)
             case ast.EntryAssign():
                 self._lower_entry_assign(builder, stmt)
+            case ast.UnitDef():
+                # Nothing is lowered: a unit is part of a type and a type is
+                # nothing the program runs.  What it does is exist from here to
+                # the end of the body.
+                self._define_unit(stmt)
             case ast.ElementAssign():
                 self._lower_element_assign(builder, stmt)
             case ast.DerefAssign():
@@ -2632,6 +2809,15 @@ class Checker:
         if not isinstance(found, IntType):
             self._diags.emit(D.LANG_ARRAY_INDEX_NOT_A_NUMBER, written.span,
                              found=found.render())
+            return None
+        if not isinstance(written, ast.IntLit) \
+                and not self._stands_for(found.unit, IDX_UNIT):
+            # Which element is wanted is not a length, a count of seconds or a
+            # number of apples.  A literal is whatever it is asked to be and so
+            # is never wrong here; anything else says what it counts, and a
+            # number counting something else reaches this through `\N{APL FUNCTIONAL SYMBOL QUAD}drop` and
+            # `\N{APL FUNCTIONAL SYMBOL QUAD}unit`, which is the program saying it meant to.
+            self._diags.emit(D.LANG_UNIT_INDEX, written.span, found=found.render())
             return None
         if isinstance(written, ast.IntLit) and along is not None:
             if not 0 <= written.value < along:
@@ -5732,8 +5918,13 @@ class Checker:
         difference = builder.binary(BinOp.SUB, first, second, expr.span)
         if magnitude:
             difference = builder.unary(UnOp.FABS, difference, expr.span)
-        if ty is not F64:
+        if without_units(ty) is not F64:
+            # A unit is no part of the bits, so what is widened is decided by
+            # the width alone -- and the difference between two lengths is
+            # measured against a tolerance that is a plain number.
             difference = builder.cast(CastKind.FEXT, difference, F64, expr.span)
+        elif not _unit_of(ty).is_none:
+            difference = builder.cast(CastKind.BITCAST, difference, F64, expr.span)
         tolerance = builder.load(self._tolerance_variable(), expr.span)
         return builder.compare(pred, difference, tolerance, expr.span)
 
@@ -6941,6 +7132,11 @@ class Checker:
         # lets a number stand beside an array and take its element's type.
         context = self._scalar_of(self._aiming_at(expected)) \
             if expected is not None else self._hint_of(expr)
+        # A product and a quotient are the two that work a unit out rather than
+        # demand one, so while their operands are lowered any unit stands where
+        # any other does -- and a literal among them takes no unit at all, `d \N{MULTIPLICATION SIGN} 3`
+        # being three of whatever `d` is and not three metres times a metre.
+        was_deriving, self._deriving = self._deriving, expr.op in _DERIVES
         outer, self._operand_of = self._operand_of, expr.op.value
         was_listing, self._listing = self._listing, True
         try:
@@ -6955,6 +7151,7 @@ class Checker:
                                      ty if ty is not ERROR else context)
         finally:
             self._operand_of = outer
+            self._deriving = was_deriving
             self._listing = was_listing
         if self._wrapping and expr.op in _SATURATES:
             # Both halves have been lowered, so a mistake in either is reported
@@ -6977,11 +7174,34 @@ class Checker:
             self._diags.emit(D.LANG_TYPE_OPERAND_NOT_INTEGER, expr.right.span,
                              operator=expr.op.value, found=found.render())
             return UndefConst(ERROR)
-        if found is not ty:
+        if found is not ty and not (expr.op in _DERIVES
+                                    and without_units(found) is without_units(ty)):
             self._diags.emit(D.LANG_TYPE_OPERAND_MISMATCH, expr.right.span,
                              operator=expr.op.value, expected=ty.render(),
                              found=found.render())
             return UndefConst(ERROR)
+        derived: Type | None = None
+        if expr.op in _DERIVES and self._value_type_of(left) is ty:
+            # The unit of what comes out is worked out from the two that went
+            # in: the exponents added for a product and subtracted for a
+            # quotient, so a length over a time is a speed and a speed times a
+            # time is a length again.  Asked of the operand's own type rather
+            # than of the scalar it is one of, because a run of them is a run
+            # and what it answers with has to stay one.
+            made = (_unit_of(ty).times(_unit_of(found))
+                    if expr.op is ast.BinaryOp.MULTIPLY
+                    else _unit_of(ty).over(_unit_of(found)))
+            if made != _unit_of(ty):
+                ty = _carrying(ty, made)
+                derived = ty
+            # What the operands carried was not measured against what the place
+            # wants -- a product takes any two units -- so what came out of them
+            # is measured here instead, and this is the only place that can.
+            aimed = self._scalar_of(self._aiming_at(expected)) \
+                if expected is not None else None
+            if aimed is not None and not self._accepts(aimed, ty):
+                self._report_mismatch(expr.span, ty, aimed)
+                return UndefConst(ERROR)
         if self._answer_is_already_known(expr, ty, left, right):
             return UndefConst(ERROR)
         if isinstance(ty, SetType):
@@ -7027,7 +7247,7 @@ class Checker:
             return builder.binary(wanted[0] if signed else wanted[1],
                                   left, right, expr.span, answer)
         return builder.binary(self._wrapped(_BINARY_OPS[expr.op]), left, right,
-                              expr.span)
+                              expr.span, derived)
 
     #: What each operator that can fault does, where both sides are known.  The
     #: saturating ones are not here: theirs is the answer nearest the end of the
@@ -7255,10 +7475,17 @@ class Checker:
             self._diags.emit(D.LANG_LENGTH_HAS_NO_COUNT, expr.operand.span,
                              found=ty.render())
             return UndefConst(ERROR)
-        if not self._accepts(expected, U64):
-            self._report_mismatch(expr.span, U64, expected)
+        if not self._accepts(expected, SIZE_TYPE):
+            self._report_mismatch(expr.span, SIZE_TYPE, expected)
             return UndefConst(ERROR)
-        return found
+        # How many there are is a count, and a count is a quantity like any
+        # other: it is not a length in metres and it is not which one is wanted,
+        # and saying so here is what stops either being written by mistake.
+        # A count the compiler worked out is simply made in that unit; one the
+        # program works out is the same bits read as it, which costs nothing.
+        if isinstance(found, IntConst):
+            return builder.int_const(SIZE_TYPE, found.value)
+        return builder.cast(CastKind.BITCAST, found, SIZE_TYPE, expr.span)
 
     def _counted(self, builder: IRBuilder, value: Value, ty: Type,
                  span: Span) -> Value | None:
@@ -7654,8 +7881,9 @@ class Checker:
                 return (None if found is None
                         else self._module.types.result_type(BOOL, found))
             case ast.Unary() if expr.op is ast.UnaryOp.LENGTH:
-                # How many, which is a count and not whatever was counted.
-                return U64
+                # How many, which is a count and not whatever was counted --
+                # and the unit says so, `\N{CURRENCY SIGN}size` being what a count is measured in.
+                return SIZE_TYPE
             case ast.Unary() if expr.op in (ast.UnaryOp.MAX, ast.UnaryOp.MIN):
                 # One of what was looked through, which is not what was looked
                 # through -- and where what was looked through has rows, one of
@@ -7709,7 +7937,10 @@ class Checker:
         """The type a floating-point literal has, from its suffix or its place."""
         expected = self._aiming_at(expected)
         named = BUILTIN_TYPES.get(expr.type_name) if expr.type_name is not None else None
-        if named is not None and expected is not None and named is not expected:
+        if named is not None and expected is not None \
+                and named is not without_units(expected):
+            # A suffix names a type and says nothing about a unit, so what it
+            # has to agree with is the type the place wants and not the unit.
             self._report_mismatch(expr.span, named, expected)
             return None
         found = named if named is not None else expected
@@ -7722,7 +7953,9 @@ class Checker:
         if not isinstance(found, FloatType):
             self._report_mismatch(expr.span, named or F64, found)
             return None
-        return found
+        # A number written down beside a product or a quotient counts nothing,
+        # which is the rule an integer literal follows in the same place.
+        return found.bare if self._deriving else found
 
     def _literal_type(self, expr: ast.IntLit, expected: Type | None) -> IntType | None:
         """The type an integer literal has, from its suffix or from the context.
@@ -7746,7 +7979,10 @@ class Checker:
         if not isinstance(chosen, IntType):
             self._report_mismatch(expr.span, BUILTIN_TYPES["i32"], chosen)
             return None
-        return chosen
+        # A number written down beside a product or a quotient counts nothing:
+        # doubling a length gives a length, and it would be a length times a
+        # length if the literal took the unit standing beside it.
+        return chosen.bare if self._deriving else chosen
 
     def _lower_code_point(self, builder: IRBuilder, expr: ast.Call,
                           expected: Type | None) -> Value:
@@ -7949,6 +8185,9 @@ class Checker:
                 and expr.callee.name in (ORD_NAME, CHR_NAME):
             return self._lower_code_point(builder, expr, expected)
         if isinstance(expr.callee, ast.NameRef) \
+                and expr.callee.name in (DROP_NAME, UNIT_NAME):
+            return self._lower_unit_call(builder, expr, expected)
+        if isinstance(expr.callee, ast.NameRef) \
                 and expr.callee.name == TYPEOF_NAME:
             # Reaching here means it stood somewhere a value was wanted, since
             # a condition the compiler settles never lowers what is in it.
@@ -8071,6 +8310,112 @@ class Checker:
         if failed or any(value is None for value in held):
             return None
         return [value for value in held if value is not None]
+
+    def _lower_unit_call(self, builder: IRBuilder, expr: ast.Call,
+                         expected: Type | None) -> Value:
+        """Lower `\N{APL FUNCTIONAL SYMBOL QUAD}drop(x)` and `\N{APL FUNCTIONAL SYMBOL QUAD}unit(x, \N{TOP LEFT CORNER}UNIT\N{TOP RIGHT CORNER})`, which cross between units.
+
+        Nothing crosses on its own, so these two are where a program says it
+        meant to -- and they are a pair rather than one operation with a
+        direction, because going from one unit to another is two steps and
+        saying so is the point: a number in metres that is to become a number
+        of seconds has its metres taken off and its seconds put on, and both
+        are written.
+
+        Neither is a conversion.  No bits change and no factor is applied: what
+        changes is the type, which is the whole of what a unit is.
+        """
+        name = expr.callee.name if isinstance(expr.callee, ast.NameRef) else ""
+        dropping = name == DROP_NAME
+        if len(expr.args) != (1 if dropping else 2):
+            self._diags.emit(D.LANG_UNIT_TAKES_TWO, expr.span, name=name,
+                             wanted=1 if dropping else 2, found=len(expr.args))
+            return UndefConst(ERROR)
+        given = self._lower_expr(builder, expr.args[0], None)
+        found = self._value_type_of(given)
+        if found is ERROR:
+            return UndefConst(ERROR)
+        if not isinstance(found, (IntType, FloatType)):
+            self._diags.emit(D.LANG_UNIT_NOT_A_NUMBER, expr.args[0].span,
+                             found=found.render())
+            return UndefConst(ERROR)
+        if dropping:
+            if found.unit.is_none:
+                self._diags.emit(D.LANG_UNIT_DROP_HAS_NONE, expr.span)
+                return UndefConst(ERROR)
+            return self._as_united(builder, given, found.bare, expected, expr.span)
+        if not found.unit.is_none:
+            self._diags.emit(D.LANG_UNIT_PUT_ON_A_UNIT, expr.args[1].span,
+                             found=found.unit.render())
+            return UndefConst(ERROR)
+        written = expr.args[1]
+        if not isinstance(written, ast.Lifted):
+            self._diags.emit(D.LANG_UNIT_NOT_LIFTED, written.span)
+            return UndefConst(ERROR)
+        unit = self._unit_lifted(written)
+        if unit is None:
+            return UndefConst(ERROR)
+        return self._as_united(builder, given, _carrying(found, unit), expected,
+                               expr.span)
+
+    def _as_united(self, builder: IRBuilder, given: Value, wanted: Type,
+                   expected: Type | None, span: Span) -> Value:
+        """*given*, read as *wanted*, which differs from its type only in a unit."""
+        if not self._accepts(expected, wanted):
+            self._report_mismatch(span, wanted, expected)
+            return UndefConst(ERROR)
+        if isinstance(given, IntConst):
+            return builder.int_const(wanted, given.value)
+        if isinstance(given, FloatConst):
+            return builder.float_const(wanted, given.value)
+        return builder.cast(CastKind.BITCAST, given, wanted, span)
+
+    def _unit_lifted(self, written: ast.Lifted) -> Unit | None:
+        """The unit lifted out of the program between `\N{TOP LEFT CORNER}` and `\N{TOP RIGHT CORNER}`.
+
+        What is written there reads as an expression -- `meter\N{DIVISION SIGN}second\N{SUPERSCRIPT TWO}` is a
+        division and a power as far as the parser is concerned -- and is read
+        here as what it is: a product of powers of units.  The brackets are what
+        say the names are the compiler's to look up and not the program's.
+        """
+        found = written.value if written.value is not None else None
+        if found is None and isinstance(written.written, ast.TypeRef) \
+                and written.written.module is None:
+            return self._unit_named(written.written.name, written.span)
+        if found is None:
+            self._diags.emit(D.LANG_UNIT_NOT_LIFTED, written.span)
+            return None
+        return self._unit_expression(found, 1)
+
+    def _unit_expression(self, expr: ast.Expr, sign: int) -> Unit | None:
+        """One written unit, read out of what the parser made of it."""
+        match expr:
+            case ast.NameRef():
+                found = self._unit_named(expr.name, expr.span)
+                return None if found is None else \
+                    (found if sign > 0 else NO_UNIT.over(found))
+            case ast.StringLit():
+                found = self._unit_named(expr.value, expr.span)
+                return None if found is None else \
+                    (found if sign > 0 else NO_UNIT.over(found))
+            case ast.Raised():
+                inner = self._unit_expression(expr.base, 1)
+                if inner is None:
+                    return None
+                made = inner.raised(abs(expr.exponent))
+                return made if sign > 0 and expr.exponent > 0 \
+                    else NO_UNIT.over(made)
+            case ast.Binary() if expr.op in (ast.BinaryOp.MULTIPLY,
+                                             ast.BinaryOp.DIVIDE):
+                left = self._unit_expression(expr.left, sign)
+                right = self._unit_expression(
+                    expr.right, sign if expr.op is ast.BinaryOp.MULTIPLY else -sign)
+                if left is None or right is None:
+                    return None
+                return left.times(right)
+            case _:
+                self._diags.emit(D.LANG_SYNTAX_EXPECTED_UNIT, expr.span)
+                return None
 
     def _scalar_of(self, ty: Type | None) -> Type | None:
         """What an array is an array of, however many dimensions deep.
@@ -8729,6 +9074,19 @@ class Checker:
         if expected is None or found is ERROR or expected is ERROR:
             return True
         if found is expected:
+            return True
+        if isinstance(expected, (IntType, FloatType)) \
+                and isinstance(found, (IntType, FloatType)) \
+                and found.bare is expected.bare \
+                and self._stands_for(found.unit, expected.unit):
+            # The same number in a unit the program said may stand here.  The
+            # bits are the same bits, so nothing is emitted for it.
+            return True
+        if self._deriving and isinstance(expected, (IntType, FloatType)) \
+                and isinstance(found, (IntType, FloatType)) \
+                and found.bare is expected.bare:
+            # An operand of a product or a quotient: whatever unit it carries is
+            # one the operator can work with, and what comes out says which.
             return True
         if self._listing and isinstance(found, ArrayType):
             # An argument of a call being walked: an array stands where one of

@@ -8,6 +8,7 @@ is a property computed late and held beside the type, never inside it.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from fractions import Fraction
 from typing import ClassVar, Final, Sequence
 
 
@@ -81,6 +82,102 @@ class CharType(Type):
 
 
 @dataclass(frozen=True, slots=True)
+class Unit:
+    """What a number counts, as base units with exponents and a scale.
+
+    A unit is not a name: `\N{CURRENCY SIGN}meter/second` and `\N{CURRENCY SIGN}meter\N{SUPERSCRIPT TWO}/meter\N{SUPERSCRIPT TWO}\N{MULTIPLICATION SIGN}meter/second` are the
+    same unit, and a product of two is worked out rather than looked up.  So
+    what is kept is the exponent of each base unit, in a canonical order, and
+    `\N{MULTIPLICATION SIGN}` adds those exponents while `\N{DIVISION SIGN}` subtracts them -- which is what makes the
+    seconds cancel when a speed is multiplied by a time.
+
+    `scale` is what one of these is in terms of its base units: a mile an hour
+    is 1609344/3600000 of a metre a second, so two units with the same
+    exponents and different scales are two units.  Nothing yet converts between
+    them -- what it records is that they measure the same thing.
+
+    The empty one is no unit at all, which is what every number has that was
+    never given one.  It is a unit like any other so that there is one rule
+    rather than two: a value may stand where another does when the units are
+    equal, and "no unit" is equal only to itself.
+    """
+
+    #: Base unit names and their exponents, sorted by name, with no zeros.
+    powers: tuple[tuple[str, int], ...] = ()
+    #: How many of the base units one of these is, as a fraction.
+    scale: Fraction = Fraction(1)
+
+    def render(self) -> str:
+        """How the unit is written in a type."""
+        if not self.powers:
+            return ""
+        above = [(n, e) for n, e in self.powers if e > 0]
+        below = [(n, -e) for n, e in self.powers if e < 0]
+        made = _raised(above) if above else "1"
+        # Each one below the line gets its own sign, because a unit is read
+        # left to right: `a\N{DIVISION SIGN}b\N{MULTIPLICATION SIGN}c` is `c` times `a` over `b`, and what is wanted
+        # here is `a` over both.
+        return "".join((made, *("".join(("\N{DIVISION SIGN}", one))
+                                for one in _each(below))))
+
+    def mangled(self) -> str:
+        """The unit as one word, for a symbol name."""
+        return "".join((n, str(e)) for n, e in self.powers)
+
+    def times(self, other: Unit) -> Unit:
+        """The unit of a product: the exponents added, the scales multiplied."""
+        return _made_of(dict(self.powers), other.powers, 1,
+                        self.scale * other.scale)
+
+    def over(self, other: Unit) -> Unit:
+        """The unit of a quotient: the exponents subtracted, the scales divided."""
+        return _made_of(dict(self.powers), other.powers, -1,
+                        self.scale / other.scale)
+
+    def raised(self, exponent: int) -> Unit:
+        """The unit of a power: every exponent multiplied by it."""
+        return _made_of({}, tuple((n, e * exponent) for n, e in self.powers), 1,
+                        self.scale ** exponent)
+
+    @property
+    def is_none(self) -> bool:
+        """Whether this is no unit at all."""
+        return not self.powers and self.scale == 1
+
+
+def _raised(powers: Sequence[tuple[str, int]]) -> str:
+    """One side of a unit written out, with the raised digits a power takes."""
+    return "\N{MULTIPLICATION SIGN}".join(_each(powers))
+
+
+def _each(powers: Sequence[tuple[str, int]]) -> list[str]:
+    """Every base unit written out, with its exponent where it has one."""
+    return [n if e == 1 else "".join((n, _superscript(e))) for n, e in powers]
+
+
+#: The digits written raised, which is how an exponent is written in a unit as
+#: well as in an expression.
+_RAISED_DIGITS: Final[str] = "\N{SUPERSCRIPT ZERO}\N{SUPERSCRIPT ONE}\N{SUPERSCRIPT TWO}\N{SUPERSCRIPT THREE}\N{SUPERSCRIPT FOUR}\N{SUPERSCRIPT FIVE}\N{SUPERSCRIPT SIX}\N{SUPERSCRIPT SEVEN}\N{SUPERSCRIPT EIGHT}\N{SUPERSCRIPT NINE}"
+
+
+def _superscript(value: int) -> str:
+    """*value* written in raised digits."""
+    return "".join(_RAISED_DIGITS[int(d)] for d in str(value))
+
+
+def _made_of(powers: dict[str, int], more: Sequence[tuple[str, int]], sign: int,
+             scale: Fraction) -> Unit:
+    """A unit out of exponents gathered together, dropping the ones that cancel."""
+    for name, exponent in more:
+        powers[name] = powers.get(name, 0) + sign * exponent
+    return Unit(tuple(sorted((n, e) for n, e in powers.items() if e != 0)), scale)
+
+
+#: No unit at all, which is what a number has that was never given one.
+NO_UNIT: Final[Unit] = Unit()
+
+
+@dataclass(frozen=True, slots=True)
 class IntType(Type):
     """An integer of a given width and signedness.
 
@@ -96,24 +193,44 @@ class IntType(Type):
 
     bits: int
     signed: bool
+    #: What a value of it counts.  Part of the type, so `u64` and `u64 \N{CURRENCY SIGN}meter`
+    #: are two types and neither stands where the other is wanted; no unit at
+    #: all is the empty one, which is equal only to itself.
+    unit: Unit = NO_UNIT
 
     #: Every one of them that has been made, so that two asks for one width
     #: answer with the one type.  `TypeContext` interns the types that are
     #: built out of others for the same reason and says why: identity
     #: comparison is what the rest of the compiler asks these with, and there
     #: are now sixty-odd of these rather than eight.
-    _made: ClassVar[dict[tuple[int, bool], IntType]] = {}
+    _made: ClassVar[dict[tuple[int, bool, Unit], IntType]] = {}
 
-    def __new__(cls, bits: int, signed: bool = False) -> IntType:
-        found = cls._made.get((bits, signed))
+    def __new__(cls, bits: int, signed: bool = False,
+                unit: Unit = NO_UNIT) -> IntType:
+        found = cls._made.get((bits, signed, unit))
         if found is None:
             found = super().__new__(cls)
-            cls._made[(bits, signed)] = found
+            cls._made[(bits, signed, unit)] = found
         return found
 
     def render(self) -> str:
         """The name of this type in the textual form of the IR."""
+        made = "".join(("i" if self.signed else "u", str(self.bits)))
+        return made if self.unit.is_none else \
+            "".join((made, " \N{CURRENCY SIGN}", self.unit.render()))
+
+    def mangled(self) -> str:
+        """The normalized name of this type, for use inside a symbol name.
+
+        The unit is left out: it says nothing about what the bits are, and a
+        unit that changed a symbol name would be a unit that changed the code.
+        """
         return "".join(("i" if self.signed else "u", str(self.bits)))
+
+    @property
+    def bare(self) -> IntType:
+        """The same width and signedness with no unit, which is what the bits are."""
+        return IntType(self.bits, self.signed)
 
     @property
     def held(self) -> int:
@@ -157,10 +274,36 @@ class FloatType(Type):
     """A binary floating-point type."""
 
     bits: int
+    #: What a value of it counts, as an integer type carries one and for the
+    #: same reason.
+    unit: Unit = NO_UNIT
+
+    #: Interned like the integer types and for the same reason: identity
+    #: comparison is what the rest of the compiler asks a type with, and a unit
+    #: makes many of these where there were two.
+    _made: ClassVar[dict[tuple[int, Unit], FloatType]] = {}
+
+    def __new__(cls, bits: int, unit: Unit = NO_UNIT) -> FloatType:
+        found = cls._made.get((bits, unit))
+        if found is None:
+            found = super().__new__(cls)
+            cls._made[(bits, unit)] = found
+        return found
 
     def render(self) -> str:
         """The name of this type in the textual form of the IR."""
+        made = "".join(("f", str(self.bits)))
+        return made if self.unit.is_none else \
+            "".join((made, " \N{CURRENCY SIGN}", self.unit.render()))
+
+    def mangled(self) -> str:
+        """The normalized name of this type, with the unit left out."""
         return "".join(("f", str(self.bits)))
+
+    @property
+    def bare(self) -> FloatType:
+        """The same width with no unit, which is what the bits are."""
+        return FloatType(self.bits)
 
 
 @dataclass(frozen=True, slots=True)
@@ -798,6 +941,17 @@ def _pointer_to(element: Type) -> PtrType:
         found = PtrType(element, mutable=True)
         _ELEMENT_POINTERS[element] = found
     return found
+
+
+def without_units(ty: Type) -> Type:
+    """The same type with no unit on it, which is what the bits are.
+
+    A unit is part of a type and no part of the code: it decides what may be
+    written where, and by the time there are instructions it has said all it has
+    to say.  So the checks about what bits an instruction takes and answers with
+    ask this, and the checks about what a program may write ask the type.
+    """
+    return ty.bare if isinstance(ty, (IntType, FloatType)) else ty
 
 
 def parts_of(ty: Type) -> tuple[Type, ...]:

@@ -19,7 +19,7 @@ fn main() → u6:
     let empty: [u8] = []
     ※ the elements take their type from the list's where nothing says theirs
     let plain: [u16] = [1, 2, 3, 4]
-    if #a ≠ 3u64 ∨ #wide ≠ 2u64 ∨ #empty ≠ 0u64 ∨ #plain ≠ 4u64:
+    if #a ≠ 3 ∨ #wide ≠ 2 ∨ #empty ≠ 0 ∨ #plain ≠ 4:
         1u6
     elif total(a) ≠ 6u8:
         2u6

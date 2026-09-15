@@ -1,0 +1,99 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ A number may say what it counts, written after its type: `u32 ¤meter` is a
+※ length and `u32 ¤second` a time, and neither stands where the other is
+※ wanted.  The unit is part of the type and nothing else about the value: the
+※ bits are the same bits, and except in a signature nothing about a unit
+※ reaches the generated code.
+※
+※ **What may be added must be of one kind, and what is multiplied need not be.**
+※ A sum of a length and a time is nothing, so `+`, `-` and every comparison ask
+※ that both sides carry the same unit.  A product and a quotient work a new one
+※ out instead -- the exponents added or subtracted -- so a length over a time is
+※ a speed and a speed times a time is a length again, with the seconds
+※ cancelling because a unit is kept as base units and exponents rather than as
+※ a name.
+※
+※ **A number written down counts nothing.**  `d × 2` is twice whatever `d` is
+※ and not a length times a length, which is why a literal beside a product
+※ takes no unit from what stands next to it.
+※
+※ Two units are the compiler's own: `¤size` is what `#` answers with, and
+※ `¤idx` is what an index must be.  Neither is SI and both are units for the
+※ same reason the SI ones are -- adding a count of seconds to a count of places
+※ is the mistake, and the type is where it is caught.
+※
+※ Nothing crosses from one unit to another on its own.  `⎕drop` takes a unit
+※ off and `⎕unit` puts one on, and a number going from one to another is
+※ written as both -- which is the point: the step that would have been silent
+※ is the step that is said out loud.
+
+※ A unit the language does not provide is introduced before it is used.
+unit apples
+
+※ And one that says what it is in terms of others, which records that the two
+※ measure the same thing.
+unit mph = 1609344 ÷ 3600000 × meter ÷ second
+
+※ A count of places is what an index is asked for, and this says a count of
+※ things may stand where one is wanted.  The other way round does not follow.
+unit ¤size → ¤idx
+
+@[startup, impure]
+fn main() → u6:
+    let d: u32 ¤meter = 100
+    let t: u32 ¤second = 5
+    ※ a quotient, whose unit is worked out
+    let v: u32 ¤meter÷second = (d ÷ t) ?? 0
+    ※ and a product, in which the seconds cancel
+    let back: u32 ¤meter = v × t
+    ※ a number written down counts nothing, so this is still a length
+    let twice: u32 ¤meter = d × 2
+    ※ a sum, which asks that both sides be of one kind
+    let more: u32 ¤meter = d + twice
+    ※ a unit of the program's own
+    let picked: u16 ¤apples = 7
+    let basket: u16 ¤apples = picked + 3
+    ※ `#` answers a count, and a count may stand where an index is wanted
+    let v8: u8⟦4⟧ = ⟦10u8, 20u8, 30u8, 40u8⟧
+    let last: u8 = v8⟦#v8 - 1⟧
+    ※ and an index of its own
+    let at: u64 ¤idx = 2
+    let third: u8 = v8⟦at⟧
+    ※ crossing from one unit to another, said out loud both times
+    let far: u32 ¤mph = ⎕unit(⎕drop(v), ⌜mph⌝)
+    ※ a unit on a parameter and on what a function answers with
+    let area: u32 ¤meter² = square(d)
+    ※ and a floating-point one, with a derived unit written out.  Twice the
+    ※ acceleration times two seconds twice over is a length, and it is a length
+    ※ because the seconds cancel and not because anybody said so.
+    let a: f64 ¤meter÷second² = 9.8
+    let fall: f64 ¤second = 2.0
+    let fell: f64 ¤meter = a × fall × fall
+    if back ≠ 100:
+        1u6
+    elif twice ≠ 200 ∨ more ≠ 300:
+        2u6
+    elif basket ≠ 10:
+        3u6
+    elif last ≠ 40u8 ∨ third ≠ 30u8:
+        4u6
+    elif ⎕drop(far) ≠ 20u32:
+        5u6
+    elif area ≠ 10000:
+        6u6
+    elif fell ≇ 39.2:
+        7u6
+    ※ a unit introduced inside a body, which reaches as far as the body does
+    elif oranges() ≠ 12u16:
+        8u6
+    else:
+        0u6
+
+fn square(of: u32 ¤meter) → u32 ¤meter²:
+    of × of
+
+fn oranges() → u16:
+    unit orange
+    let some: u16 ¤orange = 12
+    ⎕drop(some)

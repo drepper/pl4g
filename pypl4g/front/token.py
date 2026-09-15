@@ -153,6 +153,14 @@ TYPEOF_NAME: Final[str] = "".join((BUILTIN_GLYPH, "typeof"))
 #: iterator, which is a thing a loop takes and nothing else does.
 ENUMERATE_NAME: Final[str] = "".join((BUILTIN_GLYPH, "enumerate"))
 
+#: Taking a unit off a number, and putting one on.  A unit is part of a type
+#: and nothing converts between types on its own, so these are the two places
+#: where a program says it means to cross from one to the other -- and they are
+#: the compiler's names because neither can be written in the language: what
+#: they do is change a type and no bits at all.
+DROP_NAME: Final[str] = "".join((BUILTIN_GLYPH, "drop"))
+UNIT_NAME: Final[str] = "".join((BUILTIN_GLYPH, "unit"))
+
 ORD_NAME: Final[str] = "".join((BUILTIN_GLYPH, "ord"))
 CHR_NAME: Final[str] = "".join((BUILTIN_GLYPH, "chr"))
 
@@ -256,6 +264,13 @@ LIFT_CLOSE_GLYPH: Final[str] = "\N{TOP RIGHT CORNER}"
 #: holds, and it is in no family with the arrows the roundings use.
 DEREF_GLYPH: Final[str] = "\N{POSITION INDICATOR}"
 
+#: What says a unit follows.  A unit is part of a type and not a type of its
+#: own, so it is written after one -- `u64 ¤meter` -- and the mark is what
+#: tells the unit from the array suffix that may follow it.  U+00A4 is the
+#: currency sign, which stands for "some unit of account" and for nothing else
+#: in this language.
+UNIT_GLYPH: Final[str] = "\N{CURRENCY SIGN}"
+
 #: The digits written raised, which is how an exponent that *is* a number is
 #: written.  The first three are where Latin-1 put them and the rest are where
 #: Unicode put the ones Latin-1 had not got, which is why this is a table and
@@ -300,6 +315,7 @@ class TokKind(StrEnum):
     KW_CONTINUE = "'continue'"
     KW_LET = "'let'"
     KW_MUT = "'mut'"
+    KW_UNIT = "'unit'"
     KW_TYPE = "'type'"
     KW_MATCH = "'match'"
     KW_ENUM = "'enum'"
@@ -403,6 +419,7 @@ class TokKind(StrEnum):
     LIFT_OPEN = "'\N{TOP LEFT CORNER}'"
     LIFT_CLOSE = "'\N{TOP RIGHT CORNER}'"
     DEREF = "'\N{POSITION INDICATOR}'"
+    UNIT = "'\N{CURRENCY SIGN}'"
     #: A number written raised, which is an exponent and its operator at once.
     EXPONENT = "a raised number"
 
@@ -428,6 +445,7 @@ KEYWORDS: Final[dict[str, TokKind]] = {
     "return": TokKind.KW_RETURN,
     "let": TokKind.KW_LET,
     "mut": TokKind.KW_MUT,
+    "unit": TokKind.KW_UNIT,
     "type": TokKind.KW_TYPE,
     "match": TokKind.KW_MATCH,
     "enum": TokKind.KW_ENUM,

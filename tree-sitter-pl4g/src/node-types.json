@@ -2192,6 +2192,10 @@
           "named": true
         },
         {
+          "type": "unit_definition",
+          "named": true
+        },
+        {
           "type": "variable_statement",
           "named": true
         },
@@ -3189,6 +3193,10 @@
         },
         {
           "type": "return_statement",
+          "named": true
+        },
+        {
+          "type": "unit_definition",
           "named": true
         },
         {
@@ -5740,6 +5748,10 @@
           "named": true
         },
         {
+          "type": "unit_definition",
+          "named": true
+        },
+        {
           "type": "variable_definition",
           "named": true
         }
@@ -6344,6 +6356,10 @@
         {
           "type": "mutable",
           "named": true
+        },
+        {
+          "type": "unit_suffix",
+          "named": true
         }
       ]
     }
@@ -6595,6 +6611,105 @@
         },
         {
           "type": "unary_expression",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "unit_definition",
+    "named": true,
+    "fields": {
+      "from": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "unit_suffix",
+            "named": true
+          }
+        ]
+      },
+      "name": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          },
+          {
+            "type": "string_literal",
+            "named": true
+          }
+        ]
+      },
+      "to": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "unit_suffix",
+            "named": true
+          }
+        ]
+      }
+    },
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "integer_literal",
+          "named": true
+        },
+        {
+          "type": "unit_factor",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "unit_factor",
+    "named": true,
+    "fields": {
+      "exponent": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "exponent_literal",
+            "named": true
+          }
+        ]
+      },
+      "name": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          },
+          {
+            "type": "string_literal",
+            "named": true
+          }
+        ]
+      }
+    }
+  },
+  {
+    "type": "unit_suffix",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "unit_factor",
           "named": true
         }
       ]
@@ -7313,6 +7428,10 @@
     "named": false
   },
   {
+    "type": "unit",
+    "named": false
+  },
+  {
     "type": "while",
     "named": false
   },
@@ -7330,6 +7449,10 @@
   },
   {
     "type": "~",
+    "named": false
+  },
+  {
+    "type": "¤",
     "named": false
   },
   {

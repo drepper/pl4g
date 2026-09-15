@@ -1621,6 +1621,94 @@ sum is its largest variant with a one-byte tag after it, the tag last rather tha
 eight bytes is seven bytes of padding and behind it is often none.  The whole of either is rounded up to its own alignment, which
 is the largest of its parts'.
 
+#### Units
+
+**A number may say what it counts**, written after its type:
+
+```
+let d: u32 ¤meter = 100
+let t: u32 ¤second = 5
+```
+
+`¤meter` and `¤second` are part of the types, so `d` and `t` are of two types and neither stands where the other is wanted.
+The unit is the only thing that differs: the bits are the same bits, the register is the same register, and **except in a
+signature nothing about a unit reaches the generated code**.
+
+**What is added must be of one kind; what is multiplied need not be.**  A sum of a length and a time is nothing, so `+`, `-` and
+every comparison ask that both sides carry the same unit -- which they do by being the same type, so no rule of their own was
+needed.  A product and a quotient work a new unit out instead:
+
+```
+let v: u32 ¤meter÷second = (d ÷ t) ?? 0
+let back: u32 ¤meter = v × t          ※ the seconds cancel
+```
+
+A unit is kept as base units and exponents and not as a name, so `¤meter÷second` times `¤second` really is `¤meter`: the
+exponents are added for a product and subtracted for a quotient, and what cancels, cancels.
+
+**A number written down counts nothing.**  `d × 2` is twice whatever `d` is and not a length times a length, so a literal beside
+a product or a quotient takes no unit from what stands next to it -- the one place a literal does not take everything from its
+context.
+
+**How a unit is written.**  `¤` and then base units, read left to right: `×` puts the next one above the line, `÷` below it, and a
+raised number after one is what it is raised to.  `¤gram×meter÷second²` is what a newton is.  A name between quotation marks is a
+unit whose name is not an identifier, which is what lets a program count things the language has never heard of.
+
+**The units the language provides** are the seven SI base units -- `second`, `meter`, `gram`, `ampere`, `kelvin`, `mole`,
+`candela` -- and two the compiler counts with:
+
+- **`¤size` is what `#` answers with.**  How many there are is a quantity like any other, and saying so is what stops a count of
+  things being added to a count of seconds.
+- **`¤idx` is what an index must be** (4541).  Which element is wanted is not a length and not a count of apples.  A literal is
+  whatever it is asked to be and so is never wrong there -- `v⟦2⟧` needs nothing written -- but anything else says what it counts.
+
+```
+let at: u64 ¤idx = 2
+v⟦at⟧                                ※ which one
+v⟦#v - 1⟧                             ※ a count, where `unit ¤size → ¤idx` says it may stand
+```
+
+**Any other unit is introduced before it is used** (4539), which is what keeps a unit mistyped in one place from quietly becoming
+a unit of its own -- the one mistake a language with no such rule cannot tell from a new kind of quantity.  Three forms:
+
+```
+unit apples                                      ※ measured in nothing but itself
+unit mph = 1609344 ÷ 3600000 × meter ÷ second    ※ and in terms of others
+unit ¤size → ¤idx                                ※ and where it may stand
+```
+
+The first introduces a base unit of the program's own.  The second says what one of them is in terms of others -- numbers and
+names in one product, read left to right -- which records that the two measure the same thing; nothing yet converts between them,
+and two units with the same base units and different scales are two units.  The third says a value written in one unit may stand
+where another is wanted, and **only the way round it is written**: a count of things may be told to stand where an index is
+wanted without an index being allowed to stand for a count.  Where a definition stands is how far it reaches -- at the top level,
+the whole file; inside a body, that body.
+
+**A unit belongs to a number** (4540).  A truth value counts nothing and a code point counts nothing; an array is several of
+something and the unit belongs to what it holds, which is where it is written, `u8 ¤meter⟦4⟧` being four lengths.
+
+**Nothing crosses from one unit to another on its own.**  `⎕drop(x)` takes a unit off and `⎕unit(x, ⌜UNIT⌝)` puts one on, and a
+number going from one unit to another is written as both:
+
+```
+let far: u32 ¤mph = ⎕unit(⎕drop(v), ⌜mph⌝)
+```
+
+That is the point rather than the price: the step that would otherwise have been silent is the step that is said out loud.
+`⎕drop` of something with no unit is refused (4543) and `⎕unit` on something that has one is refused (4544), so neither can be
+written where it does nothing or where it hides a crossing.  The unit is written between the lifting marks (4546) because a unit
+is not a value -- there is nothing at all for one to be while the program runs.
+
+Compare: **F#**, whose units of measure are this feature and the one full implementation in a mainstream language -- `[<Measure>]`
+declares a unit, the exponents cancel the same way, and the units are erased before code is generated, which is the same bargain
+struck here.  What F# adds is inference of unit-polymorphic functions, which this language does not have because it does not
+infer.  **Ada** checks dimensions with aspects on a numeric type and applies a conversion factor, which is what the `unit NAME =`
+form here records and deliberately does not yet apply.  **Boost.Units**, **Haskell's `units`** and **Rust's `uom`** do it with
+the type system rather than in the language, at a cost in error messages this language has no reason to pay.  **Swift** and
+**Java** have libraries that carry the unit as a value at run time, which is the other design entirely: it costs a word and a
+check per quantity, and catches at run time what this catches while compiling.  **C**, **Go** and **Zig** have nothing, and the
+Mars Climate Orbiter is the usual reason to want it.
+
 #### References
 
 **`&T` is a name for a place someone else holds**, and `&mut T` one the place may be written through.  `&x` makes one out of a

@@ -1275,6 +1275,38 @@
       "option": null
     },
     {
+      "number": 3038,
+      "name": "LANG_SYNTAX_EXPECTED_UNIT",
+      "severity": "error",
+      "message": "expected the name of a unit",
+      "args": [],
+      "cause": "A unit is a name, or a name between quotation marks where it is not an identifier.  The mark that introduces one says a unit follows, and a name is what may follow it.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Units",
+        "requirement": "A unit is a name or a quoted name."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 3039,
+      "name": "LANG_SYNTAX_EXPECTED_UNIT_ARROW",
+      "severity": "error",
+      "message": "expected '\u2192' after the unit that may stand elsewhere",
+      "args": [],
+      "cause": "`unit \u00a4FROM \u2192 \u00a4TO` is the form that says where a unit may stand, and the arrow is what tells it from the form that introduces a name.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Units",
+        "requirement": "Standing elsewhere is written 'unit \u00a4FROM \u2192 \u00a4TO'."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 3031,
       "name": "LANG_SYNTAX_SPREAD_OUTSIDE_A_CALL",
       "severity": "error",
@@ -5305,6 +5337,180 @@
         "document": "spec/spec.md",
         "section": "The Language / Types / References",
         "requirement": "A reference names a place holding one value."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4539,
+      "name": "LANG_UNIT_UNKNOWN",
+      "severity": "error",
+      "message": "'{name}' is not a unit",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the name that was written"
+        }
+      ],
+      "cause": "The units the language provides are the SI base units and the two the compiler counts with.  Any other is introduced by a `unit` definition before it is used, which is what keeps a unit mistyped in one place from quietly becoming a unit of its own -- the mistake a language with no such rule cannot tell from a new kind of quantity.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Units",
+        "requirement": "A unit is builtin or introduced with 'unit'."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4540,
+      "name": "LANG_UNIT_NOT_A_NUMBER",
+      "severity": "error",
+      "message": "a unit belongs to a number, and '{found}' is not one",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type written"
+        }
+      ],
+      "cause": "A unit says what a number counts.  A truth value counts nothing, a code point counts nothing, and an array is several of something whose unit belongs to what it holds -- which is where it is written, `u8 \u00a4meter\u27e64\u27e7` being four lengths.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Units",
+        "requirement": "A unit is written after a number type."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4541,
+      "name": "LANG_UNIT_INDEX",
+      "severity": "error",
+      "message": "an index counts places, so it needs '\u00a4idx', and this is '{found}'",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type of what was written"
+        }
+      ],
+      "cause": "Which element of an array is wanted is not a length, a count of seconds or a number of apples, and an index worked out from one of those is nearly always a mistake.  The unit of the question -- which one -- is `\u00a4idx`, and a number with another unit reaches it through `\u2395drop` and `\u2395unit`, which is the program saying it meant to.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Units",
+        "requirement": "An index has the unit '\u00a4idx'."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4542,
+      "name": "LANG_UNIT_ALREADY_DEFINED",
+      "severity": "error",
+      "message": "'{name}' is already a unit here",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the unit"
+        }
+      ],
+      "cause": "A unit is introduced once where it is introduced at all.  Two definitions of one name would be two units a reader could not tell apart, or one definition saying two things about the same unit.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Units",
+        "requirement": "A unit is introduced once."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4543,
+      "name": "LANG_UNIT_DROP_HAS_NONE",
+      "severity": "error",
+      "message": "'\u2395drop' takes a unit off, and this value has none",
+      "args": [],
+      "cause": "What it does is cross from a type with a unit to the one without it, and a value that has no unit is already there.  A call that does nothing is a line a generator emitted by mistake, which is what every rule about a statement with no effect is for.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Units",
+        "requirement": "'\u2395drop' is written where there is a unit."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4544,
+      "name": "LANG_UNIT_PUT_ON_A_UNIT",
+      "severity": "error",
+      "message": "'\u2395unit' puts a unit on a number that has none, and this one has '{found}'",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the unit it already has"
+        }
+      ],
+      "cause": "Nothing crosses from one unit to another in a single step, because a step that did would be the mistake units exist to catch written in one place instead of none.  A value that has a unit reaches another through `\u2395drop` and then `\u2395unit`, which is two things said out loud.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Units",
+        "requirement": "'\u2395unit' is written where there is no unit."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4545,
+      "name": "LANG_UNIT_TAKES_TWO",
+      "severity": "error",
+      "message": "'{name}' takes {wanted} arguments, and {found} were written",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the builtin"
+        },
+        {
+          "name": "wanted",
+          "type": "string",
+          "description": "how many it takes"
+        },
+        {
+          "name": "found",
+          "type": "string",
+          "description": "how many were written"
+        }
+      ],
+      "cause": "`\u2395drop` takes the value whose unit is to come off; `\u2395unit` takes that value and the unit to put on it, written between the lifting marks because a unit is something the compiler reads and not a value the program works out.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Units",
+        "requirement": "'\u2395drop' takes one argument and '\u2395unit' two."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4546,
+      "name": "LANG_UNIT_NOT_LIFTED",
+      "severity": "error",
+      "message": "the unit '\u2395unit' puts on is written between '\u231c' and '\u231d'",
+      "args": [],
+      "cause": "A unit is not a value: there is nothing at all for one to be at the time the program runs, since a unit is the part of a type the code knows nothing about.  So it is lifted out of the program the same way a type is where the compiler is asked about one.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Units",
+        "requirement": "The unit is written between the lifting marks."
       },
       "since": "0.1",
       "default_enabled": true,

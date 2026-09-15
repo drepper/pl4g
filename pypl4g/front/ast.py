@@ -156,8 +156,41 @@ class RefTypeRef(Node):
     mutable: bool = False
 
 
+@dataclass(frozen=True, slots=True)
+class UnitFactor(Node):
+    """One base unit in a written unit, and what it is raised to."""
+
+    name: str
+    #: Whether the name was written between quotation marks, which is how a
+    #: unit whose name is not an identifier is written.
+    quoted: bool = False
+    #: What it is raised to, negative where it stands below the line.
+    exponent: int = 1
+
+
+@dataclass(frozen=True, slots=True)
+class UnitRef(Node):
+    """`\N{CURRENCY SIGN}meter\N{DIVISION SIGN}second\N{SUPERSCRIPT TWO}`: what a number counts.
+
+    Read left to right: `\N{MULTIPLICATION SIGN}` puts the next one above the line and `\N{DIVISION SIGN}` below it,
+    and a raised number after one is what it is raised to.  What comes of it is
+    a product of powers, so two units written differently are one unit where
+    they come to the same thing.
+    """
+
+    factors: tuple[UnitFactor, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class UnitTypeRef(Node):
+    """A type with a unit written after it: `u64 \N{CURRENCY SIGN}meter`."""
+
+    base: TypeExpr
+    unit: UnitRef
+
+
 type TypeExpr = (TypeRef | CollectionTypeRef | TupleTypeRef | ArrayTypeRef
-                 | ListTypeRef | RefTypeRef)
+                 | ListTypeRef | RefTypeRef | UnitTypeRef)
 
 
 @dataclass(frozen=True, slots=True)
@@ -701,6 +734,31 @@ class EntryAssign(Stmt):
 
 
 @dataclass(frozen=True, slots=True)
+class UnitDef(Stmt):
+    """`unit NAME`, `unit NAME = VALUE` and `unit \N{CURRENCY SIGN}FROM \N{RIGHTWARDS ARROW} \N{CURRENCY SIGN}TO`.
+
+    The first introduces a unit that is measured in nothing but itself.  The
+    second says what one of them is in terms of others, so that a unit and the
+    units it is built from are known to measure the same thing.  The third says
+    a value written in one unit may stand where another is wanted, which is a
+    statement about what the program means and not about arithmetic.
+    """
+
+    #: The name being introduced, and nothing for the third form, which
+    #: introduces none.
+    name: str
+    name_span: Span
+    quoted: bool = False
+    #: What one of these is measured in, where the definition says.
+    measured: UnitRef | None = None
+    #: How many of those it is, as a fraction written over.
+    scale: tuple[int, int] | None = None
+    #: The two units of `unit \N{CURRENCY SIGN}FROM \N{RIGHTWARDS ARROW} \N{CURRENCY SIGN}TO`: what may stand, and where.
+    stands: tuple[UnitRef, UnitRef] | None = None
+    doc: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class ModuleImport(Node):
     """A module brought into a file, and the name it is known by there.
 
@@ -925,7 +983,7 @@ class EnumDef(Node):
     doc: str | None = None
 
 
-type Definition = FuncDef | VarDef | ModuleImport | TypeDef | EnumDef
+type Definition = FuncDef | VarDef | ModuleImport | TypeDef | EnumDef | UnitDef
 
 
 @dataclass(frozen=True, slots=True)

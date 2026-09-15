@@ -1,0 +1,18 @@
+※ pl4g-test: compile=error diag=4539
+
+※ The units the language provides are the seven SI base units and the two the
+※ compiler counts with.  Any other is introduced by a `unit` definition before
+※ it is used, which is what keeps a unit mistyped in one place from quietly
+※ becoming a unit of its own -- the one mistake a language with no such rule
+※ cannot tell from a new kind of quantity.
+※
+※ F# is the language that took the other road furthest and still writes
+※ `[<Measure>] type m` before using `m`; Ada's dimension checking declares its
+※ system too.  A unit that appeared by being written is a unit that catches
+※ nothing.
+
+@[startup]
+fn main() → u6:
+    let d: u32 ¤metre = 5
+    let n: u32 = ⎕drop(d)
+    0u6

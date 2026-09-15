@@ -120,7 +120,10 @@ class Module:
 
     def int_const(self, ty: IntType, value: int) -> IntConst:
         """Return the interned constant *value* of type *ty*."""
-        key = (ty.bits, ty.signed, value)
+        # The unit is part of the key, because it is part of the type: three
+        # seconds and three metres are two constants and neither stands where
+        # the other is wanted.
+        key = (ty.bits, ty.signed, ty.unit, value)
         found = self._int_consts.get(key)
         if found is None:
             found = IntConst(ty, value)
@@ -135,7 +138,7 @@ class Module:
         """
         import struct
 
-        key = (ty.bits, struct.pack("<d", value))
+        key = (ty.bits, ty.unit, struct.pack("<d", value))
         found = self._float_consts.get(key)
         if found is None:
             found = FloatConst(ty, value)

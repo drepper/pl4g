@@ -4387,6 +4387,49 @@ value is behind an indirection so the question never arises; **Go**, where a str
 of itself.  What is decided here is the one thing those all share -- an indirection is what makes it finite -- with the depth
 rather than the field as the test, so that a cycle through several definitions is judged by the same rule as a cycle through one.
 
+---
+
+## 2026-09-16T13:30+02:00 — language
+
+**Units: `TYPE ¤UNIT`, and what may be written where**
+
+Decided on the user's direction, with three sub-decisions chosen by the user.
+
+**A unit is part of the type.**  `u32` and `u32 ¤meter` are two types and neither stands where the other is wanted, so `+`, `-`
+and the comparisons needed no rule of their own: they already demanded that both sides be the same type.  **F#**'s units of
+measure are this feature done fully in a mainstream language, and the bargain is the same one struck here -- checked while
+compiling, erased before code is generated.
+
+**A product and a quotient derive a unit; everything else demands one.**  The exponents are added and subtracted, so the seconds
+cancel when a speed is multiplied by a time.  A unit is therefore kept as base units and exponents rather than as a name, which is
+what makes `¤meter÷second × ¤second` really be `¤meter`.  A literal beside one of the two takes no unit at all, since doubling a
+length gives a length.
+
+**A unit that is not builtin is introduced with `unit`**, chosen by the user.  Without it a mistyped unit becomes a unit of its
+own, which is the one mistake the feature cannot otherwise catch; F# and Ada both declare their units for the same reason.  Three
+forms: a base unit of the program's own, one written in terms of others with a scale, and `unit ¤FROM → ¤TO`, which says a value
+in one unit may stand where another is wanted and only the way round it is written.  Where a definition stands is how far it
+reaches.
+
+**`¤idx` is what an index must be**, and `¤size` is what `#` answers with.  The user was asked whether an index should accept a
+count and answered with the `→` construct instead, so the two stay distinct and a program that wants to index with a count writes
+`unit ¤size → ¤idx` once.  That is the better answer: it is one rule that covers every such pair rather than an exception built
+into indexing.
+
+**Crossing between units is two steps, written.**  `⎕drop` takes a unit off and `⎕unit` puts one on, and going from one unit to
+another is both -- the user's choice from three ways of giving a number a unit.  The alternative, letting a written type give a
+unit to a value that had none, would have made the crossing invisible at exactly the place it matters.  Neither applies a factor:
+the scale a `unit NAME =` records says the two measure the same thing, and applying it would generate code where units generate
+none.
+
+**The division sign is the language's own `÷`.**  The request wrote `¤meter/second` and the definition form `÷`; `÷` is what
+every other division in the language is written with, and `/` has no meaning anywhere here.  One meaning, one spelling.
+
+Compare: **Ada**, whose dimension checking applies a conversion factor, which is what this records and does not yet apply;
+**Boost.Units**, **Haskell's `units`** and **Rust's `uom`**, which do it in the type system rather than in the language, at a cost
+in error messages; **Java** and **Swift** libraries that carry the unit at run time, which costs a word and a check per quantity;
+**C**, **Go** and **Zig**, which have nothing.
+
 Open questions
 --------------
 

@@ -19,7 +19,7 @@ fn main() → u6:
     let still: [u8] = a ⧺ []
     ※ and elements wider than a byte, where the multiplication matters
     let wide: [u32] = [1u32, 2u32] ⧺ [3u32]
-    if #both ≠ 5u64 ∨ #more ≠ 6u64 ∨ #still ≠ 3u64 ∨ #wide ≠ 3u64:
+    if #both ≠ 5 ∨ #more ≠ 6 ∨ #still ≠ 3 ∨ #wide ≠ 3:
         1u6
     elif total(both) ≠ 15u8:
         2u6

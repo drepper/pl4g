@@ -24,34 +24,34 @@ fn main() → u6:
     let s: ⸨u8⸩ = ⸨1u8, 2u8, 5u8⸩
     let d: ⸨u8: u16⸩ = ⸨1u8: 10u16, 2u8: 20u16⸩
     let run: u8⟦⟧ = v⟦0…2⟧
-    if #v ≠ 3u64:
+    if #v ≠ 3:
         1u6
     ※ a table answers its outermost dimension and not how many elements in all
-    elif #m ≠ 2u64:
+    elif #m ≠ 2:
         2u6
-    elif #t ≠ 3u64:
+    elif #t ≠ 3:
         3u6
     ※ four characters and ten bytes, which is what makes this the useful one
-    elif #text ≠ 4u64:
+    elif #text ≠ 4:
         4u6
-    elif #s ≠ 3u64:
+    elif #s ≠ 3:
         5u6
-    elif #d ≠ 2u64:
+    elif #d ≠ 2:
         6u6
     ※ a run taken out of an array carries its own count
-    elif #run ≠ 2u64:
+    elif #run ≠ 2:
         7u6
     ※ it binds tighter than every operator written between two operands
-    elif #v + 1u64 ≠ 4u64:
+    elif #v + 1 ≠ 4:
         8u6
     ※ and looser than an index, so this asks about the row and not the table
-    elif #m⟦1⟧ ≠ 4u64:
+    elif #m⟦1⟧ ≠ 4:
         9u6
     ※ a string made by joining two is a string, and is counted the same way
-    elif #("ab" ⧺ text) ≠ 6u64:
+    elif #("ab" ⧺ text) ≠ 6:
         10u6
     ※ and what it answers is a number like any other
-    elif #text + #v ≠ 7u64:
+    elif #text + #v ≠ 7:
         11u6
     else:
         0u6

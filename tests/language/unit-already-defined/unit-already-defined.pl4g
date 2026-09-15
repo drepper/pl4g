@@ -1,0 +1,12 @@
+※ pl4g-test: compile=error diag=4542
+
+※ A unit is introduced once where it is introduced at all.  Two definitions of
+※ one name would be two units a reader could not tell apart, or one definition
+※ saying two things about the same unit.
+
+unit apples
+unit apples
+
+@[startup]
+fn main() → u6:
+    0u6

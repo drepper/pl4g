@@ -1,0 +1,12 @@
+※ pl4g-test: compile=error diag=4546
+
+※ A unit is not a value: there is nothing at all for one to be while the
+※ program runs, a unit being the part of a type the code knows nothing about.
+※ So it is lifted out of the program the same way a type is where the compiler
+※ is asked about one, and `⌜meter⌝` is what `⎕unit` is given.
+
+@[startup]
+fn main() → u6:
+    let n: u32 = 5u32
+    let m: u32 ¤meter = ⎕unit(n, 3u32)
+    0u6

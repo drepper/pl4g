@@ -31,8 +31,9 @@ fn main() → u6:
                           .fourth ← 8u8,
                           .third ← 4u8)
     ※ a lookup written over two lines
-    let picked: u8 = v⟦1u8 +
-                       1u8⟧
+    let one: u8 ¤idx = 1
+    let picked: u8 = v⟦one +
+                       one⟧
     if v⟦0⟧ ≠ 10u8 ∨ v⟦3⟧ ≠ 40u8:
         1u6
     elif pair⟦0⟧ ≠ 1u8 ∨ pair⟦1⟧ ≠ 2u16:

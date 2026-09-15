@@ -1886,6 +1886,44 @@ reference stands somewhere on the way round, and the shell is handed back.  That
 in hand is a reference, but whether one is open anywhere between the type and itself.
 
 
+A unit is part of a type
+------------------------
+
+The decision that made the rest of it small: a unit lives **inside** `IntType` and `FloatType` rather than in a wrapper type
+around them.  A wrapper would have had to be seen through by every `isinstance(ty, IntType)` in an eight-thousand-line checker;
+inside, `ty.bits`, `ty.signed`, `ty.low` and `ty.high` all still answer, every existing check still reads, and the one thing that
+changes is identity -- `u64` and `u64 ¤meter` are two interned types.
+
+That identity is the whole of the checking.  `+`, `-` and the comparisons already demanded that both sides be the *same* type and
+already reported what did not match; with the unit in the type they demand the same unit and say so in the message, and not one
+of them was touched.  `FloatType` had to be interned like `IntType` for it, since `is` is what the compiler asks a type with.
+
+**Two operators work a unit out rather than demand one.**  `_DERIVES` is `×` and `÷`, and while their operands are lowered
+`self._deriving` is set, which does two things: `_accepts` lets any unit through provided the bits agree, and `_literal_type` and
+`_float_literal_type` give a literal the *bare* type, so `d × 2` is twice a length and not a length times a length.  The unit of
+the answer is then worked out from the two operands' -- `Unit.times` and `Unit.over`, which add and subtract exponents -- and
+handed to `builder.binary` as an explicit type.  Because the operands were let through unmeasured, what comes out is measured
+against the place it is going here and nowhere else; that check is the one thing the derive path has to do for itself.
+
+The unit is derived only where the operand's own type *is* the scalar being worked with.  In the vectorised path `ty` is the
+element of a `VecType`, and answering with the element would turn a run into a single value.
+
+**Nothing below the checker knows.**  `mangled()` leaves the unit out, so a symbol name is what it was.  `parts_of`, the layout,
+the register allocator and the three instruction selectors all read `bits`, which is unchanged.  The verifier compares types
+`without_units` in the two places where a unit legitimately differs across an instruction -- a `bitcast` between the same bits,
+and the operands of a product or a quotient -- and nowhere else.  `Module.int_const` and `float_const` intern by the unit as well
+as the bits, which was the one thing that had to change for a literal to carry one at all.
+
+**`⎕drop` and `⎕unit` are a `bitcast`**, or nothing where the value is a constant -- the constant is simply made in the other
+type.  Neither applies a factor: what the `unit NAME =` form records is that two units measure the same thing, and the scale is
+kept in `Unit.scale` so that two units with the same base units and different scales are two types.  A conversion that used the
+scale would generate code, and units generate none.
+
+**`#` answers `u64 ¤size`**, which is where the `¤idx` rule earns its keep: an index is `¤idx`, a count is `¤size`, and a program
+that wants to index with a count writes `unit ¤size → ¤idx` once.  `_stands_for` follows those declarations transitively and never
+backwards.
+
+
 Expectations
 ------------
 
