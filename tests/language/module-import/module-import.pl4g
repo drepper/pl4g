@@ -4,7 +4,7 @@
 
 ※ A module is found beside the file importing it, read while this one is being
 ※ compiled, and what it exports is named through the name it was bound to here.
-let limits := import("limits")
+let limits := ⎕import("limits")
 
 @[startup]
 fn main() → u6:

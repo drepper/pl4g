@@ -45,7 +45,7 @@ def test_the_directory_of_the_importing_file_is_looked_at_first(tmp_path: Path) 
     """A program and the modules beside it need no path telling the compiler so."""
     write(tmp_path, "lib/limits.pl4g", "@[export]\nlet ceiling: u6 = 42u6\n")
     proc, output = build(tmp_path, "".join((
-        'let limits := import("lib/limits")\n\n@[startup, impure]\nfn main() ', ARROW,
+        'let limits := ⎕import("lib/limits")\n\n@[startup, impure]\nfn main() ', ARROW,
         " u6:\n    limits.ceiling\n")))
     assert proc.returncode == 0, describe(proc)
     assert ran(output) == 42
@@ -55,7 +55,7 @@ def test_a_name_given_on_the_command_line_is_looked_at_next(tmp_path: Path) -> N
     """Which is how a build says where the modules of a project are."""
     write(tmp_path, "elsewhere/found.pl4g", "@[export]\nlet v: u6 = 5u6\n")
     proc, output = build(tmp_path, "".join((
-        'let f := import("found")\n\n@[startup, impure]\nfn main() ', ARROW,
+        'let f := ⎕import("found")\n\n@[startup, impure]\nfn main() ', ARROW,
         " u6:\n    f.v\n")), "--module-path=elsewhere")
     assert proc.returncode == 0, describe(proc)
     assert ran(output) == 5
@@ -65,7 +65,7 @@ def test_a_name_that_is_a_path_names_one_file(tmp_path: Path) -> None:
     """Nothing is searched for: an absolute name is an answer, not a question."""
     absolute = write(tmp_path, "away/exact.pl4g", "@[export]\nlet v: u6 = 9u6\n")
     proc, output = build(tmp_path, "".join((
-        'let f := import("', absolute.as_posix(), '")\n\n@[startup, impure]\nfn main() ',
+        'let f := ⎕import("', absolute.as_posix(), '")\n\n@[startup, impure]\nfn main() ',
         ARROW, " u6:\n    f.v\n")))
     assert proc.returncode == 0, describe(proc)
     assert ran(output) == 9
@@ -76,7 +76,7 @@ def test_the_extension_is_added_where_it_is_not_written(tmp_path: Path) -> None:
     write(tmp_path, "with.pl4g", "@[export]\nlet v: u6 = 3u6\n")
     for written in ("with", "with.pl4g"):
         proc, output = build(tmp_path, "".join((
-            'let f := import("', written, '")\n\n@[startup, impure]\nfn main() ', ARROW,
+            'let f := ⎕import("', written, '")\n\n@[startup, impure]\nfn main() ', ARROW,
             " u6:\n    f.v\n")))
         assert proc.returncode == 0, "".join((written, ": ", describe(proc)))
         assert ran(output) == 3
@@ -85,7 +85,7 @@ def test_the_extension_is_added_where_it_is_not_written(tmp_path: Path) -> None:
 def test_a_name_found_nowhere_says_how_many_places_were_looked(tmp_path: Path) -> None:
     """Saying only that it failed would leave the reader to guess where to put it."""
     proc, _ = build(tmp_path, "".join((
-        'let z := import("nowhere")\n\n@[startup, impure]\nfn main() ', ARROW,
+        'let z := ⎕import("nowhere")\n\n@[startup, impure]\nfn main() ', ARROW,
         " u6:\n    1u6\n")))
     assert proc.returncode != 0
     assert "[PL4G-4100]" in proc.stderr, proc.stderr
@@ -113,7 +113,7 @@ def test_a_relative_entry_is_tried_against_the_file_then_the_directory() -> None
 # -- read once ------------------------------------------------------------------
 
 SHARED = "@[export, visible]\nlet value: u6 = 7u6\n"
-MIDDLE = 'let s := import("shared")\n\n@[export]\nlet echo: u6 = 1u6\n'
+MIDDLE = 'let s := ⎕import("shared")\n\n@[export]\nlet echo: u6 = 1u6\n'
 
 
 def test_one_file_reached_two_ways_is_one_module(tmp_path: Path) -> None:
@@ -121,7 +121,7 @@ def test_one_file_reached_two_ways_is_one_module(tmp_path: Path) -> None:
     write(tmp_path, "shared.pl4g", SHARED)
     write(tmp_path, "middle.pl4g", MIDDLE)
     proc, output = build(tmp_path, "".join((
-        'let direct := import("shared")\nlet mid := import("middle")\n\n',
+        'let direct := ⎕import("shared")\nlet mid := ⎕import("middle")\n\n',
         "@[startup, impure]\nfn main() ", ARROW, " u6:\n    direct.value\n")))
     assert proc.returncode == 0, describe(proc)
     assert ran(output) == 7
@@ -135,7 +135,7 @@ def test_the_shortest_of_a_module_s_names_is_the_one_used(tmp_path: Path) -> Non
     write(tmp_path, "shared.pl4g", SHARED)
     write(tmp_path, "middle.pl4g", MIDDLE)
     proc, output = build(tmp_path, "".join((
-        'let mid := import("middle")\nlet direct := import("shared")\n\n',
+        'let mid := ⎕import("middle")\nlet direct := ⎕import("shared")\n\n',
         "@[startup, impure]\nfn main() ", ARROW, " u6:\n    direct.value\n")))
     assert proc.returncode == 0, describe(proc)
     parsed = elfcheck.parse(output.read_bytes())
@@ -149,7 +149,7 @@ def test_two_files_of_one_name_are_told_apart(tmp_path: Path) -> None:
     write(tmp_path, "one/util.pl4g", "@[export, visible]\nlet v: u6 = 1u6\n")
     write(tmp_path, "two/util.pl4g", "@[export, visible]\nlet v: u6 = 2u6\n")
     proc, output = build(tmp_path, "".join((
-        'let a := import("one/util")\nlet b := import("two/util")\n\n',
+        'let a := ⎕import("one/util")\nlet b := ⎕import("two/util")\n\n',
         "@[startup, impure]\nfn main() ", ARROW, " u6:\n    a.v | b.v\n")))
     assert proc.returncode == 0, describe(proc)
     assert ran(output) == 3
@@ -172,7 +172,7 @@ def test_only_what_a_module_exports_can_be_named(tmp_path: Path) -> None:
     """Everything else is the module's own."""
     write(tmp_path, "lib.pl4g", "@[export]\nlet open: u6 = 1u6\n\nlet shut: u6 = 2u6\n")
     proc, _ = build(tmp_path, "".join((
-        'let l := import("lib")\n\n@[startup, impure]\nfn main() ', ARROW,
+        'let l := ⎕import("lib")\n\n@[startup, impure]\nfn main() ', ARROW,
         " u6:\n    l.shut\n")))
     assert proc.returncode != 0
     assert "[PL4G-4104]" in proc.stderr, proc.stderr
@@ -183,7 +183,7 @@ def test_two_modules_may_each_define_a_name(tmp_path: Path) -> None:
     write(tmp_path, "a.pl4g", "@[export]\nlet counter: u6 = 1u6\n")
     write(tmp_path, "b.pl4g", "@[export]\nlet counter: u6 = 2u6\n")
     proc, output = build(tmp_path, "".join((
-        'let a := import("a")\nlet b := import("b")\n\n@[startup, impure]\nfn main() ',
+        'let a := ⎕import("a")\nlet b := ⎕import("b")\n\n@[startup, impure]\nfn main() ',
         ARROW, " u6:\n    a.counter | b.counter\n")))
     assert proc.returncode == 0, describe(proc)
     assert ran(output) == 3
@@ -193,7 +193,7 @@ def test_a_module_is_not_a_value(tmp_path: Path) -> None:
     """Nothing can be computed from one and nothing of it reaches the program."""
     write(tmp_path, "lib.pl4g", "@[export]\nlet v: u6 = 1u6\n")
     proc, _ = build(tmp_path, "".join((
-        'let l := import("lib")\n\n@[startup, impure]\nfn main() ', ARROW,
+        'let l := ⎕import("lib")\n\n@[startup, impure]\nfn main() ', ARROW,
         " u6:\n    l\n")))
     assert proc.returncode != 0
     assert "[PL4G-4105]" in proc.stderr, proc.stderr
@@ -212,10 +212,10 @@ def test_a_dot_after_something_that_is_not_a_module_is_reported(tmp_path: Path) 
 def test_a_ring_of_imports_is_refused_and_shown(tmp_path: Path) -> None:
     """A module is read while the file importing it is being read, so a ring has
     no beginning: neither can be finished before the other."""
-    write(tmp_path, "a.pl4g", 'let b := import("b")\n\n@[export]\nlet x: u6 = 1u6\n')
-    write(tmp_path, "b.pl4g", 'let a := import("a")\n\n@[export]\nlet y: u6 = 2u6\n')
+    write(tmp_path, "a.pl4g", 'let b := ⎕import("b")\n\n@[export]\nlet x: u6 = 1u6\n')
+    write(tmp_path, "b.pl4g", 'let a := ⎕import("a")\n\n@[export]\nlet y: u6 = 2u6\n')
     proc, _ = build(tmp_path, "".join((
-        'let a := import("a")\n\n@[startup, impure]\nfn main() ', ARROW, " u6:\n    a.x\n")))
+        'let a := ⎕import("a")\n\n@[startup, impure]\nfn main() ', ARROW, " u6:\n    a.x\n")))
     assert proc.returncode != 0
     assert "[PL4G-4102]" in proc.stderr, proc.stderr
     assert "a.pl4g -> b.pl4g -> a.pl4g" in proc.stderr, proc.stderr
@@ -223,9 +223,9 @@ def test_a_ring_of_imports_is_refused_and_shown(tmp_path: Path) -> None:
 
 def test_a_module_importing_itself_is_a_ring_of_one(tmp_path: Path) -> None:
     """The shortest ring there is, and the one easiest to write by accident."""
-    write(tmp_path, "self.pl4g", 'let me := import("self")\n\n@[export]\nlet v: u6 = 1u6\n')
+    write(tmp_path, "self.pl4g", 'let me := ⎕import("self")\n\n@[export]\nlet v: u6 = 1u6\n')
     proc, _ = build(tmp_path, "".join((
-        'let s := import("self")\n\n@[startup, impure]\nfn main() ', ARROW, " u6:\n    s.v\n")))
+        'let s := ⎕import("self")\n\n@[startup, impure]\nfn main() ', ARROW, " u6:\n    s.v\n")))
     assert proc.returncode != 0
     assert "[PL4G-4102]" in proc.stderr, proc.stderr
 
@@ -235,13 +235,13 @@ def test_an_import_inside_a_function_is_refused(tmp_path: Path) -> None:
     write(tmp_path, "lib.pl4g", "@[export]\nlet v: u6 = 1u6\n")
     proc, _ = build(tmp_path, "".join((
         "@[startup, impure]\nfn main() ", ARROW,
-        ' u6:\n    let m := import("lib")\n    1u6\n')))
+        ' u6:\n    let m := ⎕import("lib")\n    1u6\n')))
     assert proc.returncode != 0
     assert "[PL4G-3013]" in proc.stderr, proc.stderr
 
 
-@pytest.mark.parametrize("written", ["let m: mut = import(\"lib\")",
-                                     "let m: u6 = import(\"lib\")"])
+@pytest.mark.parametrize("written", ["let m: mut = ⎕import(\"lib\")",
+                                     "let m: u6 = ⎕import(\"lib\")"])
 def test_a_module_cannot_be_qualified(tmp_path: Path, written: str) -> None:
     """There is nothing to change and nothing to give a type to."""
     write(tmp_path, "lib.pl4g", "@[export]\nlet v: u6 = 1u6\n")
@@ -258,9 +258,9 @@ def test_a_program_with_modules_runs_everywhere(triple: str, tmp_path: Path) -> 
     """Nothing about a module is a property of one architecture."""
     write(tmp_path, "lib/one.pl4g", "@[export]\nlet a: u6 = 0b1100u6\n")
     write(tmp_path, "lib/two.pl4g",
-          'let one := import("one")\n\n@[export]\nlet b: u6 = 0b1010u6\n')
+          'let one := ⎕import("one")\n\n@[export]\nlet b: u6 = 0b1010u6\n')
     write(tmp_path, "main.pl4g", "".join((
-        'let one := import("lib/one")\nlet two := import("lib/two")\n\n',
+        'let one := ⎕import("lib/one")\nlet two := ⎕import("lib/two")\n\n',
         "@[startup, impure]\nfn main() ", ARROW, " u6:\n    one.a & two.b\n")))
     output = tmp_path / "out"
     proc = run_compiler(["-o", str(output), "".join(("--target=", triple)),
@@ -289,7 +289,7 @@ def test_the_source_of_a_module_is_recorded(tmp_path: Path) -> None:
     """A debugger and an incremental build both want to know what went in."""
     write(tmp_path, "lib.pl4g", "@[export]\nlet v: u6 = 1u6\n")
     proc, output = build(tmp_path, "".join((
-        'let l := import("lib")\n\n@[startup, impure]\nfn main() ', ARROW,
+        'let l := ⎕import("lib")\n\n@[startup, impure]\nfn main() ', ARROW,
         " u6:\n    l.v\n")))
     assert proc.returncode == 0, describe(proc)
     parsed = elfcheck.parse(output.read_bytes())

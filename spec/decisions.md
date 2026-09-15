@@ -1228,7 +1228,7 @@ needs exists.
 
 **Modules: read while compiling, read once, and named by the shortest way of reaching them**
 
-A module is a source file, brought in by `let name := import("somename")` and named through afterwards as `name.thing`.  Several
+A module is a source file, brought in by `let name := ⎕import("somename")` and named through afterwards as `name.thing`.  Several
 decisions are worth stating.
 
 *A module is not a value.*  It is read while the program is being compiled, and nothing of it survives into the program but the
@@ -4525,6 +4525,29 @@ Compare: **C**'s implicit conversions, silent and a category of defect on their 
 refuses what it can see and says nothing about what it cannot; **Rust**'s `as` beside `TryFrom`; **Go**, silent; **Ada**, whose
 `Constraint_Error` says which subtype was violated at the price of exceptions; **Swift**'s failable initializer.  What is here is
 Rust's shape with Ada's amount of detail and neither's cost.
+
+---
+
+## 2026-09-16T18:20+02:00 — language
+
+**`import` becomes `⎕import`**
+
+On the user's direction, for consistency with every other name the compiler provides.  It was a keyword, which is the one thing
+that made it unlike `⎕typeof`, `⎕wrap`, `⎕enumerate`, `⎕drop`, `⎕unit` and `⎕narrow` -- all of which look like calls, are read by
+the compiler rather than called, and carry the sigil to say so.
+
+What the change buys is the thing the sigil exists for: `import` is now an ordinary identifier, so a program may have a variable
+called `import`.  That is the stated reason for the sigil on every one of the others, and it applied here as much as anywhere --
+a word as ordinary as this one is a word a generator will want.
+
+It stays a shape the parser knows rather than a call the checker recognizes, because what it makes is not a value: a module is a
+file that was read, and there is nothing for an expression to come to.  So the parser matches it by what it says rather than by a
+token kind, which is what a compiler-provided name is.
+
+Compare: **Python**, **Go**, **Rust** and **Zig** all spend a keyword on it -- except Zig, whose `@import` is a builtin for this
+exact reason, and whose `@` is this language's `⎕`.  That this language and Zig arrived at the same answer from the same premise
+is worth recording: an import is a compiler operation wearing a call's clothes, and marking it as one costs a character and frees
+a word.
 
 Open questions
 --------------

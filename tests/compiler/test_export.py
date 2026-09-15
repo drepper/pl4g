@@ -186,7 +186,7 @@ def test_offering_a_symbol_does_not_export_the_definition(tmp_path) -> None:  # 
                                        encoding="utf-8")
     source = tmp_path / "main.pl4g"
     source.write_text("".join((
-        'let l := import("lib")\n\n@[startup, impure]\nfn main() ', ARROW,
+        'let l := ⎕import("lib")\n\n@[startup, impure]\nfn main() ', ARROW,
         " u6:\n    l.v\n")), encoding="utf-8")
     proc = run_compiler(["-o", str(tmp_path / "out"), str(source)])
     assert proc.returncode != 0

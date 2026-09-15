@@ -60,4 +60,6 @@
 (module_import name: (identifier) @module)
 (member_expression base: (identifier) @module)
 (member_expression name: (identifier) @variable)
-["import"] @keyword.import
+; One of the compiler's names rather than a keyword, and coloured as what it
+; does rather than as what it looks like.
+["⎕import"] @keyword.import

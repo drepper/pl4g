@@ -775,7 +775,7 @@
         },
         {
           "type": "STRING",
-          "value": "import"
+          "value": "⎕import"
         },
         {
           "type": "STRING",

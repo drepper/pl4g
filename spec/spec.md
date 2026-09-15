@@ -170,11 +170,16 @@ A literal is made negative by the same leading `⁻` an integer literal uses: `�
 A file brings another in with a definition:
 
 ```
-let limits := import("lib/limits")
+let limits := ⎕import("lib/limits")
 ```
 
 The name on the left is what the module is called here; the string is the name of the module.  What the module exports is named
-through it: `limits.ceiling`.  Nothing else of it can be named -- what a module does not export is its own, and two modules may
+through it: `limits.ceiling`.
+
+**`⎕import` carries the sigil every name the compiler provides carries**, and for the reason every one of them does: a program
+that wants a variable called `import` should not have to give it up because the compiler wanted the word.  It looks like a call
+and is not one -- a module is not a value and there is nothing for an expression to come to -- so it is a shape the syntax knows
+rather than a function, which is what the sigil says about it as much as about the name.  Nothing else of it can be named -- what a module does not export is its own, and two modules may
 each define a name without either seeing the other's.
 
 A module is read while the program is compiled, and nothing of it reaches the program but the definitions it holds.  It is

@@ -195,7 +195,9 @@ module.exports = grammar({
       'let',
       field('name', $.identifier),
       ':', '=',
-      'import', '(', field('source', $.string_literal), ')',
+      // One of the compiler's names and not a keyword, so that a program that
+      // wants a variable called `import` may have one.
+      '\u2395import', '(', field('source', $.string_literal), ')',
     ),
 
     mutable: _ => 'mut',

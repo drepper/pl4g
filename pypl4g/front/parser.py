@@ -14,7 +14,7 @@ from ..diag import ids as D
 from ..diag.engine import DiagEngine
 from ..source.location import Span
 from . import ast
-from .token import COMMENT_GLYPH, TokKind, Token, WILDCARD_NAME
+from .token import COMMENT_GLYPH, IMPORT_NAME, TokKind, Token, WILDCARD_NAME
 
 #: Tokens at which error recovery stops, because a new definition can begin there.
 _RECOVERY: Final[frozenset[TokKind]] = frozenset(
@@ -328,7 +328,11 @@ class Parser:
             self._diags.emit(D.LANG_VARDEF_MISSING_INITIALIZER, name_token.span,
                              name=name_token.text)
             raise _Bail()
-        if self._check(TokKind.KW_IMPORT):
+        if self._check(TokKind.IDENT) and self._current.text == IMPORT_NAME:
+            # One of the compiler's names rather than a keyword, so it is
+            # matched by what it says.  It is read here and not by the checker
+            # because what it makes is not a value: a module is a file that was
+            # read, and there is nothing for an expression to come to.
             return self._parse_import(start, name_token, mutable, declared, doc)
         value = self._parse_expression()
         return ast.VarDef(span=start.to(value.span), name=name_token.text,
@@ -339,7 +343,7 @@ class Parser:
     def _parse_import(self, start: Span, name_token: Token, mutable: bool,
                       declared: ast.TypeExpr | None,
                       doc: str | None) -> ast.ModuleImport:
-        """Parse the rest of ``let NAME ':=' import(STRING)``.
+        """Parse the rest of ``let NAME ':=' \N{APL FUNCTIONAL SYMBOL QUAD}import(STRING)``.
 
         A module is not a value, so nothing about it may be qualified: there is
         nothing to change and nothing to give a type to.

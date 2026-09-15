@@ -7379,10 +7379,6 @@
     "named": false
   },
   {
-    "type": "import",
-    "named": false
-  },
-  {
     "type": "in",
     "named": false
   },
@@ -7609,6 +7605,10 @@
   },
   {
     "type": "⍴",
+    "named": false
+  },
+  {
+    "type": "⎕import",
     "named": false
   },
   {

@@ -23,7 +23,7 @@
 ※ count from anywhere.  What is written is still worked out left to right, in
 ※ the order it was written, whatever order the parameters end up in.
 
-let helper := import("named-arguments-helper")
+let helper := ⎕import("named-arguments-helper")
 
 enum Colour:
     red ;

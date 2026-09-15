@@ -89,7 +89,7 @@ fn one() → u8 { 1u8 }
 A module, and something named through it
 ================================================================================
 
-let limits := import("lib/limits")
+let limits := ⎕import("lib/limits")
 
 @[startup]
 fn main() → u8:

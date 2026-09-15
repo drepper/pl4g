@@ -165,6 +165,14 @@ ENUMERATE_NAME: Final[str] = "".join((BUILTIN_GLYPH, "enumerate"))
 #: of a type it is not yet of.
 NARROW_NAME: Final[str] = "".join((BUILTIN_GLYPH, "narrow"))
 
+#: Bringing a module into a file.  It carries the sigil every name the
+#: compiler provides carries, for the reason every one of them does: a program
+#: that wanted a variable called `import` should not have to give it up because
+#: the compiler wanted the word.  What it looks like is a call and what it does
+#: is not one -- a module is not a value -- so the parser reads it rather than
+#: the checker.
+IMPORT_NAME: Final[str] = "".join((BUILTIN_GLYPH, "import"))
+
 DROP_NAME: Final[str] = "".join((BUILTIN_GLYPH, "drop"))
 UNIT_NAME: Final[str] = "".join((BUILTIN_GLYPH, "unit"))
 
@@ -335,7 +343,6 @@ class TokKind(StrEnum):
     KW_IN = "'in'"
     KW_TRUE = "'true'"
     KW_FALSE = "'false'"
-    KW_IMPORT = "'import'"
     KW_AND = "'and'"
     KW_OR = "'or'"
 
@@ -467,7 +474,6 @@ KEYWORDS: Final[dict[str, TokKind]] = {
     "in": TokKind.KW_IN,
     "true": TokKind.KW_TRUE,
     "false": TokKind.KW_FALSE,
-    "import": TokKind.KW_IMPORT,
     "and": TokKind.KW_AND,
     "or": TokKind.KW_OR,
 }
