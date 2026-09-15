@@ -13,7 +13,7 @@ from pypl4g.ir.types import (BOOL, PtrType, TypeContext, U8, U16, U32, U64,
                              VecType)
 from pypl4g.diag.engine import InternalError
 from pypl4g.ir.verify import verify
-from pypl4g.target.vectors import Vectors, settle
+from pypl4g.target.vectors import EVERY, Vectors, settle
 
 LAYOUT = DataLayout(pointer_size=8)
 
@@ -117,7 +117,7 @@ def test_a_machine_with_nothing_does_an_element_at_a_time() -> None:
 def test_a_run_that_fits_is_left_alone() -> None:
     """A machine that can add a whole register of them adds it in one."""
     module = read_module(RUNS)
-    settle(module, Vectors(bits=128, binary={BinOp.ADD: 64}),
+    settle(module, Vectors(bits=128, binary={BinOp.ADD: EVERY}),
            LAYOUT)
     verify(module)
     found = _instructions(module)
@@ -129,7 +129,7 @@ def test_a_run_that_fits_is_left_alone() -> None:
 def test_an_operation_it_does_not_have_comes_apart() -> None:
     """Registers it has and this operation it has not: an element at a time."""
     module = read_module(RUNS)
-    settle(module, Vectors(bits=128, binary={BinOp.SUB: 64}), LAYOUT)
+    settle(module, Vectors(bits=128, binary={BinOp.SUB: EVERY}), LAYOUT)
     verify(module)
     assert len(_additions(_instructions(module))) == 4
 
@@ -140,7 +140,7 @@ LONG = RUNS.replace("\N{MULTIPLICATION SIGN}4", "\N{MULTIPLICATION SIGN}19")
 def test_a_longer_run_goes_in_whole_registers_and_then_one_at_a_time() -> None:
     """Nineteen bytes in registers of sixteen: one register and three left over."""
     module = read_module(LONG)
-    settle(module, Vectors(bits=128, binary={BinOp.ADD: 64}),
+    settle(module, Vectors(bits=128, binary={BinOp.ADD: EVERY}),
            LAYOUT)
     verify(module)
     found = _instructions(module)
@@ -153,17 +153,20 @@ def test_a_longer_run_goes_in_whole_registers_and_then_one_at_a_time() -> None:
 
 def test_a_wider_element_holds_fewer_lanes() -> None:
     """Four bytes to a lane is four lanes to a sixteen-byte register."""
-    able = Vectors(bits=128, binary={BinOp.ADD: 64})
-    assert able.lanes_at_once(U8, LAYOUT, 64) == 16
-    assert able.lanes_at_once(U32, LAYOUT, 64) == 4
-    assert able.lanes_at_once(U64, LAYOUT, 64) == 2
-    # A lane wider than the operation reaches is no lane at all.
-    assert able.lanes_at_once(U64, LAYOUT, 32) == 0
-    assert able.lanes_at_once(U32, LAYOUT, 32) == 4
+    able = Vectors(bits=128, binary={BinOp.ADD: EVERY})
+    assert able.lanes_at_once(U8, LAYOUT, EVERY) == 16
+    assert able.lanes_at_once(U32, LAYOUT, EVERY) == 4
+    assert able.lanes_at_once(U64, LAYOUT, EVERY) == 2
+    # A width the operation does not exist at is no lane at all, and the widths
+    # need not be a range: a machine may multiply halfwords and words and not
+    # bytes.
+    assert able.lanes_at_once(U64, LAYOUT, frozenset((8, 16, 32))) == 0
+    assert able.lanes_at_once(U32, LAYOUT, frozenset((16, 32))) == 4
+    assert able.lanes_at_once(U8, LAYOUT, frozenset((16, 32))) == 0
     # An operation it does not have at all, and a machine with no such
     # registers: neither holds anything.
-    assert able.lanes_at_once(U8, LAYOUT, 0) == 0
-    assert Vectors().lanes_at_once(U8, LAYOUT, 64) == 0
+    assert able.lanes_at_once(U8, LAYOUT, frozenset()) == 0
+    assert Vectors().lanes_at_once(U8, LAYOUT, EVERY) == 0
 
 
 def test_the_level_says_how_wide_a_run_register_is() -> None:
@@ -177,12 +180,19 @@ def test_the_level_says_how_wide_a_run_register_is() -> None:
         target.use_mclevel(level)
         widths[level] = target.vectors.bits
     assert widths == {"v1": 128, "v2": 128, "v3": 256, "v4": 256}
-    # The operations are the same at every level: the wider forms are the same
-    # operations over more lanes.
+    # The operations are the same at every level but one: the wider forms are
+    # the same operations over more lanes.  Multiplying a whole run is the
+    # exception, the word-wide multiply being SSE4.1 and so part of what the
+    # second level promises and not the first.
     target.use_mclevel("v1")
     narrow = target.vectors
     target.use_mclevel("v4")
-    assert target.vectors.binary == narrow.binary
+    assert narrow.binary[BinOp.WRAP_MUL] == frozenset((16,))
+    assert target.vectors.binary[BinOp.WRAP_MUL] == frozenset((16, 32))
+    assert {op: widths for op, widths in target.vectors.binary.items()
+            if op is not BinOp.WRAP_MUL} == \
+        {op: widths for op, widths in narrow.binary.items()
+         if op is not BinOp.WRAP_MUL}
     assert target.vectors.unary == narrow.unary
 
 
@@ -190,12 +200,12 @@ def test_a_wider_register_holds_a_longer_run_in_one_piece() -> None:
     """Thirty-two bytes is two pieces at the older levels and one at the newer."""
     module = read_module(RUNS.replace("\N{MULTIPLICATION SIGN}4",
                                       "\N{MULTIPLICATION SIGN}32"))
-    settle(module, Vectors(bits=128, binary={BinOp.ADD: 64}), LAYOUT)
+    settle(module, Vectors(bits=128, binary={BinOp.ADD: EVERY}), LAYOUT)
     verify(module)
     assert len(_additions(_instructions(module))) == 2
 
     module = read_module(RUNS.replace("\N{MULTIPLICATION SIGN}4",
                                       "\N{MULTIPLICATION SIGN}32"))
-    settle(module, Vectors(bits=256, binary={BinOp.ADD: 64}), LAYOUT)
+    settle(module, Vectors(bits=256, binary={BinOp.ADD: EVERY}), LAYOUT)
     verify(module)
     assert len(_additions(_instructions(module))) == 1

@@ -48,15 +48,23 @@ class BinOp(Enum):
     SAT_SUB = "sat.sub"
     SAT_MUL = "sat.mul"
 
-    #: The three that answer with the low bits of what the arithmetic came to,
-    #: whatever it came to.  No program of the language can write one: the
-    #: specification says arithmetic is checked, and an answer that does not fit
-    #: stops the program.  What they are for is the code the compiler generates
-    #: for itself, where a hash is defined on the bits and there is nothing
-    #: about an overflow to report to anyone.
+    #: The ones that answer with the low bits of what the operation came to,
+    #: whatever it came to.  A program writes one by putting the operator inside
+    #: `⎕wrap`, which is what says that going past the end of the type is
+    #: what was meant; the compiler also generates them for itself, where a hash
+    #: is defined on the bits and there is nothing about an overflow to report.
     WRAP_ADD = "wrap.add"
     WRAP_SUB = "wrap.sub"
     WRAP_MUL = "wrap.mul"
+
+    #: And the moving ones, whose distance is taken modulo the width of the type
+    #: rather than being a question the program can get wrong.  Every width is a
+    #: power of two, so that is a mask and not a division.
+    WRAP_SHL = "wrap.shl"
+    WRAP_ASHR = "wrap.ashr"
+    WRAP_LSHR = "wrap.lshr"
+    WRAP_ROTL = "wrap.rotl"
+    WRAP_ROTR = "wrap.rotr"
 
 
 class UnOp(Enum):

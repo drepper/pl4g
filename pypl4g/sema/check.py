@@ -15,6 +15,7 @@ from ..diag import ids as D
 from ..diag.engine import DiagEngine, Expectation
 from ..front import ast
 from ..front.token import (BOTTOM_GLYPH, BUILTIN_GLYPH, EMPTY_ARENA_NAME,
+                          WRAP_NAME,
                           HEAP_NAME, TOLERANCE_DEFAULT,
                           TOLERANCE_NAME, WILDCARD_NAME)
 from ..ir.builder import IRBuilder
@@ -357,6 +358,30 @@ _ALL_AT_ONCE: Final[frozenset[ast.BinaryOp]] = frozenset((
 _ALL_AT_ONCE_UNARY: Final[frozenset[ast.UnaryOp]] = frozenset((
     ast.UnaryOp.LOGIC_NOT, ast.UnaryOp.BIT_NOT))
 
+#: What each operator means where it is written inside `⎕wrap`.  Every one of them
+#: answers with the low bits of what it came to, whatever it came to -- so the
+#: ones that would have stopped the program do not, and the ones that would have
+#: stopped at the end of the type do not either.
+#:
+#: The saturating three are here for the second of those reasons, which is the
+#: part worth saying out loud: `⨁` inside a wrap is an addition that wraps and not
+#: one that saturates.  A wrap says what every operator inside it means, and an
+#: operator that meant something else would make that untrue of the one place a
+#: reader most needs it to hold.
+#:
+#: Dividing and taking a remainder are not here.  Neither of them can go past
+#: the end of a type by arithmetic -- what they have is a pair with no answer at
+#: all, a divisor of zero -- so there is nothing about them for a wrap to say.
+_WRAPPED: Final[dict[BinOp, BinOp]] = {
+    BinOp.ADD: BinOp.WRAP_ADD, BinOp.SUB: BinOp.WRAP_SUB,
+    BinOp.MUL: BinOp.WRAP_MUL,
+    BinOp.SAT_ADD: BinOp.WRAP_ADD, BinOp.SAT_SUB: BinOp.WRAP_SUB,
+    BinOp.SAT_MUL: BinOp.WRAP_MUL,
+    BinOp.SHL: BinOp.WRAP_SHL, BinOp.ASHR: BinOp.WRAP_ASHR,
+    BinOp.LSHR: BinOp.WRAP_LSHR,
+    BinOp.ROTL: BinOp.WRAP_ROTL, BinOp.ROTR: BinOp.WRAP_ROTR,
+}
+
 _BINARY_OPS: Final[dict[ast.BinaryOp, BinOp]] = {
     ast.BinaryOp.BIT_AND: BinOp.AND,
     ast.BinaryOp.BIT_OR: BinOp.OR,
@@ -581,6 +606,12 @@ class Checker:
         #: is so while the arguments of a call to a function marked `listable`
         #: are lowered and nowhere else.
         self._listing: bool = False
+        #: Whether what is being lowered stands inside `⎕wrap`, where every
+        #: operator answers with the low bits of what it came to rather than
+        #: stopping the program or stopping at the end of the type.  It is
+        #: lexical: it says where the operator was written and nothing about the
+        #: body of anything called from there.
+        self._wrapping: bool = False
         #: Whether the function being lowered said it may change things that
         #: outlive the call.  Where it did not, the places that would make such
         #: a change report one instead.
@@ -5070,8 +5101,9 @@ class Checker:
                                  found=ty.render())
                 return UndefConst(ERROR)
             signed = isinstance(ty, IntType) and ty.signed
-            return builder.binary(_SHIFTS[expr.op][0 if signed else 1],
-                                  left, right, expr.span)
+            return builder.binary(
+                self._wrapped(_SHIFTS[expr.op][0 if signed else 1]),
+                left, right, expr.span)
         if expr.op in (ast.BinaryOp.DIVIDE, ast.BinaryOp.REMAINDER):
             # These are the operations that have no answer for some pairs of
             # operands, so what they answer with is a result: the number where
@@ -5090,7 +5122,8 @@ class Checker:
                       else (BinOp.SREM, BinOp.UREM))
             return builder.binary(wanted[0] if signed else wanted[1],
                                   left, right, expr.span, answer)
-        return builder.binary(_BINARY_OPS[expr.op], left, right, expr.span)
+        return builder.binary(self._wrapped(_BINARY_OPS[expr.op]), left, right,
+                              expr.span)
 
     #: What each operator that can fault does, where both sides are known.  The
     #: saturating ones are not here: theirs is the answer nearest the end of the
@@ -5126,6 +5159,11 @@ class Checker:
         down.  This is the checker and not the folder, because the folder is an
         optimization and a program means the same thing whether or not one runs.
         """
+        if self._wrapping:
+            # Inside a wrap there is no answer that does not fit: what the
+            # operation comes to is its low bits, which is a number of the type
+            # whatever the arithmetic came to.
+            return False
         if isinstance(left, FloatConst) and isinstance(right, FloatConst):
             return self._float_answer_is_already_known(expr, left, right)
         if not isinstance(left, IntConst) or not isinstance(right, IntConst):
@@ -5342,6 +5380,35 @@ class Checker:
             return None
         return chosen
 
+    def _lower_wrap(self, builder: IRBuilder, expr: ast.Call,
+                    expected: Type | None) -> Value:
+        """Lower `⎕wrap(EXPR)`: the expression, with its operators wrapping.
+
+        It looks like a call and is not one.  Nothing is called, nothing is
+        passed, and what it answers with is what the expression inside answers
+        with -- so what is wanted of the whole is what is wanted of the
+        expression, and an unsuffixed literal inside takes its type from outside
+        exactly as it would have without the wrap.
+
+        What it changes is what the operators *written inside it* mean, which is
+        why it is lexical and why it stops at a call: the body of a function
+        called from inside was written somewhere else and says for itself what
+        its operators mean.
+        """
+        if len(expr.args) != 1:
+            self._diags.emit(D.LANG_WRAP_TAKES_ONE_EXPRESSION, expr.span,
+                             found=len(expr.args))
+            return UndefConst(ERROR)
+        outer, self._wrapping = self._wrapping, True
+        try:
+            return self._lower_expr(builder, expr.args[0], expected)
+        finally:
+            self._wrapping = outer
+
+    def _wrapped(self, op: BinOp) -> BinOp:
+        """The operation to emit for *op* where it stands, wrapping or not."""
+        return _WRAPPED.get(op, op) if self._wrapping else op
+
     def _lower_call(self, builder: IRBuilder, expr: ast.Call,
                     expected: Type | None) -> Value:
         """Lower a call, checking it against what the function takes and gives.
@@ -5350,6 +5417,8 @@ class Checker:
         than lowered as an expression: there is nothing for a name that stands
         for a function to become.
         """
+        if isinstance(expr.callee, ast.NameRef) and expr.callee.name == WRAP_NAME:
+            return self._lower_wrap(builder, expr, expected)
         func = self._callee(expr.callee)
         if func is None:
             return UndefConst(ERROR)
@@ -5894,6 +5963,12 @@ class Checker:
         address, so reading one is a load -- which is what keeps every access to
         memory visible in the graph instead of hidden behind a name.
         """
+        if ref.name == WRAP_NAME:
+            # It looks like a function and is not one: what it does is decide
+            # what the operators written inside it mean, which is nothing a
+            # value could stand for.
+            self._diags.emit(D.LANG_WRAP_IS_NOT_A_VALUE, ref.span)
+            return UndefConst(ERROR)
         resolved = self._lookup(ref)
         if resolved is None:
             return UndefConst(ERROR)

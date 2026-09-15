@@ -346,6 +346,34 @@ for the other and quietly picks the code for a subtraction.  That was a real
 defect -- the widest signed and unsigned sums did not notice they had gone
 past -- and it is why every such test names the ordinary operation.
 
+**`⎕wrap` is a flag on the lowering and not a node in the graph.**  The checker carries one bit saying whether what is being
+lowered stands inside one, and every operator asks it before choosing which instruction it is: `+` becomes `wrap.add` rather than
+`add`, `⊞` becomes `wrap.add` rather than `sat.add`, `«` becomes `wrap.shl` rather than `shl`.  Nothing survives into the IR
+saying that a wrap was written: what survives is which operations it chose, which is all anything after the checker needs.  That
+is what makes it lexical for free, and what makes it stop at a call -- a callee's body is lowered with the bit as its own
+definition left it.
+
+The wrapping opcodes were already there.  The compiler generates them for itself, in the hash of a key and the arithmetic on a
+table's indices, where a value is a bit pattern and there is nothing about an overflow to report to anyone; what `⎕wrap` adds is a
+way for a program to write one.  The five moving ones are new, and are the five checked ones with the distance taken modulo the
+width of the type rather than compared against it -- one `and`, every width being a power of two, in place of a comparison and a
+branch that does not come back.
+
+**A wrapping operation is the only arithmetic that has to be brought back into its type.**  The checked and the saturating forms
+never produce a value outside it, so the bits above a narrow value already say what the type says; this one deliberately does
+not, and a sum of two bytes that wrapped has a ninth bit.  So it is followed by a mask for an unsigned type and a sign extension
+for a signed one -- and by nothing at all where the type is as wide as the register it was computed in, which is where most of
+them are.
+
+**Over a run there is nothing to bring back and nothing to check**, which is where a wrap costs the least and saves the most.  A
+checked addition of sixteen bytes is one instruction and then the eight that ask whether any lane went past; a wrapping one is
+the one instruction.  It is also the only way a run is multiplied at all: seeing that a product went past wants the upper half of
+it, which none of these machines gives at every lane width, while a product that may wrap wants only the low half, which they do
+give -- `pmullw` and `pmulld` on one, `mul` at three arrangements on the other.
+
+Which lane widths a machine has an operation at is stated as a set and not as a width to stay under, because of that last one:
+x86-64 multiplies halfwords at every level and words from the second on and bytes not at all, which is not a range.
+
 **An operator over an array is one operation over a whole run of elements.**  The front end asks the question of the whole
 innermost run -- the last dimension, which is the one whose elements are next to each other -- as a single value of as many
 *lanes* as the run is long, whatever the machine it is being built for can actually do.  `u8⟦16⟧ + u8⟦16⟧` is one

@@ -1,0 +1,30 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ A wrap reaches a whole run of elements as it reaches a single value, and what
+※ it takes away there is the part that costs the most: an addition over sixteen
+※ elements that may not go past its type is one instruction and then the eight
+※ that ask whether any lane did, and one that may go past is the one instruction.
+※
+※ Multiplying a run is here and nowhere else.  Seeing that a product went past
+※ wants the upper half of it, which these machines do not give at every width;
+※ a product that may wrap wants only the low half, which is what they do give.
+
+let v: u8⟦16⟧ = ⟦240u8, 241u8, 242u8, 243u8, 244u8, 245u8, 246u8, 247u8, 248u8, 249u8, 250u8, 251u8, 252u8, 253u8, 254u8, 255u8⟧
+let h: u16⟦8⟧ = ⟦30000u16, 30001u16, 30002u16, 30003u16, 30004u16, 30005u16, 30006u16, 30007u16⟧
+
+@[startup]
+fn main() → u8:
+    let up: u8⟦16⟧ = ⎕wrap(v + 100u8)
+    let down: u8⟦16⟧ = ⎕wrap(v - 250u8)
+    let times: u16⟦8⟧ = ⎕wrap(h × 3u16)
+    let both: u8⟦16⟧ = ⎕wrap(v + v)
+    if up⟦0⟧ ≠ 84u8 ∨ up⟦15⟧ ≠ 99u8:
+        1u8
+    elif down⟦0⟧ ≠ 246u8 ∨ down⟦15⟧ ≠ 5u8:
+        2u8
+    elif times⟦0⟧ ≠ 24464u16 ∨ times⟦7⟧ ≠ 24485u16:
+        3u8
+    elif both⟦0⟧ ≠ 224u8 ∨ both⟦15⟧ ≠ 254u8:
+        4u8
+    else:
+        0u8

@@ -4139,6 +4139,43 @@
       "option": null
     },
     {
+      "number": 4486,
+      "name": "LANG_WRAP_TAKES_ONE_EXPRESSION",
+      "severity": "error",
+      "message": "'⎕wrap' is written around one expression, and {found} were given",
+      "args": [
+        {
+          "name": "found",
+          "type": "number",
+          "description": "how many expressions were written inside it"
+        }
+      ],
+      "cause": "'⎕wrap' is not a function and takes no arguments: it is written around the one expression whose operators are to go past the ends of their types rather than stopping the program.  Written around none or around several there is no such expression.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Arithmetic",
+        "requirement": "'⎕wrap' is written around exactly one expression."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4487,
+      "name": "LANG_WRAP_IS_NOT_A_VALUE",
+      "severity": "error",
+      "message": "'⎕wrap' is not a value; it is written around the expression whose operators are to wrap",
+      "cause": "'⎕wrap' looks like a function and is not one.  There is nothing for it to stand for on its own: what it does is decide what the operators written inside it mean, which is a property of where they are written and not a value that can be passed about.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Arithmetic",
+        "requirement": "'⎕wrap' appears only with an expression written inside it."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 5001,
       "name": "LANG_STMT_UNREACHABLE",
       "severity": "warning",

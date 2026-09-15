@@ -94,6 +94,7 @@ GROUPS: tuple[Group, ...] = (
            "saturating-precedence": "a sum and a product that saturate",
            "arithmetic-operators": "a sum and a product that check and can fault",
            "arithmetic-at-each-width": "a sum and a difference at each of the four widths",
+           "wrap-arithmetic": "fifteen operators that may go past the end of their type",
            "call-nested": "four calls, two of them nested",
            "assign-to-the-wildcard": "two answers taken and two dropped into '_'",
            "pure-by-default": "four pure functions, one of them writing its own array",
@@ -136,7 +137,8 @@ GROUPS: tuple[Group, ...] = (
            "operators-over-a-run": "runs of four lengths, on either side of a register",
            "run-of-each-width": "the bitwise three at every lane width",
            "run-arithmetic": "eight runs added and subtracted, each checked",
-           "run-longer-than-a-register": "a run of two registers and one of one and a bit"}),
+           "run-longer-than-a-register": "a run of two registers and one of one and a bit",
+           "wrap-over-a-run": "four runs whose operators may go past, one of them multiplied"}),
     Group("Loops",
           "A branch backwards, which is what makes liveness a question about "
           "the graph rather than about the layout.  These move when the "

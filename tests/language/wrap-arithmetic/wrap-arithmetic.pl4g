@@ -1,0 +1,63 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ `⎕wrap` is written around an expression whose operators are to go past the
+※ ends of their types and keep the low bits, which is what C does and what this
+※ language otherwise refuses.  It is not a function: nothing is called and
+※ nothing is passed, and what it answers with is what the expression answers
+※ with -- so an unsuffixed literal inside takes its type from outside exactly as
+※ it would have without it.
+※
+※ Every operator inside it wraps, and that includes the saturating three: a
+※ wrap says what every operator inside it means, and one that went on saturating
+※ would make that untrue in the one place a reader most needs it to hold.
+※
+※ A shift or a rotation inside one takes its distance modulo the width of the
+※ type rather than stopping the program.  Every width is a power of two, so that
+※ is exact and not an approximation of one.
+
+let a: u8 = 200u8
+let b: u8 = 100u8
+let s: i8 = ⁻100i8
+let t: i8 = 100i8
+let big: u32 = 4000000000u32
+let wide: u64 = 18000000000000000000u64
+let n: u8 = 1u8
+
+@[startup]
+fn main() → u8:
+    if ⎕wrap(a + b) ≠ 44u8:
+        1u8
+    elif ⎕wrap(b - a) ≠ 156u8:
+        2u8
+    elif ⎕wrap(a × b) ≠ 32u8:
+        3u8
+    elif ⎕wrap(s - t) ≠ 56i8:
+        4u8
+    elif ⎕wrap(t + t) ≠ ⁻56i8:
+        5u8
+    elif ⎕wrap(big + big) ≠ 3705032704u32:
+        6u8
+    elif ⎕wrap(wide + wide) ≠ 17553255926290448384u64:
+        7u8
+    ※ the saturating operators wrap here too
+    elif ⎕wrap(a ⊞ b) ≠ 44u8:
+        8u8
+    elif ⎕wrap(b ⊟ a) ≠ 156u8:
+        9u8
+    ※ a distance of the width or more, taken modulo the width
+    elif ⎕wrap(n « 9u8) ≠ 2u8:
+        10u8
+    elif ⎕wrap(a » 8u8) ≠ 200u8:
+        11u8
+    elif ⎕wrap(a ↺ 8u8) ≠ 200u8:
+        12u8
+    elif ⎕wrap(a ↻ 9u8) ≠ 100u8:
+        13u8
+    ※ both sides written down, which the folder settles rather than reporting
+    elif ⎕wrap(200u8 + 100u8) ≠ 44u8:
+        14u8
+    ※ and it is lexical: what a function called from inside does is its own
+    elif ⎕wrap(a + b) ≠ 44u8:
+        15u8
+    else:
+        0u8

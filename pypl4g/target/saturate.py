@@ -77,6 +77,8 @@ class Fault(Protocol):
 _PLAIN = {
     BinOp.SAT_ADD: ops.PLUS, BinOp.SAT_SUB: ops.MINUS, BinOp.SAT_MUL: ops.TIMES,
     BinOp.ADD: ops.PLUS, BinOp.SUB: ops.MINUS, BinOp.MUL: ops.TIMES,
+    BinOp.WRAP_ADD: ops.PLUS, BinOp.WRAP_SUB: ops.MINUS,
+    BinOp.WRAP_MUL: ops.TIMES,
 }
 
 #: The operations that clamp.
@@ -91,13 +93,26 @@ NAMES = {
     BinOp.ADD: "addition", BinOp.SUB: "subtraction", BinOp.MUL: "multiplication",
 }
 
+#: The operations that answer with the low bits of what they came to, whatever
+#: they came to.  A program writes one by putting the operator inside `⎕wrap`.
+WRAPPING = frozenset((BinOp.WRAP_ADD, BinOp.WRAP_SUB, BinOp.WRAP_MUL))
+
 #: Moving bits sideways.  A rotation is built from two shifts rather than from
 #: a rotate instruction, so that it means the same thing for a type narrower
 #: than the register it is held in -- which is most of them.
-SHIFTS = frozenset((BinOp.SHL, BinOp.ASHR, BinOp.LSHR, BinOp.ROTL, BinOp.ROTR))
+#:
+#: The wrapping five are here too: they are the same five with the distance
+#: taken modulo the width of the type instead of being a question the program
+#: can get wrong, so it is one lowering with one thing decided differently.
+SHIFTS = frozenset((BinOp.SHL, BinOp.ASHR, BinOp.LSHR, BinOp.ROTL, BinOp.ROTR,
+                    BinOp.WRAP_SHL, BinOp.WRAP_ASHR, BinOp.WRAP_LSHR,
+                    BinOp.WRAP_ROTL, BinOp.WRAP_ROTR))
 
 NAMES.update({BinOp.SHL: "shift", BinOp.ASHR: "shift", BinOp.LSHR: "shift",
-              BinOp.ROTL: "rotation", BinOp.ROTR: "rotation"})
+              BinOp.ROTL: "rotation", BinOp.ROTR: "rotation",
+              BinOp.WRAP_SHL: "shift", BinOp.WRAP_ASHR: "shift",
+              BinOp.WRAP_LSHR: "shift", BinOp.WRAP_ROTL: "rotation",
+              BinOp.WRAP_ROTR: "rotation"})
 
 #: Dividing, and asking what is left over.  They are one operation as far as the
 #: instructions go -- two of the three architectures answer both questions with
@@ -413,10 +428,37 @@ def _in_a_register(asm: Assembler, operand: MCOperand, scratch: Scratch,
     return carried
 
 
+def lower_wrapping(asm: Assembler, op: BinOp, ty: Type, left: MCOperand,
+                   right: MCOperand, destination: Reg, register_bits: int,
+                   span: Span) -> None:
+    """Emit the operation with nothing asked afterwards about what it came to.
+
+    One instruction, and then the answer put back into the type where the type
+    is narrower than the register it was computed in.  That last step is the
+    whole difference from the checked and the saturating forms: those two never
+    produce a value outside the type, so the bits above it already say what the
+    type says, and this one deliberately does not -- a sum of two bytes that
+    wrapped has a ninth bit, and the register would otherwise hold a number the
+    type has no value for.
+    """
+    asm.op(_PLAIN[op], destination, left, right, span=span)
+    if isinstance(ty, IntType) and ty.bits < register_bits:
+        _back_into_the_type(asm, ty, destination, span)
+
+
+#: The checked operation each wrapping one is the unchecked form of.
+_UNCHECKED = {
+    BinOp.WRAP_SHL: BinOp.SHL, BinOp.WRAP_ASHR: BinOp.ASHR,
+    BinOp.WRAP_LSHR: BinOp.LSHR,
+    BinOp.WRAP_ROTL: BinOp.ROTL, BinOp.WRAP_ROTR: BinOp.ROTR,
+}
+
+
 def lower_shift(asm: Assembler, op: BinOp, ty: Type, value: MCOperand,
                 amount: MCOperand, destination: Reg, scratch: Scratch,
                 register_bits: int, too_far: Fault, span: Span) -> None:
-    """Emit a shift or a rotation, with the distance checked first.
+    """Emit a shift or a rotation, with the distance checked first -- or, for
+    the wrapping forms, taken modulo the width instead.
 
     **A distance of the width or more has no answer**, and the three
     architectures answer it three different ways: two take the distance modulo
@@ -437,9 +479,20 @@ def lower_shift(asm: Assembler, op: BinOp, ty: Type, value: MCOperand,
         raise Unsupported("a shift of something that is not an integer")
     held = _in_a_register(asm, value, scratch, span)
     distance = _in_a_register(asm, amount, scratch, span)
-    width = MCImm(ty.bits, 32, signed=False)
-    _answer(asm, Condition.UGE, destination, distance, width,
-            MCImm(0, 32, signed=False), too_far, span)
+    plain = _UNCHECKED.get(op)
+    if plain is not None:
+        # Inside a wrap the distance is not a question the program can get
+        # wrong: it is taken modulo the width of the type, which every width
+        # being a power of two makes one `and` rather than a division.  The
+        # architectures each take it modulo the width of the *register*, which
+        # is not the same thing, so this is done here and not left to them.
+        asm.op(ops.AND, distance.reg, distance,
+               MCImm(ty.bits - 1, 32, signed=False), span=span)
+        op = plain
+    else:
+        width = MCImm(ty.bits, 32, signed=False)
+        _answer(asm, Condition.UGE, destination, distance, width,
+                MCImm(0, 32, signed=False), too_far, span)
     # Everything below is done at the full width of a register.  A value
     # narrower than one carries its own zeroes or its own sign above itself, so
     # the wide reading of it is the value; what the wide answer has above the

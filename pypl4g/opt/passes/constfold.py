@@ -48,6 +48,20 @@ def _left_over(left: int, right: int) -> int:
 #: The operations that clamp rather than going past the ends of their type.
 _SATURATING = frozenset((BinOp.SAT_ADD, BinOp.SAT_SUB, BinOp.SAT_MUL))
 
+#: The ones that go past it and keep the low bits, which is what the program
+#: asked for by writing them inside `⎕wrap`.  An answer outside the type is
+#: not a reason to leave the operation standing here either: it is the answer,
+#: read as the type reads those bits.
+_WRAPPING = frozenset((BinOp.WRAP_ADD, BinOp.WRAP_SUB, BinOp.WRAP_MUL))
+
+
+def _wrapped(value: int, ty: IntType) -> int:
+    """*value* as the low bits of it, read the way its type reads them."""
+    found = value & ((1 << ty.bits) - 1)
+    if ty.signed and found > ty.high:
+        found -= 1 << ty.bits
+    return found
+
 #: The ones that have no answer for every pair of operands.
 _DIVISIONS = frozenset((BinOp.SDIV, BinOp.UDIV, BinOp.SREM, BinOp.UREM))
 
@@ -66,6 +80,12 @@ _FOLDERS = {
     BinOp.AND: lambda a, b: a & b,
     BinOp.OR: lambda a, b: a | b,
     BinOp.XOR: lambda a, b: a ^ b,
+    BinOp.WRAP_ADD: lambda a, b: a + b,
+    BinOp.WRAP_SUB: lambda a, b: a - b,
+    BinOp.WRAP_MUL: lambda a, b: a * b,
+    # The moving ones are not here, wrapping or not: none of the five folds
+    # today, and adding the wrapping five alone would make a program mean one
+    # thing inside a wrap and another outside it for no reason anyone asked for.
 }
 
 
@@ -133,6 +153,8 @@ class ConstantFolding:
             # it is the end it went past and not a reason to leave the operation
             # standing.
             value = max(ty.low, min(ty.high, value))
+        elif inst.op in _WRAPPING:
+            value = _wrapped(value, ty)
         elif not ty.holds(value):
             return None
         return module.int_const(ty, value)

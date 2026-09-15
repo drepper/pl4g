@@ -484,6 +484,51 @@ Compare Rust, which has `saturating_add` and its relatives as methods and no ope
 and Go, which have neither and leave it to be written out.  Zig's position is the one taken here -- that these are common enough
 to deserve a notation -- with glyphs instead of punctuation pairs, for the reason every glyph in this language is a glyph.
 
+#### Going past the end on purpose
+
+**`⎕wrap(EXPR)`** is written around an expression whose operators are to go past the ends of their types and keep the low
+bits, which is what C does and what this language otherwise refuses.
+
+```
+⎕wrap(200u8 + 100u8)              ※ 44, and not a program that stops
+⎕wrap(counter × 2654435761u32)   ※ a hash, whose whole point is the bits it ends with
+```
+
+**It is not a function.**  Nothing is called, nothing is passed, and it answers with whatever the expression inside answers with
+-- so an unsuffixed literal inside takes its type from outside exactly as it would have without it.  It is written like one
+because there is no other notation that says "this far and no further" about an expression, and because parentheses are where a
+reader already looks for that.
+
+**Every operator written inside it wraps.**  `+`, `-` and `×` keep the low bits instead of stopping the program.  `⊞`, `⊟` and
+`⊠` keep them instead of stopping at the end of the type: a wrap says what every operator inside it means, and one that went
+on saturating would make that untrue in the one place a reader most needs it to hold.  `«`, `»`, `↺` and `↻` take their distance modulo the
+width of the type instead of stopping the program where it is the width or more -- every width is a power of two, so that is
+exact.  The bitwise operators and the comparisons are unchanged, having nothing to go past.
+
+**Dividing and taking a remainder are unchanged too.**  Neither can go past the end of a type by arithmetic; what they have is a
+pair with no answer at all, and a wrap has nothing to say about that.
+
+**It reaches what is written inside it and no further.**  A function called from inside one was written somewhere else and says
+for itself what its operators mean:
+
+```
+fn summed(x: u8, y: u8) → u8:
+    x + y                        ※ this addition checks, wherever it is called from
+
+⎕wrap(summed(200u8, 100u8))       ※ stops the program, inside `summed`
+```
+
+**It reaches a whole array as it reaches a single value**, which is where it costs the most and saves the most: an operator over
+an array asks the same question of every element, and a wrap is what says that question is not being asked at all.
+
+Compare: **C and C++**, where unsigned arithmetic wraps and signed arithmetic is undefined, so there is no way to ask for one
+without the other and no way to ask for neither; **Rust**, whose `wrapping_add` and relatives are methods, one per operation,
+which reads as a different program rather than as the same program with one thing said about it; **Zig**, whose `+%`, `-%` and
+`*%` are operators of their own -- the closest of the three, with the difference that there every operator in an expression has
+to carry the mark and here the expression carries it once; **Go**, which wraps always and offers nothing else; and **Swift**,
+whose `&+`, `&-` and `&*` are Zig's answer with different spelling.  What none of them has is a way to say it of a region rather
+than of an operator, which is what makes `⎕wrap` worth being a wrapup rather than nine more glyphs.
+
 #### Comparisons
 
 Six operators compare two values.  All six bind equally, and looser than every other operator.

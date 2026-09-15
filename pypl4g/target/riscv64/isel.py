@@ -34,8 +34,9 @@ from ...ir.layout import DataLayout, align_of, size_of, tag_offset_of
 from ...ir.types import parts_of
 from ..callconv import TooManyArguments, argument_places, result_places
 from ..saturate import (DIVISION, NAMES, SATURATING, TRAPPING, Unsupported,
-                        SHIFTS, lower_division_result, lower_saturating,
-                        lower_shift, lower_trapping)
+                        SHIFTS, WRAPPING, lower_division_result,
+                        lower_saturating, lower_shift, lower_trapping,
+                        lower_wrapping)
 from . import ops as rvops
 from ...ir.function import SYSTEM_CCONV
 from .abi import lookup as lookup_cconv
@@ -1234,6 +1235,17 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                     except Unsupported as unsupported:
                         raise UnsupportedOperation(unsupported.what, span) \
                             from unsupported
+                case BinaryInst() if inst.op in WRAPPING:
+                    destination = _new_value(
+                        inst.ty, registers,
+                        hint=(_result_register(inst.ty, cconv, registers)
+                              if inst is returned else None))
+                    held[id(inst)] = destination
+                    lower_wrapping(
+                        asm, inst.op, inst.ty,
+                        operands.value(inst.operands[0], inst.span),
+                        operands.value(inst.operands[1], inst.span),
+                        destination, 64, inst.span)
                 case BinaryInst():
                     operation = _OPERATIONS.get(inst.op)
                     if operation is None:

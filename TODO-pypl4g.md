@@ -337,6 +337,15 @@ To Do List for the pypl4g compiler
 [ ] multiply a run at once.  Seeing that a product went past wants the upper half of it, which none of these machines gives at
     every lane width -- the same reason the narrow scalar arithmetic leaves multiplication to the widening path.
 
+[ ] shift a whole run at once.  A shift by one value in every lane is one instruction on both machines that have runs, and a
+    shift by a lane apiece is another on the newer x86-64 levels; neither is emitted, so a shift over an array is still an
+    element at a time whether or not it is inside a wrap.  What holds it up is the check: outside a wrap the distance has to be
+    compared against the width in every lane, which is the same question as the arithmetic's and wants the same machinery.
+
+[ ] fold a shift of two constants.  None of the five folds today, wrapping or not, so `1u8 « 2u8` reaches the code generator as
+    an instruction.  Adding the wrapping five alone would have made a program fold inside a wrap and not outside it, which is
+    why neither is there.
+
 [ ] report a tuple holding an array.  `〈⟦1u8, 2u8⟧〉` reaches the code generator and fails there (9901, "making a 〈u8⟦2⟧〉, which
     is one value and not several"), so what a reader is told is an internal error about a program the front end accepted.  Either
     an array is a thing a tuple may hold, in which case `parts_of` has to say what its parts are, or it is not and the checker

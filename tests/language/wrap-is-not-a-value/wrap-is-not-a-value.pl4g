@@ -1,0 +1,11 @@
+※ pl4g-test: compile=error diag=4487
+
+※ `⎕wrap` looks like a function and is not one.  There is nothing for it to
+※ stand for on its own: what it does is decide what the operators written inside
+※ it mean, which is a property of where they are written and not a value that
+※ can be passed about.
+
+@[startup]
+fn main() → u8:
+    let held: u8 = ⎕wrap
+    held

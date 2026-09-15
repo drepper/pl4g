@@ -57,31 +57,35 @@ class Vectors:
     gives for as long as its vector extension is not in the base it builds for.
 
     *binary* and *unary* say, for each operation it can do to a whole register,
-    how wide one lane may be for that operation to exist -- because that differs
-    between them.  A machine may add sixteen bytes at once and have no
-    instruction that multiplies them, or saturate a byte and not a word.  An
-    operation not named at all is one it cannot do, and naming them one by one
-    rather than assuming a set is what lets a target take them in whatever order
-    suits it with everything it has not taken still compiling.
+    which lane widths it has it at -- because that differs between them, and not
+    always as a range.  A machine may add sixteen bytes at once and have no
+    instruction that multiplies them; it may saturate a byte and not a word; it
+    may multiply halfwords and words and not bytes.  An operation not named at
+    all is one it cannot do, and naming them one by one rather than assuming a
+    set is what lets a target take them in whatever order suits it with
+    everything it has not taken still compiling.
     """
 
     bits: int = 0
-    binary: dict[BinOp, int] = field(default_factory=dict)
-    unary: dict[UnOp, int] = field(default_factory=dict)
-    #: The widest lane it can compare, answering a truth value per lane; zero
-    #: where it cannot compare a run at all.
-    compares: int = 0
+    binary: dict[BinOp, frozenset[int]] = field(default_factory=dict)
+    unary: dict[UnOp, frozenset[int]] = field(default_factory=dict)
+    #: The lane widths it can compare at, answering a truth value per lane.
+    compares: frozenset[int] = frozenset()
 
     def lanes_at_once(self, element: Type, layout: DataLayout,
-                      widest: int) -> int:
+                      widths: frozenset[int]) -> int:
         """How many elements of this type fit in one of its registers, where an
-        operation reaching lanes of *widest* bits is what is being asked about."""
-        if self.bits == 0 or widest == 0:
+        operation it has at *widths* is what is being asked about."""
+        if self.bits == 0 or not widths:
             return 0
         wide = stride_of(element, layout) * 8
-        if wide == 0 or wide > widest:
+        if wide not in widths:
             return 0
         return self.bits // wide
+
+
+#: Every width a lane can be, which is what most operations have.
+EVERY: frozenset[int] = frozenset((8, 16, 32, 64))
 
 
 #: A target that has nothing, which every program still compiles for.
@@ -227,21 +231,21 @@ class _Settler:
         read = inst.operands[0].ty
         element = read.element if isinstance(read, VecType) else held.element
         at_once = self._able.lanes_at_once(element, self._layout,
-                                           self._widest(inst))
+                                           self._widths(inst))
         return _pieces(held.lanes, stride_of(element, self._layout), at_once)
 
-    def _widest(self, inst: Instruction) -> int:
-        """How wide a lane this machine reaches for this operation; zero where
-        it does not have it at all."""
+    def _widths(self, inst: Instruction) -> frozenset[int]:
+        """Which lane widths this machine has this operation at; none where it
+        does not have it at all."""
         match inst:
             case BinaryInst():
-                return self._able.binary.get(inst.op, 0)
+                return self._able.binary.get(inst.op, frozenset())
             case UnaryInst():
-                return self._able.unary.get(inst.op, 0)
+                return self._able.unary.get(inst.op, frozenset())
             case CmpInst():
                 return self._able.compares
             case _:
-                return 0
+                return frozenset()
 
     def _cut(self, value: Value, lanes: int) -> list[int]:
         """How the run this value holds is cut up."""

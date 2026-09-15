@@ -24,7 +24,7 @@ from ..allocator import OUT_OF_MEMORY, emit_allocator, wanted_by
 from ..faults import Messages
 from ..pool import Constants
 from ..globals import emit_globals
-from ..vectors import Vectors, settle as settle_vectors
+from ..vectors import EVERY, Vectors, settle as settle_vectors
 from ...ir.inst import BinOp, UnOp
 from ..target import ImageDefaults
 from .abi import CC_PL4G, lookup as lookup_cconv
@@ -46,6 +46,10 @@ PAD_BYTE: Final[int] = 0xCC
 IMAGE_DEFAULTS: Final[ImageDefaults] = ImageDefaults(
     machine=62, base_vaddr=0x400000, page_size=0x1000, text_alignment=16,
     function_alignment=16)
+
+
+#: The lane widths the saturating instructions exist at.
+NARROW: Final[frozenset[int]] = frozenset((8, 16))
 
 
 class X86_64Target:
@@ -122,13 +126,17 @@ class X86_64Target:
         seeing that a product went past wants the upper half of it, which these
         instructions do not give at every width.
         """
-        every = 64
+        # A halfword everywhere, and a word where the level promises SSE4.1.
+        _MULTIPLIES = frozenset((16,)) if self._mclevel == "v1" \
+            else frozenset((16, 32))
         return Vectors(
             bits=256 if self._mclevel in levels.WIDE else 128,
-            binary={BinOp.AND: every, BinOp.OR: every, BinOp.XOR: every,
-                    BinOp.ADD: every, BinOp.SUB: every,
-                    BinOp.SAT_ADD: 16, BinOp.SAT_SUB: 16},
-            unary={UnOp.NOT: every})
+            binary={BinOp.AND: EVERY, BinOp.OR: EVERY, BinOp.XOR: EVERY,
+                    BinOp.ADD: EVERY, BinOp.SUB: EVERY,
+                    BinOp.SAT_ADD: NARROW, BinOp.SAT_SUB: NARROW,
+                    BinOp.WRAP_ADD: EVERY, BinOp.WRAP_SUB: EVERY,
+                    BinOp.WRAP_MUL: _MULTIPLIES},
+            unary={UnOp.NOT: EVERY})
 
     def generate(self, module: Module, asm: Assembler, diags: DiagEngine,
                  opt_level: int, sources: SourceManager | None = None) -> None:

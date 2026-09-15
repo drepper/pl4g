@@ -24,7 +24,7 @@ from ..allocator import OUT_OF_MEMORY, emit_allocator, wanted_by
 from ..faults import Messages
 from ..pool import Constants
 from ..globals import emit_globals
-from ..vectors import Vectors, settle as settle_vectors
+from ..vectors import EVERY, Vectors, settle as settle_vectors
 from ...ir.inst import BinOp, UnOp
 from ..target import ImageDefaults
 from .abi import CC_PL4G, lookup as lookup_cconv
@@ -94,15 +94,18 @@ class AArch64Target:
         every lane width too, each with the check that says whether any lane
         went past.  And the saturating pair at every width, which this machine
         has and the other one has only for the two narrow ones.  Multiplying is
-        not here: seeing that a product went past wants the upper half of it.
+        not here in its checked form: seeing that a product went past wants the
+        upper half of it.  Where the program said it may wrap, only the low half
+        is wanted and this machine gives that at every width but the widest.
         """
-        every = 64
         return Vectors(
             bits=128,
-            binary={BinOp.AND: every, BinOp.OR: every, BinOp.XOR: every,
-                    BinOp.ADD: every, BinOp.SUB: every,
-                    BinOp.SAT_ADD: every, BinOp.SAT_SUB: every},
-            unary={UnOp.NOT: every})
+            binary={BinOp.AND: EVERY, BinOp.OR: EVERY, BinOp.XOR: EVERY,
+                    BinOp.ADD: EVERY, BinOp.SUB: EVERY,
+                    BinOp.SAT_ADD: EVERY, BinOp.SAT_SUB: EVERY,
+                    BinOp.WRAP_ADD: EVERY, BinOp.WRAP_SUB: EVERY,
+                    BinOp.WRAP_MUL: frozenset((8, 16, 32))},
+            unary={UnOp.NOT: EVERY})
 
     def generate(self, module: Module, asm: Assembler, diags: DiagEngine,
                  opt_level: int, sources: SourceManager | None = None) -> None:

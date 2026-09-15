@@ -634,6 +634,18 @@ X86_INSTRS: Final[tuple[X86InstDesc, ...]] = (
     X86InstDesc("psubq", (_x(), _xm(128)), opcode=0xFB, map=OpMap.M0F,
                 mandatory_prefix=0x66, modrm=ModRMUse.REG_RM,
                 reg_op=0, rm_op=1, est_size=4, roles=_ACCUMULATE),
+    # pmullw xmm, xmm/m128               66 0F D5 /r
+    # The low half of the product in every lane, which is all a multiplication
+    # that may wrap wants.  There is no byte-wide form and the word-wide one is
+    # SSE4.1, which is why which widths this exists at is a property of the
+    # level and not of the architecture.
+    X86InstDesc("pmullw", (_x(), _xm(128)), opcode=0xD5, map=OpMap.M0F,
+                mandatory_prefix=0x66, modrm=ModRMUse.REG_RM,
+                reg_op=0, rm_op=1, est_size=4, roles=_ACCUMULATE),
+    # pmulld xmm, xmm/m128               66 0F 38 40 /r
+    X86InstDesc("pmulld", (_x(), _xm(128)), opcode=0x40, map=OpMap.M0F38,
+                mandatory_prefix=0x66, modrm=ModRMUse.REG_RM,
+                reg_op=0, rm_op=1, est_size=5, roles=_ACCUMULATE),
     # The saturating forms, which answer with the nearest value the lane's type
     # can hold rather than going past it.  Only the two narrow widths have them,
     # which is why the wider ones are still done an element at a time.
@@ -805,6 +817,16 @@ X86_INSTRS: Final[tuple[X86InstDesc, ...]] = (
                 enc=EncKind.VEX, mandatory_prefix=0x66,
                 modrm=ModRMUse.REG_RM, reg_op=0, rm_op=2,
                 vex=VexInfo(length=256, vvvv_op=1), est_size=5,
+                roles=_THREE_OPERAND),
+    X86InstDesc("pmullw", (_y(), _y(), _ym()), opcode=0xD5, map=OpMap.M0F,
+                enc=EncKind.VEX, mandatory_prefix=0x66,
+                modrm=ModRMUse.REG_RM, reg_op=0, rm_op=2,
+                vex=VexInfo(length=256, vvvv_op=1), est_size=5,
+                roles=_THREE_OPERAND),
+    X86InstDesc("pmulld", (_y(), _y(), _ym()), opcode=0x40, map=OpMap.M0F38,
+                enc=EncKind.VEX, mandatory_prefix=0x66,
+                modrm=ModRMUse.REG_RM, reg_op=0, rm_op=2,
+                vex=VexInfo(length=256, vvvv_op=1), est_size=6,
                 roles=_THREE_OPERAND),
     # And the saturating forms the two narrow widths have.
     X86InstDesc("paddusb", (_y(), _y(), _ym()), opcode=0xDC, map=OpMap.M0F,

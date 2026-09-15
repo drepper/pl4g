@@ -131,6 +131,13 @@ BOTTOM_GLYPH: Final[str] = "\N{UP TACK}"
 #: same reason.
 BUILTIN_GLYPH: Final[str] = "\N{APL FUNCTIONAL SYMBOL QUAD}"
 
+#: What is written around an expression whose operators are to go past the ends
+#: of their types rather than stopping the program.  It is not a function -- it
+#: takes no arguments and answers with nothing of its own -- which is why it is
+#: one of the names the compiler provides rather than something a program could
+#: have defined: what it does is decide what the operators inside it mean.
+WRAP_NAME: Final[str] = "".join((BUILTIN_GLYPH, "wrap"))
+
 #: The tolerance the approximate comparisons read, and what it holds until a
 #: program sets it.  APL's own tolerance defaults to the same number.
 TOLERANCE_NAME: Final[str] = "".join((BUILTIN_GLYPH, "tolerance"))

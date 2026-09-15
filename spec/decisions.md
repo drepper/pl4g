@@ -3434,6 +3434,56 @@ check that every element still gets.
 
 ---
 
+## 2026-09-15T23:30+02:00 — language
+
+**`⎕wrap`, which says of a region that its arithmetic may go past the end**
+
+Decided on the user’s direction: a name written like a function and taking one expression, inside which the operators keep the
+low bits of what they came to instead of stopping the program or stopping at the end of the type.
+
+**The thing being decided is the grain.**  Every language that offers wrapping arithmetic at all offers it one operator at a
+time -- Rust’s `wrapping_add`, Zig’s `+%`, Swift’s `&+` -- and the places that actually want it want it of a whole expression: a hash,
+a checksum, a pseudo-random step, a counter that is meant to run round.  Written one operator at a time those read as a different
+program from the one anybody means, and every operator in them has to carry the mark, which is exactly where one gets left off.
+Written once around the expression, what a reader has to check is that the expression is one where wrapping is intended, which is
+the thing that is actually true or false.
+
+**It is a wrapup and not a function**, and that is not a spelling detail: a function takes values, and this takes an expression
+and changes what the operators in it mean.  There is nothing for it to stand for on its own, which is why naming it without an
+expression is an error of its own rather than a type mismatch.  The `⎕` sigil is what makes that possible without taking a name
+away from any program.
+
+**The saturating operators wrap inside it too.**  This is the one part that could have gone the other way: `⊞` is a program
+explicitly asking to stop at the end of the type, and a wrap silently turning it into an addition that runs round could be called
+a contradiction the compiler ought to report.  It is decided the other way because a wrap has to mean one thing: *every operator
+in here keeps the low bits*.  A reader checking whether a region is safe to wrap should not have to also check which operators in
+it were exempt, and a rule with an exception in it is a rule that gets the exception wrong.  Refusing the saturating glyphs
+inside a wrap was the alternative considered; it is a smaller language and a worse one, because the program that wants a
+saturating step inside a mostly-wrapping expression can write it outside the wrap and hand it in.
+
+**Shifts take their distance modulo the width rather than being undefined.**  C leaves a shift by the width or more undefined,
+which is where this language otherwise stops the program; inside a wrap it cannot stop the program, so the question is what it
+answers instead.  Modulo the width is the answer because every width is a power of two, so it is one `and` and exact -- and
+because the three architectures each take it modulo the width of the *register*, which is a different number, so leaving it to
+them would have made a program mean three things.
+
+**Dividing is left alone.**  Neither a quotient nor a remainder can go past the end of a type by arithmetic; what they have is a
+divisor of zero, which is not an overflow and which a wrap has nothing to say about.
+
+**Over a run it is where the cost is.**  A checked addition of sixteen elements is one instruction and eight more asking whether
+any lane went past; a wrapping one is the one instruction.  And it is the only way a run is multiplied at all, the upper half of
+a product not being available at every lane width on any of these machines.
+
+Compare, beyond those above: **C and C++**, where unsigned wraps and signed is undefined, so there is no way to ask for one
+without the other and no way to ask for neither -- and where `-fwrapv` is the whole-program version of this decision, made once
+for a compilation rather than once for an expression; **Go**, which wraps always and offers nothing else, so the question never
+arises and neither does the check; **Python**, whose integers do not have ends; and **Ada**, whose `mod` types wrap by being a
+different type, which is the third possible grain -- the value’s rather than the operator’s or the region’s.  Ada’s is the most
+honest of the three and the least usable: it makes a wrapping `u8` a type of its own, so every function that takes one has to
+say which it takes, and a program that wants one expression to wrap has to convert going in and coming out.
+
+---
+
 ---
 
 Open questions

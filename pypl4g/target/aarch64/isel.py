@@ -31,8 +31,9 @@ from ...ir.layout import (DataLayout, align_of, size_of, stride_of,
 from ...ir.types import VecType, parts_of
 from ..callconv import TooManyArguments, argument_places, result_places
 from ..saturate import (DIVISION, NAMES, SATURATING, TRAPPING, Unsupported,
-                        SHIFTS, lower_division_result, lower_saturating,
-                        lower_shift, lower_trapping)
+                        SHIFTS, WRAPPING, lower_division_result,
+                        lower_saturating, lower_shift, lower_trapping,
+                        lower_wrapping)
 from ..runs import lower_trapping as lower_trapping_run
 from . import ops as a64ops
 from ...ir.function import SYSTEM_CCONV
@@ -257,6 +258,9 @@ class A64Selector(InstructionSelector):
     #: And the arithmetic, which does depend on it.
     _RUN_ARITHMETIC: Final[dict[str, str]] = {
         ops.PLUS.name: "add", ops.MINUS.name: "sub",
+        # The low half of the product, which is all a multiplication that may
+        # wrap wants.  There is no form for the widest lane.
+        ops.TIMES.name: "mul",
     }
 
     def select_run_move(self, dst: Reg | MCMem, src: MCOperand, bits: int,
@@ -1538,6 +1542,17 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                     except Unsupported as unsupported:
                         raise UnsupportedOperation(unsupported.what, span) \
                             from unsupported
+                case BinaryInst() if inst.op in WRAPPING:
+                    destination = _new_value(
+                        inst.ty, registers,
+                        hint=(_result_register(inst.ty, cconv, registers)
+                              if inst is returned else None))
+                    held[id(inst)] = destination
+                    lower_wrapping(
+                        asm, inst.op, inst.ty,
+                        operands.value(inst.operands[0], inst.span),
+                        operands.value(inst.operands[1], inst.span),
+                        destination, max(32, _width_of(inst.ty)), inst.span)
                 case BinaryInst():
                     operation = _OPERATIONS.get(inst.op)
                     if operation is None:

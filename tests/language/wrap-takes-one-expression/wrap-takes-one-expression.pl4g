@@ -1,0 +1,12 @@
+※ pl4g-test: compile=error diag=4486
+
+※ It takes no arguments, because it is not a function: it is written around the
+※ one expression whose operators are to wrap.  Written around two there is no
+※ such expression, and what the second one was meant to be is anyone's guess.
+
+let a: u8 = 200u8
+let b: u8 = 100u8
+
+@[startup]
+fn main() → u8:
+    ⎕wrap(a, b)

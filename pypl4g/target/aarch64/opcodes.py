@@ -264,6 +264,21 @@ AARCH64_INSTRS: Final[tuple[A64InstDesc, ...]] = (
                 fields=(_reg_field(0, _RD), _reg_field(1, _RN),
                         _reg_field(2, _RM)),
                 est_size=INSTRUCTION_SIZE),
+    # mul Vd.<T>, Vn.<T>, Vm.<T> -- the low half of the product in every lane,
+    # which is all a multiplication that may wrap wants.  There is no form for
+    # the widest lane.
+    A64InstDesc("mul.16b", (_v(128), _v(128), _v(128)), template=0x4E209C00,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN),
+                        _reg_field(2, _RM)),
+                est_size=INSTRUCTION_SIZE),
+    A64InstDesc("mul.8h", (_v(128), _v(128), _v(128)), template=0x4E609C00,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN),
+                        _reg_field(2, _RM)),
+                est_size=INSTRUCTION_SIZE),
+    A64InstDesc("mul.4s", (_v(128), _v(128), _v(128)), template=0x4EA09C00,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN),
+                        _reg_field(2, _RM)),
+                est_size=INSTRUCTION_SIZE),
     # The saturating forms, which stop at the end of the lane's type rather
     # than going past it.  Unlike the other machine here, this one has them
     # at every width.
