@@ -1,0 +1,16 @@
+※ pl4g-test: compile=error diag=4526
+
+※ Arguments written without a name fill the parameters from the left, so a
+※ parameter with a default before one without means a call one argument short
+※ cannot say which one it left out.  Every parameter after one with a default
+※ has one too -- the rule C++, Python, D and Swift all state.  Naming the
+※ arguments is what gets round it at the call, but the rule is about what a
+※ call written without names can mean.
+
+@[startup]
+fn main() → u6:
+    let n: u8 = plus(1u8, 2u8)
+    0u6
+
+fn plus(n: u8 ← 1u8, by: u8) → u8:
+    n + by

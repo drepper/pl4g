@@ -613,6 +613,31 @@
             "type": "SYMBOL",
             "name": "type"
           }
+        },
+        {
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "SEQ",
+              "members": [
+                {
+                  "type": "STRING",
+                  "value": "←"
+                },
+                {
+                  "type": "FIELD",
+                  "name": "default",
+                  "content": {
+                    "type": "SYMBOL",
+                    "name": "_expression"
+                  }
+                }
+              ]
+            },
+            {
+              "type": "BLANK"
+            }
+          ]
         }
       ]
     },
@@ -3651,8 +3676,17 @@
                     "type": "FIELD",
                     "name": "argument",
                     "content": {
-                      "type": "SYMBOL",
-                      "name": "_spreadable"
+                      "type": "CHOICE",
+                      "members": [
+                        {
+                          "type": "SYMBOL",
+                          "name": "_spreadable"
+                        },
+                        {
+                          "type": "SYMBOL",
+                          "name": "named_argument"
+                        }
+                      ]
                     }
                   },
                   {
@@ -3668,8 +3702,17 @@
                           "type": "FIELD",
                           "name": "argument",
                           "content": {
-                            "type": "SYMBOL",
-                            "name": "_spreadable"
+                            "type": "CHOICE",
+                            "members": [
+                              {
+                                "type": "SYMBOL",
+                                "name": "_spreadable"
+                              },
+                              {
+                                "type": "SYMBOL",
+                                "name": "named_argument"
+                              }
+                            ]
                           }
                         }
                       ]
@@ -3688,6 +3731,35 @@
           }
         ]
       }
+    },
+    "named_argument": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "STRING",
+          "value": "."
+        },
+        {
+          "type": "FIELD",
+          "name": "name",
+          "content": {
+            "type": "SYMBOL",
+            "name": "identifier"
+          }
+        },
+        {
+          "type": "STRING",
+          "value": "←"
+        },
+        {
+          "type": "FIELD",
+          "name": "value",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_expression"
+          }
+        }
+      ]
     },
     "_spreadable": {
       "type": "CHOICE",

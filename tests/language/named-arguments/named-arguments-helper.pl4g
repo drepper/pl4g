@@ -1,0 +1,10 @@
+※ pl4g-test: module
+※※ A function in another file, so that a call which leaves an argument out and
+※※ one that names it are seen across a module boundary.
+※
+※ This is not a test of its own but a module the test beside it imports.  The
+※ default is settled here, where the function is written; the caller never
+※ sees what was written, only the value.
+@[export]
+fn twice(n: u8, by: u8 ← 10u8) → u8:
+    n + by

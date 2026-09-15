@@ -154,9 +154,14 @@ module.exports = grammar({
     // the same thing there: the name may be bound to something else later on.
     // It is no part of the type, so two functions differing only in it are one
     // signature.
+    // A default follows the type, written the way a value is bound to a name
+    // everywhere else.  It belongs to the function rather than to any call, so
+    // it is settled while compiling and every call that leaves the argument out
+    // hands over the same value.
     parameter: $ => seq(
       field('name', $.identifier), ':', optional($.mutable),
       field('type', $.type),
+      optional(seq('\u2190', field('default', $._expression))),
     ),
 
     variable_definition: $ => seq(
@@ -718,8 +723,18 @@ module.exports = grammar({
 
     call_expression: $ => prec(14, seq(
       field('function', $._non_comparison),
-      '(', sepBy(',', field('argument', $._spreadable)), ')',
+      '(', sepBy(',', field('argument', choice($._spreadable,
+                                               $.named_argument))), ')',
     )),
+
+    // `.NAME \u2190 VALUE`: an argument that says which parameter it is for.  The
+    // dot cannot be a member access, there being nothing on its left for a
+    // member to belong to, which is what lets it mark the name as a
+    // parameter's.
+    named_argument: $ => seq(
+      '.', field('name', $.identifier),
+      '\u2190', field('value', $._expression),
+    ),
 
     // A tuple or a fixed-size array standing for several of the things around it
     // rather than for one.  It is a rule of the two lists that admit it -- a

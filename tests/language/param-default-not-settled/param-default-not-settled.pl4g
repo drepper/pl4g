@@ -1,0 +1,17 @@
+※ pl4g-test: compile=error diag=4525
+
+※ A default belongs to every call of the function, including calls in files
+※ this one has never seen, and a caller there has none of the names this
+※ definition could use.  So what is written has to be a value the compiler
+※ settles here, once, and hands over unchanged at every call.  C++ takes the
+※ other road -- the expression is looked up in the definition's scope and
+※ worked out afresh at each call -- which needs a scope to travel with the
+※ function, and nothing here carries one.
+
+@[startup]
+fn main() → u6:
+    let n: u8 = plus(1u8)
+    0u6
+
+fn plus(n: u8, by: u8 ← n) → u8:
+    n + by

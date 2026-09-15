@@ -1,0 +1,104 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ A parameter may say what it is given where a call gives it nothing, written
+※ `← VALUE` after its type, and an argument may say which parameter it is for,
+※ written `.NAME ← VALUE`.  The two are one feature: a default is only useful
+※ where a call can leave out something that is not the last thing, and naming
+※ the argument is how it does that.
+※
+※ **A default belongs to the function and not to the call.**  It is settled
+※ where the function is written, once, and every call hands over that same
+※ value -- including a call in another file, which sees the function and never
+※ the names its definition could have used.  That is narrower than C++, where
+※ the default is an expression looked up in the definition's scope and worked
+※ out afresh at each call; it is what can be promised without a scope
+※ travelling with the function.
+※
+※ The dot is what says a name is a parameter's: a leading one cannot be a
+※ member access, there being nothing on its left.  C, Odin and Zig spell the
+※ same idea the same way in a structure's initializer.
+※
+※ Arguments written by place come first and ones written by name after, for the
+※ reason the places exist: once a name has been written the places no longer
+※ count from anywhere.  What is written is still worked out left to right, in
+※ the order it was written, whatever order the parameters end up in.
+
+let helper := import("named-arguments-helper")
+
+enum Colour:
+    red ;
+    green
+
+let counted: mut u8 = 0u8
+
+@[startup, impure]
+fn main() → u6:
+    ※ every argument written, by place, which is what it always was
+    if plus(1u8, 10u8) ≠ 11u8:
+        1u6
+    ※ the last one left out, which is what the default is for
+    elif plus(1u8) ≠ 3u8:
+        2u6
+    ※ every argument written by name, in the order the function takes them
+    elif plus(.n ← 1u8, .by ← 10u8) ≠ 11u8:
+        3u6
+    ※ and in the other order, which names what it is for and so may be in any
+    elif plus(.by ← 10u8, .n ← 1u8) ≠ 11u8:
+        4u6
+    ※ one by place and the rest by name
+    elif plus(1u8, .by ← 30u8) ≠ 31u8:
+        5u6
+    ※ a parameter in the middle left out, which is what naming the ones after
+    ※ it is for
+    elif three(1u8, .last ← 100u8) ≠ 111u8:
+        6u6
+    ※ every one of them left out
+    elif three() ≠ 111u8:
+        7u6
+    ※ a default of every kind of value the compiler settles
+    elif ¬sizes(10u16) ∨ ¬sizes(10u16, .yes ← true):
+        8u6
+    ※ what is written is worked out in the order it is written and not in the
+    ※ order the parameters are in: the one written second runs second
+    elif two(.second ← counting(2u8), .first ← counting(20u8)) ≠ 22u8:
+        9u6
+    ※ which leaves the count at what the one written last set it to
+    elif counted ≠ 20u8:
+        10u6
+    ※ a listable function, whose default stands for every element alike
+    elif ¬listed():
+        11u6
+    ※ and one across a module boundary, where the caller sees the value and
+    ※ never the names the definition could have used
+    elif helper.twice(5u8) ≠ 15u8 ∨ helper.twice(.by ← 1u8, .n ← 5u8) ≠ 6u8:
+        12u6
+    else:
+        0u6
+
+fn plus(n: u8, by: u8 ← 2u8) → u8:
+    n + by
+
+fn three(first: u8 ← 1u8, middle: u8 ← 10u8, last: u8 ← 100u8) → u8:
+    first + middle + last
+
+※ A default of every kind of value the compiler settles: a number, a truth
+※ value, a floating-point number, a code point and a value of an enumeration.
+fn sizes(n: u16, yes: bool ← false, scale: f64 ← 2.5, mark: char ← 'x', hue: Colour ← Colour.red) → bool:
+    n = 10u16 ∧ (yes ∨ ¬yes) ∧ scale > 2.0 ∧ mark = 'x' ∧ hue = Colour.red
+
+fn two(first: u8, second: u8) → u8:
+    first + second
+
+@[impure]
+fn counting(value: u8) → u8:
+    counted ← value
+    value
+
+@[listable]
+fn scaled(n: u8, by: u8 ← 3u8) → u8:
+    n × by
+
+fn listed() → bool:
+    let v: u8⟦3⟧ = ⟦1u8, 2u8, 3u8⟧
+    let got: u8⟦3⟧ = scaled(v)
+    got⟦0⟧ = 3u8 ∧ got⟦1⟧ = 6u8 ∧ got⟦2⟧ = 9u8

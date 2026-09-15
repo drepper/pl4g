@@ -9,7 +9,7 @@ from typing import Final, Mapping, Sequence
 from ..source.location import INVALID_SPAN, Span
 from .inst import Instruction, Terminator
 from .types import FuncType, Type, parts_of
-from .value import BlockParam
+from .value import BlockParam, Const
 
 
 class Linkage(Enum):
@@ -175,6 +175,18 @@ class Function:
     #: Whether a file importing this module may name it.  Not the same question
     #: as the linkage: this one is about the language, that one about the image.
     exported: bool = False
+    #: What the parameters are called, in order.  A call may say which
+    #: parameter an argument is for, and the name it says is this one.  The
+    #: entry block's parameters carry a name hint each, but a declaration has no
+    #: entry block and a caller in another file has to be able to name them all
+    #: the same.
+    param_names: tuple[str, ...] = ()
+    #: What each parameter is given where a call gives it nothing, and nothing
+    #: where it must be given something.  Settled where the function is defined
+    #: rather than at the call, so that every call of it -- in this file or any
+    #: other -- hands over the same value.
+    defaults: tuple[Const | None, ...] = ()
+
     #: How this function hands back an answer that is more than one value.  A
     #: property of the function that answers, as the convention it is called by
     #: is, and for the same reason: what a caller has to do to receive the

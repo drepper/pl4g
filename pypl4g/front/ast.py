@@ -337,6 +337,22 @@ class Try(Expr):
 
 
 @dataclass(frozen=True, slots=True)
+class Named(Expr):
+    """`.name \N{LEFTWARDS ARROW} VALUE`: an argument that says which parameter it is for.
+
+    The dot is what says the name is a parameter's and not a variable's -- a
+    leading one cannot be a member access, there being nothing on its left -- and
+    it is the spelling C, Odin and Zig give the same idea in a structure's
+    initializer.  What follows the arrow is the argument, written the way a
+    value is bound to a name everywhere else.
+    """
+
+    name: str
+    name_span: Span
+    value: Expr
+
+
+@dataclass(frozen=True, slots=True)
 class Failure(Expr):
     """`\N{UP TACK}` and `\N{UP TACK} VALUE`: a result that has no answer, written out.
 
@@ -770,6 +786,9 @@ class Param(Node):
     name: str
     type: TypeExpr
     mutable: bool = False
+    #: What a caller that says nothing about it gets.  Nothing where the
+    #: parameter has none, in which case every caller says something.
+    default: Expr | None = None
 
 
 @dataclass(frozen=True, slots=True)

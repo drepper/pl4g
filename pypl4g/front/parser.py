@@ -760,14 +760,22 @@ class Parser:
             # else later on.
             mutable = self._accept(TokKind.KW_MUT) is not None
             written = self._parse_type_ref()
+            # `\N{LEFTWARDS ARROW} VALUE` says what a caller that says nothing about this
+            # parameter gets.  The glyph is the one an assignment is written
+            # with, which is what this is: the name is bound to that value.
+            default = None
+            end = written.span
+            if self._accept(TokKind.ASSIGN) is not None:
+                default = self._parse_expression()
+                end = default.span
             if name_token.text in seen:
                 self._diags.emit(D.LANG_FUNCDEF_DUPLICATE_PARAMETER, name_token.span,
                                  name=name_token.text)
             else:
                 seen[name_token.text] = name_token.span
             params.append(ast.Param(
-                span=name_token.span.to(written.span), name=name_token.text,
-                type=written, mutable=mutable))
+                span=name_token.span.to(end), name=name_token.text,
+                type=written, mutable=mutable, default=default))
             if self._accept(TokKind.COMMA) is None:
                 break
         return tuple(params)
@@ -1337,16 +1345,31 @@ class Parser:
         arguments rather than as one.  It stands where an argument stands, so
         arguments may be written before it and after it and more than one may
         appear; what it is not is an expression, and nowhere but here takes one.
+
+        An argument written `.name \N{LEFTWARDS ARROW} VALUE` says which parameter it is for
+        rather than leaving the place to say.  The dot is what says the name is
+        a parameter's: a leading one cannot be a member access, there being
+        nothing on its left.
         """
         self._expect(TokKind.LPAREN)
         args: list[ast.Expr] = []
         if not self._check(TokKind.RPAREN):
             while True:
-                args.append(self._parse_spreadable())
+                args.append(self._parse_named() if self._check(TokKind.DOT)
+                            else self._parse_spreadable())
                 if self._accept(TokKind.COMMA) is None:
                     break
         end = self._expect(TokKind.RPAREN, D.LANG_SYNTAX_EXPECTED_CLOSING_PAREN).span
         return ast.Call(span=callee.span.to(end), callee=callee, args=tuple(args))
+
+    def _parse_named(self) -> ast.Expr:
+        """Parse ``'.' NAME '\N{LEFTWARDS ARROW}' VALUE``, an argument that names its parameter."""
+        start = self._expect(TokKind.DOT).span
+        name_token = self._expect(TokKind.IDENT, D.LANG_SYNTAX_EXPECTED_PARAMETER)
+        self._expect(TokKind.ASSIGN, D.LANG_SYNTAX_EXPECTED_NAMED_VALUE)
+        value = self._parse_expression()
+        return ast.Named(span=start.to(value.span), name=name_token.text,
+                         name_span=name_token.span, value=value)
 
     def _parse_spreadable(self) -> ast.Expr:
         """Parse one entry of a list that admits `\N{ASTERISM}` in front of it.

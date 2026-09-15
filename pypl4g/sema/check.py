@@ -1328,6 +1328,8 @@ class Checker:
             func = Function(name=node.name,
                             ty=self._module.types.func_type(params, ret),
                             attrs=func_attrs, linkage=linkage,
+                            param_names=tuple(p.name for p in node.params),
+                            defaults=self._defaults_of(node, params),
                             exported=self._is_export(attrs),
                             cconv=(func_attrs.abi if func_attrs.abi is not None
                                    else DEFAULT_CCONV),
@@ -1344,6 +1346,57 @@ class Checker:
             if expectation is not None:
                 self._diags.release(expectation)
         return _Collected(node=node, attrs=attrs, func=func, expectation=expectation)
+
+    def _defaults_of(self, node: ast.FuncDef,
+                     types: Sequence[Type]) -> tuple[Const | None, ...]:
+        """What each parameter of *node* is given where a call gives it nothing.
+
+        A default belongs to the function and not to any one call of it: a
+        caller in another file sees the function and never the names its
+        definition could have used, so what is written has to be a value the
+        compiler settles here, once, and hands over unchanged at every call.
+        That is narrower than C++, where a default is an expression looked up in
+        the definition's scope and worked out afresh at each call; it is what
+        can be promised without a scope travelling with the function.
+
+        A parameter with no default after one that has is refused, because
+        arguments written without a name fill the parameters from the left and a
+        call one argument short could not say which one it left out.
+        """
+        found: list[Const | None] = []
+        defaulted = False
+        for param, ty in zip(node.params, types):
+            if param.default is None:
+                if defaulted:
+                    self._diags.emit(D.LANG_PARAM_DEFAULT_ORDER, param.span,
+                                     name=param.name)
+                found.append(None)
+                continue
+            defaulted = True
+            found.append(self._default_value(param, ty))
+        return tuple(found)
+
+    def _default_value(self, param: ast.Param, ty: Type) -> Const | None:
+        """The value written as *param*'s default, where it is one.
+
+        What may be written is what the compiler can settle into a value of the
+        type and hand over as an argument: a literal of it, or a value of an
+        enumeration.  A collection or a run of elements is not one of them yet,
+        since what a call hands over is values and those live in memory.
+        """
+        written = param.default
+        assert written is not None
+        if ty is ERROR:
+            return None
+        if not isinstance(written, (ast.IntLit, ast.CharLit, ast.BoolLit,
+                                    ast.FloatLit, ast.Member)):
+            self._diags.emit(D.LANG_PARAM_DEFAULT_NOT_SETTLED, written.span,
+                             name=param.name)
+            return None
+        stood = ast.VarDef(span=param.span, name=param.name,
+                           name_span=param.span, type=param.type, value=written)
+        value = self._constant_value(stood, ty)
+        return value if isinstance(value, Const) else None
 
     def _register_special(self, func: Function, node: ast.FuncDef) -> None:
         """Record the function in the module's caches and check its signature."""
@@ -7533,15 +7586,10 @@ class Checker:
         # its left.
         outer_listing, self._listing = self._listing, func.attrs.listable
         try:
-            args = self._one_by_one(builder, expr.args, wanted, func.name)
+            args = self._given_arguments(builder, expr, func)
         finally:
             self._listing = outer_listing
         if args is None:
-            return UndefConst(ERROR)
-        if len(args) != len(wanted):
-            self._diags.emit(D.LANG_CALL_WRONG_ARGUMENT_COUNT, expr.span,
-                             name=func.name, expected=len(wanted),
-                             found=len(args))
             return UndefConst(ERROR)
         if any(value.ty is ERROR for value in args):
             return UndefConst(ERROR)
@@ -7562,6 +7610,88 @@ class Checker:
             self._report_mismatch(expr.span, answer.ty, expected)
             return UndefConst(ERROR)
         return answer
+
+    def _given_arguments(self, builder: IRBuilder, expr: ast.Call,
+                         func: Function) -> list[Value] | None:
+        """Every parameter's value, in the order the function takes them.
+
+        An argument may say which parameter it is for and a parameter may say
+        what it is given where no argument does, so what a call writes and what
+        a function takes are no longer the same list.  What is written is still
+        lowered where it stands and in the order it was written -- a call that
+        both faults and calls has to be readable -- and the values are put into
+        the parameters' order afterwards, which costs nothing because by then
+        every one of them has been worked out.
+
+        Arguments written by place come first and ones written by name after,
+        for the reason the places exist: once a name has been written the places
+        no longer count from anywhere.
+        """
+        wanted = func.ty.params
+        placed: list[ast.Expr] = []
+        named: list[ast.Named] = []
+        failed = False
+        for one in expr.args:
+            if isinstance(one, ast.Named):
+                named.append(one)
+            elif named:
+                self._diags.emit(D.LANG_CALL_POSITION_AFTER_NAME, one.span)
+                failed = True
+            else:
+                placed.append(one)
+        values = self._one_by_one(builder, placed, wanted, func.name)
+        if values is None:
+            return None
+        if len(values) > len(wanted):
+            self._diags.emit(D.LANG_CALL_WRONG_ARGUMENT_COUNT, expr.span,
+                             name=func.name, expected=len(wanted),
+                             found=len(values) + len(named))
+            return None
+        if len(values) < len(wanted) and not named and not any(func.defaults):
+            # Nothing in the call or the definition says anything but the
+            # places, so what is wrong with it is its length and that is what
+            # to say about it.
+            self._diags.emit(D.LANG_CALL_WRONG_ARGUMENT_COUNT, expr.span,
+                             name=func.name, expected=len(wanted),
+                             found=len(values))
+            return None
+        held: list[Value | None] = [*values]
+        held.extend([None] * (len(wanted) - len(values)))
+        for one in named:
+            at = (func.param_names.index(one.name)
+                  if one.name in func.param_names else None)
+            if at is None or at >= len(wanted):
+                self._diags.emit(D.LANG_CALL_UNKNOWN_PARAMETER, one.name_span,
+                                 name=one.name, func=func.name)
+                self._lower_expr(builder, one.value, None)
+                failed = True
+                continue
+            if held[at] is not None:
+                self._diags.emit(D.LANG_CALL_PARAMETER_TWICE, one.name_span,
+                                 name=one.name)
+                failed = True
+            outer = self._handing_over
+            self._handing_over = (func.name, at + 1)
+            try:
+                held[at] = self._lower_into(builder, one.value, wanted[at],
+                                            one.value.span)
+            finally:
+                self._handing_over = outer
+        for at, value in enumerate(held):
+            if value is not None:
+                continue
+            given = func.defaults[at] if at < len(func.defaults) else None
+            if given is None:
+                self._diags.emit(D.LANG_CALL_PARAMETER_MISSING, expr.span,
+                                 name=(func.param_names[at]
+                                       if at < len(func.param_names)
+                                       else str(at + 1)))
+                failed = True
+                continue
+            held[at] = given
+        if failed or any(value is None for value in held):
+            return None
+        return [value for value in held if value is not None]
 
     def _scalar_of(self, ty: Type | None) -> Type | None:
         """What an array is an array of, however many dimensions deep.

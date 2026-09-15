@@ -4264,6 +4264,41 @@ what it does for the successful half already, and having the two halves written 
 
 ---
 
+---
+
+## 2026-09-16T09:40+02:00 — language
+
+**Default values for parameters, and arguments that say which parameter they are for**
+
+Decided on the user's direction, with the marker for a named argument chosen by the user from three proposals.
+
+**`.NAME ← VALUE` marks an argument with the parameter it is for.**  The three offered were `.name ← v`, `name: ← v` and
+`‹name› ← v`.  The dot wins because a leading dot cannot be anything else: a member access needs something on its left, so the
+mark costs no new glyph and no lookahead.  It is also what C's designated initializers, Odin and Zig write for the same idea in a
+structure's initializer, so a reader who knows any of the three knows this.  The arrow is the language's own binding of a value
+to a name, used here as it is everywhere else, which is what the instruction asked for.
+
+**A default is settled while compiling and belongs to the function** (4525).  The alternative is C++'s: an expression looked up
+in the definition's scope and worked out afresh at each call, which lets a default name a global, call a function, or read a
+member.  That needs a scope to travel with the function into every place that calls it -- C++ gets it from the header model, and
+a language with separately checked modules does not have it.  **Python** settles the value once, at definition, which is the
+answer taken here; Python's famous trap, the shared mutable default, cannot arise because what is settled is a value and there
+are no mutable ones to settle.  **Ada**, **D** and **Swift** are with C++.  **C**, **Go**, **Rust** and **Zig** have no defaults
+at all, holding that an overload or an options structure says the same thing where a reader can see it; that argument is weaker
+for a language emitted by a generator, which should not have to emit the arguments nobody varies.
+
+**Every parameter after one with a default has one too** (4526), which is C++'s, Python's and D's rule and for the same reason:
+arguments written without a name fill from the left.  Named arguments get round it at a call, but the rule is about what a call
+without names can mean.
+
+**Arguments by place come first, ones by name after** (4529) -- Python's rule, and the only one that keeps the places counting
+from a fixed point.  A name that is not a parameter (4527), a parameter given twice (4528) and a parameter given nothing with no
+default (4530) are the three remaining ways a call can fail to name each parameter exactly once.
+
+**What is written is still worked out in the order it is written**, whatever order the parameters end up in.  The reordering is
+done on the lowered values, after every argument has been worked out, so the rule that a call's arguments run left to right did
+not have to acquire an exception.
+
 Open questions
 --------------
 

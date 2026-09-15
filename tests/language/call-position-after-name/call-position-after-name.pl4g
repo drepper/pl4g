@@ -1,0 +1,15 @@
+※ pl4g-test: compile=error diag=4529
+
+※ An argument that does not name its parameter is for the parameter in the
+※ place it stands, and once an argument has named one the places no longer
+※ count from anywhere.  So the ones written by place come first and the ones
+※ written by name after, which is the order they read in anyway.  Python
+※ states the same rule about the same two kinds of argument.
+
+@[startup]
+fn main() → u6:
+    let n: u8 = plus(.n ← 2u8, 1u8)
+    0u6
+
+fn plus(n: u8, by: u8 ← 1u8) → u8:
+    n + by

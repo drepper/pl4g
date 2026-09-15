@@ -1764,6 +1764,36 @@ The allocator is emitted where something calls it and nowhere else: a module tha
 and a program that never allocates carries none of it.
 
 
+What a call writes and what a function takes
+--------------------------------------------
+
+They used to be the same list, and `_lower_call` checked the lengths against each other.  Two things separated them: an argument
+may say which parameter it is for, and a parameter may say what it is given where no argument does.
+
+**The default is settled where the function is written.**  `_defaults_of` runs in `_collect_function`, beside the resolution of
+the parameter types, and each default it settles goes into `Function.defaults` as an `ir.value.Const` -- not an expression, not a
+tree.  `Function.param_names` goes in beside it.  Both are on the function rather than on the definition's AST because a call in
+another module has the `Function` and nothing else: modules are checked in the same process and the exports map holds the very
+same objects, so a caller across a module boundary reads the value the definition settled without anything being serialized.
+
+Settling reuses `_constant_value`, the same code a top-level variable's initializer goes through, by standing the default in a
+throwaway `ast.VarDef`: the question "is this a value of this type the compiler knows" is one question and has one answer.  What
+may be written is narrowed first, to a literal or a value of an enumeration, so that what does not settle is reported as a
+default that does not settle (4525) rather than as a top-level initializer the compiler has not implemented.  A run of elements
+or a collection is excluded on purpose -- what a call hands over is values, and those live in memory.
+
+**The reordering happens after the lowering, which is why it costs nothing.**  `_given_arguments` splits the written list at the
+first named argument, hands the prefix to `_one_by_one` unchanged -- so spreads, the per-place type, the unsuffixed literal
+taking its parameter's type and the left-to-right order are all exactly what they were -- and then lowers each named argument
+into the parameter it names.  The values land in a list indexed by parameter, gaps are filled from `Function.defaults`, and what
+comes out is the positional list every later stage already understood.  Nothing after `_lower_call` knows that a call was written
+with names.
+
+The count check had to be split in two.  Too many arguments is still the old diagnostic; too few is only the old diagnostic where
+neither the call nor the definition says anything but the places, and is otherwise reported per parameter (4530), because with
+defaults in play "three where four were wanted" does not say which one is missing.
+
+
 Expectations
 ------------
 

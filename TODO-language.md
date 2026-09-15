@@ -568,6 +568,10 @@ Runtime
     substitutes, the brace notation, an omitted type and a named argument all differ in meaning or in what they are for, so none
     of them is a second spelling of one thing.
 
+[ ] widen what a parameter's default may be.  Today it is a literal or a value of an enumeration, which is what a call can hand
+    over in registers.  A run of elements, a string or a collection is a value in memory, so a default of one would have to say
+    whose memory -- the caller's, or one copy the image holds -- and nothing yet needs it.
+
 [ ] consider warning where an attribute cannot have an effect where it stands.  `@[export]` in the file named on the command line
     is the case that prompted it: nothing imports that file, so the attribute says nothing.  It is not an error -- the file is a
     module like any other and may be imported later -- but it is the sort of thing a reader would want told.

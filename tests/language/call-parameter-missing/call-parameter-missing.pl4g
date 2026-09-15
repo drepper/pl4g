@@ -1,0 +1,13 @@
+※ pl4g-test: compile=error diag=4530
+
+※ Every parameter has a value at every call: one the call wrote, by place or
+※ by name, or the default the definition wrote.  A parameter with neither is a
+※ call the function cannot be entered with.
+
+@[startup]
+fn main() → u6:
+    let n: u8 = plus(.by ← 2u8)
+    0u6
+
+fn plus(n: u8, by: u8 ← 1u8) → u8:
+    n + by

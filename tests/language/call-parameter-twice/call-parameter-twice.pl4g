@@ -1,0 +1,13 @@
+※ pl4g-test: compile=error diag=4528
+
+※ A parameter takes one argument.  It is given twice where a name repeats one
+※ an earlier argument already filled -- by its place, as here, or by its own
+※ name -- and which of the two was meant is not something to guess at.
+
+@[startup]
+fn main() → u6:
+    let n: u8 = plus(1u8, .n ← 2u8)
+    0u6
+
+fn plus(n: u8 ← 1u8) → u8:
+    n

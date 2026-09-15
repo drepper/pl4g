@@ -1243,6 +1243,38 @@
       "option": null
     },
     {
+      "number": 3036,
+      "name": "LANG_SYNTAX_EXPECTED_PARAMETER",
+      "severity": "error",
+      "message": "expected the name of a parameter after '.'",
+      "args": [],
+      "cause": "A dot at the start of an argument says that what follows names the parameter the argument is for.  A name is what may follow it, and nothing else: the dot does nothing on its own.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Calls",
+        "requirement": "A named argument is written '.NAME \u2190 VALUE'."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 3037,
+      "name": "LANG_SYNTAX_EXPECTED_NAMED_VALUE",
+      "severity": "error",
+      "message": "expected '\u2190' after the name of a parameter",
+      "args": [],
+      "cause": "An argument that names its parameter binds a value to that name, and an assignment is how this language writes binding a value to a name.  So the arrow follows the name, and what follows the arrow is the argument.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Calls",
+        "requirement": "A named argument is written '.NAME \u2190 VALUE'."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 3031,
       "name": "LANG_SYNTAX_SPREAD_OUTSIDE_A_CALL",
       "severity": "error",
@@ -5028,6 +5060,137 @@
         "document": "spec/spec.md",
         "section": "The Language / Expressions / Results",
         "requirement": "'\u22a5' carries a value where the error does."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4525,
+      "name": "LANG_PARAM_DEFAULT_NOT_SETTLED",
+      "severity": "error",
+      "message": "what '{name}' is given where a caller says nothing has to be settled while compiling",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the parameter"
+        }
+      ],
+      "cause": "A default belongs to every call of the function, including calls in other files, and a caller there cannot see the names the definition could.  So what is written has to be a value the compiler settles where the function is defined, and is then the same value at every call.  That is a narrower rule than C++'s, which looks the names up at the definition and computes them at the call; it is what this language can promise without a scope travelling with the function.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition",
+        "requirement": "A parameter's default is settled while compiling."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4526,
+      "name": "LANG_PARAM_DEFAULT_ORDER",
+      "severity": "error",
+      "message": "'{name}' has no default and follows one that has, so a call that leaves it out would have nothing to leave out",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the parameter with no default"
+        }
+      ],
+      "cause": "Arguments written without a name fill the parameters from the left, so a parameter with a default before one without means a call giving one argument fewer cannot say which it left out.  Every parameter after one with a default therefore has one too.  Naming the arguments is what gets round it -- but the rule is about what a call *without* names can mean.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition",
+        "requirement": "Every parameter after one with a default has one."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4527,
+      "name": "LANG_CALL_UNKNOWN_PARAMETER",
+      "severity": "error",
+      "message": "'{name}' is not a parameter of '{func}'",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the name that was written"
+        },
+        {
+          "name": "func",
+          "type": "string",
+          "description": "the function being called"
+        }
+      ],
+      "cause": "An argument that names its parameter names one the function has.  A name that is not one of them is usually a spelling, and the parameters are where to look for the right one.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Calls",
+        "requirement": "A named argument names a parameter of the function."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4528,
+      "name": "LANG_CALL_PARAMETER_TWICE",
+      "severity": "error",
+      "message": "'{name}' is given twice",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the parameter"
+        }
+      ],
+      "cause": "A parameter takes one argument.  It is given twice where a name repeats one an earlier argument already filled -- by its place or by its own name -- and which of the two was meant is not something to guess at.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Calls",
+        "requirement": "A parameter is given one argument."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4529,
+      "name": "LANG_CALL_POSITION_AFTER_NAME",
+      "severity": "error",
+      "message": "this argument does not name its parameter, and one before it did",
+      "args": [],
+      "cause": "An argument that does not name its parameter is for the parameter in the place it stands, and once an argument has named one the places no longer say which is which.  So the ones written by place come first and the ones written by name come after, which is the order they read in anyway.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Calls",
+        "requirement": "An argument written by place comes before every argument written by name."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4530,
+      "name": "LANG_CALL_PARAMETER_MISSING",
+      "severity": "error",
+      "message": "'{name}' is given nothing and has no default",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the parameter"
+        }
+      ],
+      "cause": "Every parameter has a value at every call: one the call wrote, by place or by name, or the default the definition wrote.  A parameter with neither is a call the function cannot be entered with.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Calls",
+        "requirement": "Every parameter is given a value or has a default."
       },
       "since": "0.1",
       "default_enabled": true,

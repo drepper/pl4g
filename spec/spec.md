@@ -224,10 +224,72 @@ difference(50u8, 8u8)
 prepare()
 ```
 
-**Arguments are positional**: what an argument is for is decided by where it stands.  A call hands over exactly the arguments
-the function takes -- nothing is variadic, nothing has a default -- and each has the type of the parameter it is handed to, with
-nothing widened to make two types meet.  A literal with no suffix takes the parameter's type, which is what lets a call be written
-with plain numbers.  Whether arguments may also be *named*, as an attribute's are, is not decided; nothing here forecloses it.
+**An argument is for the parameter in the place it stands**, unless it says which parameter it is for.  Nothing is variadic, and
+each argument has the type of the parameter it is handed to, with nothing widened to make two types meet.  A literal with no
+suffix takes the parameter's type, which is what lets a call be written with plain numbers.
+
+##### Saying which parameter an argument is for
+
+An argument may name the parameter it is for, written `.NAME ← VALUE`:
+
+```
+fn line(text: str, indent: u8 ← 0u8, width: u8 ← 80u8) → u8:
+    …
+
+line("hello")                       ※ indent 0, width 80
+line("hello", 4u8)                  ※ indent 4, width 80
+line("hello", .width ← 40u8)        ※ indent 0, width 40
+line(.width ← 40u8, .text ← "hi")   ※ any order, since each says what it is for
+```
+
+**The dot is what says the name is a parameter's.**  A leading dot cannot be a member access, there being nothing on its left for
+a member to belong to, so the spelling is free and the reading is unambiguous without looking anything up.  It is what C's
+designated initializers, Odin and Zig all write for the same idea in a structure's initializer, and reusing it here means one
+mark for "this names a field of the thing being built", whether the thing is a structure or a call.
+
+**Arguments written by place come first and ones written by name after** (4529).  That is the reason the places exist: once an
+argument has named its parameter the places no longer count from anywhere, so a call that went back to counting would have to say
+from where.  A name that is not a parameter of the function is refused (4527), and so is a parameter given twice -- by place and
+then by name, or by name twice (4528).
+
+**The order they are worked out in is the order they are written in**, which is the rule for every list of things in this
+language and does not change because the parameters end up in another order.  A call is the only thing that can be noticed
+happening, so what a reader sees is the text, not the signature.
+
+##### What a parameter is given where a call gives it nothing
+
+A parameter may say what it is given where no argument does, written `← VALUE` after its type:
+
+```
+fn plus(n: u8, by: u8 ← 2u8) → u8:
+    n + by
+
+plus(1u8)                           ※ 3
+plus(1u8, 10u8)                     ※ 11
+```
+
+**A default belongs to the function and not to any call of it.**  What is written is settled while compiling, once, where the
+function is (4525), and every call that leaves the argument out hands over that same value -- a call in this file, and a call in
+a file that has only imported the function.  A default may therefore be a literal, or a value of an enumeration, and not an
+expression naming anything.
+
+Compare: **C++** takes the other road.  A default there is an expression looked up in the definition's scope and worked out
+afresh at each call, so `void f(int n = g())` calls `g` once per call and `void f(int n = m)` reads a member the caller cannot
+see.  That needs a scope to travel with the function into every translation unit that calls it, which is exactly what C++'s
+header model provides and what a language compiling modules separately does not have.  **Ada** and **D** settle for the same
+thing C++ does, and **Python** goes further in the other direction: a default there is worked out *once*, when the function is
+defined, which is the same answer this language gives -- except that Python's default may be a mutable object, and the famous
+trap of a shared default list is what settling a value rather than an expression avoids by having no mutable values to settle.
+**Swift** allows an arbitrary expression, worked out at the call.  **C** has no defaults at all, and **Go**, **Rust** and **Zig**
+deliberately have none either, on the ground that an overload or an options structure says the same thing where a reader can see
+it; this language takes the opposite view for the reason it takes most of them -- a generator emitting a call should not have to
+emit the arguments nobody varies.
+
+**Every parameter after one with a default has one too** (4526).  Arguments written without a name fill the parameters from the
+left, so a parameter with a default before one without would leave a call one argument short with no way to say which one it left
+out.  Naming the arguments is what gets round that at a call; the rule is about what a call written without names can mean.
+Every parameter has a value at every call -- one the call wrote, by place or by name, or the default the definition wrote -- and
+a parameter with none of the three is refused (4530).
 
 **Arguments are worked out left to right**, in the order they are written.  A call is the only thing in this language that can
 be noticed happening -- it may write a variable at the top level, and it may stop the program -- so it is the only thing the
@@ -3041,12 +3103,13 @@ meaning, which is what a definition does.
 Functions are defined at the top level of a file with the syntax:
 
 ```
-fn NAME(ARG1: TYPE1, [ARGN: TYPEN]) → RETVALTYPE BLOCK
-fn NAME(ARG1: TYPE1, [ARGN: TYPEN]) BLOCK
+fn NAME(ARG1: TYPE1 [← DEFAULT1], [ARGN: TYPEN [← DEFAULTN]]) → RETVALTYPE BLOCK
+fn NAME(ARG1: TYPE1 [← DEFAULT1], [ARGN: TYPEN [← DEFAULTN]]) BLOCK
 ```
 
 where `NAME` is a valid identifier naming the function, `ARG?` are parameter names, `TYPE?` are type descriptions for the parameter,
-`RETVALTYPE` is the type of the return value.  `BLOCK` is the code of the function, in one of the two notations.  In layout format,
+`DEFAULT?` is what the parameter is given where a call gives it nothing -- described under Calls, since what it is for is visible
+there -- and `RETVALTYPE` is the type of the return value.  `BLOCK` is the code of the function, in one of the two notations.  In layout format,
 the function header is followed by a colon, a newline, and then the properly indented code.  When the function header is followed by
 a `{` it uses the explicit syntax and continues until the respective closing `}`.
 

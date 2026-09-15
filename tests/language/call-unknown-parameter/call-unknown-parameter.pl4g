@@ -1,0 +1,13 @@
+※ pl4g-test: compile=error diag=4527
+
+※ An argument that names its parameter names one the function has.  A name
+※ that is not one of them is nearly always a spelling, and the parameters are
+※ where to look for the right one.
+
+@[startup]
+fn main() → u6:
+    let n: u8 = plus(.nope ← 1u8)
+    0u6
+
+fn plus(n: u8 ← 1u8) → u8:
+    n
