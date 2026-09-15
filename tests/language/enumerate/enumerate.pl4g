@@ -1,0 +1,72 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ `⎕enumerate(x)` makes something for a loop to walk out of something a loop
+※ could already walk, and what a turn gives is the count and what the walk gave,
+※ as a tuple.  Two names take that apart, which is what two names already do
+※ everywhere a tuple is bound -- so it needed nothing of its own beyond the
+※ counting.
+※
+※ It is the iterator the loop would have had with a number carried beside it,
+※ so it works over everything a loop works over -- an array, a list, a string,
+※ a set, a range -- without any of them knowing about it.  A dictionary is the
+※ one exception and not for a reason of its own: its turn is already a pair, so
+※ counting it would make a tuple holding a tuple, and a value of one of those
+※ is not a thing this compiler can hold yet.
+※
+※ A second argument says what to count from, and its type is the type the count
+※ has: `⎕enumerate(v, 1u8)` counts in bytes from one.  The count goes up by one
+※ each turn with the check every other addition carries, so a count that runs
+※ past the end of its type stops the program, which is what says the type was
+※ too narrow for the thing being walked.
+
+@[startup, impure]
+fn main() → u6:
+    let v: u8⟦4⟧ = ⟦10u8, 20u8, 30u8, 40u8⟧
+    let l: [u8] = [1u8, 2u8, 3u8]
+    let text: str = "abc"
+    let s: ⸨u8⸩ = ⸨5u8, 9u8⸩
+    let places: mut u64 = 0u64
+    let summed: mut u8 = 0u8
+    ※ an array, counting from zero, which is what it counts from unless told
+    foreach i, x := ⎕enumerate(v):
+        places ← places + i
+        summed ← summed + x
+    ※ a list, counting from one in a byte: what it counts from says the type
+    let weighted: mut u8 = 0u8
+    foreach n, y := ⎕enumerate(l, 1u8):
+        weighted ← weighted + n × y
+    ※ a string, whose turns are characters and not bytes
+    let over: mut u64 = 0u64
+    let widest: mut u32 = 0u32
+    foreach at, c := ⎕enumerate(text):
+        over ← over + at
+        widest ← widest + ⎕ord(c)
+    ※ a range, which has no type of its own either
+    let stepped: mut u64 = 0u64
+    let added: mut u32 = 0u32
+    foreach k, m := ⎕enumerate(2u32…5u32):
+        stepped ← stepped + k
+        added ← added + m
+    ※ and a set, counting from a number of its own
+    let entries: mut u16 = 0u16
+    let held: mut u8 = 0u8
+    foreach j, e := ⎕enumerate(s, 100u16):
+        entries ← entries + j
+        held ← held + e
+    ※ 0+1+2+3 = 6, and the elements are 100 all told
+    if places ≠ 6u64 ∨ summed ≠ 100u8:
+        1u6
+    ※ 1×1 + 2×2 + 3×3 = 14
+    elif weighted ≠ 14u8:
+        2u6
+    ※ three characters counted 0, 1, 2, and 'a' + 'b' + 'c'
+    elif over ≠ 3u64 ∨ widest ≠ 294u32:
+        3u6
+    ※ three turns of the range, 2 + 3 + 4
+    elif stepped ≠ 3u64 ∨ added ≠ 9u32:
+        4u6
+    ※ two entries counted 100 and 101, holding five and nine
+    elif entries ≠ 201u16 ∨ held ≠ 14u8:
+        5u6
+    else:
+        0u6

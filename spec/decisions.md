@@ -4135,6 +4135,39 @@ is an associated constant and needs types that can carry those.
 
 ---
 
+## 2026-09-16T04:05+02:00 — language
+
+**`⎕enumerate`, and what it counts in**
+
+Decided on the user's direction: something that makes an iterator out of an iterator, giving the count and the value as a tuple,
+with an optional second argument saying what to count from.
+
+**A tuple rather than two bindings of its own.**  Two names already take a tuple apart wherever one is bound, and a dictionary's
+turn is already a pair taken apart that way -- so `foreach i, x := ⎕enumerate(v):` needed nothing beyond the counting.  The
+alternative, a second kind of loop binding, would have been a new rule for a thing the language already does.
+
+**What it counts from says what the count is**, rather than the count always being a `u64` that a program then converts.  There
+is no conversion between integer widths here, so a fixed `u64` would have made `⎕enumerate(v, 1u8)` impossible to write rather
+than merely longer -- and the type is the honest place to say how many turns are expected: a count that runs past the end of what
+was asked for stops the program, which is what says the type was too narrow.  Rust's `.enumerate()` is always a `usize` and
+counting from one is a `.map` after it; Python's takes a start and has no types to disagree about.
+
+**A name the compiler provides rather than an operator or a method.**  What it makes is an iterator, and this language has no
+type for one and no methods to hang it on; a glyph would have to be found for something written once per loop.  The quad already
+means "the compiler provides this", and it is what `⎕typeof` and `⎕wrap` are.
+
+**It stands where a loop takes its values from and nowhere else** (4515), for the same reason `⎕wrap` stands where it stands:
+what it makes has no representation, so there is nothing for it to be anywhere else.
+
+A dictionary cannot be counted, and that is a limit of the compiler rather than a decision: its turn is already a pair, and a
+tuple holding a tuple is not a value this compiler can hold.  It is reported where the count is built, and the to-do list has
+the underlying gap.
+
+Compare: **Python**, whose `enumerate` this is including the start; **Rust**, **Swift** and **Kotlin**, whose versions are
+methods on the iterator; **Go**, where `range` gives the index whether or not it is wanted; and **C++23**'s `views::enumerate`.
+
+---
+
 Open questions
 --------------
 

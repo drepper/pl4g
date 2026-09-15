@@ -1,0 +1,11 @@
+※ pl4g-test: compile=error diag=4515
+
+※ What `⎕enumerate` makes is an iterator, and a loop is the only thing that
+※ takes one: there is no type for an iterator in this language and nothing else
+※ to do with one.  So it stands after the `=` of a `foreach` and nowhere else.
+
+@[startup]
+fn main() → u6:
+    let v: u8⟦2⟧ = ⟦1u8, 2u8⟧
+    let held: u8 = ⎕enumerate(v)
+    0u6

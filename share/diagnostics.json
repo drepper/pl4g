@@ -4805,6 +4805,66 @@
       "option": null
     },
     {
+      "number": 4515,
+      "name": "LANG_ENUMERATE_IS_NOT_A_VALUE",
+      "severity": "error",
+      "message": "'⎕enumerate' makes something for a loop to walk, and this is not where a loop takes its values from",
+      "args": [],
+      "cause": "What it makes is an iterator, and a loop is the only thing that takes one: there is no type for an iterator in this language and nothing else to do with one.  So it stands after the `=` of a `foreach` and nowhere else.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / foreach",
+        "requirement": "'⎕enumerate' stands where a loop takes its values from."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4516,
+      "name": "LANG_ENUMERATE_TAKES_ONE_OR_TWO",
+      "severity": "error",
+      "message": "'⎕enumerate' takes what to walk, and optionally what to count from; {found} were written",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "how many arguments were written"
+        }
+      ],
+      "cause": "One argument is the thing to walk, counting from zero.  A second says what to count from instead, and its type is the type the count has -- so `⎕enumerate(v, 1u8)` counts in bytes from one.  There is no third thing to say: how far the count moves each turn is one, which is what counting is.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / foreach",
+        "requirement": "'⎕enumerate' takes one argument or two."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4517,
+      "name": "LANG_ENUMERATE_COUNTS_IN_INTEGERS",
+      "severity": "error",
+      "message": "'⎕enumerate' counts the turns, and '{found}' is not a number to count in",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type of what it was told to count from"
+        }
+      ],
+      "cause": "What it counts from says what type the count has, and a count is a whole number.  The count goes up by one each turn and is checked like every other addition, so a count that runs past the end of its type stops the program -- which is what says the type was too narrow for the thing being walked.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / foreach",
+        "requirement": "The second argument of '⎕enumerate' is an integer."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 5001,
       "name": "LANG_STMT_UNREACHABLE",
       "severity": "warning",

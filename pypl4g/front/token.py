@@ -148,6 +148,11 @@ WRAP_NAME: Final[str] = "".join((BUILTIN_GLYPH, "wrap"))
 #: that no program has to give up the names `ord` and `chr`.
 TYPEOF_NAME: Final[str] = "".join((BUILTIN_GLYPH, "typeof"))
 
+#: Walking something and counting the turns at the same time.  It is a name the
+#: compiler provides rather than an operator because what it makes is an
+#: iterator, which is a thing a loop takes and nothing else does.
+ENUMERATE_NAME: Final[str] = "".join((BUILTIN_GLYPH, "enumerate"))
+
 ORD_NAME: Final[str] = "".join((BUILTIN_GLYPH, "ord"))
 CHR_NAME: Final[str] = "".join((BUILTIN_GLYPH, "chr"))
 

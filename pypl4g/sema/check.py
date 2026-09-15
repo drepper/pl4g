@@ -15,7 +15,7 @@ from ..diag import ids as D
 from ..diag.engine import DiagEngine, Expectation
 from ..front import ast
 from ..front.token import (BOTTOM_GLYPH, BUILTIN_GLYPH, CHR_NAME,
-                          TYPEOF_NAME,
+                          ENUMERATE_NAME, TYPEOF_NAME,
                           EMPTY_ARENA_NAME, ORD_NAME,
                           WRAP_NAME,
                           HEAP_NAME, TOLERANCE_DEFAULT,
@@ -3908,6 +3908,105 @@ class Checker:
                         stmt: ast.ForEach) -> _Iteration | None:
         """What the loop's expression turns out to be, as a thing to walk.
 
+        Two things are recognised before anything is lowered, and for the same
+        reason: neither has a type of its own.  A range is written where it is
+        used, and `\N{APL FUNCTIONAL SYMBOL QUAD}enumerate` makes an iterator out of another one.  Everything
+        else is a value, and what it is, is its type's business.
+        """
+        counted = self._enumerating(stmt.iterable)
+        if counted is not None:
+            return self._enumerated(builder, stmt, counted)
+        return self._iteration_of(builder, stmt)
+
+    def _enumerating(self, written: ast.Expr
+                     ) -> tuple[ast.Expr, ast.Expr | None] | None:
+        """What `\N{APL FUNCTIONAL SYMBOL QUAD}enumerate` was asked to walk and what to count from, or
+        nothing where the loop's expression is not one of those."""
+        if not (isinstance(written, ast.Call)
+                and isinstance(written.callee, ast.NameRef)
+                and written.callee.name == ENUMERATE_NAME):
+            return None
+        if not 1 <= len(written.args) <= 2:
+            self._diags.emit(D.LANG_ENUMERATE_TAKES_ONE_OR_TWO, written.span,
+                             found=str(len(written.args)))
+            return None
+        return (written.args[0],
+                written.args[1] if len(written.args) == 2 else None)
+
+    def _enumerated(self, builder: IRBuilder, stmt: ast.ForEach,
+                    counted: tuple[ast.Expr, ast.Expr | None]
+                    ) -> _Iteration | None:
+        """Walk something and count the turns, which is the two as one.
+
+        It is the iterator the loop would have had with a number carried beside
+        it, so it works over everything a loop works over -- an array, a list, a
+        string, a set, a dictionary, a range -- without any of them knowing
+        about it.  What a turn gives is the count and what the walk gave, as a
+        tuple, which two names take apart exactly as they take a dictionary's
+        pair apart.
+
+        **The count goes up by one and the addition is an addition**, with the
+        check every other one carries.  So counting a hundred things in a `u6`
+        stops the program, which is what says the type was too narrow -- and is
+        why what to count from says what type the count has.
+        """
+        walked, from_written = counted
+        inner = self._iteration_of(
+            builder, replace(stmt, iterable=walked, type=None))
+        if inner is None:
+            return None
+        if from_written is None:
+            index: Type = U64
+            first: Value = builder.int_const(U64, 0)
+        else:
+            first = self._lower_expr(
+                builder, from_written,
+                U64 if isinstance(from_written, ast.IntLit)
+                and from_written.type_name is None else None)
+            index = self._value_type_of(first)
+            if index is ERROR:
+                return None
+            if not isinstance(index, IntType):
+                self._diags.emit(D.LANG_ENUMERATE_COUNTS_IN_INTEGERS,
+                                 from_written.span, found=index.render())
+                return None
+        if len(parts_of(inner.element)) > 1:
+            # A turn that is already several values -- a dictionary's pair --
+            # would make a tuple holding a tuple, and a value of one of those
+            # is not a thing this compiler can hold: what it travels in is one
+            # register per part, and a part that is itself several has nowhere
+            # to go.  The to-do list records it beside the tuple holding an
+            # array, which is the same gap.
+            self._diags.emit(
+                D.IMPL_UNIMPLEMENTED_FEATURE, stmt.iterable.span,
+                feature="".join((
+                    "counting the turns of something whose turn is already "
+                    "several values, which would make a tuple holding the "
+                    "tuple '", inner.element.render(), "'")))
+            return None
+        element = self._module.types.tuple_type((index, inner.element))
+        one = builder.int_const(index, 1)
+        span = stmt.span
+
+        def take(b: IRBuilder, state: tuple[Value, ...]) -> Value:
+            return b.make_tuple((state[-1], inner.take(b, state[:-1])),
+                                element, span)
+
+        declared = self._resolve_type(stmt.type) if stmt.type is not None else None
+        if declared is not None and declared is not element:
+            self._report_mismatch(stmt.iterable.span, element, declared)
+            return None
+        return _Iteration(
+            element=element, start=(*inner.start, first),
+            more=lambda b, s: inner.more(b, s[:-1]),
+            take=take,
+            step=lambda b, s: (*inner.step(b, s[:-1]),
+                               b.binary(BinOp.ADD, s[-1], one, span)))
+
+    def _iteration_of(self, builder: IRBuilder,
+                      stmt: ast.ForEach) -> _Iteration | None:
+        """What the loop's expression is as a thing to walk, without counting.
+
         A range is written where it is used and has no type of its own, so it is
         recognised before anything is lowered; everything else is a value, and
         what it is, is its type's business.
@@ -4960,6 +5059,12 @@ class Checker:
                                          expected, True)
             case _Ready():
                 return expr.value
+            case ast.Call() if isinstance(expr.callee, ast.NameRef) \
+                    and expr.callee.name == ENUMERATE_NAME:
+                # A loop's expression is looked at before it is lowered, so
+                # reaching this is standing where a value stands.
+                self._diags.emit(D.LANG_ENUMERATE_IS_NOT_A_VALUE, expr.span)
+                return UndefConst(ERROR)
             case ast.Lifted():
                 # Every place one may stand looks at it before it gets here:
                 # `\N{APL FUNCTIONAL SYMBOL QUAD}typeof`, a comparison the compiler settles, and the two

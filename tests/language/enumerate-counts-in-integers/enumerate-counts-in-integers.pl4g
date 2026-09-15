@@ -1,0 +1,13 @@
+※ pl4g-test: compile=error diag=4517
+
+※ What `⎕enumerate` counts from says what type the count has, and a count is a
+※ whole number.  There is nothing for a count to be that is not one: it starts
+※ where it is told and goes up by one each turn.
+
+@[startup, impure]
+fn main() → u6:
+    let v: u8⟦2⟧ = ⟦1u8, 2u8⟧
+    let sum: mut u8 = 0u8
+    foreach i, x := ⎕enumerate(v, 1.5f64):
+        sum ← sum + x
+    0u6

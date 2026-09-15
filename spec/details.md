@@ -427,6 +427,15 @@ The type of what the one-sided form answers is worked out twice, once off the sy
 what was lowered.  That is not duplication for its own sake: a comparison lowers its left side with what the right side is wanted
 to be, so `⌈v ≠ 9u8` needs the answer's type before the answer exists.
 
+**Counting the turns is one iterator wrapping another.**  `_Iteration` is the three things a loop asks -- whether there is
+another turn, what this turn gives, what the next turn starts from -- and `⎕enumerate` answers all three by asking the iterator
+underneath and carrying one number beside its state.  So it works over everything a loop works over without any of them knowing
+about it, and the whole of it is twenty lines in the checker: nothing reached the representation, the optimizer or any backend.
+
+Which is also why a dictionary cannot be counted.  Its turn is already a pair, so the tuple this makes would hold a tuple, and a
+value of one of those has nowhere to go: what a tuple travels in is one register per part, and a part that is itself several is
+not one register.  It is reported where the count is built rather than left to fail in a backend.
+
 **Lifting is read twice and settled once.**  What stands between `⌜` and `⌝` is parsed as a *type* first and kept where that
 reading ends at the closing bracket; anything else is re-read as an expression.  Reading it twice rather than deciding is what
 makes the brackets worth having: a bare name is both readings and the parser is not the thing that knows which, so it carries

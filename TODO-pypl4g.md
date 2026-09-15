@@ -406,6 +406,11 @@ To Do List for the pypl4g compiler
     `x \N{LEFT FLOOR} 255u8` is `x`, and both are what a generator writes when the bound comes from somewhere else.  Neither folds
     today.
 
+[ ] hold a tuple whose member is itself several values.  A tuple holding a tuple reaches the code generator and fails there
+    ("no encoding of 'mov' accepts ..."), because what a tuple travels in is one register per part and a part that is itself
+    several has nowhere to go.  It is what stops `\N{APL FUNCTIONAL SYMBOL QUAD}enumerate` counting the turns of a dictionary, whose turn is already a
+    pair, and it is the same gap as the array below.
+
 [ ] report a tuple holding an array.  `〈⟦1u8, 2u8⟧〉` reaches the code generator and fails there (9901, "making a 〈u8⟦2⟧〉, which
     is one value and not several"), so what a reader is told is an internal error about a program the front end accepted.  Either
     an array is a thing a tuple may hold, in which case `parts_of` has to say what its parts are, or it is not and the checker

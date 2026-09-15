@@ -2535,6 +2535,38 @@ else too, so the form needs nothing of its own.  Over something that gives one v
 **`_` is the name that is not a name**, as it is in a `match` arm: the loop runs a turn for each value there is and the value
 itself is not wanted.  Nothing is bound, so nothing is reported as a value nothing reads.
 
+##### Counting the turns
+
+**`⎕enumerate(x)` makes something to walk out of something a loop could already walk**, and what a turn gives is the count and
+what the walk gave, as a tuple.
+
+```
+foreach i, x := ⎕enumerate(v):          ※ 0 and the first element, 1 and the second, …
+foreach n, y := ⎕enumerate(l, 1u8):     ※ counting from one, in a byte
+```
+
+**Two names take that apart**, which is what two names already do everywhere a tuple is bound -- so it needed nothing of its own
+beyond the counting.  It is the iterator the loop would have had with a number carried beside it, so it works over everything a
+loop works over: an array, a list, a string, a set, a range.
+
+**A second argument says what to count from**, and **its type is the type the count has**: `⎕enumerate(v, 1u8)` counts in bytes
+from one, and without it the count is a `u64` from zero.  There is no third thing to say -- how far the count moves each turn is
+one, which is what counting is.
+
+**The count goes up by one and the addition is an addition**, with the check every other one carries.  So counting a hundred
+things from a `u6` stops the program, which is what says the type was too narrow rather than quietly starting again from zero.
+
+**It stands where a loop takes its values from and nowhere else** (4515).  What it makes is an iterator, and a loop is the only
+thing that takes one: there is no type for an iterator here and nothing else to do with one.
+
+A dictionary is the one thing it cannot count, and not for a reason of its own: a dictionary's turn is already a pair, so
+counting it would make a tuple holding a tuple, and a value of one of those is not a thing this compiler can hold yet.
+
+Compare: **Python**, whose `enumerate` this is, including the optional start; **Rust**, whose `.enumerate()` is a method on the
+iterator and whose count is always a `usize` from zero, so counting from one is a `.map` after it; **Swift** and **Kotlin**,
+whose `enumerated()`/`withIndex()` are the same thing under longer names; **Go**, where `range` gives the index without being
+asked, which is convenient until the index is not wanted; and **C++23**'s `views::enumerate`, which is this as a range adaptor.
+
 **`while` written with a binding is the same statement.**
 
 ```
