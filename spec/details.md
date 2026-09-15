@@ -427,6 +427,15 @@ The type of what the one-sided form answers is worked out twice, once off the sy
 what was lowered.  That is not duplication for its own sake: a comparison lowers its left side with what the right side is wanted
 to be, so `⌈v ≠ 9u8` needs the answer's type before the answer exists.
 
+**Dividing without a remainder is the remainder with the remainder thrown away**, and the only thing worth saying about it is
+the divisor of zero.  The operator is total and the instruction is not, so where the divisor is a value the compiler cannot see
+there is a comparison against zero and a branch: one way answers whether what was asked about is zero too, the other takes the
+remainder, and both hand a truth value to the same block.  Where the divisor is written down -- always, for the form written
+before one operand -- neither the test nor the branch is built, because which of the two cases it is, is written down with it.
+
+The remainder it takes is the language's own, which answers a result; the answer is unwrapped without looking at the failure,
+because the branch above has already settled that the divisor is not zero.
+
 **Counting the turns is one iterator wrapping another.**  `_Iteration` is the three things a loop asks -- whether there is
 another turn, what this turn gives, what the next turn starts from -- and `⎕enumerate` answers all three by asking the iterator
 underneath and carrying one number beside its state.  So it works over everything a loop works over without any of them knowing

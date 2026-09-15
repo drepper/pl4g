@@ -573,6 +573,11 @@ module.exports = grammar({
       field('left', $._non_comparison),
       field('operator', choice('=', '\u2260', '<', '>', '\u2264', '\u2265',
                                '<=', '>=',
+                               // Whether one number divides another answers a
+                               // truth value about two numbers, which is a
+                               // comparison's shape and so a comparison's
+                               // level.
+                               '\u2223', '\u2224',
                                // The same six asked of the tolerance rather
                                // than of the values, for floating point.
                                '\u2245', '\u2247', '\u2a85', '\u2a86',
@@ -624,7 +629,8 @@ module.exports = grammar({
     // the same rule '!' follows in C, Go and Rust.
     unary_expression: $ => prec(13, seq(
       field('operator', choice('~', '\u00ac', '#', '\u2374', '\u2308', '\u230a',
-                               '\u2193', '\u2191', '\u2195', '\u21d5')),
+                               '\u2193', '\u2191', '\u2195', '\u21d5',
+                               '\u2223', '\u2224')),
       $._non_comparison,
     )),
 

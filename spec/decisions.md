@@ -4168,6 +4168,35 @@ methods on the iterator; **Go**, where `range` gives the index whether or not it
 
 ---
 
+## 2026-09-16T05:00+02:00 — language
+
+**`∣` and `∤`, and what zero divides**
+
+Decided on the user's direction: an operator asking whether one number divides another exactly, with the form written before one
+operand meaning the same thing with two on the left.
+
+**Zero divides nothing but zero**, so the operator is total and answers a truth value whatever it is given.  That was the one
+decision here and it is mathematics', not this language's: `a ∣ b` means "there is a `k` with `b = a·k`", which for `a` of zero
+holds exactly when `b` is zero.  The alternative -- stopping the program, as a division by zero would -- would have made the
+operator partial for a case that *has* an answer, and would have made `∣` no better than the `b % a = 0` every other language
+writes.  Being total where `%` is not is the whole reason it is worth having.
+
+**A comparison's level and a comparison's associativity.**  It relates two numbers and answers a truth value, which is what a
+comparison is; and `a ∣ b ∣ c` would be asking whether `a` divides a truth value, so it joins two and no more, exactly as the
+comparisons do.
+
+**The form written before one operand is the operator and not a second one.**  "Is it even" is the question it is nearly always
+asked, and writing the two in is what every notation for it does.  It costs nothing: the two is made of the operand's own type,
+which also means a type with no two -- a `u1` -- refuses it, and that refusal says what is wrong rather than reporting a literal
+that does not fit.
+
+Compare: **mathematics**, whose glyphs and whose rule about zero these are; **C**, **Rust**, **Go** and **Python**, which write
+`b % a == 0` and get a division by zero where this gets an answer; **Ada**, which has `rem` and `mod` and no divisibility test;
+and **APL**, whose `|` is the remainder and which spells the test `0 = a | b` -- this operator with the comparison left to the
+program.
+
+---
+
 Open questions
 --------------
 

@@ -229,6 +229,12 @@ ROUNDED_GLYPH: Final[str] = "\N{UP DOWN DOUBLE ARROW}"
 #: written on paper.
 POWER_GLYPH: Final[str] = "\N{SUPERSCRIPT LATIN SMALL LETTER N}"
 
+#: Whether one number divides another without anything left over.  Written
+#: before one operand it asks whether two does, which is the same question as
+#: whether the number is even.
+DIVIDES_GLYPH: Final[str] = "\N{DIVIDES}"
+NOT_DIVIDES_GLYPH: Final[str] = "\N{DOES NOT DIVIDE}"
+
 #: Lifting what is written between them out of the program and into the
 #: compiler: `\N{TOP LEFT CORNER}u32\N{TOP RIGHT CORNER}` is the type and not a value of it, and `\N{TOP LEFT CORNER}a\N{TOP RIGHT CORNER}` is the name and
 #: not what it stands for.  The brackets are what keeps the grammar
@@ -381,6 +387,8 @@ class TokKind(StrEnum):
     NEAREST = "'\N{UP DOWN ARROW}'"
     ROUNDED = "'\N{UP DOWN DOUBLE ARROW}'"
     POWER = "'\N{SUPERSCRIPT LATIN SMALL LETTER N}'"
+    DIVIDES = "'\N{DIVIDES}'"
+    NOT_DIVIDES = "'\N{DOES NOT DIVIDE}'"
     LIFT_OPEN = "'\N{TOP LEFT CORNER}'"
     LIFT_CLOSE = "'\N{TOP RIGHT CORNER}'"
     #: A number written raised, which is an exponent and its operator at once.

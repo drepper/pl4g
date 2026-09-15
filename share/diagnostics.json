@@ -4865,6 +4865,60 @@
       "option": null
     },
     {
+      "number": 4518,
+      "name": "LANG_DIVIDES_IS_FOR_INTEGERS",
+      "severity": "error",
+      "message": "'{operator}' asks whether one number divides another with nothing left over, and '{found}' is not a whole number",
+      "args": [
+        {
+          "name": "operator",
+          "type": "string",
+          "description": "which of the two was written"
+        },
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type of the operand"
+        }
+      ],
+      "cause": "Dividing without a remainder is a question about whole numbers: what is left over is what the question is about, and a floating-point division leaves nothing over by construction.  Whether one floating-point value is a whole multiple of another is a different question, and one a program asks by writing the division it means.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Dividing without a remainder",
+        "requirement": "The operands of '∣' are integers."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4519,
+      "name": "LANG_DIVIDES_NEEDS_A_TWO",
+      "severity": "error",
+      "message": "'{operator}' written before one operand asks whether two divides it, and '{found}' has no two",
+      "args": [
+        {
+          "name": "operator",
+          "type": "string",
+          "description": "which of the two was written"
+        },
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type of the operand"
+        }
+      ],
+      "cause": "Written before one operand it is the same operator with two on the left, so it needs a two of the operand's own type -- and a type of one bit has not got one.  What was meant is a question about that one bit, and comparing it with nothing or with one says it.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Dividing without a remainder",
+        "requirement": "'∣' written before one operand needs a type that holds two."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 5001,
       "name": "LANG_STMT_UNREACHABLE",
       "severity": "warning",

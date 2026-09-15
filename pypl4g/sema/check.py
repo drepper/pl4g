@@ -446,6 +446,14 @@ _UNARY_OPS: Final[dict[ast.UnaryOp, UnOp]] = {
 
 #: The four roundings, and the operation each is.  Three of them name a
 #: direction and the fourth asks the processor which it is using.
+#: The two that ask whether one number divides another, and the two that ask it
+#: of two.  Which of each pair was written says whether the answer is turned
+#: round, and nothing else about it differs.
+_DIVIDES: Final[frozenset[ast.BinaryOp]] = frozenset((
+    ast.BinaryOp.DIVIDES, ast.BinaryOp.NOT_DIVIDES))
+_DIVIDES_UNARY: Final[frozenset[ast.UnaryOp]] = frozenset((
+    ast.UnaryOp.DIVIDES, ast.UnaryOp.NOT_DIVIDES))
+
 _ROUNDINGS: Final[dict[ast.UnaryOp, UnOp]] = {
     ast.UnaryOp.FLOOR: UnOp.FLOOR,
     ast.UnaryOp.CEILING: UnOp.CEIL,
@@ -5679,6 +5687,119 @@ class Checker:
             found.append(along)
         return tuple(found)
 
+    def _lower_divides(self, builder: IRBuilder, expr: ast.Expr,
+                       written: ast.Expr | None, over: ast.Expr, name: str,
+                       negated: bool, expected: Type | None) -> Value:
+        """Lower `a \N{DIVIDES} b`: whether *a* divides *b* with nothing left over.
+
+        It relates two numbers and answers a truth value, which is a
+        comparison's shape, so it is written where a comparison is written and
+        binds as one.  What it asks is the remainder's question with the
+        remainder thrown away.
+
+        **It is total, where dividing is not.**  `\N{DIVIDES}` by zero has an answer and
+        `\N{DIVISION SIGN}` by zero has not: zero divides nothing but zero, which is the
+        definition and not a rule invented here.  So this answers a truth value
+        whatever it is given, and nothing about it is a result.
+
+        *written* is nothing where the operator was written before one operand,
+        which is the same operator with two on the left -- so the two is made
+        here, of the type the operand turned out to be.
+        """
+        left: Value | None = None
+        outer, self._operand_of = self._operand_of, name
+        was_listing, self._listing = self._listing, True
+        try:
+            if written is not None:
+                # What is wanted of each side is what an array of them would be
+                # an array of, which is what lets a number stand beside one.
+                left = self._lower_expr(builder, written,
+                                        self._scalar_of(self._hint_of(over)))
+                first = self._scalar_of(self._value_type_of(left))
+                if first is not None and first is not ERROR \
+                        and not isinstance(first, IntType):
+                    self._diags.emit(D.LANG_DIVIDES_IS_FOR_INTEGERS,
+                                     written.span, operator=name,
+                                     found=first.render())
+                    first = ERROR
+            else:
+                first = None
+            right = self._lower_expr(
+                builder, over,
+                first if first is not None and first is not ERROR else None)
+        finally:
+            self._operand_of = outer
+            self._listing = was_listing
+        ty = self._scalar_of(self._value_type_of(right))
+        if first is ERROR or ty is None or ty is ERROR:
+            return UndefConst(ERROR)
+        if not isinstance(ty, IntType):
+            self._diags.emit(D.LANG_DIVIDES_IS_FOR_INTEGERS, over.span,
+                             operator=name, found=ty.render())
+            return UndefConst(ERROR)
+        if left is None:
+            if not ty.holds(2):
+                self._diags.emit(D.LANG_DIVIDES_NEEDS_A_TWO, expr.span,
+                                 operator=name, found=ty.render())
+                return UndefConst(ERROR)
+            left = IntConst(ty, 2)
+        elif first is not ty:
+            assert first is not None
+            self._diags.emit(D.LANG_TYPE_OPERAND_MISMATCH, over.span,
+                             operator=name, expected=first.render(),
+                             found=ty.render())
+            return UndefConst(ERROR)
+        walked = self._walk_operands(builder, expr,
+                                     (("left", left), ("right", right))
+                                     if written is not None
+                                     else (("operand", right),), expected)
+        if walked is not None:
+            return walked
+        if not self._accepts(expected, BOOL):
+            self._report_mismatch(expr.span, BOOL, expected)
+            return UndefConst(ERROR)
+        answer = self._divides(builder, left, right, ty, expr.span)
+        return self._negate(builder, answer, expr.span) if negated else answer
+
+    def _divides(self, builder: IRBuilder, left: Value, right: Value,
+                 ty: IntType, span: Span) -> Value:
+        """Whether *left* divides *right*, as a truth value.
+
+        Zero divides nothing but zero, so where the divisor is zero the answer
+        is whether what it was asked about is zero too.  Written down, that is
+        settled here and costs nothing; worked out, it is one comparison and a
+        branch, and the two ways the answer is reached hand it over to the same
+        block.
+        """
+        nothing = builder.int_const(ty, 0)
+        remainder = self._module.types.result_type(ty)
+        taking = BinOp.SREM if ty.signed else BinOp.UREM
+
+        def evenly() -> Value:
+            left_over = builder.binary(taking, right, left, span, remainder)
+            return builder.compare(CmpPred.EQ,
+                                   builder.unwrap(left_over, ty, span),
+                                   nothing, span)
+
+        if isinstance(left, IntConst):
+            # The divisor is written down, so which of the two cases this is, is
+            # written down with it.
+            if left.value == 0:
+                return builder.compare(CmpPred.EQ, right, nothing, span)
+            return evenly()
+        by_zero = builder.new_block("divides.by.nothing")
+        ordinary = builder.new_block("divides")
+        done = builder.new_block("divided")
+        builder.condbr(builder.compare(CmpPred.EQ, left, nothing, span),
+                       by_zero, ordinary, span=span)
+        builder.position_at(by_zero)
+        builder.br(done, (builder.compare(CmpPred.EQ, right, nothing, span),),
+                   span)
+        builder.position_at(ordinary)
+        builder.br(done, (evenly(),), span)
+        builder.position_at(done)
+        return done.add_param(BOOL, "divides")
+
     def _lower_power(self, builder: IRBuilder, expr: ast.Binary,
                      expected: Type | None) -> Value:
         """Lower `a \N{SUPERSCRIPT LATIN SMALL LETTER N} b`: raising by an exponent the compiler cannot see.
@@ -6256,6 +6377,10 @@ class Checker:
             return self._lower_reshape(builder, expr, expected)
         if expr.op is ast.BinaryOp.POWER:
             return self._lower_power(builder, expr, expected)
+        if expr.op in _DIVIDES:
+            return self._lower_divides(
+                builder, expr, expr.left, expr.right, expr.op.value,
+                expr.op is ast.BinaryOp.NOT_DIVIDES, expected)
         # An operator is defined on values and not on arrays, so what is wanted
         # of each side is what an array of them would be an array of -- which
         # lets a number stand beside an array and take its element's type.
@@ -6473,6 +6598,12 @@ class Checker:
             return self._lower_extremum(builder, expr, expected)
         if expr.op in _ROUNDINGS:
             return self._lower_rounding(builder, expr, expected)
+        if expr.op in _DIVIDES_UNARY:
+            # The same operator with two on the left, which is what the
+            # question "is it even" is.
+            return self._lower_divides(
+                builder, expr, None, expr.operand, expr.op.value,
+                expr.op is ast.UnaryOp.NOT_DIVIDES, expected)
         outer, self._operand_of = self._operand_of, expr.op.value
         was_listing, self._listing = self._listing, True
         try:
@@ -6947,11 +7078,16 @@ class Checker:
             case ast.NameRef():
                 return self._type_of_name(expr.name)
             case ast.Binary() if (expr.op in _COMPARISONS or expr.op in _LOGIC_OPS
-                                  or expr.op in _SHORT_CIRCUIT):
+                                  or expr.op in _SHORT_CIRCUIT
+                                  or expr.op in _DIVIDES):
                 # What the operator answers with, not what it was given: the
                 # answer is what whatever reads the expression will get.
                 return BOOL
             case ast.Unary() if expr.op is ast.UnaryOp.LOGIC_NOT:
+                return BOOL
+            case ast.Unary() if expr.op in _DIVIDES_UNARY:
+                # Whether two divides it, which is a truth value about a number
+                # and not a number.
                 return BOOL
             case ast.Unary() if expr.op is ast.UnaryOp.LENGTH:
                 # How many, which is a count and not whatever was counted.

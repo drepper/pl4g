@@ -1,0 +1,16 @@
+※ pl4g-test: compile=error diag=4518
+
+※ Dividing without a remainder is a question about whole numbers: what is left
+※ over is what the question is about, and a floating-point division leaves
+※ nothing over by construction.  Whether one floating-point value is a whole
+※ multiple of another is a different question, and one a program asks by writing
+※ the division it means.
+
+@[startup]
+fn main() → u6:
+    let x: f64 = 12.0f64
+    let y: f64 = 3.0f64
+    if y ∣ x:
+        0u6
+    else:
+        1u6

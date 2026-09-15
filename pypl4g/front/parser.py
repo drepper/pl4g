@@ -90,6 +90,13 @@ _BINARY_OPERATORS: Final[dict[TokKind, _Operator]] = {
     # associative, so that `a ?? b ?? c` is "a, or else b, or else c" -- which
     # is the only reading of it that is well typed.
     TokKind.OR_ELSE: _Operator(ast.BinaryOp.OR_ELSE, 6, right_associative=True),
+    # Whether one number divides another answers a truth value about two
+    # numbers, which is a comparison's shape -- so it binds where a comparison
+    # binds and joins two and no more: `a \N{DIVIDES} b \N{DIVIDES} c` would be asking whether
+    # `a` divides a truth value.
+    TokKind.DIVIDES: _Operator(ast.BinaryOp.DIVIDES, 5, non_associative=True),
+    TokKind.NOT_DIVIDES: _Operator(ast.BinaryOp.NOT_DIVIDES, 5,
+                                   non_associative=True),
     TokKind.ALIKE: _Operator(ast.BinaryOp.ALIKE, 5, non_associative=True),
     TokKind.UNALIKE: _Operator(ast.BinaryOp.UNALIKE, 5, non_associative=True),
     TokKind.BELOW_OR_ALIKE: _Operator(ast.BinaryOp.BELOW_OR_ALIKE, 5,
@@ -149,6 +156,8 @@ _UNARY_OPERATORS: Final[dict[TokKind, ast.UnaryOp]] = {
     TokKind.SHAPE: ast.UnaryOp.SHAPE,
     TokKind.MAX: ast.UnaryOp.MAX,
     TokKind.MIN: ast.UnaryOp.MIN,
+    TokKind.DIVIDES: ast.UnaryOp.DIVIDES,
+    TokKind.NOT_DIVIDES: ast.UnaryOp.NOT_DIVIDES,
     TokKind.FLOOR: ast.UnaryOp.FLOOR,
     TokKind.CEILING: ast.UnaryOp.CEILING,
     TokKind.NEAREST: ast.UnaryOp.NEAREST,

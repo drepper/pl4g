@@ -1,0 +1,65 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ `a ∣ b` asks whether `a` divides `b` with nothing left over, and `a ∤ b`
+※ whether it does not.  It relates two numbers and answers a truth value, which
+※ is a comparison's shape -- so it is written where a comparison is written,
+※ binds as one, and joins two and no more.
+※
+※ Written before one operand it is the same operator with two on the left,
+※ which is the question "is it even": `∣n` is even and `∤n` is odd.  That is not
+※ a second operator but the first with the one thing it is nearly always asked
+※ about written in.
+※
+※ **It is total, where dividing is not.**  `∣` by zero has an answer and `÷` by
+※ zero has not: zero divides nothing but zero, which is the definition and not a
+※ rule invented here.  So it answers a truth value whatever it is given, and
+※ nothing about it is a result -- which is the whole reason it is worth having
+※ beside `%`.
+
+@[startup, impure]
+fn main() → u6:
+    let a: u8 = 12u8
+    let b: u8 = 3u8
+    let c: u8 = 5u8
+    let s: i16 = ⁻12i16
+    let v: u8⟦4⟧ = ⟦2u8, 3u8, 4u8, 5u8⟧
+    let even: bool⟦4⟧ = ∣v
+    let by: bool⟦4⟧ = 2u8 ∣ v
+    if ¬(b ∣ a) ∨ c ∣ a:
+        1u6
+    ※ the one that is turned round, which is the same question answered the
+    ※ other way
+    elif b ∤ a ∨ ¬(c ∤ a):
+        2u6
+    ※ written before one operand, which asks about two
+    elif ¬(∣a) ∨ ∤a ∨ ∣c ∨ ¬(∤c):
+        3u6
+    ※ and the two spellings agree, since one is the other
+    elif (∣a) ≠ (2u8 ∣ a) ∨ (∤c) ≠ (2u8 ∤ c):
+        4u6
+    ※ signed, where what is divided and what divides it may both be negative
+    elif ¬(4i16 ∣ s) ∨ ¬(⁻4i16 ∣ s) ∨ 5i16 ∣ s:
+        5u6
+    ※ a divisor worked out while the program runs, which is where the test for
+    ※ zero is made rather than settled
+    elif ¬divides(3u8, 12u8) ∨ divides(5u8, 12u8):
+        6u6
+    ※ zero divides nothing but zero, which is an answer and not a fault
+    elif ¬divides(0u8, 0u8) ∨ divides(0u8, 7u8) ∨ ¬(0u8 ∣ 0u8) ∨ 0u8 ∣ 7u8:
+        7u6
+    ※ and everything divides zero, including two
+    elif ¬(7u8 ∣ 0u8) ∨ ¬(∣0u8):
+        8u6
+    ※ listable, both ways of writing it, answering a truth value per element
+    elif ¬even⟦0⟧ ∨ even⟦1⟧ ∨ ¬even⟦2⟧ ∨ even⟦3⟧:
+        9u6
+    elif by⟦0⟧ ≠ even⟦0⟧ ∨ by⟦1⟧ ≠ even⟦1⟧ ∨ by⟦3⟧ ≠ even⟦3⟧:
+        10u6
+    ※ a width that is not a machine width, where the remainder is the type's
+    elif ¬(3u5 ∣ 12u5) ∨ ¬(∣12u5) ∨ ∣13u5:
+        11u6
+    else:
+        0u6
+
+fn divides(a: u8, b: u8) → bool:
+    a ∣ b

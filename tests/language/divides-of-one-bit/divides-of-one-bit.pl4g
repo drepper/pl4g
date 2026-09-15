@@ -1,0 +1,14 @@
+※ pl4g-test: compile=error diag=4519
+
+※ Written before one operand it is the same operator with two on the left, so
+※ it needs a two of the operand's own type -- and a type of one bit has not got
+※ one.  What was meant is a question about that one bit, and comparing it with
+※ nothing says it.
+
+@[startup]
+fn main() → u6:
+    let flag: u1 = 1u1
+    if ∣flag:
+        0u6
+    else:
+        1u6

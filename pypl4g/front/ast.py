@@ -248,6 +248,9 @@ class BinaryOp(StrEnum):
     #: Raising something to a power.  A number written raised is this with the
     #: number on the right, which is why there is one operator and not two.
     POWER = "\N{SUPERSCRIPT LATIN SMALL LETTER N}"
+    #: Whether the left divides the right with nothing left over.
+    DIVIDES = "\N{DIVIDES}"
+    NOT_DIVIDES = "\N{DOES NOT DIVIDE}"
 
 
 class UnaryOp(StrEnum):
@@ -263,6 +266,11 @@ class UnaryOp(StrEnum):
     #: The largest and the smallest of what something holds.
     MAX = "\N{LEFT CEILING}"
     MIN = "\N{LEFT FLOOR}"
+    #: Whether two divides it, which is whether it is even.  It is the operator
+    #: above with two on the left, and is written this way because that is how
+    #: the question is asked.
+    DIVIDES = "\N{DIVIDES}"
+    NOT_DIVIDES = "\N{DOES NOT DIVIDE}"
     #: The four roundings of a floating-point number to a whole one.  The last
     #: of them asks the processor what it is doing just now, so a function that
     #: writes it depends on something outside itself.

@@ -484,6 +484,47 @@ performance mistake; **Rust**, **Go** and **Zig**, which have no operator either
 floating-point cases separately; and **Haskell**, which has three operators -- `^`, `^^` and `**` -- one per combination of
 integer and fractional, which is the most honest arrangement anyone has and the hardest to remember.
 
+#### Dividing without a remainder
+
+**`a ∣ b` asks whether `a` divides `b` with nothing left over**, and **`a ∤ b` whether it does not.  Written before one
+operand it is the same operator with two on the left**, which is the question "is it even".
+
+```
+b ∣ a                          ※ bool: does b divide a exactly
+b ∤ a                          ※ bool: and does it not
+∣n                             ※ bool: is n even -- the same as 2 ∣ n
+∤n                             ※ bool: is n odd
+```
+
+**It relates two numbers and answers a truth value**, which is a comparison's shape -- so it is written where a comparison is
+written, binds as one, and joins two and no more: `a ∣ b ∣ c` would be asking whether `a` divides a truth value.
+
+**Both sides are integers of one type** (4518), the usual rule: a number written without a suffix takes the other side's type.
+A floating-point division leaves nothing over by construction, so there is no question here to ask of one.
+
+**It is total, where dividing is not**, and that is the whole reason it is worth having beside `%`.  `∣` by zero has an answer
+and `÷` by zero has not: **zero divides nothing but zero**, which is the definition and not a rule invented here.  So `0 ∣ 0` is
+true, `0 ∣ 7` is false, and nothing about the answer is a result.
+
+```
+7u8 ∣ 0u8                      ※ true: everything divides zero
+0u8 ∣ 0u8                      ※ true
+0u8 ∣ 7u8                      ※ false
+```
+
+**Where the divisor is written down there is no test for zero at all** -- which is always so for the form written before one
+operand, two being written into it.  Where it is not, the test is one comparison and a branch.
+
+**It is listable**, so written with an array on either side it answers a truth value per element.
+
+Written before an operand of a type that has no two -- a `u1` -- it is refused (4519): it is the operator with two on the left,
+and there is no two to write.  What was meant there is a question about that one bit, and comparing it with nothing says it.
+
+Compare: **mathematics**, whose `∣` and `∤` these are, including that zero divides only zero; **C**, **Rust**, **Go** and
+everything else in that line, which write `b % a == 0` and get a division by zero where this gets an answer; **Ada**, whose
+`rem` and `mod` are the two remainders and which has no divisibility test; **Python**, the same with `%`; and **APL**, whose `|`
+is the remainder and which spells the test `0 = a | b`, which is this operator with the comparison left to the program.
+
 #### Moving bits
 
 Four operators move the bits of a number sideways.  They bind where multiplication does.

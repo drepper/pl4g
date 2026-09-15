@@ -46,6 +46,7 @@
 ["#" "⍴" "⧺" "++" "⌈" "⌊"] @operator
 ["↓" "↑" "↕" "⇕" "ⁿ"] @operator
 ["⌜" "⌝"] @punctuation.bracket
+["∣" "∤"] @operator
 (exponent_literal) @number
 ["and" "or"] @keyword.operator
 ["←"] @operator
