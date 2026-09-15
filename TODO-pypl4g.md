@@ -346,6 +346,11 @@ To Do List for the pypl4g compiler
     an instruction.  Adding the wrapping five alone would have made a program fold inside a wrap and not outside it, which is
     why neither is there.
 
+[ ] copy a string's bytes a register at a time rather than one at a time.  Joining two arrays is one instruction per register's
+    worth, because the lengths are written down and the run-at-a-time machinery can cut them up; a string's are not, so the join
+    is a byte loop.  What it wants is a run whose length is a value rather than a number, which is the same thing a loop over a
+    dynamically sized array would want.
+
 [ ] report a tuple holding an array.  `〈⟦1u8, 2u8⟧〉` reaches the code generator and fails there (9901, "making a 〈u8⟦2⟧〉, which
     is one value and not several"), so what a reader is told is an internal error about a program the front end accepted.  Either
     an array is a thing a tuple may hold, in which case `parts_of` has to say what its parts are, or it is not and the checker

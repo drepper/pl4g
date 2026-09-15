@@ -66,7 +66,9 @@ GROUPS: tuple[Group, ...] = (
            "semicolon-separates-statements": "two statements on one line",
            "digit-separators": "literals in every base",
            "boolean-values": "truth values in both sections",
-           "character-values": "code points written eight ways, and both conversions"}),
+           "character-values": "code points written eight ways, and both conversions",
+           "string-walk": "a walk over every length a UTF-8 sequence has",
+           "string-join": "four joins, and the arena they come out of"}),
     Group("Variables and memory",
           "Reading and writing variables, including one of every width.  These "
           "move when the loads and stores of a backend do.",

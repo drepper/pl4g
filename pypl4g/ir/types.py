@@ -372,6 +372,34 @@ class VecType(Type):
 
 
 @dataclass(frozen=True, slots=True)
+class StrType(Type):
+    """Text, encoded as UTF-8 and nothing else.
+
+    A value of one is where the bytes are and how many there are -- two words,
+    the same shape an array whose type does not say its length has.  It owns
+    nothing: the bytes are a literal's, in the image, or an arena's, put there
+    by something that made a string out of two others.
+
+    **Every value of it is well-formed UTF-8**, which is an invariant and not a
+    hope.  The only two ways to make one are a literal, whose bytes are what the
+    source held and which the compiler encoded itself, and joining two of them,
+    which puts well-formed bytes after well-formed bytes.  So nothing that reads
+    one has to check it, and a walk over the characters is a decoder and not a
+    validator -- which is where nearly all of the cost of walking text usually
+    goes.
+
+    There is no index.  The *n*-th byte of UTF-8 is not the *n*-th character and
+    a type that let one be asked for would be a type whose obvious use is wrong;
+    `foreach` is how the characters are reached, and it reaches them in order
+    because that is the order they are encoded in.
+    """
+
+    def render(self) -> str:
+        """The name of this type in the textual form of the IR."""
+        return "str"
+
+
+@dataclass(frozen=True, slots=True)
 class SetType(Type):
     """A set: the keys it holds, and nothing said about them beyond membership."""
 
@@ -490,6 +518,7 @@ F32: Final[FloatType] = FloatType(32)
 F64: Final[FloatType] = FloatType(64)
 
 CHAR: Final[CharType] = CharType()
+STR: Final[StrType] = StrType()
 
 #: The last code point there is.  Unicode says so and will not say otherwise:
 #: the range was fixed at this when UTF-16 was given its surrogate pairs, which
@@ -512,7 +541,7 @@ BUILTIN_TYPES: Final[dict[str, Type]] = {
     "i8": I8, "i16": I16, "i32": I32, "i64": I64,
     "u8": U8, "u16": U16, "u32": U32, "u64": U64,
     "f32": F32, "f64": F64,
-    "bool": BOOL, "char": CHAR, "void": VOID,
+    "bool": BOOL, "char": CHAR, "str": STR, "void": VOID,
     ARENA_NAME: ARENA,
 }
 
@@ -665,4 +694,9 @@ def parts_of(ty: Type) -> tuple[Type, ...]:
         return ty.members
     if isinstance(ty, ArrayType) and not ty.fixed:
         return (_pointer_to(ty.element), *(U64 for _ in ty.shape))
+    if isinstance(ty, StrType):
+        # Where the bytes are and how many there are, which is what an array
+        # whose type does not say its length is as well -- the difference
+        # between the two is what may be done with them, not what they are.
+        return (_pointer_to(U8), U64)
     return (ty,)

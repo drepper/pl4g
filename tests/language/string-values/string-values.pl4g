@@ -1,0 +1,46 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ A string written down is where its bytes are and how many there are, and the
+※ bytes are what the source held, encoded by the compiler.  That is what makes
+※ "always UTF-8" an invariant rather than a hope: the only two ways to make one
+※ are a literal and a join, and neither can produce anything else.
+※
+※ Two literals that say the same thing are the same bytes in the image, which
+※ costs nothing to arrange and is what a program that writes one string in
+※ several places would expect.  A string of nothing is a string: it has no
+※ characters and a walk over it runs no turns.
+
+@[startup]
+fn main() → u8:
+    let empty: str = ""
+    let one: str = "x"
+    let same: str = "x"
+    ※ the escapes a character literal takes, a string takes
+    let escaped: str = "a\tb\u00a3"
+    if total(empty) ≠ 0u32 ∨ counted(empty) ≠ 0u8:
+        1u8
+    elif total(one) ≠ 120u32 ∨ total(same) ≠ 120u32:
+        2u8
+    elif counted(escaped) ≠ 4u8:
+        3u8
+    elif total(escaped) ≠ 367u32:
+        4u8
+    else:
+        0u8
+
+※ The two a test needs and the language does not have yet: what a string's
+※ characters add up to, and how many there are.  Both are a walk, which is the
+※ one thing a string offers.
+fn total(s: str) → u32:
+    let found: mut u32 = 0u32
+    foreach c = s:
+        found ← found + ⎕ord(c)
+    found
+
+fn counted(s: str) → u8:
+    let found: mut u8 = 0u8
+    foreach c = s:
+        ※ every character counts, which is what makes this a count
+        if ⎕ord(c) < 0x110000u32:
+            found ← found + 1u8
+    found

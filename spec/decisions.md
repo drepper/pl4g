@@ -3578,6 +3578,42 @@ stays open, and the grapheme question belongs to it.
 
 ---
 
+## 2026-09-16T04:00+02:00 — language
+
+**`str`, which is UTF-8 and is walked rather than indexed**
+
+Decided on the user's direction: a string type, always UTF-8, written between quotation marks, walked by `foreach` a character at
+a time, and joined with `⧺`.
+
+**The decision inside it is that there is no index.**  The *n*-th byte of UTF-8 is not the *n*-th character, so a type that let
+`s[n]` be written would be a type whose obvious use is wrong -- and every language that offers one has had to pick which of the
+two it means and then live with programs that meant the other.  Python pays for the index with either four bytes a character or
+three representations of a string; Go offers an index and it is a byte, so `s[0]` of a string beginning with a non-ASCII
+character is half a character; Rust refuses the index outright and is the model here.  A walk is what a string offers, and it
+reaches the characters in order because that is the order they are encoded in.
+
+**Well-formedness is an invariant and not a check.**  There are two ways to make a string -- a literal, whose bytes the compiler
+encoded, and a join, which puts well-formed bytes after well-formed bytes -- and nothing else makes one.  So the decoder in the
+walk is a decoder and not a validator, which is where nearly all of the cost of walking text usually goes: Go's `range` over a
+string substitutes a replacement character where the bytes are not UTF-8 and therefore checks on every turn, because a Go string
+carries no such guarantee.  The guarantee is what buys the check away, and it is affordable here because the language has no way
+to build a string out of bytes.
+
+**A join allocates, so a function that joins is impure.**  How long a join is, is not known while compiling, so its bytes cannot
+go where a join of two arrays puts them; they come from the arena the compiler provides, which outlives the call.  That is the
+same rule a collection already follows, and stating it the same way is worth more than an exception would be.
+
+**What a string is not, yet**, and each is in the to-do list rather than decided here: there is no comparison of two strings, no
+length, no slice, and no `mut str`.  The first three are refused honestly -- `"a" = "a"` reports that `=` does not compare
+strings -- rather than given a meaning that would have to be taken back.
+
+Compare, beyond those above: **C**, where a string is a pointer and a convention and every length is a linear scan; **Swift**,
+whose `String` is a sequence of grapheme clusters, which is what a reader means by "character" and which `char` already left open
+as the larger question; and **Java**, whose strings are UTF-16 and whose `charAt` therefore has the same defect Go's byte index
+has, one layer up.
+
+---
+
 ---
 
 Open questions

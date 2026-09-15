@@ -988,6 +988,57 @@ code point, which is the other place the line could have been drawn and is a muc
 
 What is not decided here is what a *string* is, which is the question a grapheme cluster belongs to.
 
+#### Strings
+
+**`str` is text, and its bytes are always well-formed UTF-8.**  A literal of one is written between quotation marks, with the
+escapes a character literal takes.
+
+```
+let greeting: str = "hi"
+let wide: str = "a\tb\u00a3ω"
+```
+
+**A value of one is where the bytes are and how many there are** -- two words, the shape an array whose type does not say its
+length has.  It owns nothing: the bytes are a literal's, in the image, or an arena's, put there by a join.
+
+**That the bytes are well-formed is an invariant and not a hope.**  There are two ways to make a string: a literal, whose bytes
+the compiler encoded itself from what the source held, and a join of two, which puts well-formed bytes after well-formed bytes.
+Nothing else makes one, so nothing that reads one has to check it -- which is where nearly all of the cost of walking text
+usually goes.
+
+**`foreach` over a string gives its characters, as `char` values, in order.**
+
+```
+foreach c: char = greeting:
+    ⎕ord(c)                      ※ 104, then 105
+```
+
+A turn is not a byte.  The bytes are UTF-8 and the characters are what they encode, so what the loop carries is where in the
+bytes it is and a turn moves it on by however many that character took.
+
+**There is no index and no length.**  The *n*-th byte of UTF-8 is not the *n*-th character, so an index whose obvious reading is
+wrong is worse than no index; a walk is what a string offers, and it reaches the characters in order because that is the order
+they are encoded in.
+
+**`⧺` joins two strings**, as it joins two arrays.
+
+```
+let both: str = greeting ⧺ " there"
+```
+
+What is different is where the answer goes.  How long a join is, is not known while compiling, so room for it is taken from the
+arena the compiler provides -- which is a change that outlives the call, so **a function that joins strings says `@[impure]`**,
+the same as one that puts something in a collection.  Joining a string to an array, or an array to a string, is refused (4489):
+a string is not an array of bytes that happens to be spelled differently.
+
+Compare: **Rust**, whose `&str` is this -- bytes, guaranteed UTF-8, no index by character, iterated with `.chars()` -- and whose
+`String` is the owning one this does not have yet; **Go**, whose `string` is bytes with no encoding guarantee at all, so `range`
+over one decodes and substitutes a replacement character where the bytes are not UTF-8, which is a check on every turn that this
+does not need; **Python**, whose strings are sequences of code points with an index, which costs either four bytes a character or
+three representations; **C**, where a string is a pointer and a convention; and **Swift**, whose `String` is a sequence of
+grapheme clusters, which is what a reader means by "character" and is a much larger thing -- and is the question `char` already
+left open.
+
 #### Product and sum types
 
 A program defines a type by writing

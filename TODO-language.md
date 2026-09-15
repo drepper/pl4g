@@ -319,10 +319,24 @@ To Do List for the PL4g language
     runs it is a loop, and the language has no way to write one, so the loop would have to be emitted -- or the operator
     restricted to constant exponents, which is what every language that has an integer `**` other than Python effectively does.
 
-[ ] decide what a string is, now that there is a character.  `char` is one code point; a string is a sequence of something,
-    and which something is the question -- code points, as Python has it, or grapheme clusters, as Swift does.  The second is
-    what a reader means by "character" and is not a fixed-width thing, so it is a decision about the type and not about the
-    encoding.  `mut str` is already declared and refused by the code generator, so this is what unblocks it.
+[x] decide what a string is, now that there is a character.  Done: `str` is where its bytes are and how many there are, always
+    well-formed UTF-8, walked by `foreach` a character at a time and joined with `⧺`.  There is no index, the n-th byte of
+    UTF-8 not being the n-th character; a grapheme cluster is the larger question and stays open.
+
+[ ] compare two strings.  `"a" = "a"` is refused today, which is honest and not enough: what two strings being equal means is
+    that their bytes are equal, UTF-8 being a one-to-one encoding of a sequence of code points -- so it is a length test and a
+    comparison of the bytes, and the run-at-a-time machinery is what would do the second.  Ordering is a different question and
+    a much larger one: which order is a collation, and there is more than one.
+
+[ ] say how long a string is.  Two answers are wanted and they are different numbers: how many bytes, which is in the value
+    already, and how many characters, which is a walk.  Naming them both is the decision; naming one `length` is the mistake
+    every language that has made it has had to live with.
+
+[ ] take a piece of a string.  A slice of one has to begin and end where a character does, so it is not the same operation an
+    array's slice is -- either the ends are found by walking, or the type says they were.
+
+[ ] `mut str`, the owning, growable one.  `str` owns nothing and a join makes a new one; what is missing is the one a program
+    builds up in place, which wants the arena in its type the way a collection does.
 
 [ ] decide whether `char` may be a key of a set or a dictionary, and whether it may be the tag of an enumeration.  Both are
     questions about which types are alike enough to be hashed and compared, and a code point is a number as far as either is

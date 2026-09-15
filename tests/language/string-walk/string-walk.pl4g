@@ -1,0 +1,39 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ A `foreach` over a string gives its characters, in order, as `char` values.
+※ A turn is not a byte: the bytes are UTF-8 and the characters are what they
+※ encode, so what the loop carries is where in the bytes it is and a turn moves
+※ it on by however many that character took.
+※
+※ The four here are one, two, three and four bytes long, which is every length
+※ UTF-8 has -- and each is checked for the code point it should be rather than
+※ only counted, since a decoder that lost the bits would still give the right
+※ number of turns.
+
+@[startup]
+fn main() → u8:
+    let text: str = "a£€𐀀"
+    let at: mut u8 = 0u8
+    let wrong: mut u8 = 0u8
+    foreach c = text:
+        if at = 0u8:
+            if ⎕ord(c) ≠ 97u32:
+                wrong ← wrong + 1u8
+        elif at = 1u8:
+            if ⎕ord(c) ≠ 163u32:
+                wrong ← wrong + 1u8
+        elif at = 2u8:
+            if ⎕ord(c) ≠ 8364u32:
+                wrong ← wrong + 1u8
+        elif at = 3u8:
+            if ⎕ord(c) ≠ 65536u32:
+                wrong ← wrong + 1u8
+        else:
+            wrong ← wrong + 1u8
+        at ← at + 1u8
+    if at ≠ 4u8:
+        1u8
+    elif wrong ≠ 0u8:
+        2u8
+    else:
+        0u8

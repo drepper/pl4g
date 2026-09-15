@@ -16,7 +16,7 @@ from .types import (ArrayType, BoolType, CharType, DictType, EnumType,
                     FloatType,
                     IntType, MemType,
                     ProductType, PtrType, SetType, TupleType,
-                    ResultType, SumType, Type, VecType, VoidType)
+                    ResultType, StrType, SumType, Type, VecType, VoidType)
 
 
 class NoLayoutError(Exception):
@@ -88,6 +88,10 @@ def size_of(ty: Type, layout: DataLayout) -> int:
             # Where the elements are and one count per dimension, which is what
             # an array whose type does not say its shape has to carry with it.
             return (1 + ty.rank) * layout.pointer_size
+        case StrType():
+            # Where the bytes are and how many there are, which is the same
+            # shape and for the same reason.
+            return 2 * layout.pointer_size
         case SetType() | DictType():
             # A handle, which is where the table is and nothing else: how many
             # entries it has and how much room it has for them are in the table
@@ -152,7 +156,7 @@ def align_of(ty: Type, layout: DataLayout) -> int:
             if layout.system or size_of(ty, layout) < WIDE_ENOUGH:
                 return plain
             return max(plain, WIDE_ENOUGH)
-        case ArrayType():
+        case ArrayType() | StrType():
             return layout.pointer_size
         case SetType() | DictType():
             return layout.pointer_size

@@ -35,8 +35,9 @@ from ..ir.types import (ARENA, ArrayType, BOOL, BoolType, BUILTIN_TYPES,
                         U32, U64,
                         F64,
                         FloatType, IntType, MEM, ProductType, ResultType,
-                        SetType, SumType, TupleType, Type, VecType, VOID,
-                        CHAR, MAX_CODE_POINT)
+                        SetType, STR, SumType, TupleType, Type, VecType, VOID,
+                        CHAR, MAX_CODE_POINT, U8, parts_of)
+from . import strings
 from .modules import (ImportCycle, LoadedModule, ModuleNotFound, ModuleRegistry,
                       base_name)
 from ..ir.value import (CharConst, Const, EnumConst, FloatConst, IntConst,
@@ -443,6 +444,11 @@ TOLERANCE_SYMBOL: Final[str] = "__pl4g_tolerance"
 #: And the one the arena the compiler provides carries.
 HEAP_SYMBOL: Final[str] = "__pl4g_heap"
 
+#: What the bytes of a string written down are filed under, numbered from zero
+#: as they are met.  A program cannot name one: what it wrote is the string, and
+#: where the bytes went is the compiler's business.
+TEXT_SYMBOL: Final[str] = "__pl4g_text."
+
 
 def _tolerance(module: Module) -> GlobalVar:
     """The variable the approximate comparisons read, made once per module.
@@ -620,6 +626,9 @@ class Checker:
         #: lexical: it says where the operator was written and nothing about the
         #: body of anything called from there.
         self._wrapping: bool = False
+        #: The bytes of each distinct string written down, so that two literals
+        #: saying the same thing are the one run of bytes in the image.
+        self._texts: dict[str, GlobalVar] = {}
         #: Whether the function being lowered said it may change things that
         #: outlive the call.  Where it did not, the places that would make such
         #: a change report one instead.
@@ -961,6 +970,8 @@ class Checker:
                 return BOOL
             case ast.CharLit():
                 return CHAR
+            case ast.StringLit():
+                return STR
             case ast.FloatLit():
                 return BUILTIN_TYPES.get(expr.type_name) if expr.type_name else None
             case ast.NameRef():
@@ -3681,6 +3692,8 @@ class Checker:
         found: _Iteration | None
         if isinstance(ty, ArrayType):
             found = self._over_an_array(builder, value, ty, stmt.span)
+        elif ty is STR:
+            found = self._over_a_string(builder, value, stmt.span)
         elif isinstance(ty, (SetType, DictType)):
             found = self._over_a_table(builder, value, ty, stmt.span)
         else:
@@ -3739,6 +3752,40 @@ class Checker:
             take=take,
             step=lambda b, s: (b.binary(BinOp.WRAP_ADD, s[0],
                                         b.int_const(U64, 1), span),))
+
+    def _over_a_string(self, builder: IRBuilder, value: Value,
+                       span: Span) -> _Iteration:
+        """Walk the characters of a string, which is what walking one means.
+
+        The bytes are UTF-8 and the characters are what they encode, so a turn
+        is not a byte: what the loop carries is where in the bytes it is, and a
+        turn moves it on by however many that character took.  Walking the bytes
+        instead is a different loop over a different thing, and the type does not
+        offer it -- the *n*-th byte of UTF-8 is not the *n*-th character, and a
+        walk whose obvious reading is wrong is worse than no walk.
+
+        Taking the character and moving past it are one call and not two.  Both
+        want the leading byte and what it says, so they are asked together and
+        the answer is kept for whichever of them is asked second.
+        """
+        bytes_ = builder.extract(value, 0, parts_of(STR)[0], span)
+        length = builder.extract(value, 1, U64, span)
+        taker = strings.next_function(self._module)
+        taken = strings.taken_type(self._module)
+        held: dict[int, Value] = {}
+
+        def reach(b: IRBuilder, s: tuple[Value, ...]) -> Value:
+            found = held.get(id(s[0]))
+            if found is None:
+                found = b.call(taker, (bytes_, s[0]), taken, span)
+                held[id(s[0])] = found
+            return found
+
+        return _Iteration(
+            element=CHAR, start=(builder.int_const(U64, 0),),
+            more=lambda b, s: b.compare(CmpPred.ULT, s[0], length, span),
+            take=lambda b, s: b.extract(reach(b, s), 0, CHAR, span),
+            step=lambda b, s: (b.extract(reach(b, s), 1, U64, span),))
 
     def _over_a_table(self, builder: IRBuilder, value: Value,
                       ty: SetType | DictType, span: Span) -> _Iteration:
@@ -4640,9 +4687,10 @@ class Checker:
             case ast.Member():
                 return self._lower_member(builder, expr, expected)
             case ast.StringLit():
-                self._diags.emit(D.LANG_TYPE_RETURN_MISMATCH, expr.span, found="string",
-                                 expected=expected.render() if expected is not None else "void")
-                return UndefConst(ERROR)
+                if not self._accepts(expected, STR):
+                    self._report_mismatch(expr.span, STR, expected)
+                    return UndefConst(ERROR)
+                return self._written_text(builder, expr.value, expr.span)
             case _:
                 self._diags.internal("unknown expression kind in lowering")
                 return UndefConst(ERROR)
@@ -5100,6 +5148,8 @@ class Checker:
         """
         left = self._lower_expr(builder, expr.left, None)
         right = self._lower_expr(builder, expr.right, None)
+        if self._value_type_of(left) is STR or self._value_type_of(right) is STR:
+            return self._joined_text(builder, expr, left, right, expected)
         joined = self._joined_type(expr, left, right)
         if joined is None:
             return UndefConst(ERROR)
@@ -5113,6 +5163,52 @@ class Checker:
         found = builder.cast(CastKind.BITCAST, place, joined, expr.span)
         if not self._accepts(expected, joined):
             self._report_mismatch(expr.span, joined, expected)
+            return UndefConst(ERROR)
+        return found
+
+    def _joined_text(self, builder: IRBuilder, expr: ast.Binary, left: Value,
+                     right: Value, expected: Type | None) -> Value:
+        """Lower `A \N{DOUBLE PLUS} B` where the two are strings.
+
+        The answer is as long as the two together and that length is not known
+        while compiling, so the bytes cannot go where a join of two arrays puts
+        them -- room for them is taken from the arena the compiler provides,
+        which is where everything that outlives an expression and was not
+        written down already comes from.
+
+        Which is why this is a change that outlives the call and a pure function
+        may not make one.  A program that joins strings says `@[impure]`, the
+        same as one that puts something in a collection.
+        """
+        for side, value in ((expr.left, left), (expr.right, right)):
+            found = self._value_type_of(value)
+            if found is not STR and found is not ERROR:
+                self._diags.emit(D.LANG_CONCAT_NEEDS_AN_ARRAY, side.span,
+                                 found=found.render())
+                return UndefConst(ERROR)
+        if self._value_type_of(left) is ERROR \
+                or self._value_type_of(right) is ERROR:
+            return UndefConst(ERROR)
+        self._an_effect(D.LANG_PURE_CALLS_IMPURE, expr.span,
+                        name=strings.JOIN_SYMBOL)
+        pointer = parts_of(STR)[0]
+        first = builder.extract(left, 0, pointer, expr.span)
+        first_len = builder.extract(left, 1, U64, expr.span)
+        second = builder.extract(right, 0, pointer, expr.span)
+        second_len = builder.extract(right, 1, U64, expr.span)
+        heap = self._provided(HEAP_NAME)
+        assert isinstance(heap, GlobalVar)
+        bytes_ = builder.call(
+            strings.join_function(self._module),
+            (builder.address(heap, expr.span), first, first_len, second,
+             second_len),
+            pointer, expr.span)
+        found = builder.make_tuple(
+            (bytes_, builder.binary(BinOp.WRAP_ADD, first_len, second_len,
+                                    expr.span)),
+            STR, expr.span)
+        if not self._accepts(expected, STR):
+            self._report_mismatch(expr.span, STR, expected)
             return UndefConst(ERROR)
         return found
 
@@ -5572,6 +5668,37 @@ class Checker:
                                 builder.int_const(U32, MAX_CODE_POINT), expr.span),
                 "a number that is not a code point", expr.span)
         return builder.cast(CastKind.BITCAST, given, answer, expr.span)
+
+    def _written_text(self, builder: IRBuilder, text: str, span: Span) -> Value:
+        """A string written down: where its bytes are, and how many there are.
+
+        The bytes go in the image, once per distinct text -- two literals that
+        say the same thing are the same bytes, which costs nothing to arrange
+        and is what a program that writes one string in several places would
+        expect.  They are read-only in the sense that nothing can reach them to
+        write: a `str` has no index and no way to take a place out of one.
+
+        The encoding is done here, by the compiler, which is what makes the
+        invariant that a `str` is well-formed UTF-8 true by construction rather
+        than by inspection.
+        """
+        found = self._texts.get(text)
+        if found is None:
+            data = text.encode("utf-8")
+            held = self._module.types.array_type(U8, (len(data),))
+            found = self._module.add_global(GlobalVar(
+                name="".join((TEXT_SYMBOL, str(len(self._texts)))),
+                value_type=held,
+                ptr_type=self._module.types.ptr_type(held, mutable=True),
+                initializer=self._module.array_const(
+                    held, [self._module.int_const(U8, byte) for byte in data]),
+                linkage=Linkage.INTERNAL))
+            self._texts[text] = found
+        bytes_ = builder.cast(
+            CastKind.BITCAST, builder.address(found, span),
+            self._module.types.ptr_type(U8, mutable=True), span)
+        return builder.make_tuple(
+            (bytes_, builder.int_const(U64, len(text.encode("utf-8")))), STR, span)
 
     def _code_point(self, builder: IRBuilder, value: int, span: Span) -> Value:
         """The code point *value*, or a report where there is no such code point.

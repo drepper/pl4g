@@ -375,6 +375,25 @@ give -- `pmullw` and `pmulld` on one, `mul` at three arrangements on the other.
 Which lane widths a machine has an operation at is stated as a set and not as a width to stay under, because of that last one:
 x86-64 multiplies halfwords at every level and words from the second on and bytes not at all, which is not a range.
 
+**A string is two words and two generated functions.**  The value is where the bytes are and how many there are, which
+`parts_of` answers exactly as it answers for an array whose type does not say its length -- so a string travels in two registers,
+is passed and answered with in two, and needed nothing of the calling convention's own.
+
+The bytes of a literal go in the image as an ordinary array of bytes with a name of the compiler's, one per distinct text: two
+literals that say the same thing are the one run of bytes, which costs a dictionary lookup while compiling and nothing at run
+time.  The encoding is done by the compiler, which is what makes "well-formed UTF-8" true by construction.
+
+The two functions are generated in the representation rather than written as assembly per target, for the reason the table
+runtime gives -- both have loops, several live values and arithmetic that wants a register allocator.  **Taking one character**
+reads the leading byte, works out from it how many bytes the sequence has and which of its own bits belong to the code point, and
+folds in six bits per continuation byte; it answers the code point *and* where the next one begins, because a walk wants both and
+reading the leading byte twice would be the same work done again.  It checks nothing, the bytes being well-formed by
+construction, and it is pure: it reads and changes nothing.  **Joining two** takes room for the two lengths together from the
+arena and copies each side in, which is a change that outlives the call and is therefore impure.
+
+A walk calls the first of them once per turn and uses the answer twice -- the character in the body, the place at the branch
+backwards.  That is what the loop's `take` and `step` are, and they share one call rather than making two.
+
 **A code point is held the way an enumeration's value is held, and is described the same way.**  `char` carries a *holder* --
 the integer type its values are stored and read as, which is `u32` -- and everything that has to know how wide one is, whether it
 is read back with its sign or with zeroes, and how much room it takes asks the holder rather than knowing about code points.

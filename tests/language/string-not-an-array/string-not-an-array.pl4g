@@ -1,0 +1,13 @@
+※ pl4g-test: compile=error diag=4489
+
+※ `⧺` joins two strings or two arrays and not one of each.  A string is not an
+※ array of bytes that happens to be spelled differently: its bytes are UTF-8
+※ and what it holds is characters, which is why it has no index and why this is
+※ refused rather than given a meaning.
+
+let v: u8⟦2⟧ = ⟦1u8, 2u8⟧
+
+@[startup, impure]
+fn main() → u8:
+    let both: str = "ab" ⧺ v
+    0u8
