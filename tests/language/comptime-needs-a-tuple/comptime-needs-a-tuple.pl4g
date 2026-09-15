@@ -1,0 +1,13 @@
+※ pl4g-test: compile=error diag=4503
+
+※ A `comptime foreach` is written out, one body per turn, which is what lets
+※ each turn's value be of a different type.  A tuple is the only thing whose
+※ values are of types written one by one; everything else holds values of one
+※ type, and a loop over one of those is an ordinary loop.
+
+@[startup]
+fn main() → u8:
+    let v: u8⟦3⟧ = ⟦1u8, 2u8, 3u8⟧
+    comptime foreach x := v:
+        0u8
+    0u8

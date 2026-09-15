@@ -835,9 +835,16 @@ class Parser:
         if self._check(TokKind.KW_MATCH):
             matched = self._parse_match()
             return ast.ExprStmt(span=matched.span, value=matched)
-        if self._check(TokKind.KW_IF):
+        if self._check(TokKind.KW_IF) or self._begins_an_arm(TokKind.KW_IF):
             asked = self._parse_if()
             return ast.ExprStmt(span=asked.span, value=asked)
+        if self._check(TokKind.KW_COMPTIME) \
+                and self._peek().kind is TokKind.KW_FOREACH:
+            start = self._advance().span
+            self._advance()
+            walked = self._parse_iteration(start, "foreach", self._parse_label(),
+                                           comptime=True)
+            return ast.ExprStmt(span=walked.span, value=walked)
         if self._check(TokKind.KW_WHILE):
             looped = self._parse_while()
             return ast.ExprStmt(span=looped.span, value=looped)
@@ -968,8 +975,18 @@ class Parser:
         return (self._peek().kind is TokKind.COLON
                 and self._peek(2).kind is not TokKind.NEWLINE)
 
+    def _parse_comptime(self) -> ast.Expr:
+        """Parse what `comptime` stands before where a value is wanted."""
+        if self._peek().kind is TokKind.KW_IF:
+            return self._parse_if()
+        start = self._advance().span
+        self._expect(TokKind.KW_FOREACH)
+        return self._parse_iteration(start, "foreach", self._parse_label(),
+                                     comptime=True)
+
     def _parse_iteration(self, start: Span, keyword: str,
-                         label: ast.Label | None = None) -> ast.ForEach:
+                         label: ast.Label | None = None,
+                         comptime: bool = False) -> ast.ForEach:
         """Parse ``NAMES ':' [TYPE] '=' EXPR BODY``, which is `let`'s shape.
 
         The colon is always there and the type may be left out, exactly as in a
@@ -1000,35 +1017,54 @@ class Parser:
                            name=name_token.text,
                            name_span=name_token.span, type=declared,
                            iterable=iterable, body=body, more=tuple(more),
-                           keyword=keyword, label=label, alternative=otherwise)
+                           keyword=keyword, label=label, alternative=otherwise,
+                           comptime=comptime)
 
     def _parse_if(self) -> ast.If:
-        """Parse ``if COND BODY`` with its `elif`s and its `else`.
+        """Parse ``[comptime] if COND BODY`` with its `elif`s and its `else`.
 
         The condition stands on its own: there are no parentheses around it,
         because nothing needs them -- what ends it is the body, which begins
         with a colon or a brace, and neither can be part of an expression.
+
+        `comptime` is written before the keyword of each arm it applies to, and
+        not once for the whole `if`: which arms are settled while compiling is a
+        property of each condition rather than of the chain, and a chain that
+        mixes the two is a program asking one question of the compiler and
+        another of itself.
         """
-        start = self._expect(TokKind.KW_IF).span
-        arms: list[ast.IfArm] = [self._parse_if_arm()]
-        while self._check(TokKind.KW_ELIF):
-            self._advance()
-            arms.append(self._parse_if_arm())
+        start = self._current.span
+        arms: list[ast.IfArm] = [self._parse_if_arm(self._takes_comptime(
+            TokKind.KW_IF))]
+        while self._begins_an_arm(TokKind.KW_ELIF):
+            arms.append(self._parse_if_arm(self._takes_comptime(TokKind.KW_ELIF)))
         if self._check(TokKind.KW_ELSE):
             self._advance()
             body = self._parse_body()
             arms.append(ast.IfArm(span=body.span, condition=None, body=body))
-            if self._check(TokKind.KW_ELIF) or self._check(TokKind.KW_ELSE):
+            if self._begins_an_arm(TokKind.KW_ELIF) or self._check(TokKind.KW_ELSE):
                 self._diags.emit(D.LANG_IF_ELSE_IS_LAST, self._current.span)
                 raise _Bail()
         return ast.If(span=start.to(arms[-1].body.span), arms=tuple(arms))
 
-    def _parse_if_arm(self) -> ast.IfArm:
+    def _begins_an_arm(self, keyword: TokKind) -> bool:
+        """Whether an arm beginning with *keyword* stands here, with or without
+        the word that says it is settled while compiling."""
+        return self._check(keyword) or (
+            self._check(TokKind.KW_COMPTIME) and self._peek().kind is keyword)
+
+    def _takes_comptime(self, keyword: TokKind) -> bool:
+        """Read past an arm's keyword, saying whether `comptime` came first."""
+        found = self._accept(TokKind.KW_COMPTIME) is not None
+        self._expect(keyword)
+        return found
+
+    def _parse_if_arm(self, comptime: bool = False) -> ast.IfArm:
         """Parse the condition of one arm and the body it runs."""
         condition = self._parse_expression()
         body = self._parse_body()
         return ast.IfArm(span=condition.span.to(body.span), condition=condition,
-                         body=body)
+                         body=body, comptime=comptime)
 
     def _parse_match(self) -> ast.Match:
         """Parse ``match EXPR`` and the arms that take its alternatives apart.
@@ -1412,6 +1448,8 @@ class Parser:
                 return self._parse_match()
             case TokKind.KW_IF:
                 return self._parse_if()
+            case TokKind.KW_COMPTIME:
+                return self._parse_comptime()
             case TokKind.KW_WHILE:
                 return self._parse_while()
             case TokKind.KW_FOREACH:

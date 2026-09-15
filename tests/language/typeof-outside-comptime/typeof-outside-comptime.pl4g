@@ -1,0 +1,14 @@
+※ pl4g-test: compile=error diag=4505
+
+※ What `⎕typeof` answers is a type, and a type is not a value: there is
+※ nothing for one to be at run time, which is why the representation is
+※ deliberately unspecified.  Where it may stand is the one place the answer is
+※ wanted and never has to exist.
+
+@[startup]
+fn main() → u8:
+    let n: u8 = 5u8
+    if ⎕typeof(n) = u8:
+        1u8
+    else:
+        0u8

@@ -1512,82 +1512,110 @@
       }
     },
     "if_expression": {
-      "type": "SEQ",
-      "members": [
-        {
-          "type": "STRING",
-          "value": "if"
-        },
-        {
-          "type": "FIELD",
-          "name": "condition",
-          "content": {
-            "type": "SYMBOL",
-            "name": "_expression"
-          }
-        },
-        {
-          "type": "FIELD",
-          "name": "then",
-          "content": {
-            "type": "SYMBOL",
-            "name": "_block"
-          }
-        },
-        {
-          "type": "REPEAT",
-          "content": {
-            "type": "SEQ",
+      "type": "PREC_RIGHT",
+      "value": 0,
+      "content": {
+        "type": "SEQ",
+        "members": [
+          {
+            "type": "CHOICE",
             "members": [
               {
                 "type": "STRING",
-                "value": "elif"
+                "value": "comptime"
               },
               {
-                "type": "FIELD",
-                "name": "condition",
-                "content": {
-                  "type": "SYMBOL",
-                  "name": "_expression"
-                }
-              },
-              {
-                "type": "FIELD",
-                "name": "then",
-                "content": {
-                  "type": "SYMBOL",
-                  "name": "_block"
-                }
+                "type": "BLANK"
               }
             ]
-          }
-        },
-        {
-          "type": "CHOICE",
-          "members": [
-            {
+          },
+          {
+            "type": "STRING",
+            "value": "if"
+          },
+          {
+            "type": "FIELD",
+            "name": "condition",
+            "content": {
+              "type": "SYMBOL",
+              "name": "_expression"
+            }
+          },
+          {
+            "type": "FIELD",
+            "name": "then",
+            "content": {
+              "type": "SYMBOL",
+              "name": "_block"
+            }
+          },
+          {
+            "type": "REPEAT",
+            "content": {
               "type": "SEQ",
               "members": [
                 {
+                  "type": "CHOICE",
+                  "members": [
+                    {
+                      "type": "STRING",
+                      "value": "comptime"
+                    },
+                    {
+                      "type": "BLANK"
+                    }
+                  ]
+                },
+                {
                   "type": "STRING",
-                  "value": "else"
+                  "value": "elif"
                 },
                 {
                   "type": "FIELD",
-                  "name": "else",
+                  "name": "condition",
+                  "content": {
+                    "type": "SYMBOL",
+                    "name": "_expression"
+                  }
+                },
+                {
+                  "type": "FIELD",
+                  "name": "then",
                   "content": {
                     "type": "SYMBOL",
                     "name": "_block"
                   }
                 }
               ]
-            },
-            {
-              "type": "BLANK"
             }
-          ]
-        }
-      ]
+          },
+          {
+            "type": "CHOICE",
+            "members": [
+              {
+                "type": "SEQ",
+                "members": [
+                  {
+                    "type": "STRING",
+                    "value": "else"
+                  },
+                  {
+                    "type": "FIELD",
+                    "name": "else",
+                    "content": {
+                      "type": "SYMBOL",
+                      "name": "_block"
+                    }
+                  }
+                ]
+              },
+              {
+                "type": "BLANK"
+              }
+            ]
+          }
+        ]
+      }
     },
     "if_statement": {
       "type": "PREC",
@@ -1693,6 +1721,18 @@
             {
               "type": "SEQ",
               "members": [
+                {
+                  "type": "CHOICE",
+                  "members": [
+                    {
+                      "type": "STRING",
+                      "value": "comptime"
+                    },
+                    {
+                      "type": "BLANK"
+                    }
+                  ]
+                },
                 {
                   "type": "STRING",
                   "value": "foreach"

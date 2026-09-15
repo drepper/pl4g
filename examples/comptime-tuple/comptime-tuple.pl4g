@@ -1,0 +1,47 @@
+※※ Walking a tuple at compile time, and choosing by type.
+※※
+※※ A tuple's members are of whatever types they were written with, so a loop
+※※ over one cannot be one body run again: the name would have to be of one type
+※※ and there is no one type.  `comptime foreach` writes the body out instead --
+※※ once per member, each with the name standing for that member and of that
+※※ member's type.
+※※
+※※ `comptime if` then asks which type this turn's name is of.  `⎕typeof`
+※※ answers a type, and a type is not a value: there is nothing for one to be at
+※※ run time, which is why it may stand only in a question the compiler settles.
+※※ What comes out of the whole of this is five additions in a row -- no loop, no
+※※ counter, and no test of any kind.
+※※
+※※ The program adds each member to a different running total according to its
+※※ type and checks the three totals afterwards.  It exits with 0 where they are
+※※ what they should be, and with the number of the check that failed otherwise.
+
+@[startup]
+fn main() → u8:
+    ※ five members, of three different types
+    let values: 〈u8, u16, u32, u8, u16〉 = 〈1u8, 2u16, 3u32, 4u8, 5u16〉
+
+    ※ one total per type, all of them outside the loop
+    let bytes: mut u8 = 0u8
+    let halves: mut u16 = 0u16
+    let words: mut u32 = 0u32
+
+    comptime foreach v := values:
+        comptime if ⎕typeof(v) = u8:
+            bytes ← bytes + v
+        comptime elif ⎕typeof(v) = u16:
+            halves ← halves + v
+        comptime elif ⎕typeof(v) = u32:
+            words ← words + v
+        else:
+            ※ nothing else can reach here, every member being one of the three
+            words ← words
+
+    if bytes ≠ 5u8:
+        1u8
+    elif halves ≠ 7u16:
+        2u8
+    elif words ≠ 3u32:
+        3u8
+    else:
+        0u8

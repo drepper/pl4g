@@ -15,6 +15,7 @@ from ..diag import ids as D
 from ..diag.engine import DiagEngine, Expectation
 from ..front import ast
 from ..front.token import (BOTTOM_GLYPH, BUILTIN_GLYPH, CHR_NAME,
+                          TYPEOF_NAME,
                           EMPTY_ARENA_NAME, ORD_NAME,
                           WRAP_NAME,
                           HEAP_NAME, TOLERANCE_DEFAULT,
@@ -3120,6 +3121,100 @@ class Checker:
 
     # -- if --------------------------------------------------------------------
 
+    def _settled(self, condition: ast.Expr) -> bool | None:
+        """What a condition written after `comptime` comes to, or nothing where
+        it is not a question the compiler can settle.
+
+        Nothing here is lowered.  That is the whole point: a question the
+        compiler answers leaves nothing behind for the program to ask, so the
+        condition never becomes a value and `\N{APL FUNCTIONAL SYMBOL QUAD}typeof` never has to have a
+        representation.  What may be asked is whether two types are the one
+        type, and those answers joined the way truth values are joined.
+        """
+        match condition:
+            case ast.BoolLit():
+                return condition.value
+            case ast.Unary() if condition.op is ast.UnaryOp.LOGIC_NOT:
+                found = self._settled(condition.operand)
+                return None if found is None else not found
+            case ast.Binary() if condition.op in (ast.BinaryOp.LOGIC_AND,
+                                                  ast.BinaryOp.SHORT_AND):
+                return self._both_settled(condition, all)
+            case ast.Binary() if condition.op in (ast.BinaryOp.LOGIC_OR,
+                                                  ast.BinaryOp.SHORT_OR):
+                return self._both_settled(condition, any)
+            case ast.Binary() if condition.op in (ast.BinaryOp.EQUAL,
+                                                  ast.BinaryOp.NOT_EQUAL):
+                left = self._type_stood_for(condition.left)
+                right = self._type_stood_for(condition.right)
+                if left is None or right is None:
+                    return None
+                alike = left is right
+                return alike if condition.op is ast.BinaryOp.EQUAL else not alike
+            case _:
+                return None
+
+    def _both_settled(self, condition: ast.Binary,
+                      joined: object) -> bool | None:
+        """Both sides of a logical operator, where both are settled."""
+        sides = [self._settled(condition.left), self._settled(condition.right)]
+        if any(side is None for side in sides):
+            return None
+        return bool(joined(sides))  # type: ignore[operator]
+
+    def _type_stood_for(self, expr: ast.Expr) -> Type | None:
+        """The type an operand of a compile-time comparison stands for.
+
+        Two things stand for one: `\N{APL FUNCTIONAL SYMBOL QUAD}typeof` of something, which is that thing's
+        type, and a type's own name.  Neither is lowered -- a type is not a
+        value, and what makes that bearable is that the only place either may
+        stand is a question the compiler answers.
+        """
+        match expr:
+            case ast.Call() if isinstance(expr.callee, ast.NameRef) \
+                    and expr.callee.name == TYPEOF_NAME:
+                if len(expr.args) != 1:
+                    return None
+                asked = expr.args[0]
+                if isinstance(asked, ast.NameRef):
+                    # Asking what a name is of is reading it, as far as a reader
+                    # is concerned: the program mentioned it and the compiler
+                    # used it.  What it did not do is lower it, which is why
+                    # nothing of the value reaches the program.
+                    local = self._find_local(asked.name)
+                    if local is not None:
+                        local.read = True
+                found = self._hint_of(asked)
+                return None if found is ERROR else found
+            case ast.NameRef():
+                return BUILTIN_TYPES.get(expr.name)
+            case _:
+                return None
+
+    def _chosen_arms(self, stmt: ast.If) -> tuple[ast.IfArm, ...] | None:
+        """The arms left once every one the compiler settled has been answered.
+
+        An arm it settled as true is the whole of the `if` -- what follows it
+        cannot be reached -- and one it settled as false is not there at all.
+        Neither leaves a test in the program: that is what `comptime` says, and
+        it is why the arms it removes may be of types that do not agree with the
+        ones that stay.
+        """
+        found: list[ast.IfArm] = []
+        for arm in stmt.arms:
+            if not arm.comptime or arm.condition is None:
+                found.append(arm)
+                continue
+            holds = self._settled(arm.condition)
+            if holds is None:
+                self._diags.emit(D.LANG_COMPTIME_NOT_SETTLED, arm.condition.span)
+                return None
+            if holds:
+                # The arm is taken, so what it does is what the whole `if` does.
+                found.append(replace(arm, condition=None, comptime=False))
+                break
+        return tuple(found)
+
     def _lower_if(self, builder: IRBuilder, stmt: ast.If, func: Function,
                   wanted: Type | None, produces: bool) -> Value:
         """Check and lower an `if`, its `elif`s and its `else`.
@@ -3140,6 +3235,20 @@ class Checker:
         has a way through that runs no arm, and that way would owe a value it
         has nowhere to get.
         """
+        if any(arm.comptime for arm in stmt.arms):
+            arms = self._chosen_arms(stmt)
+            if arms is None:
+                return UndefConst(ERROR)
+            if not arms:
+                # Every arm the compiler settled was false and there was no
+                # `else`: the `if` does nothing, which is a thing to do.
+                return UndefConst(VOID) if not produces else UndefConst(ERROR)
+            if len(arms) == 1 and arms[0].condition is None:
+                found = self._lower_block(builder, arms[0].body, func,
+                                          as_result=produces, wanted=wanted,
+                                          produces=produces)
+                return found if found is not None else UndefConst(VOID)
+            stmt = replace(stmt, arms=arms)
         last = stmt.arms[-1]
         has_else = last.condition is None
         if produces and not has_else:
@@ -3310,6 +3419,8 @@ class Checker:
         """
         if builder.block is None:
             return UndefConst(ERROR)
+        if stmt.comptime:
+            return self._written_out(builder, stmt, func, expected, produces)
         found = self._iteration_over(builder, stmt)
         if found is None:
             # Bound to nothing that means anything, so that a later mention of
@@ -3685,6 +3796,48 @@ class Checker:
 
     # -- what a loop can take its values from ----------------------------------
 
+    def _written_out(self, builder: IRBuilder, stmt: ast.ForEach,
+                     func: Function, expected: Type | None,
+                     produces: bool) -> Value:
+        """Lower `comptime foreach`, which is the body written out once per turn.
+
+        A tuple's members are of whatever types they were written with, so a
+        loop over one cannot be one body run again: the name would have to be of
+        one type and there is no one type.  Written out there is no such
+        problem -- each body is lowered on its own, with the name standing for
+        that member, and what the name is of is what that member is of.
+
+        There is no loop in what comes out.  No counter, no branch backwards, no
+        test: the turns are taken here and what is left is the bodies, one after
+        another.  That is why it is the one loop whose turns may differ, and it
+        is also why it has nothing to hand over -- a `break` needs somewhere to
+        jump to and there is nowhere.
+        """
+        value = self._lower_expr(builder, stmt.iterable, None)
+        ty = self._value_type_of(value)
+        if ty is ERROR:
+            return UndefConst(ERROR)
+        if not isinstance(ty, TupleType):
+            self._diags.emit(D.LANG_COMPTIME_NEEDS_A_TUPLE, stmt.iterable.span,
+                             found=ty.render())
+            return UndefConst(ERROR)
+        if produces or stmt.alternative is not None or stmt.label is not None:
+            self._diags.emit(D.LANG_COMPTIME_NEEDS_A_TUPLE, stmt.span,
+                             found=ty.render())
+            return UndefConst(ERROR)
+        declared = self._resolve_type(stmt.type) if stmt.type is not None else None
+        for at, member in enumerate(ty.members):
+            if declared is not None and declared is not member:
+                self._report_mismatch(stmt.iterable.span, member, declared)
+                return UndefConst(ERROR)
+            self._push_scope()
+            self._bind_local(stmt.name, builder.extract(value, at, member,
+                                                        stmt.span),
+                             stmt.name_span)
+            self._lower_block(builder, stmt.body, func, as_result=False)
+            self._pop_scope()
+        return UndefConst(VOID)
+
     def _iteration_over(self, builder: IRBuilder,
                         stmt: ast.ForEach) -> _Iteration | None:
         """What the loop's expression turns out to be, as a thing to walk.
@@ -3710,6 +3863,10 @@ class Checker:
             found = self._over_a_string(builder, value, stmt.span)
         elif isinstance(ty, (SetType, DictType)):
             found = self._over_a_table(builder, value, ty, stmt.span)
+        elif isinstance(ty, TupleType):
+            self._diags.emit(D.LANG_FOREACH_TUPLE_NEEDS_COMPTIME,
+                             stmt.iterable.span)
+            return None
         else:
             self._diags.emit(D.LANG_LOOP_NOT_AN_ITERATOR, stmt.iterable.span,
                              found=ty.render())
@@ -6160,6 +6317,12 @@ class Checker:
         if isinstance(expr.callee, ast.NameRef) \
                 and expr.callee.name in (ORD_NAME, CHR_NAME):
             return self._lower_code_point(builder, expr, expected)
+        if isinstance(expr.callee, ast.NameRef) \
+                and expr.callee.name == TYPEOF_NAME:
+            # Reaching here means it stood somewhere a value was wanted, since
+            # a condition the compiler settles never lowers what is in it.
+            self._diags.emit(D.LANG_TYPEOF_OUTSIDE_COMPTIME, expr.span)
+            return UndefConst(ERROR)
         func = self._callee(expr.callee)
         if func is None:
             return UndefConst(ERROR)

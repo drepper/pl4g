@@ -487,6 +487,11 @@ class IfArm(Node):
 
     condition: Expr | None
     body: Block
+    #: Whether the condition is settled while compiling rather than while the
+    #: program runs, which is what `comptime` before the keyword says.  Such an
+    #: arm puts no test in the program at all: one of the arms is what the `if`
+    #: turned out to be, and the others are not lowered.
+    comptime: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -601,6 +606,12 @@ class ForEach(Expr):
     label: Label | None = None
     #: What runs where the loop ran out rather than being left by a `break`.
     alternative: Block | None = None
+    #: Whether the turns are taken while compiling rather than while the program
+    #: runs, which is what `comptime` before the keyword says.  Such a loop is
+    #: written out, one body per turn -- which is what lets each turn's value be
+    #: of a different type, a tuple's members being of the types they were
+    #: written with.
+    comptime: bool = False
 
 
 @dataclass(frozen=True, slots=True)

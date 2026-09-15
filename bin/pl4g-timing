@@ -158,6 +158,7 @@ GROUPS: tuple[Group, ...] = (
            "foreach-range-step": "three ranges, one of them counting down",
            "loop-break": "a loop left early, and what it carries handed over",
            "foreach-declares-the-turn": "six loops whose binding says what a turn is",
+           "comptime-tuple-loop": "a tuple walked while compiling, and chosen by type",
            "loop-break-nested": "two loops and all four jumps between them",
            "loop-continue": "two loops each begun again from inside the body",
            "loop-break-value": "a search whose loop comes to what it found",

@@ -4554,6 +4554,73 @@
       "option": null
     },
     {
+      "number": 4502,
+      "name": "LANG_COMPTIME_NOT_SETTLED",
+      "severity": "error",
+      "message": "this is not a question the compiler can settle",
+      "cause": "A condition written after 'comptime' is answered while the program is compiled, so it may only ask what the compiler knows: whether two types are the one type, written with '⎕typeof' and a type's name, and those joined with the logical operators.  Anything about a value is a question about what the program does, which is what an ordinary condition is for.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Statements / Compile-time",
+        "requirement": "A condition after 'comptime' asks only about types."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4503,
+      "name": "LANG_COMPTIME_NEEDS_A_TUPLE",
+      "severity": "error",
+      "message": "a loop settled while compiling takes its turns from a tuple, and '{found}' is not one",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type of what the loop was given"
+        }
+      ],
+      "cause": "A 'comptime foreach' is written out, one body per turn, which is what lets each turn's value be of a different type.  A tuple is the only thing whose values are of types written one by one; everything else holds values of one type, and a loop over one of those is an ordinary loop.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Statements / Compile-time",
+        "requirement": "A 'comptime foreach' takes its turns from a tuple."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4504,
+      "name": "LANG_FOREACH_TUPLE_NEEDS_COMPTIME",
+      "severity": "error",
+      "message": "a tuple's members are of the types they were written with, so a loop over one is written 'comptime foreach'",
+      "cause": "Every turn of an ordinary loop binds a name of one type, because the loop is one body run again.  A tuple's members are of whatever types they were written with, so a loop over one has to be written out -- one body per member, each with its own type -- which is what 'comptime' says.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Statements / Compile-time",
+        "requirement": "A loop over a tuple is written 'comptime foreach'."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4505,
+      "name": "LANG_TYPEOF_OUTSIDE_COMPTIME",
+      "severity": "error",
+      "message": "'⎕typeof' stands in a condition settled while compiling and nowhere else",
+      "cause": "What '⎕typeof' answers is a type, and a type is not a value: there is nothing for one to be at run time, which is why the representation is deliberately unspecified.  Where it may stand is the one place the answer is wanted and never has to exist -- a condition the compiler settles.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Statements / Compile-time",
+        "requirement": "'⎕typeof' appears only in a condition after 'comptime'."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 5001,
       "name": "LANG_STMT_UNREACHABLE",
       "severity": "warning",

@@ -317,12 +317,20 @@ module.exports = grammar({
     // there are no parentheses around it, because nothing needs them: what ends
     // it is the body, which begins with a colon or a brace, and neither can be
     // part of an expression.
-    if_expression: $ => seq(
-      'if', field('condition', $._expression), field('then', $._block),
-      repeat(seq('elif', field('condition', $._expression),
+    // `comptime` stands before the keyword of each arm it applies to, and not
+    // once for the whole `if`: which arms the compiler settles is a property of
+    // each condition rather than of the chain.
+    // Right associative because `comptime` after an arm's body may begin the
+    // next arm or a statement of its own, and continuing the chain is what it
+    // means where an `elif` follows it.
+    if_expression: $ => prec.right(seq(
+      optional('comptime'), 'if',
+      field('condition', $._expression), field('then', $._block),
+      repeat(seq(optional('comptime'), 'elif',
+                 field('condition', $._expression),
                  field('then', $._block))),
       optional(seq('else', field('else', $._block))),
-    ),
+    )),
 
     if_statement: $ => prec(2, $.if_expression),
 
@@ -357,7 +365,7 @@ module.exports = grammar({
     // from may take its own type from that.
     foreach_statement: $ => seq(
       choice(
-        seq('foreach', optional(field('label', $.label)),
+        seq(optional('comptime'), 'foreach', optional(field('label', $.label)),
             $._binding_names, $._binding_type),
         seq('while', optional(field('label', $.label)),
             $._binding_names, $._binding_type),

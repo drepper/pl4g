@@ -327,6 +327,14 @@ To Do List for the PL4g language
     compile: the numbers have nothing to say what they are, where an array and a list in the same place do take it.  Found while
     making `foreach x: T = ...` hand the declared type to what the loop walks.
 
+[ ] decide what else a condition settled while compiling may ask.  Today it asks whether two types are the one type and joins
+    those answers; whether a number written down is what it is, whether a function has an attribute, and whether a type is one
+    of a kind -- an integer, an array -- are the obvious next ones, and each is a decision about what the compiler is willing to
+    promise rather than about how to compute it.
+
+[ ] decide whether `⎕typeof` may name a type in a declaration: `let y: ⎕typeof(x) = ...`.  That is a type in a type position
+    rather than in a condition, and it is where a type first has to be more than a thing two conditions compare.
+
 [ ] box a list's elements, so that they need not be of one type.  The type records what they agree on today, which is what
     makes the agreeing case the one worth not boxing; what is missing is the boxed value -- a value held with enough beside it
     to say what it is -- and the rule for which of the two a list is.

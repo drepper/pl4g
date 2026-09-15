@@ -2095,6 +2095,63 @@ At the top level of a file one can find:
 - function definitions
 
 
+#### Settled while compiling
+
+**`comptime` before `foreach` or before `if` says that the compiler answers it**, and that what it answers leaves nothing behind.
+
+##### comptime foreach
+
+**`comptime foreach` walks a tuple**, and it is the one loop whose turns may differ in type.
+
+```
+let values: 〈u8, u16, u32〉 = 〈1u8, 2u16, 3u32〉
+comptime foreach v := values:
+    ...                          ※ v is a u8, then a u16, then a u32
+```
+
+A tuple's members are of whatever types they were written with, so a loop over one cannot be one body run again: the name would
+have to be of one type and there is no one type.  **The body is written out instead, once per member**, each with the name
+standing for that member and of that member's type.  There is no loop in what comes out -- no counter, no branch backwards, no
+test -- which is also why such a loop has nothing to hand over and takes no name for a `break` to call it by.
+
+A tuple is the only thing it walks (4503); everything else holds values of one type and is walked by an ordinary loop.  And a
+tuple is walked only this way (4504), for the same reason.
+
+##### comptime if
+
+**`comptime if` asks a question the compiler answers**, and **`⎕typeof` is what it asks about**:
+
+```
+comptime if ⎕typeof(v) = u8:
+    bytes ← bytes + v
+comptime elif ⎕typeof(v) = u16:
+    halves ← halves + v
+else:
+    words ← words + v
+```
+
+**No test reaches the program.**  An arm the compiler settled as true is the whole of the `if` -- what follows it cannot be
+reached -- and one it settled as false is not there at all.  That is not an optimization: the arms it did not choose are *never
+lowered*, which is what lets them be of types that would not otherwise agree, and is the whole point of the construct.
+
+**`comptime` stands before the keyword of each arm it applies to**, and not once for the whole `if`.  Which arms the compiler
+settles is a property of each condition, so a chain may mix them: a `comptime if` whose condition is false simply goes on to
+whatever follows, settled or not.
+
+**What may be asked** is whether two types are the one type -- `⎕typeof(x)` and a type's own name, joined with `=` or `≠` -- and
+those answers joined with the logical operators.  Anything about a value is a question about what the program does and is
+reported (4502).
+
+**`⎕typeof` answers a type, and a type is not a value.**  There is nothing for one to be at run time, which is why the
+representation is deliberately unspecified and why it may stand nowhere else (4505).  What it is of is read off the expression
+without lowering it, and asking what a name is of counts as reading that name.
+
+Compare: **C++**, whose `if constexpr` this is and whose `decltype` `⎕typeof` resembles -- with the difference that there the
+discarded branch is still parsed and instantiated unless the enclosing thing is a template, where here it is simply not lowered;
+**Zig**, whose `comptime` and `inline for` are the same two constructs under one keyword and whose `@TypeOf` is `⎕typeof`;
+**D**, whose `static if` and `foreach` over a tuple are the direct ancestors of both; and **Rust**, which has neither and reaches
+for macros and traits instead.
+
 #### foreach
 
 `foreach` runs its body once for each value something gives out.

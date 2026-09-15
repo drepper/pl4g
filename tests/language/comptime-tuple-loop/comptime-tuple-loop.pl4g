@@ -1,0 +1,56 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ `comptime foreach` walks a tuple, and it is the one loop whose turns may
+※ differ in type: a tuple's members are of whatever types they were written
+※ with, so the body is written out once per member rather than run again.
+※ There is no loop in what comes out -- no counter, no branch backwards, no
+※ test -- which is also why it has nothing to hand over.
+※
+※ `comptime if` asks which type this turn's name is of.  `⎕typeof` answers a
+※ type, and a type is not a value: it may stand only in a question the
+※ compiler settles, and the arms it does not choose are not lowered at all --
+※ which is what lets them be of types that would not otherwise agree.
+
+@[startup]
+fn main() → u8:
+    let values: 〈u8, u16, u32, u8, u16〉 = 〈1u8, 2u16, 3u32, 4u8, 5u16〉
+    let bytes: mut u8 = 0u8
+    let halves: mut u16 = 0u16
+    let words: mut u32 = 0u32
+    comptime foreach v := values:
+        comptime if ⎕typeof(v) = u8:
+            bytes ← bytes + v
+        comptime elif ⎕typeof(v) = u16:
+            halves ← halves + v
+        comptime elif ⎕typeof(v) = u32:
+            words ← words + v
+        else:
+            words ← words
+    ※ the logical operators join what the compiler settled
+    let joined: mut u8 = 0u8
+    comptime foreach w := values:
+        comptime if ⎕typeof(w) = u8 ∨ ⎕typeof(w) = u16:
+            joined ← joined + 1u8
+    ※ a tuple of one type walks the same way
+    let alike: 〈u8, u8〉 = 〈6u8, 7u8〉
+    let summed: mut u8 = 0u8
+    comptime foreach a := alike:
+        summed ← summed + a
+    ※ a type written on the name says what every turn must be, where it is
+    let named: mut u8 = 0u8
+    comptime foreach b: u8 = alike:
+        named ← named + b
+    if bytes ≠ 5u8 ∨ halves ≠ 7u16 ∨ words ≠ 3u32:
+        1u8
+    elif joined ≠ 4u8:
+        2u8
+    elif summed ≠ 13u8 ∨ named ≠ 13u8:
+        3u8
+    ※ and one that is settled outside a loop, with an arm that is not
+    else:
+        comptime if ⎕typeof(bytes) ≠ u8:
+            4u8
+        elif halves = 7u16:
+            0u8
+        else:
+            5u8

@@ -391,6 +391,18 @@ the walk `foreach` uses: what counting needs of each character is only how long 
 else -- every byte that is not a continuation byte begins a character, which is one `and` and one comparison per byte and no
 decoding at all.
 
+**Nothing settled while compiling is lowered, and that is the whole implementation.**  A condition after `comptime` is answered
+by walking the syntax -- `⎕typeof` of something is that thing's type, read off it without lowering it; a type's name is that
+type; and the two are compared and joined.  There is no value of a type at any point, which is why the representation of what
+`⎕typeof` answers is unspecified: there is nothing to specify.  An arm the compiler settled as false is dropped from the chain
+before anything is built, so what it holds is never checked against anything -- which is what lets the arms of one `if` be of
+types that would not otherwise agree.
+
+A `comptime foreach` is the loop lowering with the loop taken out.  There is no header block, no counter and no branch backwards:
+the members are walked here, and for each one the name is bound to an `extract` of that member and the body is lowered.  Each
+body is lowered separately, so each sees the name at that member's type -- which is the whole of how one loop binds a name of
+several types.
+
 **A list is two words and no new runtime.**  The value is where the elements are and how many there are, which `parts_of`
 answers as it does for a string and for an array of unstated length -- so a list travels in two registers and needed nothing of
 the calling convention's own.  Its elements come from the arena, one allocation per literal, and a join uses the very function a

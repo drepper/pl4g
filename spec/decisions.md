@@ -3746,6 +3746,43 @@ part this does not copy; and **Python**, which has no types to write there.
 
 ---
 
+## 2026-09-16T11:00+02:00 — language
+
+**`comptime`, and a type that is never a value**
+
+Decided on the user's direction: `comptime` before `foreach` walks a tuple with each turn's name of that member's type, and
+before `if` or `elif` asks a question the compiler answers; `⎕typeof` is what such a question asks about.
+
+**The decision that made the rest easy is that a compile-time condition is never lowered.**  It is answered by walking the
+syntax, and nothing in it becomes a value.  That is what makes `⎕typeof`'s "as-yet unspecified representation" not a
+placeholder but the honest answer: there is no representation because there is nothing to represent.  A type is not a value here
+and never becomes one, so nothing had to be added to the representation, the verifier, the calling convention or any backend --
+the whole feature is in the checker.
+
+The alternative was a first-class type value with some encoding, which is what a language needs if types can be passed about and
+stored.  This language cannot do that and does not want to yet, so paying for it would have bought nothing.
+
+**`comptime` goes before each arm's keyword, not once before the chain.**  Which arms the compiler settles is a property of each
+condition; a chain may mix them, and one that does is a program asking one question of the compiler and another of itself, which
+is a reasonable thing to write.  Writing it once before the `if` would have made "the whole chain is settled" the only reading
+and would have been wrong for the common case where a settled first arm falls through to an ordinary one.
+
+**A `comptime foreach` has no `break`, no label and nothing to hand over.**  It is the body written out; there is nowhere to jump
+to.  Refusing those is honest rather than restrictive -- a loop that is not a loop cannot be left early.
+
+**A tuple is walked only this way, and this walks only a tuple.**  An ordinary loop over a tuple is reported with what to write
+instead, and a `comptime foreach` over anything else is reported as well: everything but a tuple holds values of one type, so
+writing the body out per element would be the same body many times for no reason.
+
+Compare: **C++**, whose `if constexpr` this is and whose `decltype` `⎕typeof` resembles -- the difference being that a
+discarded `if constexpr` branch is still parsed and instantiated outside a template, where here it is simply not lowered, which
+is the behaviour people expect and do not get; **Zig**, whose `comptime` and `inline for` are these two under one keyword and
+whose `@TypeOf` is this exactly -- the closest of the three; **D**, whose `static if` and tuple `foreach` are the direct
+ancestors of both; and **Rust**, which has neither and reaches for macros and traits, paying in compile time and in error
+messages for what these two keywords do plainly.
+
+---
+
 ---
 
 Open questions

@@ -5507,6 +5507,10 @@
     "named": true
   },
   {
+    "type": "comptime",
+    "named": false
+  },
+  {
     "type": "continue",
     "named": false
   },

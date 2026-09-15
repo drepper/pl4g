@@ -144,6 +144,8 @@ WRAP_NAME: Final[str] = "".join((BUILTIN_GLYPH, "wrap"))
 #: the other checks a number against the last code point there is -- and they
 #: carry the sigil for the same reason every compiler-provided name does: so
 #: that no program has to give up the names `ord` and `chr`.
+TYPEOF_NAME: Final[str] = "".join((BUILTIN_GLYPH, "typeof"))
+
 ORD_NAME: Final[str] = "".join((BUILTIN_GLYPH, "ord"))
 CHR_NAME: Final[str] = "".join((BUILTIN_GLYPH, "chr"))
 
@@ -239,6 +241,7 @@ class TokKind(StrEnum):
     KW_ELSE = "'else'"
     KW_WHILE = "'while'"
     KW_FOREACH = "'foreach'"
+    KW_COMPTIME = "'comptime'"
     KW_IN = "'in'"
     KW_TRUE = "'true'"
     KW_FALSE = "'false'"
@@ -353,6 +356,7 @@ KEYWORDS: Final[dict[str, TokKind]] = {
     "else": TokKind.KW_ELSE,
     "while": TokKind.KW_WHILE,
     "foreach": TokKind.KW_FOREACH,
+    "comptime": TokKind.KW_COMPTIME,
     "break": TokKind.KW_BREAK,
     "continue": TokKind.KW_CONTINUE,
     "in": TokKind.KW_IN,

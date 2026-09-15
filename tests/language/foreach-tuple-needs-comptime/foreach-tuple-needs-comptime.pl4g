@@ -1,0 +1,12 @@
+※ pl4g-test: compile=error diag=4504
+
+※ Every turn of an ordinary loop binds a name of one type, because the loop is
+※ one body run again.  A tuple's members are of whatever types they were
+※ written with, so a loop over one has to be written out.
+
+@[startup]
+fn main() → u8:
+    let t: 〈u8, u16〉 = 〈1u8, 2u16〉
+    foreach x := t:
+        0u8
+    0u8
