@@ -997,7 +997,7 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                              IntType, MEM, PtrType, ResultType, SetType,
                              VecType, VOID)
     from ...ir.inst import (CastInst, CastKind, ExtractInst, FailedInst,
-                            TupleInst, UnwrapInst, WrapInst)
+                            ErrorInst, TupleInst, UnwrapInst, WrapInst)
     from ...ir.value import FloatConst, UndefConst
     from ...ir.layout import encode_float
     from ..globals import symbol_of
@@ -1667,9 +1667,10 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                     held[id(inst)] = operands.part_of(inst.operands[0],
                                                       inst.index, span)
                 case WrapInst():
-                    # One value made of two, which here is two registers with
-                    # nothing between them: the answer goes where an answer
-                    # goes, and the truth value beside it.
+                    # One value made of two or of three, which here is that
+                    # many registers with nothing between them: the answer goes
+                    # where an answer goes, the truth value beside it, and what
+                    # the error carries after that.
                     answer = inst.ty.ok if isinstance(inst.ty, ResultType) \
                         else inst.ty
                     destination = _new_value(
@@ -1688,12 +1689,29 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                                 inst.span)
                     asm.loadreg(failed, operands.value(inst.operands[1], inst.span),
                                 inst.span)
+                    if len(inst.operands) > 2:
+                        assert isinstance(inst.ty, ResultType)
+                        assert inst.ty.err is not None
+                        carried = _new_value(
+                            inst.ty.err, registers,
+                            hint=(_result_register(inst.ty.err, cconv,
+                                                   registers, 2)
+                                  if inst is returned else None))
+                        extra[id(inst)].append(carried)
+                        asm.loadreg(carried,
+                                    operands.undefined(inst.operands[2],
+                                                       inst.ty.err, inst.span),
+                                    inst.span)
                 case UnwrapInst():
                     # Nothing to emit: the answer half is already in a register
                     # of its own, and this says to go on using it.
                     held[id(inst)] = operands.register_of(inst.operands[0], span)
                 case FailedInst():
                     held[id(inst)] = operands.flag_of(inst.operands[0], span)
+                case ErrorInst():
+                    # Nothing to emit either: what the error carries is already
+                    # in a register of its own, the third of the three.
+                    held[id(inst)] = operands.part_of(inst.operands[0], 2, span)
                 case UnaryInst() if inst.op in _ROUNDINGS:
                     destination = _new_value(
                         inst.ty, registers,

@@ -25,11 +25,12 @@ fn main() → u6:
     let v: u8⟦4⟧ = ⟦2u8, 3u8, 4u8, 5u8⟧
     let even: bool⟦4⟧ = ∣v
     let by: bool⟦4⟧ = 2u8 ∣ v
-    if ¬(b ∣ a) ∨ c ∣ a:
+    ※ the divisor is worked out here, so what these answer is a result
+    if ¬((b ∣ a) ?? false) ∨ ((c ∣ a) ?? true):
         1u6
     ※ the one that is turned round, which is the same question answered the
     ※ other way
-    elif b ∤ a ∨ ¬(c ∤ a):
+    elif ((b ∤ a) ?? true) ∨ ¬((c ∤ a) ?? false):
         2u6
     ※ written before one operand, which asks about two
     elif ¬(∣a) ∨ ∤a ∨ ∣c ∨ ¬(∤c):
@@ -40,12 +41,12 @@ fn main() → u6:
     ※ signed, where what is divided and what divides it may both be negative
     elif ¬(4i16 ∣ s) ∨ ¬(⁻4i16 ∣ s) ∨ 5i16 ∣ s:
         5u6
-    ※ a divisor worked out while the program runs, which is where the test for
-    ※ zero is made rather than settled
-    elif ¬divides(3u8, 12u8) ∨ divides(5u8, 12u8):
+    ※ a divisor worked out while the program runs, which is where it may turn
+    ※ out to be zero and the answer is a result
+    elif ¬(divides(3u8, 12u8) ?? false) ∨ (divides(5u8, 12u8) ?? true):
         6u6
-    ※ zero divides nothing but zero, which is an answer and not a fault
-    elif ¬divides(0u8, 0u8) ∨ divides(0u8, 7u8) ∨ ¬(0u8 ∣ 0u8) ∨ 0u8 ∣ 7u8:
+    ※ and where it is zero there is no answer at all
+    elif (divides(0u8, 7u8) ?? true) ≠ true ∨ (divides(0u8, 7u8) ?? false) ≠ false:
         7u6
     ※ and everything divides zero, including two
     elif ¬(7u8 ∣ 0u8) ∨ ¬(∣0u8):
@@ -61,5 +62,5 @@ fn main() → u6:
     else:
         0u6
 
-fn divides(a: u8, b: u8) → bool:
+fn divides(a: u8, b: u8) → bool?u8:
     a ∣ b

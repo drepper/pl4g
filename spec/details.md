@@ -427,14 +427,19 @@ The type of what the one-sided form answers is worked out twice, once off the sy
 what was lowered.  That is not duplication for its own sake: a comparison lowers its left side with what the right side is wanted
 to be, so `⌈v ≠ 9u8` needs the answer's type before the answer exists.
 
-**Dividing without a remainder is the remainder with the remainder thrown away**, and the only thing worth saying about it is
-the divisor of zero.  The operator is total and the instruction is not, so where the divisor is a value the compiler cannot see
-there is a comparison against zero and a branch: one way answers whether what was asked about is zero too, the other takes the
-remainder, and both hand a truth value to the same block.  Where the divisor is written down -- always, for the form written
-before one operand -- neither the test nor the branch is built, because which of the two cases it is, is written down with it.
+**Dividing without a remainder is the remainder with the remainder thrown away**, and it needed no test for zero of its own: the
+remainder already answers a result and already fails on exactly the divisor this one has no answer for.  So where the divisor is
+worked out, the whole of it is the remainder, a comparison of the answer with nothing, and a `wrap` putting that beside the
+failure the remainder gave -- with the number the question was asked about carried as what the error holds.  Where the divisor is
+written down neither the result nor the test is built at all.
 
-The remainder it takes is the language's own, which answers a result; the answer is unwrapped without looking at the failure,
-because the branch above has already settled that the divisor is not zero.
+**A result whose error carries a value is three parts**, and putting the truth value *between* the two is what made that a small
+change rather than a large one: everything that reads a result asks for the truth value by its place, and a part added after it
+changes nothing.  `parts_of` says so, which is the one place that had to; the register allocation, the calling convention and the
+pass that moves a large answer into the caller's storage all ask it rather than knowing the shape.  What had to be written was
+one instruction to read the third part, one operand on the one that makes a result, and three lines in the pass that takes an
+answer apart -- which now uses `unwrap`, `failed` and `error` for a result where it uses `extract` for a tuple, the parts of a
+result being of three types rather than indexed by number.
 
 **Counting the turns is one iterator wrapping another.**  `_Iteration` is the three things a loop asks -- whether there is
 another turn, what this turn gives, what the next turn starts from -- and `⎕enumerate` answers all three by asking the iterator

@@ -4175,11 +4175,19 @@ methods on the iterator; **Go**, where `range` gives the index whether or not it
 Decided on the user's direction: an operator asking whether one number divides another exactly, with the form written before one
 operand meaning the same thing with two on the left.
 
-**Zero divides nothing but zero**, so the operator is total and answers a truth value whatever it is given.  That was the one
-decision here and it is mathematics', not this language's: `a ∣ b` means "there is a `k` with `b = a·k`", which for `a` of zero
-holds exactly when `b` is zero.  The alternative -- stopping the program, as a division by zero would -- would have made the
-operator partial for a case that *has* an answer, and would have made `∣` no better than the `b % a = 0` every other language
-writes.  Being total where `%` is not is the whole reason it is worth having.
+**What it answers depends on what the compiler can see of the divisor**, which was decided twice.  It first answered a truth
+value always, on the mathematical reading that zero divides nothing but zero; the user's direction replaced that with the rule
+recorded here, and the rule is better.  Nothing divides by zero, and a program that has worked the divisor out has a case with no
+answer -- which is what a result is for, and is the shape `÷` already has.  Where the divisor is *written down*, or left out so
+that two is written in, there is no such case and no result: the type says what the compiler could see, which is the same
+principle the raised exponent follows.
+
+**What the error carries is the number the question was asked about.**  What made it fail is known from the failure itself -- the
+divisor was zero -- so carrying the zero would say nothing a reader did not have.  This is the first thing in the language to make
+a result whose error carries a value, a type the specification has described since the beginning and nothing could produce.
+
+**A zero written on the left is refused.**  There the answer is a truth value, which has nowhere to say there is no answer, and a
+program that wrote a zero asked a question it knew the answer to.
 
 **A comparison's level and a comparison's associativity.**  It relates two numbers and answers a truth value, which is what a
 comparison is; and `a ∣ b ∣ c` would be asking whether `a` divides a truth value, so it joins two and no more, exactly as the
@@ -4194,6 +4202,38 @@ Compare: **mathematics**, whose glyphs and whose rule about zero these are; **C*
 `b % a == 0` and get a division by zero where this gets an answer; **Ada**, which has `rem` and `mod` and no divisibility test;
 and **APL**, whose `|` is the remainder and which spells the test `0 = a | b` -- this operator with the comparison left to the
 program.
+
+---
+
+## 2026-09-16T06:30+02:00 — implementation
+
+**A result whose error carries a value**
+
+Implemented because `∣` needed one.  `TYPE?ERROR` has been in the specification and in the type system since the beginning, and
+nothing in the language could make one, so the compiler reported it as a feature it lacked.
+
+**The truth value stays the second part.**  A result that carries something is three values -- the answer, whether there is one,
+what the error carries -- and the obvious order puts the new part last so that everything reading the first two goes on working.
+That is what was done, and it is why the change was small: `parts_of` is the one place that says what a value is made of, and the
+register allocation, the calling convention and the pass that moves a large answer into the caller's storage all ask it.
+
+**Three parts is more than a call answers in registers**, so such a result travels through the caller's storage -- the path an
+answer of three parts already took, reached without deciding anything: `in_registers` asks how many parts there are.
+
+**Reading the third part is its own instruction** rather than an index.  A tuple's parts are indexed because they are alike in
+kind; a result's are the answer, a truth value and the error, which are three types, so `unwrap`, `failed` and `error` are three
+instructions and the pass that takes an answer apart asks which shape it has.
+
+**The `⊥` arm binds it**, exactly as the answer's arm binds the answer.  The machinery was already written for it -- the table of
+a result's alternatives already gave the error's type -- and what was missing was passing it to the arm.
+
+What is still missing is a way to *write* a failure carrying a value; `∣` makes one and nothing else does.  A `⊥ value`
+expression is the obvious spelling and is not decided here.
+
+Compare: **Rust**'s `Result<T, E>`, which this is, with the difference that there the two are a real sum and here they are both
+present -- the answer and the error laid out beside each other rather than over each other, which makes reading either one read
+and no branch and costs the room of the smaller; **Go**'s pair of return values, which is this without the tag; **Haskell**'s
+`Either`; and **C++**'s `std::expected`, which unions them as Rust does.
 
 ---
 

@@ -779,7 +779,11 @@ def parts_of(ty: Type) -> tuple[Type, ...]:
     elements and nothing else, which is a place in memory and never a register.
     """
     if isinstance(ty, ResultType):
-        return (ty.ok, BOOL)
+        # The answer, whether there is one, and -- where the error carries a
+        # value of its own -- that value.  The truth value stays the *second*
+        # part whatever else there is, because everything that reads one asks
+        # for it by that place and a part added after it changes nothing.
+        return (ty.ok, BOOL) if ty.err is None else (ty.ok, BOOL, ty.err)
     if isinstance(ty, TupleType):
         return ty.members
     if isinstance(ty, ArrayType) and not ty.fixed:

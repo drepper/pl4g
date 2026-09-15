@@ -4919,6 +4919,50 @@
       "option": null
     },
     {
+      "number": 4520,
+      "name": "LANG_DIVIDES_BY_A_WRITTEN_ZERO",
+      "severity": "error",
+      "message": "nothing divides by zero, and '{operator}' written with a zero on the left asks whether it does",
+      "args": [
+        {
+          "name": "operator",
+          "type": "string",
+          "description": "which of the two was written"
+        }
+      ],
+      "cause": "Where the divisor is written down the operator answers a truth value, there being no pair of operands it has no answer for -- except this one.  A divisor the program works out may turn out to be zero and the answer is a result, which has somewhere to say so; a zero written down has nowhere, and a program that wrote one asked a question it knew the answer to.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Dividing without a remainder",
+        "requirement": "A zero written on the left of '∣' is refused."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4521,
+      "name": "LANG_MATCH_BOTTOM_CARRIES_NOTHING",
+      "severity": "error",
+      "message": "the error of '{found}' carries nothing, so there is nothing for a name here to stand for",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the result being matched"
+        }
+      ],
+      "cause": "A result whose type names what its error carries -- `bool?u8` -- has something for the arm written `\u22a5` to bind; one written `bool?` has not, its error being the fact that there is no answer and nothing more.  A name written there would stand for nothing, which is a thing to say rather than a thing to allow.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Results",
+        "requirement": "A name in a '\u22a5' arm needs an error that carries something."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 5001,
       "name": "LANG_STMT_UNREACHABLE",
       "severity": "warning",

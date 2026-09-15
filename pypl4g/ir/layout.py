@@ -128,11 +128,16 @@ def size_of(ty: Type, layout: DataLayout) -> int:
             payload = max((size_of(v, layout) for _, v in ty.variants), default=0)
             return _align_up(payload + _TAG_SIZE, align_of(ty, layout))
         case ResultType():
-            # The same shape: the answer, and one byte saying whether there is
-            # one.  It is not a `SumType` because the error carries nothing and
-            # a variant of a sum carries something.
-            return _align_up(size_of(ty.ok, layout) + _TAG_SIZE,
-                             align_of(ty, layout))
+            # The answer, one byte saying whether there is one, and -- where
+            # the error carries a value of its own -- that value after it.  It
+            # is not a `SumType` even then: the two are not alternatives laid
+            # over each other but both there, which is what makes reading
+            # either of them one read and no branch.
+            total = size_of(ty.ok, layout) + _TAG_SIZE
+            if ty.err is not None:
+                total = _align_up(total, align_of(ty.err, layout)) \
+                    + size_of(ty.err, layout)
+            return _align_up(total, align_of(ty, layout))
         case _:
             raise NoLayoutError(ty)
 
@@ -179,7 +184,8 @@ def align_of(ty: Type, layout: DataLayout) -> int:
         case SumType():
             return max((align_of(v, layout) for _, v in ty.variants), default=1)
         case ResultType():
-            return align_of(ty.ok, layout)
+            return (align_of(ty.ok, layout) if ty.err is None
+                    else max(align_of(ty.ok, layout), align_of(ty.err, layout)))
         case MemType():
             raise NoLayoutError(ty)
         case _:
@@ -239,6 +245,12 @@ def tag_offset_of(ty: SumType | ResultType, layout: DataLayout) -> int:
     if isinstance(ty, ResultType):
         return size_of(ty.ok, layout)
     return max((size_of(v, layout) for _, v in ty.variants), default=0)
+
+
+def error_offset_of(ty: ResultType, layout: DataLayout) -> int:
+    """Where what a result's error carries starts, after the truth value."""
+    assert ty.err is not None
+    return _align_up(size_of(ty.ok, layout) + _TAG_SIZE, align_of(ty.err, layout))
 
 
 def _align_up(value: int, alignment: int) -> int:

@@ -502,28 +502,42 @@ written, binds as one, and joins two and no more: `a ∣ b ∣ c` would be askin
 **Both sides are integers of one type** (4518), the usual rule: a number written without a suffix takes the other side's type.
 A floating-point division leaves nothing over by construction, so there is no question here to ask of one.
 
-**It is total, where dividing is not**, and that is the whole reason it is worth having beside `%`.  `∣` by zero has an answer
-and `÷` by zero has not: **zero divides nothing but zero**, which is the definition and not a rule invented here.  So `0 ∣ 0` is
-true, `0 ∣ 7` is false, and nothing about the answer is a result.
+**What it answers depends on what the compiler can see of the divisor.**
+
+| Written | Answers |
+|---|---|
+| `∣n`, `∤n` | `bool` -- two is the divisor and two is not zero |
+| `3u8 ∣ n` | `bool` -- the divisor is written down and is not zero |
+| `a ∣ n`, where `a` is worked out | `bool?u8` -- it may turn out to be zero, and then there is no answer |
+
+**Nothing divides by zero**, so there is a pair of operands the operator has no answer for -- which is what a result is for, and
+is the same shape `÷` already has.  **What the error carries is the number the question was asked about**, since what made it
+fail is known from the failure itself: the divisor was zero, and a zero says nothing a reader did not have.
 
 ```
-7u8 ∣ 0u8                      ※ true: everything divides zero
-0u8 ∣ 0u8                      ※ true
-0u8 ∣ 7u8                      ※ false
+3u8 ∣ n                        ※ bool
+a ∣ n                          ※ bool?u8
+(a ∣ n) ?? false               ※ bool: and what to say where there was no answer
 ```
 
-**Where the divisor is written down there is no test for zero at all** -- which is always so for the form written before one
-operand, two being written into it.  Where it is not, the test is one comparison and a branch.
+The parentheses there are not optional: `??` binds tighter than a comparison, and this binds where a comparison binds, so
+`a ∣ n ?? false` is `a ∣ (n ?? false)` -- the same grouping `x = a ÷ b ?? c` has and for the same reason.
+
+**A zero written on the left is refused** (4520).  Where the divisor is written down the answer is a truth value, which has
+nowhere to say there is no answer -- and a program that wrote a zero there asked a question it knew the answer to.
+
+**Where the divisor is written down there is no test for zero at all**, and no result either -- which is always so for the form
+written before one operand, two being written into it.
 
 **It is listable**, so written with an array on either side it answers a truth value per element.
 
 Written before an operand of a type that has no two -- a `u1` -- it is refused (4519): it is the operator with two on the left,
 and there is no two to write.  What was meant there is a question about that one bit, and comparing it with nothing says it.
 
-Compare: **mathematics**, whose `∣` and `∤` these are, including that zero divides only zero; **C**, **Rust**, **Go** and
-everything else in that line, which write `b % a == 0` and get a division by zero where this gets an answer; **Ada**, whose
-`rem` and `mod` are the two remainders and which has no divisibility test; **Python**, the same with `%`; and **APL**, whose `|`
-is the remainder and which spells the test `0 = a | b`, which is this operator with the comparison left to the program.
+Compare: **mathematics**, whose `∣` and `∤` these are; **C**, **Rust**, **Go** and everything else in that line, which write
+`b % a == 0` and get an undefined program or a signal where this gets a result to read; **Ada**, whose `rem` and `mod` are the
+two remainders and which has no divisibility test; **Python**, the same with `%` and a `ZeroDivisionError`; and **APL**, whose
+`|` is the remainder and which spells the test `0 = a | b`, which is this operator with the comparison left to the program.
 
 #### Moving bits
 
@@ -960,10 +974,24 @@ signed type divided by minus one is the second.  What such an operation answers 
 have answered with, or the fact that there is none.
 
 A result type is written `TYPE?`, where `TYPE` is the **answer type**.  The mark with nothing after it says the error carries
-nothing beyond the fact of it.  `TYPE?ERROR` is a result whose error is a value of its own; the syntax is part of the language and
-nothing in the language makes such a value yet, so a program that writes it is told the compiler lacks the feature.
+nothing beyond the fact of it.  **`TYPE?ERROR` is a result whose error is a value of its own**: `bool?u8` is a truth value, or
+the fact that there is none and a `u8` saying something about why.
 
-`÷` and `%` answer with one: `u8 ÷ u8` is a `u8?`, and so is `u8 % u8`.  That is the whole of what a division does about a divisor
+**The `⊥` arm of a `match` binds what the error carries**, exactly as the answer's arm binds the answer.  Where the error
+carries nothing there is nothing for a name there to stand for, and one written is refused (4521).
+
+```
+match a ∣ n:
+    bool(yes):  …            ※ the answer
+    ⊥(number):  …            ※ what the error carries
+```
+
+**A result that carries something is three values rather than two** -- the answer, whether there is one, and what the error
+carries.  Three is more than a call answers in registers, so such a result travels through the caller's storage, which is the
+path an answer of three parts already takes; nothing about writing one says so.
+
+`÷` and `%` answer with one: `u8 ÷ u8` is a `u8?`, and so is `u8 % u8`.  `∣` answers with one whose error carries something,
+where its divisor is not written down.  That is the whole of what a division does about a divisor
 it has no answer for -- it does not stop the program, and it does not answer with a number that stands for nothing.
 
 **Two operators read a result.**

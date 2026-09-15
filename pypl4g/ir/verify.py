@@ -16,7 +16,7 @@ from .mangle import symbol_name
 from .inst import (AddressInst, AnyLaneInst, AssertInst, BinaryInst, BinOp,
                    BlockTarget, CastInst, FrameInst, SplatInst,
                    CastKind, CmpInst,
-                   ExtractInst, FailedInst,
+                   ErrorInst, ExtractInst, FailedInst,
                    Instruction, TupleInst,
                    LoadInst, RetInst, StoreInst, Terminator, UnaryInst,
                    UnwrapInst, WrapInst)
@@ -273,7 +273,16 @@ class Verifier:
                         inst.operands[0].ty.render())))
                 elif inst.operands[1].ty is not BOOL:
                     self._fail(where, "whether a result failed is not a truth value")
-            case UnwrapInst() | FailedInst():
+                elif (len(inst.operands) > 2) != (inst.ty.err is not None):
+                    self._fail(where, "".join((
+                        "making a ", inst.ty.render(),
+                        " with an error value" if len(inst.operands) > 2
+                        else " without the value its error carries")))
+                elif len(inst.operands) > 2 and inst.operands[2].ty != inst.ty.err:
+                    self._fail(where, "".join((
+                        "making a ", inst.ty.render(), " whose error carries ",
+                        inst.operands[2].ty.render())))
+            case UnwrapInst() | FailedInst() | ErrorInst():
                 inner = inst.operands[0].ty
                 if not isinstance(inner, ResultType):
                     self._fail(where, "".join(("'", inst.opcode,
@@ -281,6 +290,10 @@ class Verifier:
                 elif isinstance(inst, UnwrapInst) and inst.ty != inner.ok:
                     self._fail(where, "".join((
                         "reading ", inst.ty.render(), " out of ", inner.render())))
+                elif isinstance(inst, ErrorInst) and inst.ty != inner.err:
+                    self._fail(where, "".join((
+                        "reading the error of ", inner.render(), " as ",
+                        inst.ty.render())))
             case UnaryInst():
                 if inst.ty != inst.operands[0].ty:
                     self._fail(where, "".join(("'", inst.opcode,

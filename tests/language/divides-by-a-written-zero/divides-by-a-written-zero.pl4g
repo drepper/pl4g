@@ -1,0 +1,15 @@
+※ pl4g-test: compile=error diag=4520
+
+※ Where the divisor is written down the operator answers a truth value, there
+※ being no pair of operands it has no answer for -- except this one.  A divisor
+※ the program works out may turn out to be zero and the answer is a result,
+※ which has somewhere to say so; a zero written down has nowhere, and a program
+※ that wrote one asked a question it knew the answer to.
+
+@[startup]
+fn main() → u6:
+    let n: u8 = 7u8
+    if 0u8 ∣ n:
+        0u6
+    else:
+        1u6

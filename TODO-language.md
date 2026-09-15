@@ -549,6 +549,10 @@ To Do List for the PL4g language
     already and there is one style, so there is nothing yet to choose between; when there is a second, an attribute beside
     `@[cdecl]` is where it goes, and `ReturnStyle` is what it sets.
 
+[ ] give the language a way to write a failure that carries a value.  `\N{DIVIDES}` makes one and nothing else does, so a program
+    can read what an error carries and cannot produce one of its own.  `\N{UP TACK} value` is the obvious spelling -- the glyph already
+    names the error in a `match` arm -- and what it needs beside the syntax is the rule for where the type comes from.
+
 [ ] say what order a call's arguments are worked out in.
 
 Runtime

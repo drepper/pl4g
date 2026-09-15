@@ -15,7 +15,8 @@ from .inst import (AddressInst, AnyLaneInst, AssertInst, CallInst, BinaryInst,
                    BinOp, BlockTarget, BrInst, FrameInst, SplatInst,
                    CastInst, CastKind,
                    CmpInst, CmpPred, CondBrInst, Instruction, LoadInst, MemStartInst,
-                   ExtractInst, FailedInst, RetInst, StoreInst, Terminator,
+                   ErrorInst, ExtractInst, FailedInst, RetInst, StoreInst,
+                   Terminator,
                    TupleInst, UnaryInst, UnOp,
                    UnreachableInst, UnwrapInst, WrapInst)
 from .module import Module
@@ -88,9 +89,13 @@ class IRBuilder:
         return self._append(BinaryInst(op, lhs, rhs, span, ty))
 
     def wrap(self, value: Value, failed: Value, result_ty: Type,
-             span: Span = INVALID_SPAN) -> Value:
-        """Append the making of a result out of an answer and a truth value."""
-        return self._append(WrapInst(value, failed, result_ty, span))
+             span: Span = INVALID_SPAN, error: Value | None = None) -> Value:
+        """Append the making of a result out of an answer and a truth value.
+
+        *error* is what the error carries where the type says it carries
+        something, and nothing where it does not.
+        """
+        return self._append(WrapInst(value, failed, result_ty, span, error))
 
     def make_tuple(self, values: Sequence[Value], ty: Type,
                    span: Span = INVALID_SPAN) -> Value:
@@ -109,6 +114,11 @@ class IRBuilder:
     def failed(self, value: Value, span: Span = INVALID_SPAN) -> Value:
         """Append the asking of whether a result is the error."""
         return self._append(FailedInst(value, BOOL, span))
+
+    def error(self, value: Value, err_ty: Type,
+              span: Span = INVALID_SPAN) -> Value:
+        """Append the taking of what a result's error carries."""
+        return self._append(ErrorInst(value, err_ty, span))
 
     def unary(self, op: UnOp, value: Value, span: Span = INVALID_SPAN) -> Value:
         """Append a unary operation."""

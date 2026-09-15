@@ -1,14 +1,70 @@
-※ pl4g-test: compile=fail
-※ pl4g-test: expect-diag 9902 IMPL_UNIMPLEMENTED_FEATURE
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
 
-※ `TYPE?ERROR` is a result whose error is a value of its own.  The syntax is
-※ specified and nothing in the language makes such a value yet, so a program
-※ that wrote the type could not put anything in it: the compiler says it lacks
-※ the feature rather than pretending to have it.
+※ `TYPE?ERROR` is a result whose error is a value of its own, and `∣` is what
+※ makes one: where the divisor is worked out rather than written down it may
+※ turn out to be zero, and what the error carries is the number the question
+※ was asked about.
+※
+※ A result that carries something is three values rather than two -- the
+※ answer, whether there is one, and what the error carries -- with the truth
+※ value staying in the middle so that everything which reads one still reads it
+※ where it always did.  Three is more than a call answers in registers, so such
+※ a result travels through the caller's storage, which is the path an answer of
+※ three parts already took.
+※
+※ A name written in the `⊥` arm stands for what the error carries, exactly as a
+※ name on the answer's arm stands for the answer.
 
-fn asking() → u8?u16:
-    0u8
-
-@[startup]
+@[startup, impure]
 fn main() → u6:
-    0u6
+    let three: u8 = 3u8
+    let zero: u8 = 0u8
+    ※ an answer, taken with `??` and with a name in the arm
+    if ¬((three ∣ 12u8) ?? false) ∨ ((three ∣ 13u8) ?? true):
+        1u6
+    ※ no answer, where the divisor turned out to be zero
+    elif ¬((zero ∣ 7u8) ?? true) ∨ ((zero ∣ 7u8) ?? false):
+        2u6
+    ※ what the error carries, which is the number the question was about
+    elif asked(zero, 7u8) ≠ 7u8 ∨ asked(zero, 200u8) ≠ 200u8:
+        3u6
+    ※ and where there is an answer the error carries nothing anybody reads
+    elif asked(three, 12u8) ≠ 1u8 ∨ asked(three, 13u8) ≠ 0u8:
+        4u6
+    ※ handed from one function to another, which is the caller's storage
+    elif (passed(three, 12u8) ?? false) ≠ true:
+        5u6
+    ※ and propagated with `?`, which carries the error along with the failure
+    elif carried(zero, 9u8) ≠ 9u8:
+        6u6
+    else:
+        0u6
+
+fn asked(by: u8, of: u8) → u8:
+    match by ∣ of:
+        bool(yes):
+            if yes:
+                1u8
+            else:
+                0u8
+        ⊥(number):
+            number
+
+fn passed(by: u8, of: u8) → bool?u8:
+    by ∣ of
+
+fn carried(by: u8, of: u8) → u8:
+    match twice(by, of):
+        bool(yes):
+            if yes:
+                1u8
+            else:
+                0u8
+        ⊥(number):
+            number
+
+※ Propagating with `?`: where the one below has no answer this has none either,
+※ and what its error carries is what the one below's carried.
+fn twice(by: u8, of: u8) → bool?u8:
+    let yes: bool = (by ∣ of)?
+    yes

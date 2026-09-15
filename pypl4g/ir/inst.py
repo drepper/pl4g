@@ -284,8 +284,10 @@ class WrapInst(Instruction):
     __slots__ = ()
 
     def __init__(self, value: Value, failed: Value, result_ty: Type,
-                 span: Span = INVALID_SPAN) -> None:
-        super().__init__(result_ty, (value, failed), span)
+                 span: Span = INVALID_SPAN, error: Value | None = None) -> None:
+        super().__init__(result_ty,
+                         (value, failed) if error is None
+                         else (value, failed, error), span)
 
     @property
     def opcode(self) -> str:
@@ -337,6 +339,28 @@ class UnwrapInst(Instruction):
     def opcode(self) -> str:
         """The mnemonic used in the textual form."""
         return "unwrap"
+
+
+class ErrorInst(Instruction):
+    """The value a result's error carries, which means nothing where there is
+    an answer instead.
+
+    Its own instruction rather than a third reading of `unwrap`, because what
+    it takes out is of a different type: a result is two types and a truth
+    value, and an instruction that answered either of the two depending on
+    which was asked would be two instructions under one name.
+    """
+
+    __slots__ = ()
+
+    def __init__(self, value: Value, err_ty: Type,
+                 span: Span = INVALID_SPAN) -> None:
+        super().__init__(err_ty, (value,), span)
+
+    @property
+    def opcode(self) -> str:
+        """The mnemonic used in the textual form."""
+        return "error"
 
 
 class FailedInst(Instruction):

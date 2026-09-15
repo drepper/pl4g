@@ -122,6 +122,10 @@ class _ArmPlan:
     body: ast.Block
     block: BasicBlock | None = None
     binds: tuple[str, Span, Span, Value, Type] | None = None
+    #: Whether what it binds is what the error carries rather than the answer.
+    #: The two are read out of a result by different instructions, being of
+    #: different types.
+    carried: bool = False
 
 
 @dataclass(slots=True)
@@ -1873,17 +1877,22 @@ class Checker:
             return ERROR
         if not ref.result:
             return found
-        if ref.error is not None:
-            # Nothing in the language makes one, so a program that wrote the
-            # type could not put a value in it.  Refused as a thing the compiler
-            # lacks rather than as a thing the language does not have.
-            self._diags.emit(D.IMPL_UNIMPLEMENTED_FEATURE, ref.span,
-                             feature="a result whose error carries a value")
-            return ERROR
         if found is VOID:
             self._diags.emit(D.LANG_TYPE_RESULT_OF_NOTHING, ref.span)
             return ERROR
-        return self._module.types.result_type(found)
+        if ref.error is None:
+            return self._module.types.result_type(found)
+        # What the error carries is a type like any other, named the way the
+        # answer is: the same lookup, and the same report where the name is not
+        # one.
+        carried = self._resolve_type(
+            replace(ref, name=ref.error, result=False, error=None))
+        if carried is ERROR:
+            return ERROR
+        if carried is VOID:
+            self._diags.emit(D.LANG_TYPE_RESULT_OF_NOTHING, ref.span)
+            return ERROR
+        return self._module.types.result_type(found, carried)
 
     # -- bodies ----------------------------------------------------------------
 
@@ -3822,7 +3831,8 @@ class Checker:
         given: Value | None = None
         if answer is not None:
             given = otherwise if stmt.alternative is not None else builder.wrap(
-                UndefConst(handing), builder.bool_const(True), answer, stmt.span)
+                UndefConst(handing), builder.bool_const(True), answer, stmt.span,
+                None if answer.err is None else UndefConst(answer.err))
             if given is None:
                 given = UndefConst(answer)
         self._settle_after(builder, carried, ways, params, after, exit_token,
@@ -4509,10 +4519,22 @@ class Checker:
         binds = None if first.pattern.name is None else (
             first.pattern.name, first.pattern.name_span, first.pattern.span,
             subject, ty.ok)
+        # The error's arm binds too, where the error carries something: a name
+        # written there stands for what it carries, exactly as a name on the
+        # answer's arm stands for the answer.
+        carried = None
+        if second.pattern.name is not None and ty.err is not None:
+            carried = (second.pattern.name, second.pattern.name_span,
+                       second.pattern.span, subject, ty.err)
+        elif second.pattern.name is not None:
+            self._diags.emit(D.LANG_MATCH_BOTTOM_CARRIES_NOTHING,
+                             second.pattern.span, found=ty.render())
+            return UndefConst(ERROR)
         return self._run_arms(
             builder, stmt, func,
             [_ArmPlan(body=first.body, block=answered, binds=binds),
-             _ArmPlan(body=second.body, block=failed)], wanted, produces)
+             _ArmPlan(body=second.body, block=failed, binds=carried,
+                      carried=True)], wanted, produces)
 
     def _lower_match_on_enum(self, builder: IRBuilder, stmt: ast.Match,
                              func: Function, subject: Value, ty: EnumType,
@@ -4578,7 +4600,9 @@ class Checker:
             self._push_scope()
             if arm.binds is not None:
                 name, name_span, where_span, value, answer_ty = arm.binds
-                bound = builder.unwrap(value, answer_ty, where_span)
+                bound = (builder.error(value, answer_ty, where_span)
+                         if arm.carried
+                         else builder.unwrap(value, answer_ty, where_span))
                 self._name_value(bound, name, name_span)
                 self._bind_local(name, bound, name_span, value_span=where_span)
             given = self._lower_block(builder, arm.body, func, as_result=False,
@@ -5360,11 +5384,15 @@ class Checker:
         builder.condbr(builder.failed(value, expr.span), leaving, answered,
                        span=expr.span)
         builder.position_at(leaving)
-        # An error carries nothing, so what is handed back is an answer nothing
-        # may read beside the truth value that forbids reading it.
-        builder.ret(builder.wrap(UndefConst(answering.ok),
-                                 builder.bool_const(True), answering, expr.span),
-                    expr.span)
+        # What is handed back is an answer nothing may read beside the truth
+        # value that forbids reading it -- and, where the error carries
+        # something, that something, taken from the failure being propagated.
+        # The two error types agree: it is what was checked above.
+        builder.ret(builder.wrap(
+            UndefConst(answering.ok), builder.bool_const(True), answering,
+            expr.span,
+            None if answering.err is None
+            else builder.error(value, answering.err, expr.span)), expr.span)
         builder.position_at(answered)
         return builder.unwrap(value, ty.ok, expr.span)
 
@@ -5755,11 +5783,58 @@ class Checker:
                                      else (("operand", right),), expected)
         if walked is not None:
             return walked
-        if not self._accepts(expected, BOOL):
-            self._report_mismatch(expr.span, BOOL, expected)
+        # What it answers depends on whether the divisor can be seen: written
+        # down -- or left out, which writes two in -- the compiler knows it is
+        # not zero, so the answer is a truth value.  Worked out, it may be
+        # zero, and a truth value has no room to say so.
+        # A `_Ready` stands for a value already lowered, which is what an
+        # operand becomes while the operator is being applied to each element of
+        # an array -- so a literal written on the left is still a literal there.
+        settled = (written is None or isinstance(written, ast.IntLit)
+                   or (isinstance(written, _Ready)
+                       and isinstance(written.value, IntConst)))
+        answer: Type = BOOL if settled else \
+            self._module.types.result_type(BOOL, ty)
+        if not self._accepts(expected, answer):
+            self._report_mismatch(expr.span, answer, expected)
             return UndefConst(ERROR)
-        answer = self._divides(builder, left, right, ty, expr.span)
-        return self._negate(builder, answer, expr.span) if negated else answer
+        if settled:
+            assert isinstance(left, IntConst)
+            if left.value == 0:
+                self._diags.emit(D.LANG_DIVIDES_BY_A_WRITTEN_ZERO, expr.span,
+                                 operator=name)
+                return UndefConst(ERROR)
+            found = self._divides(builder, left, right, ty, expr.span)
+            return (self._negate(builder, found, expr.span) if negated
+                    else found)
+        return self._divides_or_not(builder, left, right, ty, answer, negated,
+                                    expr.span)
+
+    def _divides_or_not(self, builder: IRBuilder, left: Value, right: Value,
+                        ty: IntType, answer: Type, negated: bool,
+                        span: Span) -> Value:
+        """Whether one number divides another, where the divisor may be zero.
+
+        Nothing divides by zero, so there is a pair of operands this has no
+        answer for -- which is what a result is for, and is the same shape `\N{DIVISION SIGN}`
+        already has.  **What the error carries is the number the question was
+        asked about**, since what made it fail is known from the failure itself:
+        the divisor was zero, and a zero says nothing a reader did not have.
+
+        There is no test for zero written here.  The remainder already answers
+        a result, failing on exactly the divisor this does, so the failure is
+        taken from it and the answer is the comparison beside it.
+        """
+        remainder = self._module.types.result_type(ty)
+        left_over = builder.binary(BinOp.SREM if ty.signed else BinOp.UREM,
+                                   right, left, span, remainder)
+        divides = builder.compare(CmpPred.EQ,
+                                  builder.unwrap(left_over, ty, span),
+                                  builder.int_const(ty, 0), span)
+        if negated:
+            divides = self._negate(builder, divides, span)
+        return builder.wrap(divides, builder.failed(left_over, span), answer,
+                            span, right)
 
     def _divides(self, builder: IRBuilder, left: Value, right: Value,
                  ty: IntType, span: Span) -> Value:
@@ -7078,8 +7153,7 @@ class Checker:
             case ast.NameRef():
                 return self._type_of_name(expr.name)
             case ast.Binary() if (expr.op in _COMPARISONS or expr.op in _LOGIC_OPS
-                                  or expr.op in _SHORT_CIRCUIT
-                                  or expr.op in _DIVIDES):
+                                  or expr.op in _SHORT_CIRCUIT):
                 # What the operator answers with, not what it was given: the
                 # answer is what whatever reads the expression will get.
                 return BOOL
@@ -7087,8 +7161,18 @@ class Checker:
                 return BOOL
             case ast.Unary() if expr.op in _DIVIDES_UNARY:
                 # Whether two divides it, which is a truth value about a number
-                # and not a number.
+                # and not a number.  Two is never zero, so there is nothing for
+                # it to have no answer for.
                 return BOOL
+            case ast.Binary() if expr.op in _DIVIDES:
+                # A truth value where the divisor is written down, and a result
+                # where it is not: what it answers is what the compiler can see
+                # about the divisor.
+                if isinstance(expr.left, ast.IntLit):
+                    return BOOL
+                found = self._hint_of(expr.left) or self._hint_of(expr.right)
+                return (None if found is None
+                        else self._module.types.result_type(BOOL, found))
             case ast.Unary() if expr.op is ast.UnaryOp.LENGTH:
                 # How many, which is a count and not whatever was counted.
                 return U64
@@ -7994,7 +8078,11 @@ class Checker:
         if found is expected or found is ERROR:
             return value
         if found is expected.ok:
-            return builder.wrap(value, builder.bool_const(False), expected, span)
+            # An answer, so what the error would have carried is not there and
+            # nothing may read it.
+            return builder.wrap(
+                value, builder.bool_const(False), expected, span,
+                None if expected.err is None else UndefConst(expected.err))
         self._report_mismatch(span, found, expected)
         return UndefConst(ERROR)
 

@@ -19,16 +19,20 @@ that one of them is not one.
 from __future__ import annotations
 
 from dataclasses import replace
+from typing import Sequence
 
 from ...ir.decisions import DecisionKind, DecisionLog
 from ...ir.function import BasicBlock, Function, ReturnStyle
 from ...ir.inst import (BinOp, BinaryInst, CallInst, CastInst, CastKind,
-                        ExtractInst, FrameInst, Instruction, LoadInst,
+                        ErrorInst, ExtractInst, FailedInst, FrameInst,
+                        Instruction, LoadInst,
                         MemStartInst, RetInst, StoreInst, Terminator,
-                        TupleInst)
-from ...ir.layout import DataLayout, member_offsets_of
+                        TupleInst, UnwrapInst, WrapInst)
+from ...ir.layout import (DataLayout, error_offset_of,
+                          member_offsets_of, tag_offset_of)
 from ...ir.module import Module
-from ...ir.types import MEM, TupleType, Type, U64, VOID, parts_of
+from ...ir.types import (MEM, ResultType, TupleType, Type, U64, VOID,
+                         parts_of)
 from ...ir.value import IntConst, Value
 
 #: The one layout this compiler has.  Where it grows a second, the pass is
@@ -119,7 +123,7 @@ class LargeAnswers:
             value = last.operands[0]
             for index, (part, offset) in enumerate(
                     zip(parts_of(answer), _offsets(answer))):
-                taken = ExtractInst(value, index, part, last.span)
+                taken = _part(value, index, part, answer, last.span)
                 made.append(taken)
                 token = StoreInst(token, _at(module, place, part, offset,
                                              made, last.span), taken, last.span)
@@ -159,7 +163,7 @@ class LargeAnswers:
                                                   made, span)), span)
                 made.append(read)
                 taken.append(read)
-            rebuilt = TupleInst(taken, answer, span)
+            rebuilt = _whole(taken, answer, span)
             made.append(rebuilt)
             _splice(block, index, made)
             _stands_for(block.parent, inst, rebuilt)
@@ -168,8 +172,36 @@ class LargeAnswers:
 
 def _offsets(answer: Type) -> tuple[int, ...]:
     """Where each part of the answer goes in the place that holds it."""
+    if isinstance(answer, ResultType):
+        assert answer.err is not None
+        return (0, tag_offset_of(answer, LAYOUT),
+                error_offset_of(answer, LAYOUT))
     assert isinstance(answer, TupleType), answer
     return member_offsets_of(answer, LAYOUT)
+
+
+def _part(value: Value, index: int, part: Type, answer: Type,
+          span) -> Instruction:  # noqa: ANN001
+    """One part of an answer, taken out of it.
+
+    A tuple's parts are its members and a result's are the answer, whether
+    there is one, and what the error carries -- three different instructions
+    rather than one indexed by number, because they are of three types and the
+    representation says so.
+    """
+    if not isinstance(answer, ResultType):
+        return ExtractInst(value, index, part, span)
+    return (UnwrapInst(value, part, span) if index == 0
+            else FailedInst(value, part, span) if index == 1
+            else ErrorInst(value, part, span))
+
+
+def _whole(taken: Sequence[Value], answer: Type,
+           span) -> Instruction:  # noqa: ANN001
+    """The parts put back together into the one value they are."""
+    if not isinstance(answer, ResultType):
+        return TupleInst(list(taken), answer, span)
+    return WrapInst(taken[0], taken[1], answer, span, taken[2])
 
 
 def _at(module: Module, place: Value, part: Type, offset: int,
