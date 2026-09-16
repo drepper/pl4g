@@ -2301,6 +2301,31 @@ holds at least one statement, so right after the open neither the end of a line
 nor a dedent is a token the parser would take, and the close cannot fire until
 something has been read.
 
+What the grammar is made into
+-----------------------------
+
+Two things are made from `grammar.js`, by two commands.  `tree-sitter generate`
+writes `src/parser.c`, which is committed so that anything reading the grammar
+needs no tree-sitter command.  `tree-sitter build` writes `pl4g.so` beside it,
+which is what an editor loads; it is not committed, being a binary for one
+machine.  `bin/pl4g-grammar` runs both, and is the one thing a grammar change
+asks for.
+
+**The suite keeps them current**, so that forgetting costs nothing.  One test
+generates into a copy and compares the parser byte for byte; another rebuilds
+the library whenever anything it is made from is newer, and fails with the C
+compiler's own words when the scanner does not build -- which is the one place
+the scanner is compiled on purpose, a scanner that does not build showing up
+anywhere else as a grammar that cannot be loaded.
+
+**Neither test may write what the others read.**  `tree-sitter parse` builds a
+library of its own in a cache, from `src/parser.c`, whenever that file is the
+newer of the two -- so a test that rewrote `src/parser.c` in place while the
+suite ran over every core made one of those reads find a parser half written,
+and the run then disagreed with the compiler about a program that was perfectly
+all right.  Generating into a copy is what settles it.  The built library is
+read by nobody here, so building it disturbs nothing.
+
 Expectations
 ------------
 

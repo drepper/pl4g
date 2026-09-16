@@ -112,19 +112,72 @@ def test_the_corpus_of_the_grammar_passes() -> None:
     assert proc.returncode == 0, proc.stdout + proc.stderr
 
 
-def test_the_generated_parser_is_current() -> None:
+def test_the_generated_parser_is_current(tmp_path: Path) -> None:
     """The parser checked in is the one the grammar produces.
 
     It is generated and committed so that anything reading the grammar needs no
     tree-sitter command; a grammar changed without regenerating would leave the
     two disagreeing with nothing to say so.
+
+    Generated into a copy rather than over the file it is compared against.
+    Every other test here reads that file -- `tree-sitter parse` builds its own
+    library from it whenever it is the newer of the two -- and the suite runs
+    over every core, so rewriting it in place made one of those read a parser
+    half written and disagree with the compiler about a program that is
+    perfectly all right.
     """
-    before = (GRAMMAR / "src" / "parser.c").read_bytes()
-    proc = subprocess.run([TREE_SITTER, "generate"], cwd=GRAMMAR,
+    elsewhere = tmp_path / "tree-sitter-pl4g"
+    shutil.copytree(GRAMMAR, elsewhere,
+                    ignore=shutil.ignore_patterns("node_modules", "build",
+                                                  "*.so", "*.dylib", "*.wasm"))
+    proc = subprocess.run([TREE_SITTER, "generate"], cwd=elsewhere,
                           capture_output=True, text=True, timeout=300)
     assert proc.returncode == 0, proc.stdout + proc.stderr
-    after = (GRAMMAR / "src" / "parser.c").read_bytes()
-    assert before == after, "run tree-sitter generate after changing grammar.js"
+    assert (elsewhere / "src" / "parser.c").read_bytes() \
+        == (GRAMMAR / "src" / "parser.c").read_bytes(), \
+        "run bin/pl4g-grammar after changing grammar.js"
+
+
+#: What the built library is made from.  `grammar.js` is not compiled -- the
+#: generated parser is -- but a library older than it is out of date whatever
+#: order the tests happen to run in, and saying so here needs no reasoning about
+#: that order.
+def _inputs_of_the_library() -> list[Path]:
+    """Every file the built library is made from."""
+    found = [GRAMMAR / "grammar.js", GRAMMAR / "tree-sitter.json"]
+    found += sorted((GRAMMAR / "src").rglob("*.c"))
+    found += sorted((GRAMMAR / "src").rglob("*.h"))
+    return [one for one in found if one.exists()]
+
+
+def test_the_built_library_is_current() -> None:
+    """The shared library beside the grammar is built from what is there now.
+
+    `tree-sitter parse` does not use it -- the command keeps a library of its
+    own in a cache and rebuilds that when the sources are newer -- so an editor
+    or anything else loading the grammar from this directory is what would read
+    a stale one, and nothing it did would say so.  Nothing else here reads it
+    either, which is why building it disturbs no other test.  Building it here is what
+    keeps that from happening: the suite is what everything else in this project
+    is kept current by, and this is one more thing it keeps.
+
+    It is also the one place the scanner is compiled on purpose.  A scanner that
+    does not build shows up elsewhere as a grammar that cannot be loaded, which
+    says nothing about what is wrong with it; here the compiler's own words are
+    what the failure carries.
+    """
+    library = GRAMMAR / "pl4g.so"
+    inputs = _inputs_of_the_library()
+    assert inputs, "the grammar directory holds nothing to build from"
+    newest = max(one.stat().st_mtime for one in inputs)
+    if library.exists() and library.stat().st_mtime >= newest:
+        return
+    proc = subprocess.run([TREE_SITTER, "build"], cwd=GRAMMAR,
+                          capture_output=True, text=True, timeout=300)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert library.exists(), "tree-sitter build wrote no library"
+    assert library.stat().st_mtime >= newest, \
+        "the library is still older than what it is built from"
 
 
 def test_every_highlight_query_is_valid() -> None:

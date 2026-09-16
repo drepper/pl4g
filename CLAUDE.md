@@ -34,9 +34,10 @@ compiled for all the target architectures as long as they use the Linux kernel i
 `python -m pytest tests` runs the suite over every core, `pytest-xdist` being a dependency and `-n auto` the default; `-n0` runs
 it in one process where a debugger or a test's own output wants that.
 
-A change to the syntax of the language changes `tree-sitter-pl4g/grammar.js` in the same commit, and `tree-sitter generate` is run
-so that the committed parser matches.  A test requires the grammar and the compiler to agree on every program in the test suite, so
-a syntax added to one and not the other fails the suite.
+A change to the syntax of the language changes `tree-sitter-pl4g/grammar.js` in the same commit, and `bin/pl4g-grammar` is run so
+that the committed parser and the shared library beside it both match.  A test requires the grammar and the compiler to agree on
+every program in the test suite, so a syntax added to one and not the other fails the suite; two more check that the parser is the
+one the grammar produces and rebuild the library whenever anything it is made from is newer.
 
 Every change that lands is timed.  Run `bin/pl4g-timing` after committing it, which appends a column for that commit to
 `spec/timings.md`, and report what it shows.  Add a sample to the list in the script whenever a feature lands that could plausibly

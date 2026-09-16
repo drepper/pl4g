@@ -1,0 +1,35 @@
+#!/usr/bin/python3
+"""Bring the tree-sitter grammar's generated files up to date.
+
+Two things are made from ``grammar.js``: the parser that is committed, so that
+anything reading the grammar needs no tree-sitter command, and the shared
+library beside it, which an editor loads.  They are made by two commands and
+forgetting the second leaves an editor reading a grammar the project no longer
+has -- so this runs both, and running it is the one thing a grammar change asks
+for.
+
+The suite keeps them current as well, `tests/compiler/test_grammar.py` checking
+the first and rebuilding the second.  This is for the times between.
+"""
+
+from __future__ import annotations
+
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+GRAMMAR = Path(__file__).resolve().parent.parent / "tree-sitter-pl4g"
+TREE_SITTER = "tree-sitter"
+
+if shutil.which(TREE_SITTER) is None:
+    print("the tree-sitter command is not installed", file=sys.stderr)
+    raise SystemExit(1)
+
+for step in ("generate", "build"):
+    done = subprocess.run([TREE_SITTER, step], cwd=GRAMMAR)
+    if done.returncode != 0:
+        print("".join(("tree-sitter ", step, " failed")), file=sys.stderr)
+        raise SystemExit(done.returncode)
+print("".join(("wrote ", str(GRAMMAR / "src" / "parser.c"), " and ",
+               str(GRAMMAR / "pl4g.so"))), file=sys.stderr)
