@@ -190,6 +190,7 @@ GROUPS: tuple[Group, ...] = (
            "record-values": "a record made, read, handed to a call and answered with",
            "record-in-a-record": "a record holding records, and a reference into one",
            "record-through-a-call": "a record holding records handed to a call and answered with",
+           "record-of-one-field": "a record of one field made, passed, answered with and referred into",
            "loop-break-nested": "two loops and all four jumps between them",
            "loop-continue": "two loops each begun again from inside the body",
            "loop-break-value": "a search whose loop comes to what it found",

@@ -33,7 +33,7 @@ from ..pool import Constants
 from ..narrow import normalize
 from ...ir.value import Value
 from ...ir.layout import DataLayout, align_of, size_of, tag_offset_of
-from ...ir.types import parts_of
+from ...ir.types import made_of_parts, parts_of
 from ..callconv import TooManyArguments, argument_places, result_places
 from ..saturate import (DIVISION, EXTREMA, NAMES, SATURATING, TRAPPING,
                         Unsupported,
@@ -1162,7 +1162,7 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                     value = inst.operands[0]
                     ty = value.ty
                     pieces = parts_of(ty)
-                    if len(pieces) > 1:
+                    if made_of_parts(ty):
                         # One register per part, which is what every one of
                         # these architectures answers with for a two-word value.
                         try:
@@ -1633,7 +1633,7 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                     handed: list[Move] = []
                     for position, argument in enumerate(given):
                         pieces = parts_of(argument.ty)
-                        if len(pieces) > 1:
+                        if made_of_parts(argument.ty):
                             for at, (part, place) in enumerate(
                                     zip(pieces, going[position])):
                                 handed.append(Move(
@@ -1665,7 +1665,7 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                                            theirs, registers, known_clobbers),
                              reads=[move.into for move in handed
                                     if through is None or move.into is not called])
-                    if len(parts_of(inst.ty)) > 1:
+                    if made_of_parts(inst.ty):
                         pieces = parts_of(inst.ty)
                         try:
                             places = result_places(theirs, inst.ty)

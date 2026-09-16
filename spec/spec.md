@@ -2007,6 +2007,10 @@ read.  Such a record is handed to a call and answered with like any other, becau
 of and a field that is itself a record is not one of them**: a `Line` goes as four `u32`s and not as two `Point`s.  Which of them
 a field is, and where it lies, is the compiler's to remember -- nothing in the language says it.
 
+**A record of one field is a record**, made, passed, answered with and referred into like any other.  Nothing about a record asks
+how many fields it has, so `type Handle = fd : i32` is what says which of the things that may be done with a number may be done
+with this one -- which is what C's structure of one member, Rust's newtype and Haskell's `newtype` are each for.
+
 **A reference that promises more stands where less is wanted.**  `&mut T` promises everything `&T` does and adds writing, and
 `&static T` promises everything `&T` does and adds the time, so each stands where the weaker one is asked for -- in a call, a
 definition, a return.  The bits are the same bits, so nothing is emitted for it.  Both go one way only: a place nothing may write

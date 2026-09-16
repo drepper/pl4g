@@ -2413,6 +2413,16 @@ a call answered with -- it is written into a frame first and the field read out
 of that, so one rule reads a field however the record got here and a field of a
 field needs no second one.
 
+**One field is not one value.**  Whether a value is several travelling as one is
+asked of the type -- `made_of_parts`, which is `parts_of(ty) != (ty,)` -- and not
+counted, because a record of one field is made of parts and has one of them while
+a `u32` is not made of parts at all.  Every place that chooses between the
+one-register path and the part-by-part one asks it: the three instruction
+selectors at a return, at a call's arguments and at its answer, the parallel copy
+a branch's arguments are, and the verifier's rule about making a value and taking
+one apart.  Counting was the question before, which is why a record of one field
+reached the back end looking like its field and was refused there.
+
 **An `elif` asks its condition in a block of its own**, and a condition that
 writes -- which is what such a frame is -- leaves a memory token only the arms
 below it may read.  Each arm therefore begins with the token current where the

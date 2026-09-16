@@ -1,0 +1,55 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ A record of one field is a record like any other: made, handed to a call,
+※ answered with, and a reference taken into it.
+※
+※ **One field is not one value.**  What a record is made of is asked of the type
+※ and not counted -- a record of one field is made of parts and has one of them,
+※ a `u32` is not made of parts at all -- and every place that chose between the
+※ one-register path and the part-by-part one asks that question rather than
+※ counting.  Before this the count was the question, so a record of one field was
+※ read like a `u32` and the back end refused a record.
+※
+※ **Why it matters here.**  A descriptor is naturally one number, and a record
+※ around it is what says which of the things that may be done with a number may be
+※ done with this one.  A language that made a program add a second field to get
+※ that would be charging for the abstraction.
+※
+※ Compare: **C**, where a structure of one member is a structure and the ABI says
+※ so; **Rust**, whose newtype is exactly this and is the idiom for it; **Go** and
+※ **Zig**, the same; **Haskell**, whose `newtype` goes further and costs nothing
+※ at all by construction.
+
+type Handle = fd : i32
+type Pair = a : u32 ; b : u32
+type Holder = only : Pair
+
+fn open(n: i32) → Handle:
+    Handle(.fd ← n)
+
+fn number(h: Handle) → i32:
+    h.fd
+
+@[impure]
+fn bump(at: &mut i32):
+    at⌖ ← at⌖ + 1i32
+
+fn wrapped(p: Pair) → Holder:
+    Holder(.only ← p)
+
+@[startup, impure]
+fn main() → u6:
+    let h : mut Handle = open(7i32)
+    if number(h) ≠ 7i32:
+        1u6
+    else:
+        ※ a reference to the one field, written through
+        bump(&h.fd)
+        if h.fd ≠ 8i32:
+            2u6
+        elif number(open(3i32)) ≠ 3i32:
+            3u6
+        else:
+            ※ and one holding a record, whose one part is two leaves
+            let w : Holder = wrapped(Pair(.a ← 1u32, .b ← 2u32))
+            if w.only.b ≠ 2u32: 4u6 else: 0u6

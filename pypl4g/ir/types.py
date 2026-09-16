@@ -996,6 +996,17 @@ def without_units(ty: Type) -> Type:
     return ty.bare if isinstance(ty, (IntType, FloatType)) else ty
 
 
+def made_of_parts(ty: Type) -> bool:
+    """Whether a value of *ty* is several values travelling as one.
+
+    Not "more than one part": a record of one field is made of parts and has
+    one, and what tells the two apart is whether the parts are something other
+    than the type itself.  Everything that chooses between the one-register path
+    and the part-by-part one asks this, so the two answers cannot drift.
+    """
+    return parts_of(ty) != (ty,)
+
+
 def parts_of(ty: Type) -> tuple[Type, ...]:
     """What a value of *ty* is, where it is more than one value travelling as one.
 

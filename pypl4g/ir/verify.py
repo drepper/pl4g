@@ -258,10 +258,13 @@ class Verifier:
                 # with.  An array whose type does not say how long it is has
                 # two, and is made the same way.
                 pieces = parts_of(inst.ty)
-                if len(pieces) < 2:
+                if pieces == (inst.ty,):
+                    # Not "fewer than two": a record of one field is made this
+                    # way and is one value, the question being whether the type
+                    # is a shape whose parts are something other than itself.
                     self._fail(where, "".join((
                         "making a ", inst.ty.render(),
-                        ", which is one value and not several")))
+                        ", which is not made of parts")))
                 elif len(inst.operands) != len(pieces):
                     self._fail(where, "".join((
                         "making a ", inst.ty.render(), " out of ",
@@ -275,10 +278,10 @@ class Verifier:
                                 inst.ty.render(), " is ", value.ty.render())))
             case ExtractInst():
                 inner = parts_of(inst.operands[0].ty)
-                if len(inner) < 2:
+                if inner == (inst.operands[0].ty,):
                     self._fail(where, "".join((
                         "taking a value out of ", inst.operands[0].ty.render(),
-                        ", which is one value and not several")))
+                        ", which is not made of parts")))
                 elif not 0 <= inst.index < len(inner):
                     self._fail(where, "".join((
                         inst.operands[0].ty.render(), " has no value at ",

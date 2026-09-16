@@ -35,7 +35,7 @@ from typing import Callable, Protocol, Sequence
 from ..ir.function import BasicBlock, Function
 from ..ir.inst import (BlockTarget, BrInst, CmpInst, CmpPred, CondBrInst,
                        Instruction, Terminator)
-from ..ir.types import FloatType, MEM, parts_of
+from ..ir.types import FloatType, MEM, made_of_parts, parts_of
 from ..ir.value import BlockParam
 from ..mc.asmbuilder import Assembler
 from ..mc.operand import MCImm, MCOperand, MCReg
@@ -298,7 +298,7 @@ def _moves_of(target: BlockTarget, operands: Operands,
     moves: list[Move] = []
     for param, argument in carried_values(target):
         pieces = parts_of(param.ty)
-        if len(pieces) == 1:
+        if not made_of_parts(param.ty):
             moves.append(Move(into=operands.destination(param),
                                source=operands.value(argument, span)))
             continue
