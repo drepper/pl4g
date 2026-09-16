@@ -511,6 +511,23 @@ def _holds_a_lambda(ty: Type, seen: frozenset[int] = frozenset()) -> bool:
             return False
 
 
+def _promises_as_much(expected: Type | None, found: Type) -> bool:
+    """Whether the reference *found* promises at least what *expected* asks.
+
+    Two promises, each of which may be given away without anything being lost:
+    one that lasts as long as the program lasts long enough for a call, and one
+    that may be written may be read.  Both go one way only -- a call's storage
+    is no use where the program's is wanted, and a place nothing may write is
+    no use where writing is -- and the bits are the same either way, so what
+    carries a value across is a bitcast and the generated code is unchanged.
+    """
+    if not isinstance(expected, PtrType) or not isinstance(found, PtrType) \
+            or found is expected or found.pointee is not expected.pointee:
+        return False
+    return ((found.lasting or not expected.lasting)
+            and (found.mutable or not expected.mutable))
+
+
 def _reached_from(value: Value, sources: Sequence[Value]) -> bool:
     """Whether *value* was worked out from one of *sources*.
 
@@ -10463,22 +10480,16 @@ class Checker:
 
     def _shorter_life(self, builder: IRBuilder, value: Value, expected: Type,
                       span: Span) -> Value:
-        """A reference that outlives what is wanted, read as what is wanted.
+        """A reference promising more than is wanted, read as what is wanted.
 
         A place that is there as long as the program is there for as long as
-        any one call, so a reference to one stands where a reference of the
-        call's own would -- and what stands there has that type, the same bits
-        read as a promise about a shorter time.
+        any one call, and a place that may be written may certainly be read.
+        So such a reference stands where the weaker one is wanted -- and what
+        stands there has that type, the same bits read as the smaller promise.
         """
-        found = self._value_type_of(value)
-        if found is expected or not isinstance(found, PtrType) \
-                or not isinstance(expected, PtrType):
+        if not _promises_as_much(expected, self._value_type_of(value)):
             return value
-        if found.lasting and not expected.lasting \
-                and found.pointee is expected.pointee \
-                and found.mutable == expected.mutable:
-            return builder.cast(CastKind.BITCAST, value, expected, span)
-        return value
+        return builder.cast(CastKind.BITCAST, value, expected, span)
 
     def _spread(self, builder: IRBuilder, expr: ast.Expr, expected: ArrayType,
                 span: Span) -> Value:
@@ -10564,14 +10575,12 @@ class Checker:
             # The same number in a unit the program said may stand here.  The
             # bits are the same bits, so nothing is emitted for it.
             return True
-        if isinstance(expected, PtrType) and isinstance(found, PtrType) \
-                and found.lasting and not expected.lasting \
-                and found.pointee is expected.pointee \
-                and found.mutable == expected.mutable:
-            # What lives as long as the program lives long enough for anything:
-            # a place that outlives every call outlives this one.  It goes one
-            # way only, a call's storage being no use where the program's is
-            # wanted.
+        if _promises_as_much(expected, found):
+            # A reference that promises at least what is wanted.  What lives as
+            # long as the program lives long enough for anything, and what may
+            # be written may be read; both go one way only, a call's storage
+            # being no use where the program's is wanted and a place nothing
+            # may write being no use where writing is.
             return True
         if self._deriving and isinstance(expected, (IntType, FloatType)) \
                 and isinstance(found, (IntType, FloatType)) \

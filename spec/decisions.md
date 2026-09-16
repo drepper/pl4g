@@ -3378,14 +3378,14 @@ paths, and saying which widths an architecture answers for is what keeps that to
 
 **An operator over an array is one operation over a whole run of elements**
 
-Decided on the user’s direction: the arithmetic, the bitwise and the logical operators are done to a whole run at once where the
+Decided on the user's direction: the arithmetic, the bitwise and the logical operators are done to a whole run at once where the
 machine has registers that hold one, as wide as the machine allows, and `--mclevel` is what says which instructions it has.
 
 **The decision that shapes everything else is where the choice is made.**  The front end asks the question of the whole run --
 one addition of sixteen lanes -- and a step in each backend brings that down to what that machine has.  It is not the front end
 that asks how wide a register is, and it is not a pattern-matcher that notices a run of sixteen additions afterwards.
 
-That the front end does not ask is what keeps a program’s meaning out of the machine’s hands: the same IR is produced for all
+That the front end does not ask is what keeps a program's meaning out of the machine's hands: the same IR is produced for all
 three targets and for every level, and a target that can do nothing still compiles it, an element at a time, which is what the
 program said in the first place.  That a pattern-matcher does not notice is the other half: the information that sixteen
 additions are the same addition is *in the program* -- it wrote one operator over one array -- and a compiler that threw it away
@@ -3438,11 +3438,11 @@ check that every element still gets.
 
 **`⎕wrap`, which says of a region that its arithmetic may go past the end**
 
-Decided on the user’s direction: a name written like a function and taking one expression, inside which the operators keep the
+Decided on the user's direction: a name written like a function and taking one expression, inside which the operators keep the
 low bits of what they came to instead of stopping the program or stopping at the end of the type.
 
 **The thing being decided is the grain.**  Every language that offers wrapping arithmetic at all offers it one operator at a
-time -- Rust’s `wrapping_add`, Zig’s `+%`, Swift’s `&+` -- and the places that actually want it want it of a whole expression: a hash,
+time -- Rust's `wrapping_add`, Zig's `+%`, Swift's `&+` -- and the places that actually want it want it of a whole expression: a hash,
 a checksum, a pseudo-random step, a counter that is meant to run round.  Written one operator at a time those read as a different
 program from the one anybody means, and every operator in them has to carry the mark, which is exactly where one gets left off.
 Written once around the expression, what a reader has to check is that the expression is one where wrapping is intended, which is
@@ -3482,7 +3482,7 @@ Compare, beyond those above: **C and C++**, where unsigned wraps and signed is u
 without the other and no way to ask for neither -- and where `-fwrapv` is the whole-program version of this decision, made once
 for a compilation rather than once for an expression; **Go**, which wraps always and offers nothing else, so the question never
 arises and neither does the check; **Python**, whose integers do not have ends; and **Ada**, whose `mod` types wrap by being a
-different type, which is the third possible grain -- the value’s rather than the operator’s or the region’s.  Ada’s is the most
+different type, which is the third possible grain -- the value's rather than the operator's or the region's.  Ada's is the most
 honest of the three and the least usable: it makes a wrapping `u8` a type of its own, so every function that takes one has to
 say which it takes, and a program that wants one expression to wrap has to convert going in and coming out.
 
@@ -4665,11 +4665,11 @@ found it.
 
 ## 2026-09-17T00:30+02:00 — language
 
-**Generic functions: `fn f(p: T’, q: u32) → T’`**
+**Generic functions: `fn f(p: T', q: u32) → T'`**
 
 Decided on the user's direction, with the notation asked for and checked.
 
-**`T’` is free.**  The user asked whether it clashes, and it does not: making a quotation mark continue an identifier is enough,
+**`T'` is free.**  The user asked whether it clashes, and it does not: making a quotation mark continue an identifier is enough,
 and it cannot begin one, so `'a'` is still a character literal.  The whole suite passes with the rule in place, and the only
 thing it costs is a name immediately followed by a character literal with nothing between them -- which nothing readable writes.
 It is Haskell's rule and ML's, and the mark has meant "another one of these" in mathematics since Newton.

@@ -1931,6 +1931,11 @@ is a way to write it.
 `rows⌖⟦2⟧` is an element of what `rows` names.  That is what Pascal, Modula, Ada and Odin put a mark after a pointer for, and it
 is why the mark is not a prefix as C's is.  Written after anything that is not a reference there is no place to read (4534).
 
+**A reference that promises more stands where less is wanted.**  `&mut T` promises everything `&T` does and adds writing, and
+`&static T` promises everything `&T` does and adds the time, so each stands where the weaker one is asked for -- in a call, a
+definition, a return.  The bits are the same bits, so nothing is emitted for it.  Both go one way only: a place nothing may write
+is no use where writing is, and a call's storage is no use where the program's is wanted.
+
 **A reference names a place holding one value** (4536): a number, a truth value, a code point, a value of an enumeration, a
 record, a choice between records, and a reference itself.  An array, a list, a string, a set, a dictionary, a tuple and a result are each already several
 values or already a place, so a reference to one would be a second way of writing what a value of it already is.  A reference
@@ -2020,6 +2025,12 @@ opens a scope or writes the statement, and the rule can be read off the source w
 array**, so lending one lends the array: two elements are two places, but telling one index from another is arithmetic, and a
 promise that depends on arithmetic is no promise.  **A variable at the top level is not tracked** -- it is reachable from every
 function and no one of them can see what the others do -- so the rule is about names a body binds.
+
+**The rule is about taking a reference, not about copying one.**  A reference is a value like any other, so binding a second
+name to one already in hand -- `let other: &mut u8 = r` -- makes a second way to the place that no `&` was written for and that
+nothing here counts.  What is checked is every place a reference is *made*, which is where a generator would make a mistake; what
+is not checked is a program that hands one it already has to two names.  Rust closes that with moves and reborrows, which need an
+ownership rule this language does not have.
 
 C++ has no such rule and two references to one object is the ordinary case, which is why `std::vector` invalidating its own
 iterators is a hazard rather than an error.  Swift enforces the same exclusivity for `inout` and does it partly at run time.  ML
@@ -3955,14 +3966,14 @@ about is what went in.
 **A name with a mark after it is a type a call settles.**
 
 ```
-fn largest(a: T’, b: T’) → T’:
+fn largest(a: T', b: T') → T':
     a ⌈ b
 
 largest(1u8, 2u8)                 ※ u8
 largest(5u32, 3u32)               ※ u32
 ```
 
-`T’` is a **type parameter**: it stands for whatever type a call turns out to give it.  The mark is written after the name and
+`T'` is a **type parameter**: it stands for whatever type a call turns out to give it.  The mark is written after the name and
 not before it, so that the name reads as a name and the mark as a note about it -- which is what the prime has meant in
 mathematics for three hundred years and in ML and Haskell for fifty.
 
@@ -3979,8 +3990,8 @@ suffix takes the type an earlier argument settled:
 largest(9u8, 4)                   ※ the 4 is a u8, because the 9u8 said so
 ```
 
-**The type a parameter is written with says how to read the argument's.**  `T’⟦⟧` against `u8⟦4⟧` says `T’` is `u8`, and
-so do `&T’`, `[T’]`, `⸨T’⸩`, `〈T’, U’〉` and `fn(T’) → T’` against the shapes they name.  Where the two are not
+**The type a parameter is written with says how to read the argument's.**  `T'⟦⟧` against `u8⟦4⟧` says `T'` is `u8`, and
+so do `&T'`, `[T']`, `⸨T'⸩`, `〈T', U'〉` and `fn(T') → T'` against the shapes they name.  Where the two are not
 the same shape there is nothing to read (4556), and where two places in one argument say different things about one parameter
 they cannot both be right (4557).
 
@@ -4014,7 +4025,7 @@ has, and something written once per set of types is none of them.
 Compare: **C++** templates, whose instantiation-time checking this is, and whose `template<typename T>` this leaves out -- the
 parameters being named by being used, as C++20's abbreviated `void f(auto x)` does.  **Rust** and **Swift**, which check a
 generic body once against bounds written on it, which is stronger and needs a language for the bounds.  **Go**, whose type
-parameters are written in brackets and constrained by interfaces.  **ML** and **Haskell**, whose `’a` and `a` are inferred rather than
+parameters are written in brackets and constrained by interfaces.  **ML** and **Haskell**, whose `'a` and `a` are inferred rather than
 written, and from whom the mark is borrowed.  **Zig**, where a type is an ordinary value at compile time and a generic function
 is a function taking one -- the most economical answer of the lot, and one that needs types to be values.
 

@@ -593,6 +593,10 @@ Runtime
     `static` on the field is the obvious half; borrowing per field would need what was deliberately not built, a way of naming
     several lifetimes at once.
 
+[ ] count a reference copied into a second name.  The aliasing rule (4563) watches every place a reference is *made* and not
+    the ones that are merely handed on, so `let other: &mut u8 = r` is a second way to the place that nothing reports.  Rust
+    closes it with moves and reborrows, which need an ownership rule this language does not have.
+
 [ ] end a reference where it is last used rather than where its scope does.  A reference a name kept lives as long as the name
     (4563), which refuses programs that are plainly fine -- a `&mut` written through and then never mentioned again, followed by
     a second one.  Rust's non-lexical lifetimes are the design to compare against, and what it costs is a liveness analysis where

@@ -53,6 +53,11 @@ fn main() → u6:
     let only_at: i8 = 30i8
     let only: &i8 = &only_at
     let also: &i8 = &only_at
+    ※ and one that may be written through, standing where one that may not is
+    ※ wanted: it promises everything the other does and more
+    let w: mut i8 = 12i8
+    let writable: &mut i8 = &mut w
+    let readable: &i8 = writable
     ※ an element of an array, which is a place like any other
     let v: u8⟦4⟧ = ⟦1u8, 2u8, 3u8, 4u8⟧
     let e: &mut u8 = &mut v⟦2⟧
@@ -79,6 +84,8 @@ fn main() → u6:
         3u6
     elif only⌖ ≠ 30i8 ∨ also⌖ ≠ 30i8:
         4u6
+    elif readable⌖ ≠ 12i8 ∨ reads(writable) ≠ 12i8:
+        11u6
     elif e⌖ ≠ 9u8:
         5u6
     elif counter ≠ 7u16:
@@ -95,6 +102,11 @@ fn main() → u6:
         10u6
     else:
         0u6
+
+※ A function that only reads takes the reference that only reads, and a caller
+※ holding one that may write hands it over unchanged.
+fn reads(at: &i8) → i8:
+    at⌖
 
 ※ The callee writes what the caller named, which is the whole point.
 @[impure]
