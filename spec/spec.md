@@ -1924,8 +1924,23 @@ line (4535) and a name without `mut` refuses the second.
 
 **`&` is written before a place** (4533): a name, a variable at the top level, an element of an array.  A value the program worked
 out is in no particular place -- it may be in a register and it may be nowhere at all -- so there is nothing for a reference to
-name.  `&mut` further needs a place the program could have written where it stands (4537), since a reference that allows writing
-is a way to write it.
+name.  A reference that allows writing further needs a place the program could have written where it stands (4537), since it is a
+way to write it.
+
+**Whether it may be written is part of the type, so the context says it.**  `&x` where a `&mut T` is wanted is a reference that
+may write, exactly as an integer literal where a `u8` is wanted is a `u8` -- what a type is written down for is to say what goes
+in it.  `mut` on the right is written where nothing says: a name whose type is read off its value, the wildcard, an argument of a
+call being walked.
+
+```
+let r: &mut i8 = &n              ※ may write: the type said so
+bump(&n)                         ※ may write: the parameter said so
+let m := &mut n                  ※ may write: nothing else says, so this does
+let s: &i8 = &n                  ※ may not; `&mut n` here would be refused
+```
+
+Writing `mut` where the context already says it is allowed and says the same thing, which is what makes the call above readable
+either way; writing it where the place may not be written is refused (4537) whichever of the two said it.
 
 **`⌖` is written after what it reads through**, so reaching further into what it answers reads left to right without brackets:
 `rows⌖⟦2⟧` is an element of what `rows` names.  That is what Pascal, Modula, Ada and Odin put a mark after a pointer for, and it

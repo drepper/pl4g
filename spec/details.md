@@ -1850,6 +1850,17 @@ A name that has to be somewhere
 A local in this compiler is a value: `let n: mut u8 = 0u8` binds a name to an SSA value, and assigning to it binds the name to
 another.  Nothing of it is in memory, so there is no address to give -- which is the one thing `&n` needs.
 
+**Whether `&x` may be written through is decided before the place is worked out.**  `_lower_address` reads it off `expected`,
+because the aliasing rule has to be told which kind of borrow is being taken and `_lend` runs before `_place_written` -- working
+the place out reads the name, and a name being lent is what is being asked about.  So the one flag serves three things: the
+borrow recorded, the check that the place allows writing, and the type the value gets.
+
+**A diagnostic that says the compiler has not implemented something must not be a consequence of one that says the program is
+wrong.**  It is a claim about the compiler, it is fatal, and a reader has no way to tell it from the real thing.  `_literal_type`
+therefore answers nothing, quietly, when what it is measured against is the error type, and `_lower_comparison` hands the error
+type down to the right operand where the left turned out to be one -- the left having already been reported.  `_hint_of` learnt
+to look through a dereference in the same pass, which is what lets `0 = r⌖` mean what `r⌖ = 0` means.
+
 **A name a reference is taken of is given storage of its own, before the body is walked.**  `_addressed_in` collects every name
 written after `&` anywhere below a node, and `_lower_body` runs it over the body before binding a single parameter.  A name in
 that set is bound to a `frame` with its value stored into it, and `_Local.placed` says so; reading it is then a `load` and

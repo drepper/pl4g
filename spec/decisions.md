@@ -4868,6 +4868,39 @@ What the shorter form bought was two characters on the most common signature, an
 own three diagnostics for a case the general one already covered.  Rust keeps a shorter form of its own -- elision, which writes
 nothing at all -- and that is a different trade: it removes a spelling rather than adding one.
 
+## 2026-09-17T06:30+02:00 — language
+
+**`&x` takes whether it may write from what is wanted**
+
+Reported by the user as a program that should not have been refused: `let r: &mut u32 = &v` said the type on the left and was
+told the value on the right was the wrong one.
+
+**What a type is written down for is to say what goes in it.**  Whether a reference may be written through is part of its type,
+so a context that states the type states that too -- which is the rule an integer literal already follows, and the reason
+`let n: u8 = 1` needs no suffix.  `mut` on the right is now written where nothing says: a name whose type is read off its value,
+the wildcard, an argument of a call being walked.  Writing it where the context already says it is allowed and says the same
+thing.
+
+**What it costs** is the thing a call used to say outright: `bump(&mut n)` announced at the call that the callee may write, and
+`bump(&n)` does not.  What is kept is that a reference is still taken explicitly, which is the decision this does not touch --
+`bump(n)` is still not a way to hand a place over.  A reader who wants the louder form still writes it, and the compiler's own
+output does.
+
+**The place must still allow it** (4537), whichever of the two said the reference may write, so nothing is reachable now that was
+not before.  The aliasing rule sees the same thing: `&v` bound to a `&mut u32` records the exclusive borrow.
+
+Compare: **Rust**, where `&mut x` is always written and there is no inference of it; **C++**, where the distinction lives in the
+callee's signature alone and a call says nothing at all -- the far end of this line, and the reason the reference itself stays
+explicit here.
+
+**A cascade may not claim the compiler is unfinished**
+
+Found while fixing the above: the refused line left the name bound to the error type, and a literal compared against it then
+reported that an integer literal with no context is not implemented yet.  That is a claim about the compiler rather than about the
+program, it is fatal, and a reader has no way to tell it from the real thing.  A literal measured against the error type now
+answers nothing, quietly.  It is a rule about this compiler and not about the language, so it is written down in the
+implementation notes rather than the specification.
+
 Open questions
 --------------
 

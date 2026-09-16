@@ -4697,11 +4697,22 @@ class Checker:
 
     def _lower_address(self, builder: IRBuilder, expr: ast.AddressOf,
                        expected: Type | None) -> Value:
-        """Lower `&x` and `&mut x`: a reference to the place *x* names."""
+        """Lower `&x` and `&mut x`: a reference to the place *x* names.
+
+        Whether the reference may be written through is part of its type, so
+        where something says what type is wanted it says that too: `&x` bound
+        to a `&mut T` is a reference that may write, exactly as an integer
+        literal bound to a `u8` is a `u8`.  `mut` is written where nothing
+        says -- a name whose type is read off its value, a `_`, an argument of
+        a call being walked -- and says it outright wherever a reader wants it
+        said.
+        """
+        wanted = self._aiming_at(expected)
+        writes = expr.mutable or (isinstance(wanted, PtrType) and wanted.mutable)
         # Asked before the place is worked out: working it out reads the name,
         # and a name being lent out is what is being asked about.
         lent = self._borrowed_name(expr.operand)
-        self._lend(lent, expr.mutable, expr.span)
+        self._lend(lent, writes, expr.span)
         outer, self._taking_a_reference = self._taking_a_reference, lent
         try:
             found = self._place_written(builder, expr.operand)
@@ -4714,10 +4725,10 @@ class Checker:
             self._diags.emit(D.LANG_REF_TYPE_NOT_ALLOWED, expr.span,
                              found=held.render())
             return UndefConst(ERROR)
-        if expr.mutable and not may_change:
+        if writes and not may_change:
             self._diags.emit(D.LANG_REF_PLACE_NOT_MUTABLE, expr.span, name=what)
             return UndefConst(ERROR)
-        ty = self._module.types.ptr_type(held, expr.mutable, lasting)
+        ty = self._module.types.ptr_type(held, writes, lasting)
         answer = (address if address.ty is ty
                   else builder.cast(CastKind.BITCAST, address, ty, expr.span))
         if not self._accepts(expected, answer.ty):
@@ -7284,8 +7295,17 @@ class Checker:
             left = self._lower_expr(builder, expr.left, context)
             ty = self._comparable(expr.left.span, expr.op,
                                   self._scalar_of(self._value_type_of(left)))
-            right = self._lower_expr(builder, expr.right,
-                                     ty if ty is not ERROR else context)
+            if ty is not ERROR:
+                other: Type | None = ty
+            elif self._value_type_of(left) is ERROR:
+                # Whatever is wrong with the left has been reported, and the
+                # right takes its type from it: handing the error down is what
+                # keeps a literal there from asking for a type of its own and
+                # being told the compiler has not got one.
+                other = ERROR
+            else:
+                other = context
+            right = self._lower_expr(builder, expr.right, other)
         finally:
             self._operand_of = outer
             self._listing = was_listing
@@ -9368,6 +9388,12 @@ class Checker:
                 # What the operator answers with, not what it was given: the
                 # answer is what whatever reads the expression will get.
                 return BOOL
+            case ast.Deref():
+                # What is at the place a reference names, which its type says
+                # without anything being read.  It is what lets `0 = r⌖` mean
+                # what `r⌖ = 0` means.
+                found = self._hint_of(expr.operand)
+                return found.pointee if isinstance(found, PtrType) else None
             case ast.Unary() if expr.op is ast.UnaryOp.LOGIC_NOT:
                 return BOOL
             case ast.Unary() if expr.op in _DIVIDES_UNARY:
@@ -9454,6 +9480,8 @@ class Checker:
                 feature=("a floating-point literal with neither a type suffix nor a "
                          "context that gives it a type"))
             return None
+        if found is ERROR:
+            return None
         if not isinstance(found, FloatType):
             self._report_mismatch(expr.span, named or F64, found)
             return None
@@ -9469,6 +9497,11 @@ class Checker:
         untyped value, which this compiler does not have yet.
         """
         expected = self._aiming_at(expected)
+        if expected is ERROR:
+            # Something this literal would have taken its type from is wrong,
+            # and that has been reported.  A literal with nowhere to look is a
+            # thing this compiler has not got, but that is not what happened.
+            return None
         named = BUILTIN_TYPES.get(expr.type_name) if expr.type_name is not None else None
         if named is not None and expected is not None and named is not expected:
             self._report_mismatch(expr.span, named, expected)

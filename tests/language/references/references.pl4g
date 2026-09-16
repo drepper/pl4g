@@ -17,6 +17,12 @@
 ※ what it answers -- an element of it -- reads left to right without brackets.
 ※ That is what Pascal, Modula, Ada and Odin put a mark after a pointer for.
 ※
+※ **Whether it may be written is part of the type, so the context says it.**
+※ `&x` bound to a `&mut T` is a reference that may write, exactly as an integer
+※ literal bound to a `u8` is a `u8`; `mut` is written where nothing says -- a name
+※ whose type is read off its value -- and says it outright wherever a reader wants
+※ it said.  The place must still allow it either way (4537).
+※
 ※ **A `&mut` is the only reference to its place while it lives**, and a `&` may
 ※ share with other `&`s.  So each variable here is lent once: while `r` is out,
 ※ `n` is reached through `r` and not by its own name, and a second `&mut n`
@@ -48,7 +54,8 @@ fn main() → u6:
     ※ once the call is over, so the next statement may make another
     let p: mut i8 = 28i8
     bump(&mut p)
-    bump(&mut p)
+    ※ and once with no `mut` written, the parameter's type saying it
+    bump(&p)
     ※ two that may not be written through, sharing the same place
     let only_at: i8 = 30i8
     let only: &i8 = &only_at
@@ -66,6 +73,10 @@ fn main() → u6:
     let g: &mut u16 = &mut counter
     g⌖ ← 7u16
     ※ a reference to a reference, which is a place holding a place
+    ※ the declared type saying it, with no `mut` on the right
+    let told: mut i8 = 12i8
+    let quiet: &mut i8 = &told
+    quiet⌖ ← 13i8
     let d: mut i8 = 1i8
     let deep: mut &mut i8 = &mut d
     let over: &mut &mut i8 = &mut deep
@@ -97,6 +108,10 @@ fn main() → u6:
         8u6
     elif over⌖⌖ ≠ 30i8:
         9u6
+    ※ written through a reference the context made writable, and read the other
+    ※ way round, a literal on the left taking its type from what the reference names
+    elif 13i8 ≠ quiet⌖:
+        12u6
     ※ bumped twice, each call lending the place for its own statement only
     elif bump_read(&mut p) ≠ 31i8:
         10u6
