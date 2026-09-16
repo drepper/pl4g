@@ -1496,10 +1496,10 @@ class Parser:
     def _parse_assignment(self, target: ast.Expr) -> ast.Stmt:
         """Parse the rest of ``TARGET ← VALUE``.
 
-        What may stand on the left is a name, an entry of a dictionary and an
-        element of an array, each written the way one is read.  Anything else is
-        a value the program worked out, and there is nowhere for an assignment
-        to put anything.
+        What may stand on the left is a name, a field of a record, an entry of
+        a dictionary and an element of an array, each written the way one is
+        read.  Anything else is a value the program worked out, and there is
+        nowhere for an assignment to put anything.
         """
         self._expect(TokKind.ASSIGN)
         value = self._parse_expression()
@@ -1516,6 +1516,10 @@ class Parser:
         if isinstance(target, ast.Deref):
             return ast.DerefAssign(span=target.span.to(value.span),
                                    target=target.operand, value=value)
+        if isinstance(target, ast.Member):
+            return ast.MemberAssign(span=target.span.to(value.span),
+                                    base=target.base, name=target.name,
+                                    name_span=target.name_span, value=value)
         self._diags.emit(D.LANG_ASSIGN_NOT_A_PLACE, target.span)
         raise _Bail()
 

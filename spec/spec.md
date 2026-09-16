@@ -3722,6 +3722,26 @@ count ← 7u8
 
 The value must have the variable's type, and -- as everywhere -- must fit it: `count ← 300u8` does not compile.
 
+**What may stand on the left is a place**: a name, a field of a record, an element of an array, an entry of a dictionary, and what
+a reference names -- each written the way it is read.
+
+```
+p.x ← 9u32                       ※ one field of a record
+l.to.x ← 7u32                    ※ a field of a field
+r⌖.from ← Point(.x ← 0u32, .y ← 0u32)   ※ through a reference, written out
+```
+
+**Only the field is written.**  The rest of the record is not read, not copied and not touched: a record that is somewhere has an
+address for each field, and writing one is a store to that address.  So the record has to *be* somewhere -- a name given storage of
+its own, what a reference names, or a field of one of those.  A record the program worked out is a value in registers and has no
+place for a field to be at (4588); binding it to a name is what gives it one.
+
+**A field is as mutable as the record holding it**, and a record reached through a reference is as mutable as the reference.  The
+mark is written once, where the thing was made or where it was lent, and a field does not get to say it again: `p.x ← v` on a `p`
+defined without `mut` is refused (4004), and `r⌖.x ← v` through a `&Point` is refused (4535).  Compare **ML**, whose records are
+immutable unless a *field* says `mutable`, which is the other place the mark could go; this language puts it on the binding, as C,
+Rust, Go and Zig all do.
+
 ##### Assigning to `_`
 
 `_` is where a value goes when the program means to work it out and not use it:

@@ -742,6 +742,21 @@ class ElementAssign(Stmt):
 
 
 @dataclass(frozen=True, slots=True)
+class MemberAssign(Stmt):
+    """`p.x ← v`: one field of a record, changed.
+
+    Written the way the field is read, which is what every place in this
+    language is: a name on the left says where, and the same words on the right
+    say what is there.
+    """
+
+    base: Expr
+    name: str
+    name_span: Span
+    value: Expr
+
+
+@dataclass(frozen=True, slots=True)
 class EntryAssign(Stmt):
     """`d\N{LEFT DOUBLE PARENTHESIS}k\N{RIGHT DOUBLE PARENTHESIS} \N{LEFTWARDS ARROW} v`: what a dictionary has for a key, changed."""
 

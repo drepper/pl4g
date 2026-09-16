@@ -6561,6 +6561,21 @@
       "option": null
     },
     {
+      "number": 4588,
+      "name": "LANG_ASSIGN_NOT_A_RECORD",
+      "severity": "error",
+      "message": "this is not a record that is somewhere, so a field of it has no place to be written",
+      "args": [],
+      "cause": "Writing a field writes one place, so what holds the field has to be somewhere: a name given storage of its own, what a reference names, or a field of one of those.  A record the program worked out is a value in registers and has no place for a field to be at; bind it to a name first, which is what gives it one.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Assignment"
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 5001,
       "name": "LANG_STMT_UNREACHABLE",
       "severity": "warning",

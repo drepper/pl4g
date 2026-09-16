@@ -1,0 +1,52 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ `p.x ← v` writes one field of a record, written the way the field is read.
+※
+※ **Only the field is written.**  The rest of the record is not read, not copied
+※ and not touched: a record that is somewhere has an address for each field, and
+※ writing one is a store to that address and nothing else.  Which is why this
+※ belongs to a record that is *somewhere* -- a name given storage of its own,
+※ what a reference names, or a field of one of those.  A record the program
+※ worked out is a value in registers and has no place for a field to be at
+※ (4588); binding it to a name is what gives it one.
+※
+※ **A field is as mutable as the record holding it**, and a record reached
+※ through a reference is as mutable as the reference.  The mark is written once,
+※ where the thing was made or where it was lent, and a field does not get to say
+※ it again: `p.x ← v` on a `p` defined without `mut` is refused (4004), and
+※ `r⌖.x ← v` through a `&Point` is refused (4535).
+※
+※ **A field that is itself a record is written out where it stands**, for the
+※ reason a definition's is: there is no register a value of one could be made in.
+※
+※ Compare: **C**, **Rust**, **Go** and **Zig**, where this is the same statement
+※ written the same way and means the same thing; **ML**, whose records are
+※ immutable unless a field says `mutable`, which is the other place the mark
+※ could go; **Haskell**, which has no such statement at all and builds a new
+※ record naming the fields that differ.
+
+type Point = x : u32 ; y : u32
+type Line = from : Point ; to : Point
+
+@[impure]
+fn move_to(l: &mut Line, x: u32):
+    ※ through a reference, and a field of a field
+    l⌖.to.x ← x
+    ※ and a whole nested field written out where it stands
+    l⌖.from ← Point(.x ← 0u32, .y ← 0u32)
+
+@[startup, impure]
+fn main() → u6:
+    let l: mut Line = Line(.from ← Point(.x ← 1u32, .y ← 2u32),
+                           .to ← Point(.x ← 3u32, .y ← 4u32))
+    l.to.y ← 8u32
+    move_to(&mut l, 7u32)
+    if l.to.x ≠ 7u32:
+        1u6
+    ※ what the other write left alone
+    elif l.to.y ≠ 8u32:
+        2u6
+    elif l.from.x ≠ 0u32 ∨ l.from.y ≠ 0u32:
+        3u6
+    else:
+        0u6

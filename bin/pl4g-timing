@@ -194,6 +194,7 @@ GROUPS: tuple[Group, ...] = (
            "std-init": "the descriptors a program starts with, and a write through one",
            "ordered-access": "a read that acquires and a write that releases",
            "place-at-an-address": "memory the kernel gave the program, read one value and many at a time",
+           "assign-a-field": "a field of a record written, through a name and through a reference",
            "loop-break-nested": "two loops and all four jumps between them",
            "loop-continue": "two loops each begun again from inside the body",
            "loop-break-value": "a search whose loop comes to what it found",

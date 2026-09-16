@@ -216,6 +216,11 @@ To Do List for the PL4g language
     over a mapping that answers bytes: `⎕at(ADDRESS, ⌜TYPE⌝)` for one value and `⎕span(ADDRESS, COUNT, ⌜TYPE⌝)` for a run
     of them.  They are the only way, which is what keeps that door in one place.
 
+[ ] a record at the top level.  `let held: mut Small = Small(...)` is refused (9902, "a top-level variable whose value is not a
+    literal"), and `_record_at` reaches a local and not a global, so a field of one cannot be read or written either.  The `std`
+    module wants one for the ring it keeps.  Two pieces: a record literal of constants laid out into the bytes a global holds,
+    and the global's address standing where a placed local's does.
+
 [ ] answer a result rather than the kernel's number.  `std.write` answers an `i64` that is negative where the kernel refused,
     which is the kernel's convention and not the language's.  It should answer `u64 ¤size?`, which wants somewhere for the error
     to go -- an enumeration of what the kernel says -- and that is a table the compiler does not have yet.

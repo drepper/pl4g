@@ -1666,8 +1666,8 @@ class Checker:
             self._report_mismatch(expr.span, found.ty, expected)
         return found
 
-    def _record_at(self, builder: IRBuilder, expr: ast.Expr
-                   ) -> tuple[Value, ProductType] | None:
+    def _record_at(self, builder: IRBuilder, expr: ast.Expr,
+                   writing: bool = False) -> tuple[Value, ProductType] | None:
         """Where the record *expr* names is, where it is somewhere.
 
         Three things are: a name given storage of its own, which every record
@@ -1681,7 +1681,7 @@ class Checker:
                 if local is not None and local.placed \
                         and isinstance(local.held, ProductType):
                     if expr.name != self._taking_a_reference \
-                            and self._lent_out(expr.name, expr.span, False):
+                            and self._lent_out(expr.name, expr.span, writing):
                         return None
                     local.read = True
                     return (local.value, local.held)
@@ -1694,7 +1694,7 @@ class Checker:
                     return (value, ty.pointee)
                 return None
             case ast.Member():
-                found = self._record_at(builder, expr.base)
+                found = self._record_at(builder, expr.base, writing)
                 if found is None:
                     return None
                 where, ty = found
@@ -3276,6 +3276,8 @@ class Checker:
                 self._define_unit(stmt)
             case ast.ElementAssign():
                 self._lower_element_assign(builder, stmt)
+            case ast.MemberAssign():
+                self._lower_member_assign(builder, stmt)
             case ast.DerefAssign():
                 self._lower_deref_assign(builder, stmt)
             case ast.Break():
@@ -4188,6 +4190,88 @@ class Checker:
         builder.store(
             self._element_place(builder, start, ty.element, offset, stmt.span),
             value, stmt.span)
+
+    def _lower_member_assign(self, builder: IRBuilder,
+                             stmt: ast.MemberAssign) -> None:
+        """Lower `p.x ← v`, which writes one field of a record.
+
+        Written the way the field is read, which is what every place in this
+        language is.  Only the field is written: the rest of the record is not
+        read, not copied and not touched, which is what having an address for
+        each field is for.
+        """
+        found = self._record_at(builder, stmt.base, writing=True)
+        if found is None:
+            self._diags.emit(D.LANG_ASSIGN_NOT_A_RECORD, stmt.base.span)
+            return
+        where, ty = found
+        at = _field_index(ty, stmt.name)
+        if at is None:
+            self._diags.emit(D.LANG_PRODUCT_NO_SUCH_FIELD, stmt.name_span,
+                             type=ty.render(), name=stmt.name)
+            return
+        if not self._record_may_change(stmt.base, stmt.name_span):
+            return
+        if not self._made_here(where):
+            # The record may be the caller's -- a reference says nothing about
+            # whose place it names -- so writing a field of it is a change that
+            # outlives the call unless the storage is this call's own.
+            self._an_effect(D.LANG_PURE_WRITES_ELSEWHERE, stmt.span)
+        held = ty.fields[at][1]
+        place = self._field_place(builder, where, ty, at, stmt.span)
+        if isinstance(held, ProductType) \
+                and self._is_record_literal(stmt.value, held):
+            # A record written out goes straight into the place that will hold
+            # it, for the reason a definition's does: there is no register a
+            # value of one could be made in.
+            self._build_record(builder, place, stmt.value, held, stmt.span)
+            return
+        value = self._lower_into(builder, stmt.value, held, stmt.span)
+        if self._value_type_of(value) is ERROR:
+            return
+        if isinstance(held, ProductType):
+            self._record_into(builder, place, value, held, stmt.span)
+            return
+        builder.store(place, value, stmt.span)
+
+    def _record_may_change(self, expr: ast.Expr, where: Span) -> bool:
+        """Whether the record *expr* names may be written, said by its root.
+
+        A field is as mutable as the record holding it, and a record reached
+        through a reference is as mutable as the reference: the mark is written
+        once, where the thing was made or where it was lent, and a field does
+        not get to say it again.
+        """
+        match expr:
+            case ast.Member() | ast.Element():
+                return self._record_may_change(expr.base, where)
+            case ast.Deref():
+                if not isinstance(expr.operand, ast.NameRef):
+                    # A reference worked out rather than named.  What it
+                    # promises is in its type and nothing here has it without
+                    # lowering the expression a second time.
+                    return True
+                held = self._find_local(expr.operand.name)
+                if held is None:
+                    return True
+                ty = self._held_by(held)
+                if isinstance(ty, PtrType) and not ty.mutable:
+                    self._diags.emit(D.LANG_REF_NOT_WRITABLE, where,
+                                     found=ty.render())
+                    return False
+                return True
+            case ast.NameRef():
+                local = self._find_local(expr.name)
+                if local is None:
+                    return True
+                if local.mutable:
+                    return True
+                self._diags.emit(D.LANG_VARDEF_NOT_MUTABLE, where,
+                                 name=expr.name).note(
+                    D.LANG_VARDEF_DEFINED_HERE, local.span, name=expr.name)
+                return False
+            case _:
+                return True
 
     def _callee_value(self, expr: ast.Expr) -> _Local | None:
         """The name a call names, where it names a function held in one.

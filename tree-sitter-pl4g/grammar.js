@@ -421,7 +421,10 @@ module.exports = grammar({
     ),
 
     _trailing_assignment: $ => seq(
-      field('target', $.identifier), '\u2190', field('value', $._block_expression),
+      field('target', choice($.identifier, $.index_expression,
+                             $.element_expression, $.deref_expression,
+                             $.member_expression)),
+      '\u2190', field('value', $._block_expression),
     ),
 
     _trailing_return: $ => seq('return', $._block_expression),
@@ -572,11 +575,13 @@ module.exports = grammar({
       field('value', $._expression),
     ),
 
-    // What may stand on the left is a place: a name, an entry of a dictionary
-    // or an element of an array, each written the way one is read.
+    // What may stand on the left is a place: a name, a field of a record, an
+    // entry of a dictionary or an element of an array, each written the way one
+    // is read.
     assignment: $ => seq(
       field('target', choice($.identifier, $.index_expression,
-                             $.element_expression, $.deref_expression)),
+                             $.element_expression, $.deref_expression,
+                             $.member_expression)),
       // Targets next to each other take a tuple apart, one name per member.
       repeat(seq(',', field('target', $.identifier))),
       '←', field('value', $._expression),

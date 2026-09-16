@@ -5596,6 +5596,44 @@ exactly -- one name for the one thing that cannot be checked; **Go**, whose
 **Ada**, whose `System.Address_To_Access_Conversions` is a generic a program
 instantiates, which is the same decision with more ceremony.
 
+## 2026-09-17T23:00+02:00 — language
+
+**A field of a record may be assigned to**
+
+Not a decision so much as a hole: records have been readable, referable and
+copyable since 2026-09-17 and `p.x ← v` was refused by the *parser*, which knew
+about a name, an element, an entry and a dereference and not about a field.  A
+ring's submission entry is nothing but field assignments, which is where it
+surfaced.
+
+**Only the field is written**, which is what having an address per field is for:
+the rest of the record is not read, not copied and not touched.  So the record
+has to be somewhere -- a name given storage of its own, what a reference names,
+or a field of one of those -- and a record the program worked out is a value in
+registers with no place for a field to be at (4588).
+
+**The mutability mark stays on the binding.**  A field is as mutable as the
+record holding it and a record behind a reference as mutable as the reference,
+so `p.x ← v` on a `p` without `mut` is refused (4004) and `r⌖.x ← v` through a
+`&Point` is refused (4535).  ML puts the mark on the field instead, which would
+let one record hold both kinds; that is a second axis for a reader to track and
+was not taken.
+
+**A field that is itself a record is written out where it stands**, by the same
+path a definition's literal takes: there is no register a value of one could be
+made in, and going through one would be the thing records-in-records already
+does not do.
+
+Left open, and now in the to-do list: a record at the *top level*.  A global's
+initializer must be a literal the image can hold and a record literal is not one
+of them yet (9902), and `_record_at` reaches a local and not a global, so
+neither holding nor writing one works.  The ring will want it.
+
+Compare: **C**, **Rust**, **Go** and **Zig**, where this is the same statement
+written the same way; **Haskell**, which has no such statement and builds a new
+record naming the fields that differ; **APL**, where the whole idea is an
+indexed assignment into a nested array.
+
 Open questions
 --------------
 

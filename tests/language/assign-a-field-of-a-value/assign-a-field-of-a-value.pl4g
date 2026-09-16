@@ -1,0 +1,15 @@
+※ pl4g-test: compile=error diag=4588
+
+※ Writing a field writes one place, so what holds the field has to be somewhere.
+※ A record the program worked out is a value in registers and has no place for a
+※ field to be at; binding it to a name is what gives it one.
+
+type Point = x : u32 ; y : u32
+
+fn made() → Point:
+    Point(.x ← 1u32, .y ← 2u32)
+
+@[startup, impure]
+fn main() → u6:
+    made().x ← 9u32
+    0u6
