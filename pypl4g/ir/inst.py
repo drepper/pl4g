@@ -422,12 +422,28 @@ class CallInst(Instruction):
 
     def __init__(self, callee: object, args: Sequence[Value], result_ty: Type,
                  span: Span = INVALID_SPAN) -> None:
-        super().__init__(result_ty, args, span)
-        self.callee = callee
+        # A callee the graph computed is an operand and not a reference, and
+        # has to be: everything that asks what an instruction uses asks its
+        # operands, so a callee kept anywhere else is a value nothing counts as
+        # used -- which is a value the dead-code pass removes and the call then
+        # jumps to whatever was left behind.
+        through = isinstance(callee, Value)
+        super().__init__(result_ty, (callee, *args) if through else args, span)
+        self.callee = None if through else callee
+
+    @property
+    def target(self) -> Value | None:
+        """The value called, where the call computed one rather than naming it."""
+        return self.operands[0] if self.callee is None else None
+
+    @property
+    def arguments(self) -> Sequence[Value]:
+        """What is handed over, which is every operand but the callee."""
+        return self.operands[1:] if self.callee is None else self.operands
 
     def references(self) -> Sequence[object]:
         """The callee, where the call names one rather than computing it."""
-        return (self.callee,)
+        return () if self.callee is None else (self.callee,)
 
     @property
     def opcode(self) -> str:
@@ -453,6 +469,35 @@ class AddressInst(Instruction):
     def opcode(self) -> str:
         """The mnemonic used in the textual form."""
         return "address"
+
+
+class CodeInst(Instruction):
+    """Where a function's code is, as a value a register can hold.
+
+    The other half of what a function written where a value is wanted comes to,
+    the first being what it brought in with it.  What it answers with is an
+    address and says nothing about what is there: what a caller has to know is
+    in the type of the value this is half of, and nothing reads the bytes.
+
+    The function is a reference and not an operand, as a call's callee is and
+    for the same reason: it is a thing of the module rather than a value in the
+    graph, and nothing before it computed it.
+    """
+
+    __slots__ = ("callee",)
+
+    def __init__(self, func: object, ty: Type, span: Span = INVALID_SPAN) -> None:
+        super().__init__(ty, (), span)
+        self.callee = func
+
+    def references(self) -> Sequence[object]:
+        """The function whose address this is."""
+        return (self.callee,)
+
+    @property
+    def opcode(self) -> str:
+        """The mnemonic used in the textual form."""
+        return "code"
 
 
 class FrameInst(Instruction):

@@ -942,6 +942,14 @@ AARCH64_INSTRS: Final[tuple[A64InstDesc, ...]] = (
     # instruction itself writes, is not.
                 implicit_defs=(X30,), flags=InstFlags.CALL,
                 est_size=INSTRUCTION_SIZE),
+    # blr Xn
+    # A call through a register, which is what a function held in a value is
+    # called by.  It writes the link register as `bl` does; what it destroys
+    # beyond that is the callee's to say and travels on the instruction.
+    A64InstDesc("blr", (_r(64),), template=0xD63F0000,
+                fields=(_reg_field(0, _RN),),
+                implicit_defs=(X30,), flags=InstFlags.CALL,
+                est_size=INSTRUCTION_SIZE),
     # ret   (returns through the link register)
     A64InstDesc("ret", (), template=0xD65F03C0, implicit_uses=(X30,),
                 flags=InstFlags.TERMINATOR | InstFlags.RETURN, est_size=INSTRUCTION_SIZE),

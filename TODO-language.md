@@ -568,6 +568,10 @@ Runtime
     substitutes, the brace notation, an omitted type and a named argument all differ in meaning or in what they are for, so none
     of them is a second spelling of one thing.
 
+[ ] let a lambda leave the call that made it (4549, 4550).  What it brought in lives in a frame of that call, so a lambda that
+    escaped would read storage that is gone.  The same lifetime annotations that lift the rule for references lift it here, and
+    a lambda that brought nothing in could be let out sooner: it carries an address nobody reads.
+
 [ ] design lifetime annotations, which are what say how long what a reference names lives.  Until they exist a reference may not
     be what a function answers with (4531) and may not be held at the top level (4532), which refuses good programs -- `fn
     first(a: &mut u8) → &mut u8` among them -- to refuse every dangling one.  Rust's lifetimes are the design to compare against,

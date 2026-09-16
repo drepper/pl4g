@@ -195,7 +195,7 @@ class UnitTypeRef(Node):
 
 
 type TypeExpr = (TypeRef | CollectionTypeRef | TupleTypeRef | ArrayTypeRef
-                 | ListTypeRef | RefTypeRef | UnitTypeRef)
+                 | ListTypeRef | RefTypeRef | UnitTypeRef | FuncTypeRef)
 
 
 @dataclass(frozen=True, slots=True)
@@ -909,6 +909,54 @@ class Param(Node):
     #: What a caller that says nothing about it gets.  Nothing where the
     #: parameter has none, in which case every caller says something.
     default: Expr | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class Capture(Node):
+    """One name a lambda brings in from around it.
+
+    Written plain, what the lambda gets is the value the name held where the
+    lambda was written; written after `&`, it is the variable itself, so a
+    change to it afterwards is one the lambda sees.  That is C++'s distinction
+    and C++'s mark for it, and it is the same `&` a reference type is written
+    with -- what it says here is what it says there.
+    """
+
+    name: str
+    by_reference: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class Lambda(Expr):
+    """`\N{GREEK SMALL LETTER LAMDA} PARM: TYPE, \N{HORIZONTAL ELLIPSIS} [CAPTURES] \N{RIGHTWARDS ARROW} TYPE` and a body: a function written
+    where a value is wanted.
+
+    The parameter list has no parentheses round it, there being nothing before
+    it for them to separate it from.  What ends it is the capture list, the
+    arrow, or the body -- and none of those can be part of a parameter.
+    """
+
+    params: tuple[Param, ...]
+    body: Block
+    #: The names it brings in from around it.  Empty where none was written,
+    #: which says it reads nothing outside itself.
+    captures: tuple[Capture, ...] = ()
+    #: What it answers with, or nothing where it answers with nothing -- which
+    #: is written by leaving the arrow off, as a function definition does.
+    ret_type: TypeExpr | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class FuncTypeRef(Node):
+    """`fn(u8, u8) \N{RIGHTWARDS ARROW} u8`: the type of a function written as a value.
+
+    The parameter names are not there because a type is not a definition: what
+    a caller has to know is what it takes and what it answers with, and what
+    the names are is the body's business.
+    """
+
+    params: tuple[TypeExpr, ...]
+    ret: TypeExpr | None = None
 
 
 @dataclass(frozen=True, slots=True)

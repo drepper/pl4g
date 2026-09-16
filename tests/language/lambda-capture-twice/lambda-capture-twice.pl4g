@@ -1,0 +1,11 @@
+※ pl4g-test: compile=error diag=4553
+
+※ A name is brought in once, by value or by reference.  Twice would be two
+※ ways of reaching one variable inside one body, and which of them a mention
+※ meant would not be decidable.
+
+@[startup, impure]
+fn main() → u6:
+    let n: u8 = 1u8
+    let f: fn(u8) → u8 = λ a: u8 [n, n] → u8 { a + n }
+    0u6

@@ -286,6 +286,12 @@ DEREF_GLYPH: Final[str] = "\N{POSITION INDICATOR}"
 #: in this language.
 UNIT_GLYPH: Final[str] = "\N{CURRENCY SIGN}"
 
+#: What begins a function written where a value is wanted.  The letter
+#: mathematics has used for one since Church, and the letter every language
+#: that has the idea names it after -- so a reader who has met the idea at all
+#: has met this mark.
+LAMBDA_GLYPH: Final[str] = "\N{GREEK SMALL LETTER LAMDA}"
+
 #: The digits written raised, which is how an exponent that *is* a number is
 #: written.  The first three are where Latin-1 put them and the rest are where
 #: Unicode put the ones Latin-1 had not got, which is why this is a table and
@@ -434,6 +440,7 @@ class TokKind(StrEnum):
     LIFT_CLOSE = "'\N{TOP RIGHT CORNER}'"
     DEREF = "'\N{POSITION INDICATOR}'"
     UNIT = "'\N{CURRENCY SIGN}'"
+    LAMBDA = "'\N{GREEK SMALL LETTER LAMDA}'"
     #: A number written raised, which is an exponent and its operator at once.
     EXPONENT = "a raised number"
 

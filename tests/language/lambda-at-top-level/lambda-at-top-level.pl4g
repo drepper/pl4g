@@ -1,0 +1,12 @@
+※ pl4g-test: compile=error diag=4550
+
+※ A variable here lasts as long as the program, so what a lambda kept would
+※ have to as well -- and what it kept belongs to the call that wrote it.  It is
+※ the rule about answering with one, asked at the other place a value can
+※ escape to.
+
+let kept: fn(u8) → u8 = ⊥
+
+@[startup]
+fn main() → u6:
+    0u6

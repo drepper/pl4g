@@ -1,0 +1,18 @@
+※ pl4g-test: compile=error diag=4552
+
+※ A lambda reads its parameters, what it brought in, and what the whole
+※ program has -- and nothing else.  A name from around it that is not in the
+※ capture list is one the body may not reach, which is the whole point of the
+※ list: what a lambda depends on is written at the top of it rather than found
+※ by reading the body.
+※
+※ C++ says the same with its capture list, and says it for the same reason.
+※ What is different here is that there is no way to write "everything": a list
+※ that said "whatever the body turns out to use" would be a list that said
+※ nothing.
+
+@[startup, impure]
+fn main() → u6:
+    let n: u8 = 1u8
+    let f: fn(u8) → u8 = λ a: u8 → u8 { a + n }
+    0u6

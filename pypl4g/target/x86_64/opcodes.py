@@ -1018,6 +1018,12 @@ X86_INSTRS: Final[tuple[X86InstDesc, ...]] = (
     # instruction itself writes, is not.
     X86InstDesc("call", (_rel(32),), opcode=0xE8, rel_op=0, rel_bits=32,
                 flags=InstFlags.CALL, est_size=5),
+    # call r/m64                         FF /2
+    # A call through a register, which is what a function held in a value is
+    # called by.  No REX.W: in long mode the operand of a near call is already
+    # sixty-four bits and saying so again is refused by the assembler.
+    X86InstDesc("call", (_rm(64),), opcode=0xFF, modrm=ModRMUse.EXT_RM, ext=2,
+                rm_op=0, flags=InstFlags.CALL, est_size=3),
     # ret                                C3
     X86InstDesc("ret", (), opcode=0xC3, flags=InstFlags.TERMINATOR | InstFlags.RETURN, est_size=1),
     # syscall                            0F 05

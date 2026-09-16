@@ -1,0 +1,90 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ `λ PARM: TYPE, … [CAPTURES] → TYPE` and a body is a function written where a
+※ value is wanted.  The parameter list has no parentheses round it, there being
+※ nothing before it for them to separate it from: what ends it is the capture
+※ list, the arrow or the body, and none of the three can be part of a
+※ parameter.  The body follows in either notation, and every rule about one
+※ holds -- the last statement is what it answers with, and a statement whose
+※ value goes nowhere is reported.
+※
+※ **What it comes to is two addresses**: where its code is, and where what it
+※ brought in with it is.  That is one type whether it brought anything in or
+※ nothing, so either stands where a `fn(…)` is wanted -- which is what lets a
+※ function take one without knowing which it will be given.
+※
+※ **What it may name is written at the top of it.**  A lambda reads its
+※ parameters, what its capture list brought in, and what the whole program has,
+※ and nothing else: a name from around it that is not in the list is not a name
+※ inside it at all.  So what a lambda depends on is read off its first line
+※ rather than found by reading its body.
+※
+※ `[n]` brings in what `n` held where the lambda was written; `[&n]` brings in
+※ the variable itself, so a change afterwards is one the lambda sees.  That is
+※ C++'s distinction and C++'s mark for it, and the mark is the same `&` a
+※ reference is written with.
+※
+※ **A lambda does not leave the call that made it** -- not answered with, not
+※ held at the top level -- because what it brought in belongs to that call.  It
+※ is the rule a reference follows, and lifetime annotations will lift both.
+
+let counted: mut u8 = 0u8
+
+@[startup, impure]
+fn main() → u6:
+    ※ nothing brought in, the body written with braces
+    let one: fn(u8) → u8 = λ a: u8 → u8 { a + 1u8 }
+    ※ and written by indentation, which is the same function
+    let two: fn(u8) → u8 = λ a: u8 → u8:
+        a + 2u8
+    ※ two parameters, and one of them changed inside
+    let sum: fn(u8, u8) → u8 = λ a: u8, b: mut u8 → u8 { b ← b + a ; b }
+    ※ what a name held, copied in where the lambda was written
+    let n: mut u8 = 10u8
+    let by: fn(u8) → u8 = λ a: u8 [n] → u8 { a + n }
+    ※ the variable itself, so what it holds later is what it reads
+    let seen: fn(u8) → u8 = λ a: u8 [&n] → u8 { a + n }
+    ※ answering with nothing, which is written by leaving the arrow off
+    let bump: fn(u8) = λ a: u8:
+        counted ← counted + a
+    ※ handed to a function, which calls it without knowing which it is
+    if one(5u8) ≠ 6u8 ∨ two(5u8) ≠ 7u8:
+        1u6
+    elif sum(3u8, 4u8) ≠ 7u8:
+        2u6
+    elif by(5u8) ≠ 15u8 ∨ seen(5u8) ≠ 15u8:
+        3u6
+    else:
+        n ← 20u8
+        ※ the copy kept the ten; the reference sees the twenty
+        if by(5u8) ≠ 15u8:
+            4u6
+        elif seen(5u8) ≠ 25u8:
+            5u6
+        ※ called through a parameter, twice over
+        elif twice(one, 5u8) ≠ 7u8 ∨ twice(two, 5u8) ≠ 9u8:
+            6u6
+        ※ and one written at the call it is handed to
+        elif twice(λ a: u8 → u8 { a × 2u8 }, 3u8) ≠ 12u8:
+            7u6
+        ※ one that answers with nothing, called for what it does
+        else:
+            bump(7u8)
+            bump(3u8)
+            if counted ≠ 10u8:
+                8u6
+            ※ and one brought in by a lambda, called from inside it
+            elif through(one, 5u8) ≠ 6u8:
+                9u6
+            else:
+                0u6
+
+@[impure]
+fn twice(g: fn(u8) → u8, x: u8) → u8:
+    g(g(x))
+
+※ A lambda may bring in a lambda, which is a value like any other.
+@[impure]
+fn through(g: fn(u8) → u8, x: u8) → u8:
+    let once: fn(u8) → u8 = λ a: u8 [g] → u8 { g(a) }
+    once(x)

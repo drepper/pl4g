@@ -4549,6 +4549,39 @@ exact reason, and whose `@` is this language's `⎕`.  That this language and Zi
 is worth recording: an import is a compiler operation wearing a call's clothes, and marking it as one costs a character and frees
 a word.
 
+---
+
+## 2026-09-16T20:30+02:00 — language
+
+**Lambdas: `λ PARM: TYPE [CAPTURES] → TYPE` and a body**
+
+Decided on the user's direction, with three sub-decisions chosen by the user and one suggested here and taken.
+
+**A lambda is a value like any other** -- bound to a name, handed to a parameter, called through whatever holds it -- chosen by
+the user over a narrower version where the compiler had to see which lambda it was.  That is what needed a call through a
+register, which the three instruction selectors refused; the assembler underneath already took one, so what it cost was a guard
+to replace and an instruction row in each table.
+
+**Its type is written `fn(u8, u8) → u8`**, chosen by the user from three.  The keyword a function is defined with, then what it
+takes and what it answers; a reader who knows `fn twice(of: u8) → u8` knows it.  Rust, Go, Swift and Zig all spell it about this
+way.
+
+**The capture list is `[n, &n]`**, chosen by the user from four suggestions, with `&` for by-reference on the user's direction --
+C++'s spelling and C++'s distinction.  It is free in that position: what may follow a parameter list is a comma, the arrow or the
+body, so a bracket there can be nothing else.  What is *not* taken from C++ is `[=]` and `[&]`: a list that says "whatever the
+body turns out to use" is a list that says nothing, and the point of writing one is that what a lambda depends on is read off its
+first line.
+
+**A lambda does not leave the call that made it**, suggested here and not objected to.  What it brought in lives in that call, so
+handing one back would hand back a way of reading storage that is gone.  It is exactly the rule references follow, and it is what
+lets the captures live in a frame rather than in the arena -- lifetime annotations lift both at once.
+
+Compare: **C++**, whose capture list this is; **Rust**, which infers what a closure captures and sorts closures into three traits
+by what they do with it, which is a larger machine for a language that infers; **Go** and **JavaScript**, which capture by
+reference and keep the variables alive by collecting garbage; **Java**, which captures by value and requires what it captures to
+be effectively final.  Every one of them answers the lifetime question somehow; this answers it by not letting a lambda leave,
+which is blunt and is the same answer references got.
+
 Open questions
 --------------
 

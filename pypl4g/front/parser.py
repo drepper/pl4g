@@ -178,7 +178,7 @@ _STARTS_AN_EXPRESSION: Final[frozenset[TokKind]] = frozenset((
     TokKind.BOTTOM, TokKind.TILDE, TokKind.LOGIC_NOT, TokKind.LENGTH,
     TokKind.SHAPE, TokKind.MAX, TokKind.MIN, TokKind.FLOOR, TokKind.CEILING,
     TokKind.NEAREST, TokKind.ROUNDED, TokKind.DIVIDES, TokKind.NOT_DIVIDES,
-    TokKind.AMPERSAND,
+    TokKind.AMPERSAND, TokKind.LAMBDA,
 ))
 
 
@@ -500,6 +500,8 @@ class Parser:
             pointee = self._parse_type_ref()
             return ast.RefTypeRef(span=start.to(pointee.span), pointee=pointee,
                                   mutable=mutable)
+        if self._check(TokKind.KW_FN):
+            return self._parse_function_type()
         if self._check(TokKind.SET_OPEN):
             found: ast.TypeExpr = self._parse_collection_type()
         elif self._check(TokKind.TUPLE_OPEN):
@@ -629,6 +631,86 @@ class Parser:
             else:
                 return (over, under, factors)
 
+    def _parse_function_type(self) -> ast.FuncTypeRef:
+        """Parse `fn(TYPE, TYPE) \N{RIGHTWARDS ARROW} TYPE`: the type of a function as a value.
+
+        The keyword a function is defined with, and then what it takes and what
+        it answers.  The parameter names are not there because a type is not a
+        definition: what a caller has to know is the types, and what the names
+        are is the body's business.
+        """
+        start = self._expect(TokKind.KW_FN).span
+        self._expect(TokKind.LPAREN)
+        params: list[ast.TypeExpr] = []
+        if not self._check(TokKind.RPAREN):
+            params.append(self._parse_type_ref())
+            while self._accept(TokKind.COMMA) is not None:
+                params.append(self._parse_type_ref())
+        end = self._expect(TokKind.RPAREN).span
+        ret: ast.TypeExpr | None = None
+        if self._accept(TokKind.ARROW) is not None:
+            ret = self._parse_type_ref()
+            end = ret.span
+        return ast.FuncTypeRef(span=start.to(end), params=tuple(params), ret=ret)
+
+    def _parse_lambda(self) -> ast.Lambda:
+        """Parse `\N{GREEK SMALL LETTER LAMDA} PARM: TYPE, \N{HORIZONTAL ELLIPSIS} [CAPTURES] \N{RIGHTWARDS ARROW} TYPE` and the body after it.
+
+        The parameter list has no parentheses round it, there being nothing
+        before it for them to separate it from -- and it needs none: what ends
+        it is the capture list, the arrow or the body, and none of the three can
+        be part of a parameter.
+        """
+        start = self._expect(TokKind.LAMBDA).span
+        params: list[ast.Param] = []
+        while self._check(TokKind.IDENT):
+            params.append(self._parse_lambda_param())
+            if self._accept(TokKind.COMMA) is None:
+                break
+        captures = self._parse_captures() if self._check(TokKind.LBRACKET) else ()
+        ret: ast.TypeExpr | None = None
+        if self._accept(TokKind.ARROW) is not None:
+            ret = self._parse_type_ref()
+        body = self._parse_body()
+        return ast.Lambda(span=start.to(body.span), params=tuple(params),
+                          body=body, captures=captures, ret_type=ret)
+
+    def _parse_lambda_param(self) -> ast.Param:
+        """Parse one parameter of a lambda, which is one of a function without
+        a default: what a caller gives an indirect call is what its type says,
+        and nothing at such a call knows what a definition wrote."""
+        name = self._expect(TokKind.IDENT)
+        self._expect(TokKind.COLON)
+        mutable = self._accept(TokKind.KW_MUT) is not None
+        written = self._parse_type_ref()
+        return ast.Param(span=name.span.to(written.span), name=name.text,
+                         type=written, mutable=mutable)
+
+    def _parse_captures(self) -> tuple[ast.Capture, ...]:
+        """Parse `[a, &b]`: the names a lambda brings in from around it.
+
+        `&` says the variable itself rather than what it held, which is C++'s
+        mark for the distinction and the same `&` a reference type is written
+        with -- what it says here is what it says there.
+        """
+        start = self._expect(TokKind.LBRACKET).span
+        found: list[ast.Capture] = []
+        while not self._check(TokKind.RBRACKET):
+            mark = self._accept(TokKind.AMPERSAND)
+            name = self._expect(TokKind.IDENT, D.LANG_SYNTAX_EXPECTED_CAPTURE)
+            found.append(ast.Capture(
+                span=(mark.span if mark is not None else name.span).to(name.span),
+                name=name.text, by_reference=mark is not None))
+            if self._accept(TokKind.COMMA) is None:
+                break
+        end = self._expect(TokKind.RBRACKET,
+                           D.LANG_SYNTAX_EXPECTED_CLOSING_LIST).span
+        if not found:
+            # An empty list is a second spelling of no list at all, and the
+            # language admits one spelling of one thing.
+            self._diags.emit(D.LANG_SYNTAX_EMPTY_CAPTURE, start.to(end))
+        return tuple(found)
+
     def _parse_dimension(self) -> ast.Expr | None:
         """Parse how many there are along one dimension, or nothing for a
         dimension the type does not say the size of."""
@@ -666,7 +748,8 @@ class Parser:
         return (self._check(TokKind.IDENT) or self._check(TokKind.SET_OPEN)
                 or self._check(TokKind.TUPLE_OPEN)
                 or self._check(TokKind.LBRACKET)
-                or self._check(TokKind.AMPERSAND))
+                or self._check(TokKind.AMPERSAND)
+                or self._check(TokKind.KW_FN))
 
     def _parse_list_type(self) -> ast.ListTypeRef:
         """Parse ``'[' TYPE ']'``, which is written the way a value of one is."""
@@ -1663,6 +1746,11 @@ class Parser:
     def _parse_atom(self) -> ast.Expr:
         """Parse an expression with nothing binding it to what is around it."""
         token = self._current
+        if token.kind is TokKind.LAMBDA:
+            # A function written where a value is wanted.  It ends with its
+            # body, so nothing may follow it on the line -- which is the rule
+            # everything ending in a block already follows.
+            return self._parse_lambda()
         if token.kind is TokKind.LPAREN:
             self._advance()
             inner = self._parse_expression()
@@ -1752,7 +1840,8 @@ def _ends_with_a_block(stmt: ast.Stmt) -> bool:
 def _trailing_match(expr: ast.Expr | None) -> bool:
     """Whether something with a block of its own ends an expression."""
     while True:
-        if isinstance(expr, (ast.Match, ast.If, ast.While, ast.ForEach)):
+        if isinstance(expr, (ast.Match, ast.If, ast.While, ast.ForEach,
+                             ast.Lambda)):
             return True
         if isinstance(expr, ast.Binary):
             expr = expr.right

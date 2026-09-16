@@ -450,6 +450,81 @@ these do but belong to templates rather than to calls; and Lisp's `apply`, which
 function rather than a syntax.  This is the compile-time half only: what is spread is a type that counts, so the expansion
 happens in the checker and the generated code shows no trace of it.
 
+#### Lambdas
+
+**A function may be written where a value is wanted.**
+
+```
+λ PARM: TYPE, … [CAPTURES] → TYPE
+```
+
+and then a body, in either notation:
+
+```
+let one: fn(u8) → u8 = λ a: u8 → u8 { a + 1u8 }
+
+let two: fn(u8) → u8 = λ a: u8 → u8:
+    a + 2u8
+```
+
+The parameter list has no parentheses round it, there being nothing before it for them to separate it from -- and it needs none:
+what ends it is the capture list, the arrow or the body, and none of the three can be part of a parameter.  **The arrow and the
+type after it may be left out**, and then the lambda answers with nothing, which is how a function definition says the same.
+
+Everything a body is, this body is: the last statement is what it answers with and no `return` is written for it, a statement
+whose value goes nowhere is reported (5005), and a body that must answer and does not is reported (5003).
+
+**Its type is `fn(TYPE, …) → TYPE`**, the keyword a function is defined with and then what it takes and what it answers.  The
+parameter names are not in it because a type is not a definition: what a caller has to know is the types, and what the names are
+is the body's business.
+
+**What it comes to is two addresses**: where its code is, and where what it brought in with it is.  That is one type whether it
+brought anything in or nothing, so either stands where a `fn(…)` is wanted -- which is what lets a function take one without
+knowing which it will be given:
+
+```
+fn apply(g: fn(u8) → u8, x: u8) → u8:
+    g(g(x))
+
+apply(λ a: u8 → u8 { a × 2u8 }, 3u8)
+```
+
+##### What a lambda may name
+
+**Its parameters, what its capture list brought in, and what the whole program has** -- and nothing else.  A name from around it
+that is not in the list is not a name inside it at all (4552).  So what a lambda depends on is read off its first line rather than
+found by reading its body, which is the whole point of writing the list.
+
+```
+let n: mut u8 = 10u8
+let by: fn(u8) → u8 = λ a: u8 [n] → u8 { a + n }      ※ what n held
+let seen: fn(u8) → u8 = λ a: u8 [&n] → u8 { a + n }   ※ n itself
+n ← 20u8
+by(5u8)                                             ※ 15: it kept the ten
+seen(5u8)                                           ※ 25: it sees the twenty
+```
+
+**`[n]` brings in what the name held** where the lambda was written, copied in; **`[&n]` brings in the variable itself**, so a
+change afterwards is one the lambda sees and it may write the variable where the variable is `mut`.  That is C++'s distinction
+and C++'s mark for it, and the mark is the same `&` a reference type is written with -- what it says here is what it says there.
+A name is brought in once (4553), and a name that is not there to bring in is refused (4551).  A lambda that brings nothing in is
+written with no list at all, an empty one being a second spelling of that (3041).
+
+**A lambda does not leave the call that made it** -- it may not be what a function answers with (4549), nor what a variable at
+the top level holds (4550) -- because what it brought in belongs to that call.  It is the rule a reference follows, and lifetime
+annotations will lift both at once.  What is left is where a lambda earns its keep: bound to a name, handed to a parameter, and
+called through whatever holds it.
+
+**A call through one is a call to whatever it holds**, so nothing about the callee is known: a function that makes one is impure,
+because what it calls may do anything.
+
+Compare: **C++**'s lambdas, whose capture list this is, down to the `&` -- what is different is that there is no `[=]` or `[&]`
+that says "whatever the body turns out to use", a list that said that being a list that said nothing.  **Rust**'s closures, which
+infer what they capture and sort themselves into three traits by what they do with it; **Go**'s and **JavaScript**'s, which
+capture by reference and keep the variables alive by garbage collection; **Java**'s, which capture by value and require what they
+capture to be effectively final.  The lifetime question every one of those answers somehow is the one answered here by not
+letting a lambda leave the call -- the blunt answer, and the same one references got.
+
 #### Narrowing
 
 **`⎕narrow(EXPR, ⌜TYPE⌝)` makes a value of a narrower type out of one of a wider**, and says so where it will not fit.

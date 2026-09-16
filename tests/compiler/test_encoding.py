@@ -58,6 +58,7 @@ KNOWN = [
     ("c3", "ret"),
     ("0f 0b", "ud2"),
     ("e8 00 00 00 00", "call", MCSymRef(SymExpr(MCSymbol("main")))),
+    ("ff d3", "call", MCReg(reg("rbx"))),
 ]
 
 
@@ -244,6 +245,7 @@ SAMPLES = [
     ("lea rdi,[rip+0x0]", "lea", MCReg(reg("rdi")),
      MCMem(rip_relative=True, disp_sym=SymExpr(MCSymbol("msg")))),
     ("call", "call", MCSymRef(SymExpr(MCSymbol("main")))),
+    ("call rbx", "call", MCReg(reg("rbx"))),
     ("sub rsp,0x10", "sub", MCReg(reg("rsp")), MCImm(16, 8)),
     ("add rsp,0x10", "add", MCReg(reg("rsp")), MCImm(16, 8)),
     ("sub rsp,0x200", "sub", MCReg(reg("rsp")), MCImm(0x200, 32)),

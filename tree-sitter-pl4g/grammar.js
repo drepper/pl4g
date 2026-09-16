@@ -222,6 +222,18 @@ module.exports = grammar({
     type: $ => choice(
       seq($._plain_type, repeat($._array_suffix)),
       seq('&', optional($.mutable), field('pointee', $.type)),
+      // A function written where a value is wanted.  The keyword one is
+      // defined with, and then what it takes and what it answers; the
+      // parameter names are not here because a type is not a definition.  It
+      // takes the whole of what follows it, as a reference does and for the
+      // same reason: a suffix after one would have two readings.
+      // Right associative because the arrow after one may be its own return
+      // type or the return type of a lambda whose parameter it is, and the
+      // inner reading is the one the compiler takes: the type is read first
+      // and takes what follows it.
+      prec.right(seq('fn', '(', sepBy(',', field('parameter', $.type)), ')',
+                     optional(seq($._return_arrow,
+                                  field('return_type', $.type))))),
     ),
 
     // What a number counts, written after the type it belongs to and before
@@ -609,6 +621,7 @@ module.exports = grammar({
       $.raised_expression,
       $.binary_expression,
       $.unary_expression,
+      $.lambda_expression,
       $.address_expression,
       $.deref_expression,
       $.call_expression,
@@ -696,6 +709,30 @@ module.exports = grammar({
     ),
 
     // Both bind tighter than every operator written between two operands, so
+    // `\u03bb PARM: TYPE, \u2026 [CAPTURES] \u2192 TYPE` and a body: a function written
+    // where a value is wanted.  The parameter list has no parentheses round
+    // it, there being nothing before it for them to separate it from -- what
+    // ends it is the capture list, the arrow or the body, and none of the
+    // three can be part of a parameter.
+    lambda_expression: $ => prec.right(seq(
+      '\u03bb',
+      sepBy(',', field('parameter', $.lambda_parameter)),
+      optional(field('captures', $.capture_list)),
+      optional(seq($._return_arrow, field('return_type', $.type))),
+      field('body', $._block),
+    )),
+
+    lambda_parameter: $ => seq(
+      field('name', $.identifier), ':', optional($.mutable),
+      field('type', $.type),
+    ),
+
+    // `&` says the variable itself rather than what it held, which is the same
+    // `&` a reference type is written with and says the same thing.
+    capture_list: $ => seq('[', sepBy1(',', $.capture), ']'),
+
+    capture: $ => seq(optional('&'), field('name', $.identifier)),
+
     // `\u00ac ready \u2227 seen` is `(\u00ac ready) \u2227 seen` and `\u00ac (a < b)` needs its parentheses --
     // the same rule '!' follows in C, Go and Rust.
     unary_expression: $ => prec(13, seq(

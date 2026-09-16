@@ -1307,6 +1307,38 @@
       "option": null
     },
     {
+      "number": 3040,
+      "name": "LANG_SYNTAX_EXPECTED_CAPTURE",
+      "severity": "error",
+      "message": "expected the name of something to bring in",
+      "args": [],
+      "cause": "A capture list holds names, each optionally after `&`.  It is the list of what the body may reach from outside itself, so a name is what may stand in it and nothing else.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Lambdas",
+        "requirement": "A capture is a name, written after '&' or not."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 3041,
+      "name": "LANG_SYNTAX_EMPTY_CAPTURE",
+      "severity": "error",
+      "message": "a capture list with nothing in it is written by leaving it out",
+      "args": [],
+      "cause": "A lambda that brings nothing in is written with no list at all, so an empty one would be a second spelling of that.  Where two ways of writing something would mean the same thing in every respect, the language admits one of them.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Lambdas",
+        "requirement": "A lambda that brings nothing in has no capture list."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 3031,
       "name": "LANG_SYNTAX_SPREAD_OUTSIDE_A_CALL",
       "severity": "error",
@@ -5549,6 +5581,104 @@
         "document": "spec/spec.md",
         "section": "The Language / Expressions / Narrowing",
         "requirement": "'\u2395narrow' is written of a whole number and to one."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4549,
+      "name": "LANG_LAMBDA_ANSWERED",
+      "severity": "error",
+      "message": "a function may not answer with something that holds a lambda",
+      "args": [],
+      "cause": "A lambda keeps what it brought in, and what it brought in lives in the call that wrote it -- so handing one back would hand back a way of reading storage that is gone.  It is the rule a reference follows, at the same place and for the same reason, and lifetime annotations are what will lift both.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Lambdas",
+        "requirement": "A lambda does not leave the call that made it."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4550,
+      "name": "LANG_LAMBDA_AT_TOP_LEVEL",
+      "severity": "error",
+      "message": "a variable at the top level may not hold a lambda",
+      "args": [],
+      "cause": "A variable here lasts as long as the program, so what a lambda kept would have to as well -- and what it kept belongs to the call that wrote it.  It is the rule about answering with one, asked at the other place a value can escape to.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Lambdas",
+        "requirement": "A lambda does not leave the call that made it."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4551,
+      "name": "LANG_CAPTURE_UNKNOWN",
+      "severity": "error",
+      "message": "'{name}' is brought in and is not a name here",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the name in the capture list"
+        }
+      ],
+      "cause": "A capture list names what the body may reach from around it, so every name in it is one the place the lambda is written can see.  A name that is not is a spelling, or a name that belongs somewhere else.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Lambdas",
+        "requirement": "A capture names something bound where the lambda is written."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4552,
+      "name": "LANG_CAPTURE_NOT_LISTED",
+      "severity": "error",
+      "message": "'{name}' is not a parameter and was not brought in",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the name the body used"
+        }
+      ],
+      "cause": "A lambda reads its parameters, what it brought in, and what the whole program has -- and nothing else.  A name from around it that is not in the capture list is one the body may not reach, which is the whole point of the list: what a lambda depends on is written at the top of it rather than found by reading the body.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Lambdas",
+        "requirement": "A lambda reads its parameters, its captures and the top level."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4553,
+      "name": "LANG_CAPTURE_TWICE",
+      "severity": "error",
+      "message": "'{name}' is brought in twice",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the capture"
+        }
+      ],
+      "cause": "A name is brought in once, by value or by reference.  Twice would be two ways of reaching one variable inside one body, and which of them a mention meant would not be decidable.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Lambdas",
+        "requirement": "A name is brought in once."
       },
       "since": "0.1",
       "default_enabled": true,

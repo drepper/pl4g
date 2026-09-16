@@ -23,12 +23,12 @@ from ..front.token import (BOTTOM_GLYPH, BUILTIN_GLYPH, CHR_NAME,
                           HEAP_NAME, TOLERANCE_DEFAULT,
                           TOLERANCE_NAME, WILDCARD_NAME)
 from ..ir.builder import IRBuilder
-from ..ir.layout import DataLayout, stride_of
+from ..ir.layout import DataLayout, member_offsets_of, stride_of
 from ..ir.inst import (BinaryInst, BinOp, CastInst, CastKind, CmpPred,
                        ExtractInst, FrameInst, Instruction, UnOp)
 from . import tables
 from ..ir.function import (DEFAULT_CCONV, SYSTEM_CCONV, BasicBlock, FuncAttrs,
-                           Function,
+                           FuncType, Function,
                            InlineHint,
                            Linkage, SpecialKind)
 from ..ir.module import GlobalVar, Module
@@ -237,6 +237,11 @@ def _addressed_in(node: object, into: set[str]) -> None:
     """
     if isinstance(node, ast.AddressOf) and isinstance(node.operand, ast.NameRef):
         into.add(node.operand.name)
+    if isinstance(node, ast.Capture) and node.by_reference:
+        # A lambda that brings a variable in rather than what it held needs the
+        # variable to be somewhere, which is the same thing `&` needs anywhere
+        # else and is got the same way.
+        into.add(node.name)
     if isinstance(node, ast.Node):
         for one in fields_of(node):
             _addressed_in(getattr(node, one.name), into)
@@ -280,6 +285,15 @@ def _filled_in(shell: Type | None, made: Type) -> Type:
 #: otherwise.  Written as the words rather than the symbols -- `meter` and not
 #: `m` -- because a program is read more often than it is written and because a
 #: single letter is a name a program might want.
+#: What a lambda's function is called, with a number after it.  The glyph is
+#: the compiler's, so nothing a program can write collides with one.
+LAMBDA_PREFIX: Final[str] = "".join((BUILTIN_GLYPH, "lambda"))
+
+#: What a lambda carries what it brought in through.  An address and nothing
+#: more: what is there is the lambda's own business and no caller reads it.
+_ENVIRONMENT: Final[PtrType] = PtrType(U8, mutable=True)
+
+
 SI_UNITS: Final[tuple[str, ...]] = ("ampere", "candela", "gram", "kelvin",
                                     "meter", "mole", "second")
 
@@ -326,6 +340,27 @@ def _can_be_referred_to(ty: Type) -> bool:
     return (isinstance(ty, (IntType, FloatType, EnumType, PtrType, ProductType,
                             SumType))
             or ty is BOOL or ty is CHAR)
+
+
+def _holds_a_lambda(ty: Type, seen: frozenset[int] = frozenset()) -> bool:
+    """Whether a value of *ty* holds a function anywhere inside it."""
+    if isinstance(ty, FuncType):
+        return True
+    if id(ty) in seen:
+        return False
+    deeper = seen | {id(ty)}
+    match ty:
+        case TupleType():
+            return any(_holds_a_lambda(m, deeper) for m in ty.members)
+        case ResultType():
+            return (_holds_a_lambda(ty.ok, deeper)
+                    or (ty.err is not None and _holds_a_lambda(ty.err, deeper)))
+        case ProductType():
+            return any(_holds_a_lambda(t, deeper) for _, t in ty.fields)
+        case ArrayType() | ListType() | SetType() | VecType():
+            return _holds_a_lambda(ty.element, deeper)
+        case _:
+            return False
 
 
 def _holds_a_reference(ty: Type, seen: frozenset[int] = frozenset()) -> bool:
@@ -840,6 +875,13 @@ class Checker:
         #: which are the two operators that work a unit out rather than demand
         #: that both sides carry the same one.
         self._deriving: bool = False
+        #: How many lambdas have been given a name, so that the next gets one
+        #: nothing else has.
+        self._lambdas: int = 0
+        #: The scopes around the lambda being checked, which its body may not
+        #: reach.  Kept so that a name it names and did not bring in is
+        #: reported as one it did not bring in rather than as one nobody has.
+        self._outside: list[dict[str, _Local]] = []
         #: Whether an array stands where one of its elements is wanted, which
         #: is so while the arguments of a call to a function marked `listable`
         #: are lowered and nowhere else.
@@ -1020,7 +1062,10 @@ class Checker:
         expectation = self._begin_expecting(pairs)
         try:
             ty = self._variable_type(node)
-            if ty is not None and _holds_a_reference(ty):
+            if ty is not None and _holds_a_lambda(ty):
+                self._diags.emit(D.LANG_LAMBDA_AT_TOP_LEVEL, node.span)
+                ty = ERROR
+            elif ty is not None and _holds_a_reference(ty):
                 # A variable here lasts as long as the program, so what it named
                 # would have to as well, and nothing yet says how long anything
                 # lives.  Asked before the value is looked at, since there is no
@@ -1489,7 +1534,8 @@ class Checker:
     def _bind_local(self, name: str, value: Value, span: Span,
                     mutable: bool = False, value_span: Span = INVALID_SPAN,
                     is_parameter: bool = False,
-                    builder: IRBuilder | None = None) -> None:
+                    builder: IRBuilder | None = None,
+                    placed_as: Type | None = None) -> None:
         """Bind a name in the innermost scope, reporting one already bound there.
 
         A name the body takes a reference to is given storage of its own here
@@ -1507,6 +1553,15 @@ class Checker:
                              name=name).note(
                 D.LANG_FILESTRUCT_PREVIOUS_DEFINITION, previous.span, name=name)
             return
+        if placed_as is not None:
+            # A name that already stands for a place: what was handed over is
+            # the address and not what is there, which is what a lambda's
+            # capture by reference brings in.
+            scope[name] = _Local(name=name, value=value, span=span,
+                                 mutable=mutable, placed=True, held=placed_as,
+                                 value_span=value_span if value_span.is_valid
+                                 else span, is_parameter=is_parameter)
+            return
         held = self._value_type_of(value)
         placed = (builder is not None and name in self._addressed
                   and _can_be_referred_to(held))
@@ -1519,6 +1574,19 @@ class Checker:
                              value_span=value_span if value_span.is_valid else span,
                              is_parameter=is_parameter,
                              placed=placed, held=held if placed else None)
+
+    def _report_undefined(self, name: str, span: Span) -> None:
+        """Report a name nothing here stands for, saying which nothing it is.
+
+        Inside a lambda a name may be one the place the lambda was written can
+        see perfectly well, and the lambda did not bring it in -- which is a
+        different mistake from a name nobody has, and the one worth pointing at:
+        what a lambda depends on is written at the top of it.
+        """
+        if any(name in scope for scope in self._outside):
+            self._diags.emit(D.LANG_CAPTURE_NOT_LISTED, span, name=name)
+            return
+        self._diags.emit(D.LANG_FILESTRUCT_UNDEFINED_NAME, span, name=name)
 
     def _held_by(self, local: _Local) -> Type:
         """The type a name has, whether it stands for a value or for a place."""
@@ -1554,7 +1622,7 @@ class Checker:
         if isinstance(found_global, LoadedModule):
             self._diags.emit(D.LANG_IMPORT_MODULE_AS_VALUE, ref.span, name=ref.name)
             return None
-        self._diags.emit(D.LANG_FILESTRUCT_UNDEFINED_NAME, ref.span, name=ref.name)
+        self._report_undefined(ref.name, ref.span)
         return None
 
     # -- collection ------------------------------------------------------------
@@ -1573,6 +1641,14 @@ class Checker:
         try:
             params = tuple(self._resolve_type(p.type) for p in node.params)
             ret = self._return_type(node.ret_type)
+            if _holds_a_lambda(ret):
+                # What a lambda kept belongs to the call that wrote it, so
+                # handing one back would hand back a way of reading storage
+                # that is gone.  It is the rule a reference follows, at the
+                # same place and for the same reason.
+                self._diags.emit(D.LANG_LAMBDA_ANSWERED,
+                                 node.ret_type.span if node.ret_type is not None
+                                 else node.name_span)
             if _holds_a_reference(ret):
                 # What a reference names has to outlive the reference, and
                 # handing one back is the case where the compiler cannot tell:
@@ -2133,6 +2209,12 @@ class Checker:
             return self._reference_type(ref)
         if isinstance(ref, ast.UnitTypeRef):
             return self._united_type(ref)
+        if isinstance(ref, ast.FuncTypeRef):
+            params = tuple(self._resolve_type(one) for one in ref.params)
+            ret = self._return_type(ref.ret)
+            if ret is ERROR or any(one is ERROR for one in params):
+                return ERROR
+            return self._module.types.func_type(params, ret)
         return self._named_type(ref)
 
     # -- units -----------------------------------------------------------------
@@ -3322,6 +3404,294 @@ class Checker:
         builder.store(
             self._element_place(builder, start, ty.element, offset, stmt.span),
             value, stmt.span)
+
+    def _callee_value(self, expr: ast.Expr) -> _Local | None:
+        """The name a call names, where it names a function held in one.
+
+        A name bound to a function is called through what it holds rather than
+        by naming a definition: which function it is, is not a question the
+        compiler answers, which is the whole point of a function being a value.
+        """
+        if not isinstance(expr, ast.NameRef):
+            return None
+        local = self._find_local(expr.name)
+        if local is None or not isinstance(self._held_by(local), FuncType):
+            return None
+        return local
+
+    def _lower_indirect(self, builder: IRBuilder, expr: ast.Call,
+                        local: _Local, expected: Type | None) -> Value:
+        """Lower a call through a function held in a name.
+
+        What it brought in goes first, before what the call wrote, which is the
+        parameter nobody wrote and the one thing an indirect call has to agree
+        about beyond the types.  Nothing here knows what the callee does, so it
+        is taken to do everything: a pure function may not make one.
+        """
+        local.read = True
+        ty = self._held_by(local)
+        assert isinstance(ty, FuncType)
+        held = self._read_capture(builder, local, expr.span)
+        args = self._one_by_one(builder, expr.args, ty.params, local.name)
+        if args is None:
+            return UndefConst(ERROR)
+        if len(args) != len(ty.params):
+            self._diags.emit(D.LANG_CALL_WRONG_ARGUMENT_COUNT, expr.span,
+                             name=local.name, expected=len(ty.params),
+                             found=len(args))
+            return UndefConst(ERROR)
+        if any(one.ty is ERROR for one in args):
+            return UndefConst(ERROR)
+        self._an_effect(D.LANG_PURE_CALLS_IMPURE, expr.span, name=local.name)
+        answer = builder.call(
+            builder.extract(held, 0, _ENVIRONMENT, expr.span),
+            (builder.extract(held, 1, _ENVIRONMENT, expr.span), *args),
+            ty.ret, expr.span)
+        if ty.ret is VOID and expected is not None:
+            self._diags.emit(D.LANG_CALL_HAS_NO_VALUE, expr.span, name=local.name)
+            return UndefConst(ERROR)
+        if not self._accepts(expected, answer.ty):
+            self._report_mismatch(expr.span, answer.ty, expected)
+            return UndefConst(ERROR)
+        return answer
+
+    # -- lambdas ---------------------------------------------------------------    # -- lambdas ---------------------------------------------------------------
+
+    def _lower_lambda(self, builder: IRBuilder, expr: ast.Lambda,
+                      expected: Type | None) -> Value:
+        """Lower `\N{GREEK SMALL LETTER LAMDA} \N{HORIZONTAL ELLIPSIS}`: a function written where a value is wanted.
+
+        What it comes to is two addresses -- where its code is and where what it
+        brought in with it is -- which is one type whether it brought anything
+        in or nothing, so either stands where a `fn(\N{HORIZONTAL ELLIPSIS})` is wanted.
+
+        The body becomes a function of the module like any other, with the
+        things it brought in reached through a first parameter nobody wrote.
+        What it may name is its parameters, what it brought in, and what the
+        whole program has: the scope it is checked in holds those and nothing
+        else, which is what makes the capture list the list of what it depends
+        on rather than something a reader works out by reading the body.
+        """
+        taken = self._captures_of(expr)
+        if taken is None:
+            return UndefConst(ERROR)
+        params = tuple(self._resolve_type(one.type) for one in expr.params)
+        answer = self._return_type(expr.ret_type)
+        if answer is ERROR or any(one is ERROR for one in params):
+            return UndefConst(ERROR)
+        ty = self._module.types.func_type(params, answer)
+        held = tuple(self._held_by_capture(one, local) for one, local in taken)
+        if any(one is ERROR for one in held):
+            return UndefConst(ERROR)
+        place, offsets = self._environment(builder, taken, held, expr.span)
+        func = self._function_of_a_lambda(expr, params, answer, held, offsets,
+                                          taken)
+        if func is None:
+            return UndefConst(ERROR)
+        # What it carries is an address and says nothing about what is there:
+        # one type covers every lambda, and what is at the address is the
+        # lambda's own business.
+        carried = (place if place.ty is _ENVIRONMENT
+                   else builder.cast(CastKind.BITCAST, place, _ENVIRONMENT,
+                                     expr.span))
+        made = builder.make_tuple(
+            (builder.code_address(func, expr.span), carried), ty, expr.span)
+        if not self._accepts(expected, ty):
+            self._report_mismatch(expr.span, ty, expected)
+            return UndefConst(ERROR)
+        return made
+
+    def _captures_of(self, expr: ast.Lambda
+                     ) -> list[tuple[ast.Capture, _Local]] | None:
+        """What the lambda brings in, looked up where the lambda is written."""
+        found: list[tuple[ast.Capture, _Local]] = []
+        seen: set[str] = set()
+        spoiled = False
+        for one in expr.captures:
+            if one.name in seen:
+                self._diags.emit(D.LANG_CAPTURE_TWICE, one.span, name=one.name)
+                spoiled = True
+                continue
+            seen.add(one.name)
+            local = self._find_local(one.name)
+            if local is None:
+                self._diags.emit(D.LANG_CAPTURE_UNKNOWN, one.span, name=one.name)
+                spoiled = True
+                continue
+            local.read = True
+            found.append((one, local))
+        return None if spoiled else found
+
+    def _held_by_capture(self, one: ast.Capture, local: _Local) -> Type:
+        """What the environment holds for one capture.
+
+        By value, the type the name has: a copy of what it held where the
+        lambda was written, so what the lambda answers depends on its
+        parameters and on what it was given.  By reference, a reference to it,
+        which is the same thing `&` makes anywhere else -- and the name is
+        given storage of its own for the same reason it is there.
+        """
+        held = self._held_by(local)
+        if not one.by_reference:
+            return held
+        if not local.placed:
+            self._diags.emit(D.LANG_REF_TYPE_NOT_ALLOWED, one.span,
+                             found=held.render())
+            return ERROR
+        return self._module.types.ptr_type(held, local.mutable)
+
+    def _environment(self, builder: IRBuilder,
+                     taken: Sequence[tuple[ast.Capture, _Local]],
+                     held: Sequence[Type], span: Span
+                     ) -> tuple[Value, tuple[int, ...]]:
+        """Room for what the lambda brings in, filled where it is written.
+
+        A frame of this call and not room from the arena, because a lambda does
+        not leave the call that made it -- which is the rule a reference
+        follows, and is what makes the two safe by one argument.
+        """
+        if not taken:
+            # Room for nothing, which is still somewhere: one type covers the
+            # lambda that brought something in and the one that brought
+            # nothing, so both carry an address and this is the address of
+            # nothing in particular.  A byte, and nothing reads it.
+            return (builder.frame(U8, span), ())
+        slots = tuple(self._slot_for(one) for one in held)
+        if len(slots) == 1:
+            inside: Type = slots[0]
+            offsets = (0,)
+        else:
+            inside = self._module.types.tuple_type(slots)
+            offsets = member_offsets_of(inside, _LAYOUT)
+        place = builder.frame(inside, span)
+        for at, ((one, local), what) in enumerate(zip(taken, held)):
+            value = (local.value if one.by_reference
+                     else self._read_capture(builder, local, span))
+            self._put_away(builder, place, offsets[at], what, value, span)
+        return (place, offsets)
+
+    def _slot_for(self, what: Type) -> Type:
+        """What the environment holds one capture in.
+
+        A value of several parts is kept as its parts, laid out as a tuple of
+        them would be: what a store writes and what a load reads is one part
+        each, so the room has to be the parts' and not the whole's.
+        """
+        pieces = parts_of(what)
+        return what if len(pieces) == 1 else self._module.types.tuple_type(pieces)
+
+    def _put_away(self, builder: IRBuilder, place: Value, offset: int,
+                  what: Type, value: Value, span: Span) -> None:
+        """Write one capture into the room kept for it."""
+        pieces = parts_of(what)
+        if len(pieces) == 1:
+            builder.store(self._inside(builder, place, offset, what, span),
+                          value, span)
+            return
+        slot = self._module.types.tuple_type(pieces)
+        for at, (part, inner) in enumerate(
+                zip(pieces, member_offsets_of(slot, _LAYOUT))):
+            builder.store(
+                self._inside(builder, place, offset + inner, part, span),
+                builder.extract(value, at, part, span), span)
+
+    def _taken_out(self, builder: IRBuilder, place: Value, offset: int,
+                   what: Type, span: Span) -> Value:
+        """Read one capture back out of the room kept for it."""
+        pieces = parts_of(what)
+        if len(pieces) == 1:
+            return builder.load(self._inside(builder, place, offset, what, span),
+                                span)
+        slot = self._module.types.tuple_type(pieces)
+        return builder.make_tuple(
+            [builder.load(self._inside(builder, place, offset + inner, part, span),
+                          span)
+             for part, inner in zip(pieces, member_offsets_of(slot, _LAYOUT))],
+            what, span)
+
+    def _read_capture(self, builder: IRBuilder, local: _Local,
+                      span: Span) -> Value:
+        """What a name held where the lambda was written."""
+        return builder.load(local.value, span) if local.placed else local.value
+
+    def _inside(self, builder: IRBuilder, place: Value, offset: int,
+                what: Type, span: Span) -> Value:
+        """Where one of the things brought in sits, given where they all are."""
+        start = builder.cast(CastKind.BITCAST, place,
+                             self._module.types.ptr_type(what, mutable=True), span)
+        if offset == 0:
+            return start
+        return builder.binary(BinOp.ADD, start,
+                              builder.int_const(U64, offset), span)
+
+    def _function_of_a_lambda(self, expr: ast.Lambda, params: Sequence[Type],
+                              answer: Type, held: Sequence[Type],
+                              offsets: Sequence[int],
+                              taken: Sequence[tuple[ast.Capture, _Local]]
+                              ) -> Function | None:
+        """The function a lambda's body becomes, checked and lowered.
+
+        It takes one parameter nobody wrote -- where what the lambda brought in
+        is -- and then the ones that were written.  The body is checked in a
+        scope holding those and nothing else, so a name from around the lambda
+        that was not brought in is not a name here at all.
+        """
+        self._lambdas += 1
+        name = "".join((LAMBDA_PREFIX, str(self._lambdas)))
+        func = Function(
+            name=name,
+            ty=self._module.types.func_type((_ENVIRONMENT, *params), answer),
+            attrs=FuncAttrs(impure=True), linkage=Linkage.INTERNAL,
+            span=expr.span, name_span=expr.span, source_path=self._path.as_posix(),
+            param_names=("", *(one.name for one in expr.params)))
+        self._module.add_function(func, key=self._key(name))
+        block = func.add_block()
+        inner = IRBuilder(self._module, func)
+        arriving = [block.add_param(one, "")
+                    for one in (_ENVIRONMENT, *params)]
+        outer = (self._scopes, self._addressed, self._answering, self._impure,
+                 self._carried, self._loops, self._outside)
+        self._outside = self._outside + self._scopes
+        self._scopes, self._addressed = [], set()
+        self._answering, self._impure = answer, True
+        self._carried, self._loops = set(), []
+        self._push_scope()
+        try:
+            _addressed_in(expr.body, self._addressed)
+            for at, ((one, local), what) in enumerate(zip(taken, held)):
+                # What is in the environment is what was put there: the value
+                # for a capture by value, and the address of the variable for
+                # one by reference -- which the name then stands for, so that
+                # reading it reads the variable and writing it writes it.
+                inside = self._taken_out(inner, arriving[0], offsets[at], what,
+                                         expr.span)
+                self._bind_local(one.name, inside, one.span,
+                                 mutable=local.mutable if one.by_reference
+                                 else False,
+                                 builder=inner,
+                                 placed_as=(what.pointee
+                                            if isinstance(what, PtrType)
+                                            else None))
+            for one, value in zip(expr.params, arriving[1:]):
+                self._bind_local(one.name, value, one.span, one.mutable,
+                                 is_parameter=True, builder=inner)
+            self._lower_block(inner, expr.body, func)
+            if not inner.is_terminated:
+                if answer is VOID:
+                    inner.ret()
+                else:
+                    self._diags.emit(D.LANG_FUNCDEF_RETURN_MISSING, expr.span,
+                                     name=name, type=answer.render())
+                    # The mistake is reported and the compilation is over, but
+                    # what was built has to be well formed all the same: a
+                    # function with no terminator is one the verifier would
+                    # complain about instead, which would say nothing useful.
+                    inner.unreachable(expr.span)
+            self._pop_scope()
+        finally:
+            (self._scopes, self._addressed, self._answering, self._impure,
+             self._carried, self._loops, self._outside) = outer
+        return func
 
     def _lower_deref_assign(self, builder: IRBuilder,
                             stmt: ast.DerefAssign) -> None:
@@ -5785,6 +6155,8 @@ class Checker:
                 # reaching this is standing where a value stands.
                 self._diags.emit(D.LANG_ENUMERATE_IS_NOT_A_VALUE, expr.span)
                 return UndefConst(ERROR)
+            case ast.Lambda():
+                return self._lower_lambda(builder, expr, expected)
             case ast.AddressOf():
                 return self._lower_address(builder, expr, expected)
             case ast.Deref():
@@ -8274,6 +8646,9 @@ class Checker:
             # a condition the compiler settles never lowers what is in it.
             self._diags.emit(D.LANG_TYPEOF_OUTSIDE_COMPTIME, expr.span)
             return UndefConst(ERROR)
+        held = self._callee_value(expr.callee)
+        if held is not None:
+            return self._lower_indirect(builder, expr, held, expected)
         func = self._callee(expr.callee)
         if func is None:
             return UndefConst(ERROR)

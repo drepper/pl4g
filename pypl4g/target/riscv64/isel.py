@@ -31,6 +31,7 @@ from ..branches import (CONDITIONS, Move, UnsupportedBranch,
 from ..faults import Messages, describe
 from ..pool import Constants
 from ..narrow import normalize
+from ...ir.value import Value
 from ...ir.layout import DataLayout, align_of, size_of, tag_offset_of
 from ...ir.types import parts_of
 from ..callconv import TooManyArguments, argument_places, result_places
@@ -40,7 +41,7 @@ from ..saturate import (DIVISION, EXTREMA, NAMES, SATURATING, TRAPPING,
                         lower_extremum, lower_saturating, lower_shift,
                         lower_trapping, lower_wrapping)
 from . import ops as rvops
-from ...ir.function import SYSTEM_CCONV
+from ...ir.function import DEFAULT_CCONV, SYSTEM_CCONV
 from .abi import lookup as lookup_cconv
 from .startup import ABORT_SYMBOL
 from .opcodes import IMM12_MAX, IMM12_MIN, RISCV_INSTRS
@@ -437,7 +438,9 @@ class RVSelector(InstructionSelector):
     def select_call(self, target: MCOperand, span: Span) -> Sequence[MCInst]:
         """Instructions that call *target*."""
         if not isinstance(target, MCSymRef):
-            raise UnsupportedOperation("only direct calls are generated yet", span)
+            # A call through a register: what is called is whatever it holds,
+            # which is how a function held in a value is called.
+            return (self._inst("jalr", (target,), span),)
         return (self._inst("jal", (target,), span),)
 
     def select_return(self, span: Span) -> Sequence[MCInst]:
@@ -794,7 +797,7 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                    known_clobbers: Mapping[str, frozenset[RegUnit]] | None = None
                    ) -> None:
     """Build the machine form of one IR function."""
-    from ...ir.inst import (AddressInst, BinaryInst, BrInst, CallInst, CmpInst,
+    from ...ir.inst import (CodeInst, AddressInst, BinaryInst, BrInst, CallInst, CmpInst,
                             CondBrInst,
                             FrameInst, AssertInst,
                             LoadInst, MemStartInst, RetInst, StoreInst,
@@ -1057,6 +1060,16 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                     # order the operations that touch it, and there is nothing
                     # yet for it to order.
                     pass
+                case CodeInst():
+                    # Where a function's code is, as a value.  The same
+                    # instruction a variable's address needs, asked of a
+                    # function's symbol instead.
+                    destination = _new_value(
+                        inst.ty, registers,
+                        hint=(_result_register(inst.ty, cconv, registers)
+                              if inst is returned else None))
+                    held[id(inst)] = destination
+                    asm.address(destination, symbol_name(inst.callee), inst.span)
                 case AddressInst():
                     # The variable's address put where arithmetic can reach it.
                     # Reading and writing through the variable itself needs no
@@ -1570,19 +1583,27 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                     lower_comparison(asm, inst, operands, destination)
                 case CallInst():
                     callee = inst.callee
-                    if not isinstance(callee, _Function):
+                    # A call through a value rather than to a definition: what
+                    # is called is whatever the register holds, so the
+                    # convention cannot be the callee's -- nothing here knows
+                    # which callee it is -- and is the one every function of
+                    # this language follows.
+                    through = inst.target
+                    if through is None and not isinstance(callee, _Function):
                         raise UnsupportedOperation(
                             "a call through something that is not a named function",
                             span)
+                    given = inst.arguments
                     # A call is placed by the *callee's* convention and not by
                     # this function's.  Which register an argument goes in is
                     # what the function being called says, and the specification
                     # lets two functions of one compilation say different
                     # things.
-                    theirs = lookup_cconv(callee.cconv)
+                    theirs = lookup_cconv(DEFAULT_CCONV if through is not None
+                                          else callee.cconv)
                     try:
                         going = argument_places(
-                            theirs, [a.ty for a in inst.operands])
+                            theirs, [a.ty for a in given])
                     except TooManyArguments as many:
                         raise UnsupportedOperation(
                             "a call with more arguments than the convention passes "
@@ -1593,7 +1614,7 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                     # the more a convention's argument registers are ones the
                     # allocator prefers.
                     handed: list[Move] = []
-                    for position, argument in enumerate(inst.operands):
+                    for position, argument in enumerate(given):
                         pieces = parts_of(argument.ty)
                         if len(pieces) > 1:
                             for at, (part, place) in enumerate(
@@ -1607,12 +1628,26 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                             into=_as_argument(going[position][0], argument.ty,
                                               registers),
                             source=operands.value(argument, inst.span)))
+                    if through is not None:
+                        # The register the callee is in is read by the call, so
+                        # it goes into the parallel copy with the arguments: an
+                        # argument register is one the callee may already be in,
+                        # and a move that wrote it first would call whatever the
+                        # argument happened to be.
+                        called = asm.temporary(
+                            operands.register_of(through, inst.span))
+                        handed.append(Move(
+                            into=called,
+                            source=operands.value(through, inst.span)))
                     for move in sequenced(handed, asm.temporary):
                         asm.loadreg(move.into, move.source, inst.span)
-                    asm.call(symbol_name(callee), inst.span,
-                             _destroyed_by(callee, theirs, registers,
-                                           known_clobbers),
-                             reads=[move.into for move in handed])
+                    asm.call(MCReg(called) if through is not None
+                             else symbol_name(callee),
+                             inst.span,
+                             _destroyed_by(callee if through is None else None,
+                                           theirs, registers, known_clobbers),
+                             reads=[move.into for move in handed
+                                    if through is None or move.into is not called])
                     if len(parts_of(inst.ty)) > 1:
                         pieces = parts_of(inst.ty)
                         try:
@@ -1720,7 +1755,7 @@ def _result_register(ty: Type, cconv: CallConvDesc,
 _FLOAT_REGISTER_BITS: Final[int] = 64
 
 
-def _destroyed_by(callee: Function, cconv: CallConvDesc,
+def _destroyed_by(callee: Function | None, cconv: CallConvDesc,
                   registers: RegisterInfo,
                   known: Mapping[str, frozenset[RegUnit]] | None
                   ) -> list[PhysReg]:
@@ -1734,8 +1769,11 @@ def _destroyed_by(callee: Function, cconv: CallConvDesc,
     """
     from ...ir.mangle import symbol_name
 
-    units = None if known is None else known.get(symbol_name(callee))
+    units = (None if known is None or callee is None
+             else known.get(symbol_name(callee)))
     if units is None:
+        # Everything the convention allows, which is what a call through a
+        # value has to assume: nothing here knows which function it is.
         units = cconv.caller_saved
     return [registers.widest(unit) for unit in units]
 

@@ -188,6 +188,7 @@ SAMPLES = [
     ("bgeu a0, a1, .", "bgeu", MCReg(reg("a0")), MCReg(reg("a1")),
      MCSymRef(SymExpr(MCSymbol("s")))),
     ("jal ra, .", "jal", MCSymRef(SymExpr(MCSymbol("s")))),
+    ("jalr ra, a0, 0", "jalr", MCReg(reg("a0"))),
     ("ret", "ret"),
     ("ecall", "ecall"),
     ("ebreak", "ebreak"),

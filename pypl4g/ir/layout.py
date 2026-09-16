@@ -15,7 +15,7 @@ from typing import Final
 from .types import (ArrayType, BoolType, CharType, DictType, EnumType,
                     FloatType,
                     IntType, MemType,
-                    ProductType, PtrType, SetType, TupleType,
+                    FuncType, ProductType, PtrType, SetType, TupleType,
                     ListType, ResultType, StrType, SumType, Type, VecType,
                     VoidType)
 
@@ -71,6 +71,9 @@ def size_of(ty: Type, layout: DataLayout) -> int:
             # point as the thirty-two bits every one of them fits in, a value of
             # an enumeration as whatever holds its values.
             return size_of(ty.holder, layout)
+        case FuncType():
+            # Where the code is and where what it brought in is: two addresses.
+            return 2 * layout.pointer_size
         case TupleType():
             # Laid out as a product of the same members would be.
             total = 0
@@ -153,6 +156,8 @@ def align_of(ty: Type, layout: DataLayout) -> int:
             return 1
         case CharType() | EnumType():
             return align_of(ty.holder, layout)
+        case FuncType():
+            return layout.pointer_size
         case TupleType():
             return max((align_of(m, layout) for m in ty.members), default=1)
         case VecType():

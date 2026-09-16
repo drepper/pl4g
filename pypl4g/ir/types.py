@@ -1002,6 +1002,13 @@ def parts_of(ty: Type) -> tuple[Type, ...]:
         # string and an array of unstated length both have and for the same
         # reason: how many is not in the type.
         return (_pointer_to(ty.element), U64)
+    if isinstance(ty, FuncType):
+        # A function written where a value is wanted is two addresses: where
+        # its code is, and where what it brought in with it is.  One type
+        # covers both the lambda that brought something in and the one that
+        # brought nothing, which is what lets either stand where the type says
+        # a function stands.
+        return (_pointer_to(U8), _pointer_to(U8))
     if isinstance(ty, StrType):
         # Where the bytes are and how many there are, which is what an array
         # whose type does not say its length is as well -- the difference

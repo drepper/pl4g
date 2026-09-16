@@ -1,0 +1,10 @@
+※ pl4g-test: compile=error diag=3041
+
+※ A lambda that brings nothing in is written with no list at all, so an empty
+※ one would be a second spelling of that.  Where two ways of writing something
+※ would mean the same thing in every respect, the language admits one of them.
+
+@[startup, impure]
+fn main() → u6:
+    let f: fn(u8) → u8 = λ a: u8 [] → u8 { a }
+    0u6

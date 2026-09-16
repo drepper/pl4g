@@ -1,0 +1,13 @@
+※ pl4g-test: compile=error diag=4549
+
+※ A lambda keeps what it brought in, and what it brought in lives in the call
+※ that wrote it -- so handing one back would hand back a way of reading storage
+※ that is gone.  It is the rule a reference follows, at the same place and for
+※ the same reason, and lifetime annotations are what will lift both.
+
+@[startup]
+fn main() → u6:
+    0u6
+
+fn made() → fn(u8) → u8:
+    λ a: u8 → u8 { a }

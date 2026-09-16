@@ -1,0 +1,10 @@
+※ pl4g-test: compile=error diag=4551
+
+※ A capture list names what the body may reach from around it, so every name
+※ in it is one the place the lambda is written can see.  A name that is not is
+※ a spelling, or a name that belongs somewhere else.
+
+@[startup, impure]
+fn main() → u6:
+    let f: fn(u8) → u8 = λ a: u8 [nope] → u8 { a }
+    0u6

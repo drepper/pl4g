@@ -12,6 +12,7 @@ from .function import BasicBlock, Function
 from typing import Sequence
 
 from .inst import (AddressInst, AnyLaneInst, AssertInst, CallInst, BinaryInst,
+                   CodeInst,
                    BinOp, BlockTarget, BrInst, FrameInst, SplatInst,
                    CastInst, CastKind,
                    CmpInst, CmpPred, CondBrInst, Instruction, LoadInst, MemStartInst,
@@ -20,7 +21,7 @@ from .inst import (AddressInst, AnyLaneInst, AssertInst, CallInst, BinaryInst,
                    TupleInst, UnaryInst, UnOp,
                    UnreachableInst, UnwrapInst, WrapInst)
 from .module import Module
-from .types import FloatType, BOOL, IntType, PtrType, Type, VecType
+from .types import FloatType, BOOL, IntType, PtrType, Type, U8, VecType
 from .value import Value
 
 
@@ -199,6 +200,11 @@ class IRBuilder:
         """Append the taking of a variable's address into a register."""
         assert isinstance(var.ty, PtrType)
         return self._append(AddressInst(var, span))
+
+    def code_address(self, func: object, span: Span = INVALID_SPAN) -> Value:
+        """Append the taking of a function's address into a register."""
+        return self._append(
+            CodeInst(func, self._module.types.ptr_type(U8, mutable=True), span))
 
     def load(self, address: Value, span: Span = INVALID_SPAN) -> Value:
         """Append a load of whatever *address* points at."""

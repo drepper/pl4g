@@ -470,6 +470,14 @@ RISCV_INSTRS: Final[tuple[RVInstDesc, ...]] = (
     # instruction itself writes, is not.
                implicit_defs=(RA,), flags=InstFlags.CALL,
                est_size=INSTRUCTION_SIZE),
+    # jalr ra, rs, 0
+    # A call through a register, which is what a function held in a value is
+    # called by.  The link register is written, as `jal` writes it; what it
+    # destroys beyond that is the callee's to say.
+    RVInstDesc("jalr", (_r(),), template=0x000000E7,
+               fields=(_reg(0, _RS1),),
+               implicit_defs=(RA,), flags=InstFlags.CALL,
+               est_size=INSTRUCTION_SIZE),
     # ret                is  jalr zero, ra, 0
     RVInstDesc("ret", (), template=0x00008067, implicit_uses=(RA,),
                flags=InstFlags.TERMINATOR | InstFlags.RETURN, est_size=INSTRUCTION_SIZE),

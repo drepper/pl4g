@@ -2011,6 +2011,49 @@ now carries the unit and the parser reads it between the name and the mark, whic
 a result whose answer is a length, and there is nothing about a result for a unit to say.
 
 
+A function written where a value is wanted
+------------------------------------------
+
+**A lambda's value is two addresses**: where its code is and where what it brought in is.  `parts_of(FuncType)` answers those two
+pointers, which is what makes a function value travel the way every other value of several parts already travels -- two registers
+as an argument, two words in memory, and the large-answer pass needs no telling.  One type covers the lambda that brought
+something in and the one that brought nothing, which is what lets either stand where a `fn(...)` is wanted; the one with nothing
+to carry carries the address of a byte nobody reads.
+
+**The body becomes a function of the module**, `⎕lambdaN`, taking the environment as a first parameter nobody wrote.  It is
+checked in a scope stack of its own, holding the captures and the parameters and nothing else, with the scopes around it kept in
+`_outside` -- so a name it names and did not bring in is reported as one it did not bring in rather than as one nobody has, which
+is the difference worth telling a reader about.
+
+**A capture by reference is a placed local inside the lambda.**  `_addressed_in` collects the names written after `&` in a
+capture list beside the ones written after `&` in an expression, because both need the variable to be somewhere; the environment
+then holds a pointer, and the name inside the body is bound with `placed_as`, so reading it loads and assigning to it stores.
+That is the same `_Local.placed` a reference already introduced, doing the same job.
+
+A capture of something that is itself several values -- a lambda capturing a lambda -- is kept in the environment **as its
+parts**, laid out as a tuple of them would be, because a store writes one part and a load reads one part.
+
+Indirect calls
+--------------
+
+**The callee of an indirect call is an operand and not a reference.**  It was a reference at first, beside the `Function` a
+direct call names, and the optimizer removed the instruction computing it: everything that asks what an instruction uses asks its
+operands, so a callee kept anywhere else is a value nothing counts as used.  `CallInst` now puts a computed callee first among
+the operands and answers `target` and `arguments` accordingly.
+
+**The callee goes into the parallel copy with the arguments.**  The register it is in is one an argument may be moved into --
+which is likelier than it sounds, the argument registers being the ones the allocator prefers -- and a move that wrote it first
+would call whatever the argument happened to be.  That was a segmentation fault the first time the callee and an argument
+collided, and it is the same reason a branch's arguments are a parallel copy.
+
+The convention for a call through a value is the language's own and cannot be the callee's: nothing at the call knows which
+function it is.  For the same reason such a call is taken to destroy everything its convention allows, and to do anything at all
+-- so a pure function may not make one.
+
+Three instructions were added, one per target: `call r/m64`, `blr Xn` and `jalr ra, rs, 0`, each with a sample in the
+differential tests against the GNU assemblers.
+
+
 Expectations
 ------------
 
