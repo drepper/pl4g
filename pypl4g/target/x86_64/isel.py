@@ -16,7 +16,7 @@ from ...mc.desc import InstrTable, SelectionError
 from ...mc.inst import MCInst
 from ...mc.operand import MCImm, MCMem, MCOperand, MCReg, MCSymRef
 from ...mc.ops import Condition, Op, Rounding
-from ...ir.inst import BinOp, UnOp
+from ...ir.inst import BinOp, Ordering, UnOp
 from ...mc.reg import Reg, VirtReg
 from ...mc.operand import SymExpr
 from ...source.location import Span
@@ -25,6 +25,7 @@ from ..branches import (CONDITIONS, Move, UnsupportedBranch,
                         labels_of,
                         lower_branch, lower_comparison)
 from ..faults import Messages, describe
+from ..ordering import cannot_order
 from ..pool import Constants
 from ..narrow import normalize
 from ...ir.value import Value
@@ -368,6 +369,24 @@ class X86Selector(InstructionSelector):
                     self._inst("mov", (address, MCReg(carried,
                                                       bits=address.size_bits)), span))
         return (self._inst("mov", (address, value), span),)
+
+    def select_acquire(self, dst: Reg, address: MCMem,
+                       span: Span) -> Sequence[MCInst]:
+        """An ordinary read.
+
+        This architecture's reads are already acquiring and its writes already
+        releasing -- a read is never seen to move ahead of an earlier read, nor
+        a write ahead of an earlier write -- so an ordering that asks for no
+        more than that asks for nothing this machine does not already do.  The
+        one ordering it would cost an instruction is a write followed by a read
+        of another place, which nothing here asks for yet.
+        """
+        return self.select_move(dst, address, span)
+
+    def select_release(self, address: MCMem, value: MCOperand,
+                       span: Span) -> Sequence[MCInst]:
+        """An ordinary write, for the reason above."""
+        return self.select_store(address, value, span)
 
     def _fits_a_store(self, address: MCMem, value: MCImm) -> bool:
         """Whether a store of *value* into *address* has an encoding."""
@@ -1232,6 +1251,9 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
             asm.block(labels[index])
         for inst in block.insts:
             span = inst.span if inst.span.is_valid else None
+            refused = cannot_order(inst)
+            if refused is not None:
+                raise UnsupportedOperation(refused, inst.span)
             match inst:
                 case FrameInst():
                     # Room of this function's own.  What the value is, is where
@@ -1391,11 +1413,13 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                         hint=(_result_register(inst.ty, cconv, registers)
                               if inst is returned else None))
                     held[id(inst)] = destination
-                    asm.loadreg(
-                        destination,
-                        place_of(address, span, size_bits=_width_of(inst.ty),
-                                 signed=_is_signed(inst.ty)),
-                        inst.span)
+                    read = place_of(address, span,
+                                    size_bits=_width_of(inst.ty),
+                                    signed=_is_signed(inst.ty))
+                    if inst.ordering is Ordering.ACQUIRE:
+                        asm.acquire(destination, read, inst.span)
+                    else:
+                        asm.loadreg(destination, read, inst.span)
                 case StoreInst():
                     address = inst.operands[1]
                     written = inst.operands[2]
@@ -1428,16 +1452,20 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                                      signed=_is_signed(written.ty))
                     constant = _number_of(written)
                     if constant is not None:
-                        asm.store(place, MCImm(
+                        put = MCImm(
                             constant[0],
                             _immediate_width(constant[0], _is_signed(written.ty),
                                              _width_of(written.ty)),
-                            signed=_is_signed(written.ty)), inst.span)
+                            signed=_is_signed(written.ty))
                     else:
                         # A store names how much of memory it writes, so it
                         # reads the view of that width of wherever the value is.
-                        asm.store(place, MCReg(_value_of(written, held, span),
-                                               bits=_width_of(written.ty)), inst.span)
+                        put = MCReg(_value_of(written, held, span),
+                                    bits=_width_of(written.ty))
+                    if inst.ordering is Ordering.RELEASE:
+                        asm.release(place, put, inst.span)
+                    else:
+                        asm.store(place, put, inst.span)
                 case RetInst() if not inst.operands:
                     asm.ret(inst.span)
                 case RetInst():

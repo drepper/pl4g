@@ -63,6 +63,26 @@ class InstructionSelector(Protocol):
         """Instructions that write *value* into the memory *address* names."""
         ...
 
+    def select_acquire(self, dst: Reg, address: MCMem,
+                       span: Span) -> Sequence[MCInst]:
+        """Instructions that read *address* into *dst*, acquiring.
+
+        Nothing written after this may be seen by another observer to have
+        happened before it.  On a machine whose ordinary reads already promise
+        that, this is an ordinary read; on one whose do not, it is a different
+        instruction or a read and a barrier.
+        """
+        ...
+
+    def select_release(self, address: MCMem, value: MCOperand,
+                       span: Span) -> Sequence[MCInst]:
+        """Instructions that write *value* into *address*, releasing.
+
+        Nothing written before this may be seen by another observer to have
+        happened after it.
+        """
+        ...
+
     def select_call(self, target: MCOperand, span: Span) -> Sequence[MCInst]:
         """Instructions that call *target*."""
         ...
@@ -699,6 +719,19 @@ class Assembler:
         """Write *value* into the memory *address* names."""
         operand = self.imm(value) if isinstance(value, int) else value
         self._emit(self._selector.select_store(address, operand, span))
+
+    def acquire(self, dst: Reg, address: MCMem,
+                span: Span = INVALID_SPAN) -> None:
+        """Read *address* into *dst*, so that nothing written after it is seen
+        by another observer to have happened before."""
+        self._emit(self._selector.select_acquire(dst, address, span))
+
+    def release(self, address: MCMem, value: MCOperand | int,
+                span: Span = INVALID_SPAN) -> None:
+        """Write *value* into *address*, so that nothing written before it is
+        seen by another observer to have happened after."""
+        operand = self.imm(value) if isinstance(value, int) else value
+        self._emit(self._selector.select_release(address, operand, span))
 
     def op(self, op: Op, dst: Reg | None = None, *sources: MCOperand | int,
            span: Span = INVALID_SPAN) -> None:

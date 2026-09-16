@@ -96,6 +96,16 @@ SAMPLES = [
      MCImm(8, 12, False)),
     ("str x0, [x1, #16]", "str", MCReg(reg("x0")), MCReg(reg("x1")),
      MCImm(16, 12, False)),
+    # The ordered forms, which carry no offset: the address is a register and
+    # nothing else, which is why what selects one adds the offset first.
+    ("ldarb w0, [x1]", "ldarb", MCReg(reg("w0")), MCReg(reg("x1"))),
+    ("ldarh w0, [x1]", "ldarh", MCReg(reg("w0")), MCReg(reg("x1"))),
+    ("ldar w0, [x1]", "ldar", MCReg(reg("w0")), MCReg(reg("x1"))),
+    ("ldar x0, [x1]", "ldar", MCReg(reg("x0")), MCReg(reg("x1"))),
+    ("stlrb w0, [x1]", "stlrb", MCReg(reg("w0")), MCReg(reg("x1"))),
+    ("stlrh w0, [x1]", "stlrh", MCReg(reg("w0")), MCReg(reg("x1"))),
+    ("stlr w0, [x1]", "stlr", MCReg(reg("w0")), MCReg(reg("x1"))),
+    ("stlr x0, [x1]", "stlr", MCReg(reg("x0")), MCReg(reg("x1"))),
     ("and w0, w1, w2", "and", MCReg(reg("w0")), MCReg(reg("w1")), MCReg(reg("w2"))),
     ("and x0, x1, x2", "and", MCReg(reg("x0")), MCReg(reg("x1")), MCReg(reg("x2"))),
     ("orr w0, w1, w2", "orr", MCReg(reg("w0")), MCReg(reg("w1")), MCReg(reg("w2"))),

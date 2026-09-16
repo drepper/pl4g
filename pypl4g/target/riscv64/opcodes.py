@@ -75,6 +75,16 @@ def _sym() -> OperandSpec:
     return OperandSpec(OperandKind.REL | OperandKind.SYM)
 
 
+def _fence_bits() -> OperandSpec:
+    """Which accesses a fence orders, as the twelve bits holding all of it.
+
+    One operand and not two, because the architecture puts the mode, what comes
+    before and what comes after in one run of bits: a fence the compiler ever
+    wants is then a number, and one row covers all of them.
+    """
+    return OperandSpec(OperandKind.IMM, imm_min=0, imm_max=0xFFF)
+
+
 def _reg(operand: int, lsb: int) -> Field:
     """A five-bit register number."""
     return Field(FieldKind.REGISTER, operand, lsb)
@@ -483,6 +493,11 @@ RISCV_INSTRS: Final[tuple[RVInstDesc, ...]] = (
                flags=InstFlags.TERMINATOR | InstFlags.RETURN, est_size=INSTRUCTION_SIZE),
     # ecall
     RVInstDesc("ecall", (), template=0x00000073, est_size=INSTRUCTION_SIZE),
+    # fence pred, succ
+    RVInstDesc("fence", (_fence_bits(),), template=0x0000000F,
+               fields=(Field(FieldKind.IMMEDIATE, 0, _IMM12, 12, signed=False),),
+               flags=InstFlags.MAY_LOAD | InstFlags.MAY_STORE,
+               est_size=INSTRUCTION_SIZE),
     # ebreak
     RVInstDesc("ebreak", (), template=0x00100073, est_size=INSTRUCTION_SIZE),
     # unimp              a word the architecture guarantees is never valid

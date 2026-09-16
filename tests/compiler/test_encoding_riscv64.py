@@ -191,6 +191,11 @@ SAMPLES = [
     ("jalr ra, a0, 0", "jalr", MCReg(reg("a0"))),
     ("ret", "ret"),
     ("ecall", "ecall"),
+    # The fence an acquiring read is followed by, and the one a releasing write
+    # is preceded by.  One row carries all twelve bits, so one sample of each is
+    # what says the bits were put in the right places.
+    ("fence r, rw", "fence", MCImm(0x023, 12)),
+    ("fence rw, w", "fence", MCImm(0x031, 12)),
     ("ebreak", "ebreak"),
     ("unimp", "unimp"),
     ("nop", "nop"),

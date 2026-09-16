@@ -2431,6 +2431,39 @@ one's; before this there was one token for all of them, which was the entry
 block's only because nothing asked in an `elif` had ever written.
 
 
+What another observer sees
+--------------------------
+
+A load may **acquire** and a store may **release**, said on the instruction
+(`Ordering` in `ir/inst.py`) and written `load.acquire.u32` and
+`store.release.u32` in the textual form.  The memory token says that two
+accesses of this program happen in an order; this says what a second observer --
+a kernel reaping a ring, another thread -- may see, which the token does not.
+The verifier refuses a load that releases and a store that acquires, each
+promising something about the wrong side of itself, and an acquiring load counts
+as having an effect although a plain one does not.
+
+`target/ordering.py` is the one rule about which accesses may carry an ordering:
+a value of several parts is several accesses and which of them the ordering
+belonged to has no answer, and floating point is refused because the ordered
+forms name integer registers.  Both come back as 8501 rather than as a crash.
+
+Below that each machine answers for itself, through `Assembler.acquire` and
+`Assembler.release`:
+
+- **x86-64** emits what it would have emitted.  Its reads are already acquiring
+  and its writes already releasing; the one ordering that would cost it an
+  instruction is a write followed by a read of another place, which nothing asks
+  for yet.
+- **AArch64** emits `ldar` and `stlr`, in the four widths.  They carry no offset
+  -- the address is a register and nothing else -- so `_flat_address` adds the
+  offset first, into the destination for a read and into a register of its own
+  for a write.
+- **RISC-V** has no acquiring form of a plain load, those bits belonging to the
+  atomic instructions, so it emits the fences the architecture asks for:
+  `fence r, rw` after the read and `fence rw, w` before the write, one table row
+  carrying all twelve bits of either.
+
 What a program is started with
 ------------------------------
 

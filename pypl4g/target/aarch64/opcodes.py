@@ -510,6 +510,47 @@ AARCH64_INSTRS: Final[tuple[A64InstDesc, ...]] = (
                 fields=(_reg_field(0, _RD), _reg_field(1, _RN), _offset_field(2, 3)),
                 flags=InstFlags.MAY_STORE, est_size=INSTRUCTION_SIZE,
                 roles=_READS_ALL_THREE),
+    # The ordered forms.  They carry no offset -- the address is a register and
+    # nothing else -- which is why what selects one adds the offset first.
+    # ldarb Wt, [Xn]
+    A64InstDesc("ldarb", (_r(32), _r(64)), template=0x08DFFC00,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN)),
+                flags=InstFlags.MAY_LOAD | InstFlags.ZEXT32,
+                est_size=INSTRUCTION_SIZE),
+    # ldarh Wt, [Xn]
+    A64InstDesc("ldarh", (_r(32), _r(64)), template=0x48DFFC00,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN)),
+                flags=InstFlags.MAY_LOAD | InstFlags.ZEXT32,
+                est_size=INSTRUCTION_SIZE),
+    # ldar Wt, [Xn]
+    A64InstDesc("ldar", (_r(32), _r(64)), template=0x88DFFC00,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN)),
+                flags=InstFlags.MAY_LOAD | InstFlags.ZEXT32,
+                est_size=INSTRUCTION_SIZE),
+    # ldar Xt, [Xn]
+    A64InstDesc("ldar", (_r(64), _r(64)), template=0xC8DFFC00,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN)),
+                flags=InstFlags.MAY_LOAD, est_size=INSTRUCTION_SIZE),
+    # stlrb Wt, [Xn]
+    A64InstDesc("stlrb", (_r(32), _r(64)), template=0x089FFC00,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN)),
+                flags=InstFlags.MAY_STORE, est_size=INSTRUCTION_SIZE,
+                roles=_READS_BOTH),
+    # stlrh Wt, [Xn]
+    A64InstDesc("stlrh", (_r(32), _r(64)), template=0x489FFC00,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN)),
+                flags=InstFlags.MAY_STORE, est_size=INSTRUCTION_SIZE,
+                roles=_READS_BOTH),
+    # stlr Wt, [Xn]
+    A64InstDesc("stlr", (_r(32), _r(64)), template=0x889FFC00,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN)),
+                flags=InstFlags.MAY_STORE, est_size=INSTRUCTION_SIZE,
+                roles=_READS_BOTH),
+    # stlr Xt, [Xn]
+    A64InstDesc("stlr", (_r(64), _r(64)), template=0xC89FFC00,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN)),
+                flags=InstFlags.MAY_STORE, est_size=INSTRUCTION_SIZE,
+                roles=_READS_BOTH),
     # b label
     A64InstDesc("b", (_sym(),), template=0x14000000,
                 fields=(Field(FieldKind.RELOCATION, 0, 0, 26, shift=2, signed=True,

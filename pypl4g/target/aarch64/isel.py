@@ -15,7 +15,7 @@ from ...mc.desc import InstrTable, SelectionError
 from ...mc.inst import MCInst
 from ...mc.operand import MCImm, MCMem, MCOperand, MCReg, MCSymRef
 from ...mc.ops import Condition, Op, Rounding
-from ...ir.inst import BinOp, UnOp
+from ...ir.inst import BinOp, Ordering, UnOp
 from ...mc.reg import PhysReg, Reg, RegUnit, VirtReg
 from ...mc.operand import SymExpr
 from ...source.location import Span
@@ -24,6 +24,7 @@ from ..branches import (CONDITIONS, Move, UnsupportedBranch,
                         labels_of,
                         lower_branch, lower_comparison)
 from ..faults import Messages, describe
+from ..ordering import cannot_order
 from ..pool import Constants
 from ..narrow import normalize
 from ...ir.value import Value
@@ -592,6 +593,71 @@ class A64Selector(InstructionSelector):
             self._inst(mnemonic, (held[1], place,
                                   MCImm(address.disp, 12, signed=False)), span),
         )
+
+    #: The ordered forms, by how much of memory they touch.  There is no signed
+    #: read among them: what an ordering says is about other observers and not
+    #: about the value, so a narrow read that has to be widened is widened after.
+    _ACQUIRES: Final[dict[int, str]] = {
+        8: "ldarb", 16: "ldarh", 32: "ldar", 64: "ldar"}
+    _RELEASES: Final[dict[int, str]] = {
+        8: "stlrb", 16: "stlrh", 32: "stlr", 64: "stlr"}
+
+    def _flat_address(self, address: MCMem, into: Reg,
+                      span: Span) -> tuple[Sequence[MCInst], MCReg]:
+        """The place as a bare register, which is all an ordered access names.
+
+        The ordered forms carry no offset, so where the ordinary ones put one in
+        the instruction this adds it first, into *into*.
+        """
+        place = MCReg(into, bits=64)
+        made: list[MCInst] = []
+        if address.disp_sym is not None:
+            symbol = MCSymRef(address.disp_sym)
+            made.append(self._inst("adrp", (place, symbol), span))
+            made.append(self._inst("add.lo12", (place, place, symbol), span))
+        elif address.base is not None:
+            base = MCReg(address.base, bits=64)
+            if address.disp == 0:
+                return (), base
+            made.append(self._inst("add", (place, base,
+                                           MCImm(address.disp, 12,
+                                                 signed=False)), span))
+            return made, place
+        else:
+            raise UnsupportedOperation(
+                "an ordered access to a place that is neither a symbol nor an "
+                "address held in a register", span)
+        if address.disp:
+            made.append(self._inst("add", (place, place,
+                                           MCImm(address.disp, 12,
+                                                 signed=False)), span))
+        return made, place
+
+    def select_acquire(self, dst: Reg, address: MCMem,
+                       span: Span) -> Sequence[MCInst]:
+        """Read *address* into *dst* with a load-acquire."""
+        width = address.size_bits if address.size_bits is not None else 64
+        mnemonic = self._ACQUIRES.get(width)
+        if mnemonic is None:
+            raise UnsupportedOperation("".join((
+                "reading ", str(width), " bits from memory in order")), span)
+        # The address is built in the destination, as an ordinary read builds
+        # its own: the load consumes it and overwrites it.
+        before, place = self._flat_address(address, dst, span)
+        return (*before, self._inst(mnemonic, (MCReg(dst), place), span))
+
+    def select_release(self, address: MCMem, value: MCOperand,
+                       span: Span) -> Sequence[MCInst]:
+        """Write *value* into *address* with a store-release."""
+        width = address.size_bits if address.size_bits is not None else 64
+        mnemonic = self._RELEASES.get(width)
+        if mnemonic is None:
+            raise UnsupportedOperation("".join((
+                "writing ", str(width), " bits to memory in order")), span)
+        held, written = self._value_in_register(value, width, span)
+        before, place = self._flat_address(address, INFO.new_virtual(GPR, 64),
+                                           span)
+        return (*held, *before, self._inst(mnemonic, (written, place), span))
 
     def _value_in_register(self, value: MCOperand, width: int,
                            span: Span) -> tuple[Sequence[MCInst], MCReg]:
@@ -1195,6 +1261,9 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
             asm.block(labels[index])
         for inst in block.insts:
             span = inst.span if inst.span.is_valid else None
+            refused = cannot_order(inst)
+            if refused is not None:
+                raise UnsupportedOperation(refused, inst.span)
             match inst:
                 case FrameInst():
                     # Room of this function's own.  What the value is, is where
@@ -1354,11 +1423,13 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                         hint=(_result_register(inst.ty, cconv, registers)
                               if inst is returned else None))
                     held[id(inst)] = destination
-                    asm.loadreg(
-                        destination,
-                        place_of(address, span, size_bits=_width_of(inst.ty),
-                                 signed=_is_signed(inst.ty)),
-                        inst.span)
+                    read = place_of(address, span,
+                                    size_bits=_width_of(inst.ty),
+                                    signed=_is_signed(inst.ty))
+                    if inst.ordering is Ordering.ACQUIRE:
+                        asm.acquire(destination, read, inst.span)
+                    else:
+                        asm.loadreg(destination, read, inst.span)
                 case StoreInst():
                     address = inst.operands[1]
                     written = inst.operands[2]
@@ -1389,16 +1460,19 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                                      signed=_is_signed(written.ty))
                     constant = _number_of(written)
                     if constant is not None:
-                        asm.store(place, MCImm(
+                        put = MCImm(
                             constant[0],
                             _immediate_width(constant[0], _is_signed(written.ty)),
-                            signed=_is_signed(written.ty)), inst.span)
+                            signed=_is_signed(written.ty))
                     else:
                         # A narrow store here names the whole register and
                         # writes as much of it as the width says, so unlike
                         # x86-64 there is no narrower view to ask for.
-                        asm.store(place, MCReg(_value_of(written, held, span)),
-                                  inst.span)
+                        put = MCReg(_value_of(written, held, span))
+                    if inst.ordering is Ordering.RELEASE:
+                        asm.release(place, put, inst.span)
+                    else:
+                        asm.store(place, put, inst.span)
                 case RetInst() if not inst.operands:
                     asm.ret(inst.span)
                 case RetInst():

@@ -16,7 +16,7 @@ from .inst import (SyscallInst,
                    CodeInst,
                    BinOp, BlockTarget, BrInst, FrameInst, SplatInst,
                    CastInst, CastKind,
-                   CmpInst, CmpPred, CondBrInst, Instruction, LoadInst, MemStartInst,
+                   CmpInst, CmpPred, CondBrInst, Instruction, LoadInst, MemStartInst, Ordering,
                    ErrorInst, ExtractInst, FailedInst, RetInst, StoreInst,
                    Terminator,
                    TupleInst, UnaryInst, UnOp,
@@ -207,16 +207,20 @@ class IRBuilder:
         return self._append(
             CodeInst(func, self._module.types.ptr_type(U8, mutable=True), span))
 
-    def load(self, address: Value, span: Span = INVALID_SPAN) -> Value:
+    def load(self, address: Value, span: Span = INVALID_SPAN,
+             ordering: Ordering = Ordering.PLAIN) -> Value:
         """Append a load of whatever *address* points at."""
         pointee = address.ty
         assert isinstance(pointee, PtrType)
-        return self._append(LoadInst(pointee.pointee, (self.memory(), address), span))
+        return self._append(LoadInst(pointee.pointee, (self.memory(), address),
+                                     span, ordering))
 
     def store(self, address: Value, value: Value,
-              span: Span = INVALID_SPAN) -> Value:
+              span: Span = INVALID_SPAN,
+              ordering: Ordering = Ordering.PLAIN) -> Value:
         """Append a store of *value* through *address*, and take the new token."""
-        written = self._append(StoreInst(self.memory(), address, value, span))
+        written = self._append(StoreInst(self.memory(), address, value, span,
+                                         ordering))
         self._memory = written
         return written
 

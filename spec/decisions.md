@@ -5471,6 +5471,50 @@ variable; **Zig**, which passes a writer explicitly as this does and whose `main
 may take an allocator and the arguments; **Haskell**, where the whole question is
 inside `IO` and the descriptors are handles of the library.
 
+## 2026-09-17T20:00+02:00 — implementation
+
+**Acquire and release are said on the read and the write, not by a fence**
+
+The memory token, settled on 2026-09-12, says that two accesses of one program
+happen in an order.  It says nothing about the order a *second* observer sees
+them in, and a ring shared with the kernel is exactly that question.  So a load
+may acquire and a store may release, written on the instruction: `load.acquire.u32`,
+`store.release.u32`.
+
+**On the instruction rather than as a barrier of its own**, which was the
+alternative.  A barrier is a second thing that has to be kept next to the access
+it belongs to, by every pass that moves anything; the word on the access cannot
+come apart from it.  It is also what two of the three machines actually have --
+AArch64's `ldar` and `stlr` are one instruction each -- so a barrier would have
+been a shape the compiler invented and then had to fold back.  RISC-V, which has
+no such form for a plain load, gets the fence its architecture asks for and the
+selector is the one place that knows.
+
+**What each machine answers**, which is the whole of what an ordering costs:
+x86-64 emits what it would have emitted, its reads already acquiring and its
+writes already releasing; AArch64 emits `ldar`/`stlr`, which carry no offset, so
+the selector adds one first; RISC-V emits `fence r, rw` after the read and
+`fence rw, w` before the write.  A test asserts each of those three, instruction
+by instruction, because "it compiled" would not have told them apart.
+
+**An ordered access is one access.**  A value of several parts is several, and
+which of them the ordering belonged to would have no answer, so it is refused
+(8501); floating point is refused too, the ordered forms naming integer
+registers.  A `load.acquire` counts as having an effect although a plain load
+does not: what it does is order what comes after it, which a read nobody looks
+at does as much as one somebody does.
+
+Not taken, and not needed yet: sequential consistency, which on x86-64 is the
+one ordering that costs an instruction -- a write followed by a read of another
+place -- and which nothing driving a ring asks for.
+
+Compare: **C11** and **C++11**, whose `memory_order` is a parameter of the
+atomic operation and not a separate fence, which this follows; **Java**, whose
+`volatile` says the same thing by being a property of the field; **Rust**, the
+same as C11; **Go**, which has no such thing in the language at all and puts it
+in the library; **Linux's own `smp_load_acquire`**, which is where this pair of
+fences on RISC-V comes from.
+
 Open questions
 --------------
 

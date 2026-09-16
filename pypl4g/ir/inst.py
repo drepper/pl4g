@@ -617,6 +617,26 @@ class MemStartInst(Instruction):
         return "mem.start"
 
 
+class Ordering(Enum):
+    """What a read or a write says about what *another* observer sees.
+
+    The memory token already says that two accesses of this program happen in
+    an order; it says nothing about the order a second observer sees them in,
+    and where memory is shared with something else -- a kernel reaping a ring,
+    another thread -- that is the whole question.  So it is said on the
+    instruction: an `acquire` read is one nothing written after it may be seen
+    before, and a `release` write is one nothing written before it may be seen
+    after.
+
+    Plain is the default and is what every access the language has written so
+    far is, there being nothing to share with yet.
+    """
+
+    PLAIN = "plain"
+    ACQUIRE = "acquire"
+    RELEASE = "release"
+
+
 class LoadInst(Instruction):
     """Reads memory.  Operands are the memory token and the address.
 
@@ -624,9 +644,24 @@ class LoadInst(Instruction):
     own, so a read nobody looks at is one nobody can tell happened.  A place
     where reading is itself an action -- a device register -- would have to say
     so on the instruction, and none exists.
+
+    An acquiring read is the exception, and not because of what it reads: what
+    it does is order everything written after it, which a read nobody looks at
+    does just as much as one somebody does.
     """
 
-    __slots__ = ()
+    __slots__ = ("ordering",)
+
+    def __init__(self, ty: Type, operands: Sequence[Value],
+                 span: Span = INVALID_SPAN,
+                 ordering: Ordering = Ordering.PLAIN) -> None:
+        super().__init__(ty, operands, span)
+        self.ordering = ordering
+
+    @property
+    def has_effects(self) -> bool:
+        """Whether dropping it would change what another observer sees."""
+        return self.ordering is not Ordering.PLAIN
 
     def reads(self) -> Sequence[Value]:
         """The place the address operand names."""
@@ -635,7 +670,8 @@ class LoadInst(Instruction):
     @property
     def opcode(self) -> str:
         """The mnemonic used in the textual form."""
-        return "load"
+        return ("load" if self.ordering is Ordering.PLAIN
+                else ".".join(("load", self.ordering.value)))
 
 
 class StoreInst(Instruction):
@@ -647,11 +683,13 @@ class StoreInst(Instruction):
     that takes the old token provably is not.
     """
 
-    __slots__ = ()
+    __slots__ = ("ordering",)
 
     def __init__(self, token: Value, address: Value, value: Value,
-                 span: Span = INVALID_SPAN) -> None:
+                 span: Span = INVALID_SPAN,
+                 ordering: Ordering = Ordering.PLAIN) -> None:
         super().__init__(MEM, (token, address, value), span)
+        self.ordering = ordering
 
     @property
     def has_effects(self) -> bool:
@@ -665,7 +703,8 @@ class StoreInst(Instruction):
     @property
     def opcode(self) -> str:
         """The mnemonic used in the textual form."""
-        return "store"
+        return ("store" if self.ordering is Ordering.PLAIN
+                else ".".join(("store", self.ordering.value)))
 
 
 class FieldInst(Instruction):

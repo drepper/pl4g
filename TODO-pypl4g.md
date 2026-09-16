@@ -13,10 +13,17 @@ To Do List for the pypl4g compiler
     a module asking *which* architecture it is, for anything other than a call number -- `comptime if` compares types and
     refuses a question about a value (4502), so the shape that would answer it is not there.
 
-[ ] acquire and release ordering in the IR.  io_uring's submission and completion rings are shared with the kernel and their head
-    and tail indices are read and written with ordering, which the memory token does not express: the token says *that* two
-    operations are ordered here, not what a second observer sees.  Needed before a ring can be driven correctly, and useless
-    before then.
+[x] acquire and release ordering in the IR.  Done on 2026-09-17: a load may acquire and a store may release, said on the
+    instruction.  x86-64 emits what it would have emitted, AArch64 `ldar`/`stlr`, RISC-V the two fences.  An ordered access to a
+    value of several parts, or to a floating-point value, is refused (8501).
+
+[ ] a way to write an ordering in the language.  The representation carries one and nothing reaches it: `std` will want to read a
+    ring's tail with acquire and publish its own with release, and there is no syntax for that.  It is a language decision and is
+    listed in TODO-language.md as well.
+
+[ ] sequential consistency.  Acquire and release are what driving a ring needs; the ordering neither of them gives -- a write
+    followed by a read of another place, seen by everyone in one order -- is the one that costs x86-64 an instruction, and
+    nothing asks for it yet.
 
 [ ] report every test that failed rather than stopping at the first.  A failing
     test leaves through the abort helper, which writes a message and exits, so a

@@ -18,7 +18,7 @@ from .inst import (AddressInst, SyscallInst, AnyLaneInst, AssertInst, BinaryInst
                    CastKind, CmpInst,
                    ErrorInst, ExtractInst, FailedInst,
                    Instruction, TupleInst,
-                   LoadInst, RetInst, StoreInst, Terminator, UnaryInst,
+                   LoadInst, Ordering, RetInst, StoreInst, Terminator, UnaryInst,
                    UnwrapInst, WrapInst)
 from .module import GlobalVar, Module
 from .types import (ArrayType, BOOL, BoolType, CharType, DictType, EnumType,
@@ -360,6 +360,11 @@ class Verifier:
                     self._fail(where, "".join((
                         "whether any lane is true read as ", inst.ty.render())))
             case StoreInst():
+                if inst.ordering is Ordering.ACQUIRE:
+                    # An acquire orders what is written after it against a read,
+                    # and a write is not a read: the ordering a write can carry
+                    # is the one that says what came before it is already seen.
+                    self._fail(where, "a store cannot acquire")
                 if len(inst.operands) != 3:
                     self._fail(where, "a store takes a token, an address and a value")
                 elif inst.operands[0].ty is not MEM:
@@ -379,6 +384,8 @@ class Verifier:
                             "storing into '", named,
                             "', through a pointer that does not allow it")))
             case LoadInst():
+                if inst.ordering is Ordering.RELEASE:
+                    self._fail(where, "a load cannot release")
                 if len(inst.operands) != 2:
                     self._fail(where, "a load takes a memory token and an address")
                 elif inst.operands[0].ty is not MEM:

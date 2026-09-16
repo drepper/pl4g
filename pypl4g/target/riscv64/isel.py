@@ -20,7 +20,7 @@ from ...mc.inst import MCInst
 from ...mc.operand import MCImm, MCMem, MCOperand, MCReg, MCSymRef
 from ...mc.ops import Condition, Op, Rounding
 from . import isa
-from ...ir.inst import BinOp, UnOp
+from ...ir.inst import BinOp, Ordering, UnOp
 from ...mc.reg import Reg, VirtReg
 from ...mc.operand import SymExpr
 from ...source.location import Span
@@ -29,6 +29,7 @@ from ..branches import (CONDITIONS, Move, UnsupportedBranch,
                         labels_of,
                         lower_branch, lower_comparison)
 from ..faults import Messages, describe
+from ..ordering import cannot_order
 from ..pool import Constants
 from ..narrow import normalize
 from ...ir.value import Value
@@ -144,6 +145,16 @@ STACK_POINTER: Final = SP
 #: What memory looks like here.  Every one of these targets has an eight-byte
 #: pointer, and nothing else about the layout differs between them.
 _LAYOUT: Final[DataLayout] = DataLayout(pointer_size=8)
+
+#: The two fences the orderings come to, as the twelve bits the architecture
+#: holds the mode, what comes before and what comes after in.  `fence r, rw`
+#: says nothing read or written after may move before a read, which is what an
+#: acquiring read wants after it; `fence rw, w` says nothing read or written
+#: before may move after a write, which is what a releasing write wants before
+#: it.  Written as numbers because that is what the field is, and checked
+#: against the assembler's own spelling by the encoding test.
+FENCE_R_RW: Final[int] = 0x023
+FENCE_RW_W: Final[int] = 0x031
 
 
 class UnsupportedOperation(Exception):
@@ -377,6 +388,28 @@ class RVSelector(InstructionSelector):
 
     #: Which store writes a value of a given width.
     _STORES: Final[dict[int, str]] = {8: "sb", 16: "sh", 32: "sw", 64: "sd"}
+
+    def select_acquire(self, dst: Reg, address: MCMem,
+                       span: Span) -> Sequence[MCInst]:
+        """An ordinary read followed by a fence.
+
+        This architecture has no acquiring form of a plain load -- the bits that
+        say so belong to the atomic instructions -- so the ordering is a fence
+        of its own: nothing read or written after may be moved before the read.
+        """
+        return (*self.select_move(dst, address, span),
+                self._inst("fence", (MCImm(FENCE_R_RW, 12),), span))
+
+    def select_release(self, address: MCOperand, value: MCOperand,
+                       span: Span) -> Sequence[MCInst]:
+        """A fence followed by an ordinary write, for the reason above.
+
+        The fence comes first and names what came before: nothing read or
+        written before it may be moved after the write.
+        """
+        assert isinstance(address, MCMem)
+        return (self._inst("fence", (MCImm(FENCE_RW_W, 12),), span),
+                *self.select_store(address, value, span))
 
     def select_store(self, address: MCMem, value: MCOperand,
                      span: Span) -> Sequence[MCInst]:
@@ -1028,6 +1061,9 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
             asm.block(labels[index])
         for inst in block.insts:
             span = inst.span if inst.span.is_valid else None
+            refused = cannot_order(inst)
+            if refused is not None:
+                raise UnsupportedOperation(refused, inst.span)
             match inst:
                 case FrameInst():
                     # Room of this function's own.  What the value is, is where
@@ -1111,11 +1147,13 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                         hint=(_result_register(inst.ty, cconv, registers)
                               if inst is returned else None))
                     held[id(inst)] = destination
-                    asm.loadreg(
-                        destination,
-                        place_of(address, span, size_bits=_width_of(inst.ty),
-                                 signed=_is_signed(inst.ty)),
-                        inst.span)
+                    read = place_of(address, span,
+                                    size_bits=_width_of(inst.ty),
+                                    signed=_is_signed(inst.ty))
+                    if inst.ordering is Ordering.ACQUIRE:
+                        asm.acquire(destination, read, inst.span)
+                    else:
+                        asm.loadreg(destination, read, inst.span)
                 case StoreInst():
                     address = inst.operands[1]
                     written = inst.operands[2]
@@ -1146,16 +1184,19 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                                      signed=_is_signed(written.ty))
                     constant = _number_of(written)
                     if constant is not None:
-                        asm.store(place, MCImm(
+                        put = MCImm(
                             constant[0],
                             _immediate_width(constant[0], _is_signed(written.ty)),
-                            signed=_is_signed(written.ty)), inst.span)
+                            signed=_is_signed(written.ty))
                     else:
                         # A store writes as much of the register as the width
                         # names and reads the rest not at all, so no narrower
                         # view of it has to be asked for here.
-                        asm.store(place, MCReg(_value_of(written, held, span)),
-                                  inst.span)
+                        put = MCReg(_value_of(written, held, span))
+                    if inst.ordering is Ordering.RELEASE:
+                        asm.release(place, put, inst.span)
+                    else:
+                        asm.store(place, put, inst.span)
                 case RetInst() if not inst.operands:
                     asm.ret(inst.span)
                 case RetInst():

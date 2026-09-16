@@ -15,7 +15,8 @@ from .function import (DEFAULT_CCONV, BasicBlock, FuncAttrs, Function,
                        SpecialKind)
 from .inst import (AddressInst, SyscallInst, AnyLaneInst, BinaryInst, BinOp, BlockTarget,
                    BrInst, CastInst, CastKind, SplatInst,
-                   CmpInst, CmpPred, CondBrInst, LoadInst, MemStartInst, RetInst,
+                   CmpInst, CmpPred, CondBrInst, LoadInst, MemStartInst,
+                   Ordering, RetInst,
                    StoreInst, UnaryInst, UnOp, UnreachableInst)
 from .module import GlobalVar, Module
 from .printer import IR_VERSION
@@ -37,6 +38,19 @@ _BINOPS = {op.value: op for op in BinOp}
 _UNOPS = {op.value: op for op in UnOp}
 _PREDS = {p.value: p for p in CmpPred}
 _CASTS = {k.value: k for k in CastKind}
+
+
+def _ordered(text: str) -> tuple[str, Ordering]:
+    """What is left of a load's or a store's suffix, and the ordering it named.
+
+    The ordering is written before the type -- `load.acquire.u32` -- so that the
+    suffix a reader already knows how to take apart still ends with the type.
+    """
+    for ordering in (Ordering.ACQUIRE, Ordering.RELEASE):
+        head = "".join((ordering.value, "."))
+        if text.startswith(head):
+            return text[len(head):], ordering
+    return text, Ordering.PLAIN
 
 
 def _parse_type(text: str, types: TypeContext, line_number: int) -> Type:
@@ -257,18 +271,22 @@ class _FunctionReader:
         if opcode == "mem.start":
             return block.append(MemStartInst())
         if opcode.startswith("store."):
-            ty = _parse_type(opcode[len("store."):], self._module.types, number)
+            written, ordering = _ordered(opcode[len("store."):])
+            ty = _parse_type(written, self._module.types, number)
             parts = _split_top(rest)
             token = self._value(parts[0], MEM, number)
             address = self._value(parts[1], self._module.types.ptr_type(ty), number)
             stored = self._value(parts[2], ty, number)
-            return block.append(StoreInst(token, address, stored))
+            return block.append(StoreInst(token, address, stored,
+                                          ordering=ordering))
         if opcode.startswith("load."):
-            ty = _parse_type(opcode[len("load."):], self._module.types, number)
+            read, ordering = _ordered(opcode[len("load."):])
+            ty = _parse_type(read, self._module.types, number)
             parts = _split_top(rest)
             token = self._value(parts[0], MEM, number)
             address = self._value(parts[1], self._module.types.ptr_type(ty), number)
-            return block.append(LoadInst(ty, (token, address)))
+            return block.append(LoadInst(ty, (token, address),
+                                         ordering=ordering))
         if opcode == "ret.void":
             return block.append(RetInst())
         if opcode.startswith("ret."):
