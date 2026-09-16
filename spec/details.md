@@ -2364,6 +2364,37 @@ and the run then disagreed with the compiler about a program that was perfectly
 all right.  Generating into a copy is what settles it.  The built library is
 read by nobody here, so building it disturbs nothing.
 
+Where a record lives
+--------------------
+
+A record name stands for storage of its own, which is `_Local.placed` doing what
+it already did for a name a reference is taken of.  That is what gives a field
+an offset to be read at: `offsets_of` says where each one lies, `_field_place`
+turns that into an address, and `&p.x` is then an address like any other.  A
+field behind a reference is read the same way, which is the only way one can be
+read at all -- loading the whole record first would be a load of a multi-part
+value, which the back ends do not do.
+
+**Binding one writes the fields.**  `_record_into` walks the layout and stores
+each field, `_record_from` walks it and reads each back; a field that is itself a
+record recurses.  Two names are two records, which is what a record being a value
+rather than a place means, and the copy costs one store per field rather than a
+call to something that moves bytes.
+
+**What travels between functions is unchanged**: `parts_of` answers a record with
+its field types, so a convention places it as it places a tuple, and anything
+larger than two registers goes through storage the caller provides -- which
+`largeanswers` already did and is where the value semantics of a call and an
+answer come from.
+
+**A record holding a record is still refused** (8501), and for one reason: such a
+record cannot be a *value*, since a part that is itself several values has no
+register to be read into.  Reading its fields works, the offsets composing; what
+does not is building one, because a literal makes a value before anything binds
+it.  What that wants is for a literal to be written into the place that will hold
+it rather than made and then copied, which is a path down rather than a
+representation change.
+
 Asking the kernel
 -----------------
 

@@ -26,7 +26,8 @@ from ..front.token import (BOTTOM_GLYPH, BUILTIN_GLYPH, CHR_NAME, DEREF_GLYPH,
                           TOLERANCE_NAME, WILDCARD_NAME)
 from ..ir.builder import IRBuilder
 from ..ir.reports import ReportKind
-from ..ir.layout import DataLayout, member_offsets_of, stride_of
+from ..ir.layout import (DataLayout, member_offsets_of, offsets_of,
+                         stride_of)
 from ..ir.inst import (AddressInst, BinaryInst, BinOp, CallInst, CastInst,
                        CastKind, CmpPred,
                        ExtractInst, FrameInst, Instruction, LoadInst, RetInst,
@@ -1591,6 +1592,26 @@ class Checker:
         difference between the two being that one of them named its parts, and
         that is a question here and nowhere below.
         """
+        somewhere = self._record_at(builder, expr.base)
+        if somewhere is not None:
+            # The record is somewhere, so only the field is read: reading the
+            # whole of it to take one part out would read what nothing asked
+            # for, and a record holding a record has no register to be read
+            # into at all.
+            where, ty = somewhere
+            at = _field_index(ty, expr.name)
+            if at is None:
+                self._diags.emit(D.LANG_PRODUCT_NO_SUCH_FIELD, expr.name_span,
+                                 type=ty.render(), name=expr.name)
+                return UndefConst(ERROR)
+            place = self._field_place(builder, where, ty, at, expr.span)
+            held = ty.fields[at][1]
+            found = (self._record_from(builder, place, held, expr.span)
+                     if isinstance(held, ProductType)
+                     else builder.load(place, expr.span))
+            if not self._accepts(expected, found.ty):
+                self._report_mismatch(expr.span, found.ty, expected)
+            return found
         value = self._lower_expr(builder, expr.base, None)
         ty = self._value_type_of(value)
         if ty is ERROR:
@@ -1608,6 +1629,48 @@ class Checker:
         if not self._accepts(expected, found.ty):
             self._report_mismatch(expr.span, found.ty, expected)
         return found
+
+    def _record_at(self, builder: IRBuilder, expr: ast.Expr
+                   ) -> tuple[Value, ProductType] | None:
+        """Where the record *expr* names is, where it is somewhere.
+
+        Three things are: a name given storage of its own, which every record
+        local is; what a reference names; and a field of one of those, which is
+        one offset further in.  A record that is somewhere is read a field at a
+        time, which is the only way one holding a record can be read at all.
+        """
+        match expr:
+            case ast.NameRef():
+                local = self._find_local(expr.name)
+                if local is not None and local.placed \
+                        and isinstance(local.held, ProductType):
+                    if expr.name != self._taking_a_reference \
+                            and self._lent_out(expr.name, expr.span, False):
+                        return None
+                    local.read = True
+                    return (local.value, local.held)
+                return None
+            case ast.Deref():
+                value = self._lower_expr(builder, expr.operand, None)
+                ty = self._value_type_of(value)
+                if isinstance(ty, PtrType) \
+                        and isinstance(ty.pointee, ProductType):
+                    return (value, ty.pointee)
+                return None
+            case ast.Member():
+                found = self._record_at(builder, expr.base)
+                if found is None:
+                    return None
+                where, ty = found
+                at = _field_index(ty, expr.name)
+                if at is None or not isinstance(ty.fields[at][1], ProductType):
+                    return None
+                held = ty.fields[at][1]
+                assert isinstance(held, ProductType)
+                return (self._field_place(builder, where, ty, at, expr.span),
+                        held)
+            case _:
+                return None
 
     def _enum_value(self, defined: _NamedType, expr: ast.Member) -> Value:
         """The value of an enumeration written as `TYPE.NAME`."""
@@ -1963,7 +2026,12 @@ class Checker:
             self._places[id(value)] = scope[name]
             return
         held = self._value_type_of(value)
-        placed = (builder is not None and name in self._addressed
+        # A record is given storage of its own whether or not anything takes its
+        # address: a field is read at an offset, so the record has to be
+        # somewhere for there to be an offset from.  Binding one then copies it,
+        # which is what a record being a value rather than a place means.
+        placed = (builder is not None
+                  and (name in self._addressed or isinstance(held, ProductType))
                   and _can_be_referred_to(held))
         if placed:
             assert builder is not None
@@ -1976,7 +2044,10 @@ class Checker:
                 "own rather than in a register",
                 span)
             place = builder.frame(held, span)
-            builder.store(place, value, span)
+            if isinstance(held, ProductType):
+                self._record_into(builder, place, value, held, span)
+            else:
+                builder.store(place, value, span)
             value = place
         scope[name] = _Local(name=name, value=value, span=span, mutable=mutable,
                              value_span=value_span if value_span.is_valid else span,
@@ -3409,6 +3480,52 @@ class Checker:
             (self._operand_of, self._initializing, self._assigning,
              self._handing_over) = outer
 
+    def _field_place(self, builder: IRBuilder, where: Value, ty: ProductType,
+                     at: int, span: Span) -> Value:
+        """Where one field of a record is, given where the record is.
+
+        `offsets_of` is the one thing that says where a field went, so a field
+        written and a field read agree without either knowing the other.
+        """
+        held = ty.fields[at][1]
+        start = builder.cast(CastKind.BITCAST, where,
+                             self._module.types.ptr_type(U8, mutable=True),
+                             span)
+        moved = builder.binary(
+            BinOp.ADD, start,
+            builder.int_const(U64, offsets_of(ty, _LAYOUT)[at]), span)
+        return builder.cast(CastKind.BITCAST, moved,
+                            self._module.types.ptr_type(held, mutable=True),
+                            span)
+
+    def _record_into(self, builder: IRBuilder, where: Value, value: Value,
+                     ty: ProductType, span: Span) -> None:
+        """Write a record into the place *where*, a field at a time.
+
+        A field at a time rather than all at once, because a record is its
+        fields and each of them is something a store already knows how to
+        write; a field that is itself a record is written the same way, one
+        offset further in.
+        """
+        for at, (_, held) in enumerate(ty.fields):
+            place = self._field_place(builder, where, ty, at, span)
+            part = builder.extract(value, at, held, span)
+            if isinstance(held, ProductType):
+                self._record_into(builder, place, part, held, span)
+                continue
+            builder.store(place, part, span)
+
+    def _record_from(self, builder: IRBuilder, where: Value, ty: ProductType,
+                     span: Span) -> Value:
+        """Read a record out of the place *where*, a field at a time."""
+        parts: list[Value] = []
+        for at, (_, held) in enumerate(ty.fields):
+            place = self._field_place(builder, where, ty, at, span)
+            parts.append(self._record_from(builder, place, held, span)
+                         if isinstance(held, ProductType)
+                         else builder.load(place, span))
+        return builder.make_tuple(tuple(parts), ty, span)
+
     def _element_place(self, builder: IRBuilder, base: Value, element: Type,
                        index: Value, span: Span) -> Value:
         """Where the element at *index* is, given where the first one is."""
@@ -4825,11 +4942,14 @@ class Checker:
     def _borrowed_name(self, expr: ast.Expr) -> str | None:
         """Which local's place `&expr` reaches, where it reaches one.
 
-        An element is part of the array, so lending one lends the array: two
-        elements of it are two places, but nothing here tells one index from
-        another and a promise that depends on arithmetic is no promise.  A
-        reference reached through another reference belongs to whoever owns
-        that one, and there is nothing here to hold to it.
+        An element is part of the array and a field is part of the record, so
+        lending one lends the whole: two elements are two places, but nothing
+        here tells one index from another and a promise that depends on
+        arithmetic is no promise.  Two fields really are two places and could be
+        told apart, which is a finer rule than this one and is written down
+        rather than guessed at.  A reference reached through another reference
+        belongs to whoever owns that one, and there is nothing here to hold to
+        it.
         """
         seen = expr
         while True:
@@ -4837,7 +4957,7 @@ class Checker:
                 case ast.NameRef():
                     return (seen.name if self._find_local(seen.name) is not None
                             else None)
-                case ast.Element():
+                case ast.Element() | ast.Member():
                     seen = seen.base
                 case _:
                     return None
@@ -4933,6 +5053,8 @@ class Checker:
                 return self._place_of_a_name(builder, expr)
             case ast.Element():
                 return self._place_of_an_element(builder, expr)
+            case ast.Member():
+                return self._place_of_a_field(builder, expr)
             case ast.Deref():
                 # `&r\N{POSITION INDICATOR}` is the place `r` already names, so it is `r` -- with
                 # whatever this asks for about writing, which the reference in
@@ -5145,6 +5267,24 @@ class Checker:
         self._diags.emit(D.LANG_FILESTRUCT_UNDEFINED_NAME, expr.span,
                          name=expr.name)
         return None
+
+    def _place_of_a_field(self, builder: IRBuilder, expr: ast.Member
+                          ) -> tuple[Value, Type, bool, str, bool] | None:
+        """Where one field of a record is, for a reference being taken of it."""
+        found = self._record_at(builder, expr.base)
+        if found is None:
+            self._diags.emit(D.LANG_REF_NOT_A_PLACE, expr.span)
+            return None
+        where, ty = found
+        at = _field_index(ty, expr.name)
+        if at is None:
+            self._diags.emit(D.LANG_PRODUCT_NO_SUCH_FIELD, expr.name_span,
+                             type=ty.render(), name=expr.name)
+            return None
+        # A field lives as long as the record does, which is what says how long
+        # a reference to it may be held.
+        return (self._field_place(builder, where, ty, at, expr.span),
+                ty.fields[at][1], True, expr.name, self._lasting(where))
 
     def _place_of_an_element(self, builder: IRBuilder, expr: ast.Element
                              ) -> tuple[Value, Type, bool, str, bool] | None:
@@ -7262,10 +7402,19 @@ class Checker:
                                           node.span):
                 return None
             self._kept_by_a_name(local.held)
-            builder.store(local.value, value, node.span)
+            if isinstance(local.held, ProductType):
+                self._record_into(builder, local.value, value, local.held,
+                                  node.span)
+            else:
+                builder.store(local.value, value, node.span)
             local.written = True
             local.is_parameter = False
-            return builder.load(local.value, node.span) if wants_value else None
+            if not wants_value:
+                return None
+            return (self._record_from(builder, local.value, local.held,
+                                      node.span)
+                    if isinstance(local.held, ProductType)
+                    else builder.load(local.value, node.span))
         if local is not None:
             if not self._check_mutable(node, local.mutable, local.span):
                 return None
@@ -11062,7 +11211,10 @@ class Checker:
                     and self._lent_out(ref.name, ref.span, False):
                 return UndefConst(ERROR)
             local.read = True
-            found = builder.load(local.value, ref.span)
+            held = local.held
+            found = (self._record_from(builder, local.value, held, ref.span)
+                     if isinstance(held, ProductType)
+                     else builder.load(local.value, ref.span))
             if not self._accepts(expected, found.ty):
                 self._report_mismatch(ref.span, found.ty, expected)
             return found

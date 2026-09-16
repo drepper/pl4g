@@ -1987,6 +1987,11 @@ record's field -- told apart by what stands on its left, which is what Go, Rust 
 placed by a convention the same way, so a record handed to a call or answered with needs no rule of its own.  What differs
 between the two is that one of them named its parts.
 
+**A record *name* stands for storage of its own**, which is what a name a reference is taken of already does.  A field is read at
+an offset from it, so `&p.x` is an address like any other and a field behind a reference is read without reading the whole record
+first.  Binding a record to a name writes the fields into that storage: **a record is a value and not a place**, so two names are
+two records and writing through one leaves the other as it was -- which is what C, Rust, Go and Zig all do.
+
 **A reference that promises more stands where less is wanted.**  `&mut T` promises everything `&T` does and adds writing, and
 `&static T` promises everything `&T` does and adds the time, so each stands where the weaker one is asked for -- in a call, a
 definition, a return.  The bits are the same bits, so nothing is emitted for it.  Both go one way only: a place nothing may write

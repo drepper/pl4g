@@ -183,18 +183,17 @@ To Do List for the PL4g language
 [ ] write a value of a sum.  The decision was that the two are one shape, the definitions being one construct, so it is
     `Colour(.red ← …)` -- but a sum is a tag and a payload rather than its parts side by side, and nothing places one yet.
 
-[ ] let a record hold a record, and let one be reached through a reference.  Both are refused by the code generator today
+[ ] let a record hold a record.  Both are refused by the code generator today
     (8501): a record travels as its fields, so a field that is itself several values has no one register to go in, and a load of
     a multi-part value is not a thing the back ends do.  `std.Init` needs both: it holds an `Io`, and `&mut init.io.output` is a
     reference into it.
 
-    The shape, worked out on 2026-09-17: a record *local* is given storage of its own, the way a local a reference is taken of
-    already is -- `offsets_of` says where each field lies, a field is read at an offset, `&p.x` is an address, and a field that
-    is itself a record is one more offset.  What travels between functions stays what it is now: several values, with anything
-    larger than two registers going through storage the caller provides, which `largeanswers` already does and which is where
-    the value semantics of a call and an answer already come from.  What each path needs is written out rather than discovered
-    one at a time: binding copies field by field, reading the whole of one to hand it over reads the fields back, and both walk
-    the same recursion over the layout.
+    Half of that landed on 2026-09-17: a record local is given storage of its own, a field is read at an offset, `&p.x` is an
+    address, and a field behind a reference is read without reading the whole record.  What is left is a record *holding* a
+    record, which cannot be a value -- a part that is itself several values has no register to be read into.  Reading its fields
+    already works, the offsets composing; what does not is building one, a literal making a value before anything binds it.
+    What that wants is a literal written into the place that will hold it rather than made and copied, which is a path down
+    through `_lower_into` rather than a change of representation.
 
 [ ] decide whether a fixed array is copied or shared when it is bound to a name.  `let b = a` names the same elements today --
     `a⟦0⟧ ← 9u8` is seen through `b` -- because a value of an array type is where the elements are.  Nothing in the
