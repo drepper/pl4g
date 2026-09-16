@@ -1,0 +1,13 @@
+※ pl4g-test: compile=error diag=4582
+
+※ A record travels as the several values it is made of, so reading or writing
+※ one is that many accesses.  Which of them the ordering belonged to would have
+※ no answer, and ordering all of them is a different promise from the one the
+※ word makes.  Order one field and let the rest be ordinary.
+
+type Pair = a : u32 ; b : u32
+
+@[startup, impure]
+fn main() → u6:
+    let q: mut Pair = Pair(.a ← 1u32, .b ← 2u32)
+    if ⎕acquire(&q).a = 1u32: 0u6 else: 1u6

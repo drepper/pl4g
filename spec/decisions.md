@@ -5515,6 +5515,44 @@ same as C11; **Go**, which has no such thing in the language at all and puts it
 in the library; **Linux's own `smp_load_acquire`**, which is where this pair of
 fences on RISC-V comes from.
 
+## 2026-09-17T21:00+02:00 — language
+
+**`⎕acquire` and `⎕release`: the ordering is said at the access**
+
+Chosen by the user from three.  `⎕acquire(REF)` reads a place and `⎕release(REF, VALUE)`
+writes one, each saying what a second observer may see; they carry the sigil
+every name the compiler provides carries, for the reason every one of them does.
+
+**Turned down: a reference that carries the promise** -- `&shared u32`, whose
+every read acquires and every write releases.  It is the tidier type story and
+is what Java's `volatile` does, and it was turned down because the promise is
+then on the place rather than on the access: driving a ring publishes an index
+with a release and reads the same index back plainly a moment later, and a type
+that said "always" would make that second read pay for the first.  Said at the
+access, the ordinary read stays ordinary and the one that matters is visible
+where it is written.
+
+**Also turned down: keeping it out of the language** and emitting the ring code
+per target, as the startup and the fault helper are emitted.  The user chose the
+other half of the same question the other way: the ring is driven by `std.pl4g`
+written in pl4g, one source for three architectures, which is also what puts the
+language on real work.
+
+**What they take.**  A reference (4580) to one value: a record, a tuple and a
+result each travel as the several values they are made of, so ordering one would
+be that many accesses and which of them the word belonged to would have no
+answer (4582).  `⎕release` writes, so its reference is a `&mut` (4581) -- the
+ordering says what others see and nothing about who may write.  Both make the
+function impure: one notices what something else did, the other lets something
+else notice.
+
+Compare: **C11** and **Rust**, whose `memory_order` is a parameter of the
+operation, which this is; **Java**, whose `volatile` is the answer not taken;
+**Go**, which has none of it in the language; **Zig**, whose `@atomicLoad` takes
+the ordering as an argument, which is this shape exactly; **Linux's own
+`smp_load_acquire` and `smp_store_release`**, which are this pair by another
+name and are what the ring code will read like.
+
 Open questions
 --------------
 

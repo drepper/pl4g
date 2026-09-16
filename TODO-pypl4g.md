@@ -17,9 +17,12 @@ To Do List for the pypl4g compiler
     instruction.  x86-64 emits what it would have emitted, AArch64 `ldar`/`stlr`, RISC-V the two fences.  An ordered access to a
     value of several parts, or to a floating-point value, is refused (8501).
 
-[ ] a way to write an ordering in the language.  The representation carries one and nothing reaches it: `std` will want to read a
-    ring's tail with acquire and publish its own with release, and there is no syntax for that.  It is a language decision and is
-    listed in TODO-language.md as well.
+[x] a way to write an ordering in the language.  Done on 2026-09-17, at the user's direction: `⎕acquire(REF)` and
+    `⎕release(REF, VALUE)`, said at the access rather than by the type of the place.
+
+[ ] render a reference as the program wrote it.  A diagnostic says `ptr<mut Pair>` where the source said `&mut Pair`, `render`
+    being the IR's spelling and the only one there is.  Everything that reports a type is affected, so this is one change in
+    `Type.render` or a second method beside it; it predates the ordering work, which is merely where it was noticed.
 
 [ ] sequential consistency.  Acquire and release are what driving a ring needs; the ordering neither of them gives -- a write
     followed by a read of another place, seen by everyone in one order -- is the one that costs x86-64 an instruction, and

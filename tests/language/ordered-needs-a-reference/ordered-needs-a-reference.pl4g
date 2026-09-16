@@ -1,0 +1,11 @@
+※ pl4g-test: compile=error diag=4580
+
+※ An ordering is said about one access to one place, so what it is given is the
+※ place: a reference and nothing else.  A value has no place to order an access
+※ to, and naming a place outright would be a second way of saying what a
+※ reference already says.
+
+@[startup, impure]
+fn main() → u6:
+    let v: u32 = 5u32
+    if ⎕acquire(v) = 5u32: 0u6 else: 1u6

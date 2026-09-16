@@ -1,0 +1,12 @@
+※ pl4g-test: compile=error diag=4581
+
+※ Writing through a reference that does not allow it is refused wherever it is
+※ written, and a releasing write is a write.  The ordering says what other
+※ observers see and changes nothing about who may write.
+
+@[startup, impure]
+fn main() → u6:
+    let v: mut u32 = 5u32
+    let r: &u32 = &v
+    ⎕release(r, 9u32)
+    0u6

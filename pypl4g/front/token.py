@@ -179,6 +179,16 @@ IMPORT_NAME: Final[str] = "".join((BUILTIN_GLYPH, "import"))
 #: `std` module reaches anything outside the process, and it is the only way.
 SYSCALL_NAME: Final[str] = "".join((BUILTIN_GLYPH, "syscall"))
 
+#: Reading a place so that nothing written after is seen by another observer to
+#: have happened before, and writing one so that nothing written before is seen
+#: to have happened after.  They are the compiler's names because what they say
+#: is about the machine and not about the value: nothing a program could write
+#: for itself would make a read acquire.  Said at the access that wants it,
+#: rather than by a type, so that the same place read the ordinary way elsewhere
+#: is still an ordinary read.
+ACQUIRE_NAME: Final[str] = "".join((BUILTIN_GLYPH, "acquire"))
+RELEASE_NAME: Final[str] = "".join((BUILTIN_GLYPH, "release"))
+
 #: What stands between a name the compiler provides and the key it is asked
 #: about: `⎕sc@write` is one name and the whole of it is looked up.  Only a name
 #: beginning with the quad may carry one, so the mark means nothing new

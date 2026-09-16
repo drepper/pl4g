@@ -6378,6 +6378,79 @@
       "option": null
     },
     {
+      "number": 4580,
+      "name": "LANG_ORDERED_NOT_A_REFERENCE",
+      "severity": "error",
+      "message": "'{name}' reads or writes through a reference, and this is '{found}'",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "which of the two was written"
+        },
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type that was written instead"
+        }
+      ],
+      "cause": "An ordering is said about one access to one place, so what it is given is the place: a reference and nothing else.  A value has no place to order an access to, and a place named outright would be a second way of saying what a reference already says.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Compiler-Provided Names"
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4581,
+      "name": "LANG_ORDERED_NOT_MUTABLE",
+      "severity": "error",
+      "message": "'{name}' writes, and '&mut' is what says a place may be written",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "which of the two was written"
+        }
+      ],
+      "cause": "Writing through a reference that does not allow it is refused wherever it is written, and a releasing write is a write.  The ordering says what other observers see and changes nothing about who may write.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Compiler-Provided Names"
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4582,
+      "name": "LANG_ORDERED_SEVERAL_VALUES",
+      "severity": "error",
+      "message": "'{name}' is one access, and a '{found}' is several values",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "which of the two was written"
+        },
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type the reference points at"
+        }
+      ],
+      "cause": "A record, a tuple and a result each travel as the several values they are made of, so reading or writing one is that many accesses.  Which of them the ordering belonged to would have no answer, and ordering all of them is a different promise from the one the word makes.  Order one field, or one index, and let the rest be ordinary.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Compiler-Provided Names"
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 5001,
       "name": "LANG_STMT_UNREACHABLE",
       "severity": "warning",

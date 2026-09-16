@@ -1,0 +1,54 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ `⎕acquire(REF)` reads a place and `⎕release(REF, VALUE)` writes one, each
+※ saying what a *second* observer may see.
+※
+※ **What they say is about the machine and not about the value.**  An acquiring
+※ read is one nothing written after it may be seen to have happened before; a
+※ releasing write is one nothing written before it may be seen to have happened
+※ after.  Nothing a program could write for itself says that, which is why they
+※ are the compiler's names.
+※
+※ **Said at the access and not by the type of the place.**  The same place read
+※ the ordinary way elsewhere is an ordinary read, which is what driving a ring
+※ wants: an index is published with a release and read back plainly by the same
+※ program a moment later.  A type that carried the promise would make every
+※ access pay for the one that needed it.
+※
+※ **Each machine answers for itself, and the program says the same thing.**
+※ x86-64 emits what it would have emitted, its reads already acquiring and its
+※ writes already releasing; AArch64 emits `ldar` and `stlr`; RISC-V emits the
+※ two fences its architecture asks for.
+※
+※ **A function using either says `impure`**, since one notices what something
+※ else did and the other lets something else notice.
+※
+※ Compare: **C11** and **Rust**, where the ordering is a parameter of the atomic
+※ operation and not a fence of its own, which this follows; **Java**, whose
+※ `volatile` says it by being a property of the field, which is the answer not
+※ taken; **Go**, which has no such thing in the language at all; **Linux's own
+※ `smp_load_acquire`**, which is this pair by another name.
+
+@[impure]
+fn publish(at: &mut u32, n: u32):
+    ⎕release(at, n)
+
+@[impure]
+fn taken(at: &u32) → u32:
+    ⎕acquire(at)
+
+@[startup, impure]
+fn main() → u6:
+    let tail: mut u32 = 0u32
+    publish(&mut tail, 9u32)
+    if taken(&tail) ≠ 9u32:
+        1u6
+    ※ and the same place read the ordinary way
+    elif tail ≠ 9u32:
+        2u6
+    else:
+        ※ what is to be published is worked out first: lending a place out by a
+        ※ '&mut' is what says nothing else may read it while the loan lasts
+        let next: u32 = tail + 1u32
+        ⎕release(&mut tail, next)
+        if ⎕acquire(&tail) = 10u32: 0u6 else: 3u6

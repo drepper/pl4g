@@ -192,6 +192,7 @@ GROUPS: tuple[Group, ...] = (
            "record-through-a-call": "a record holding records handed to a call and answered with",
            "record-of-one-field": "a record of one field made, passed, answered with and referred into",
            "std-init": "the descriptors a program starts with, and a write through one",
+           "ordered-access": "a read that acquires and a write that releases",
            "loop-break-nested": "two loops and all four jumps between them",
            "loop-continue": "two loops each begun again from inside the body",
            "loop-break-value": "a search whose loop comes to what it found",

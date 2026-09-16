@@ -15,7 +15,8 @@ from typing import Callable, Final, Sequence
 from ..diag import ids as D
 from ..diag.engine import DiagEngine, Expectation
 from ..front import ast
-from ..front.token import (BOTTOM_GLYPH, BUILTIN_GLYPH, CHR_NAME, DEREF_GLYPH,
+from ..front.token import (ACQUIRE_NAME, RELEASE_NAME,
+                           BOTTOM_GLYPH, BUILTIN_GLYPH, CHR_NAME, DEREF_GLYPH,
                            LIFETIME_GLYPH,
                            DROP_NAME, NARROW_NAME, UNIT_NAME,
                           ENUMERATE_NAME, TYPEOF_NAME,
@@ -31,7 +32,7 @@ from ..ir.layout import (DataLayout, member_offsets_of, offsets_of,
 from ..ir.inst import (AddressInst, BinaryInst, BinOp, CallInst, CastInst,
                        CastKind, CmpPred,
                        ExtractInst, FrameInst, Instruction, LoadInst, RetInst,
-                       Terminator, TupleInst, UnOp)
+                       Ordering, Terminator, TupleInst, UnOp)
 from ..target.registry import architecture_of
 from ..target.syscalls import KNOWN as SYSCALL_NAMES, number_of
 from . import tables
@@ -50,7 +51,7 @@ from ..ir.types import (ARENA, ArrayType, BOOL, BoolType, BUILTIN_TYPES,
                         ListType, SetType, STR, SumType, TupleType, Type,
                         NARROWING, NO_UNIT, Unit, VecType, VOID,
                         without_units,
-                        CHAR, MAX_CODE_POINT, U8, parts_of)
+                        CHAR, MAX_CODE_POINT, U8, made_of_parts, parts_of)
 from . import strings, tables
 from .modules import (SUFFIX, ImportCycle, LoadedModule, ModuleNotFound,
                       ModuleRegistry, base_name, system_modules)
@@ -10327,6 +10328,9 @@ class Checker:
                 and expr.callee.name == SYSCALL_NAME:
             return self._lower_syscall(builder, expr, expected)
         if isinstance(expr.callee, ast.NameRef) \
+                and expr.callee.name in (ACQUIRE_NAME, RELEASE_NAME):
+            return self._lower_ordered(builder, expr, expected)
+        if isinstance(expr.callee, ast.NameRef) \
                 and expr.callee.name == TYPEOF_NAME:
             # Reaching here means it stood somewhere a value was wanted, since
             # a condition the compiler settles never lowers what is in it.
@@ -10695,6 +10699,70 @@ class Checker:
             self._report_mismatch(expr.span, answer.ty, expected)
             return UndefConst(ERROR)
         return answer
+
+    def _lower_ordered(self, builder: IRBuilder, expr: ast.Call,
+                       expected: Type | None) -> Value:
+        """Lower `⎕acquire(REF)` and `⎕release(REF, VALUE)`.
+
+        What each says is about the machine and not about the value: an
+        acquiring read is one nothing written after it may be seen by another
+        observer to have happened before, and a releasing write is one nothing
+        written before it may be seen to have happened after.  Nothing a program
+        could write for itself says that, which is why they are the compiler's
+        names.
+
+        Said at the access and not by the type of the place, so the same place
+        read the ordinary way elsewhere is an ordinary read -- which is what
+        driving a ring wants: one index is published with a release and read
+        back plainly by the same program a moment later.
+
+        Both change what outlives them, or notice that something else did, so a
+        function using one says `impure`.
+        """
+        assert isinstance(expr.callee, ast.NameRef)
+        name = expr.callee.name
+        writing = name == RELEASE_NAME
+        wanted = 2 if writing else 1
+        if len(expr.args) != wanted:
+            self._diags.emit(D.LANG_CALL_WRONG_ARGUMENT_COUNT, expr.span,
+                             name=name, expected=wanted, found=len(expr.args))
+            return UndefConst(ERROR)
+        self._an_effect(D.LANG_PURE_CALLS_IMPURE, expr.span, name=name)
+        place = self._lower_expr(builder, expr.args[0], None)
+        ty = self._value_type_of(place)
+        if ty is ERROR:
+            return UndefConst(ERROR)
+        if not isinstance(ty, PtrType):
+            self._diags.emit(D.LANG_ORDERED_NOT_A_REFERENCE, expr.args[0].span,
+                             name=name, found=ty.render())
+            return UndefConst(ERROR)
+        if made_of_parts(ty.pointee):
+            # One access and not several, which is what the back ends say too:
+            # which of the parts the ordering belonged to would have no answer.
+            self._diags.emit(D.LANG_ORDERED_SEVERAL_VALUES, expr.args[0].span,
+                             name=name, found=ty.pointee.render())
+            return UndefConst(ERROR)
+        if not writing:
+            found = builder.load(place, expr.span, ordering=Ordering.ACQUIRE)
+            if not self._accepts(expected, found.ty):
+                self._report_mismatch(expr.span, found.ty, expected)
+                return UndefConst(ERROR)
+            return found
+        if not ty.mutable:
+            self._diags.emit(D.LANG_ORDERED_NOT_MUTABLE, expr.args[0].span,
+                             name=name)
+            return UndefConst(ERROR)
+        value = self._lower_into(builder, expr.args[1], ty.pointee,
+                                 expr.args[1].span)
+        if self._value_type_of(value) is ERROR:
+            return UndefConst(ERROR)
+        builder.store(place, value, expr.span, ordering=Ordering.RELEASE)
+        if expected is not None:
+            # It writes and answers nothing, so somewhere wanting a value from
+            # it is somewhere wanting what there is none of.
+            self._diags.emit(D.LANG_CALL_HAS_NO_VALUE, expr.span, name=name)
+            return UndefConst(ERROR)
+        return UndefConst(VOID)
 
     def _as_a_word(self, builder: IRBuilder, value: Value, ty: Type,
                    span: Span) -> Value:

@@ -208,10 +208,9 @@ To Do List for the PL4g language
     kernel directly.  What is left, in order: ordering in the IR that says a request may not be moved past what it depends on;
     `Ring` and `Pending`, and the ring the startup code makes where something needs one; `read`, and `ReadWriter`.
 
-[ ] a way to write an ordering.  The representation carries acquire and release since 2026-09-17 and nothing in the language
-    reaches them.  `std` will want to read a ring's tail with acquire and publish its own with release -- which is a question
-    about what a reference says, or about a function the compiler provides, and is a decision to make rather than a thing to
-    write down.
+[x] a way to write an ordering.  Done on 2026-09-17, the user choosing the compiler-provided functions over a reference that
+    carries the promise: `⎕acquire(REF)` and `⎕release(REF, VALUE)`, so the same place read the ordinary way elsewhere
+    is an ordinary read.
 
 [ ] answer a result rather than the kernel's number.  `std.write` answers an `i64` that is negative where the kernel refused,
     which is the kernel's convention and not the language's.  It should answer `u64 ¤size?`, which wants somewhere for the error

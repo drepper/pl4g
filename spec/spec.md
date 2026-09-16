@@ -2001,6 +2001,30 @@ call**, so a function that does it says `impure`.
 It is how the standard library will reach anything outside the process, and it is the only way: there is no C library underneath
 and nothing else to call.
 
+**`⎕acquire(REF)` reads a place and `⎕release(REF, VALUE)` writes one**, each saying what a *second* observer may see.  An
+acquiring read is one nothing written after it may be seen to have happened before; a releasing write is one nothing written
+before it may be seen to have happened after.
+
+```
+let n: u32 = ⎕acquire(&ring.tail)     ※ nothing written after this is seen before it
+⎕release(&mut ring.head, n + 1u32)    ※ nothing written before this is seen after it
+```
+
+They are the compiler's names because what they say is about the machine and not about the value: nothing a program could write
+for itself makes a read acquire.  **It is said at the access and not by the type of the place**, so the same place read the
+ordinary way elsewhere is an ordinary read -- which is what driving a ring wants, an index being published with a release and read
+back plainly by the same program a moment later.  A type that carried the promise, as Java's `volatile` does, would make every
+access pay for the one that needed it.
+
+What each is given is a reference (4580) to **one** value: a record, a tuple or a result travels as the several values it is made
+of, so reading or writing one is that many accesses and which of them the ordering belonged to would have no answer (4582).
+`⎕release` writes, so its reference is a `&mut` (4581).  A function using either says `impure`, since one notices what something
+else did and the other lets something else notice.
+
+Compare: **C11** and **Rust**, where the ordering is a parameter of the operation and not a fence of its own, which this follows;
+**Java**, whose `volatile` is the property-of-the-place answer; **Go**, which keeps the whole question out of the language;
+**Linux's own `smp_load_acquire`**, which is this pair by another name.
+
 **A value of a record gives a value for each of its fields**: `Point(.x ← 3u32, .y ← 4u32)`.  It is written the way a
 call names a parameter, which is the same idea asked of a field -- the mark says the name is the thing's and not a variable's --
 and it is the spelling C, Odin and Zig give a structure's initializer.
