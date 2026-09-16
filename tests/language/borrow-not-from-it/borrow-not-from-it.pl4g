@@ -1,0 +1,19 @@
+※ pl4g-test: compile=error diag=4561
+
+※ `from q` is a promise to the caller, and the compiler keeps the function to
+※ it: what is handed back is worked out from what `q` named, or it lives as long
+※ as the program, or it is refused.  Here the answer is the other parameter,
+※ whose lifetime may be shorter than `q`'s and which the caller was told nothing
+※ about, so the signature and the body disagree.
+※
+※ The walk back is the one provenance uses everywhere else -- reading the
+※ parameter out of its storage, offsetting it, reading the same bits as another
+※ type, and through a call that made the same promise about its own parameter.
+※ A reference reached by none of those is not the one that was promised.
+
+@[startup]
+fn main() → u6:
+    0u6
+
+fn second(p: &u8, q: &u8) → &u8 from q:
+    p

@@ -104,6 +104,36 @@ def test_a_variable_put_in_storage_is_recorded() -> None:
     assert "address" in placed[0].reason
 
 
+def test_a_lifetime_worked_out_at_a_call_is_recorded() -> None:
+    """A function promises its parameter's lifetime; the call says what that is.
+
+    `first(&total)` for a variable at the top level answers with a reference
+    that lasts as long as the program, and `first(&n)` for a local does not.
+    Neither the signature nor the call writes that down, so the log does.
+    """
+    source = "".join((
+        "let total: mut u8 = 3u8\n\n",
+        "fn first(v: &u8) ", ARROW, " &u8 from v:\n    v\n\n",
+        "@[startup, impure]\nfn main() ", ARROW, " u6:\n",
+        "    let g: &static u8 = first(&total)\n",
+        "    let n: u8 = 1u8\n",
+        "    let s: &u8 = first(&n)\n",
+        "    if g", DEREF, " + s", DEREF, " ", NE, " 4u8:\n",
+        "        1u6\n    else:\n        0u6\n"))
+    sources = SourceManager()
+    unit_source = sources.add(Path("t.pl4g"), source)
+    engine, collected = collecting_engine(None)
+    unit = parse(tokenize(unit_source, engine), "t.pl4g", engine)
+    module = Module("t")
+    check(module, [unit], engine, ModuleRegistry(), sources)
+    assert [d.info.name for d in collected if d.info.severity == "error"] == []
+    worked_out = module.decisions.of_kind(DecisionKind.LIFETIME)
+    assert [d.subject for d in worked_out] == ["first"], \
+        "only the call whose argument lasts that long is a decision"
+    assert "'v'" in worked_out[0].reason, \
+        "the reason names the parameter the lifetime was borrowed from"
+
+
 def test_every_decision_says_why() -> None:
     """A log entry with no reason is one nobody can act on."""
     module = compiled("".join((

@@ -1,0 +1,21 @@
+※ pl4g-test: compile=error diag=4562
+
+※ A reference is only worth having while what it names is still there, and a
+※ caller cannot see into the function to work that out.  So a function handing
+※ one back says which of the two lifetimes it is: as long as the program, which
+※ `static` in the type says, or as long as what a parameter named, which `from`
+※ says.  Saying neither leaves the caller with a reference it has no rule for,
+※ and that is what is refused here -- `→ &mut u8 from a` is the program meant.
+※
+※ C and Odin do not ask the question at all, and a reference to a local that has
+※ gone is a program nobody notices is wrong.  Rust asks it with a named lifetime
+※ and lets the common case go unwritten, which is the one thing not done here:
+※ there is no default, because the two answers differ and guessing either would
+※ make a promise the program did not.
+
+@[startup]
+fn main() → u6:
+    0u6
+
+fn first(a: &mut u8) → &mut u8:
+    a

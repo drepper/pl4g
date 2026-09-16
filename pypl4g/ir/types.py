@@ -314,19 +314,32 @@ class PtrType(Type):
     of the thing it points at: a value is a value, and it is the *place* that is
     writable or not.  A variable in memory is a pointer, so this is where the
     language's ``mut`` ends up.
+
+    So is how long what it names lives, and for the same reason: it is a fact
+    about the place and both the one who made the reference and the one who
+    reads it have to agree about it.  There are two lifetimes a type can say --
+    as long as the program, or no longer than the call -- because there are two
+    a place can have: a variable at the top level has the first and everything
+    else has the second.  A reference that is neither, because it names what a
+    parameter named, says so in the signature it appears in rather than in its
+    type, there being nothing in a type to name a parameter with.
     """
 
     pointee: Type
     mutable: bool = False
+    #: Whether what it names lives as long as the program does.
+    lasting: bool = False
 
     def render(self) -> str:
         """The name of this type in the textual form of the IR."""
         return "".join(("ptr<", "mut " if self.mutable else "",
+                        "static " if self.lasting else "",
                         self.pointee.render(), ">"))
 
     def mangled(self) -> str:
         """The normalized name of this type, for use inside a symbol name."""
         return "".join(("ptr<", "mut " if self.mutable else "",
+                        "static " if self.lasting else "",
                         self.pointee.mangled(), ">"))
 
 
@@ -836,7 +849,7 @@ class TypeContext:
         self._lists: dict[Type, ListType] = {}
         self._sets: dict[Type, SetType] = {}
         self._dicts: dict[tuple[Type, Type], DictType] = {}
-        self._pointers: dict[tuple[Type, bool], PtrType] = {}
+        self._pointers: dict[tuple[Type, bool, bool], PtrType] = {}
         self._functions: dict[tuple[tuple[Type, ...], Type], FuncType] = {}
         self._integers: dict[tuple[int, bool], IntType] = {
             (t.bits, t.signed): t for t in (I8, I16, I32, I64, U8, U16, U32, U64)}
@@ -924,12 +937,13 @@ class TypeContext:
             self._integers[key] = found
         return found
 
-    def ptr_type(self, pointee: Type, mutable: bool = False) -> PtrType:
+    def ptr_type(self, pointee: Type, mutable: bool = False,
+                 lasting: bool = False) -> PtrType:
         """Return the pointer type to *pointee*."""
-        key = (pointee, mutable)
+        key = (pointee, mutable, lasting)
         found = self._pointers.get(key)
         if found is None:
-            found = PtrType(pointee, mutable)
+            found = PtrType(pointee, mutable, lasting)
             self._pointers[key] = found
         return found
 

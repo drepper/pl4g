@@ -1,0 +1,98 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ A reference is only worth having while what it names is still there, so a
+※ function handing one back says how long that is.  There are two answers and
+※ the language has a word for each: `static` in the type says "as long as the
+※ program", and `from v` after the type says "as long as what the parameter `v`
+※ named".  Nothing else can be said, and nothing may be left unsaid.
+※
+※ **`static` belongs to the type, `from` to the signature.**  A lifetime that is
+※ fixed once and for all is a property of the reference itself, so it is written
+※ where the rest of the type is: `&mut static u8`.  A lifetime borrowed from a
+※ parameter is a relation between two things in the signature, and no type could
+※ name a parameter, so it is written after the type, once, for the whole answer.
+※
+※ **The caller works out the rest.**  A function promises no more than its
+※ parameter's lifetime, so `first(&total)` -- where `total` is a variable at the
+※ top level -- answers with a reference that lasts as long as the program, while
+※ `first(&n)` for a local answers with one that does not.  The same function,
+※ two answers, decided where both are in view.
+※
+※ Rust writes both of these as named lifetime parameters, `fn first<'a>(v: &'a
+※ u8) -> &'a u8` and `&'static u8`, which say more -- several lifetimes at once,
+※ and relations between them -- at the cost of a name to invent at every
+※ signature.  Here a function answers with at most one reference, so the name
+※ would only ever have one thing to point at, and pointing at the parameter
+※ directly says the same thing with nothing to invent.  C++ has no such rule and
+※ a dangling reference is a program nobody notices is wrong; Go and Java move
+※ what escapes to the heap instead, which needs a collector.
+
+let total: mut u8 = 0u8
+let other: mut u8 = 0u8
+
+※ As long as the program: what it names is a variable at the top level, which is
+※ there before the first call and after the last.
+fn counter() → &mut static u8:
+    &mut total
+
+※ As long as what `v` named, which is all this can promise and all a caller
+※ needs: it hands back what it was given.
+fn first(v: &u8) → &u8 from v:
+    v
+
+※ Which parameter, out of several, is exactly what `from` is for.
+fn second(p: &u8, q: &u8) → &u8 from q:
+    q
+
+※ A reference handed on through another call keeps the promise it was made
+※ with, so the two signatures agree with nothing written between them.
+fn again(v: &u8) → &u8 from v:
+    first(v)
+
+@[impure]
+fn bump(at: &mut u8) → &mut u8 from at:
+    at⌖ ← at⌖ + 1u8
+    at
+
+※ A promise about the program's whole life is kept by anything that lasts that
+※ long, so answering `from v` with a variable at the top level is allowed.
+fn ignoring(v: &u8) → &u8 from v:
+    &other
+
+@[startup, impure]
+fn main() → u6:
+    ※ a reference that lasts as long as the program, written through
+    let c: &mut static u8 = counter()
+    c⌖ ← 5u8
+    ※ and standing where one with less to promise is wanted, which it may
+    let shorter: &mut u8 = counter()
+    shorter⌖ ← shorter⌖ + 1u8
+    ※ borrowed from a local, which lives as long as the body
+    let n: u8 = 7u8
+    let r: &u8 = first(&n)
+    let again_r: &u8 = again(&n)
+    ※ borrowed from the second of two
+    let x: u8 = 1u8
+    let y: u8 = 2u8
+    let q: &u8 = second(&x, &y)
+    ※ the same function called with a top-level variable answers with one that
+    ※ lasts as long as the program, which is what the type here demands
+    let lasting: &static u8 = first(&total)
+    ※ handed on and written through
+    let m: mut u8 = 40u8
+    let b: &mut u8 = bump(&mut m)
+    b⌖ ← b⌖ + 1u8
+    if total ≠ 6u8:
+        1u6
+    elif r⌖ ≠ 7u8 ∨ again_r⌖ ≠ 7u8:
+        2u6
+    elif q⌖ ≠ 2u8:
+        3u6
+    elif lasting⌖ ≠ 6u8:
+        4u6
+    elif m ≠ 42u8:
+        5u6
+    elif ignoring(&n)⌖ ≠ 0u8:
+        6u6
+    else:
+        0u6

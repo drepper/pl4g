@@ -159,6 +159,9 @@ class RefTypeRef(Node):
     pointee: TypeExpr
     #: Whether the place may be written through this reference.
     mutable: bool = False
+    #: Whether what it names lives as long as the program, which is what
+    #: `static` says and what a variable at the top level has.
+    lasting: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -987,6 +990,11 @@ class FuncDef(Node):
     body: Block | None
     attrs: tuple[Attribute, ...] = ()
     doc: str | None = None
+    #: The parameter the answer names what was named by, written `from NAME`
+    #: after the return type.  It is how a reference says it lives as long as
+    #: something the caller has rather than as long as the program.
+    borrows_from: str | None = None
+    borrows_span: Span = INVALID_SPAN
 
 
 class TypeKind(StrEnum):

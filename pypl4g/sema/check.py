@@ -25,8 +25,10 @@ from ..front.token import (BOTTOM_GLYPH, BUILTIN_GLYPH, CHR_NAME,
 from ..ir.builder import IRBuilder
 from ..ir.decisions import DecisionKind
 from ..ir.layout import DataLayout, member_offsets_of, stride_of
-from ..ir.inst import (BinaryInst, BinOp, CastInst, CastKind, CmpPred,
-                       ExtractInst, FrameInst, Instruction, UnOp)
+from ..ir.inst import (AddressInst, BinaryInst, BinOp, CallInst, CastInst,
+                       CastKind, CmpPred,
+                       ExtractInst, FrameInst, Instruction, LoadInst, RetInst,
+                       UnOp)
 from . import tables
 from ..ir.function import (DEFAULT_CCONV, SYSTEM_CCONV, BasicBlock, FuncAttrs,
                            FuncType, Function,
@@ -480,6 +482,41 @@ def _holds_a_lambda(ty: Type, seen: frozenset[int] = frozenset()) -> bool:
             return _holds_a_lambda(ty.element, deeper)
         case _:
             return False
+
+
+def _reached_from(value: Value, sources: Sequence[Value]) -> bool:
+    """Whether *value* was worked out from one of *sources*.
+
+    Walked back the way provenance is walked everywhere else, through the
+    instructions that keep a reference pointing into the same place: reading
+    the parameter out of its storage, offsetting it, and reading the same bits
+    as another type.
+    """
+    seen = value
+    while True:
+        if any(seen is one for one in sources):
+            return True
+        if isinstance(seen, LoadInst):
+            seen = seen.operands[1]
+            continue
+        if isinstance(seen, AddressInst):
+            seen = seen.operands[0]
+            continue
+        if isinstance(seen, CallInst):
+            # A call that promised `from` its own parameter names whatever the
+            # argument for it named, so the walk carries on there and the two
+            # signatures agree with nothing written between them.
+            at = getattr(seen.callee, "borrows_from", None)
+            if at is None or at >= len(seen.arguments):
+                return False
+            seen = seen.arguments[at]
+            continue
+        if isinstance(seen, (CastInst, ExtractInst)) or (
+                isinstance(seen, BinaryInst)
+                and seen.op in (BinOp.ADD, BinOp.SUB)):
+            seen = seen.operands[0]
+            continue
+        return False
 
 
 def _holds_a_reference(ty: Type, seen: frozenset[int] = frozenset()) -> bool:
@@ -1188,11 +1225,12 @@ class Checker:
             if ty is not None and _holds_a_lambda(ty):
                 self._diags.emit(D.LANG_LAMBDA_AT_TOP_LEVEL, node.span)
                 ty = ERROR
-            elif ty is not None and _holds_a_reference(ty):
-                # A variable here lasts as long as the program, so what it named
-                # would have to as well, and nothing yet says how long anything
-                # lives.  Asked before the value is looked at, since there is no
-                # value such a variable could be given.
+            elif ty is not None and _holds_a_reference(ty) \
+                    and not (isinstance(ty, PtrType) and ty.lasting):
+                # A variable here lasts as long as the program, so what it names
+                # has to as well -- which is what `static` says and what nothing
+                # else promises.  Asked before the value is looked at, since
+                # there is no value a variable of the other sort could be given.
                 self._diags.emit(D.LANG_REF_AT_TOP_LEVEL, node.span)
                 ty = ERROR
             initializer = self._constant_value(node, ty) if ty is not None else None
@@ -1799,20 +1837,14 @@ class Checker:
                 self._diags.emit(D.LANG_LAMBDA_ANSWERED,
                                  node.ret_type.span if node.ret_type is not None
                                  else node.name_span)
-            if _holds_a_reference(ret):
-                # What a reference names has to outlive the reference, and
-                # handing one back is the case where the compiler cannot tell:
-                # the place may be this call's own storage, gone the moment it
-                # answers.  Lifetime annotations are what will say when it may.
-                self._diags.emit(D.LANG_REF_ANSWERED,
-                                 node.ret_type.span if node.ret_type is not None
-                                 else node.name_span)
+            borrows = self._borrowed_from(node, ret)
             func_attrs, linkage = self._function_attrs(attrs)
             func = Function(name=node.name,
                             ty=self._module.types.func_type(params, ret),
                             attrs=func_attrs, linkage=linkage,
                             param_names=tuple(p.name for p in node.params),
                             defaults=self._defaults_of(node, params),
+                            borrows_from=borrows,
                             exported=self._is_export(attrs),
                             cconv=(func_attrs.abi if func_attrs.abi is not None
                                    else DEFAULT_CCONV),
@@ -1880,6 +1912,41 @@ class Checker:
                            name_span=param.span, type=param.type, value=written)
         value = self._constant_value(stood, ty)
         return value if isinstance(value, Const) else None
+
+    def _borrowed_from(self, node: ast.FuncDef, ret: Type) -> int | None:
+        """Which parameter the answer names what was named by, where it says.
+
+        A reference is only worth having while what it names is still there,
+        and a caller cannot see into the function to work that out -- so a
+        function handing one back says which of the two lifetimes it is: as
+        long as the program, which `static` in the type says, or as long as
+        what a parameter named, which `from` says, there being nothing a type
+        could write that names a parameter.
+        """
+        where = (node.ret_type.span if node.ret_type is not None
+                 else node.name_span)
+        if not isinstance(ret, PtrType):
+            if node.borrows_from is not None:
+                # `from` is a promise about a reference, and there is none for
+                # it to be about.
+                self._diags.emit(D.LANG_BORROW_NOT_FROM_IT, node.borrows_span,
+                                 name=node.borrows_from)
+            elif _holds_a_reference(ret):
+                # A reference inside something else: there is nowhere in the
+                # signature to write how long it lives, since `static` belongs
+                # to the reference and `from` to the whole answer.
+                self._diags.emit(D.LANG_REF_ANSWERED, where)
+            return None
+        if node.borrows_from is None:
+            if not ret.lasting:
+                self._diags.emit(D.LANG_BORROW_SAYS_NOTHING, where)
+            return None
+        for at, one in enumerate(node.params):
+            if one.name == node.borrows_from:
+                return at
+        self._diags.emit(D.LANG_BORROW_NOT_A_PARAMETER, node.borrows_span,
+                         name=node.borrows_from)
+        return None
 
     def _collect_generic(self, node: ast.FuncDef, path: str,
                          attrs: list[BoundAttr],
@@ -2523,7 +2590,7 @@ class Checker:
             self._diags.emit(D.LANG_REF_TYPE_NOT_ALLOWED, ref.span,
                              found=pointee.render())
             return ERROR
-        return self._module.types.ptr_type(pointee, ref.mutable)
+        return self._module.types.ptr_type(pointee, ref.mutable, ref.lasting)
 
     def _array_type(self, ref: ast.ArrayTypeRef) -> Type:
         """Resolve `T\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}N\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}` or `T\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}`.
@@ -2679,6 +2746,14 @@ class Checker:
                              param.mutable, is_parameter=True, builder=builder)
         assert node.body is not None
         self._lower_block(builder, node.body, func)
+        if func.borrows_from is not None:
+            # Before the scope goes: a parameter a reference was taken of lives
+            # in the frame, and the name is what still knows where.
+            borrowed = self._find_local(node.params[func.borrows_from].name)
+            sources = (arriving[func.borrows_from],
+                       *((borrowed.value,) if borrowed is not None
+                         and borrowed.placed else ()))
+            self._answers_from(func, node, sources)
         self._pop_scope()
         self._addressed = outer_addressed
         self._answering = outer_answer
@@ -3674,7 +3749,8 @@ class Checker:
                 span=node.span, name_span=node.name_span,
                 source_path=written.path,
                 param_names=tuple(one.name for one in node.params),
-                defaults=self._defaults_of(node, params))
+                defaults=self._defaults_of(node, params),
+                borrows_from=self._borrowed_from(node, answer))
             self._module.add_function(
                 func, key=self._key("".join((node.name, "\N{TOP LEFT CORNER}",
                                              ",".join(one.mangled() for one in key),
@@ -3924,6 +4000,7 @@ class Checker:
         if func.attrs.impure:
             self._an_effect(D.LANG_PURE_CALLS_IMPURE, expr.span, name=func.name)
         answer = builder.call(func, list(args), func.ty.ret, expr.span)
+        answer = self._as_long_as_given(builder, func, args, answer, expr.span)
         if func.ty.ret is VOID and expected is not None:
             self._diags.emit(D.LANG_CALL_HAS_NO_VALUE, expr.span, name=func.name)
             return UndefConst(ERROR)
@@ -4306,7 +4383,7 @@ class Checker:
         found = self._place_written(builder, expr.operand)
         if found is None:
             return UndefConst(ERROR)
-        address, held, may_change, what = found
+        address, held, may_change, what, lasting = found
         if not _can_be_referred_to(held):
             self._diags.emit(D.LANG_REF_TYPE_NOT_ALLOWED, expr.span,
                              found=held.render())
@@ -4314,7 +4391,7 @@ class Checker:
         if expr.mutable and not may_change:
             self._diags.emit(D.LANG_REF_PLACE_NOT_MUTABLE, expr.span, name=what)
             return UndefConst(ERROR)
-        ty = self._module.types.ptr_type(held, expr.mutable)
+        ty = self._module.types.ptr_type(held, expr.mutable, lasting)
         answer = (address if address.ty is ty
                   else builder.cast(CastKind.BITCAST, address, ty, expr.span))
         if not self._accepts(expected, answer.ty):
@@ -4322,7 +4399,7 @@ class Checker:
         return answer
 
     def _place_written(self, builder: IRBuilder, expr: ast.Expr
-                       ) -> tuple[Value, Type, bool, str] | None:
+                       ) -> tuple[Value, Type, bool, str, bool] | None:
         """Where what *expr* names is, what it holds, whether it may be written,
         and what to call it in a message.
 
@@ -4349,13 +4426,82 @@ class Checker:
                     self._diags.emit(D.LANG_DEREF_NOT_A_REFERENCE, expr.span,
                                      found=ty.render())
                     return None
-                return (value, ty.pointee, ty.mutable, "what it names")
+                return (value, ty.pointee, ty.mutable, "what it names", ty.lasting)
             case _:
                 self._diags.emit(D.LANG_REF_NOT_A_PLACE, expr.span)
                 return None
 
+    def _lasting(self, value: Value) -> bool:
+        """Whether a place reached from *value* is there as long as the program.
+
+        Walked back the way provenance is walked everywhere else: an address
+        worked out from a variable at the top level is still that variable's,
+        and one worked out from anything else is not.
+        """
+        seen = value
+        while True:
+            if isinstance(seen, GlobalVar):
+                return True
+            if isinstance(seen, AddressInst):
+                seen = seen.operands[0]
+                continue
+            if isinstance(seen, (CastInst, ExtractInst)) or (
+                    isinstance(seen, BinaryInst)
+                    and seen.op in (BinOp.ADD, BinOp.SUB)):
+                seen = seen.operands[0]
+                continue
+            if isinstance(seen, PtrType):
+                return False
+            return isinstance(seen.ty, PtrType) and seen.ty.lasting
+
+    def _answers_from(self, func: Function, node: ast.FuncDef,
+                      sources: tuple[Value, ...]) -> None:
+        """Check that what each `return` hands back really comes from there.
+
+        The promise `from v` is only kept if what comes back was worked out
+        from what `v` named; a reference to anything else lives for its own
+        time, which is not the one the caller was told.  A reference that
+        lasts as long as the program keeps any promise, so it passes too.
+        """
+        assert func.borrows_from is not None
+        name = node.params[func.borrows_from].name
+        for block in func.blocks:
+            for inst in block.insts:
+                if not isinstance(inst, RetInst) or not inst.operands:
+                    continue
+                value = inst.operands[0]
+                if self._lasting(value) or _reached_from(value, sources):
+                    continue
+                self._diags.emit(D.LANG_BORROW_NOT_FROM_IT, inst.span,
+                                 name=name)
+
+    def _as_long_as_given(self, builder: IRBuilder, func: Function,
+                          args: Sequence[Value], answer: Value,
+                          span: Span) -> Value:
+        """What a call answers with lives as long as what it borrowed from.
+
+        The function promised no more than its parameter's lifetime, so the
+        rest is worked out here, where both are in hand: the answer is there
+        as long as the program exactly when the argument was.
+        """
+        at = func.borrows_from
+        if at is None or at >= len(args) \
+                or not isinstance(answer.ty, PtrType) or answer.ty.lasting \
+                or not self._lasting(args[at]):
+            return answer
+        self._module.decisions.record(
+            DecisionKind.LIFETIME, func.name,
+            "".join(("answers with a reference that lasts as long as the "
+                     "program, because the argument for '",
+                     func.param_names[at], "' does")),
+            span)
+        return builder.cast(
+            CastKind.BITCAST, answer,
+            self._module.types.ptr_type(answer.ty.pointee, answer.ty.mutable,
+                                        lasting=True), span)
+
     def _place_of_a_name(self, builder: IRBuilder, expr: ast.NameRef
-                         ) -> tuple[Value, Type, bool, str] | None:
+                         ) -> tuple[Value, Type, bool, str, bool] | None:
         """Where the name *expr* is, for a reference being taken of it."""
         local = self._find_local(expr.name)
         if local is not None:
@@ -4368,19 +4514,23 @@ class Checker:
                                  found=self._held_by(local).render())
                 return None
             assert local.held is not None
-            return (local.value, local.held, local.mutable, expr.name)
+            # A name inside a call is gone when the call is, whatever it holds.
+            return (local.value, local.held, local.mutable, expr.name, False)
         found = self._provided(expr.name)
         if isinstance(found, GlobalVar):
             if found.value_type is ERROR:
                 return None
+            # A variable at the top level is there for as long as the program
+            # is, so a reference to it is too -- which is the one place a
+            # lasting reference comes from.
             return (builder.address(found, expr.span), found.value_type,
-                    found.mutable, expr.name)
+                    found.mutable, expr.name, True)
         self._diags.emit(D.LANG_FILESTRUCT_UNDEFINED_NAME, expr.span,
                          name=expr.name)
         return None
 
     def _place_of_an_element(self, builder: IRBuilder, expr: ast.Element
-                             ) -> tuple[Value, Type, bool, str] | None:
+                             ) -> tuple[Value, Type, bool, str, bool] | None:
         """Where one element of an array is, for a reference being taken of it."""
         base = self._lower_expr(builder, expr.base, None)
         ty = self._value_type_of(base)
@@ -4401,7 +4551,9 @@ class Checker:
         if offset is None:
             return None
         place = self._element_place(builder, start, ty.element, offset, expr.span)
-        return (place, ty.element, True, "an element")
+        # An element lives as long as the array does, and an array written at
+        # the top level is the one that outlives the call.
+        return (place, ty.element, True, "an element", self._lasting(base))
 
     def _lower_collection(self, builder: IRBuilder,
                           expr: ast.SetLit | ast.DictLit,
@@ -9242,6 +9394,7 @@ class Checker:
         if func.attrs.impure:
             self._an_effect(D.LANG_PURE_CALLS_IMPURE, expr.span, name=func.name)
         answer = builder.call(func, args, func.ty.ret, expr.span)
+        answer = self._as_long_as_given(builder, func, args, answer, expr.span)
         if func.ty.ret is VOID and expected is not None:
             # Somewhere wants a value and there is none.  The two places a call
             # like this may stand are a statement of its own and after `return`
@@ -10145,7 +10298,9 @@ class Checker:
         if isinstance(expected, ArrayType) and not expected.fixed:
             return self._spread(builder, expr, expected, span)
         if not isinstance(expected, ResultType):
-            return self._lower_expr(builder, expr, expected)
+            return self._shorter_life(builder,
+                                      self._lower_expr(builder, expr, expected),
+                                      expected, span)
         # The whole type goes down, not nothing and not the answer alone:
         # something that can only be an answer asks `_aiming_at` for the
         # answer's type, and something that may be either is measured against
@@ -10163,6 +10318,25 @@ class Checker:
                 None if expected.err is None else UndefConst(expected.err))
         self._report_mismatch(span, found, expected)
         return UndefConst(ERROR)
+
+    def _shorter_life(self, builder: IRBuilder, value: Value, expected: Type,
+                      span: Span) -> Value:
+        """A reference that outlives what is wanted, read as what is wanted.
+
+        A place that is there as long as the program is there for as long as
+        any one call, so a reference to one stands where a reference of the
+        call's own would -- and what stands there has that type, the same bits
+        read as a promise about a shorter time.
+        """
+        found = self._value_type_of(value)
+        if found is expected or not isinstance(found, PtrType) \
+                or not isinstance(expected, PtrType):
+            return value
+        if found.lasting and not expected.lasting \
+                and found.pointee is expected.pointee \
+                and found.mutable == expected.mutable:
+            return builder.cast(CastKind.BITCAST, value, expected, span)
+        return value
 
     def _spread(self, builder: IRBuilder, expr: ast.Expr, expected: ArrayType,
                 span: Span) -> Value:
@@ -10247,6 +10421,15 @@ class Checker:
                 and self._stands_for(found.unit, expected.unit):
             # The same number in a unit the program said may stand here.  The
             # bits are the same bits, so nothing is emitted for it.
+            return True
+        if isinstance(expected, PtrType) and isinstance(found, PtrType) \
+                and found.lasting and not expected.lasting \
+                and found.pointee is expected.pointee \
+                and found.mutable == expected.mutable:
+            # What lives as long as the program lives long enough for anything:
+            # a place that outlives every call outlives this one.  It goes one
+            # way only, a call's storage being no use where the program's is
+            # wanted.
             return True
         if self._deriving and isinstance(expected, (IntType, FloatType)) \
                 and isinstance(found, (IntType, FloatType)) \

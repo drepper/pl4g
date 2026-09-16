@@ -4352,7 +4352,8 @@ APL's disclose.
 **A reference does not leave the call that made it** -- not answered with (4531), not held at the top level (4532).  What it names
 has to outlive it and nothing yet says how long anything lives, so the two escapes are closed rather than guessed at.  Rust
 answers the same question with lifetimes; C, Zig and Odin do not ask it.  Lifetime annotations are the next thing to be designed,
-and they are what will lift both rules; nothing built here has to be undone when they arrive.
+and they are what will lift both rules; nothing built here has to be undone when they arrive.  *(Lifted on 2026-09-17 by
+`static` and `from`, which say how long; both numbers stayed, for the cases that remain.)*
 
 **A reference names a place holding one value** (4536).  An array, a list, a string, a set, a dictionary, a tuple and a result are
 each already several values or already a place, so a reference to one would be a second way of writing what a value of it is --
@@ -4691,6 +4692,47 @@ Compare: **C++**, whose instantiation-time checking this is; **Rust**, **Swift**
 need a language for them; **ML** and **Haskell**, which infer rather than write and from whom the mark comes; **Zig**, where a
 type is a value at compile time and a generic function is one taking it -- the most economical of the lot, and one that needs
 types to be values.
+
+## 2026-09-17T01:30+02:00 — language
+
+**Lifetimes: `&mut static u8` and `→ &u8 from v`**
+
+Asked for by the user, who chose the notation from the alternatives after Rust's was offered: name the source, plus `static`.
+What it lifts is the pair of rules that closed both places a reference could escape to.
+
+**There are exactly two lifetimes to say, so there are two words and no names.**  A function answers with at most one reference,
+so a named lifetime parameter would only ever have one thing to point at; pointing at the parameter directly says the same with
+nothing to invent.  `static` says as long as the program, `from v` says as long as what the parameter `v` named.  That is the
+whole of it, and it is also the whole of what the compiler can check without a language for relating several lifetimes at once.
+
+**`static` is in the type, `from` is not.**  A lifetime fixed once and for all is a property of the reference, so it stands where
+the rest of the type stands and travels with it into a product or a local: `&mut static u8`.  A lifetime borrowed from a
+parameter is a relation between two things in a signature, and nothing a type can write names a parameter, so it stands after the
+type and speaks for the whole answer.  The split is why a reference held inside something else still may not be answered with
+(4531): neither word has anything to attach to.
+
+**Neither may be left unwritten** (4562).  Rust lets the common case go unwritten by elision, which works because there a missing
+lifetime is still a lifetime being inferred; here the two answers mean different things to a caller, and defaulting to either
+would make a promise the program did not.
+
+**The caller works out the answer's lifetime.**  The function promises no more than its parameter's, so `first(&total)` for a
+variable at the top level answers with a lasting reference and `first(&n)` for a local does not -- one signature read twice,
+where both the argument and the answer are in view.  The bits are the same either way; the cast the compiler inserts is a bitcast
+and the generated code is unchanged.
+
+**The body is held to the promise** (4561).  What comes back is walked back through the instructions that keep a reference
+pointing into the same place -- reading the parameter out of its storage, offsetting it, reading the same bits as another type,
+and through a call that made the same promise about its own parameter -- and anything else is refused.  A reference that lasts as
+long as the program keeps any promise, so it passes wherever `from` was written.
+
+**`static` and `from` are not keywords.**  They are read where nothing else could stand -- `static` only inside a reference type
+and only when a type follows it, `from` only after a return type -- so a program may still have a type called `static` and a
+field called `from`, which the product type `type Line = from: Point ; to: Point` already did.
+
+Compare: **Rust**, whose question this is and whose `'a` was offered first and declined; **C++**, which has no rule and where a
+dangling reference is a program nobody notices is wrong; **Go** and **Java**, which move what escapes to the heap and need a
+collector for it; **Cyclone**, whose region annotations are the ancestor of all of this; **C**, **Zig** and **Odin**, which do
+not ask.
 
 Open questions
 --------------

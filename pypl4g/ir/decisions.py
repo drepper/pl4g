@@ -51,6 +51,10 @@ class DecisionKind(StrEnum):
     #: once and said nothing about which types; which ones it was built for is
     #: what the calls turned out to ask for.
     INSTANTIATE = "instantiate"
+    #: How long the answer of one call lives.  The function promised only its
+    #: parameter's lifetime, and which one that came to is worked out at the
+    #: call; the program says it in neither place.
+    LIFETIME = "lifetime"
 
 
 @dataclass(frozen=True, slots=True)

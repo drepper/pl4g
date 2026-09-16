@@ -1,19 +1,21 @@
 ※ pl4g-test: compile=error diag=4531
 
-※ What a reference names has to outlive the reference, and nothing in the
-※ language yet says how long anything lives.  Handing one back to the caller is
-※ exactly the case where the compiler cannot tell: the place may be this call's
-※ own storage, which is gone the moment it answers.  So a reference may be a
-※ parameter, a local and a field, and may not leave the call.
+※ A function answering with a reference says how long what it names lives:
+※ `static` in the type, or `from` naming the parameter it was borrowed from.
+※ Neither of those can be written about a reference held inside something else.
+※ `static` belongs to a reference and a tuple may hold several; `from` speaks
+※ for the whole answer and there would be nothing to attach it to.  So what is
+※ refused here is not the reference but the wrapping, and the way to write this
+※ is to answer with the reference itself.
 ※
-※ Rust answers the same question with lifetimes, which say that what comes back
-※ lives as long as what went in; C and Odin do not ask it at all, and a
-※ reference to a local that has gone is a program nobody notices is wrong.
-※ Lifetime annotations are what will lift this.
+※ Rust does write it, because a lifetime there is a name the signature invents
+※ and can be put on each reference of a compound separately.  The price is that
+※ name at every signature; the language here answers with one reference and
+※ needs no name at all.
 
 @[startup]
 fn main() → u6:
     0u6
 
-fn first(a: &mut u8) → &mut u8:
-    a
+fn pair(a: &u8) → 〈&u8, u8〉:
+    〈a, 1u8〉

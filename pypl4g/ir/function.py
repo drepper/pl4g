@@ -187,6 +187,11 @@ class Function:
     #: other -- hands over the same value.
     defaults: tuple[Const | None, ...] = ()
 
+    #: Which parameter the answer names what was named by, where the signature
+    #: says: `→ &u8 from v` is the promise that what comes back lives as long
+    #: as what `v` named, which is what lets a caller keep it that long.
+    borrows_from: int | None = None
+
     #: How this function hands back an answer that is more than one value.  A
     #: property of the function that answers, as the convention it is called by
     #: is, and for the same reason: what a caller has to do to receive the

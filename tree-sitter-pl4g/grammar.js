@@ -151,8 +151,15 @@ module.exports = grammar({
       field('name', $.identifier),
       field('parameters', $.parameter_list),
       optional(seq($._return_arrow, field('return_type', $.type))),
+      // The other thing a signature can say about how long the answer lives:
+      // as long as what this parameter named.  It stands after the type rather
+      // than in it because no type could name a parameter, and there is one for
+      // the whole answer because a function answers with at most one reference.
+      optional(seq($.borrows, field('borrowed', $.identifier))),
       field('body', $._block),
     ),
+
+    borrows: _ => 'from',
 
     parameter_list: $ => seq('(', sepBy(',', $.parameter), ')'),
 
@@ -202,6 +209,13 @@ module.exports = grammar({
 
     mutable: _ => 'mut',
 
+    // How long what a reference names lives, where the type can say it: as long
+    // as the program.  It is no keyword -- a program may still have a type
+    // called `static` -- and the compiler tells the two apart by looking at
+    // what follows; here the word wins wherever a reference type may say it,
+    // which is a difference only a type of that name could show.
+    lasting: _ => 'static',
+
     // A type is a name, and after it the mark that says a value of it may not
     // be there: `TYPE?` is a result whose error carries nothing, `TYPE?ERROR`
     // one whose error is a value of its own.
@@ -221,7 +235,8 @@ module.exports = grammar({
     // choose.
     type: $ => choice(
       seq($._plain_type, repeat($._array_suffix)),
-      seq('&', optional($.mutable), field('pointee', $.type)),
+      seq('&', optional($.mutable), optional($.lasting),
+          field('pointee', $.type)),
       // A function written where a value is wanted.  The keyword one is
       // defined with, and then what it takes and what it answers; the
       // parameter names are not here because a type is not a definition.  It

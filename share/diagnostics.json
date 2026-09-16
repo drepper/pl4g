@@ -1339,6 +1339,22 @@
       "option": null
     },
     {
+      "number": 3042,
+      "name": "LANG_SYNTAX_EXPECTED_BORROWED_FROM",
+      "severity": "error",
+      "message": "expected the name of a parameter after 'from'",
+      "args": [],
+      "cause": "`from` says which parameter the answer names what was named by, so a name is what follows it -- and the name of a parameter of this function, there being nothing else for the answer to outlive.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / References",
+        "requirement": "'from' is followed by the name of a parameter."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 3031,
       "name": "LANG_SYNTAX_SPREAD_OUTSIDE_A_CALL",
       "severity": "error",
@@ -5266,7 +5282,7 @@
       "severity": "error",
       "message": "a function may not answer with something that holds a reference",
       "args": [],
-      "cause": "What a reference names has to outlive the reference, and nothing yet says how long anything lives.  Handing one back to the caller is exactly the case where the compiler cannot tell -- the place may be this call's own storage, which is gone the moment it answers.  A reference may therefore be a parameter, a local and a field, and may not leave the call; lifetime annotations are what will say when it may.",
+      "cause": "A function answering with a reference says how long what it names lives -- `static` in the type, or `from` naming the parameter it was borrowed from.  Neither can be written about a reference inside something else: `static` belongs to the reference and there may be several, and `from` speaks for the whole answer.  So a tuple, a product or a collection holding one may not be answered with, and the reference is handed back on its own instead.",
       "spec": {
         "document": "spec/spec.md",
         "section": "The Language / Types / References",
@@ -5280,9 +5296,9 @@
       "number": 4532,
       "name": "LANG_REF_AT_TOP_LEVEL",
       "severity": "error",
-      "message": "a variable at the top level may not hold a reference",
+      "message": "a variable at the top level holds a reference only where it says 'static'",
       "args": [],
-      "cause": "A variable at the top level lasts as long as the program, so what it names would have to as well, and a reference put there by one call would outlive whatever that call was pointing at.  It is the same rule as the one about answering with one, at the other place a value can escape to.",
+      "cause": "A variable at the top level lasts as long as the program, so what it names has to as well.  That is exactly what `static` in the type promises, and nothing else does: a reference borrowed from a parameter lives only as long as the call that made it, and one put here by that call would outlive what it pointed at.  It is the same question a function answering with a reference is asked, at the other place a value can escape to.",
       "spec": {
         "document": "spec/spec.md",
         "section": "The Language / Types / References",
@@ -5853,6 +5869,66 @@
         "document": "spec/spec.md",
         "section": "The Language / Types / References",
         "requirement": "'&mut' is written before a place that may be changed."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4560,
+      "name": "LANG_BORROW_NOT_A_PARAMETER",
+      "severity": "error",
+      "message": "'{name}' is not a parameter of this function",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the name written after 'from'"
+        }
+      ],
+      "cause": "What the answer names has to be something the caller still has when the call is over, and what a caller still has is what it handed over.  So `from` names a parameter, and a name that is not one names nothing the caller could keep alive.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / References",
+        "requirement": "'from' names a parameter of the function."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4561,
+      "name": "LANG_BORROW_NOT_FROM_IT",
+      "severity": "error",
+      "message": "what this answers with does not name anything '{name}' named",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the parameter"
+        }
+      ],
+      "cause": "`from` is a promise to the caller: the answer lives as long as what that parameter named, so the caller may keep it that long.  A reference made out of this call's own storage does not, and a reference made out of another parameter lives as long as *that* one -- which is a different promise and may be a shorter one.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / References",
+        "requirement": "What a function answers with comes from the parameter it says it does."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4562,
+      "name": "LANG_BORROW_SAYS_NOTHING",
+      "severity": "error",
+      "message": "a function answering with a reference says how long it lives: 'static' or 'from'",
+      "args": [],
+      "cause": "A reference is only worth having while what it names is still there, and a caller cannot see into the function to work that out.  So a function that hands one back says which of the two it is: as long as the program, which `static` in the type says, or as long as what a parameter named, which `from` says.  Without either there is nothing a caller could safely do with it.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / References",
+        "requirement": "A function answering with a reference says how long it lives."
       },
       "since": "0.1",
       "default_enabled": true,

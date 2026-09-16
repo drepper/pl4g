@@ -1,9 +1,14 @@
 ※ pl4g-test: compile=error diag=4532
 
 ※ A variable at the top level lasts as long as the program does, so what it
-※ named would have to as well, and a reference put there by one call would
-※ outlive whatever that call was pointing at.  It is the rule about answering
-※ with one, asked at the other place a value can escape to.
+※ names has to as well.  That is what `static` in the type promises and what
+※ nothing else does: a reference borrowed from a parameter lives only as long
+※ as the call that made it, and one stored here by that call would outlive what
+※ it pointed at.  It is the same question a function answering with a reference
+※ is asked, at the other place a value can escape to.
+※
+※ Written `&mut static u8` this would be allowed, and what is refused is the
+※ type as it stands, which promises nothing.
 
 let kept: &mut u8 = ⊥
 

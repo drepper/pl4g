@@ -1,0 +1,14 @@
+※ pl4g-test: compile=error diag=4560
+
+※ `from` names the parameter whose lifetime the answer borrows, so it names a
+※ parameter of this function and nothing else.  A local would be no help -- it
+※ is gone when the call is -- and a variable at the top level is what `static`
+※ is for, so the only thing `from` can usefully point at is already the only
+※ thing it is allowed to point at.
+
+@[startup]
+fn main() → u6:
+    0u6
+
+fn first(a: &u8) → &u8 from b:
+    a

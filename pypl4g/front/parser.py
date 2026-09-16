@@ -12,9 +12,10 @@ from typing import Final, Sequence
 
 from ..diag import ids as D
 from ..diag.engine import DiagEngine
-from ..source.location import Span
+from ..source.location import INVALID_SPAN, Span
 from . import ast
-from .token import COMMENT_GLYPH, IMPORT_NAME, TokKind, Token, WILDCARD_NAME
+from .token import (BORROWS_WORD, COMMENT_GLYPH, IMPORT_NAME, LASTING_WORD,
+                    TokKind, Token, WILDCARD_NAME)
 
 #: Tokens at which error recovery stops, because a new definition can begin there.
 _RECOVERY: Final[frozenset[TokKind]] = frozenset(
@@ -476,12 +477,24 @@ class Parser:
         # there is no name to write for that, which is what keeps the two from
         # being two ways of saying one thing.
         ret_type: ast.TypeExpr | None = None
+        borrows: Token | None = None
         if self._accept(TokKind.ARROW) is not None:
             ret_type = self._parse_type_ref()
+            # `from NAME` says the answer names what that parameter named, so
+            # it lives as long as that does.  It stands after the type because
+            # it is about the answer and is not part of what the answer is:
+            # nothing in a type can name a parameter.
+            if self._reading(BORROWS_WORD):
+                self._advance()
+                borrows = self._expect(TokKind.IDENT,
+                                       D.LANG_SYNTAX_EXPECTED_BORROWED_FROM)
         body = self._parse_body()
         return ast.FuncDef(span=start.to(body.span), name=name_token.text,
                            name_span=name_token.span, params=params, ret_type=ret_type,
-                           body=body, attrs=attrs, doc=doc)
+                           body=body, attrs=attrs, doc=doc,
+                           borrows_from=borrows.text if borrows is not None else None,
+                           borrows_span=(borrows.span if borrows is not None
+                                         else INVALID_SPAN))
 
     def _parse_type_ref(self) -> ast.TypeExpr:
         """Parse a type, which may be a collection written the way a value is.
@@ -497,9 +510,15 @@ class Parser:
             # the one who wrote the reference and the one who reads it reach it.
             start = self._advance().span
             mutable = self._accept(TokKind.KW_MUT) is not None
+            # How long what it names lives, where the type can say: as long as
+            # the program, which is what a variable at the top level has and
+            # nothing else does.
+            lasting = self._reading(LASTING_WORD) and self._begins_a_type(1)
+            if lasting:
+                self._advance()
             pointee = self._parse_type_ref()
             return ast.RefTypeRef(span=start.to(pointee.span), pointee=pointee,
-                                  mutable=mutable)
+                                  mutable=mutable, lasting=lasting)
         if self._check(TokKind.KW_FN):
             return self._parse_function_type()
         if self._check(TokKind.SET_OPEN):
@@ -766,18 +785,26 @@ class Parser:
         end = self._expect(TokKind.SET_CLOSE, D.LANG_SYNTAX_EXPECTED_CLOSING_SET).span
         return ast.CollectionTypeRef(span=start.to(end), element=element, value=value)
 
-    def _begins_a_type(self) -> bool:
+    def _reading(self, word: str) -> bool:
+        """Whether the token here is the identifier *word*.
+
+        Two words are read where nothing else could stand rather than taken
+        outright, so that a program may still use them as names.  What makes
+        that safe is the place: nothing but a type may follow `&`, and nothing
+        but a body may follow a function's return type.
+        """
+        return self._check(TokKind.IDENT) and self._current.text == word
+
+    def _begins_a_type(self, ahead: int = 0) -> bool:
         """Whether a type is written here rather than left out.
 
         Five things begin one: a name, a collection, a tuple, a list and the
         mark of a reference.  It is asked wherever a type may be written and may
         equally be absent, which is a variable and a binding in a loop.
         """
-        return (self._check(TokKind.IDENT) or self._check(TokKind.SET_OPEN)
-                or self._check(TokKind.TUPLE_OPEN)
-                or self._check(TokKind.LBRACKET)
-                or self._check(TokKind.AMPERSAND)
-                or self._check(TokKind.KW_FN))
+        kind = self._peek(ahead).kind if ahead else self._current.kind
+        return kind in (TokKind.IDENT, TokKind.SET_OPEN, TokKind.TUPLE_OPEN,
+                        TokKind.LBRACKET, TokKind.AMPERSAND, TokKind.KW_FN)
 
     def _parse_list_type(self) -> ast.ListTypeRef:
         """Parse ``'[' TYPE ']'``, which is written the way a value of one is."""

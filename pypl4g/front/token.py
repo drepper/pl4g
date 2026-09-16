@@ -292,6 +292,15 @@ UNIT_GLYPH: Final[str] = "\N{CURRENCY SIGN}"
 #: has met this mark.
 LAMBDA_GLYPH: Final[str] = "\N{GREEK SMALL LETTER LAMDA}"
 
+#: Two words the language reads where nothing else could stand, and which are
+#: therefore not keywords: a program may still have a variable called `from` or
+#: a type called `static`.  `static` is read after `&` and only where a type
+#: follows it; `from` after a function's return type, where a body is the only
+#: other thing that may stand.  Taking the words outright would have cost every
+#: program the two names a range and an edge want most.
+LASTING_WORD: Final[str] = "static"
+BORROWS_WORD: Final[str] = "from"
+
 #: The digits written raised, which is how an exponent that *is* a number is
 #: written.  The first three are where Latin-1 put them and the rest are where
 #: Unicode put the ones Latin-1 had not got, which is why this is a table and

@@ -2771,6 +2771,16 @@
           }
         ]
       },
+      "borrowed": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      },
       "name": {
         "multiple": false,
         "required": true,
@@ -2803,11 +2813,15 @@
       }
     },
     "children": {
-      "multiple": false,
+      "multiple": true,
       "required": false,
       "types": [
         {
           "type": "attribute_list",
+          "named": true
+        },
+        {
+          "type": "borrows",
           "named": true
         }
       ]
@@ -6659,6 +6673,10 @@
           "named": true
         },
         {
+          "type": "lasting",
+          "named": true
+        },
+        {
           "type": "mutable",
           "named": true
         },
@@ -7639,6 +7657,10 @@
     "named": false
   },
   {
+    "type": "borrows",
+    "named": true
+  },
+  {
     "type": "break",
     "named": false
   },
@@ -7705,6 +7727,10 @@
   },
   {
     "type": "integer_literal",
+    "named": true
+  },
+  {
+    "type": "lasting",
     "named": true
   },
   {

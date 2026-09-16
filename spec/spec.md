@@ -1937,10 +1937,47 @@ values or already a place, so a reference to one would be a second way of writin
 takes the whole of what follows it, so `&u8⟦4⟧` is a reference to an array of four -- which is refused -- and never an array of
 four references.
 
-**A reference does not leave the call that made it.**  What it names has to outlive it, and nothing in the language yet says how
-long anything lives, so the two places a value escapes to are closed: a function may not answer with one (4531) and a variable at
-the top level may not hold one (4532).  What is left is where a reference earns its keep -- a parameter, a local, and a field of a
-product -- and it is enough for the thing references are mostly for:
+**A reference leaving the call says how long what it names lives.**  A reference is only worth having while what it names is
+still there, and a caller cannot see into the function to work that out.  So a function handing one back says which of exactly two
+lifetimes it is, and there is a word for each:
+
+```
+fn counter() → &mut static u8:    ※ as long as the program
+    &mut total
+
+fn first(v: &u8) → &u8 from v:    ※ as long as what v named
+    v
+```
+
+**`static` belongs to the type and `from` to the signature.**  A lifetime fixed once and for all is a property of the reference
+itself, so it is written where the rest of the type is, after `mut` and before what is pointed at: `&mut static u8`.  A lifetime
+borrowed from a parameter is a relation between two things in the signature, and no type could name a parameter, so it is written
+once, after the type, for the whole answer.  Saying neither is refused (4562): there is no default, because the two answers differ
+and either guess would make a promise the program did not.
+
+**`from` names a parameter of this function** (4560), and what comes back really has to come from it (4561).  The compiler walks
+the answer back the way provenance is walked everywhere else -- reading the parameter out of its storage, offsetting it, reading
+the same bits as another type, and through a call that made the same promise about its own parameter -- and refuses a reference
+reached by none of those.  A reference that lasts as long as the program keeps any promise, so answering `from v` with a variable
+at the top level is allowed.
+
+**The caller works out the rest.**  A function promises no more than its parameter's lifetime, so the same call read two ways
+gives two answers: `first(&total)` for a variable at the top level answers with a reference that lasts as long as the program, and
+`first(&n)` for a local does not.  One signature, decided where both the argument and the answer are in view.  A reference that
+lasts as long as the program stands wherever a shorter-lived one is wanted, the other way round being refused (4203).  Which it
+came to is written to the decision log (`lifetime`), since neither the signature nor the call says it.
+
+**A variable at the top level holds a reference only where it says `static`** (4532), which is that rule asked at the other place
+a value escapes to.  A reference inside something else -- a tuple, a product, a collection -- may not be answered with at all
+(4531): `static` belongs to a reference and there may be several, and `from` speaks for the whole answer, so neither word has
+anything to attach to.
+
+Rust writes both lifetimes as named parameters, `fn first<'a>(v: &'a u8) -> &'a u8` and `&'static u8`, which says more -- several
+lifetimes at once, and relations between them -- at the cost of a name to invent at each signature, softened by the rules that let
+the common case go unwritten.  Here a function answers with at most one reference, so such a name would only ever have one thing to
+point at, and pointing at the parameter directly says the same with nothing invented.  C++ has no rule at all and a dangling
+reference is a program nobody notices is wrong; Go and Java move what escapes to the heap instead, which needs a collector.  Where
+a reference does not leave the call none of this is written, which is most of what references are for:
 
 ```
 fn main() → u6:

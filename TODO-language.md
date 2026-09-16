@@ -584,10 +584,18 @@ Runtime
 [ ] let a type definition take type parameters.  Only functions have them, so a `type Pair T’ = first : T’ ; second : T’` cannot
     be written -- which matters less than it would elsewhere, products having no values yet.
 
-[ ] design lifetime annotations, which are what say how long what a reference names lives.  Until they exist a reference may not
-    be what a function answers with (4531) and may not be held at the top level (4532), which refuses good programs -- `fn
-    first(a: &mut u8) → &mut u8` among them -- to refuse every dangling one.  Rust's lifetimes are the design to compare against,
-    and what to decide is how much of one a language emitted by a generator needs written down.
+[ ] let a variable at the top level be *given* a lasting reference.  The type is now allowed -- `let kept: &mut static u8` --
+    but the value would be an address worked out at load time, and a top-level variable whose value is not a literal is not
+    implemented yet (9902).  What it needs is a relocation in the initializer, which is a compiler job and no language question.
+
+[ ] say how long a reference held in a product lives.  A function may not answer with one inside anything else (4531) because
+    `static` belongs to a reference and `from` speaks for the whole answer, so neither word has somewhere to go.  Writing
+    `static` on the field is the obvious half; borrowing per field would need what was deliberately not built, a way of naming
+    several lifetimes at once.
+
+[ ] let a lifetime be borrowed from something that is not a parameter of this call -- a field of a parameter, or a parameter of
+    an enclosing lambda.  `from` names a parameter (4560) and provenance is checked against it (4561); both would follow a
+    longer path, and what stops it today is that nothing needs it yet.
 
 [ ] let a reference name an array, a list or a string.  A reference names a place holding one value (4536); those are already
     several values or already a place, and what a reference to one would mean -- the place the value is, or the place the elements

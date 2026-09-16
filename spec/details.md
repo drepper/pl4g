@@ -767,10 +767,12 @@ compiler to work out:
 | `name-lambda` | the name a lambda's code was given |
 | `capture` | a name a capture list saying "all of them" brought in, and how |
 | `place-local` | a variable put in storage of its own rather than a register |
+| `instantiate` | the types one instance of a generic function was compiled for |
+| `lifetime` | how long the reference one call answers with turned out to live |
 
 The first two happen at every optimization level, because a function nothing can reach is code the program cannot run; the
 sweep's two happen from `-O1`, because an unoptimized build keeps what the program wrote and so decides nothing about it.  The
-last three are the checker's and happen always, there being no level at which a lambda does not need a name.  Recording happens
+rest are the checker's and happen always, there being no level at which a lambda does not need a name.  Recording happens
 whether or not the log was asked for, because a decision recorded only when someone is watching is one a test cannot check.
 
 **A capture list is recorded where it said "all of them" and not where it named names.**  `[=]` and `[&]` leave which variables
@@ -1872,8 +1874,39 @@ calling convention. What was missing was entirely in the front end.
 
 **Where a reference may go is one question asked in two places.**  `_holds_a_reference` looks through tuples, results, products,
 sums, arrays, lists, sets and dictionaries -- with a set of what it has seen, because a type may reach itself -- and is asked of a
-function's return type and of a variable's type at the top level.  Those are the two places a value escapes to, so closing both is
-the whole of the interim rule.
+function's return type and of a variable's type at the top level.  Those are the two places a value escapes to, so both are where
+a lifetime has to be said.
+
+**How long a reference lives is one bit in the type.**  `PtrType.lasting` joins `pointee` and `mutable` in the interning key, so
+`&static u8` and `&u8` are two types and the ordinary type comparison does the work; `render` and `mangled` both write it, which
+is what keeps two instances of a generic apart.  Nothing below the front end sees it: a bitcast is the only instruction either
+direction produces, and it selects to nothing.
+
+**`from` is on the definition, not in the type.**  `ast.FuncDef.borrows_from` holds the name and `Function.borrows_from` the
+parameter's index, worked out once by `_borrowed_from` while the signature is collected.  It is deliberately not in `FuncType`:
+two functions differing only in which parameter they borrow from have the same signature as far as an indirect call is concerned,
+and an indirect call is where the promise stops being checkable anyway.
+
+**Provenance is one walk, used three ways.**  `_reached_from` follows a value back through the instructions that keep a reference
+pointing into the same place -- `LoadInst` to its address, `AddressInst` to its variable, `CastInst`, `ExtractInst` and an `ADD`
+or `SUB` to their first operand, and a `CallInst` whose callee promised `from` to the argument it promised about.  `_answers_from`
+walks each `RetInst` in the finished body back to the parameter, `_lasting` walks the same path looking for a `GlobalVar`, and
+`_as_long_as_given` asks `_lasting` of an argument to decide what the call answers with.  The parameter's block parameter and,
+where the parameter was given storage because a reference was taken of it, the place itself, are both accepted as the source.
+
+**The check runs after the body is lowered**, not as each `return` is met, because a `return` is not the only way a body answers:
+the last statement of a block is one too, and it is lowered in three places.  Walking the blocks once at the end catches all of
+them and needs no hook in any of them; the scope is still open at that point, which is what lets the placed parameter's storage
+be found by name.
+
+**A promise is kept by anything that outlives it.**  `_lasting` is asked first in `_answers_from`, so a function saying `from v`
+may answer with a variable at the top level, and `_shorter_life` in `_lower_into` bitcasts a lasting reference where a shorter one
+is wanted.  The other direction is an ordinary type mismatch and is left to be one.
+
+**`static` and `from` are read by looking, not by lexing.**  Making either a keyword broke programs the suite already had -- a
+product type with a field called `from`.  `_reading(word)` matches an identifier by text, and `static` additionally needs
+`_begins_a_type(1)`, so a reference type whose pointee is a type called `static` still reads.  The tree-sitter grammar cannot look
+ahead that way and takes the word wherever a reference type could say it, a difference only a type of that name would show.
 
 **Purity needed no rule of its own.**  `_made_here` answers whether an address is storage this call made by walking back through
 casts and offsets to a `frame`, and `LANG_PURE_WRITES_ELSEWHERE` is what an array written through already reports.  A reference
