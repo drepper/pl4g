@@ -162,6 +162,11 @@ class RefTypeRef(Node):
     #: Whether what it names lives as long as the program, which is what
     #: `static` says and what a variable at the top level has.
     lasting: bool = False
+    #: The name of the lifetime this was written with, where it was written
+    #: with one: `&mut ⧖x u32` says as long as whatever else in this signature
+    #: carries `⧖x`.  It stands in the slot `static` would, the two being the
+    #: same question answered two ways, so at most one of them is ever set.
+    lifetime: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

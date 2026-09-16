@@ -179,6 +179,7 @@ GROUPS: tuple[Group, ...] = (
            "lambda": "lambdas made, captured both ways, handed on and called through",
            "generic-functions": "one function compiled for seven sets of types",
            "lifetimes": "how long six references live, said both ways and worked out",
+           "named-lifetimes": "one lifetime name over three types, and both answers",
            "type-reaches-itself-through-a-reference": "four definitions that reach themselves through references",
            "line-breaks-inside-brackets": "every kind of bracket written down the page",
            "loop-break-nested": "two loops and all four jumps between them",

@@ -1882,6 +1882,19 @@ a lifetime has to be said.
 is what keeps two instances of a generic apart.  Nothing below the front end sees it: a bitcast is the only instruction either
 direction produces, and it selects to nothing.
 
+**A lifetime name never reaches the IR.**  `ast.RefTypeRef.lifetime` holds it, `_lifetimes_of` walks a type reference over its
+fields to collect every name written anywhere in it, and `_borrowed_from` turns the names on the return type into the tuple of
+parameter positions carrying them.  From there a named lifetime and a `from` are the same thing, so everything below the
+signature -- the provenance walk, the call site, the decision log -- was already written and needed only to take a tuple where it
+took one index.  `PtrType` gains nothing: inside the body a `&u32 ⧖x` parameter is an ordinary `&u32`.
+
+**A block's parameter is where the walk has to branch.**  A body that answers differently in two arms hands back what the join
+came to, which is a block parameter and not either arm's value.  `_answers_from` builds the map from a block to the branches that
+reach it -- there being no predecessor list in the IR -- and `_reached_from` requires *every* one of them to reach a source, a
+promise being about what the function does and not about what one path through it does.  A parameter already being walked answers
+yes, which is what stops a loop going round for ever and is right: what reaches itself round a loop is whatever it was on the way
+in, and that is the branch the walk is already looking at.
+
 **`from` is on the definition, not in the type.**  `ast.FuncDef.borrows_from` holds the name and `Function.borrows_from` the
 parameter's index, worked out once by `_borrowed_from` while the signature is collected.  It is deliberately not in `FuncType`:
 two functions differing only in which parameter they borrow from have the same signature as far as an indirect call is concerned,

@@ -3422,6 +3422,22 @@
     }
   },
   {
+    "type": "lifetime",
+    "named": true,
+    "fields": {
+      "name": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      }
+    }
+  },
+  {
     "type": "lifted_expression",
     "named": true,
     "fields": {},
@@ -6677,6 +6693,10 @@
           "named": true
         },
         {
+          "type": "lifetime",
+          "named": true
+        },
+        {
           "type": "mutable",
           "named": true
         },
@@ -7968,6 +7988,10 @@
   },
   {
     "type": "⟧",
+    "named": false
+  },
+  {
+    "type": "⧖",
     "named": false
   },
   {

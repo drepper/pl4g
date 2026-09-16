@@ -1,0 +1,19 @@
+※ pl4g-test: compile=error diag=4567
+
+※ A lifetime name means "as long as whatever else in this signature carries
+※ it", so a name carried by nothing else says nothing at all.  What the answer
+※ would live for is then undecided, which is the one thing a caller needs from
+※ the signature: it is handed a reference and told nothing about when it stops
+※ being worth having.
+※
+※ It is the rule a type parameter follows and for the same reason.  What a `T'`
+※ stands for is read off the arguments, so it has to stand where an argument
+※ arrives; what a `⧖x` stands for is read off the arguments too.  Here `⧖x` is
+※ written on the answer alone, and `&mut static u32` is what was meant.
+
+@[startup]
+fn main() → u6:
+    0u6
+
+fn f(b: &mut u32) → &mut ⧖x u32:
+    b

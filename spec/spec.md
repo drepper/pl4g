@@ -1960,15 +1960,43 @@ borrowed from a parameter is a relation between two things in the signature, and
 once, after the type, for the whole answer.  Saying neither is refused (4562): there is no default, because the two answers differ
 and either guess would make a promise the program did not.
 
+**A lifetime name says the general thing.**  `from` names one parameter, which is enough until the answer may come from either
+of two -- and then neither `from b` nor `from c` is true of it.  A name written after `⧖` on several types in one signature says
+they all live as long as each other, and an answer carrying it lives as long as the shortest of them:
+
+```
+fn either(a: bool, b: &mut ⧖x u32, c: &mut ⧖x u32) → &mut ⧖x u32:
+    if a:
+        b
+    else:
+        c
+```
+
+The name stands where `static` would, the two being one slot answering one question, so at most one of them is ever written.
+U+29D6 WHITE HOURGLASS is the one glyph in Unicode that means "how long"; it is a single character, so it has no ASCII substitute
+and claims nothing.  **A lifetime is declared by being used**, exactly as a type parameter is: there is no list at the head of the
+signature to write and none to keep in step, and a name the answer carries that stands in no parameter's type is refused (4567).
+A name on a parameter and not on the answer is allowed and says nothing, what makes a promise being the answer carrying it.
+
+`from v` is the shorter way where there is one parameter to name and `⧖x` is the general one; a signature writes one of them,
+and writing both is refused (4568) rather than read twice.
+
+Rust writes the general form as `fn either<'a>(b: &'a mut u32, c: &'a mut u32) -> &'a mut u32`: the same idea, with the name
+declared at the head and marked by a leading tick.  Neither is available here.  A leading tick begins a character literal, and
+written after a name the tick is already the type-parameter mark, so `a'` would be one spelling with two meanings; and declaring
+at the head is what the generics decision turned down, for the reason it turned it down -- a list to write and to keep in step
+with the thing it describes.
+
 **`from` names a parameter of this function** (4560), and what comes back really has to come from it (4561).  The compiler walks
 the answer back the way provenance is walked everywhere else -- reading the parameter out of its storage, offsetting it, reading
-the same bits as another type, and through a call that made the same promise about its own parameter -- and refuses a reference
-reached by none of those.  A reference that lasts as long as the program keeps any promise, so answering `from v` with a variable
+the same bits as another type, through a call that made the same promise about its own parameter, and through what an `if` or a
+loop came to, where every branch has to reach one of them -- and refuses a reference reached by none of those.  A reference that lasts as long as the program keeps any promise, so answering `from v` with a variable
 at the top level is allowed.
 
-**The caller works out the rest.**  A function promises no more than its parameter's lifetime, so the same call read two ways
+**The caller works out the rest.**  A function promises no more than its parameters' lifetime, so the same call read two ways
 gives two answers: `first(&total)` for a variable at the top level answers with a reference that lasts as long as the program, and
-`first(&n)` for a local does not.  One signature, decided where both the argument and the answer are in view.  A reference that
+`first(&n)` for a local does not.  Where several parameters carry one name, the answer lasts that long only where *every* one of
+them did, that being the only promise that holds whichever one the body picked.  One signature, decided where both the argument and the answer are in view.  A reference that
 lasts as long as the program stands wherever a shorter-lived one is wanted, the other way round being refused (4203).  Which it
 came to is written to the decision log (`lifetime`), since neither the signature nor the call says it.
 

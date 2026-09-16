@@ -15,7 +15,7 @@ from typing import Callable, Final, Sequence
 from ..diag import ids as D
 from ..diag.engine import DiagEngine, Expectation
 from ..front import ast
-from ..front.token import (BOTTOM_GLYPH, BUILTIN_GLYPH, CHR_NAME,
+from ..front.token import (BOTTOM_GLYPH, BUILTIN_GLYPH, CHR_NAME, LIFETIME_GLYPH,
                            DROP_NAME, NARROW_NAME, UNIT_NAME,
                           ENUMERATE_NAME, TYPEOF_NAME,
                           EMPTY_ARENA_NAME, ORD_NAME,
@@ -28,7 +28,7 @@ from ..ir.layout import DataLayout, member_offsets_of, stride_of
 from ..ir.inst import (AddressInst, BinaryInst, BinOp, CallInst, CastInst,
                        CastKind, CmpPred,
                        ExtractInst, FrameInst, Instruction, LoadInst, RetInst,
-                       UnOp)
+                       Terminator, UnOp)
 from . import tables
 from ..ir.function import (DEFAULT_CCONV, SYSTEM_CCONV, BasicBlock, FuncAttrs,
                            FuncType, Function,
@@ -49,7 +49,8 @@ from ..ir.types import (ARENA, ArrayType, BOOL, BoolType, BUILTIN_TYPES,
 from . import strings, tables
 from .modules import (ImportCycle, LoadedModule, ModuleNotFound, ModuleRegistry,
                       base_name)
-from ..ir.value import (BoolConst, CharConst, Const, EnumConst, FloatConst,
+from ..ir.value import (BlockParam, BoolConst, CharConst, Const, EnumConst,
+                        FloatConst,
                         IntConst,
                         UndefConst,
                         Value)
@@ -511,6 +512,29 @@ def _holds_a_lambda(ty: Type, seen: frozenset[int] = frozenset()) -> bool:
             return False
 
 
+def _lifetimes_of(node: object, found: set[str] | None = None) -> set[str]:
+    """Every lifetime name written anywhere in a type, however deep.
+
+    A reference may stand inside an array, a tuple or another reference, and a
+    name carried anywhere in a parameter's type is carried by that parameter.
+    Walked over the fields rather than by kind, so a type the language gains
+    later is walked without this having to learn about it.
+    """
+    if found is None:
+        found = set()
+    if isinstance(node, ast.RefTypeRef) and node.lifetime is not None:
+        found.add(node.lifetime)
+    if isinstance(node, ast.Node):
+        for one in fields_of(node):
+            value = getattr(node, one.name)
+            if isinstance(value, ast.Node):
+                _lifetimes_of(value, found)
+            elif isinstance(value, tuple):
+                for each in value:
+                    _lifetimes_of(each, found)
+    return found
+
+
 def _promises_as_much(expected: Type | None, found: Type) -> bool:
     """Whether the reference *found* promises at least what *expected* asks.
 
@@ -528,13 +552,23 @@ def _promises_as_much(expected: Type | None, found: Type) -> bool:
             and (found.mutable or not expected.mutable))
 
 
-def _reached_from(value: Value, sources: Sequence[Value]) -> bool:
+def _reached_from(value: Value, sources: Sequence[Value],
+                  incoming: dict[int, list[object]] | None = None,
+                  visited: set[int] | None = None) -> bool:
     """Whether *value* was worked out from one of *sources*.
 
     Walked back the way provenance is walked everywhere else, through the
     instructions that keep a reference pointing into the same place: reading
     the parameter out of its storage, offsetting it, and reading the same bits
     as another type.
+
+    A block's parameter is what an `if` or a loop comes to, and the walk has to
+    go through it or a body that answers differently in two arms could say
+    nothing about where its answer came from.  *Every* branch that reaches the
+    block has to reach a source, a promise being about what the function does
+    and not about what one path through it does; *incoming* is what maps a
+    block to the branches that reach it, and *visited* is what keeps a loop
+    from being walked twice.
     """
     seen = value
     while True:
@@ -546,15 +580,31 @@ def _reached_from(value: Value, sources: Sequence[Value]) -> bool:
         if isinstance(seen, AddressInst):
             seen = seen.operands[0]
             continue
+        if isinstance(seen, BlockParam) and incoming is not None:
+            visited = set() if visited is None else visited
+            if id(seen) in visited:
+                # Already being asked about further up: a value that reaches
+                # itself round a loop is whatever it was on the way in, which
+                # is the branch this walk is already looking at.
+                return True
+            visited.add(id(seen))
+            arms = incoming.get(id(seen.block), [])
+            return bool(arms) and all(
+                seen.index < len(getattr(arm, "args", ()))
+                and _reached_from(getattr(arm, "args")[seen.index], sources,
+                                  incoming, visited)
+                for arm in arms)
         if isinstance(seen, CallInst):
-            # A call that promised `from` its own parameter names whatever the
-            # argument for it named, so the walk carries on there and the two
-            # signatures agree with nothing written between them.
-            at = getattr(seen.callee, "borrows_from", None)
-            if at is None or at >= len(seen.arguments):
-                return False
-            seen = seen.arguments[at]
-            continue
+            # A call that promised its own parameters' lifetime names whatever
+            # the arguments for them named, so the walk carries on there and
+            # the two signatures agree with nothing written between them.  Any
+            # one of them reaching the source is enough: what came back was one
+            # of them, and every one of them is short enough.
+            carried = getattr(seen.callee, "borrows_from", ())
+            given = seen.arguments
+            return any(at < len(given)
+                       and _reached_from(given[at], sources, incoming, visited)
+                       for at in carried)
         if isinstance(seen, (CastInst, ExtractInst)) or (
                 isinstance(seen, BinaryInst)
                 and seen.op in (BinOp.ADD, BinOp.SUB)):
@@ -1967,40 +2017,59 @@ class Checker:
         value = self._constant_value(stood, ty)
         return value if isinstance(value, Const) else None
 
-    def _borrowed_from(self, node: ast.FuncDef, ret: Type) -> int | None:
-        """Which parameter the answer names what was named by, where it says.
+    def _borrowed_from(self, node: ast.FuncDef, ret: Type) -> tuple[int, ...]:
+        """Which parameters the answer names what was named by, where it says.
 
         A reference is only worth having while what it names is still there,
         and a caller cannot see into the function to work that out -- so a
-        function handing one back says which of the two lifetimes it is: as
-        long as the program, which `static` in the type says, or as long as
-        what a parameter named, which `from` says, there being nothing a type
-        could write that names a parameter.
+        function handing one back says how long that is.  Three ways of saying
+        it: `static` in the type, as long as the program; a lifetime name, as
+        long as whatever else in the signature carries that name; and `from`,
+        as long as what one parameter named.
+
+        Several parameters carrying one name means the shorter of what they
+        named, which is the only promise that holds whichever one the body
+        picked.
         """
         where = (node.ret_type.span if node.ret_type is not None
                  else node.name_span)
+        named = _lifetimes_of(node.ret_type)
+        if named and node.borrows_from is not None:
+            self._diags.emit(D.LANG_BORROW_SAID_TWICE, node.borrows_span)
+            return ()
         if not isinstance(ret, PtrType):
             if node.borrows_from is not None:
                 # `from` is a promise about a reference, and there is none for
                 # it to be about.
                 self._diags.emit(D.LANG_BORROW_NOT_FROM_IT, node.borrows_span,
                                  name=node.borrows_from)
-            elif _holds_a_reference(ret):
-                # A reference inside something else: there is nowhere in the
-                # signature to write how long it lives, since `static` belongs
-                # to the reference and `from` to the whole answer.
+            elif _holds_a_reference(ret) and not named:
+                # A reference inside something else, written with no lifetime:
+                # there is nowhere to put `static`, which belongs to one
+                # reference, or `from`, which speaks for the whole answer.
                 self._diags.emit(D.LANG_REF_ANSWERED, where)
-            return None
+            return ()
+        if named:
+            carried = tuple(at for at, one in enumerate(node.params)
+                            if named & _lifetimes_of(one.type))
+            if not carried:
+                # A name nothing else carries says nothing, and what the answer
+                # would live for is then undecided -- which is the one thing a
+                # caller needs from the signature.
+                self._diags.emit(D.LANG_LIFETIME_NOT_DETERMINED, where,
+                                 name="".join((LIFETIME_GLYPH,
+                                               sorted(named)[0])))
+            return carried
         if node.borrows_from is None:
             if not ret.lasting:
                 self._diags.emit(D.LANG_BORROW_SAYS_NOTHING, where)
-            return None
+            return ()
         for at, one in enumerate(node.params):
             if one.name == node.borrows_from:
-                return at
+                return (at,)
         self._diags.emit(D.LANG_BORROW_NOT_A_PARAMETER, node.borrows_span,
                          name=node.borrows_from)
-        return None
+        return ()
 
     def _collect_generic(self, node: ast.FuncDef, path: str,
                          attrs: list[BoundAttr],
@@ -2801,14 +2870,16 @@ class Checker:
                              param.mutable, is_parameter=True, builder=builder)
         assert node.body is not None
         self._lower_block(builder, node.body, func)
-        if func.borrows_from is not None:
+        if func.borrows_from:
             # Before the scope goes: a parameter a reference was taken of lives
             # in the frame, and the name is what still knows where.
-            borrowed = self._find_local(node.params[func.borrows_from].name)
-            sources = (arriving[func.borrows_from],
-                       *((borrowed.value,) if borrowed is not None
-                         and borrowed.placed else ()))
-            self._answers_from(func, node, sources)
+            sources: list[Value] = []
+            for at in func.borrows_from:
+                sources.append(arriving[at])
+                borrowed = self._find_local(node.params[at].name)
+                if borrowed is not None and borrowed.placed:
+                    sources.append(borrowed.value)
+            self._answers_from(func, node, tuple(sources))
         self._pop_scope()
         self._addressed = outer_addressed
         self._answering = outer_answer
@@ -4613,14 +4684,23 @@ class Checker:
         time, which is not the one the caller was told.  A reference that
         lasts as long as the program keeps any promise, so it passes too.
         """
-        assert func.borrows_from is not None
-        name = node.params[func.borrows_from].name
+        name = ", ".join(node.params[at].name for at in func.borrows_from)
+        # Which branches reach each block, so that the walk can go through a
+        # block's parameter -- which is what an `if` answering two ways comes
+        # to, and what a body of any shape hands back.
+        incoming: dict[int, list[object]] = {}
+        for block in func.blocks:
+            last = block.insts[-1] if block.insts else None
+            if isinstance(last, Terminator):
+                for arm in last.successors():
+                    incoming.setdefault(id(arm.block), []).append(arm)
         for block in func.blocks:
             for inst in block.insts:
                 if not isinstance(inst, RetInst) or not inst.operands:
                     continue
                 value = inst.operands[0]
-                if self._lasting(value) or _reached_from(value, sources):
+                if self._lasting(value) \
+                        or _reached_from(value, sources, incoming):
                     continue
                 self._diags.emit(D.LANG_BORROW_NOT_FROM_IT, inst.span,
                                  name=name)
@@ -4634,16 +4714,19 @@ class Checker:
         rest is worked out here, where both are in hand: the answer is there
         as long as the program exactly when the argument was.
         """
-        at = func.borrows_from
-        if at is None or at >= len(args) \
+        carried = func.borrows_from
+        if not carried or max(carried) >= len(args) \
                 or not isinstance(answer.ty, PtrType) or answer.ty.lasting \
-                or not self._lasting(args[at]):
+                or not all(self._lasting(args[at]) for at in carried):
             return answer
         self._module.decisions.record(
             DecisionKind.LIFETIME, func.name,
             "".join(("answers with a reference that lasts as long as the "
-                     "program, because the argument for '",
-                     func.param_names[at], "' does")),
+                     "program, because the argument",
+                     "s for " if len(carried) > 1 else " for ",
+                     ", ".join("".join(("'", func.param_names[at], "'"))
+                               for at in carried),
+                     " do" if len(carried) > 1 else " does")),
             span)
         return builder.cast(
             CastKind.BITCAST, answer,

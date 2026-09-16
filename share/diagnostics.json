@@ -1355,6 +1355,22 @@
       "option": null
     },
     {
+      "number": 3043,
+      "name": "LANG_SYNTAX_EXPECTED_LIFETIME_NAME",
+      "severity": "error",
+      "message": "expected the name of a lifetime after '\u29d6'",
+      "args": [],
+      "cause": "The hourglass says a lifetime name follows, and a lifetime is named the way anything else is.  What the name means is settled by where else in the same signature it stands, so there is nothing else the mark could be followed by.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / References",
+        "requirement": "A lifetime name follows the hourglass."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 3031,
       "name": "LANG_SYNTAX_SPREAD_OUTSIDE_A_CALL",
       "severity": "error",
@@ -6017,6 +6033,44 @@
         "document": "spec/spec.md",
         "section": "The Language / Types / References",
         "requirement": "A '&mut' is the only reference to its place while it lives; a '&' may share with other '&'s."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4567,
+      "name": "LANG_LIFETIME_NOT_DETERMINED",
+      "severity": "error",
+      "message": "the lifetime '{name}' stands nowhere in a parameter's type",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the lifetime as it is written, hourglass and all"
+        }
+      ],
+      "cause": "A lifetime name means \"as long as whatever else in this signature carries it\", so a name carried by nothing else says nothing at all.  What the answer would live for is then undecided, which is the one thing a caller needs from the signature.  It is the rule a type parameter follows, for the same reason: what it stands for is read off the arguments, so it has to stand where an argument arrives.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / References",
+        "requirement": "A lifetime in a return type stands in at least one parameter's type."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4568,
+      "name": "LANG_BORROW_SAID_TWICE",
+      "severity": "error",
+      "message": "how long the answer lives is said twice, by a lifetime and by 'from'",
+      "args": [],
+      "cause": "A lifetime name and `from` answer the same question, one by naming something the signature carries in several places and one by naming a parameter outright.  Written together they would either say the same thing twice or disagree, and neither is worth reading; one of the two is what this signature means.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / References",
+        "requirement": "A signature says how long its answer lives in one way, not two."
       },
       "since": "0.1",
       "default_enabled": true,

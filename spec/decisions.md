@@ -4755,6 +4755,41 @@ Compare: **C++**, where two references to one object is the ordinary case and `s
 hazard rather than an error; **Swift**, which enforces the same exclusivity for `inout` and does part of it at run time;
 **ML** and **Haskell**, which reach the same place by having nothing to write through.
 
+## 2026-09-17T03:00+02:00 — language
+
+**Named lifetimes: `&mut ⧖x u32`**
+
+Asked for by the user, who put the question that `from` could not answer: a function whose answer may come from either of two
+parameters.  Neither `from b` nor `from c` is true of it, so `from` needed either a list or a general form, and the user chose
+the general form with the name written after `⧖`.
+
+**The tick was not available**, which is what the user asked about and what decided the glyph.  A leading `'x`, as Rust writes
+it, begins a character literal.  A trailing `x'` is already the type-parameter mark, so it would be one spelling with two
+meanings -- the rule the whole language is built on.  U+29D6 WHITE HOURGLASS is the one glyph in Unicode that means "how long",
+it is free, and being one character it needs no ASCII substitute.  Considered beside it: `⧗` U+29D7, the same in the other
+colour; `⌛` U+231B, which many fonts render as an emoji; `⌇` U+2307 and `‵` U+2035, both free and both saying nothing.
+
+**The name stands where `static` does**, after `mut` and before what is pointed at, the two being one slot answering one
+question.  So at most one of them is ever written and no rule is needed to say which wins.
+
+**A lifetime is declared by being used**, as a type parameter already is.  There is no `<'a>` to write at the head and none to
+keep in step with the parameters; what makes a name mean anything is that it stands in a parameter's type, and a name the answer
+carries and no parameter does is refused (4567).  That is the generics decision applied again, and it is why Rust's declaration
+form was not taken even where its idea was.
+
+**Several parameters carrying one name means the shorter of what they named.**  It is the only promise that holds whichever one
+the body picked, and it makes the caller's rule the obvious one: the answer lasts as long as the program exactly where every
+argument carrying the name did.
+
+**`from` stays**, as the shorter way of saying it where one parameter is named, and writing both on one signature is refused
+(4568) rather than read twice.  Whether two spellings should exist at all is the open question the to-do list now carries: `from
+v` is exactly `⧖a` on `v` and on the answer, and one meaning with two spellings is what this language does not do elsewhere.
+
+Compare: **Rust**, whose `'a` this is, with the name declared at the head and a leading tick; **Cyclone**, whose region
+variables are the ancestor; **C++**, which has none of it and where a dangling reference is a program nobody notices is wrong;
+**Go** and **Java**, which move what escapes to the heap; **ML** and **Haskell**, which reach the same place by having nothing
+to write through.
+
 Open questions
 --------------
 

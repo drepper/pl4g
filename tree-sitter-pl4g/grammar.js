@@ -216,6 +216,11 @@ module.exports = grammar({
     // which is a difference only a type of that name could show.
     lasting: _ => 'static',
 
+    // The other answer to the one question `static` answers: as long as
+    // whatever else in this signature carries the same name.  It stands in the
+    // same place, so at most one of the two is ever written.
+    lifetime: $ => seq('\u29d6', field('name', $.identifier)),
+
     // A type is a name, and after it the mark that says a value of it may not
     // be there: `TYPE?` is a result whose error carries nothing, `TYPE?ERROR`
     // one whose error is a value of its own.
@@ -235,7 +240,8 @@ module.exports = grammar({
     // choose.
     type: $ => choice(
       seq($._plain_type, repeat($._array_suffix)),
-      seq('&', optional($.mutable), optional($.lasting),
+      seq('&', optional($.mutable),
+          optional(choice($.lasting, $.lifetime)),
           field('pointee', $.type)),
       // A function written where a value is wanted.  The keyword one is
       // defined with, and then what it takes and what it answers; the

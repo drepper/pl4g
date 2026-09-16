@@ -593,6 +593,14 @@ Runtime
     `static` on the field is the obvious half; borrowing per field would need what was deliberately not built, a way of naming
     several lifetimes at once.
 
+[ ] decide whether `from` should go now that `⧖` says the same thing.  `→ &u8 from v` is exactly `⧖a` written on `v`
+    and on the answer, so the language has two spellings for one meaning -- which it does not do anywhere else.  Writing both on
+    one signature is already refused (4568); what is open is whether the shorter one earns its keep.
+
+[ ] let a lifetime name relate two things that are not the answer and a parameter.  A name may stand on several parameters and on
+    the answer, which is what a function handing one of its arguments back needs.  What it cannot yet say is that one parameter
+    outlives another, which is the thing Rust's `'a: 'b` is for and the thing a type holding a reference would want.
+
 [ ] count a reference copied into a second name.  The aliasing rule (4563) watches every place a reference is *made* and not
     the ones that are merely handed on, so `let other: &mut u8 = r` is a second way to the place that nothing reports.  Rust
     closes it with moves and reborrows, which need an ownership rule this language does not have.

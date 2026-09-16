@@ -1,0 +1,81 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ `from v` says the answer lives as long as what one parameter named, which is
+※ enough until the answer may come from either of two.  A **lifetime name** says
+※ the general thing: `⧖x` written on several types in one signature means they
+※ all live as long as each other, and an answer carrying `⧖x` lives as long as
+※ the shortest of them.
+※
+※ **The name comes after `⧖`** and stands where `static` would, the two being
+※ the same slot answering the same question: `&mut ⧖x u32`.  U+29D6 WHITE
+※ HOURGLASS is the one glyph in Unicode that means "how long", and it is one
+※ character, so it has no ASCII substitute and claims nothing.
+※
+※ **A lifetime is declared by being used**, exactly as a type parameter is.
+※ There is no list at the head of the signature to write and none to keep in
+※ step; what makes a name mean something is that it stands in a parameter's
+※ type, and a name that stands in none is refused (4567).
+※
+※ **The caller works out the rest, as before**: the answer lasts as long as the
+※ program only where *every* argument carrying the name did, that being the only
+※ promise that holds whichever one the body picked.
+※
+※ Rust writes this as `fn f<'a>(b: &'a mut u32, c: &'a mut u32) -> &'a mut u32`,
+※ which is the same idea with the name declared at the head and a leading tick.
+※ The tick is not available here -- it begins a character literal, and written
+※ after a name it is already the type-parameter mark -- and declaring at the head
+※ is what the generics decision already turned down.
+
+let top: mut u32 = 0u32
+let other: mut u32 = 0u32
+
+※ The answer comes from either parameter, so neither `from b` nor `from c` is
+※ true of it and one name on all three is.
+fn either(a: bool, b: &mut ⧖x u32, c: &mut ⧖x u32) → &mut ⧖x u32:
+    if a:
+        b
+    else:
+        c
+
+※ One parameter carrying the name is what `from` says, written the other way.
+fn first(v: &⧖y u32) → &⧖y u32:
+    v
+
+※ A name on a parameter and not on the answer is allowed and says nothing: what
+※ makes a promise is the answer carrying it.
+fn reads(v: &⧖z u32) → u32:
+    v⌖
+
+@[startup, impure]
+fn main() → u6:
+    ※ both arguments last as long as the program, so the answer does
+    let kept: &mut static u32 = either(true, &mut top, &mut other)
+    kept⌖ ← 9u32
+    ※ the other arm, and one whose arguments do not
+    let n: mut u32 = 1u32
+    let m: mut u32 = 2u32
+    let short: &mut u32 = either(false, &mut n, &mut m)
+    short⌖ ← 7u32
+    ※ mixed: one argument lasts and one does not, so the answer does not
+    let q: mut u32 = 3u32
+    let another: u32 = 4u32
+    let mixed: &mut u32 = either(true, &mut top, &mut q)
+    ※ one name on one parameter, which is `from` written the other way.  Each
+    ※ of these places is lent once: `n` and `q` are already out above
+    let plain: u32 = 1u32
+    let r: &u32 = first(&plain)
+    let lasting: &static u32 = first(&other)
+    if top ≠ 9u32:
+        1u6
+    elif short⌖ ≠ 7u32:
+        2u6
+    elif mixed⌖ ≠ 9u32:
+        3u6
+    elif r⌖ ≠ 1u32:
+        4u6
+    elif lasting⌖ ≠ 0u32:
+        5u6
+    elif reads(&another) ≠ 4u32:
+        6u6
+    else:
+        0u6

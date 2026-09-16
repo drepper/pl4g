@@ -516,9 +516,18 @@ class Parser:
             lasting = self._reading(LASTING_WORD) and self._begins_a_type(1)
             if lasting:
                 self._advance()
+            # Or as long as whatever else in this signature carries the same
+            # name, which is the other answer to that one question and stands
+            # in the same place.
+            lifetime: str | None = None
+            if not lasting and self._accept(TokKind.LIFETIME) is not None:
+                named = self._expect(TokKind.IDENT,
+                                     D.LANG_SYNTAX_EXPECTED_LIFETIME_NAME)
+                lifetime = named.text if named is not None else None
             pointee = self._parse_type_ref()
             return ast.RefTypeRef(span=start.to(pointee.span), pointee=pointee,
-                                  mutable=mutable, lasting=lasting)
+                                  mutable=mutable, lasting=lasting,
+                                  lifetime=lifetime)
         if self._check(TokKind.KW_FN):
             return self._parse_function_type()
         if self._check(TokKind.SET_OPEN):

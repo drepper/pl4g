@@ -292,6 +292,13 @@ UNIT_GLYPH: Final[str] = "\N{CURRENCY SIGN}"
 #: has met this mark.
 LAMBDA_GLYPH: Final[str] = "\N{GREEK SMALL LETTER LAMDA}"
 
+#: What says a lifetime name follows.  A lifetime is how long what a reference
+#: names lives, so the mark is the one thing in Unicode that means "how long":
+#: U+29D6 WHITE HOURGLASS.  The name comes after it -- `&mut \N{WHITE HOURGLASS}x u32` -- where
+#: `static` would stand, the two being the same slot answering the same
+#: question.  One character, so it has no ASCII substitute and claims nothing.
+LIFETIME_GLYPH: Final[str] = "\N{WHITE HOURGLASS}"
+
 #: Two words the language reads where nothing else could stand, and which are
 #: therefore not keywords: a program may still have a variable called `from` or
 #: a type called `static`.  `static` is read after `&` and only where a type
@@ -450,6 +457,7 @@ class TokKind(StrEnum):
     DEREF = "'\N{POSITION INDICATOR}'"
     UNIT = "'\N{CURRENCY SIGN}'"
     LAMBDA = "'\N{GREEK SMALL LETTER LAMDA}'"
+    LIFETIME = "'\N{WHITE HOURGLASS}'"
     #: A number written raised, which is an exponent and its operator at once.
     EXPONENT = "a raised number"
 
