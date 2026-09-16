@@ -12,7 +12,16 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from time import perf_counter
-from typing import Sequence, TextIO
+import platform
+import subprocess
+import tempfile
+from dataclasses import replace
+from typing import Final, Sequence, TextIO
+
+#: How long a test binary is given.  A test that runs longer than this is one
+#: that will not finish, and a build waiting for ever on it is worse than a
+#: build that says so.
+TEST_TIMEOUT: Final[float] = 120.0
 
 from .. import VERSION
 from ..diag import ids as D
@@ -23,6 +32,7 @@ from ..front import ast
 from ..front.lexer import tokenize
 from ..front.parser import parse
 from ..ir.reports import Report, ReportLog
+from ..ir.function import Function, SpecialKind
 from ..ir.module import Module
 from ..ir.printer import render_module
 from ..ir.verify import verify
@@ -37,6 +47,7 @@ from ..source.manager import (SourceDecodeError, SourceManager, SourceReadError)
 from ..target.registry import (canonical_triples, known_triples,
                                lookup as lookup_target)
 from .cli import parse_command_line
+from .cli import TEST
 from .options import (DiagFormat, EmitKind, ExitCode, Options, load_option_table,
                       render_help)
 
@@ -58,6 +69,13 @@ class Driver:
     sources: SourceManager
     stderr: TextIO
     timings: list[Timing] = field(default_factory=list)
+    #: Which kinds of test the binary this run writes is built to run.  Empty
+    #: for the program itself, whose entry calls its startup function; the
+    #: `always` tests are in it either way, being what says it is fit to start.
+    wanted_tests: tuple[SpecialKind, ...] = ()
+    #: What the run compiled, kept so that what it holds can be asked about
+    #: after the fact -- whether there are tests to run, above all.
+    module: Module | None = None
     #: Everything the compiler said about the program and chose about it, in the
     #: order it happened.  The diagnostics are written here by the engine as
     #: they are reported, and the module writes its choices into the same log --
@@ -78,6 +96,7 @@ class Driver:
         module = self._analyze(units)
         if module is None or self.diags.failed:
             return ExitCode.ERRORS
+        self.module = module
         if self.options.emit is EmitKind.IR:
             return self._write_text(render_module(module))
         return self._generate(module)
@@ -131,6 +150,9 @@ class Driver:
         registry = ModuleRegistry(search=SearchPath(
             given=list(self.options.module_path), system=system_modules()))
         check(module, units, self.diags, registry, self.sources)
+        # Before anything is dropped: which tests this binary runs is what
+        # decides which of them are reachable at all.
+        module.test_plan.extend(_planned(module, self.wanted_tests))
         self._timed("semantic analysis", start)
         if self.diags.failed:
             return module
@@ -346,6 +368,93 @@ class Driver:
                            timing.name)), file=self.stderr)
 
 
+#: What `pypl4g test` runs: the tests that say the program is fit to start and
+#: the ones written for a suite run.  A `build` test is not among them -- it runs
+#: when a build finishes, which is a different question asked at a different
+#: time.
+SUITE_RUN: Final[tuple[SpecialKind, ...]] = (SpecialKind.TEST_ALWAYS,
+                                             SpecialKind.TEST_SUITE)
+
+#: What a finished build runs.
+AFTER_A_BUILD: Final[tuple[SpecialKind, ...]] = (SpecialKind.TEST_BUILD,)
+
+
+def _planned(module: Module, wanted: Sequence[SpecialKind]) -> list[Function]:
+    """The tests a binary built for *wanted* runs, in the order they are written.
+
+    In the order they are written and not grouped by kind: a run that reported
+    them in an order nobody wrote would be one whose output moved when something
+    unrelated was added.
+    """
+    if not wanted:
+        return []
+    return [one for one in module.tests if one.attrs.special in wanted]
+
+
+def _built_for_this_machine(triple: str) -> bool:
+    """Whether a binary for *triple* is one this machine runs.
+
+    The architecture and nothing else: the binaries depend on nothing from the
+    system, so what decides it is whether the processor knows the instructions.
+    """
+    wanted = triple.split("-")[0]
+    here = platform.machine()
+    return wanted == here or (wanted, here) in (("x86_64", "amd64"),
+                                                ("aarch64", "arm64"))
+
+
+def _ran_the_tests(options: Options, diags: DiagEngine, binary: Path,
+                   kind: str, stderr: TextIO) -> bool:
+    """Run a test binary and answer whether every test in it passed.
+
+    What it writes goes where the compiler's own messages go: the binary names
+    the test that did not pass, and that name is the thing worth reading.
+    """
+    if options.test_runner:
+        words = [*options.test_runner.split(), str(binary)]
+    elif _built_for_this_machine(options.triple):
+        words = [str(binary)]
+    else:
+        diags.emit(D.IMPL_TESTS_NOT_RUN, kind=kind, triple=options.triple)
+        return True
+    try:
+        done = subprocess.run(words, stderr=subprocess.PIPE, text=True,
+                              timeout=TEST_TIMEOUT)
+    except (OSError, subprocess.SubprocessError) as exc:
+        diags.emit(D.IMPL_TESTS_NOT_RUN, kind=kind, triple=str(exc))
+        return True
+    if done.stderr:
+        stderr.write(done.stderr)
+    if done.returncode == 0:
+        return True
+    diags.emit(D.IMPL_TESTS_FAILED, kind=kind)
+    return False
+
+
+def _test_binary(options: Options, diags: DiagEngine, sources: SourceManager,
+                 reports: ReportLog, stderr: TextIO,
+                 wanted: tuple[SpecialKind, ...], kind: str) -> int:
+    """Build a binary that runs *wanted* and run it.
+
+    Built from the sources over again rather than from the module in hand: the
+    passes have already left out of that one everything the program does not
+    reach, and a test the program does not call is exactly what they left out.
+    """
+    with tempfile.TemporaryDirectory() as room:
+        where = replace(options, output=Path(room) / "tests",
+                        emit=EmitKind.ELF, report_log=None)
+        driver = Driver(options=where, diags=diags, sources=sources,
+                        stderr=stderr, reports=reports, wanted_tests=wanted)
+        status = driver.run()
+        if status != ExitCode.SUCCESS or diags.failed:
+            return status
+        if driver.module is not None and not driver.module.test_plan:
+            return ExitCode.SUCCESS
+        if not _ran_the_tests(where, diags, where.output, kind, stderr):
+            return ExitCode.ERRORS
+    return ExitCode.SUCCESS
+
+
 def _warning_control(options: Options, diags: DiagEngine) -> WarningControl:
     """Build the warning settings, reporting any name that is not a warning."""
     control = WarningControl(warnings_are_errors=options.warnings_are_errors)
@@ -414,7 +523,20 @@ def main(argv: Sequence[str], stdout: TextIO | None = None,
     driver = Driver(options=options, diags=diags, sources=sources, stderr=err,
                     reports=reports)
     try:
-        status = driver.run()
+        if options.command == TEST:
+            # Nothing else is built: what was asked for is the tests, and the
+            # program itself is not what runs.
+            status = _test_binary(options, diags, sources, reports, err,
+                                  SUITE_RUN, "suite")
+        else:
+            status = driver.run()
+            if status == ExitCode.SUCCESS and not diags.failed \
+                    and options.emit is EmitKind.ELF \
+                    and driver.module is not None \
+                    and any(one.attrs.special is SpecialKind.TEST_BUILD
+                            for one in driver.module.tests):
+                status = _test_binary(options, diags, sources, reports, err,
+                                      AFTER_A_BUILD, "build")
     except InternalError as exc:
         diags.internal(str(exc))
         status = ExitCode.INTERNAL

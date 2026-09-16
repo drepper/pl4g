@@ -1,0 +1,15 @@
+※ pl4g-test: compile=error diag=4407
+
+※ Nothing calls a test but the runner, so there is nothing to give it and
+※ nowhere for arguments to come from.  What it answers is whether it passed,
+※ which is a truth value and nothing else: a status would be a second way of
+※ saying the same thing, and answering nothing would leave the runner unable to
+※ tell a test that passed from one that did not.
+
+@[startup]
+fn main() → u6:
+    0u6
+
+@[test]
+fn answers_the_wrong_thing() → u6:
+    0u6

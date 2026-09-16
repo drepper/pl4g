@@ -4,6 +4,11 @@ To Do List for the pypl4g compiler
 `[ ]` open, `[x]` done, `[?]` needs a decision before it can be started -- such an entry carries a
 `Question:` paragraph saying what is undecided and what the choices are.
 
+[ ] report every test that failed rather than stopping at the first.  A failing
+    test leaves through the abort helper, which writes a message and exits, so a
+    run ends at the first one; what it needs is a way to write and carry on, and
+    a count to exit with at the end.
+
 [x] By default, all functions and variables are not visible to the outside, including when used as a module.  The `@[export]` attribute
     can be attached to a function or variable.  This also determines ELF symbol visibility.
 

@@ -1,0 +1,59 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=3
+
+※ `@[test(ARG)]` marks a function as a test, and `ARG` says which of three kinds
+※ it is.  Written with no argument at all -- and with no `()` either -- it is a
+※ `suite` test, that being the kind most tests are.
+※
+※ **A test takes nothing and answers whether it passed.**  Nothing calls one but
+※ the runner, so there is nothing to give it; what it answers is a truth value
+※ and nothing else (4407).  A status would be a second way of saying the same
+※ thing, and answering nothing would leave the runner unable to tell a test that
+※ passed from one that did not.
+※
+※ **What differs between the kinds is which binary the test is in**, not what it
+※ says.  An `always` test is in the program and runs before the startup function
+※ is reached: what it is for is to say the program is fit to start, and after it
+※ has started is too late.  A `build` test and a `suite` test are in a binary the
+※ compiler builds to run them and in nothing else -- so this program, built
+※ ordinarily, holds `runs_at_startup` and neither of the others.
+※
+※ **A test that answers false names itself and stops the program**, leaving
+※ through the same helper a fault leaves through: it is a program that has been
+※ found to be wrong, which is what that helper is for.
+※
+※ This file is not built with `diag=none`: built for a target this machine does
+※ not run, the build test cannot be run either, and the compiler says so (1014)
+※ rather than refusing to cross-compile.  `--test-runner=COMMAND` is what names
+※ something to run it through.
+※
+※ Compare: **Rust**, whose `#[test]` functions are compiled into a separate test
+※ binary exactly as the last two kinds are; **Go**, whose `_test.go` files are
+※ the same idea with the selection made by file name; **D**, whose `unittest`
+※ blocks run at startup when the program is built with them, which is what
+※ `always` is; **C** and **C++**, which have none of it and need a framework.
+
+let counted: mut u8 = 0u8
+
+@[startup, impure]
+fn main() → u6:
+    3u6
+
+※ In the program, run before `main` is reached.
+@[test(always)]
+fn runs_at_startup() → bool:
+    2u8 + 2u8 = 4u8
+
+※ Run when a build finishes, and in no binary this program is.
+@[test(build)]
+fn runs_after_a_build() → bool:
+    1u8 < 2u8
+
+※ Run by `pypl4g test`, and in no binary this program is.  Written without an
+※ argument, which is what makes it one of these.
+@[test]
+fn runs_for_the_suite() → bool:
+    3u8 ≠ 4u8
+
+@[test(suite)]
+fn runs_for_the_suite_too() → bool:
+    counted = 0u8

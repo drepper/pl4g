@@ -36,7 +36,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 
 from ...ir.reports import ReportKind
-from ...ir.function import Function, Linkage
+from ...ir.function import Function, SpecialKind, Linkage
 from ...ir.module import GlobalVar, Module
 from ...source.location import Span
 
@@ -100,7 +100,12 @@ class DropUnreached:
             roots.append(module.startup)
         roots.extend(module.ctors)
         roots.extend(module.dtors)
-        roots.extend(module.tests)
+        # A test the binary runs is a root and one it does not is not: a suite
+        # test kept in the program it tests would be code nothing can reach,
+        # which is the very thing this pass is here to leave out.
+        roots.extend(module.test_plan if module.test_plan
+                     else [one for one in module.tests
+                           if one.attrs.special is SpecialKind.TEST_ALWAYS])
         roots.extend(func for func in module.functions.values()
                      if func.linkage is Linkage.VISIBLE)
         return roots

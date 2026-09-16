@@ -5123,6 +5123,49 @@ subcommands this follows and whose default output is the package's name;
 **Python's `argparse`**, whose greediness over optional values is the one thing
 here that had to be worked around.
 
+## 2026-09-17T13:00+02:00 — language
+
+**`@[test(ARG)]`: three kinds, and the binary each of them is in**
+
+Asked for by the user, who gave the three kinds, what each runs in, and when.
+What was settled here is the signature, chosen by the user from the
+alternatives.
+
+**A test takes nothing and answers a truth value** (4407).  Nothing calls one
+but the runner, so there is nothing to give it; what it answers is whether it
+passed, and a truth value is the whole of that.  The alternatives were a status,
+which is a second way of saying the same thing, and nothing at all with a fault
+for a failure, which is what a test that cannot say "no" is left with.
+
+**With no argument and no parentheses it is a `suite` test.**  That is the kind
+most tests are, and an attribute carrying no arguments is written without
+parentheses everywhere else here.
+
+**What differs between the kinds is which binary the test is in.**  Not what it
+says and not how it is written: an `always` test is in the program and runs
+before the startup function is reached, and the other two are in a binary the
+compiler builds to run them.  So the difference is settled in one place and each
+back end emits the same shape of code around it.
+
+**An `always` test rides the constructor path**, which already called things
+before the startup function; what it adds is looking at the answer.  A test that
+answers false leaves through the helper a fault leaves through, naming itself: a
+program found to be wrong is what that helper is for.  What that costs is that a
+run stops at the first failure, the helper having no way to write and carry on.
+It is a to-do entry rather than a second helper written now.
+
+**A cross build says what it did not run** (1014) rather than refusing.  The
+user directed this: an emulator is used only where a command line names one,
+`--test-runner=COMMAND`, and never by looking for one.  Refusing would be
+refusing the ordinary case, which is cross-compiling; running whatever emulator
+happened to be installed would be a build whose meaning depended on the machine.
+
+Compare: **Rust**, whose `#[test]` functions go into a separate test binary
+exactly as `build` and `suite` do, and whose runner reports every failure;
+**Go**, which makes the same split by file name; **D**, whose `unittest` blocks
+run at startup when the program is built with them, which is what `always` is;
+**C** and **C++**, which have none of it and need a framework.
+
 Open questions
 --------------
 

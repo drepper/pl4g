@@ -11,7 +11,7 @@ leaves through a system call rather than by returning to anything.
 
 from __future__ import annotations
 
-from typing import Final
+from typing import Final, Mapping
 
 from ...ir.mangle import symbol_name
 from ...ir.module import Module
@@ -19,11 +19,12 @@ from ...mc import ops
 from ...mc.asmbuilder import Assembler
 from .. import statuses
 from ..callconv import CallConvDesc
+from ..tests import Failure, run_by
 from . import ops as x86ops
 from ..allocator import AllocatorRegs, SyscallABI
 from ...mc.ops import Condition
 from . import levels
-from .regs import (EAX, EBP, EBX, ECX, EDI, EDX, INFO, RAX, RCX,
+from .regs import (EAX, EBP, EBX, ECX, EDI, EDX, ESI, INFO, RAX, RCX,
                    RDI, RDX, RSI, reg)
 
 #: The number of the Linux system call that ends the whole process.
@@ -35,7 +36,8 @@ ENTRY_SYMBOL: Final[str] = "_start"
 
 def emit_start(asm: Assembler, module: Module, cconv: CallConvDesc,
                level: str = levels.DEFAULT,
-               refused: str | None = None) -> None:
+               refused: str | None = None,
+               failures: Mapping[int, Failure] | None = None) -> None:
     """Emit the entry point for *module*.
 
     The constructor and destructor loops emit nothing while a program has none,
@@ -59,10 +61,17 @@ def emit_start(asm: Assembler, module: Module, cconv: CallConvDesc,
         _check_level(asm, level, refused)
     for ctor in module.ctors:
         asm.call(symbol_name(ctor))
-    asm.call(symbol_name(startup))
-    # The status is moved out of the return register before the destructors run,
-    # because a destructor is an ordinary call and may use that register.
-    asm.loadreg(EDI, asm.reg(status32))
+    _run_tests(asm, module, cconv, failures or {})
+    if module.test_plan:
+        # A binary built to run tests and nothing else: every one of them
+        # passed, or it left through the helper above and never arrived here.
+        asm.loadreg(EDI, asm.imm(0, 32, signed=False))
+    else:
+        asm.call(symbol_name(startup))
+        # The status is moved out of the return register before the destructors
+        # run, because a destructor is an ordinary call and may use that
+        # register.
+        asm.loadreg(EDI, asm.reg(status32))
     for dtor in module.dtors:
         asm.call(symbol_name(dtor))
     asm.loadreg(EAX, asm.imm(NR_EXIT_GROUP, 32, signed=False))
@@ -94,6 +103,32 @@ ABORT_SYMBOL: Final[str] = "__pl4g_abort"
 #: message goes to.
 NR_WRITE_HERE: Final[int] = 1
 STANDARD_ERROR_HERE: Final[int] = 2
+
+
+def _run_tests(asm: Assembler, module: Module, cconv: CallConvDesc,
+               failures: Mapping[int, Failure]) -> None:
+    """Call each test this binary runs, leaving through the fault helper.
+
+    A test answers a truth value, which comes back widened to the whole of the
+    register the compiler's own calls read it out of -- so it is compared the
+    way they compare it.  One that answers false names itself and
+    stops the program: it is a program that has been found to be wrong, which is
+    what that helper is for, and there is nothing further a binary could
+    usefully do after being told it is not fit to run.
+    """
+    for one in run_by(module):
+        found = failures.get(id(one))
+        if found is None:
+            continue
+        asm.call(symbol_name(one))
+        passed = asm.reserve_label("test.passed")
+        answer = INFO.view(cconv.int_ret_regs[0].unit, 32)
+        asm.branch(Condition.NE, asm.reg(answer),
+                   asm.imm(0, 32, signed=False), passed)
+        asm.address(RDI, found.symbol)
+        asm.loadreg(ESI, asm.imm(found.length, 32, signed=False))
+        asm.call(ABORT_SYMBOL)
+        asm.block(passed)
 
 
 def _check_level(asm: Assembler, level: str, refused: str) -> None:

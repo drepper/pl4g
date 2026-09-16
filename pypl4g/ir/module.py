@@ -88,6 +88,11 @@ class Module:
     ctors: list[Function] = field(default_factory=list)
     dtors: list[Function] = field(default_factory=list)
     tests: list[Function] = field(default_factory=list)
+    #: The tests this binary is being built to run, where it is a test binary
+    #: rather than the program.  Empty for the program itself, whose entry calls
+    #: the startup function; where it is not, the entry calls these instead and
+    #: the program's own startup is never reached.
+    test_plan: list[Function] = field(default_factory=list)
     source_paths: list[str] = field(default_factory=list)
     #: What the compiler decided about this program, as opposed to what it
     #: reported.  It travels with the module because every stage has the module

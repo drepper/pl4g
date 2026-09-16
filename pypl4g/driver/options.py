@@ -74,6 +74,10 @@ class Options:
     #: this says.
     colour: ColourWhen = ColourWhen.AUTO
     report_log: Path | None = None
+    #: What to run a test binary through, where this machine does not run what
+    #: was built.  An emulator is the usual answer; without one the tests for
+    #: another target are not run and the build says so.
+    test_runner: str | None = None
     #: Where to look for modules, in the order to look, as the command line
     #: gave them.  An entry that is not absolute is relative to the importing
     #: file first and to where the compiler was run second.

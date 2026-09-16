@@ -22,6 +22,7 @@ from ...mc.streamer import MCStreamer
 from ...ir.layout import DataLayout
 from ..allocator import OUT_OF_MEMORY, emit_allocator, wanted_by
 from ..faults import Messages
+from ..tests import failures_of
 from ..pool import Constants
 from ..globals import emit_globals
 from ..vectors import EVERY, Vectors, settle as settle_vectors
@@ -159,12 +160,16 @@ class AArch64Target:
             # else, so a program that never allocates carries none of it.
             emit_allocator(asm, SYSCALLS, ALLOCATOR_REGS, ABORT_SYMBOL,
                            messages.symbol(OUT_OF_MEMORY))
+        # Before the question below: a binary whose only message is a failing
+        # test needs the helper as much as one that divides by zero.
+        failures = failures_of(module, messages)
         if messages.wanted:
             # The runtime follows the system's convention whatever the
             # function that faults follows: it is written as instructions,
             # and hand-written code names its registers outright.
             emit_abort(asm, lookup_cconv(SYSTEM_CCONV))
-        emit_start(asm, module, lookup_cconv(module.startup.cconv))
+        emit_start(asm, module, lookup_cconv(module.startup.cconv),
+                   failures)
         messages.emit(asm)
         constants.emit(asm)
 

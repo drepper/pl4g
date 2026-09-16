@@ -180,6 +180,7 @@ class CommandLine:
         parser.add_argument("--module-path", dest="module_path",
                             action="append", default=[])
         parser.add_argument("--report-log", dest="report_log")
+        parser.add_argument("--test-runner", dest="test_runner")
         parser.add_argument("--incremental", action="store_true")
         parser.add_argument("-v", "--verbose", action="store_true")
         parser.add_argument("--time-report", dest="time_report",
@@ -213,8 +214,6 @@ class CommandLine:
         """Copy what was parsed into the options, checking each value."""
         options = self._options
         options.command = found.command
-        if found.command == TEST:
-            self._diags.emit(D.IMPL_CLI_NOT_IMPLEMENTED, option=TEST)
         for word in found.inputs:
             self._add_input(word)
         if found.output:
@@ -251,6 +250,7 @@ class CommandLine:
             options.module_path.extend(parse_search_path(given))
         if found.report_log is not None:
             options.report_log = Path(found.report_log)
+        options.test_runner = found.test_runner
         options.incremental = found.incremental
         if found.incremental:
             self._diags.emit(D.IMPL_CLI_NOT_IMPLEMENTED, option="--incremental")

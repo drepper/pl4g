@@ -10,14 +10,16 @@ returning to anything.
 
 from __future__ import annotations
 
-from typing import Final
+from typing import Final, Mapping
 
 from ...ir.mangle import symbol_name
 from ...ir.module import Module
 from ...mc import ops
+from ...mc.ops import Condition
 from ...mc.asmbuilder import Assembler
 from .. import statuses
 from ..callconv import CallConvDesc
+from ..tests import Failure, run_by
 from . import ops as rvops
 from ..allocator import AllocatorRegs, SyscallABI
 from .regs import A0, A1, A7, FP, RA, S1, ZERO, reg
@@ -30,7 +32,8 @@ NR_EXIT_GROUP: Final[int] = 94
 ENTRY_SYMBOL: Final[str] = "_start"
 
 
-def emit_start(asm: Assembler, module: Module, cconv: CallConvDesc) -> None:
+def emit_start(asm: Assembler, module: Module, cconv: CallConvDesc,
+               failures: Mapping[int, Failure] | None = None) -> None:
     """Emit the entry point for *module*.
 
     The constructor and destructor loops emit nothing while a program has none,
@@ -48,7 +51,13 @@ def emit_start(asm: Assembler, module: Module, cconv: CallConvDesc) -> None:
     asm.loadreg(RA, asm.reg(ZERO))
     for ctor in module.ctors:
         asm.call(symbol_name(ctor))
-    asm.call(symbol_name(startup))
+    _run_tests(asm, module, cconv, failures or {})
+    if module.test_plan:
+        # A binary built to run tests and nothing else: every one of them
+        # passed, or it left through the helper above and never arrived here.
+        asm.loadreg(status, asm.imm(0, 12))
+    else:
+        asm.call(symbol_name(startup))
     # The value a function returns is already in the register a system call
     # takes its first argument in, so nothing has to be moved -- unless a
     # destructor runs in between and is free to clobber it.
@@ -131,3 +140,26 @@ SYSCALLS: Final[SyscallABI] = SyscallABI(
 ALLOCATOR_REGS: Final[AllocatorRegs] = AllocatorRegs(
     arena=A0, size=A1, answer=A0,
     scratch=(reg("t0"), reg("t1"), reg("t2")))
+
+
+def _run_tests(asm: Assembler, module: Module, cconv: CallConvDesc,
+               failures: Mapping[int, Failure]) -> None:
+    """Call each test this binary runs, leaving through the fault helper.
+
+    A test answers a truth value, which comes back widened to the register the
+    compiler's own calls read it out of.  One that answers false names itself
+    and stops the program: it is a program that has been found to be wrong,
+    which is what that helper is for.
+    """
+    for one in run_by(module):
+        found = failures.get(id(one))
+        if found is None:
+            continue
+        asm.call(symbol_name(one))
+        passed = asm.reserve_label("test.passed")
+        asm.branch(Condition.NE, asm.reg(cconv.int_ret_regs[0]),
+                   asm.imm(0, 12), passed)
+        asm.address(cconv.int_arg_regs[0], found.symbol)
+        asm.loadreg(cconv.int_arg_regs[1], asm.imm(found.length, 12))
+        asm.call(ABORT_SYMBOL)
+        asm.block(passed)

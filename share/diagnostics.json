@@ -197,6 +197,53 @@
       "option": null
     },
     {
+      "number": 1014,
+      "name": "IMPL_TESTS_NOT_RUN",
+      "severity": "warning",
+      "message": "the {kind} tests were not run: this machine does not run '{triple}'",
+      "args": [
+        {
+          "name": "kind",
+          "type": "string",
+          "description": "which tests were not run"
+        },
+        {
+          "name": "triple",
+          "type": "string",
+          "description": "the target the binary was built for"
+        }
+      ],
+      "cause": "A test is a program and running one means running a program built for the target.  Where that is not this machine there is nothing to run it with unless one is named: `--test-runner=COMMAND` says what to run it through, and an emulator is the usual answer.  Without one the build finishes and says what it did not do, since refusing to cross-compile a program because its tests cannot be run here would be refusing the ordinary case.",
+      "spec": {
+        "document": "spec/details.md",
+        "section": "Tests"
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": "tests-not-run"
+    },
+    {
+      "number": 1015,
+      "name": "IMPL_TESTS_FAILED",
+      "severity": "error",
+      "message": "the {kind} tests did not pass",
+      "args": [
+        {
+          "name": "kind",
+          "type": "string",
+          "description": "which tests were run"
+        }
+      ],
+      "cause": "A test answered that it did not pass, and named itself as it stopped.  What is wrong is in the program rather than in the compiler, so the message naming it is the test binary\u0027s own; this is what makes the run that built it fail as well.",
+      "spec": {
+        "document": "spec/details.md",
+        "section": "Tests"
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 1004,
       "name": "IMPL_CLI_UNKNOWN_OPTION",
       "severity": "error",
@@ -2679,6 +2726,33 @@
         "document": "spec/spec.md",
         "section": "The Language / File Structure / Function Definition / Special Functions",
         "requirement": "constructor function.  These are functions that run before control is transferred to the startup function."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4407,
+      "name": "LANG_FUNCDEF_SPECIAL_BAD_TEST_SIGNATURE",
+      "severity": "error",
+      "message": "the test '{name}' takes nothing and answers with a truth value, and {problem}",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the test function"
+        },
+        {
+          "name": "problem",
+          "type": "string",
+          "description": "what is wrong with its signature"
+        }
+      ],
+      "cause": "Nothing calls a test but the runner, so there is nothing to give it and nowhere for arguments to come from.  What it answers is whether it passed, which is a truth value and nothing else: a status would be a second way of saying the same thing, and answering nothing would leave the runner unable to tell a test that passed from one that did not.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition",
+        "requirement": "A test takes no parameters and answers with a truth value."
       },
       "since": "0.1",
       "default_enabled": true,

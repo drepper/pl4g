@@ -12,9 +12,8 @@
     },
     {
       "name": "test",
-      "implemented": false,
       "since": "0.1",
-      "help": "build the sources and run the tests in them"
+      "help": "run the tests of the sources: the `always` ones and the `suite` ones"
     }
   ],
   "exit_codes": {
@@ -138,6 +137,14 @@
       "metavar": "DIRS",
       "since": "0.1",
       "help": "colon-separated directories to look for modules in, after the directory of the importing file and before the system ones"
+    },
+    {
+      "short": null,
+      "long": "--test-runner",
+      "arg": "separate_or_joined",
+      "metavar": "COMMAND",
+      "since": "0.1",
+      "help": "run a test binary through COMMAND, for a target this machine does not run"
     },
     {
       "short": null,

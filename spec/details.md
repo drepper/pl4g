@@ -2364,6 +2364,58 @@ and the run then disagreed with the compiler about a program that was perfectly
 all right.  Generating into a copy is what settles it.  The built library is
 read by nobody here, so building it disturbs nothing.
 
+Tests
+-----
+
+`@[test(ARG)]` marks a function as a test, and `ARG` says which of three kinds
+it is.  Written with no argument and no parentheses it is a `suite` test, that
+being the kind most tests are.  A test takes nothing and answers whether it
+passed (4407): nothing calls one but the runner, so there is nothing to give it,
+and a truth value is the whole of what it has to say.
+
+**What differs between the kinds is which binary the test is in**, not what the
+test says.  That is why it is settled in one place, `target/tests.py`, which
+answers what a binary runs and what it says when one fails; each back end asks
+it and emits the same shape of code around the answer.
+
+| kind | which binary it is in | when it runs |
+| --- | --- | --- |
+| `always` | the program | before the startup function is reached |
+| `build` | one the compiler builds to run it | when a build finishes |
+| `suite` | one the compiler builds to run it | when `pypl4g test` asks |
+
+**An `always` test rides the constructor path**, which already called things
+before the startup function.  What it adds is that the answer is looked at: a
+test that answers false leaves through `__pl4g_abort` with its own name, the
+same helper a fault leaves through, since a program that has been found to be
+wrong is what that helper is for.  The answer is compared at the width the
+compiler's own calls compare it at -- a truth value comes back widened to the
+whole register.
+
+**A test binary is the same module with a plan.**  `Module.test_plan` names what
+its entry runs; where it is set the entry calls those instead of the startup
+function and exits zero if it reaches the end.  It is also what the reachability
+pass takes as roots, which is how a `suite` test stays out of the program: in
+the program it is code nothing can reach, and leaving that out is what the pass
+is for.
+
+**The plan is chosen before the passes run**, and a test binary is built from
+the sources over again rather than from the module in hand -- the passes have
+already left out of that one everything the program does not reach, and a test
+the program does not call is exactly what they left out.
+
+**Running one needs a machine that runs it.**  `pypl4g test` and a build with
+`build` tests in it run a temporary binary; where the target is not this machine
+there is nothing to run it with unless `--test-runner=COMMAND` names one, and
+the build finishes with a warning (1014) rather than refusing.  Refusing would
+be refusing the ordinary case, which is cross-compiling.
+
+**A run stops at the first test that fails.**  It is the abort helper doing what
+it does, and what it costs is the list of everything else that would have
+failed.  Running them all and reporting each needs a way to write a message and
+carry on, which the runtime has not got: it has one helper, and that helper
+exits.
+
 The Command Line
 ----------------
 

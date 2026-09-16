@@ -2179,6 +2179,7 @@ class Checker:
                 self._check_ctor_signature(func, node, "destructor")
                 self._module.dtors.append(func)
             case SpecialKind.TEST_ALWAYS | SpecialKind.TEST_BUILD | SpecialKind.TEST_SUITE:
+                self._check_test_signature(func, node)
                 self._module.tests.append(func)
             case _:
                 pass
@@ -2210,6 +2211,25 @@ class Checker:
         if problem is not None:
             self._diags.emit(D.LANG_FUNCDEF_SPECIAL_BAD_CTOR_SIGNATURE, node.name_span,
                              kind=kind, name=func.name, problem=problem)
+
+    def _check_test_signature(self, func: Function, node: ast.FuncDef) -> None:
+        """Check that a test takes nothing and answers whether it passed.
+
+        Nothing calls a test but the runner, so there is nothing to give it;
+        what it answers is whether it passed, and a truth value is the whole of
+        that.
+        """
+        if func.ty.ret is ERROR or ERROR in func.ty.params:
+            return
+        problem: str | None = None
+        if func.ty.params:
+            problem = "this one takes parameters"
+        elif func.ty.ret is not BOOL:
+            problem = "".join(("this one answers with '", func.ty.ret.render(),
+                               "'"))
+        if problem is not None:
+            self._diags.emit(D.LANG_FUNCDEF_SPECIAL_BAD_TEST_SIGNATURE,
+                             node.name_span, name=func.name, problem=problem)
 
     # -- attributes ------------------------------------------------------------
 

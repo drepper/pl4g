@@ -249,15 +249,11 @@ def test_what_the_image_offers_is_a_root() -> None:
 
 
 @pytest.mark.parametrize("special", [
-    SpecialKind.CONSTRUCTOR, SpecialKind.DESTRUCTOR, SpecialKind.TEST_SUITE,
+    SpecialKind.CONSTRUCTOR, SpecialKind.DESTRUCTOR, SpecialKind.TEST_ALWAYS,
 ])
 def test_a_function_the_program_takes_part_through_is_a_root(
         special: SpecialKind) -> None:
-    """The entry point calls the first two; the testing machinery will the third.
-
-    A test has no caller yet only because what calls one is not written, which
-    would be the wrong reason to drop it.
-    """
+    """The entry point calls all three: the last before the startup function."""
     module = Module("t")
     func = Function("side", module.types.func_type((), VOID),
                     FuncAttrs(special=special))
@@ -269,6 +265,49 @@ def test_a_function_the_program_takes_part_through_is_a_root(
         module.dtors.append(func)
     else:
         module.tests.append(func)
+    start = _startup(module)
+    entry = start.entry
+    assert entry is not None
+    entry.append(RetInst(module.int_const(U8, 0)))
+    assert not DropUnreached().run(module)
+    assert set(module.functions) == {"side", "main"}
+
+
+@pytest.mark.parametrize("special", [
+    SpecialKind.TEST_BUILD, SpecialKind.TEST_SUITE,
+])
+def test_a_test_the_binary_does_not_run_is_not_a_root(
+        special: SpecialKind) -> None:
+    """A test kept in the program it tests is code nothing can reach.
+
+    The two kinds here run in a binary the compiler builds to run them, and in
+    nothing else -- so in the program itself they are exactly what this pass is
+    for.  The same function is a root in that other binary, where the plan names
+    it, which the case below checks.
+    """
+    module = Module("t")
+    func = Function("side", module.types.func_type((), VOID),
+                    FuncAttrs(special=special))
+    func.add_block().append(RetInst())
+    module.add_function(func)
+    module.tests.append(func)
+    start = _startup(module)
+    entry = start.entry
+    assert entry is not None
+    entry.append(RetInst(module.int_const(U8, 0)))
+    assert DropUnreached().run(module)
+    assert set(module.functions) == {"main"}
+
+
+def test_a_test_the_plan_names_is_a_root() -> None:
+    """In the binary built to run it, a test is what the entry point calls."""
+    module = Module("t")
+    func = Function("side", module.types.func_type((), VOID),
+                    FuncAttrs(special=SpecialKind.TEST_SUITE))
+    func.add_block().append(RetInst())
+    module.add_function(func)
+    module.tests.append(func)
+    module.test_plan.append(func)
     start = _startup(module)
     entry = start.entry
     assert entry is not None
