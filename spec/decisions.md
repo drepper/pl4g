@@ -4954,11 +4954,36 @@ lasts is how long what names it does.  Without that the rule would be one indire
 **What is left open** is a call that stores one of its arguments into another: `fn keep(slot: &mut &mut u32, r: &mut u32)`
 writing `slot⌖ ← r` is right for any one call and wrong for a caller that hands in a long-lived slot and a
 short-lived reference.  Closing it needs a signature able to say that two parameters live as long as each other, which is Rust's
-`'a: 'b` and which the lifetime names here cannot yet write.  Refusing `&mut &mut T` as a parameter would close it
-conservatively; that was not done, the hole being narrow and the restriction wide.
+`'a: 'b` and which the lifetime names here cannot yet write.  *(Shut on 2026-09-17 by refusing the write rather than the call;
+see below.)*
 
 Compare: **Rust**, whose borrow checker asks exactly this; **C++**, **C** and **Odin**, which do not, and where a pointer
 outliving its block is the oldest mistake there is; **Go** and **Java**, which move what escapes to the heap.
+
+## 2026-09-17T09:00+02:00 — language
+
+**A place the call did not make takes only a lasting reference**
+
+Directed by the user, closing the hole the previous entry left open and two more like it that turned up while looking.
+
+**The hole was a function writing one of its arguments into another.**  `fn keep(slot: &mut &mut u32, r: &mut u32)` writing
+`slot⌖ ← r` is right for any one call and wrong for a caller handing in a long-lived slot and a short-lived
+reference.  Rust writes the rule -- `'a` on both -- and refuses the *call*; the lifetime names here relate a parameter to the
+answer and cannot say it.  So the *write* is refused (4571), which is sound, needs nothing new in a signature, and costs the
+programs that would have been right.  What may still go there is a reference that lasts as long as the program, which outlives
+any caller.
+
+**What made it decidable** is that `_named_place_of` answering nothing about a place is not "it outlives everything" but "this
+body cannot say".  Reading it the first way is what let the write through.
+
+**Two more carriers, found by asking what else reaches a place.**  A tuple holding a reference lasts as long as the
+shortest-lived thing in it, and a lambda lasts as long as the shortest-lived name it brought in by reference -- both could be
+handed to a name that outlives them, and both are now asked the same question (4570).  What a lambda brought in by value ties it
+to nothing, a name standing for a place handing over what is at the place; that is why only the by-reference captures count.
+
+Compare: **Rust**, which writes the relation and refuses the call, and which can because its lifetimes relate any two things;
+**C++**, where a reference member outliving what it refers to is the ordinary hazard; **Go** and **Java**, which move what
+escapes to the heap and so never ask.
 
 Open questions
 --------------

@@ -1936,9 +1936,18 @@ local and answers nothing, which is right -- it outlives every name.
 
 It is asked at three places: assigning to a name that stands for a value, assigning to one that stands for a place, and writing
 through a reference whose pointee holds one.  A definition needs no asking, a name being bound at the depth it is written at, and
-so does handing one to a call, a parameter lasting no longer than the call.  What is *not* asked, and is the hole left open, is a
-call that stores one of its arguments into another: nothing in a signature can yet say that two parameters live as long as each
-other.
+so does handing one to a call, a parameter lasting no longer than the call.
+
+**Three kinds of value reach a place**, and `_reaches_a_place` is the one question asked of all of them.  A reference reaches the
+one it names.  A tuple reaches the shortest-lived thing in it, so `_named_place_of` walks a `TupleInst`'s operands and answers
+with the deepest.  A lambda reaches what it brought in *by reference*, so `_lower_lambda` records the deepest of those against
+the value it made -- what a lambda brought in by value is a copy, a name standing for a place handing over what is at the place,
+and ties it to nothing.
+
+**A place the call did not make is the one the body cannot measure.**  `_named_place_of` answering nothing there is not "it
+outlives everything" but "this body cannot say", and what goes into such a place must therefore outlive any caller -- which is
+what `_lasting` already answers.  That is what shuts the `&mut &mut` hole at the definition: a function writing one of its
+arguments into another is refused where it is written, since neither end can see the mistake.
 
 **A reference that is out is one row in a list.**  `_Borrow` holds the name, whether it may write, where it was taken, and how
 deep the scope is that keeps it.  `_lend` walks the list at `&`, `_lent_out` walks it at a name, `_statement_ended` drops the rows

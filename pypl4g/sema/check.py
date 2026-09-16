@@ -29,7 +29,7 @@ from ..ir.layout import DataLayout, member_offsets_of, stride_of
 from ..ir.inst import (AddressInst, BinaryInst, BinOp, CallInst, CastInst,
                        CastKind, CmpPred,
                        ExtractInst, FrameInst, Instruction, LoadInst, RetInst,
-                       Terminator, UnOp)
+                       Terminator, TupleInst, UnOp)
 from . import tables
 from ..ir.function import (DEFAULT_CCONV, SYSTEM_CCONV, BasicBlock, FuncAttrs,
                            FuncType, Function,
@@ -569,6 +569,17 @@ def _promises_as_much(expected: Type | None, found: Type) -> bool:
         return False
     return ((found.lasting or not expected.lasting)
             and (found.mutable or not expected.mutable))
+
+
+def _reaches_a_place(ty: Type) -> bool:
+    """Whether a value of *ty* may reach a place some name stands for.
+
+    A reference does, and so does a lambda: what it brought in by reference is a
+    place, reached through the environment it carries.  Both are asked the same
+    question -- may this be given to a name that outlives what it reaches -- so
+    both are asked it here.
+    """
+    return _holds_a_reference(ty) or _holds_a_lambda(ty)
 
 
 def _written_as(expr: ast.Expr) -> str:
@@ -1210,9 +1221,11 @@ class Checker:
         #: The name a reference is being taken of, while one is: working the
         #: place out reads the name, and that read is the reference itself.
         self._taking_a_reference: str | None = None
-        #: Which name each place belongs to, by the identity of the value that
-        #: is its address.  A reference is walked back to one of these to find
-        #: out how long what it names lasts and what to call it.
+        #: Which name bounds how long each value lasts, by the identity of the
+        #: value: a place by the name it belongs to, and a lambda by the
+        #: shortest-lived name it brought in by reference.  A reference is
+        #: walked back to one of these to find out how long what it reaches
+        #: lasts and what to call it.
         self._places: dict[int, _Local] = {}
         #: The references that are out, oldest first.  One is dropped when the
         #: statement that made it ends, or when the scope that kept it does.
@@ -4252,6 +4265,13 @@ class Checker:
                                      expr.span))
         made = builder.make_tuple(
             (builder.code_address(func, expr.span), carried), ty, expr.span)
+        # What it brought in by reference is what it reaches, so it lasts no
+        # longer than the shortest-lived of those: handing it to a name that
+        # outlives them would be the same escape a reference is refused for,
+        # and `_named_place_of` is where that is asked.
+        reaches = self._shortest_brought_in(taken)
+        if reaches is not None:
+            self._places[id(made)] = reaches
         if not self._accepts(expected, ty):
             self._report_mismatch(expr.span, ty, expected)
             return UndefConst(ERROR)
@@ -4325,6 +4345,22 @@ class Checker:
                      "', which the program named where a value was wanted")),
             span)
         return shim
+
+    def _shortest_brought_in(self,
+                             taken: Sequence[tuple[ast.Capture, _Local]]
+                             ) -> _Local | None:
+        """The shortest-lived name a lambda reaches, of those it brought in.
+
+        Only the ones brought in by reference: what is brought in by value is a
+        copy, and a name standing for a place hands over what is *at* the place,
+        so nothing brought in that way ties the lambda to anything.
+        """
+        deepest: _Local | None = None
+        for one, local in taken:
+            if one.by_reference and (deepest is None
+                                     or local.depth > deepest.depth):
+                deepest = local
+        return deepest
 
     def _captures_of(self, expr: ast.Lambda, name: str
                      ) -> list[tuple[ast.Capture, _Local]] | None:
@@ -4632,9 +4668,22 @@ class Checker:
             # of it as of a name: what goes into it has to last as long as it
             # does, and how long that is, is how long what this names does.
             named = self._named_place_of(target)
-            if self._outlives_it(value, named.depth if named is not None else 0,
-                                 "".join((_written_as(stmt.target),
-                                          DEREF_GLYPH)), stmt.span):
+            if named is None:
+                # Nothing here made the place, so it came in from outside and
+                # how long it lasts is the caller's business.  A reference of
+                # this call's own put there would outlive the call that made
+                # it, and neither end can see it: the body does not know how
+                # long the place lasts and the caller does not know what the
+                # body did with it.  What lasts as long as the program outlives
+                # any caller and may go there.
+                if not self._lasting(value):
+                    self._diags.emit(
+                        D.LANG_REF_WRITTEN_INTO_A_PLACE_FROM_OUTSIDE,
+                        stmt.span)
+                    return
+            elif self._outlives_it(value, named.depth,
+                                   "".join((_written_as(stmt.target),
+                                            DEREF_GLYPH)), stmt.span):
                 return
         builder.store(target, value, stmt.span)
 
@@ -4891,17 +4940,29 @@ class Checker:
                                         lasting=True), span)
 
     def _named_place_of(self, value: Value) -> _Local | None:
-        """The name whose place *value* is a reference into, where it is one.
+        """The shortest-lived name whose place *value* reaches, where it reaches
+        one.
 
-        Walked back the way provenance is walked everywhere else.  A variable at
-        the top level is nobody's local and answers nothing, which is right: it
-        is there as long as the program and outlives every name.
+        Walked back the way provenance is walked everywhere else, and through
+        the parts of something made of several: a tuple holding a reference
+        lasts as long as the shortest-lived thing in it, since taking it apart
+        gives that back.  A variable at the top level is nobody's local and
+        answers nothing, which is right -- it is there as long as the program
+        and outlives every name.
         """
         seen = value
         while True:
             found = self._places.get(id(seen))
             if found is not None:
                 return found
+            if isinstance(seen, TupleInst):
+                deepest: _Local | None = None
+                for one in seen.operands:
+                    part = self._named_place_of(one)
+                    if part is not None and (deepest is None
+                                             or part.depth > deepest.depth):
+                        deepest = part
+                return deepest
             if isinstance(seen, (CastInst, ExtractInst)) or (
                     isinstance(seen, BinaryInst)
                     and seen.op in (BinOp.ADD, BinOp.SUB)):
@@ -7068,7 +7129,7 @@ class Checker:
                 return None
             assert local.held is not None
             value = self._checked_value(builder, node, local.held)
-            if _holds_a_reference(local.held) \
+            if _reaches_a_place(local.held) \
                     and self._outlives_it(value, local.depth, node.name,
                                           node.span):
                 return None
@@ -7081,7 +7142,7 @@ class Checker:
             if not self._check_mutable(node, local.mutable, local.span):
                 return None
             value = self._checked_value(builder, node, local.value.ty)
-            if _holds_a_reference(local.value.ty) \
+            if _reaches_a_place(local.value.ty) \
                     and self._outlives_it(value, local.depth, node.name,
                                           node.span):
                 return None

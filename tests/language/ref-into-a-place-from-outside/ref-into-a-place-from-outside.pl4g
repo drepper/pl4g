@@ -1,0 +1,28 @@
+※ pl4g-test: compile=error diag=4571
+
+※ The place written here came in from outside, so how long it lasts is the
+※ caller's business and nothing in the signature says it.  A reference put there
+※ could name something of this call, which the caller would still hold after the
+※ call was over -- and neither end can see the mistake: the body cannot see how
+※ long the place lasts and the caller cannot see what the body did with it.
+※
+※ What may be written there is a reference that lasts as long as the program,
+※ which outlives any caller.  Written any other way the call is the one that
+※ carries it out:
+※
+※     keep(&mut r1, &v2)      ※ r1 is the body's, v2 the arm's
+※
+※ Rust writes the rule instead of refusing it: `fn keep<'a>(slot: &mut &'a mut
+※ u32, r: &'a mut u32)` says the two live as long as each other, and the call is
+※ then what is refused.  Saying that needs a signature able to relate two
+※ parameters, which `⧖a` cannot yet do -- it relates a parameter to the answer.
+※ Until it can, the write is refused where it is written, which costs the
+※ programs that would have been right and keeps the ones that would not.
+
+@[startup]
+fn main() → u6:
+    0u6
+
+@[impure]
+fn keep(slot: &mut &mut u32, r: &mut u32):
+    slot⌖ ← r

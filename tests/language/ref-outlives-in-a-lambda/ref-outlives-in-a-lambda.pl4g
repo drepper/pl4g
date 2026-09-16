@@ -1,0 +1,20 @@
+※ pl4g-test: compile=error diag=4570
+
+※ A lambda reaches what it brought in by reference, so it lasts no longer than
+※ the shortest-lived of those.  Giving one to a name that outlives them is the
+※ same escape a bare reference is refused for, and calling it afterwards would
+※ read a variable the program can no longer name.
+※
+※ What is brought in by *value* ties the lambda to nothing: a name standing for
+※ a place hands over what is at the place, so what the lambda holds is a copy.
+
+let b1 : bool = true
+
+@[startup, impure]
+fn main() → u6:
+    let v1 : mut u32 = 5u32
+    let f : mut fn() → u32 = λ [&v1] → u32 { v1 }
+    if b1:
+        let v2 : mut u32 = 9u32
+        f ← λ [&v2] → u32 { v2 }
+    if f() = 5u32 { 0u6 } else { 1u6 }

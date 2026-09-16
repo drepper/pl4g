@@ -6064,7 +6064,7 @@
       "number": 4570,
       "name": "LANG_REF_OUTLIVES_PLACE",
       "severity": "error",
-      "message": "'{name}' outlives '{place}', so it may not be given a reference to it",
+      "message": "'{name}' outlives '{place}', so it may not be given something that reaches it",
       "args": [
         {
           "name": "name",
@@ -6077,11 +6077,27 @@
           "description": "the name whose place the reference names"
         }
       ],
-      "cause": "A reference is only worth having while what it names is still there.  A name bound further out lasts longer than a place made further in, so the place would be gone -- out of reach and no longer nameable -- while the name holding the reference is still in hand, and reading through it would reach a variable the program can no longer name.  It is the rule a function answering with a reference follows, asked at the third place a reference can escape to.",
+      "cause": "A reference is only worth having while what it names is still there.  A name bound further out lasts longer than a place made further in, so the place would be gone -- out of reach and no longer nameable -- while the name reaching it is still in hand, and reading through it would reach a variable the program can no longer name.  It is asked of everything that can reach a place: a reference, a tuple holding one, and a lambda, which reaches what it brought in by reference.  It is the rule a function answering with a reference follows, at the third place a reference can escape to.",
       "spec": {
         "document": "spec/spec.md",
         "section": "The Language / Types / References",
         "requirement": "A name may hold a reference only to a place that lasts as long as the name."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4571,
+      "name": "LANG_REF_WRITTEN_INTO_A_PLACE_FROM_OUTSIDE",
+      "severity": "error",
+      "message": "what goes into a place this call did not make may not be a reference of this call's own",
+      "args": [],
+      "cause": "The place written here came in from outside, so how long it lasts is the caller's business and nothing in the signature says it.  A reference put there could name something of this call, which the caller would still hold after the call was over -- and neither end can see the mistake: the body cannot see how long the place lasts and the caller cannot see what the body did with it.  What may be written there is a reference that lasts as long as the program, which outlives any caller.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / References",
+        "requirement": "A reference written into a place the call did not make lasts as long as the program."
       },
       "since": "0.1",
       "default_enabled": true,

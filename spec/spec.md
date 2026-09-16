@@ -2048,6 +2048,32 @@ a reference can escape to -- not out of the call and not into a variable at the 
 is asked of a place that holds a reference as much as of a name: `rr⌖ ← &v2` puts one where `rr` names, and how long
 that lasts is how long what names it does.
 
+**It is asked of everything that can reach a place**, not only of a reference.  A tuple holding one lasts as long as the
+shortest-lived thing in it, and a lambda lasts as long as the shortest-lived name it brought in *by reference* -- what it brought
+in by value is a copy and ties it to nothing.
+
+```
+let f: mut fn() → u32 = λ [&v1] → u32 { v1 }
+if b:
+    let v2: mut u32 = 9u32
+    f ← λ [&v2] → u32 { v2 }   ※ refused: f outlives v2
+```
+
+**A place the call did not make takes only a lasting reference** (4571).  How long such a place lasts is the caller's business
+and nothing in the signature says it, so a reference of this call's own put there would outlive the call that made it -- and
+neither end can see the mistake: the body cannot see how long the place lasts and the caller cannot see what the body did with it.
+
+```
+@[impure]
+fn keep(slot: &mut &mut u32, r: &mut u32):
+    slot⌖ ← r                        ※ refused (4571)
+```
+
+Rust writes the rule instead of refusing it -- `fn keep<'a>(slot: &mut &'a mut u32, r: &'a mut u32)` says the two live as long as
+each other, and the *call* is then what is refused.  Saying that needs a signature able to relate two parameters, which `⧖a`
+cannot yet do: it relates a parameter to the answer.  Until it can, the write is refused where it is written, which costs the
+programs that would have been right and keeps out the ones that would not.
+
 Rust asks the same question and answers it the same way.  C and Odin do not ask it, and a pointer to a block-scoped variable
 outliving its block is the oldest mistake there is.
 

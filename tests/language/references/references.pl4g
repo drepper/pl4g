@@ -27,7 +27,14 @@
 ※ does** (4570).  A name bound further out lasts longer than a place made
 ※ further in, so giving it a reference to one would leave it naming a variable
 ※ the program can no longer name.  Inward is always allowed, which is what the
-※ arm below does.
+※ arm below does.  The same is asked of everything that can reach a place: a
+※ tuple holding a reference, and a lambda, which reaches what it brought in by
+※ reference.
+※
+※ **A place the call did not make takes only a lasting reference** (4571).  How
+※ long such a place lasts is the caller's business, so a reference of this call's
+※ own put there would outlive the call that made it -- and neither end can see
+※ it.
 ※
 ※ **A `&mut` is the only reference to its place while it lives**, and a `&` may
 ※ share with other `&`s.  So each variable here is lent once: while `r` is out,
@@ -86,6 +93,12 @@ fn main() → u6:
         let near: mut i8 = 70i8
         let alongside: &mut i8 = &near
         alongside⌖ ← 71i8
+    ※ a tuple holding one, and a lambda that brought one in: both reach what
+    ※ a name of this scope stands for and last as long as it does
+    let inside: mut i8 = 61i8
+    let paired: 〈&mut i8, u8〉 = 〈&inside, 1u8〉
+    let watched: mut i8 = 61i8
+    let watching: fn() → i8 = λ [&watched] → i8 { watched }
     ※ a variable at the top level, which is an address already
     let g: &mut u16 = &mut counter
     g⌖ ← 7u16
@@ -127,6 +140,10 @@ fn main() → u6:
         9u6
     elif reaching⌖ ≠ 61i8:
         13u6
+    ※ a tuple holding one, and a lambda that brought one in, both bound to
+    ※ names of this scope and so both allowed
+    elif paired⟦0⟧⌖ ≠ 61i8 ∨ watching() ≠ 61i8:
+        14u6
     ※ written through a reference the context made writable, and read the other
     ※ way round, a literal on the left taking its type from what the reference names
     elif 13i8 ≠ quiet⌖:
