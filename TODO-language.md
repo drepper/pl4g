@@ -183,17 +183,19 @@ To Do List for the PL4g language
 [ ] write a value of a sum.  The decision was that the two are one shape, the definitions being one construct, so it is
     `Colour(.red ← …)` -- but a sum is a tag and a payload rather than its parts side by side, and nothing places one yet.
 
-[ ] let a record hold a record.  Both are refused by the code generator today
+[x] let a record hold a record.  Both are refused by the code generator today
     (8501): a record travels as its fields, so a field that is itself several values has no one register to go in, and a load of
     a multi-part value is not a thing the back ends do.  `std.Init` needs both: it holds an `Io`, and `&mut init.io.output` is a
     reference into it.
 
-    Half of that landed on 2026-09-17: a record local is given storage of its own, a field is read at an offset, `&p.x` is an
-    address, and a field behind a reference is read without reading the whole record.  What is left is a record *holding* a
-    record, which cannot be a value -- a part that is itself several values has no register to be read into.  Reading its fields
-    already works, the offsets composing; what does not is building one, a literal making a value before anything binds it.
-    What that wants is a literal written into the place that will hold it rather than made and copied, which is a path down
-    through `_lower_into` rather than a change of representation.
+    Done on 2026-09-17: a record local is given storage of its own, a field is read at an offset, `&p.x` is an address, a field
+    behind a reference is read without reading the whole record, and a literal is written into the place that will hold it --
+    which is what lets a field be a record, there being no register such a value could be made in.
+
+[ ] hand a record holding a record to a call, or answer with one.  Building and reading work; what does not is the value
+    existing at all, which is what a convention needs to place.  `parts_of` answers a record with its field types, so a field
+    that is itself several values has no one register; the answer is either flattening that recursively -- and then a whole
+    nested field is no longer one extract -- or saying such a record travels through storage, which is what the C ABI does.
 
 [ ] decide whether a fixed array is copied or shared when it is bound to a name.  `let b = a` names the same elements today --
     `a⟦0⟧ ← 9u8` is seen through `b` -- because a value of an array type is where the elements are.  Nothing in the

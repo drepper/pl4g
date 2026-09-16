@@ -2387,13 +2387,18 @@ larger than two registers goes through storage the caller provides -- which
 `largeanswers` already did and is where the value semantics of a call and an
 answer come from.
 
-**A record holding a record is still refused** (8501), and for one reason: such a
-record cannot be a *value*, since a part that is itself several values has no
-register to be read into.  Reading its fields works, the offsets composing; what
-does not is building one, because a literal makes a value before anything binds
-it.  What that wants is for a literal to be written into the place that will hold
-it rather than made and then copied, which is a path down rather than a
-representation change.
+**A record holding a record needs no register at all.**  A record cannot be a
+*value* there -- a part that is itself several values has nowhere to be read
+into -- so a literal is written into the place that will hold it rather than
+made and then copied: `_build_record` walks the fields, stores each one, and for
+a field that is itself written out recurses into that field's place.  Nothing is
+an economy about it; it is the only way the value can exist.  Reading follows
+the same offsets, so `l.to.x` is one load and `&l.to.x` one address.
+
+What is *not* written out -- a call answering with a record, another name -- is
+lowered the ordinary way and copied in, which works for a record whose fields
+are each one value and is where the register representation still shows through.
+
 
 Asking the kernel
 -----------------

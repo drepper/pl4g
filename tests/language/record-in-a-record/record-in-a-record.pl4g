@@ -1,0 +1,49 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ A field of a record may be a record, and the value of one is written where it
+※ will live rather than made and then copied.
+※
+※ **That is not an economy but the only way.**  A record travels as its fields,
+※ so a field that is itself several values has no one register to be made in --
+※ which is why a record holding a record could be declared and not written for as
+※ long as a literal made a value before anything bound it.  Written straight into
+※ the place that will hold it, a nested field goes one offset further in and no
+※ whole record is ever in a register at all.
+※
+※ **Reading one follows the offsets.**  `l.to.x` is the place of `l`, plus where
+※ `to` lies, plus where `x` lies, and only the field is read.  A reference into
+※ one is that address, so `&l.to.x` is an address like any other.
+※
+※ Compare: **C**, whose nested initializer this is, and where a structure holding
+※ a structure has always been laid out by the same rule; **Rust**, **Go** and
+※ **Zig**, the same; **ML**, whose records nest the same way with the layout left
+※ to the implementation, which is what `offsets_of` is here.
+
+type Point = x : u32 ; y : u32
+type Line = from : Point ; to : Point
+
+@[impure]
+fn bump(at: &mut u32):
+    at⌖ ← at⌖ + 1u32
+
+fn span(of: &Line) → u32:
+    of⌖.to.x + of⌖.to.y
+
+@[startup, impure]
+fn main() → u6:
+    let l : mut Line = Line(.from ← Point(.x ← 1u32, .y ← 2u32),
+                            .to ← Point(.x ← 3u32, .y ← 4u32))
+    ※ a reference to a field of a field, written through
+    bump(&l.to.x)
+    ※ and the whole of it read behind a reference
+    let reached : &Line = &l
+    if l.from.x ≠ 1u32 ∨ l.from.y ≠ 2u32:
+        1u6
+    elif l.to.x ≠ 4u32 ∨ l.to.y ≠ 4u32:
+        2u6
+    elif span(reached) ≠ 8u32:
+        3u6
+    elif reached⌖.from.y ≠ 2u32:
+        4u6
+    else:
+        0u6

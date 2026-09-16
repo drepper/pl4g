@@ -1992,6 +1992,19 @@ an offset from it, so `&p.x` is an address like any other and a field behind a r
 first.  Binding a record to a name writes the fields into that storage: **a record is a value and not a place**, so two names are
 two records and writing through one leaves the other as it was -- which is what C, Rust, Go and Zig all do.
 
+**A field may be a record**, and a value written out is written where it will live rather than made and then copied:
+
+```
+type Line = from : Point ; to : Point
+
+let l: mut Line = Line(.from ← Point(.x ← 1u32, .y ← 2u32),
+                       .to ← Point(.x ← 3u32, .y ← 4u32))
+bump(&l.to.x)                    ※ a reference to a field of a field
+```
+
+Reading one follows the offsets -- `l.to.x` is where `l` is, plus where `to` lies, plus where `x` lies -- and only the field is
+read.
+
 **A reference that promises more stands where less is wanted.**  `&mut T` promises everything `&T` does and adds writing, and
 `&static T` promises everything `&T` does and adds the time, so each stands where the weaker one is asked for -- in a call, a
 definition, a return.  The bits are the same bits, so nothing is emitted for it.  Both go one way only: a place nothing may write

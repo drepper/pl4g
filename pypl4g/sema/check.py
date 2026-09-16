@@ -3498,6 +3498,77 @@ class Checker:
                             self._module.types.ptr_type(held, mutable=True),
                             span)
 
+    def _build_record(self, builder: IRBuilder, where: Value, expr: ast.Expr,
+                      ty: ProductType, span: Span) -> None:
+        """Write what *expr* comes to into the place *where*.
+
+        A record written out is written a field at a time into the place that
+        will hold it, and a field that is itself a record written out goes one
+        offset further in -- so a record holding a record is never a value, and
+        never needs a register it could not have.  Anything else is lowered the
+        ordinary way and copied in, which is what a call answering with one is.
+        """
+        if not self._is_record_literal(expr, ty):
+            self._record_into(builder, where,
+                              self._lower_into(builder, expr, ty, span),
+                              ty, span)
+            return
+        assert isinstance(expr, ast.Call)
+        given = self._fields_given(expr, ty)
+        if given is None:
+            return
+        for at, (_, held) in enumerate(ty.fields):
+            place = self._field_place(builder, where, ty, at, span)
+            written = given[ty.fields[at][0]]
+            if isinstance(held, ProductType):
+                self._build_record(builder, place, written.value, held,
+                                   written.span)
+                continue
+            builder.store(place,
+                          self._lower_into(builder, written.value, held,
+                                           written.span), span)
+
+    def _is_record_literal(self, expr: ast.Expr, ty: ProductType) -> bool:
+        """Whether *expr* writes a value of *ty* out, field by field."""
+        if not isinstance(expr, ast.Call) \
+                or not isinstance(expr.callee, ast.NameRef):
+            return False
+        named = self._top.get(expr.callee.name)
+        return isinstance(named, _NamedType) and self._resolved(named) is ty
+
+    def _fields_given(self, expr: ast.Call, ty: ProductType
+                      ) -> dict[str, ast.Named] | None:
+        """What each field of *ty* was given, checking that each was given once.
+
+        Every field and each once: there is no default to fall back on, and a
+        field left out would be storage holding whatever was there.
+        """
+        given: dict[str, ast.Named] = {}
+        spoiled = False
+        for one in expr.args:
+            if not isinstance(one, ast.Named):
+                self._diags.emit(D.LANG_PRODUCT_FIELD_NOT_NAMED, one.span,
+                                 type=ty.render())
+                spoiled = True
+                continue
+            if _field_index(ty, one.name) is None:
+                self._diags.emit(D.LANG_PRODUCT_NO_SUCH_FIELD, one.span,
+                                 type=ty.render(), name=one.name)
+                spoiled = True
+                continue
+            if one.name in given:
+                self._diags.emit(D.LANG_PRODUCT_FIELD_TWICE, one.span,
+                                 name=one.name)
+                spoiled = True
+                continue
+            given[one.name] = one
+        for name, _ in ty.fields:
+            if name not in given:
+                self._diags.emit(D.LANG_PRODUCT_FIELD_MISSING, expr.span,
+                                 type=ty.render(), name=name)
+                spoiled = True
+        return None if spoiled else given
+
     def _record_into(self, builder: IRBuilder, where: Value, value: Value,
                      ty: ProductType, span: Span) -> None:
         """Write a record into the place *where*, a field at a time.
@@ -7296,6 +7367,21 @@ class Checker:
             # mention of it from reporting the same thing again as undefined.
             self._bind_local(node.name, UndefConst(ERROR), node.name_span, node.mutable,
                              value_span=node.span)
+            return
+        if isinstance(declared, ProductType) and not node.more:
+            # Built where it will live rather than made and then copied.  A
+            # record holding a record has no register to be made in, so writing
+            # it straight into its place is not an economy but the only way.
+            place = builder.frame(declared, node.span)
+            self._initializing = node.name
+            try:
+                self._build_record(builder, place, node.value, declared,
+                                   node.span)
+            finally:
+                self._initializing = None
+            self._bind_local(node.name, place, node.name_span, node.mutable,
+                             value_span=node.span, builder=builder,
+                             placed_as=declared)
             return
         self._initializing = node.name
         try:
