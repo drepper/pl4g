@@ -1,0 +1,10 @@
+※ pl4g-test: compile=error diag=4585
+
+※ The lifted type is what the answer is and not what is pointed at, so the words
+※ on the definition and the words in the brackets are the same words.  What is
+※ at an address is one value, reached through a reference.
+
+@[startup, impure]
+fn main() → u6:
+    let a: &mut u32 = ⎕at(8u64, ⌜u32⌝)
+    if a⌖ = 0u32: 0u6 else: 1u6

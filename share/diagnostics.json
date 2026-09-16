@@ -6451,6 +6451,116 @@
       "option": null
     },
     {
+      "number": 4583,
+      "name": "LANG_ADDRESS_NOT_A_TYPE",
+      "severity": "error",
+      "message": "'{name}' is told what is there by a lifted type, and this is not one",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "which of the two was written"
+        }
+      ],
+      "cause": "What is at an address is not something the compiler can work out, so the program says it, between the lifting brackets.  A name that turns out to be a variable rather than a type is read as the variable, which is what the brackets are there to make unambiguous.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Compiler-Provided Names"
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4584,
+      "name": "LANG_ADDRESS_NOT_AN_ADDRESS",
+      "severity": "error",
+      "message": "'{name}' is given an address, and this is '{found}'",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "which of the two was written"
+        },
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type that was written instead"
+        }
+      ],
+      "cause": "An address is a machine word or a reference: a whole number as wide as one, which is what a request to the kernel answers with, or a place already reached some other way.  A narrower number is not an address, since half of one is not a place.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Compiler-Provided Names"
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4585,
+      "name": "LANG_AT_NOT_A_REFERENCE",
+      "severity": "error",
+      "message": "'\u2395at' answers a reference, and '{found}' is not one",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type that was lifted"
+        }
+      ],
+      "cause": "The lifted type is what the answer is, so that the type written on the definition and the type written between the brackets are the same words.  What is at an address is one value, reached through a reference; several of them are what '\u2395span' answers.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Compiler-Provided Names"
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4586,
+      "name": "LANG_SPAN_NOT_AN_ARRAY",
+      "severity": "error",
+      "message": "'\u2395span' answers an array whose length is not in its type, and '{found}' is not one",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type that was lifted"
+        }
+      ],
+      "cause": "How many there are is given as an argument, so it cannot also be in the type: an array type that says its length says something the count would then have to agree with, and two statements of one thing can disagree.  One value at an address is what '\u2395at' answers.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Compiler-Provided Names"
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4587,
+      "name": "LANG_SPAN_NOT_A_COUNT",
+      "severity": "error",
+      "message": "'\u2395span' is given how many there are, and this is '{found}'",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type that was written instead"
+        }
+      ],
+      "cause": "How many is a whole number, as every length in this language is.  A negative count has no meaning and a floating-point one has no meaning either.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Compiler-Provided Names"
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 5001,
       "name": "LANG_STMT_UNREACHABLE",
       "severity": "warning",

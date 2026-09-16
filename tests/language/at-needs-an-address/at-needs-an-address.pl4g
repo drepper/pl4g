@@ -1,0 +1,11 @@
+※ pl4g-test: compile=error diag=4584
+
+※ An address is a machine word or a reference.  A narrower number is not one:
+※ half of an address is not a place, and widening it would be the compiler
+※ deciding which half.
+
+@[startup, impure]
+fn main() → u6:
+    let n: u32 = 4u32
+    let a: &mut u32 = ⎕at(n, ⌜&mut u32⌝)
+    if a⌖ = 0u32: 0u6 else: 1u6

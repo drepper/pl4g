@@ -15,7 +15,7 @@ from typing import Callable, Final, Sequence
 from ..diag import ids as D
 from ..diag.engine import DiagEngine, Expectation
 from ..front import ast
-from ..front.token import (ACQUIRE_NAME, RELEASE_NAME,
+from ..front.token import (ACQUIRE_NAME, RELEASE_NAME, AT_NAME, SPAN_NAME,
                            BOTTOM_GLYPH, BUILTIN_GLYPH, CHR_NAME, DEREF_GLYPH,
                            LIFETIME_GLYPH,
                            DROP_NAME, NARROW_NAME, UNIT_NAME,
@@ -10331,6 +10331,9 @@ class Checker:
                 and expr.callee.name in (ACQUIRE_NAME, RELEASE_NAME):
             return self._lower_ordered(builder, expr, expected)
         if isinstance(expr.callee, ast.NameRef) \
+                and expr.callee.name in (AT_NAME, SPAN_NAME):
+            return self._lower_place_at(builder, expr, expected)
+        if isinstance(expr.callee, ast.NameRef) \
                 and expr.callee.name == TYPEOF_NAME:
             # Reaching here means it stood somewhere a value was wanted, since
             # a condition the compiler settles never lowers what is in it.
@@ -10699,6 +10702,101 @@ class Checker:
             self._report_mismatch(expr.span, answer.ty, expected)
             return UndefConst(ERROR)
         return answer
+
+    def _lower_place_at(self, builder: IRBuilder, expr: ast.Call,
+                        expected: Type | None) -> Value:
+        """Lower `⎕at(ADDRESS, ⌜TYPE⌝)` and `⎕span(ADDRESS, COUNT, ⌜TYPE⌝)`.
+
+        A place at an address the program worked out, and a run of places from
+        one.  Nothing in the language makes a place out of a number, so these
+        are the compiler's names: what is there is what the program says is
+        there, and there is nothing to check it against.  They are how a program
+        reaches memory something else gave it -- what `mmap` answered, what a
+        device said -- and they are the only way, which is what keeps that door
+        in one place rather than in every type that wanted one.
+
+        The lifted type is *what the answer is* and not what is pointed at, so
+        the words on the definition and the words in the brackets are the same
+        words: `let head: &mut u32 = ⎕at(a, ⌜&mut u32⌝)`.
+        """
+        assert isinstance(expr.callee, ast.NameRef)
+        name = expr.callee.name
+        several = name == SPAN_NAME
+        wanted = 3 if several else 2
+        if len(expr.args) != wanted:
+            self._diags.emit(D.LANG_CALL_WRONG_ARGUMENT_COUNT, expr.span,
+                             name=name, expected=wanted, found=len(expr.args))
+            return UndefConst(ERROR)
+        written = expr.args[-1]
+        if not isinstance(written, ast.Lifted):
+            self._diags.emit(D.LANG_ADDRESS_NOT_A_TYPE, written.span, name=name)
+            return UndefConst(ERROR)
+        answer = self._lifted_type(written)
+        if answer is None:
+            self._diags.emit(D.LANG_ADDRESS_NOT_A_TYPE, written.span, name=name)
+            return UndefConst(ERROR)
+        if several:
+            if not isinstance(answer, ArrayType) or answer.fixed \
+                    or answer.rank != 1:
+                self._diags.emit(D.LANG_SPAN_NOT_AN_ARRAY, written.span,
+                                 found=answer.render())
+                return UndefConst(ERROR)
+            place_ty = self._module.types.ptr_type(answer.element, mutable=True)
+        else:
+            if not isinstance(answer, PtrType):
+                self._diags.emit(D.LANG_AT_NOT_A_REFERENCE, written.span,
+                                 found=answer.render())
+                return UndefConst(ERROR)
+            place_ty = answer
+        address = self._as_an_address(builder, expr.args[0], name)
+        if address is None:
+            return UndefConst(ERROR)
+        place = builder.cast(CastKind.BITCAST, address, place_ty, expr.span)
+        if not several:
+            if not self._accepts(expected, answer):
+                self._report_mismatch(expr.span, answer, expected)
+                return UndefConst(ERROR)
+            return place
+        count = self._lower_expr(builder, expr.args[1], None)
+        counting = self._value_type_of(count)
+        if counting is ERROR:
+            return UndefConst(ERROR)
+        if not isinstance(counting, IntType):
+            self._diags.emit(D.LANG_SPAN_NOT_A_COUNT, expr.args[1].span,
+                             found=counting.render())
+            return UndefConst(ERROR)
+        made = builder.make_tuple(
+            (place, self._as_count(builder, count, counting, expr.span)),
+            answer, expr.span)
+        if not self._accepts(expected, answer):
+            self._report_mismatch(expr.span, answer, expected)
+            return UndefConst(ERROR)
+        return made
+
+    def _as_an_address(self, builder: IRBuilder, written: ast.Expr,
+                       name: str) -> Value | None:
+        """What was written as the address, read as one.
+
+        A machine word, which is what a request to the kernel answers with, or
+        a reference, which is already a place and is here being read as a place
+        of another type.  A narrower number is not an address: half of one is
+        not a place, and widening it would be the compiler deciding which half.
+        """
+        value = self._lower_expr(builder, written, None)
+        ty = self._value_type_of(value)
+        if ty is ERROR:
+            return None
+        if isinstance(ty, PtrType):
+            return value
+        if isinstance(ty, IntType) and ty.bits == 64:
+            # Signed or unsigned: what the kernel answers with is an `i64`, and
+            # the bits of an address do not change with how a program reads
+            # them.  The word is read as the unsigned one because that is what
+            # an address is held as, which costs nothing at this width.
+            return self._as_count(builder, value, ty, written.span)
+        self._diags.emit(D.LANG_ADDRESS_NOT_AN_ADDRESS, written.span,
+                         name=name, found=ty.render())
+        return None
 
     def _lower_ordered(self, builder: IRBuilder, expr: ast.Call,
                        expected: Type | None) -> Value:

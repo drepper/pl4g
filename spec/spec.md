@@ -2025,6 +2025,33 @@ Compare: **C11** and **Rust**, where the ordering is a parameter of the operatio
 **Java**, whose `volatile` is the property-of-the-place answer; **Go**, which keeps the whole question out of the language;
 **Linux's own `smp_load_acquire`**, which is this pair by another name.
 
+**`⎕at(ADDRESS, ⌜TYPE⌝)` is a place at an address the program worked out**, and `⎕span(ADDRESS, COUNT, ⌜TYPE⌝)` is a run of
+them:
+
+```
+let head: &mut u32 = ⎕at(mapped + 8i64, ⌜&mut u32⌝)
+let bytes: u8⟦⟧ = ⎕span(mapped, 4096u64, ⌜u8⟦⟧⌝)
+```
+
+Nothing else in the language makes a place out of a number, which is why these are the compiler's names: **what is there is what the
+program says is there**, and there is nothing to check it against.  They are how a program reaches memory something else gave it --
+what `mmap` answered, what a device said -- and being the only way is what keeps that door in one place rather than in every type
+that wanted one.
+
+**The lifted type is what the answer is**, not what is pointed at, so the words on the definition and the words in the brackets are
+the same words.  `⎕at` answers a reference (4585); `⎕span` answers an array whose length is not in its type (4586), which is already a
+place and a count and so represents nothing new -- how many there are is the argument, and a type that also said would be a second
+statement of one thing.  How many is a whole number (4587).
+
+**What may be given as the address** is a machine word -- which is what a request to the kernel answers with, signed or unsigned --
+or a reference, which is a place being read as a place of another type.  A narrower number is refused (4584): half of an address is
+not a place, and widening one would be the compiler deciding which half.  Neither name makes a function impure: making a place is
+not reaching through it.
+
+Compare: **C**, where a cast of an integer to a pointer says this and may be written anywhere; **Rust**, where it is `unsafe` and
+the word marks a region rather than the operation; **Zig**, whose `@ptrFromInt` is this exactly, one name for the one thing that
+cannot be checked; **Go**, whose `unsafe.Pointer` is the same idea behind a package a program has to name.
+
 **A value of a record gives a value for each of its fields**: `Point(.x ← 3u32, .y ← 4u32)`.  It is written the way a
 call names a parameter, which is the same idea asked of a field -- the mark says the name is the thing's and not a variable's --
 and it is the spelling C, Odin and Zig give a structure's initializer.

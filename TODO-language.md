@@ -212,6 +212,10 @@ To Do List for the PL4g language
     carries the promise: `⎕acquire(REF)` and `⎕release(REF, VALUE)`, so the same place read the ordinary way elsewhere
     is an ordinary read.
 
+[x] a way to reach memory at an address the program worked out.  Done on 2026-09-17, the user choosing two names over one and
+    over a mapping that answers bytes: `⎕at(ADDRESS, ⌜TYPE⌝)` for one value and `⎕span(ADDRESS, COUNT, ⌜TYPE⌝)` for a run
+    of them.  They are the only way, which is what keeps that door in one place.
+
 [ ] answer a result rather than the kernel's number.  `std.write` answers an `i64` that is negative where the kernel refused,
     which is the kernel's convention and not the language's.  It should answer `u64 ¤size?`, which wants somewhere for the error
     to go -- an enumeration of what the kernel says -- and that is a table the compiler does not have yet.

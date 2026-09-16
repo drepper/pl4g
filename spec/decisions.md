@@ -5553,6 +5553,49 @@ the ordering as an argument, which is this shape exactly; **Linux's own
 `smp_load_acquire` and `smp_store_release`**, which are this pair by another
 name and are what the ring code will read like.
 
+## 2026-09-17T22:00+02:00 — language
+
+**`⎕at` and `⎕span`: the one door to memory a program was handed**
+
+Chosen by the user from three.  A ring shared with the kernel is three `mmap`s
+and a set of offsets into them, so driving one in the language needs a way to
+reach memory at an address the program worked out -- which nothing in the
+language had.  `⎕at(ADDRESS, ⌜TYPE⌝)` answers a reference and
+`⎕span(ADDRESS, COUNT, ⌜TYPE⌝)` an array whose length is not in its type.
+
+**Two names and not one.**  One would have done -- several values are reached by
+arithmetic, one `⎕at` at a time -- and the second was taken because an array whose
+length is not in its type *is already* a place and a count, so `⎕span` represents
+nothing new and gives the language back its own bounds checking over memory it
+did not allocate.  A buffer handed to `write` is that shape and nothing else.
+
+**Turned down: a mapping that answers bytes**, `⎕map(fd, offset, length)`, so that
+no raw address is ever spelled.  It is the safer-looking answer and it does not
+finish the job: the head of a ring is a `u32` inside those bytes, so reading one
+still needs a typed view of a slice -- a second thing to design, and one that
+would be `⎕at` with the address hidden.  Hiding the address would have bought
+nothing that the program could not undo.
+
+**The lifted type is the answer's** and not the pointee's, so `let head: &mut u32
+= ⎕at(a, ⌜&mut u32⌝)` writes the type once in two places and a reader
+comparing them sees the same words.  `⌜mut u32⌝` was what the question
+proposed and does not parse: `mut` belongs to a definition and not to a type.
+
+Neither makes a function impure.  Making a place is not reaching through it, and
+what reaches through it is an ordinary read or write that says so already.
+
+**The user also settled how much of the ring `std` exposes: none of it.**  A
+program names descriptors and calls `read` and `write`; `Ring`, `Pending`, the
+submission entry and the completion entry are `std`'s own and are not exported.
+
+Compare: **C**, where a cast of an integer to a pointer says this and may be
+written anywhere; **Rust**, whose `*mut T` from a `usize` is `unsafe`, the word
+marking a region rather than the operation; **Zig**, whose `@ptrFromInt` is this
+exactly -- one name for the one thing that cannot be checked; **Go**, whose
+`unsafe.Pointer` is the same idea behind a package a program has to name;
+**Ada**, whose `System.Address_To_Access_Conversions` is a generic a program
+instantiates, which is the same decision with more ceremony.
+
 Open questions
 --------------
 

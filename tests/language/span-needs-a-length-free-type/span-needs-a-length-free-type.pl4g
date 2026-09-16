@@ -1,0 +1,10 @@
+※ pl4g-test: compile=error diag=4586
+
+※ How many there are is given as an argument, so it cannot also be in the type:
+※ an array type that says its length says something the count would then have to
+※ agree with, and two statements of one thing can disagree.
+
+@[startup, impure]
+fn main() → u6:
+    let b: u8⟦⟧ = ⎕span(8u64, 4u64, ⌜u8⟦4⟧⌝)
+    if #b = 4: 0u6 else: 1u6

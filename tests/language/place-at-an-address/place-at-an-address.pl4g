@@ -1,0 +1,55 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ `⎕at(ADDRESS, ⌜TYPE⌝)` is a place at an address the program worked out, and
+※ `⎕span(ADDRESS, COUNT, ⌜TYPE⌝)` is a run of them.
+※
+※ **Nothing else in the language makes a place out of a number**, which is why
+※ these are the compiler's names: what is there is what the program says is
+※ there, and there is nothing to check it against.  They are how a program
+※ reaches memory something else gave it -- what `mmap` answered, what a device
+※ said -- and being the only way is what keeps that door in one place rather
+※ than in every type that wanted one.
+※
+※ **The lifted type is what the answer is**, not what is pointed at, so the
+※ words on the definition and the words in the brackets are the same words.
+※ `⎕span` answers an array whose length is not in its type, which is already a
+※ place and a count and so represents nothing new: how many there are is the
+※ argument, and a type that also said would be a second statement of one thing.
+※
+※ **What may be given as the address** is a machine word -- which is what a
+※ request to the kernel answers with -- or a reference, which is a place being
+※ read as a place of another type.  A narrower number is refused (4584): half of
+※ an address is not a place, and widening one would be the compiler deciding
+※ which half.
+※
+※ Compare: **C**, where a cast of an integer to a pointer says this and says it
+※ anywhere; **Rust**, where it is `unsafe` and the word marks the region rather
+※ than the operation; **Zig**, whose `@ptrFromInt` is this exactly, one name for
+※ the one thing that cannot be checked; **Go**, whose `unsafe.Pointer` is the
+※ same idea behind a package a program has to name.
+
+※ mmap(NULL, 4096, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0)
+let READ_WRITE: i64 = 3i64
+let PRIVATE_ANONYMOUS: i64 = 0x22i64
+
+@[startup, impure]
+fn main() → u6:
+    let got: i64 = ⎕syscall(⎕sc@mmap, 0i64, 4096i64, READ_WRITE,
+                            PRIVATE_ANONYMOUS, ⁻1i64, 0i64)
+    if got < 0i64:
+        1u6
+    else:
+        ※ one value at the address, written through
+        let first: &mut u32 = ⎕at(got, ⌜&mut u32⌝)
+        first⌖ ← 0x12345678u32
+        ※ and the same memory as bytes, which says the write landed where the
+        ※ machine puts the low byte of a number
+        let bytes: u8⟦⟧ = ⎕span(got, 4096u64, ⌜u8⟦⟧⌝)
+        if #bytes ≠ 4096:
+            2u6
+        elif bytes⟦0⟧ ≠ 0x78u8 ∨ bytes⟦3⟧ ≠ 0x12u8:
+            3u6
+        else:
+            ※ a place further in, ordered -- which is what a ring's index is
+            ⎕release(⎕at(got + 8i64, ⌜&mut u32⌝), 7u32)
+            if ⎕acquire(⎕at(got + 8i64, ⌜&u32⌝)) = 7u32: 0u6 else: 4u6

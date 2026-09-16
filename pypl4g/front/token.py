@@ -189,6 +189,15 @@ SYSCALL_NAME: Final[str] = "".join((BUILTIN_GLYPH, "syscall"))
 ACQUIRE_NAME: Final[str] = "".join((BUILTIN_GLYPH, "acquire"))
 RELEASE_NAME: Final[str] = "".join((BUILTIN_GLYPH, "release"))
 
+#: A place at an address the program worked out, and a run of places from one.
+#: The compiler's names because nothing in the language makes a place out of a
+#: number: what is there is what the program says is there, and the compiler has
+#: no way to check it.  They are how a program reaches memory something else
+#: gave it -- what `mmap` answered, what a device said -- and they are the only
+#: way, which is what keeps that door in one place.
+AT_NAME: Final[str] = "".join((BUILTIN_GLYPH, "at"))
+SPAN_NAME: Final[str] = "".join((BUILTIN_GLYPH, "span"))
+
 #: What stands between a name the compiler provides and the key it is asked
 #: about: `⎕sc@write` is one name and the whole of it is looked up.  Only a name
 #: beginning with the quad may carry one, so the mark means nothing new
