@@ -207,6 +207,37 @@ the name is the last element; and C, where `#include` is text and there are no m
 means and to neither in how it is found: the file doing the importing decides first, which is what makes a directory of sources
 work with nothing configured.
 
+#### The `std` module
+
+One module the installation provides, holding what a program is started with and the devices it is started with open:
+
+```
+let std := ⎕import("std")
+
+type Reader     ※ a device that can be read
+type Writer     ※ a device that can be written
+type ReadWriter ※ both, which is what a socket and a file opened either way are
+
+type Io   = input : Reader ; output : Writer ; errors : Writer
+type Init = io : Io
+
+fn write(to: &mut Writer, what: u8⟦⟧) → i64
+```
+
+**A descriptor is a type and not a number.**  What says a thing may be written is the type of the name standing for it, so there is
+no way to hand a `Reader` to `write` and no way to write to a number a program made up.  The three a process inherits arrive in
+`init.io`, which is what the startup function may take.
+
+**One mutable reference is the whole of the concurrency rule.**  `&mut init.io.output` is exclusive because a second `&mut` to the
+same place is refused, so two names for one device is a thing the compiler refuses rather than a thing a lock prevents.
+
+`write` answers how many bytes went, or what the kernel said where it refused -- a negative number, which is the kernel's own
+convention.  Reading that as a result of the language's own kind is what the module will do once it has somewhere to put the error.
+
+Compare **Rust**, whose `std::io::stdout` is taken by a call and guarded by a lock, a run-time check where a static one is
+available; **Go**, whose `os.Stdout` is a package variable anything may write to; **Zig**, which passes a writer explicitly as this
+does; **C**, where the three are integers anyone may write to at any time, which is the thing being designed away.
+
 ### Expressions
 
 An expression may be enclosed in parentheses, which say how its operators group and mean nothing else.  Where there are none, each
@@ -4076,16 +4107,31 @@ The attributes that mark them are:
 The three kinds of test are one attribute with a parameter rather than three attributes, because they are three answers to one
 question.  These attributes exclude one another: a function is one of these things or none of them.
 
-The startup function takes no parameters and returns `u8`:
+The startup function takes what the program was started with, or nothing, and returns `u8`:
 
 ```
 @[startup]
 fn main() → u6:
     0
+
+let std := ⎕import("std")
+
+@[startup, impure]
+fn main(init: mut std.Init) → u6:
+    ※ the devices the process inherited, as descriptors and not as numbers
+    if std.write(&mut init.io.output, greeting) < 0i64: 1u6 else: 0u6
 ```
 
-The value it returns becomes the exit status of the process.  Control is transferred to it without arguments, so a signature with
-parameters would leave the arguments undefined.
+The value it returns becomes the exit status of the process.  The one parameter it may take is **the record the `std` module calls
+`Init`**, and no other: the entry point has the devices the process inherited to hand over and nothing else, so a parameter of any
+other type would be left undefined (4404).  It is `Init` rather than the descriptors themselves so that the arguments, the
+environment and whatever else a program is started with have somewhere to go without changing the one signature every program
+writes.  Which type that is is settled by where it was written down -- the `std` module the installation provides -- and not by its
+shape, so a record a program defines for itself and calls `Init` is a record it defined for itself.
+
+`init.io.input`, `init.io.output` and `init.io.errors` are what the process inherited open.  Taking `&mut init.io.output` is
+exclusive by the rule that already refuses a second `&mut` to a place, so **two names for one device is a thing the compiler
+refuses rather than a thing a lock prevents**, and nothing is checked while the program runs.
 
 The return type is `u8` because that is how wide an exit status is.  What a program hands to the system is truncated to eight bits
 before anything can observe it, so a wider type would let a program state a status that cannot arrive -- written with a wider type,

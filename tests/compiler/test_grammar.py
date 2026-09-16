@@ -27,9 +27,15 @@ pytestmark = pytest.mark.skipif(not shutil.which(TREE_SITTER),
 
 
 def sources() -> list[Path]:
-    """Every program in the language test suite and the examples."""
+    """Every program in the language test suite, the examples and the modules.
+
+    The modules the installation provides are sources like any other and are
+    read by every program that imports one, so a syntax one of them uses is a
+    syntax the grammar has to have.
+    """
     found = sorted((ROOT / "tests" / "language").glob("*/*.pl4g"))
     found += sorted((ROOT / "examples").glob("*/*.pl4g"))
+    found += sorted((ROOT / "modules").glob("*.pl4g"))
     return found
 
 

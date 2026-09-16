@@ -1,0 +1,37 @@
+※※ What every program starts with, and the devices it starts with open.
+※
+※ One module for now, named `std` and found beside the compiler.  What a program
+※ names here is a *descriptor* -- something that may be read, or written, or
+※ both -- and never the machinery underneath it.
+
+※※ A device that can be read.
+@[export]
+type Reader = fd : i32
+
+※※ A device that can be written.
+@[export]
+type Writer = fd : i32
+
+※※ A device that can be both, which is what a socket and a file opened either
+※※ way are.
+@[export]
+type ReadWriter = fd : i32
+
+※※ The devices a program starts with open.
+@[export]
+type Io = input : Reader ; output : Writer ; errors : Writer
+
+※※ What a program is started with.  A record rather than the descriptors
+※※ themselves, so that the arguments, the environment and whatever else a
+※※ program inherits have somewhere to go without changing the one signature
+※※ every program writes.
+@[export]
+type Init = io : Io
+
+※※ Write `what` to `to`, answering how many bytes went or what the kernel said.
+※※ The reference is exclusive, which is what says nothing else is writing to the
+※※ same device at the same time; it is checked where it is taken and costs
+※※ nothing here.
+@[export, impure]
+fn write(to: &mut Writer, what: u8⟦⟧) → i64:
+    ⎕syscall(⎕sc@write, to⌖.fd, &what⟦0⟧, #what)

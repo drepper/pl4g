@@ -52,8 +52,8 @@ from ..ir.types import (ARENA, ArrayType, BOOL, BoolType, BUILTIN_TYPES,
                         without_units,
                         CHAR, MAX_CODE_POINT, U8, parts_of)
 from . import strings, tables
-from .modules import (ImportCycle, LoadedModule, ModuleNotFound, ModuleRegistry,
-                      base_name)
+from .modules import (SUFFIX, ImportCycle, LoadedModule, ModuleNotFound,
+                      ModuleRegistry, base_name, system_modules)
 from ..ir.value import (BlockParam, BoolConst, CharConst, Const, EnumConst,
                         FloatConst,
                         IntConst,
@@ -75,6 +75,13 @@ from .attributes import (AttrSpec, AttrTarget, BoundAttr, SPECIAL_OF_TEST_KIND,
 #: that holds exactly those -- which makes a status outside its own range a
 #: thing the compiler refuses rather than a thing a reader has to know.
 STARTUP_RETURN_TYPE_NAME = "u6"
+
+#: The module the compiler knows about by name, and what it calls the record a
+#: program is started with.  One module for now, found beside the compiler; a
+#: type is that one by where it was written down and not by its shape, so a
+#: record a program defines for itself and calls `Init` is not it.
+STD_MODULE_NAME = "std"
+STARTUP_ARGUMENT_TYPE_NAME = "Init"
 
 
 @dataclass(slots=True)
@@ -789,6 +796,20 @@ def _can_be_a_key(ty: Type) -> bool:
     from ..ir.types import BoolType
 
     return isinstance(ty, (IntType, BoolType, EnumType))
+
+
+def _is_startup_argument(ty: Type) -> bool:
+    """Whether *ty* is the record a program is started with.
+
+    By where it was written down and not by its shape: a record a program
+    defines for itself and calls `Init` is a record it defined for itself, and
+    the compiler passes the descriptors to nothing but the one type it knows.
+    """
+    if not isinstance(ty, ProductType) \
+            or ty.name != STARTUP_ARGUMENT_TYPE_NAME or ty.origin is None:
+        return False
+    return any(Path(ty.origin) == (where / STD_MODULE_NAME).with_suffix(SUFFIX)
+               for where in system_modules())
 
 
 def _is_exported(what: object) -> bool:
@@ -2329,13 +2350,23 @@ class Checker:
                 pass
 
     def _check_startup_signature(self, func: Function, node: ast.FuncDef) -> None:
-        """Check that the startup function takes nothing and returns the status."""
+        """Check the startup function's signature.
+
+        It takes what the program is started with, or nothing: a program that
+        wants neither the devices it inherited nor anything else that arrives
+        with it writes no parameter, and that is most of them.  What it may take
+        is one thing, the record the `std` module calls `Init`, so that what a
+        program is started with can grow without every signature that exists by
+        then having to change.
+        """
         expected = BUILTIN_TYPES[STARTUP_RETURN_TYPE_NAME]
         if func.ty.ret is ERROR or ERROR in func.ty.params:
             return
         problem: str | None = None
-        if func.ty.params:
-            problem = "takes parameters"
+        if len(func.ty.params) > 1:
+            problem = "takes more than one parameter"
+        elif func.ty.params and not _is_startup_argument(func.ty.params[0]):
+            problem = "".join(("takes a '", func.ty.params[0].render(), "'"))
         elif func.ty.ret != expected:
             problem = "".join(("returns '", func.ty.ret.render(), "'"))
         if problem is not None:
@@ -10307,6 +10338,13 @@ class Checker:
                     and isinstance(self._resolved(named), ProductType):
                 return self._lower_record(builder, expr,
                                           self._resolved(named), expected)
+        if isinstance(expr.callee, ast.Member):
+            # A record another module defined, written the way one defined here
+            # is: what the mark before a field means does not change with where
+            # the type was written down.
+            through = self._type_exported(expr.callee)
+            if isinstance(through, ProductType):
+                return self._lower_record(builder, expr, through, expected)
         held = self._callee_value(expr.callee)
         if held is not None:
             return self._lower_indirect(builder, expr, held, expected)
@@ -11291,6 +11329,23 @@ class Checker:
             case _:
                 self._diags.emit(D.LANG_CALL_NOT_A_FUNCTION, expr.span, name="this")
                 return None
+
+    def _type_exported(self, expr: ast.Member) -> Type | None:
+        """The type another module exports under this name, asked quietly.
+
+        Nothing is reported for a name that is not one: this is asked of every
+        call written `a.b(...)` to tell a record from a call, and what a name
+        that is neither turns out to be is the ordinary path's to say.
+        """
+        if not isinstance(expr.base, ast.NameRef):
+            return None
+        held = self._top.get(expr.base.name)
+        if not isinstance(held, LoadedModule):
+            return None
+        found = held.exports.get(expr.name)
+        if not isinstance(found, _NamedType):
+            return None
+        return found.ty
 
     def _callee_of_module(self, expr: ast.Member) -> Function | None:
         """The function another module exports under this name."""

@@ -2431,6 +2431,28 @@ one's; before this there was one token for all of them, which was the entry
 block's only because nothing asked in an `elif` had ever written.
 
 
+What a program is started with
+------------------------------
+
+The startup function may take one parameter, and the compiler knows exactly one
+type it may be: the record the `std` module calls `Init`.  Which type that is is
+settled by where it was written down -- `modules/std.pl4g` beside the compiler,
+found through `system_modules()` -- and not by its shape, so a record a program
+defines for itself and calls `Init` is a record it defined for itself and is
+refused (4404).
+
+`Init` holds an `Io`, which holds three descriptors, each of them a record around
+the number the kernel knows; flattened, `parts_of(Init)` is three `i32`s.  The
+entry point puts the numbers every system opens them under -- 0, 1 and 2 -- into
+the registers `argument_places` says that one argument arrives in, and calls the
+startup function.  `target/started.py` is where both of those live, so each of
+the three entry points only has to know how to write a number into a register;
+it asserts that there are as many registers as descriptors, which is what catches
+a field added to `Io` on one side and not the other.
+
+A program that writes no parameter is started with those registers as the kernel
+left them, which is most of them and is what every test written before this does.
+
 Asking the kernel
 -----------------
 

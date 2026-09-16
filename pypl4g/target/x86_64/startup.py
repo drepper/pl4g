@@ -19,6 +19,7 @@ from ...mc import ops
 from ...mc.asmbuilder import Assembler
 from .. import statuses
 from ..callconv import CallConvDesc
+from ..started import handed_over
 from ..tests import Failure, run_by
 from . import ops as x86ops
 from ..allocator import AllocatorRegs, SyscallABI
@@ -67,6 +68,9 @@ def emit_start(asm: Assembler, module: Module, cconv: CallConvDesc,
         # passed, or it left through the helper above and never arrived here.
         asm.loadreg(EDI, asm.imm(0, 32, signed=False))
     else:
+        for place, number in handed_over(module, cconv):
+            asm.loadreg(INFO.view(place.unit, 32),
+                        asm.imm(number, 32, signed=True))
         asm.call(symbol_name(startup))
         # The status is moved out of the return register before the destructors
         # run, because a destructor is an ordinary call and may use that

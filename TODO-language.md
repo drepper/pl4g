@@ -202,8 +202,18 @@ To Do List for the PL4g language
     specification says so and nothing chose it; a record was settled the other way on 2026-09-17, and the two should agree or
     the difference should be written down.
 
-[ ] the `std` module, and I/O through io_uring.  Designed on 2026-09-17 and written down in the decision log; what it waits on is
-    the three entries above, since `std.Init` is a product and `init.io.out` is a field of one.
+[ ] the `std` module, and I/O through io_uring.  Designed on 2026-09-17 and written down in the decision log.  What it waited on
+    is done, and the first of it landed on 2026-09-17: `modules/std.pl4g` defines `Reader`, `Writer`, `ReadWriter`, `Io` and
+    `Init`; the startup function may take `std.Init` and the entry point hands over the three descriptors; `write` goes to the
+    kernel directly.  What is left, in order: ordering in the IR that says a request may not be moved past what it depends on;
+    `Ring` and `Pending`, and the ring the startup code makes where something needs one; `read`, and `ReadWriter`.
+
+[ ] answer a result rather than the kernel's number.  `std.write` answers an `i64` that is negative where the kernel refused,
+    which is the kernel's convention and not the language's.  It should answer `u64 ¤size?`, which wants somewhere for the error
+    to go -- an enumeration of what the kernel says -- and that is a table the compiler does not have yet.
+
+[ ] write a `str`.  `std.write` takes `u8⟦⟧` and a `str` is characters, so a program with text to
+    write has no way to say so.  Either a `str` answers its bytes, or `write` takes either.
 
 [x] ask which variant a sum holds: `match`.  Done, and it takes an enumeration and a result apart as well.  A result and an
     enumeration run; for a sum every rule about the arms is checked and the compiler then says it cannot generate for one, what is

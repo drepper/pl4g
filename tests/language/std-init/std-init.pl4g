@@ -1,0 +1,44 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ The startup function may take what the program was started with, and what that
+※ is is the record the `std` module calls `Init`.
+※
+※ **A descriptor and not a number.**  `init.io.output` is a `Writer`, which is a
+※ record around the number the kernel knows; what says a thing may be written is
+※ its type, and there is no way to hand a `Reader` to `write`.  Three descriptors
+※ arrive open, in the order every system opens them.
+※
+※ **One mutable reference and no lock.**  `&mut init.io.output` is exclusive by
+※ the rule that already refuses a second `&mut` to a place, so nothing is checked
+※ while the program runs and nothing is locked.  What it costs is that lending
+※ one field lends the whole of `init` for as long as the reference lives, the
+※ aliasing rule not telling one field of a local from another -- which is written
+※ down as a thing to fix and not as a thing to live with.
+※
+※ **`Init` rather than the descriptors outright**, so that the arguments, the
+※ environment and whatever else a program inherits have somewhere to go without
+※ changing the one signature every program writes.
+※
+※ Compare: **C**, whose `main` takes the arguments and whose three descriptors
+※ are integers anyone may write to at any time; **Rust**, whose `std::io::stdout`
+※ is taken by a call and guarded by a lock, a run-time check where a static one
+※ is available; **Go**, whose `os.Stdout` is a package variable; **Zig**, which
+※ passes a writer explicitly as this does.
+
+let std := ⎕import("std")
+
+@[startup, impure]
+fn main(init: mut std.Init) → u6:
+    let message: u8⟦6⟧ = ⟦104u8, 101u8, 108u8, 108u8, 111u8, 10u8⟧
+    ※ the numbers the kernel knows them by, in the order they arrive
+    if init.io.input.fd ≠ 0i32:
+        1u6
+    elif init.io.output.fd ≠ 1i32:
+        2u6
+    elif init.io.errors.fd ≠ 2i32:
+        3u6
+    ※ and one of them written through, which answers how many bytes went
+    elif std.write(&mut init.io.output, message) ≠ 6i64:
+        4u6
+    else:
+        0u6

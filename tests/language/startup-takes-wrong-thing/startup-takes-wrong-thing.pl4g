@@ -1,0 +1,16 @@
+※ pl4g-test: compile=error diag=4404
+
+※ The startup function takes what the program was started with, or nothing.  A
+※ parameter of any other type is refused: there is nothing the entry point could
+※ put in it, the descriptors being the only thing it has to hand over.
+※
+※ Nothing about the *shape* of the type is what decides it -- a record a program
+※ defines for itself and calls `Init` is a record it defined for itself.  What
+※ the compiler passes the descriptors to is the one type it knows, the one the
+※ `std` module found beside the compiler wrote down.
+
+type Init = io : u32
+
+@[startup]
+fn main(init: Init) → u6:
+    if init.io = 0u32: 0u6 else: 1u6

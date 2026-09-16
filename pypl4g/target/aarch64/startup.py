@@ -19,6 +19,7 @@ from ...mc.ops import Condition
 from ...mc.asmbuilder import Assembler
 from .. import statuses
 from ..callconv import CallConvDesc
+from ..started import handed_over
 from ..tests import Failure, run_by
 from . import ops as a64ops
 from ..allocator import AllocatorRegs, SyscallABI
@@ -60,6 +61,8 @@ def emit_start(asm: Assembler, module: Module, cconv: CallConvDesc,
         # passed, or it left through the helper above and never arrived here.
         asm.loadreg(status, asm.imm(0, 16, signed=False))
     else:
+        for place, number in handed_over(module, cconv):
+            asm.loadreg(place, asm.imm(number, 16, signed=False))
         asm.call(symbol_name(startup))
     # The value a function returns is already in the register a system call
     # takes its first argument in, so nothing has to be moved -- unless a

@@ -5423,6 +5423,54 @@ the language and passes a large structure by pointer visibly; **ML** and
 **Haskell**, where a record is boxed and one pointer travels, which is the
 answer this does not take.
 
+## 2026-09-17T19:00+02:00 — language
+
+**The `std` module, and a startup function that takes what it was started with**
+
+The first of the I/O design of 2026-09-17T14:15, which waited on three things
+about records and now waits on nothing.  `modules/std.pl4g` defines `Reader`,
+`Writer`, `ReadWriter`, `Io` and `Init`; `@[startup] fn main(init: mut std.Init)
+→ u6` is a signature the compiler accepts; and `std.write` goes
+to the kernel with `⎕syscall`, which the ring will
+replace and the interface will not notice.
+
+**Which type `Init` is, is settled by where it was written down** and not by its
+shape.  A record a program defines for itself and calls `Init` is a record it
+defined for itself, and the entry point hands the descriptors to the one type the
+compiler knows -- the one in the module the installation provides.  Checking the
+shape instead would let a program be handed three file descriptors by accident,
+which is the kind of thing this language is for refusing.  The other way, an
+attribute in `std.pl4g` marking the type, was turned down because a program could
+write the attribute too.
+
+**The descriptors arrive in registers and not through storage.**  `parts_of(Init)`
+is three `i32`s once a nested field is flattened, so the entry point writes 0, 1
+and 2 into the registers `argument_places` names and calls.  `target/started.py`
+holds both the numbers and that mapping, so the three entry points share the
+decision rather than each stating it; it asserts there are as many registers as
+descriptors, which is what catches a field added to `Io` on one side only.
+
+**Exclusivity is what the aliasing rule already says.**  `&mut init.io.output` is
+exclusive because a second `&mut` to the same place is refused, so two names for
+one device is a compile error and not a lock -- and the cost the design predicted
+is the cost paid: lending one field lends the whole of `init`, the rule not
+telling one field of a local from another.  That is a to-do entry, and the entry
+existed before this landed.
+
+**What `write` answers is the kernel's number**, an `i64` negative where it
+refused, rather than the `u64 ¤size?` the design wrote down.  A result wants
+somewhere for the error to go, which is an enumeration of what the kernel says
+and a table that does not exist yet; the signature changes when it does, and the
+to-do list says so.
+
+Compare: **C**, whose `main` takes the arguments and whose three descriptors are
+integers anyone may write to at any time; **Rust**, whose `std::io::stdout` is
+taken by a call and guarded by a lock, a run-time check where a static one is
+available, and whose `main` takes nothing; **Go**, whose `os.Stdout` is a package
+variable; **Zig**, which passes a writer explicitly as this does and whose `main`
+may take an allocator and the arguments; **Haskell**, where the whole question is
+inside `IO` and the descriptors are handles of the library.
+
 Open questions
 --------------
 
