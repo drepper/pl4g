@@ -2032,6 +2032,25 @@ fn bump(at: &mut i8):
     at⌖ ← at⌖ + 1i8
 ```
 
+**A name may hold a reference only to a place that lasts as long as it does** (4570).  A name bound further out lasts longer
+than a place made further in, so giving it a reference to one would leave it naming a variable the program can no longer name:
+
+```
+let r: mut &mut u32 = &v1
+if b:
+    let v2: mut u32 = 1u32
+    r ← &v2                   ※ refused: r outlives v2
+r⌖                          ※ what this would read is gone
+```
+
+Outward is always allowed, inward never.  It is the rule a function answering with a reference follows, asked at the third place
+a reference can escape to -- not out of the call and not into a variable at the top level, but outward within one body -- and it
+is asked of a place that holds a reference as much as of a name: `rr⌖ ← &v2` puts one where `rr` names, and how long
+that lasts is how long what names it does.
+
+Rust asks the same question and answers it the same way.  C and Odin do not ask it, and a pointer to a block-scoped variable
+outliving its block is the oldest mistake there is.
+
 **A `&mut` is the only reference to its place while it lives**, and a `&` may share with other `&`s (4563).  That is what makes
 a reference worth having rather than merely convenient: whoever holds a `&mut` knows nothing else can change the place under it,
 and whoever holds a `&` knows nothing can change it at all.  Two references where either may write would give up both promises at

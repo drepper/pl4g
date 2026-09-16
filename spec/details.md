@@ -1928,6 +1928,18 @@ be found by name.
 may answer with a variable at the top level, and `_shorter_life` in `_lower_into` bitcasts a lasting reference where a shorter one
 is wanted.  The other direction is an ordinary type mismatch and is left to be one.
 
+**How long a place lasts is how deep the scope it was made in is.**  `_Local.depth` records it when the name is bound, and
+`_places` maps the value that is a place's address to the name it belongs to -- filled in `_bind_local`, where the frame is made.
+`_named_place_of` walks a reference back to one of those the way provenance is walked everywhere else, and `_outlives_it` is the
+one comparison: the name being given the reference must not be shallower than the place.  A variable at the top level is nobody's
+local and answers nothing, which is right -- it outlives every name.
+
+It is asked at three places: assigning to a name that stands for a value, assigning to one that stands for a place, and writing
+through a reference whose pointee holds one.  A definition needs no asking, a name being bound at the depth it is written at, and
+so does handing one to a call, a parameter lasting no longer than the call.  What is *not* asked, and is the hole left open, is a
+call that stores one of its arguments into another: nothing in a signature can yet say that two parameters live as long as each
+other.
+
 **A reference that is out is one row in a list.**  `_Borrow` holds the name, whether it may write, where it was taken, and how
 deep the scope is that keeps it.  `_lend` walks the list at `&`, `_lent_out` walks it at a name, `_statement_ended` drops the rows
 nothing bound and `_pop_scope` drops the rows that scope kept.  There is no dataflow and no fixpoint: the list is the whole of the

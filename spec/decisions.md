@@ -4931,6 +4931,35 @@ Compare: **Python**, whose `if b: x` this is and which refuses the nested case f
 rule has the same notion of a block opened without a newline; **C**, **Java** and **Go**, where the braces are the block and the
 dangling `else` is settled by a rule or by requiring them.
 
+## 2026-09-17T08:15+02:00 — language
+
+**A name may hold a reference only to a place that lasts as long as it does**
+
+Reported by the user as a program that should not have compiled: a reference taken inside an arm, assigned to a name bound
+outside it, and read after the arm had ended.
+
+**It is the rule that was already there, asked at the third place.**  A function may not answer with a reference that says
+nothing about how long it lives (4562), and a variable at the top level may hold only a lasting one (4532).  Both are about a
+reference outliving what it names; this is the same thing within one body, where the two scopes are the arm and the body around
+it.  Outward is always allowed and inward never, and that is the whole of the rule (4570).
+
+**Depth is what decides it**, not a lifetime name.  A place is as deep as the scope it was made in and a name as deep as the
+scope it was bound in; the reference is walked back to the name whose place it is, the way provenance is walked for everything
+else about references.  Lifetime names would say more -- they relate two things rather than order them -- and are not needed for
+this: within one body the compiler can see both ends.
+
+**It is asked of a place that holds a reference too.**  `rr⌖ ← &v2` puts a reference where `rr` names, and how long that
+lasts is how long what names it does.  Without that the rule would be one indirection deep.
+
+**What is left open** is a call that stores one of its arguments into another: `fn keep(slot: &mut &mut u32, r: &mut u32)`
+writing `slot⌖ ← r` is right for any one call and wrong for a caller that hands in a long-lived slot and a
+short-lived reference.  Closing it needs a signature able to say that two parameters live as long as each other, which is Rust's
+`'a: 'b` and which the lifetime names here cannot yet write.  Refusing `&mut &mut T` as a parameter would close it
+conservatively; that was not done, the hole being narrow and the restriction wide.
+
+Compare: **Rust**, whose borrow checker asks exactly this; **C++**, **C** and **Odin**, which do not, and where a pointer
+outliving its block is the oldest mistake there is; **Go** and **Java**, which move what escapes to the heap.
+
 Open questions
 --------------
 

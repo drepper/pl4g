@@ -15,7 +15,8 @@ from typing import Callable, Final, Sequence
 from ..diag import ids as D
 from ..diag.engine import DiagEngine, Expectation
 from ..front import ast
-from ..front.token import (BOTTOM_GLYPH, BUILTIN_GLYPH, CHR_NAME, LIFETIME_GLYPH,
+from ..front.token import (BOTTOM_GLYPH, BUILTIN_GLYPH, CHR_NAME, DEREF_GLYPH,
+                           LIFETIME_GLYPH,
                            DROP_NAME, NARROW_NAME, UNIT_NAME,
                           ENUMERATE_NAME, TYPEOF_NAME,
                           EMPTY_ARENA_NAME, ORD_NAME,
@@ -129,6 +130,10 @@ class _Local:
     placed: bool = False
     #: What that storage holds, which is the type the name has.
     held: Type | None = None
+    #: How deep the scope it was bound in is.  A name may be given a reference
+    #: only to a place at least as deep as this: what a reference names has to
+    #: be there for as long as the name that holds it.
+    depth: int = 0
 
 
 @dataclass(slots=True)
@@ -564,6 +569,22 @@ def _promises_as_much(expected: Type | None, found: Type) -> bool:
         return False
     return ((found.lasting or not expected.lasting)
             and (found.mutable or not expected.mutable))
+
+
+def _written_as(expr: ast.Expr) -> str:
+    """What to call a place in a message, where the program wrote a name.
+
+    The place written through may be worked out rather than named -- an element
+    of an array, something a call answered with -- and there is nothing to call
+    one of those but what it is.
+    """
+    match expr:
+        case ast.NameRef():
+            return expr.name
+        case ast.Deref():
+            return "".join((_written_as(expr.operand), DEREF_GLYPH))
+        case _:
+            return "what this writes through"
 
 
 def _reached_from(value: Value, sources: Sequence[Value],
@@ -1189,6 +1210,10 @@ class Checker:
         #: The name a reference is being taken of, while one is: working the
         #: place out reads the name, and that read is the reference itself.
         self._taking_a_reference: str | None = None
+        #: Which name each place belongs to, by the identity of the value that
+        #: is its address.  A reference is walked back to one of these to find
+        #: out how long what it names lasts and what to call it.
+        self._places: dict[int, _Local] = {}
         #: The references that are out, oldest first.  One is dropped when the
         #: statement that made it ends, or when the scope that kept it does.
         self._borrows: list[_Borrow] = []
@@ -1848,7 +1873,9 @@ class Checker:
             scope[name] = _Local(name=name, value=value, span=span,
                                  mutable=mutable, placed=True, held=placed_as,
                                  value_span=value_span if value_span.is_valid
-                                 else span, is_parameter=is_parameter)
+                                 else span, is_parameter=is_parameter,
+                                 depth=len(self._scopes))
+            self._places[id(value)] = scope[name]
             return
         held = self._value_type_of(value)
         placed = (builder is not None and name in self._addressed
@@ -1868,8 +1895,12 @@ class Checker:
             value = place
         scope[name] = _Local(name=name, value=value, span=span, mutable=mutable,
                              value_span=value_span if value_span.is_valid else span,
-                             is_parameter=is_parameter,
+                             is_parameter=is_parameter, depth=len(self._scopes),
                              placed=placed, held=held if placed else None)
+        if placed:
+            # Where the place is, so that a reference worked out from it can be
+            # walked back to how long it lasts.
+            self._places[id(value)] = scope[name]
 
     def _report_undefined(self, name: str, span: Span) -> None:
         """Report a name nothing here stands for, saying which nothing it is.
@@ -2853,6 +2884,7 @@ class Checker:
         """Check and lower the statements of one function."""
         node, func = entry.node, entry.func
         self._borrows = []
+        self._places = {}
         block = func.add_block()
         builder = IRBuilder(self._module, func)
         outer_answer, self._answering = self._answering, func.ty.ret
@@ -4595,6 +4627,15 @@ class Checker:
         value = self._lower_into(builder, stmt.value, ty.pointee, stmt.span)
         if self._value_type_of(value) is ERROR:
             return
+        if _holds_a_reference(ty.pointee):
+            # The place written holds a reference, so the same question is asked
+            # of it as of a name: what goes into it has to last as long as it
+            # does, and how long that is, is how long what this names does.
+            named = self._named_place_of(target)
+            if self._outlives_it(value, named.depth if named is not None else 0,
+                                 "".join((_written_as(stmt.target),
+                                          DEREF_GLYPH)), stmt.span):
+                return
         builder.store(target, value, stmt.span)
 
     def _lower_deref(self, builder: IRBuilder, expr: ast.Deref,
@@ -4848,6 +4889,44 @@ class Checker:
             CastKind.BITCAST, answer,
             self._module.types.ptr_type(answer.ty.pointee, answer.ty.mutable,
                                         lasting=True), span)
+
+    def _named_place_of(self, value: Value) -> _Local | None:
+        """The name whose place *value* is a reference into, where it is one.
+
+        Walked back the way provenance is walked everywhere else.  A variable at
+        the top level is nobody's local and answers nothing, which is right: it
+        is there as long as the program and outlives every name.
+        """
+        seen = value
+        while True:
+            found = self._places.get(id(seen))
+            if found is not None:
+                return found
+            if isinstance(seen, (CastInst, ExtractInst)) or (
+                    isinstance(seen, BinaryInst)
+                    and seen.op in (BinOp.ADD, BinOp.SUB)):
+                seen = seen.operands[0]
+                continue
+            return None
+
+    def _outlives_it(self, value: Value, depth: int, where: str,
+                     span: Span) -> bool:
+        """Report a reference given to a name that outlives what it names.
+
+        A reference is only worth having while what it names is still there, and
+        a name bound further out lasts longer than a place made further in: the
+        place is gone -- out of reach and no longer nameable -- while the name
+        that holds the reference is still in hand.  It is the rule a function
+        answering with a reference follows, asked of the third place a reference
+        can escape to.
+        """
+        named = self._named_place_of(value)
+        if named is None or named.depth <= depth:
+            return False
+        self._diags.emit(D.LANG_REF_OUTLIVES_PLACE, span,
+                         name=where, place=named.name) \
+            .note(D.LANG_VARDEF_DEFINED_HERE, named.span, name=named.name)
+        return True
 
     def _place_of_a_name(self, builder: IRBuilder, expr: ast.NameRef
                          ) -> tuple[Value, Type, bool, str, bool] | None:
@@ -6989,6 +7068,10 @@ class Checker:
                 return None
             assert local.held is not None
             value = self._checked_value(builder, node, local.held)
+            if _holds_a_reference(local.held) \
+                    and self._outlives_it(value, local.depth, node.name,
+                                          node.span):
+                return None
             self._kept_by_a_name(local.held)
             builder.store(local.value, value, node.span)
             local.written = True
@@ -6998,6 +7081,10 @@ class Checker:
             if not self._check_mutable(node, local.mutable, local.span):
                 return None
             value = self._checked_value(builder, node, local.value.ty)
+            if _holds_a_reference(local.value.ty) \
+                    and self._outlives_it(value, local.depth, node.name,
+                                          node.span):
+                return None
             self._kept_by_a_name(local.value.ty)
             # The value the name stood for is gone; if nothing read it, giving
             # it cannot have affected what the program does.

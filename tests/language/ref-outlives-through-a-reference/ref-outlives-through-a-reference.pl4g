@@ -1,0 +1,19 @@
+※ pl4g-test: compile=error diag=4570
+
+※ The same escape, one level of indirection out.  `rr` names the place `r1` is,
+※ so writing through it puts a reference where `r1` holds one -- and `r1` lasts
+※ as long as the body while `v2` lasts as long as the arm.  What is asked of a
+※ name is asked of a place that holds a reference, and how long that place lasts
+※ is how long what names it does.
+
+let b1 : bool = true
+
+@[startup, impure]
+fn main() → u6:
+    let v1 : mut u32 = 0u32
+    let r1 : mut &mut u32 = &v1
+    let rr : &mut &mut u32 = &mut r1
+    if b1:
+        let v2 : mut u32 = 1u32
+        rr⌖ ← &v2
+    if rr⌖⌖ = 0u32 { 0u6 } else { 1u6 }

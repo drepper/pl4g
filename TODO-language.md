@@ -607,6 +607,12 @@ Runtime
     holds -- but `can_ignore` is about a caller, and `impure` would let a pure function call one that is not.  Both want the type
     to carry them, which is the same machinery `listable` just gained.
 
+[ ] say that two parameters live as long as each other, so that a call storing one of its arguments into another is checked.
+    `fn keep(slot: &mut &mut u32, r: &mut u32)` writing `slot⌖ ← r` is right for any one call and wrong for a caller
+    handing in a long-lived slot and a short-lived reference; a name may not hold a reference to a shorter-lived place (4570),
+    but nothing asks it of a call.  Rust's `'a: 'b` is the thing to compare against, and the lifetime names here cannot write
+    it: `⧖a` relates a parameter to the answer and not a parameter to a parameter.
+
 [ ] count a reference copied into a second name.  The aliasing rule (4563) watches every place a reference is *made* and not
     the ones that are merely handed on, so `let other: &mut u8 = r` is a second way to the place that nothing reports.  Rust
     closes it with moves and reborrows, which need an ownership rule this language does not have.

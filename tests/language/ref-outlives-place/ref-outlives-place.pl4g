@@ -1,0 +1,31 @@
+※ pl4g-test: compile=error diag=4570
+
+※ A reference is only worth having while what it names is still there.  A name
+※ bound further out lasts longer than a place made further in, so the place
+※ would be gone -- out of reach and no longer nameable -- while the name holding
+※ the reference is still in hand, and the last line here would read a variable
+※ the program can no longer name.
+※
+※ It is the rule a function answering with a reference follows (4562), asked at
+※ the third place a reference can escape to: not out of the call and not into a
+※ variable at the top level, but outward within one body.  What decides it is
+※ how deep the scope each of the two belongs to is, and the reference is walked
+※ back to the name whose place it is the way provenance is walked everywhere
+※ else.
+※
+※ Rust asks the same question with the same answer.  C and Odin do not ask it,
+※ and a pointer to a block-scoped variable outliving its block is the oldest
+※ mistake there is.
+
+let b1 : bool = true
+let b2 : bool = true
+
+@[startup]
+fn main() → u6:
+    let v1 : mut u32 = 0u32
+    let r1 : mut &mut u32 = &v1
+    if b1:
+        let v2 : mut u32 = 1u32
+        if b2:
+            r1 ← &v2
+    if r1⌖ = 0u32 { 0u6 } else { 1u6 }
