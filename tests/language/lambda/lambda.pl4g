@@ -24,6 +24,17 @@
 ※ C++'s distinction and C++'s mark for it, and the mark is the same `&` a
 ※ reference is written with.
 ※
+※ `[=]` and `[&]` say the same of every name the body reaches from outside
+※ itself, which saves writing them out where there are many.  Which names those
+※ are is what the body writes and does not bind for itself: its own parameters
+※ are not among them, and neither is anything it defines inside.
+※
+※ **A capture list cannot be confused with a parameter whose type is a list.**
+※ A `[` begins a capture list only where a parameter has just been read whole,
+※ and a type ends at its own closing bracket -- nothing lets a type be followed
+※ by one.  So `λ v: [u8] [=] → u8` is a list of bytes and then a capture list,
+※ and it is the only reading there is.
+※
 ※ **A lambda does not leave the call that made it** -- not answered with, not
 ※ held at the top level -- because what it brought in belongs to that call.  It
 ※ is the rule a reference follows, and lifetime annotations will lift both.
@@ -47,6 +58,16 @@ fn main() → u6:
     ※ answering with nothing, which is written by leaving the arrow off
     let bump: fn(u8) = λ a: u8:
         counted ← counted + a
+    ※ everything the body reaches, brought in by value
+    let all: fn(u8) → u8 = λ a: u8 [=] → u8 { a + n }
+    ※ and the same by reference
+    let every: fn(u8) → u8 = λ a: u8 [&] → u8 { a + n }
+    ※ a parameter whose type is a list, beside a capture list of each kind
+    let listed: fn([u8]) → u8 = λ v: [u8] [n] → u8 { n }
+    let sized: fn([u8]) → u8 = λ v: [u8] [=] → u8 { n }
+    let held: fn([u8], [u16]) → u8 = λ v: [u8], w: [u16] [&] → u8 { n }
+    let some: [u8] = [1u8, 2u8]
+    let other: [u16] = [1u16]
     ※ handed to a function, which calls it without knowing which it is
     if one(5u8) ≠ 6u8 ∨ two(5u8) ≠ 7u8:
         1u6
@@ -61,6 +82,12 @@ fn main() → u6:
             4u6
         elif seen(5u8) ≠ 25u8:
             5u6
+        ※ and the lists that say "all of them" follow the same two rules
+        elif all(5u8) ≠ 15u8 ∨ every(5u8) ≠ 25u8:
+            11u6
+        ※ a list parameter beside a capture list, which is one reading only
+        elif listed(some) ≠ 10u8 ∨ sized(some) ≠ 10u8 ∨ held(some, other) ≠ 20u8:
+            12u6
         ※ called through a parameter, twice over
         elif twice(one, 5u8) ≠ 7u8 ∨ twice(two, 5u8) ≠ 9u8:
             6u6

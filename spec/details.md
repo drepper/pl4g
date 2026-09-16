@@ -2025,6 +2025,14 @@ checked in a scope stack of its own, holding the captures and the parameters and
 `_outside` -- so a name it names and did not bring in is reported as one it did not bring in rather than as one nobody has, which
 is the difference worth telling a reader about.
 
+**`[=]` and `[&]` are worked out in the checker**, from two walks over the body: every name it writes, in the order it writes
+them, less every name it binds for itself and less its own parameters.  A nested lambda's capture list counts as names *this*
+body reaches, since that is what they are.
+
+`[&]` needs the names placed, and which names those are is not known until the body is checked -- which is after `_addressed_in`
+has decided.  So every name written in such a body is given storage: one that turns out not to be brought in has paid a load for
+it, which is the price of a list that says "all of them" rather than saying which.
+
 **A capture by reference is a placed local inside the lambda.**  `_addressed_in` collects the names written after `&` in a
 capture list beside the ones written after `&` in an expression, because both need the variable to be somewhere; the environment
 then holds a pointer, and the name inside the body is bound with `placed_as`, so reading it loads and assigning to it stores.

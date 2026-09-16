@@ -242,6 +242,16 @@ def _addressed_in(node: object, into: set[str]) -> None:
         # variable to be somewhere, which is the same thing `&` needs anywhere
         # else and is got the same way.
         into.add(node.name)
+    if isinstance(node, ast.Lambda) \
+            and node.brings_in is ast.CaptureAll.BY_REFERENCE:
+        # `[&]` says it of every name the body reaches, and which ones those are
+        # is not settled until the body is checked -- which is after this.  So
+        # every name written in it is given storage: a name that turns out not
+        # to be brought in has paid a load for it, which is the price of the
+        # list saying "all of them" rather than saying which.
+        written: list[str] = []
+        _named_in(node.body, written)
+        into.update(written)
     if isinstance(node, ast.Node):
         for one in fields_of(node):
             _addressed_in(getattr(node, one.name), into)
@@ -324,6 +334,55 @@ def _carrying(ty: Type, unit: Unit) -> Type:
     if isinstance(ty, FloatType):
         return FloatType(ty.bits, unit)
     return ty
+
+
+#: The kinds of node that bind a name, and the fields the names are in.  What
+#: `[=]` and `[&]` bring in is what the body reaches from *outside* itself, so
+#: a name the body binds for itself is not one of them however often it is
+#: written.
+_BINDS: Final[dict[str, tuple[str, ...]]] = {
+    "VarDef": ("name", "more"),
+    "ForEach": ("name", "more"),
+    "Param": ("name",),
+    "Capture": ("name",),
+    "Pattern": ("name",),
+}
+
+
+def _named_in(node: object, into: list[str]) -> None:
+    """Every name written below *node*, in the order they are written.
+
+    A name written as a name, and a name written in a capture list of a lambda
+    inside this one -- which is a name that lambda reaches from *this* body, so
+    a list that brings in everything this body reaches has to bring it in too.
+    """
+    if isinstance(node, ast.NameRef) and node.name not in into:
+        into.append(node.name)
+    if isinstance(node, ast.Capture) and node.name not in into:
+        into.append(node.name)
+    if isinstance(node, ast.Node):
+        for one in fields_of(node):
+            _named_in(getattr(node, one.name), into)
+    elif isinstance(node, (list, tuple)):
+        for one in node:
+            _named_in(one, into)
+
+
+def _bound_in(node: object, into: set[str]) -> None:
+    """Every name bound below *node*, whichever construct binds it."""
+    if isinstance(node, ast.Node):
+        for field_name in _BINDS.get(type(node).__name__, ()):
+            found = getattr(node, field_name, None)
+            if isinstance(found, str):
+                into.add(found)
+            elif isinstance(found, tuple):
+                into.update(one[0] for one in found
+                            if isinstance(one, tuple) and isinstance(one[0], str))
+        for one in fields_of(node):
+            _bound_in(getattr(node, one.name), into)
+    elif isinstance(node, (list, tuple)):
+        for one in node:
+            _bound_in(one, into)
 
 
 def _can_be_referred_to(ty: Type) -> bool:
@@ -3504,10 +3563,12 @@ class Checker:
     def _captures_of(self, expr: ast.Lambda
                      ) -> list[tuple[ast.Capture, _Local]] | None:
         """What the lambda brings in, looked up where the lambda is written."""
+        written = (self._everything_reached(expr) if expr.brings_in is not None
+                   else expr.captures)
         found: list[tuple[ast.Capture, _Local]] = []
         seen: set[str] = set()
         spoiled = False
-        for one in expr.captures:
+        for one in written:
             if one.name in seen:
                 self._diags.emit(D.LANG_CAPTURE_TWICE, one.span, name=one.name)
                 spoiled = True
@@ -3521,6 +3582,29 @@ class Checker:
             local.read = True
             found.append((one, local))
         return None if spoiled else found
+
+    def _everything_reached(self, expr: ast.Lambda) -> tuple[ast.Capture, ...]:
+        """What `[=]` or `[&]` brings in: everything the body reaches outside.
+
+        A name the body writes and does not bind for itself, that stands for
+        something where the lambda is written.  Its own parameters are not among
+        them -- they come from the caller -- and neither is anything it binds
+        inside, however often that name is written.
+
+        The order is the order the names are first written, which is the only
+        order there is: nothing about a set of names says which comes first, and
+        one that changed with the phase of the moon would make two builds of one
+        program differ.
+        """
+        seen: list[str] = []
+        _named_in(expr.body, seen)
+        inside: set[str] = {one.name for one in expr.params}
+        _bound_in(expr.body, inside)
+        return tuple(
+            ast.Capture(span=expr.span, name=name,
+                        by_reference=expr.brings_in is ast.CaptureAll.BY_REFERENCE)
+            for name in seen
+            if name not in inside and self._find_local(name) is not None)
 
     def _held_by_capture(self, one: ast.Capture, local: _Local) -> Type:
         """What the environment holds for one capture.
@@ -3565,8 +3649,14 @@ class Checker:
             offsets = member_offsets_of(inside, _LAYOUT)
         place = builder.frame(inside, span)
         for at, ((one, local), what) in enumerate(zip(taken, held)):
-            value = (local.value if one.by_reference
-                     else self._read_capture(builder, local, span))
+            value = self._read_capture(builder, local, span)
+            if one.by_reference:
+                # The place itself.  What may be done to it through the lambda
+                # is what may be done to it here, so the address is read as the
+                # reference the body will have -- the same bits either way.
+                value = (local.value if local.value.ty is what
+                         else builder.cast(CastKind.BITCAST, local.value, what,
+                                           span))
             self._put_away(builder, place, offsets[at], what, value, span)
         return (place, offsets)
 

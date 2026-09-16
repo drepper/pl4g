@@ -667,13 +667,17 @@ class Parser:
             params.append(self._parse_lambda_param())
             if self._accept(TokKind.COMMA) is None:
                 break
-        captures = self._parse_captures() if self._check(TokKind.LBRACKET) else ()
+        captures: tuple[ast.Capture, ...] = ()
+        brings_in: ast.CaptureAll | None = None
+        if self._check(TokKind.LBRACKET):
+            captures, brings_in = self._parse_captures()
         ret: ast.TypeExpr | None = None
         if self._accept(TokKind.ARROW) is not None:
             ret = self._parse_type_ref()
         body = self._parse_body()
         return ast.Lambda(span=start.to(body.span), params=tuple(params),
-                          body=body, captures=captures, ret_type=ret)
+                          body=body, captures=captures, ret_type=ret,
+                          brings_in=brings_in)
 
     def _parse_lambda_param(self) -> ast.Param:
         """Parse one parameter of a lambda, which is one of a function without
@@ -686,14 +690,24 @@ class Parser:
         return ast.Param(span=name.span.to(written.span), name=name.text,
                          type=written, mutable=mutable)
 
-    def _parse_captures(self) -> tuple[ast.Capture, ...]:
-        """Parse `[a, &b]`: the names a lambda brings in from around it.
+    def _parse_captures(self) -> tuple[tuple[ast.Capture, ...],
+                                       ast.CaptureAll | None]:
+        """Parse `[a, &b]`, `[=]` or `[&]`: what a lambda brings in.
 
         `&` says the variable itself rather than what it held, which is C++'s
         mark for the distinction and the same `&` a reference type is written
         with -- what it says here is what it says there.
+
+        `[=]` and `[&]` say it of every name the body reaches from outside
+        itself rather than of named ones, which is what those two say in C++.
+        They are told from a list of names by what follows the mark: a name
+        follows `&` in a list and the closing bracket follows it here.
         """
         start = self._expect(TokKind.LBRACKET).span
+        every = self._every_name()
+        if every is not None:
+            self._expect(TokKind.RBRACKET, D.LANG_SYNTAX_EXPECTED_CLOSING_LIST)
+            return ((), every)
         found: list[ast.Capture] = []
         while not self._check(TokKind.RBRACKET):
             mark = self._accept(TokKind.AMPERSAND)
@@ -709,7 +723,21 @@ class Parser:
             # An empty list is a second spelling of no list at all, and the
             # language admits one spelling of one thing.
             self._diags.emit(D.LANG_SYNTAX_EMPTY_CAPTURE, start.to(end))
-        return tuple(found)
+        return (tuple(found), None)
+
+    def _every_name(self) -> ast.CaptureAll | None:
+        """Whether the list is `[=]` or `[&]`, said without reading a name.
+
+        `&` begins a capture of a named variable as well, so which it is, is
+        what follows it: a name in a list, and the closing bracket here.
+        """
+        if self._check(TokKind.EQUALS):
+            self._advance()
+            return ast.CaptureAll.BY_VALUE
+        if self._check(TokKind.AMPERSAND) and self._peek(1).kind is TokKind.RBRACKET:
+            self._advance()
+            return ast.CaptureAll.BY_REFERENCE
+        return None
 
     def _parse_dimension(self) -> ast.Expr | None:
         """Parse how many there are along one dimension, or nothing for a

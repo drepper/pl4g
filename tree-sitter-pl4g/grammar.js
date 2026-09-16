@@ -729,7 +729,11 @@ module.exports = grammar({
 
     // `&` says the variable itself rather than what it held, which is the same
     // `&` a reference type is written with and says the same thing.
-    capture_list: $ => seq('[', sepBy1(',', $.capture), ']'),
+    // `[=]` and `[&]` say of every name the body reaches what a list of names
+    // says of the ones in it.  They are told from a list by what follows the
+    // mark: a name follows `&` in a list, and the closing bracket follows it
+    // here.
+    capture_list: $ => seq('[', choice('=', '&', sepBy1(',', $.capture)), ']'),
 
     capture: $ => seq(optional('&'), field('name', $.identifier)),
 

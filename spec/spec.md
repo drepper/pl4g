@@ -510,6 +510,41 @@ and C++'s mark for it, and the mark is the same `&` a reference type is written 
 A name is brought in once (4553), and a name that is not there to bring in is refused (4551).  A lambda that brings nothing in is
 written with no list at all, an empty one being a second spelling of that (3041).
 
+**`[=]` and `[&]` say the same of every name the body reaches** rather than of named ones, which is what those two say in C++:
+
+```
+let by: fn(u8) → u8 = λ a: u8 [=] → u8 { a + n + m }      ※ what n and m held
+let seen: fn(u8) → u8 = λ a: u8 [&] → u8 { a + n + m }   ※ n and m themselves
+```
+
+Which names those are is **what the body writes and does not bind for itself**: its own parameters are not among them, since
+those come from the caller, and neither is anything it defines inside, however often that name is written.  The order they are
+brought in is the order they are first written, which is the only order there is -- one that changed would make two builds of one
+program differ.
+
+A list that says "all of them" says less than one that names them: what a lambda depends on is then found by reading the body
+rather than read off its first line.  It is here because a lambda reaching many names is a lambda whose list is mostly noise, and
+because a generator emitting one knows what it emitted.
+
+**They are told from a list of names by what follows the mark.**  `&` begins a capture of a named variable as well, so which it
+is, is what comes after it: a name in a list, and the closing bracket here.
+
+##### A capture list is not a parameter's list type
+
+A parameter's type may itself be a list, so `[` can follow a parameter -- and there is still only one reading:
+
+```
+λ v: [u8] → u8 { … }              ※ a list of bytes, and no capture list
+λ v: [u8] [n] → u8 { … }          ※ a list of bytes, then a capture list
+λ v: [u8] [=] → u8 { … }          ※ and with the list that says all of them
+λ v: [u8], w: [u16] [&] → u8 { … }
+```
+
+A `[` begins a capture list only where a parameter has just been read whole, and **a type ends at its own closing bracket**:
+nothing in the language lets a type be followed by `[`, an array being written `⟦⟧` and a lookup being an expression rather than a
+type.  So what follows a complete parameter list can be nothing but the capture list, the arrow or the body, and the parser
+never has to guess.
+
 **A lambda does not leave the call that made it** -- it may not be what a function answers with (4549), nor what a variable at
 the top level holds (4550) -- because what it brought in belongs to that call.  It is the rule a reference follows, and lifetime
 annotations will lift both at once.  What is left is where a lambda earns its keep: bound to a name, handed to a parameter, and
@@ -518,8 +553,7 @@ called through whatever holds it.
 **A call through one is a call to whatever it holds**, so nothing about the callee is known: a function that makes one is impure,
 because what it calls may do anything.
 
-Compare: **C++**'s lambdas, whose capture list this is, down to the `&` -- what is different is that there is no `[=]` or `[&]`
-that says "whatever the body turns out to use", a list that said that being a list that said nothing.  **Rust**'s closures, which
+Compare: **C++**'s lambdas, whose capture list this is, down to the `&`, the `[=]` and the `[&]`.  **Rust**'s closures, which
 infer what they capture and sort themselves into three traits by what they do with it; **Go**'s and **JavaScript**'s, which
 capture by reference and keep the variables alive by garbage collection; **Java**'s, which capture by value and require what they
 capture to be effectively final.  The lifetime question every one of those answers somehow is the one answered here by not

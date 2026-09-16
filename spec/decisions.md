@@ -4568,9 +4568,7 @@ way.
 
 **The capture list is `[n, &n]`**, chosen by the user from four suggestions, with `&` for by-reference on the user's direction --
 C++'s spelling and C++'s distinction.  It is free in that position: what may follow a parameter list is a comma, the arrow or the
-body, so a bracket there can be nothing else.  What is *not* taken from C++ is `[=]` and `[&]`: a list that says "whatever the
-body turns out to use" is a list that says nothing, and the point of writing one is that what a lambda depends on is read off its
-first line.
+body, so a bracket there can be nothing else.
 
 **A lambda does not leave the call that made it**, suggested here and not objected to.  What it brought in lives in that call, so
 handing one back would hand back a way of reading storage that is gone.  It is exactly the rule references follow, and it is what
@@ -4581,6 +4579,34 @@ by what they do with it, which is a larger machine for a language that infers; *
 reference and keep the variables alive by collecting garbage; **Java**, which captures by value and requires what it captures to
 be effectively final.  Every one of them answers the lifetime question somehow; this answers it by not letting a lambda leave,
 which is blunt and is the same answer references got.
+
+---
+
+## 2026-09-16T21:30+02:00 — language
+
+**`[=]` and `[&]`**
+
+On the user's direction, overruling the argument made when lambdas landed -- that a list saying "whatever the body turns out to
+use" says nothing, and that the point of writing one is to read a lambda's dependencies off its first line.  That argument is
+still true and is still in the specification as what the two cost; what it left out is that a lambda reaching many names has a
+list that is mostly noise, and that a generator emitting one already knows what it emitted.  C++ has both forms for the same
+reason.
+
+**What they bring in is what the body writes and does not bind for itself.**  Its own parameters are not among them -- those come
+from the caller -- and neither is anything it defines inside, however often that name is written.  The order is the order the
+names are first written: nothing about a set of names says which comes first, and an order that varied would make two builds of
+one program differ.
+
+**They are told from a list of names by what follows the mark.**  `&` begins a capture of a named variable as well, so which it
+is, is decided by whether a name or the closing bracket comes next -- one token of lookahead, and no ambiguity in either front
+end.
+
+**A capture list cannot be confused with a parameter whose type is a list**, which the user asked to have verified.  It cannot:
+a `[` begins a capture list only where a parameter has been read whole, and a type ends at its own closing bracket -- nothing in
+the language lets a type be followed by `[`, an array being written with the white brackets and a lookup being an expression.
+Checked both ways: the tree-sitter grammar generates with no conflict, and a program writing every combination -- a list
+parameter with no capture list, with a named one, with `[=]`, with `[&]`, and two list parameters before a capture list --
+compiles, parses and runs.
 
 Open questions
 --------------

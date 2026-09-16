@@ -926,6 +926,18 @@ class Capture(Node):
     by_reference: bool = False
 
 
+class CaptureAll(StrEnum):
+    """A capture list that names no names and says what to do with all of them.
+
+    `[=]` brings in what each name held and `[&]` brings in the names
+    themselves, which are the two things a list of names says one at a time.
+    Which names those are, is which ones the body reaches from outside itself.
+    """
+
+    BY_VALUE = "="
+    BY_REFERENCE = "&"
+
+
 @dataclass(frozen=True, slots=True)
 class Lambda(Expr):
     """`\N{GREEK SMALL LETTER LAMDA} PARM: TYPE, \N{HORIZONTAL ELLIPSIS} [CAPTURES] \N{RIGHTWARDS ARROW} TYPE` and a body: a function written
@@ -944,6 +956,9 @@ class Lambda(Expr):
     #: What it answers with, or nothing where it answers with nothing -- which
     #: is written by leaving the arrow off, as a function definition does.
     ret_type: TypeExpr | None = None
+    #: What `[=]` or `[&]` said, where one of them was written instead of a
+    #: list of names.  The names are then worked out from the body.
+    brings_in: CaptureAll | None = None
 
 
 @dataclass(frozen=True, slots=True)

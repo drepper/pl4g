@@ -419,6 +419,22 @@ To Do List for the pypl4g compiler
     definition of every source read gets a row, including one the image did not need and the reachability pass removed, so the
     table names things the binary does not contain.  Which of the two a reader wants is the question.
 
+[ ] carry the memory token out of an `elif` condition that writes.  A store in the condition of an `elif` that is neither the
+    first arm nor the last, inside a nested `if`, leaves a token the join block reads without its being passed as a block
+    argument -- "use of a value that does not dominate the use".  Written small:
+
+        if n = 2u8: 1u6
+        else:
+            n ← 5u8
+            if n = 3u8: 3u6
+            elif n = 4u8: 4u6
+            elif #[1u16, 2u16] ≠ 2: 5u6      ※ the list literal writes
+            elif n = 6u8: 6u6
+            else: 0u6
+
+    It predates lambdas -- the same program fails at the commit before them -- and was found writing the lambda test, whose
+    conditions happened to have the same shape.
+
 [ ] narrow what the tree-sitter grammar admits where the compiler ends a statement.  An end of line is an extra there, which is
     what lets a line break inside brackets be read; it also admits one after a binary operator, after the `=` of a definition and
     after `fn`, which the compiler refuses.  Closing it means the scanner counting open brackets, which means the brackets
