@@ -185,9 +185,21 @@ To Do List for the PL4g language
 
 [ ] let a record hold a record, and let one be reached through a reference.  Both are refused by the code generator today
     (8501): a record travels as its fields, so a field that is itself several values has no one register to go in, and a load of
-    a multi-part value is not a thing the back ends do.  Both want the same answer -- a record that lives in memory, as a fixed
-    array does, with a field read at an offset and `&p.x` an address -- and `member_offsets_of` already computes the layout.
-    `std.Init` needs both: it holds an `Io`, and `&mut init.io.output` is a reference into it.
+    a multi-part value is not a thing the back ends do.  `std.Init` needs both: it holds an `Io`, and `&mut init.io.output` is a
+    reference into it.
+
+    The shape, worked out on 2026-09-17: a record *local* is given storage of its own, the way a local a reference is taken of
+    already is -- `offsets_of` says where each field lies, a field is read at an offset, `&p.x` is an address, and a field that
+    is itself a record is one more offset.  What travels between functions stays what it is now: several values, with anything
+    larger than two registers going through storage the caller provides, which `largeanswers` already does and which is where
+    the value semantics of a call and an answer already come from.  What each path needs is written out rather than discovered
+    one at a time: binding copies field by field, reading the whole of one to hand it over reads the fields back, and both walk
+    the same recursion over the layout.
+
+[ ] decide whether a fixed array is copied or shared when it is bound to a name.  `let b = a` names the same elements today --
+    `a⟦0⟧ ← 9u8` is seen through `b` -- because a value of an array type is where the elements are.  Nothing in the
+    specification says so and nothing chose it; a record was settled the other way on 2026-09-17, and the two should agree or
+    the difference should be written down.
 
 [ ] the `std` module, and I/O through io_uring.  Designed on 2026-09-17 and written down in the decision log; what it waits on is
     the three entries above, since `std.Init` is a product and `init.io.out` is a field of one.

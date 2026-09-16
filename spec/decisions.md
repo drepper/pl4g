@@ -5359,6 +5359,37 @@ and whose access is the same mark; **C**, whose designated initializer this is
 written like; **ML** and **Haskell**, whose records are the same idea with the
 type inferred rather than written.
 
+## 2026-09-17T17:00+02:00 — language
+
+**A record is a value and is copied, not a place that is shared**
+
+Chosen by the user.  `let q = p` gives a second record, and writing through one
+name leaves the other as it was -- which is what C, Rust, Go and Zig all do, and
+what the register-carried representation already does today by accident of
+travelling as its fields.
+
+**What made the question worth asking** is that a fixed array does the opposite:
+`let b = a` names the same elements, because a value of an array type *is* where
+the elements are.  That is nowhere in the specification -- it falls out of the
+representation -- and it is now a to-do entry rather than a thing the language
+says.  A record in memory would have inherited it silently, which is the trap
+this decision closes.
+
+**What it means for the two things still refused.**  A record holding a record,
+and a record reached through a reference, both want a record that lives
+somewhere; being a value is what says that binding one to a name copies the
+storage rather than sharing it.  `offsets_of` already computes the layout, and
+`largeanswers` already hands anything larger than two registers back through
+storage the caller provides -- which is where the value semantics of a call and
+an answer already come from, and is why answering with a record worked the day
+it could be written at all.
+
+Compare: **C**, **Rust**, **Go** and **Zig**, which all copy a structure on
+assignment and which this follows; **Java** and **Python**, where every such
+thing is a reference and copying is a method call; **collections here**, which
+the log already settled as handles that are shared -- a record is not one of
+those, being its fields rather than a way to reach them.
+
 Open questions
 --------------
 
