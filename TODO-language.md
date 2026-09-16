@@ -176,15 +176,20 @@ To Do List for the PL4g language
     another module exports, and may not reach itself.  Layout is computed: a product is its fields in declaration order, a sum is
     its largest variant with a one-byte tag after it.
 
-[?] write a value of a product or a sum.
-    Question: no syntax has been given, and nothing else can be done with these types until there is one -- a function that takes
-    or answers with one compiles as far as the code generator, which refuses it (8501).  Considered, for a product: `Point{x:
-    1f64, y: 2f64}` after Rust, Go and Zig, which reads well and takes `{}` that is also the explicit block syntax, though never
-    in a place an expression may stand; `Point(x: 1f64, y: 2f64)`, which reuses the call shape and the named-argument question
-    that is open for calls anyway; and a bare `(x: 1f64, y: 2f64)` taking its type from the context, which is what the language
-    already does for a literal without a suffix.  For a sum the value names the variant as well: `Colour.red`, `Colour{red: ...}`
-    or a bare `.red` taking its type from the context, which is Zig's and Swift's.  Whichever is chosen, the two should be one
-    shape, since the definitions are.
+[ ] write a value of a product or a sum: `Point(x: 1f64, y: 2f64)`, decided on 2026-09-17.  The call shape reused, with the
+    named arguments a call already takes, and a sum naming its variant the same way -- one shape for the two, since the
+    definitions are one construct.  Nothing else can be done with these types until it is written: a function that takes or
+    answers with one compiles as far as the code generator, which refuses it (8501).
+
+[ ] read a field of a product: `p.x`, and `r⌖.x` through a reference.  The mark `.` already reaches into a module and names a
+    value of an enumeration, and a field is the third thing of that shape; today it reaches neither, and `c⌖.fd` is "not a module"
+    (4103).  Needed before anything can be built out of a product.
+
+[ ] hand a product to a call and answer with one.  The type is accepted in a signature today and the code generator refuses the
+    value (8501).  `parts_of` already says what a multi-part value is made of, which is what a convention needs to place one.
+
+[ ] the `std` module, and I/O through io_uring.  Designed on 2026-09-17 and written down in the decision log; what it waits on is
+    the three entries above, since `std.Init` is a product and `init.io.out` is a field of one.
 
 [x] ask which variant a sum holds: `match`.  Done, and it takes an enumeration and a result apart as well.  A result and an
     enumeration run; for a sum every rule about the arms is checked and the compiler then says it cannot generate for one, what is

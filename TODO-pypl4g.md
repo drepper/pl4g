@@ -4,6 +4,17 @@ To Do List for the pypl4g compiler
 `[ ]` open, `[x]` done, `[?]` needs a decision before it can be started -- such an entry carries a
 `Question:` paragraph saying what is undecided and what the choices are.
 
+[ ] a system call from the language: `⎕syscall(NUMBER, ARG...)`, answering the kernel's own `i64` -- negative for an
+    error, as the kernel returns it.  `SyscallABI` already says per target where the number goes, where the arguments go, where
+    the answer comes back and which instruction enters the kernel, so what is missing is an IR instruction, an assembler entry
+    point that can declare what a syscall destroys -- `asm.op` cannot, and `asm.call` is the shape to copy -- and one selection
+    arm per back end.  Everything the `std` module does rests on it.
+
+[ ] acquire and release ordering in the IR.  io_uring's submission and completion rings are shared with the kernel and their head
+    and tail indices are read and written with ordering, which the memory token does not express: the token says *that* two
+    operations are ordered here, not what a second observer sees.  Needed before a ring can be driven correctly, and useless
+    before then.
+
 [ ] report every test that failed rather than stopping at the first.  A failing
     test leaves through the abort helper, which writes a message and exits, so a
     run ends at the first one; what it needs is a way to write and carry on, and

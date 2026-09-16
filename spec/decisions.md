@@ -5166,6 +5166,83 @@ exactly as `build` and `suite` do, and whose runner reports every failure;
 run at startup when the program is built with them, which is what `always` is;
 **C** and **C++**, which have none of it and need a framework.
 
+## 2026-09-17T14:00+02:00 — language
+
+**A value of a product is written `Point(x: 1f64, y: 2f64)`**
+
+Chosen by the user from the three the to-do list had carried since products were
+added.  The call shape reused, with the named arguments a call already takes, so
+there is nothing new to read; a sum names its variant the same way, the two being
+one construct in their definitions and one shape here.
+
+Considered: `Point{x: 1f64, y: 2f64}`, after Rust, Go and Zig, which reads well
+but gives `{}` a second job in a place a block never stands; and a bare
+`(x: 1f64, y: 2f64)` taking its type from the context, which is shortest and is
+what an unsuffixed literal already does, at the cost of nothing naming the type
+where the value is written.
+
+## 2026-09-17T14:15+02:00 — language
+
+**I/O: `std`, three descriptors, and a ring the startup code makes**
+
+Designed at the user's direction and written down before any of it is built,
+since what it waits on is three other things.
+
+**Everything goes through io_uring**, which the user settled.  A ring is made by
+the startup code where something the program reaches needs one -- not only I/O:
+waiting for a process to end will want it too -- the way the arena and the fault
+helper are already emitted only where something asks for them.  For now no
+thread serves completions: they are reaped where the ring is used, by the calls
+that read and write.
+
+**The names.**  Three descriptor types, named for what may be done through them
+rather than for what they are made of:
+
+```
+type Reader      ※ a device that can be read
+type Writer      ※ a device that can be written
+type ReadWriter  ※ both, for a socket or a file opened either way
+
+fn read(from: &mut Reader, into: &mut u8⟦⟧) → u64 ¤size?
+fn write(to: &mut Writer, what: u8⟦⟧)       → u64 ¤size?
+```
+
+A submitted request carries a `Pending`: the state the kernel completes against,
+the buffer it reads into, and what is to become of it.  The ring is a `Ring`,
+and the program never names one -- what it names is a descriptor.
+
+**The startup function is given what the program starts with**, at the user's
+direction: `@[startup] fn main(init: std.Init) → u6`, with the three predefined
+descriptors at `init.io.input`, `init.io.output` and `init.io.errors`.  `Init`
+rather than the descriptors outright so that what a program is started with --
+its arguments, its environment, what it inherited -- has somewhere to go later
+without changing every signature that exists by then.
+
+**Ownership is static and costs nothing new.**  `init` is a local of the startup
+function, so `&mut init.io.output` is exclusive by the rule that already refuses
+a second `&mut` to a place; a run-time check and a lock are both unnecessary.
+What it costs is that lending one field lends the whole of `init` for as long as
+the reference lives, the aliasing rule not telling one field of a local from
+another -- which is a to-do entry and not a reason to choose differently.
+
+Considered and turned down: a `std.output()` answering the descriptor the first
+time and a failure after, which is Rust's shape and a run-time check where a
+static one is available; and tracking variables at the top level in the aliasing
+rule, which would be exact and independent per descriptor but needs the
+whole-program reasoning that rule deliberately avoids.
+
+**What it waits on**, in order: a value of a product can be written; a field of
+one can be read; a product can be handed to a call and answered with.  All three
+are in the to-do list.  `⎕syscall` and ordering in the IR are the compiler's half
+and are listed there.
+
+Compare: **Rust**, whose `Stdout` is taken by a call and guarded by a lock, and
+whose `io_uring` crates are libraries rather than the only way; **Go**, which
+hides the whole question behind a scheduler and a thread pool; **Zig**, whose
+`std.io` passes a writer explicitly and whose `std.os.linux.IoUring` is driven by
+hand as this will be; **C**, where the descriptors are three integers anyone may
+write to at any time, which is the thing being designed away.
+
 Open questions
 --------------
 
