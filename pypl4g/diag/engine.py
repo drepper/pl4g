@@ -11,6 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Callable, Mapping
 
+from ..ir.reports import ReportLog
 from ..source.location import INVALID_SPAN, Span
 from . import ids as D
 from .catalog import Catalog, DiagID, DiagInfo, catalog
@@ -113,8 +114,13 @@ class DiagEngine:
 
     def __init__(self, sink: Callable[[Diagnostic], None],
                  control: WarningControl | None = None,
-                 cat: Catalog | None = None) -> None:
+                 cat: Catalog | None = None,
+                 log: ReportLog | None = None) -> None:
         self._sink = sink
+        #: Where everything reported is written down beside what the compiler
+        #: chose, so that the log a run leaves is in the order things happened.
+        #: Nothing here needs it: without one the compiler says the same things.
+        self._log = log
         self._control = control if control is not None else WarningControl()
         self._catalog = cat
         self.error_count: int = 0
@@ -209,10 +215,30 @@ class DiagEngine:
         elif info.severity == "warning":
             self.warning_count += 1
         diag.reported = True
+        self._record(diag)
         self._sink(diag)
         for note in diag.notes:
             self.report_note(note)
         return diag
+
+    def write_into(self, log: ReportLog) -> None:
+        """Say where to write down what is reported from here on.
+
+        For the times the log is not in hand when the engine is made: the driver
+        has one before either, and a test builds the two the other way round.
+        """
+        self._log = log
+
+    def _record(self, diag: Diagnostic) -> None:
+        """Write one reported diagnostic into the log, where there is one.
+
+        What goes down is the severity after `-Werror` has had its say, since
+        that is what was printed and what the run was decided by.
+        """
+        if self._log is None:
+            return
+        self._log.said(self.effective_severity(diag.info), diag.info.name,
+                       diag.text, diag.info.number, diag.span)
 
     def because(self, ident: DiagID, span: Span,
                 **args: object) -> object:
@@ -234,6 +260,7 @@ class DiagEngine:
     def report_note(self, note: Diagnostic) -> None:
         """Hand a note that was attached to an already reported diagnostic on."""
         note.reported = True
+        self._record(note)
         self._sink(note)
 
     def internal(self, detail: str) -> Diagnostic:

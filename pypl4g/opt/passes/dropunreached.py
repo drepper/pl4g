@@ -35,7 +35,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
-from ...ir.decisions import DecisionKind
+from ...ir.reports import ReportKind
 from ...ir.function import Function, Linkage
 from ...ir.module import GlobalVar, Module
 from ...source.location import Span
@@ -50,7 +50,7 @@ class DropUnreached:
         """Drop what nothing reaches; report whether anything changed.
 
         Each thing dropped is recorded.  Leaving something out of a binary is a
-        decision about the program, and one a reader is entitled to ask about:
+        report about the program, and one a reader is entitled to ask about:
         "I wrote that function, where is it?" has an answer, and this is where
         the answer is kept.
         """
@@ -63,8 +63,8 @@ class DropUnreached:
                 # The name the source wrote, not what the module files it
                 # under: the key tells two files' definitions apart and is
                 # nothing a reader of the log should have to know about.
-                module.decisions.record(
-                    DecisionKind.DROP_FUNCTION, func.name,
+                module.reports.record(
+                    ReportKind.DROP_FUNCTION, func.name,
                     "nothing the program can run reaches it, and it is not "
                     "exported, so nothing outside can reach it either",
                     _where(func.name_span, func.span))
@@ -77,8 +77,8 @@ class DropUnreached:
             changed = True
             for key, var in module.globals.items():
                 if key not in variables:
-                    module.decisions.record(
-                        DecisionKind.DROP_VARIABLE, var.name,
+                    module.reports.record(
+                        ReportKind.DROP_VARIABLE, var.name,
                         "no function that is itself reached names it, and it is "
                         "not exported",
                         _where(var.name_span, var.span))
@@ -159,7 +159,7 @@ class DropUnreached:
 
 
 def _where(name: Span, whole: Span) -> Span:
-    """Where a decision about a definition points: at its name, where there is one.
+    """Where a report about a definition points: at its name, where there is one.
 
     The whole definition begins at its first attribute or at the keyword, so a
     reader following the log gets the line right and the column wrong -- and for

@@ -123,13 +123,13 @@ class CommandLine:
             if value is not None:
                 self._options.module_path.extend(parse_search_path(value))
             return index
-        if word.startswith("--decision-log="):
-            self._options.decision_log = Path(word[len("--decision-log="):])
+        if word.startswith("--report-log="):
+            self._options.report_log = Path(word[len("--report-log="):])
             return index
-        if word == "--decision-log":
+        if word == "--report-log":
             value, index = self._value_of(word, argv, index)
             if value is not None:
-                self._options.decision_log = Path(value)
+                self._options.report_log = Path(value)
             return index
         if word.startswith("-O") and len(word) == 3 and word[2].isdigit():
             self._options.opt_level = int(word[2])

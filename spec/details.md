@@ -736,18 +736,27 @@ rather than a finished stream of bytes.  That is where the register allocator, t
 peephole rewrite states the condition under which it is valid and checks it: replacing a register-clearing move by an exclusive-or
 is three bytes shorter but writes the flags, so the rewrite fires only where a liveness scan has shown the flags to be dead.
 
-The Decision Log
-----------------
+The Report Log
+--------------
 
-A diagnostic says something is wrong.  A *decision* says the compiler chose something the program did not state -- above all, what
-it left out.  The two are kept apart deliberately: nothing is wrong when a function nothing can reach is dropped, and putting
-"this function is not in your binary" among the warnings would make it either noise or something missed.  A language meant to be
-generated will have plenty of them, since a generator emitting from a template routinely produces more than one instantiation uses.
+Everything the compiler has to say about one compilation goes in one log.  Two kinds of thing are in it.  What the compiler
+**said** is the diagnostics -- an error, a warning, a note -- which say something is wrong, or worth saying, about what the
+program wrote.  What it **chose** is what the program did not state: what it left out, where it put something, how long it worked
+out that a reference lives.
 
-`--decision-log=FILE` writes them as JSON beside the binary.  Each entry has a `kind`, which is the stable part that something
-reading the log matches on; a `subject`, named as the program names it; a `reason` in prose, which is for a person and may be
-reworded; and, where the subject is written in a source file, a `where` giving the file, line and column -- being told that a
-function went without being told which one would leave the reader to find it.
+The two are different things and the `kind` field keeps them apart, but they belong in one log and in one order, because the
+question a reader has -- what happened to my program? -- is not a question about only one of them.  Nothing is wrong when a
+function nothing can reach is dropped, so it is not a warning; but "this function is not in your binary" and "you never read what
+you gave this variable" are answers to the same question, asked of one program, and a reader should not have to look in two
+places for them.  A language meant to be generated will have plenty of both, a generator emitting from a template routinely
+producing more than one instantiation uses.
+
+`--report-log=FILE` writes them as JSON beside the binary.  Each entry has a `kind`, which is the stable part that something
+reading the log matches on; a `subject` -- the name the program gives it for a choice, and the diagnostic's own symbolic name for
+something the compiler said; a `reason` in prose, which for a diagnostic is the message as it was printed and not a second
+sentence about it; and, where the subject is written in a source file, a `where` giving the file, line and column.  Something the
+compiler said carries a `number` as well, which is what the catalog gives it and what a reader looks it up by; a choice has none,
+nothing being wrong with any of it, and that absence is what tells the two apart without matching on the kinds one by one.
 
 **`where` points at the subject's own name**, not at the construct that holds it.  A definition begins at its first attribute or
 at its keyword, which at the top level is column one on every one of them; a local's value is produced somewhere else on the line
@@ -769,11 +778,31 @@ compiler to work out:
 | `place-local` | a variable put in storage of its own rather than a register |
 | `instantiate` | the types one instance of a generic function was compiled for |
 | `lifetime` | how long the reference one call answers with turned out to live |
+| `fatal`, `error`, `warning`, `note` | what the compiler said, with its number |
 
 The first two happen at every optimization level, because a function nothing can reach is code the program cannot run; the
 sweep's two happen from `-O1`, because an unoptimized build keeps what the program wrote and so decides nothing about it.  The
-rest are the checker's and happen always, there being no level at which a lambda does not need a name.  Recording happens
-whether or not the log was asked for, because a decision recorded only when someone is watching is one a test cannot check.
+rest of the choices are the checker's and happen always, there being no level at which a lambda does not need a name.  Recording
+happens whether or not the log was asked for, because a choice recorded only when someone is watching is one a test cannot check.
+
+**A warning that a `-W` setting quieted is not in the log**, and neither is one an `ignore` attribute absorbed: what goes down is
+what was reported, and the severity that goes down is the one after `-Werror` has had its say.  The log is the record of what the
+run said, not of what it might have said under other settings.
+
+**How long a call's answer lives is recorded every time, and not only when it comes out lasting.**  It is the one thing about
+such a call that neither the signature nor the call site says.  Where a lifetime name stands on two parameters the signature says
+only that the two are equal, and which of the arguments the answer actually took its lifetime from is a fact about that call and
+about no other:
+
+```
+lifetime: either — answers with a reference that lives as long as 'q',
+                   the shortest-lived of what the arguments for 'b' and 'c' named
+lifetime: either — answers with a reference that lasts as long as the program,
+                   because every argument for 'b' and 'c' does
+```
+
+Where two of them live equally long both are named, since naming one would read as though the other had been looked at and
+turned down.
 
 **A capture list is recorded where it said "all of them" and not where it named names.**  `[=]` and `[&]` leave which variables
 to the compiler, and that is the one thing about such a lambda a reader cannot get from the source -- so there is one entry per
@@ -833,10 +862,10 @@ Reading the Log
 
 `bin/pl4g-decisions` shows a program's source with each record of the log standing just above the line it is about -- above rather
 than below, so that the line is read already knowing what became of it instead of being read, understood, and then corrected.  A list of names
-and line numbers is not something anyone reads; the question a decision answers is "I wrote that, where did it go?", and it is
+and line numbers is not something anyone reads; the question a report answers is "I wrote that, what happened to it?", and it is
 answered by looking at the place it was written.  A pattern on the command line chooses which source files to show.
 
-**The mark stands over the column the record gives**, which is the name the decision is about -- worth finding in a line that
+**The mark stands over the column the record gives**, which is the name the report is about -- worth finding in a line that
 holds several names, and in `_ ← f()` there are three things it could otherwise have been taken to mean.  What it puts before the
 mark is built out of the line itself, one blank per character and a tab for a tab, so a glyph the terminal draws two columns wide
 is stood in for twice without this program having to agree with the terminal about which glyphs those are.  The language's
@@ -1896,7 +1925,7 @@ direction produces, and it selects to nothing.
 **A lifetime name never reaches the IR.**  `ast.RefTypeRef.lifetime` holds it, `_lifetimes_of` walks a type reference over its
 fields to collect every name written anywhere in it, and `_borrowed_from` turns the names on the return type into the tuple of
 parameter positions carrying them.  That tuple is the whole of what the rest of the compiler sees, so the provenance walk, the
-call site and the decision log say nothing about names at all.  `PtrType` gains nothing either: inside the body a `&u32 ⧖x`
+call site and the report log say nothing about names at all.  `PtrType` gains nothing either: inside the body a `&u32 ⧖x`
 parameter is an ordinary `&u32`.
 
 **A block's parameter is where the walk has to branch.**  A body that answers differently in two arms hands back what the join
@@ -2182,7 +2211,7 @@ made: a walk makes one call per element and they all go to the same code with th
 **A named function becomes a value through a shim.**  Everything called through a name of function type is called with the
 environment first, and a definition has no such parameter -- so `_function_as_a_value` points the pair at `⎕through<name>`, which
 takes the environment, drops it, and hands the rest on.  One per function and not one per mention, kept in `_shims` by identity,
-and recorded in the decision log beside the lambdas: it is code the program did not write.  The other half is the address of a
+and recorded in the report log beside the lambdas: it is code the program did not write.  The other half is the address of a
 frame byte, which is what `_environment` already hands a lambda that brought nothing in.
 
 The cost is one call.  Rust avoids it by telling the two apart in the type system, `fn` for the bare address and `Fn` for the

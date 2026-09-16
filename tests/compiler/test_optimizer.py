@@ -427,12 +427,12 @@ def test_the_whole_chain_goes_through_the_compiler(compile_source) -> None:  # n
 
 # -- what was decided -----------------------------------------------------------
 
-def test_dropping_something_is_recorded_as_a_decision() -> None:
+def test_dropping_something_is_recorded_as_a_report() -> None:
     """The pass says what it left out, whether or not anyone asked for the log.
 
-    A decision recorded only when someone is watching is one a test cannot check.
+    A report recorded only when someone is watching is one a test cannot check.
     """
-    from pypl4g.ir.decisions import DecisionKind
+    from pypl4g.ir.reports import ReportKind
 
     module = Module("t")
     _helper(module, "orphan")
@@ -442,15 +442,15 @@ def test_dropping_something_is_recorded_as_a_decision() -> None:
     assert block is not None
     block.append(RetInst(module.int_const(U8, 0)))
     assert DropUnreached().run(module)
-    dropped = module.decisions
-    assert [d.subject for d in dropped.of_kind(DecisionKind.DROP_FUNCTION)] == ["orphan"]
-    assert [d.subject for d in dropped.of_kind(DecisionKind.DROP_VARIABLE)] == ["unused"]
-    assert all(d.reason for d in dropped.entries), "a decision with no reason"
+    dropped = module.reports
+    assert [d.subject for d in dropped.of_kind(ReportKind.DROP_FUNCTION)] == ["orphan"]
+    assert [d.subject for d in dropped.of_kind(ReportKind.DROP_VARIABLE)] == ["unused"]
+    assert all(d.reason for d in dropped.entries), "a report with no reason"
 
 
 def test_nothing_kept_is_recorded_as_dropped() -> None:
     """A log that said things went that did not would be worse than none."""
-    from pypl4g.ir.decisions import DecisionKind
+    from pypl4g.ir.reports import ReportKind
 
     module = Module("t")
     var = _global(module, "g", exported=True)
@@ -462,14 +462,14 @@ def test_nothing_kept_is_recorded_as_dropped() -> None:
     block.append(StoreInst(token, var, module.int_const(U8, 1)))
     block.append(RetInst(module.int_const(U8, 0)))
     assert not DropUnreached().run(module)
-    assert module.decisions.entries == []
-    assert module.decisions.of_kind(DecisionKind.DROP_FUNCTION) == []
+    assert module.reports.entries == []
+    assert module.reports.of_kind(ReportKind.DROP_FUNCTION) == []
 
 
 def test_a_dropped_local_is_recorded_by_the_name_it_was_given() -> None:
     """A value with no name is an intermediate of an expression and nothing the
     program can ask about; one with a name is a local the program wrote down."""
-    from pypl4g.ir.decisions import DecisionKind
+    from pypl4g.ir.reports import ReportKind
 
     module = Module("t")
     var = GlobalVar("g", U8, module.types.ptr_type(U8), module.int_const(U8, 3))
@@ -483,14 +483,14 @@ def test_a_dropped_local_is_recorded_by_the_name_it_was_given() -> None:
     block.append(LoadInst(U8, (token, var)))          # no name: an intermediate
     block.append(RetInst(module.int_const(U8, 5)))
     assert DeadCodeElimination().run(module)
-    dropped = module.decisions.of_kind(DecisionKind.DROP_LOCAL)
+    dropped = module.reports.of_kind(ReportKind.DROP_LOCAL)
     assert [d.subject for d in dropped] == ["unread"], \
         "an unnamed value was reported as a local, or a named one was not"
 
 
 def test_a_local_something_reads_is_not_recorded() -> None:
     """A log that said things went that did not would be worse than none."""
-    from pypl4g.ir.decisions import DecisionKind
+    from pypl4g.ir.reports import ReportKind
 
     module = Module("t")
     var = GlobalVar("g", U8, module.types.ptr_type(U8), module.int_const(U8, 3))
@@ -503,7 +503,7 @@ def test_a_local_something_reads_is_not_recorded() -> None:
     named.name_hint = "kept"
     block.append(RetInst(named))
     assert not DeadCodeElimination().run(module)
-    assert module.decisions.of_kind(DecisionKind.DROP_LOCAL) == []
+    assert module.reports.of_kind(ReportKind.DROP_LOCAL) == []
 
 
 
@@ -514,7 +514,7 @@ def test_a_call_that_is_not_made_is_recorded() -> None:
     run, and it does not run.  A reader wondering whether `@[impure]` is missing
     from a function is who the entry is for.
     """
-    from pypl4g.ir.decisions import DecisionKind
+    from pypl4g.ir.reports import ReportKind
 
     module = Module("t")
     callee = Function("worked_out", module.types.func_type((), U8), FuncAttrs())
@@ -525,14 +525,14 @@ def test_a_call_that_is_not_made_is_recorded() -> None:
     block.append(CallInst(callee, (), U8))
     block.append(RetInst(module.int_const(U8, 0)))
     assert DeadCodeElimination().run(module)
-    dropped = module.decisions.of_kind(DecisionKind.DROP_CALL)
-    assert [d.subject for d in dropped] == ["worked_out"], module.decisions.entries
+    dropped = module.reports.of_kind(ReportKind.DROP_CALL)
+    assert [d.subject for d in dropped] == ["worked_out"], module.reports.entries
     assert "changes nothing that outlives the call" in dropped[0].reason
 
 
 def test_a_call_that_is_made_is_not_recorded() -> None:
     """A log that said calls went that did not would be worse than none."""
-    from pypl4g.ir.decisions import DecisionKind
+    from pypl4g.ir.reports import ReportKind
 
     module = Module("t")
     callee = Function("notes", module.types.func_type((), U8),
@@ -544,7 +544,7 @@ def test_a_call_that_is_made_is_not_recorded() -> None:
     block.append(CallInst(callee, (), U8))
     block.append(RetInst(module.int_const(U8, 0)))
     assert not DeadCodeElimination().run(module)
-    assert module.decisions.of_kind(DecisionKind.DROP_CALL) == []
+    assert module.reports.of_kind(ReportKind.DROP_CALL) == []
 
 
 def test_a_dropped_function_is_pointed_at_by_its_name() -> None:
@@ -553,7 +553,7 @@ def test_a_dropped_function_is_pointed_at_by_its_name() -> None:
     At the top level that is column one on every one of them, so a log that
     pointed there would say nothing a reader could not have worked out.
     """
-    from pypl4g.ir.decisions import DecisionKind
+    from pypl4g.ir.reports import ReportKind
     from pypl4g.source.location import Span
 
     module = Module("t")
@@ -563,6 +563,6 @@ def test_a_dropped_function_is_pointed_at_by_its_name() -> None:
     module.add_function(orphan)
     _startup(module).blocks[0].append(RetInst(module.int_const(U8, 0)))
     assert DropUnreached().run(module)
-    dropped = module.decisions.of_kind(DecisionKind.DROP_FUNCTION)
+    dropped = module.reports.of_kind(ReportKind.DROP_FUNCTION)
     assert [d.span.start for d in dropped] == [3], \
         "the log points at the definition rather than at the name"

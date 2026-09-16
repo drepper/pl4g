@@ -4,9 +4,9 @@ Design and Implementation Decisions
 Every decision made about the language, the compiler or the runtime is recorded here, newest last, with the time it was made and
 what kind of decision it is.
 
-This is not the log the compiler itself produces.  That one is written per compilation, in JSON, and records the decisions the
-compiler made while translating a particular program; it is requested with `--decision-log`.  This file records decisions made
-about the project by people.
+This is not the log the compiler itself produces.  That one is written per compilation, in JSON, and records everything the
+compiler said about a particular program and chose about it; it is requested with `--report-log`.  This file records decisions
+made about the project by people, and keeps the word *decision* for them; what the compiler writes down is a **report**.
 
 Each entry states the decision, what else was considered and where it has been done before, and why this was chosen.
 
@@ -5021,6 +5021,35 @@ Compare: **Clang**, whose `-fcolor-diagnostics` and green carets this follows,
 and which highlights nothing inside the snippet; **Rust**, which colours more
 and draws more; **GCC**, which added `-fdiagnostics-color` and the same
 `auto`/`always`/`never`; the **`NO_COLOR`** convention, which all three honour.
+
+## 2026-09-17T10:45+02:00 — compiler
+
+**The decision log becomes the report log, and holds what the compiler said as well**
+
+Directed by the user, who asked for three things at once: one word for it, more in it, and the lifetime answers written down.
+
+**One word, and the word is *report*.**  What the log holds was called a decision, which was accurate while it held only choices
+and became wrong the moment it held diagnostics too.  `--decision-log` is `--report-log`, `DecisionKind` is `ReportKind`,
+`decisions.py` is `reports.py`, `bin/pl4g-decisions` is `bin/pl4g-reports`, and the JSON key is `reports`.  This file keeps the
+word *decision*, being about decisions people made and not about what the compiler writes down; the two were already
+distinguished in its header and now they are distinguished by name.
+
+**What the compiler said goes in beside what it chose**, in one order.  They are different things and `kind` keeps them apart,
+but the question a reader has -- what happened to my program? -- is not a question about only one of them, and looking in two
+places for "this function is not in your binary" and "you never read what you gave this variable" is looking twice.  A diagnostic
+carries the number the catalog gives it; a choice has none, and that absence is what tells the two apart without matching kinds
+one by one.
+
+**What was reported, not what might have been.**  A warning a `-W` setting quieted or an `ignore` attribute absorbed is not in the
+log, and the severity written down is the one after `-Werror` has had its say.
+
+**Every lifetime answer is written down**, and not only the ones that come out lasting.  It is the one thing about such a call
+that neither the signature nor the call site says: a name on two parameters says the two are equal and says nothing about which
+of the arguments the answer took its lifetime from, and that is a fact about the one call.  Where two live equally long both are
+named, since naming one would read as though the other had been turned down.
+
+**The log's format version goes to 3**, and the viewer reads all three: the key was renamed and entries of a new shape appeared,
+and a log written by an older compiler is still a log someone has.
 
 Open questions
 --------------

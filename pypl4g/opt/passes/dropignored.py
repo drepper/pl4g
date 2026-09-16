@@ -17,7 +17,7 @@ compiler noticing, and an unoptimized build keeps what the program wrote.
 
 from __future__ import annotations
 
-from ...ir.decisions import DecisionKind, DecisionLog
+from ...ir.reports import ReportKind, ReportLog
 from ...ir.function import Function
 from ...ir.inst import CallInst, Terminator
 from ...ir.module import Module
@@ -34,11 +34,11 @@ class DropIgnoredCalls:
         for func in module.functions.values():
             if func.is_declaration:
                 continue
-            while self._sweep(func, module.decisions):
+            while self._sweep(func, module.reports):
                 changed = True
         return changed
 
-    def _sweep(self, func: Function, decisions: DecisionLog) -> bool:
+    def _sweep(self, func: Function, reports: ReportLog) -> bool:
         """Drop the ones dead now, and say whether any went.
 
         Again until none does: a call may be what read another one's answer, so
@@ -55,17 +55,17 @@ class DropIgnoredCalls:
             surviving = {id(inst) for inst in kept}
             for inst in block.insts:
                 if id(inst) not in surviving:
-                    _record(func, inst, decisions)
+                    _record(func, inst, reports)
             block.insts = kept
             gone = True
         return gone
 
 
-def _record(func: Function, inst: CallInst, decisions: DecisionLog) -> None:
+def _record(func: Function, inst: CallInst, reports: ReportLog) -> None:
     """Say which call went and why, the why being a thing the reader can change."""
     name = getattr(inst.callee, "name", None)
-    decisions.record(
-        DecisionKind.DROP_CALL, name if name is not None else "a call",
+    reports.record(
+        ReportKind.DROP_CALL, name if name is not None else "a call",
         "".join(("nothing reads what it answers with and it changes nothing "
                  "that outlives the call, so ", func.name, " does not make it")),
         inst.span)

@@ -90,7 +90,7 @@ GROUPS: tuple[Group, ...] = (
            "spill-to-the-frame": "thirty-two at once, which no target can hold"}),
     Group("What is left out",
           "Definitions the compiler drops and definitions it keeps.  These move "
-          "when the reachability pass or the decision log does.",
+          "when the reachability pass or the report log does.",
           {"unreached-function": "a function and a variable that are dropped",
            "export-visibility": "several definitions, some exported"}),
     Group("Expressions",

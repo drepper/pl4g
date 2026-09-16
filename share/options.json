@@ -128,11 +128,11 @@
     },
     {
       "short": null,
-      "long": "--decision-log",
+      "long": "--report-log",
       "arg": "separate_or_joined",
       "metavar": "FILE",
       "since": "0.1",
-      "help": "write the log of the decisions the compiler made to FILE, in JSON"
+      "help": "write the log of what the compiler reported and chose to FILE, in JSON"
     },
     {
       "short": null,

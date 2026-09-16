@@ -22,7 +22,7 @@ from ..diag.render import JSONRenderer, TextRenderer
 from ..front import ast
 from ..front.lexer import tokenize
 from ..front.parser import parse
-from ..ir.decisions import Decision
+from ..ir.reports import Report, ReportLog
 from ..ir.module import Module
 from ..ir.printer import render_module
 from ..ir.verify import verify
@@ -58,10 +58,11 @@ class Driver:
     sources: SourceManager
     stderr: TextIO
     timings: list[Timing] = field(default_factory=list)
-    #: What the compiler decided about the program, gathered from the module
-    #: once it has one, so that a compilation that failed earlier still writes a
-    #: log rather than none.
-    decisions: list[Decision] = field(default_factory=list)
+    #: Everything the compiler said about the program and chose about it, in the
+    #: order it happened.  The diagnostics are written here by the engine as
+    #: they are reported, and the module writes its choices into the same log --
+    #: so a compilation that failed early still leaves one rather than none.
+    reports: ReportLog = field(default_factory=ReportLog)
 
     def _timed(self, name: str, start: float) -> None:
         """Record that a stage finished."""
@@ -125,7 +126,8 @@ class Driver:
         """Check the program and lower it to the IR."""
         start = perf_counter()
         name = self.options.inputs[0].name if self.options.inputs else "<none>"
-        module = Module(name=name, triple=self.options.triple)
+        module = Module(name=name, triple=self.options.triple,
+                        reports=self.reports)
         registry = ModuleRegistry(search=SearchPath(
             given=list(self.options.module_path), system=system_modules()))
         check(module, units, self.diags, registry, self.sources)
@@ -136,7 +138,6 @@ class Driver:
         start = perf_counter()
         manager = build_manager(self.options.opt_level)
         manager.run(module)
-        self.decisions.extend(module.decisions.entries)
         for timing in manager.timings:
             self.timings.append(Timing("".join(("pass ", timing.name)), timing.seconds))
         self._timed("optimization", start)
@@ -278,21 +279,25 @@ class Driver:
             return ExitCode.ERRORS
         return ExitCode.SUCCESS
 
-    def write_decision_log(self) -> None:
-        """Write the log of the decisions the compiler made.
+    def write_report_log(self) -> None:
+        """Write the log of everything the compiler said and chose.
 
-        A decision is something the compiler chose that the program did not
-        state -- what it left out, above all.  The log records the directory the
-        compiler ran in, so that the paths in it can be resolved from anywhere.  It is not a diagnostic: nothing
-        is wrong, and burying "this function is not in your binary" among the
-        warnings would either be noise or be missed.  It is written as JSON so
-        that a build can keep it beside the binary and something can ask it a
-        question later.
+        Two kinds of thing are in it.  What the compiler *said* is the
+        diagnostics, with the number the catalog gives them.  What it *chose* is
+        what the program did not state -- what was left out, where something was
+        put, how long a reference turned out to live -- and has no number,
+        nothing being wrong with any of it.  They are in one log and in one
+        order because the question a reader has, what happened to my program, is
+        not a question about only one of them.
+
+        The log records the directory the compiler ran in, so that the paths in
+        it can be resolved from anywhere.  It is written as JSON so that a build
+        can keep it beside the binary and something can ask it a question later.
         """
-        if self.options.decision_log is None:
+        if self.options.report_log is None:
             return
         document = {
-            "format_version": 2,
+            "format_version": 3,
             "compiler": "".join(("pypl4g ", VERSION)),
             # Where the compiler ran, so that every path below can be found from
             # anywhere: a path that is not absolute is relative to this.  It is
@@ -302,25 +307,30 @@ class Driver:
             # another directory without guessing what the paths were relative to.
             "directory": Path.cwd().as_posix(),
             "inputs": [p.as_posix() for p in self.options.inputs],
-            "decisions": [self._rendered_decision(d) for d in self.decisions],
+            "reports": [self._rendered_report(one)
+                        for one in self.reports.entries],
         }
-        self.options.decision_log.write_text(
+        self.options.report_log.write_text(
             json.dumps(document, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
-    def _rendered_decision(self, decision: Decision) -> dict[str, object]:
-        """One decision, as the log records it.
+    def _rendered_report(self, report: Report) -> dict[str, object]:
+        """One report, as the log records it.
 
         The kind is the stable part, so that a reader can ask which functions
         were dropped without matching on prose; the reason is there for a person
         and may be reworded.
         """
         entry: dict[str, object] = {
-            "kind": decision.kind.value,
-            "subject": decision.subject,
-            "reason": decision.reason,
+            "kind": report.kind.value,
+            "subject": report.subject,
+            "reason": report.reason,
         }
-        position = (self.sources.position(decision.span.start)
-                    if decision.span.is_valid else None)
+        if report.number is not None:
+            # Something the compiler said, which the catalog numbers.  A choice
+            # has no number: nothing is wrong, so there is nothing to look up.
+            entry["number"] = report.number
+        position = (self.sources.position(report.span.start)
+                    if report.span.is_valid else None)
         if position is not None:
             entry["where"] = {"file": position.path, "line": position.line,
                               "column": position.column}
@@ -357,7 +367,11 @@ def main(argv: Sequence[str], stdout: TextIO | None = None,
     sources = SourceManager()
     collected: list[DiagEngine] = []
     renderer = TextRenderer(sources, err, collected)
-    diags = DiagEngine(renderer)
+    # One log for the run, written into from both ends: the engine puts down
+    # what it reports and the module what it chooses, so that what comes out is
+    # in the order it happened rather than in two heaps.
+    reports = ReportLog()
+    diags = DiagEngine(renderer, log=reports)
     collected.append(diags)
 
     options = parse_command_line(argv, diags)
@@ -386,7 +400,7 @@ def main(argv: Sequence[str], stdout: TextIO | None = None,
     json_renderer: JSONRenderer | None = None
     if options.diag_format is DiagFormat.JSON:
         json_renderer = JSONRenderer(sources, err)
-        diags = DiagEngine(json_renderer, diags.control)
+        diags = DiagEngine(json_renderer, diags.control, log=reports)
         collected[0] = diags
     if diags.failed:
         return ExitCode.USAGE
@@ -397,13 +411,14 @@ def main(argv: Sequence[str], stdout: TextIO | None = None,
             json_renderer.finish()
         return ExitCode.USAGE
 
-    driver = Driver(options=options, diags=diags, sources=sources, stderr=err)
+    driver = Driver(options=options, diags=diags, sources=sources, stderr=err,
+                    reports=reports)
     try:
         status = driver.run()
     except InternalError as exc:
         diags.internal(str(exc))
         status = ExitCode.INTERNAL
-    driver.write_decision_log()
+    driver.write_report_log()
     driver.report_timings()
     if json_renderer is not None:
         json_renderer.finish()

@@ -1,4 +1,4 @@
-"""The program that shows a source with the compiler's decisions in it."""
+"""The program that shows a source with the compiler's reports in it."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ import pytest
 from conftest import run_compiler
 
 ROOT = Path(__file__).resolve().parent.parent.parent
-VIEWER = ROOT / "bin" / "pl4g-decisions"
+VIEWER = ROOT / "bin" / "pl4g-reports"
 
 SOURCE = """\N{REFERENCE MARK} A program with things to decide about.
 let used: u6 = 7u6
@@ -33,12 +33,12 @@ fn main() \N{RIGHTWARDS ARROW} u6:
 
 @pytest.fixture
 def compiled(tmp_path: Path) -> tuple[Path, Path]:
-    """Compile the program above and return its source and decision log."""
+    """Compile the program above and return its source and report log."""
     source = tmp_path / "show.pl4g"
     source.write_text(SOURCE, encoding="utf-8")
-    log = tmp_path / "decisions.json"
+    log = tmp_path / "reports.json"
     proc = run_compiler(["-o", str(tmp_path / "out"), "-O1",
-                         "".join(("--decision-log=", str(log))), str(source)])
+                         "".join(("--report-log=", str(log))), str(source)])
     assert proc.returncode == 0, proc.stderr
     return source, log
 
@@ -50,7 +50,7 @@ def view(log: Path, *args: str, cwd: Path | None = None) -> subprocess.Completed
                           cwd=str(cwd) if cwd is not None else None)
 
 
-def test_each_decision_stands_above_the_line_it_is_about(compiled) -> None:  # noqa: ANN001
+def test_each_report_stands_above_the_line_it_is_about(compiled) -> None:  # noqa: ANN001
     """Putting it back where it belongs is the whole point of the program.
 
     Above rather than below: the line is then read already knowing what became
@@ -74,7 +74,7 @@ def test_the_whole_source_is_shown_not_only_the_lines_with_records(compiled) -> 
     _, log = compiled
     out = view(log).stdout
     assert "A program with things to decide about" in out, "the comment is missing"
-    assert "@[startup, impure]" in out, "a line with no decision on it is missing"
+    assert "@[startup, impure]" in out, "a line with no report on it is missing"
 
 
 def test_a_pattern_chooses_which_files_are_shown(compiled) -> None:  # noqa: ANN001
@@ -90,14 +90,14 @@ def test_a_pattern_matching_nothing_says_so(compiled) -> None:  # noqa: ANN001
     _, log = compiled
     proc = view(log, "nosuch.pl4g")
     assert proc.returncode == 0
-    assert "no decisions" in proc.stderr
+    assert "no reports" in proc.stderr
 
 
 def test_the_records_come_out_in_the_order_of_the_file(compiled) -> None:  # noqa: ANN001
     """The compiler records them in the order of its passes, which is not the
     order anyone reads a file in."""
     _, log = compiled
-    out = view(log, "--only-decisions").stdout
+    out = view(log, "--only-reports").stdout
     numbers = [int(line.split(":")[1]) for line in out.splitlines() if ":" in line]
     assert numbers == sorted(numbers), out
 
@@ -110,10 +110,10 @@ def test_the_source_is_found_from_another_directory(tmp_path: Path) -> None:
     work = tmp_path / "work"
     work.mkdir()
     (work / "show.pl4g").write_text(SOURCE, encoding="utf-8")
-    log = work / "decisions.json"
+    log = work / "reports.json"
     proc = subprocess.run(
         [sys.executable, "-m", "pypl4g", "-o", str(work / "out"), "-O1",
-         "--decision-log=decisions.json", "show.pl4g"],
+         "--report-log=reports.json", "show.pl4g"],
         cwd=str(work), capture_output=True, text=True, timeout=120,
         env={**__import__("os").environ, "PYTHONPATH": str(ROOT)})
     assert proc.returncode == 0, proc.stderr
@@ -137,7 +137,7 @@ def test_a_log_of_the_older_format_is_still_read(tmp_path: Path) -> None:
         "format_version": 1,
         "compiler": "pypl4g 0.1",
         "inputs": ["show.pl4g"],
-        "decisions": [{"kind": "drop-function", "subject": "unreached",
+        "reports": [{"kind": "drop-function", "subject": "unreached",
                        "reason": "nothing reaches it",
                        "where": {"file": "show.pl4g", "line": 6, "column": 1}}],
     }), encoding="utf-8")
@@ -149,7 +149,7 @@ def test_a_log_of_the_older_format_is_still_read(tmp_path: Path) -> None:
 def test_a_format_it_does_not_know_is_refused(tmp_path: Path) -> None:
     """Guessing at a format it has not been told about would show nonsense."""
     log = tmp_path / "future.json"
-    log.write_text(json.dumps({"format_version": 99, "decisions": []}),
+    log.write_text(json.dumps({"format_version": 99, "reports": []}),
                    encoding="utf-8")
     proc = view(log)
     assert proc.returncode != 0
@@ -206,9 +206,9 @@ def test_the_mark_stands_over_the_column_the_record_gives(tmp_path: Path) -> Non
         "fn worked_out() \N{RIGHTWARDS ARROW} u6:\n    1u6\n\n",
         "@[startup]\nfn main() \N{RIGHTWARDS ARROW} u6:\n",
         "    _ \N{LEFTWARDS ARROW} worked_out()\n    0u6\n")), encoding="utf-8")
-    log = tmp_path / "decisions.json"
+    log = tmp_path / "reports.json"
     proc = run_compiler(["-o", str(tmp_path / "out"),
-                         "".join(("--decision-log=", str(log))), str(source)])
+                         "".join(("--report-log=", str(log))), str(source)])
     assert proc.returncode == 0, proc.stderr
     shown = view(log)
     assert shown.returncode == 0, shown.stderr
@@ -234,9 +234,9 @@ def test_the_mark_counts_a_glyph_as_the_terminal_draws_it(tmp_path: Path) -> Non
         "    _ \N{LEFTWARDS ARROW} worked_out()\n",
         "    t\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}0",
         "\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}\n")), encoding="utf-8")
-    log = tmp_path / "decisions.json"
+    log = tmp_path / "reports.json"
     proc = run_compiler(["-o", str(tmp_path / "out"),
-                         "".join(("--decision-log=", str(log))), str(source)])
+                         "".join(("--report-log=", str(log))), str(source)])
     assert proc.returncode == 0, proc.stderr
     shown = view(log)
     mark, below = _marked(shown.stdout, "drop-call")

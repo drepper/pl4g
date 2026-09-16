@@ -16,7 +16,7 @@ cannot be overlooked here.
 
 from __future__ import annotations
 
-from ...ir.decisions import DecisionKind, DecisionLog
+from ...ir.reports import ReportKind, ReportLog
 from ...ir.function import Function
 from ...ir.inst import CallInst, Terminator
 from ...ir.module import Module
@@ -33,11 +33,11 @@ class DeadCodeElimination:
         for func in module.functions.values():
             if func.is_declaration:
                 continue
-            while self._sweep(func, module.decisions):
+            while self._sweep(func, module.reports):
                 changed = True
         return changed
 
-    def _sweep(self, func: Function, decisions: DecisionLog) -> bool:
+    def _sweep(self, func: Function, reports: ReportLog) -> bool:
         """Drop what is dead now, and say whether anything went.
 
         Dropping an instruction can leave the ones it used with no user, so this
@@ -64,10 +64,10 @@ class DeadCodeElimination:
                 if id(inst) in surviving:
                     continue
                 if isinstance(inst, CallInst):
-                    self._not_called(func, inst, decisions)
+                    self._not_called(func, inst, reports)
                 elif inst.name_hint is not None:
-                    decisions.record(
-                        DecisionKind.DROP_LOCAL, inst.name_hint,
+                    reports.record(
+                        ReportKind.DROP_LOCAL, inst.name_hint,
                         "".join(("nothing reads it, and computing it does nothing "
                                  "else, so it is not in ", func.name)),
                         inst.name_span if inst.name_span.is_valid
@@ -77,7 +77,7 @@ class DeadCodeElimination:
         return removed
 
     def _not_called(self, func: Function, inst: CallInst,
-                    decisions: DecisionLog) -> None:
+                    reports: ReportLog) -> None:
         """Record a call the program wrote and the program does not make.
 
         It is here because the callee said it changes nothing that outlives the
@@ -88,8 +88,8 @@ class DeadCodeElimination:
         `@[impure]` is missing from a function looks here.
         """
         name = getattr(inst.callee, "name", None)
-        decisions.record(
-            DecisionKind.DROP_CALL, name if name is not None else "a call",
+        reports.record(
+            ReportKind.DROP_CALL, name if name is not None else "a call",
             "".join(("nothing reads what it answers with and it changes nothing "
                      "that outlives the call, so ", func.name, " does not make "
                      "it")),

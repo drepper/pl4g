@@ -1,11 +1,12 @@
 #!/usr/bin/python3
-"""Show a program's source with what the compiler decided about it.
+"""Show a program's source with what the compiler said and chose about it.
 
-A decision log says what the compiler left out and why, but a list of names and
-line numbers is not something anyone reads.  This puts each record back where it
-belongs -- just above the line it is about -- so that the question it answers,
-"I wrote that, where did it go?", is answered by looking at the place it was
-written, and answered before that line is read rather than after.
+A report log says what the compiler warned about, what it left out and why, but
+a list of names and line numbers is not something anyone reads.  This puts each
+record back where it belongs -- just above the line it is about -- so that the
+question it answers, "I wrote that, what happened to it?", is answered by
+looking at the place it was written, and answered before that line is read
+rather than after.
 
 The sources are found through the directory the log records, so the log can be
 read from anywhere and on another machine.  Where the output is a terminal the
@@ -50,14 +51,14 @@ STYLES: dict[str, str] = {
 }
 
 RESET = "\033[0m"
-#: How a decision record is set off from the source around it.
-DECISION = "\033[1;31m"
+#: How a report record is set off from the source around it.
+MARKER = "\033[1;31m"
 GUTTER = "\033[2m"
 
 
 @dataclass(frozen=True, slots=True)
 class Record:
-    """One decision, as the log states it."""
+    """One report, as the log states it."""
 
     kind: str
     subject: str
@@ -65,11 +66,21 @@ class Record:
     file: str | None
     line: int | None
     column: int | None = None
+    #: The number the diagnostic catalog gives it, where the record is something
+    #: the compiler said.  What it chose has none, nothing being wrong with it.
+    number: int | None = None
+
+    def written(self) -> str:
+        """The record in one line, the way the compiler would have said it."""
+        head = "".join((self.kind, ": ", self.subject, " \N{EM DASH} ", self.reason))
+        if self.number is None:
+            return head
+        return "".join((head, " [PL4G-", str(self.number), "]"))
 
 
 @dataclass(slots=True)
 class Log:
-    """A decision log, with its records grouped by the file they are about."""
+    """A report log, with its records grouped by the file they are about."""
 
     directory: Path
     inputs: list[str] = field(default_factory=list)
@@ -78,10 +89,10 @@ class Log:
 
 
 def read_log(path: Path) -> Log:
-    """Read a decision log and group what it says by file."""
+    """Read a report log and group what it says by file."""
     document = json.loads(path.read_text(encoding="utf-8"))
     version = document.get("format_version")
-    if version not in (1, 2):
+    if version not in (1, 2, 3):
         raise SystemExit("".join((
             str(path), ": format version ", str(version),
             " is not one this program knows")))
@@ -89,16 +100,19 @@ def read_log(path: Path) -> Log:
     # be resolved against the directory the log itself is in.
     directory = Path(document["directory"]) if "directory" in document else path.parent
     log = Log(directory=directory, inputs=list(document.get("inputs", ())))
-    for entry in document.get("decisions", ()):
+    # Version 3 put what the compiler said in beside what it chose and renamed
+    # the list for it; the two before held only the choices.
+    for entry in document.get("reports", document.get("decisions", ())):
         where = entry.get("where") or {}
         record = Record(kind=entry["kind"], subject=entry["subject"],
                         reason=entry["reason"], file=where.get("file"),
-                        line=where.get("line"), column=where.get("column"))
+                        line=where.get("line"), column=where.get("column"),
+                        number=entry.get("number"))
         if record.file is None or record.line is None:
             log.loose.append(record)
         else:
             log.by_file.setdefault(record.file, []).append(record)
-    # The compiler records them in the order it decided them, which is the order
+    # The compiler records them in the order they happened, which is the order
     # of its passes; a reader wants them in the order of the file.
     for records in log.by_file.values():
         records.sort(key=lambda r: (r.line or 0, r.kind, r.subject))
@@ -236,7 +250,7 @@ def paint(text: str, spans: list[tuple[int, int, str]] | None) -> list[str]:
 
 def show_file(name: str, path: Path, records: list[Record], spans, colour: bool,  # noqa: ANN001
               stream) -> None:  # noqa: ANN001
-    """Print one source file with its decisions against the lines they concern."""
+    """Print one source file with its reports against the lines they concern."""
     try:
         text = path.read_text(encoding="utf-8")
     except OSError as exc:
@@ -257,26 +271,26 @@ def show_file(name: str, path: Path, records: list[Record], spans, colour: bool,
         # already knowing what became of it.  Reading it the other way round
         # means reading the line, forming a view of it, and then being corrected.
         for record in at_line.get(number, ()):
-            print(_decision_line(record, width, colour, line), file=stream)
+            print(_report_line(record, width, colour, line), file=stream)
         gutter = str(number).rjust(width)
         print("".join((GUTTER if colour else "", gutter, " │ ",
                        RESET if colour else "", line)), file=stream)
     print(file=stream)
 
 
-def _decision_line(record: Record, width: int, colour: bool, line: str) -> str:
-    """One decision, written above the line it is about.
+def _report_line(record: Record, width: int, colour: bool, line: str) -> str:
+    """One report, written above the line it is about.
 
     The mark points down at the line, since that is the way the reader is about
     to go, and it stands over the column the record gives -- which is the name
-    the decision is about, and is worth finding in a line that may hold several
+    the report is about, and is worth finding in a line that may hold several
     of them.
     """
     lead = "".join((" " * width, " │ ", _up_to(line, record.column)))
-    body = "".join(("▼ ", record.kind, ": ", record.subject, " — ", record.reason))
+    body = "".join(("\N{BLACK DOWN-POINTING TRIANGLE} ", record.written()))
     if not colour:
         return "".join((lead, body))
-    return "".join((GUTTER, lead, RESET, DECISION, body, RESET))
+    return "".join((GUTTER, lead, RESET, MARKER, body, RESET))
 
 
 def _up_to(line: str, column: int | None) -> str:
@@ -303,8 +317,8 @@ def _cells(ch: str) -> int:
 def main() -> int:
     """Read a log and show the sources it is about."""
     parser = argparse.ArgumentParser(
-        description="show a program's source with the compiler's decisions in it")
-    parser.add_argument("log", type=Path, help="the decision log to read")
+        description="show a program's source with the compiler's reports in it")
+    parser.add_argument("log", type=Path, help="the report log to read")
     parser.add_argument("patterns", nargs="*", metavar="PATTERN",
                         help="show only source files matching one of these; a "
                              "pattern matches the path as the log states it or "
@@ -312,8 +326,8 @@ def main() -> int:
     parser.add_argument("--color", "--colour", dest="colour",
                         choices=("auto", "always", "never"), default="auto",
                         help="highlight the source (default: only on a terminal)")
-    parser.add_argument("--only-decisions", action="store_true",
-                        help="list the decisions without the source around them")
+    parser.add_argument("--only-reports", action="store_true",
+                        help="list the reports without the source around them")
     args = parser.parse_args()
 
     log = read_log(args.log)
@@ -321,29 +335,28 @@ def main() -> int:
               or (args.colour == "auto" and sys.stdout.isatty()))
     spans = highlighter() if colour else None
     if colour and spans is None:
-        print("pl4g-decisions: no grammar to highlight with; showing plain text",
+        print("pl4g-reports: no grammar to highlight with; showing plain text",
               file=sys.stderr)
 
     names = [n for n in sorted(log.by_file) if wanted(n, args.patterns)]
-    if args.only_decisions:
+    if args.only_reports:
         for name in names:
             for record in log.by_file[name]:
-                print("".join((name, ":", str(record.line), ": ", record.kind,
-                               ": ", record.subject, " — ", record.reason)))
+                print("".join((name, ":", str(record.line), ": ",
+                               record.written())))
         return 0
 
     if not names and not log.loose:
-        print("no decisions were recorded for the files asked for", file=sys.stderr)
+        print("no reports were recorded for the files asked for", file=sys.stderr)
     for name in names:
         show_file(name, resolve(log, name), log.by_file[name], spans, colour,
                   sys.stdout)
-    # A decision about the program rather than about a place in it still has to
+    # A report about the program rather than about a place in it still has to
     # be shown, or it would be silently dropped by a filter it cannot match.
     if log.loose and not args.patterns:
         print("about the program as a whole:")
         for record in log.loose:
-            print("".join(("  ", record.kind, ": ", record.subject, " — ",
-                           record.reason)))
+            print("".join(("  ", record.written())))
     return 0
 
 

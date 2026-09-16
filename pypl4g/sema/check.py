@@ -24,7 +24,7 @@ from ..front.token import (BOTTOM_GLYPH, BUILTIN_GLYPH, CHR_NAME, DEREF_GLYPH,
                           HEAP_NAME, TOLERANCE_DEFAULT,
                           TOLERANCE_NAME, WILDCARD_NAME)
 from ..ir.builder import IRBuilder
-from ..ir.decisions import DecisionKind
+from ..ir.reports import ReportKind
 from ..ir.layout import DataLayout, member_offsets_of, stride_of
 from ..ir.inst import (AddressInst, BinaryInst, BinOp, CallInst, CastInst,
                        CastKind, CmpPred,
@@ -580,6 +580,19 @@ def _reaches_a_place(ty: Type) -> bool:
     both are asked it here.
     """
     return _holds_a_reference(ty) or _holds_a_lambda(ty)
+
+
+def _and_then(names: Sequence[str]) -> str:
+    """Several names, written the way a sentence writes them.
+
+    In quotation marks and joined by a comma until the last, which takes `and`.
+    A log is read by a person as well as matched on by a program, and the half
+    that is prose reads as prose.
+    """
+    quoted = ["".join(("\'", one, "\'")) for one in names]
+    if len(quoted) < 2:
+        return "".join(quoted)
+    return " and ".join((", ".join(quoted[:-1]), quoted[-1]))
 
 
 def _written_as(expr: ast.Expr) -> str:
@@ -1317,7 +1330,7 @@ class Checker:
         """What a name the compiler provides stands for, made on first ask.
 
         On first ask rather than always, so that a program that never names one
-        carries nothing for it and its decision log says nothing about dropping
+        carries nothing for it and its report log says nothing about dropping
         it.  There is one such name so far.
         """
         found = self._top.get(name)
@@ -1898,8 +1911,8 @@ class Checker:
             # A variable the program wrote as an ordinary name and the compiler
             # put in memory: the program did not ask for that, so the log says
             # so and says why.
-            self._module.decisions.record(
-                DecisionKind.PLACE_LOCAL, name,
+            self._module.reports.record(
+                ReportKind.PLACE_LOCAL, name,
                 "something takes its address, so it is kept in storage of its "
                 "own rather than in a register",
                 span)
@@ -3946,8 +3959,8 @@ class Checker:
                                              "\N{TOP RIGHT CORNER}"))))
             self._owned.append(func)
             written.made[key] = func
-            self._module.decisions.record(
-                DecisionKind.INSTANTIATE, node.name,
+            self._module.reports.record(
+                ReportKind.INSTANTIATE, node.name,
                 "".join(("compiled for ",
                          ", ".join(one.render() for one in key),
                          ", which is what a call gave it")),
@@ -4231,8 +4244,8 @@ class Checker:
         # is where the two are tied together.
         self._lambdas += 1
         name = "".join((LAMBDA_PREFIX, str(self._lambdas)))
-        self._module.decisions.record(
-            DecisionKind.NAME_LAMBDA, name,
+        self._module.reports.record(
+            ReportKind.NAME_LAMBDA, name,
             "the code of a lambda written here, which the program left unnamed",
             expr.span)
         taken = self._captures_of(expr, name)
@@ -4245,7 +4258,7 @@ class Checker:
         walks = self._walks_what_it_is_given(expr.attrs)
         ty = self._module.types.func_type(params, answer, walks)
         if walks and not params:
-            # Named the way the decision log names it, that being the one name
+            # Named the way the report log names it, that being the one name
             # this function has and the one a reader can look up.
             self._diags.emit(D.LANG_LISTABLE_TAKES_NOTHING, expr.span,
                              name=name)
@@ -4339,8 +4352,8 @@ class Checker:
         answer = inner.call(func, tuple(arriving[1:]), func.ty.ret, func.span)
         inner.ret(None if func.ty.ret is VOID else answer, func.span)
         self._shims[id(func)] = shim
-        self._module.decisions.record(
-            DecisionKind.NAME_LAMBDA, name,
+        self._module.reports.record(
+            ReportKind.NAME_LAMBDA, name,
             "".join(("code that hands an indirect call on to '", func.name,
                      "', which the program named where a value was wanted")),
             span)
@@ -4412,8 +4425,8 @@ class Checker:
         # those turned out to be is the compiler's answer and not the
         # program's -- which is what the log is for.
         for one in found:
-            self._module.decisions.record(
-                DecisionKind.CAPTURE, one.name,
+            self._module.reports.record(
+                ReportKind.CAPTURE, one.name,
                 "".join(("brought into '", name, "' ",
                          "by reference" if by_reference else "by value",
                          ", which is what '", expr.brings_in.value,
@@ -4916,28 +4929,64 @@ class Checker:
                           span: Span) -> Value:
         """What a call answers with lives as long as what it borrowed from.
 
-        The function promised no more than its parameter's lifetime, so the
-        rest is worked out here, where both are in hand: the answer is there
-        as long as the program exactly when the argument was.
+        The function promised no more than its parameters' lifetime, so the
+        rest is worked out here, where both ends are in hand: the answer is
+        there as long as the program exactly when every argument was, and as
+        long as the shortest-lived of them otherwise.
+
+        The answer is written to the log whichever way it comes out.  It is the
+        one thing about such a call that neither the signature nor the call site
+        says, and where a name stands on several parameters it is not even a
+        thing a reader can work out from one of them.
         """
         carried = func.borrows_from
         if not carried or max(carried) >= len(args) \
-                or not isinstance(answer.ty, PtrType) or answer.ty.lasting \
-                or not all(self._lasting(args[at]) for at in carried):
+                or not isinstance(answer.ty, PtrType):
             return answer
-        self._module.decisions.record(
-            DecisionKind.LIFETIME, func.name,
-            "".join(("answers with a reference that lasts as long as the "
-                     "program, because the argument",
-                     "s for " if len(carried) > 1 else " for ",
-                     ", ".join("".join(("'", func.param_names[at], "'"))
-                               for at in carried),
-                     " do" if len(carried) > 1 else " does")),
-            span)
+        lasting = all(self._lasting(args[at]) for at in carried)
+        self._module.reports.record(ReportKind.LIFETIME, func.name,
+                                    self._how_long(func, args, carried, lasting),
+                                    span)
+        if answer.ty.lasting or not lasting:
+            return answer
         return builder.cast(
             CastKind.BITCAST, answer,
             self._module.types.ptr_type(answer.ty.pointee, answer.ty.mutable,
                                         lasting=True), span)
+
+    def _how_long(self, func: Function, args: Sequence[Value],
+                  carried: Sequence[int], lasting: bool) -> str:
+        """How long the answer of one call lives, in a sentence.
+
+        Which of the arguments decided it is the point: a lifetime name written
+        on two parameters means the shorter of what the two named, and which one
+        that was is a thing about this call and about no other.
+        """
+        named = _and_then([func.param_names[at] for at in carried])
+        many = len(carried) > 1
+        if lasting:
+            return "".join((
+                "answers with a reference that lasts as long as the program, "
+                "because ", "every argument" if many else "the argument",
+                " for ", named, " does"))
+        found = [one for one in (self._named_place_of(args[at])
+                                 for at in carried) if one is not None]
+        if not found:
+            return "".join((
+                "answers with a reference that lives as long as this call, "
+                "which is all ", "the arguments" if many else "the argument",
+                " for ", named, " said"))
+        # Every one of the shortest-lived, not the first of them: two names of
+        # one scope live equally long, and saying one of the two would read as
+        # though the other had been looked at and turned down.
+        deepest = max(one.depth for one in found)
+        shortest = _and_then([one.name for one in found
+                              if one.depth == deepest])
+        return "".join((
+            "answers with a reference that lives as long as ", shortest, ", ",
+            "the shortest-lived of what the arguments for " if many
+            else "which is what the argument for ",
+            named, " named"))
 
     def _named_place_of(self, value: Value) -> _Local | None:
         """The shortest-lived name whose place *value* reaches, where it reaches

@@ -21,7 +21,7 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import Sequence
 
-from ...ir.decisions import DecisionKind, DecisionLog
+from ...ir.reports import ReportKind, ReportLog
 from ...ir.function import BasicBlock, Function, ReturnStyle
 from ...ir.inst import (BinOp, BinaryInst, CallInst, CastInst, CastKind,
                         ErrorInst, ExtractInst, FailedInst, FrameInst,
@@ -60,7 +60,7 @@ class LargeAnswers:
 
     def run(self, module: Module) -> bool:
         """Rewrite those functions and every call to them."""
-        decisions = module.decisions
+        reports = module.reports
         # By identity, since a module may name one function more than once and
         # widening it twice would give it two places to put the answer.
         every = {id(func): func for func in module.functions.values()}
@@ -78,8 +78,8 @@ class LargeAnswers:
             if func.blocks:
                 self._store_the_answer(module, func, answers[id(func)])
         for func in wanted.values():
-            decisions.record(
-                DecisionKind.ANSWER_IN_STORAGE, func.name,
+            reports.record(
+                ReportKind.ANSWER_IN_STORAGE, func.name,
                 "".join(("'", answers[id(func)].render(), "' is more values ",
                          "than the style answers in registers, so the caller ",
                          "provides the place")),

@@ -2009,7 +2009,9 @@ gives two answers: `first(&total)` for a variable at the top level answers with 
 `first(&n)` for a local does not.  Where several parameters carry one name, the answer lasts that long only where *every* one of
 them did, that being the only promise that holds whichever one the body picked.  One signature, decided where both the argument and the answer are in view.  A reference that
 lasts as long as the program stands wherever a shorter-lived one is wanted, the other way round being refused (4203).  Which it
-came to is written to the decision log (`lifetime`), since neither the signature nor the call says it.
+came to is written to the report log (`lifetime`) every time, since neither the signature nor the call says it -- and where a
+name stands on several parameters the log says which of the arguments the answer took its lifetime from, which is a fact about
+that one call.
 
 **A variable at the top level holds a reference only where it says `static`** (4532), which is that rule asked at the other place
 a value escapes to.  A reference inside something else -- a tuple, a product, a collection -- may not be answered with at all
@@ -3889,7 +3891,7 @@ program**: an overflow inside a call nobody made cannot be reached.  That follow
 what the attribute was declared for; a program that wants the check to happen wants the answer, and reading the answer keeps the
 call.
 
-**A call that is not made is written to the decision log** (`drop-call`), naming the function and saying why.  A generator that
+**A call that is not made is written to the report log** (`drop-call`), naming the function and saying why.  A generator that
 emitted a call and cannot find it in the output is told where it went, and told that what let it go was the absence of
 `@[impure]` -- which is a property of a function the generator wrote and can change.
 
@@ -4172,7 +4174,7 @@ a generator emitting a function knows what it will call it with.
 
 **One function is made per set of types**, not one per call: a second call saying what an earlier one said gets that same
 function.  The two are told apart by their symbols on their own, a symbol being the signature written out.  Which sets of types a
-generic function was compiled for is written to the decision log (`instantiate`), since the program said nothing about them.
+generic function was compiled for is written to the report log (`instantiate`), since the program said nothing about them.
 
 **A generic function is not the runtime's entry point, a constructor or a test** (4558): each of those is one thing the program
 has, and something written once per set of types is none of them.

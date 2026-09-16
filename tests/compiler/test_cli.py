@@ -145,15 +145,16 @@ def test_emit_modes_write_to_the_output_file(source: Path, tmp_path: Path) -> No
         assert needle in output.read_text(encoding="utf-8")
 
 
-def test_decision_log_is_written(source: Path, tmp_path: Path) -> None:
-    """A program that gave the compiler nothing to decide has an empty log."""
-    log = tmp_path / "decisions.json"
+def test_report_log_is_written(source: Path, tmp_path: Path) -> None:
+    """A program the compiler said nothing and chose nothing about has an empty
+    log."""
+    log = tmp_path / "reports.json"
     proc = run_compiler(["-o", str(tmp_path / "out"),
-                         "".join(("--decision-log=", str(log))), str(source)])
+                         "".join(("--report-log=", str(log))), str(source)])
     assert proc.returncode == ExitCode.SUCCESS
     document = json.loads(log.read_text(encoding="utf-8"))
-    assert document["format_version"] == 2
-    assert document["decisions"] == []
+    assert document["format_version"] == 3
+    assert document["reports"] == []
     # Where the compiler ran, so that a path in the log can be found from
     # anywhere -- the arrangement DWARF uses for a compilation unit.
     assert Path(document["directory"]).is_absolute()
@@ -172,7 +173,7 @@ fn main() \N{RIGHTWARDS ARROW} u6:
 
 
 def test_what_is_left_out_of_the_binary_is_logged(tmp_path: Path) -> None:
-    """Leaving something out is a decision, and a reader is entitled to ask.
+    """Leaving something out is a report, and a reader is entitled to ask.
 
     "I wrote that function, where is it?" has an answer; this is where it is
     kept.  It is not a warning: nothing is wrong, and a program that is meant to
@@ -180,30 +181,30 @@ def test_what_is_left_out_of_the_binary_is_logged(tmp_path: Path) -> None:
     """
     source = tmp_path / "t.pl4g"
     source.write_text(DROPPED, encoding="utf-8")
-    log = tmp_path / "decisions.json"
+    log = tmp_path / "reports.json"
     proc = run_compiler(["-o", str(tmp_path / "out"),
-                         "".join(("--decision-log=", str(log))), str(source)])
+                         "".join(("--report-log=", str(log))), str(source)])
     assert proc.returncode == ExitCode.SUCCESS, proc.stderr
-    decisions = json.loads(log.read_text(encoding="utf-8"))["decisions"]
-    by_kind = {(d["kind"], d["subject"]): d for d in decisions}
+    reports = json.loads(log.read_text(encoding="utf-8"))["reports"]
+    by_kind = {(d["kind"], d["subject"]): d for d in reports}
     assert ("drop-function", "unreached") in by_kind
     assert ("drop-variable", "only_by_dropped") in by_kind
     assert ("drop-variable", "used") not in by_kind, "a variable in use was logged"
 
 
-def test_a_logged_decision_points_at_what_it_is_about(tmp_path: Path) -> None:
+def test_a_logged_report_points_at_what_it_is_about(tmp_path: Path) -> None:
     """Being told a function went without being told which line it was on would
     leave the reader to find it."""
     source = tmp_path / "t.pl4g"
     source.write_text(DROPPED, encoding="utf-8")
-    log = tmp_path / "decisions.json"
+    log = tmp_path / "reports.json"
     run_compiler(["-o", str(tmp_path / "out"),
-                  "".join(("--decision-log=", str(log))), str(source)])
-    decisions = json.loads(log.read_text(encoding="utf-8"))["decisions"]
-    dropped = next(d for d in decisions if d["subject"] == "unreached")
+                  "".join(("--report-log=", str(log))), str(source)])
+    reports = json.loads(log.read_text(encoding="utf-8"))["reports"]
+    dropped = next(d for d in reports if d["subject"] == "unreached")
     assert dropped["where"]["file"] == source.as_posix()
     assert dropped["where"]["line"] == 4, dropped
-    assert dropped["reason"], "a decision with no reason says only half of it"
+    assert dropped["reason"], "a report with no reason says only half of it"
 
 
 def test_nothing_the_image_offers_is_ever_logged_as_dropped(tmp_path: Path) -> None:
@@ -218,11 +219,11 @@ def test_nothing_the_image_offers_is_ever_logged_as_dropped(tmp_path: Path) -> N
         "@[visible]\nfn reachable() \N{RIGHTWARDS ARROW} u6:\n    1u6\n\n",
         "@[startup, impure]\nfn main() \N{RIGHTWARDS ARROW} u6:\n    1u6\n")),
         encoding="utf-8")
-    log = tmp_path / "decisions.json"
+    log = tmp_path / "reports.json"
     proc = run_compiler(["-o", str(tmp_path / "out"),
-                         "".join(("--decision-log=", str(log))), str(source)])
+                         "".join(("--report-log=", str(log))), str(source)])
     assert proc.returncode == ExitCode.SUCCESS, proc.stderr
-    assert json.loads(log.read_text(encoding="utf-8"))["decisions"] == []
+    assert json.loads(log.read_text(encoding="utf-8"))["reports"] == []
 
 
 def test_time_report(source: Path, tmp_path: Path) -> None:
@@ -253,13 +254,13 @@ def test_a_local_that_is_dropped_is_logged(tmp_path: Path) -> None:
     """
     source = tmp_path / "t.pl4g"
     source.write_text(DROPPED_LOCAL, encoding="utf-8")
-    log = tmp_path / "decisions.json"
+    log = tmp_path / "reports.json"
     proc = run_compiler(["-o", str(tmp_path / "out"), "-O1",
-                         "".join(("--decision-log=", str(log))), str(source)])
+                         "".join(("--report-log=", str(log))), str(source)])
     assert proc.returncode == ExitCode.SUCCESS, proc.stderr
-    decisions = json.loads(log.read_text(encoding="utf-8"))["decisions"]
-    locals_ = [d for d in decisions if d["kind"] == "drop-local"]
-    assert [d["subject"] for d in locals_] == ["unread"], decisions
+    reports = json.loads(log.read_text(encoding="utf-8"))["reports"]
+    locals_ = [d for d in reports if d["kind"] == "drop-local"]
+    assert [d["subject"] for d in locals_] == ["unread"], reports
     # At the name, not at the initializer and not at the indentation: a reader
     # following the log to a line wants to be put on the thing that went.
     assert (locals_[0]["where"]["line"], locals_[0]["where"]["column"]) \
@@ -270,12 +271,12 @@ def test_nothing_is_dropped_where_nothing_asked_for_it(tmp_path: Path) -> None:
     """An unoptimized build keeps what the program wrote, so it decides nothing."""
     source = tmp_path / "t.pl4g"
     source.write_text(DROPPED_LOCAL, encoding="utf-8")
-    log = tmp_path / "decisions.json"
+    log = tmp_path / "reports.json"
     proc = run_compiler(["-o", str(tmp_path / "out"),
-                         "".join(("--decision-log=", str(log))), str(source)])
+                         "".join(("--report-log=", str(log))), str(source)])
     assert proc.returncode == ExitCode.SUCCESS, proc.stderr
-    decisions = json.loads(log.read_text(encoding="utf-8"))["decisions"]
-    assert [d for d in decisions if d["kind"] == "drop-local"] == [], decisions
+    reports = json.loads(log.read_text(encoding="utf-8"))["reports"]
+    assert [d for d in reports if d["kind"] == "drop-local"] == [], reports
 
 
 
@@ -294,13 +295,13 @@ def test_a_call_that_is_not_made_reaches_the_log(tmp_path: Path) -> None:
     """
     source = tmp_path / "t.pl4g"
     source.write_text(DROPPED_CALL, encoding="utf-8")
-    log = tmp_path / "decisions.json"
+    log = tmp_path / "reports.json"
     proc = run_compiler(["-o", str(tmp_path / "out"), "-O1",
-                         "".join(("--decision-log=", str(log))), str(source)])
+                         "".join(("--report-log=", str(log))), str(source)])
     assert proc.returncode == ExitCode.SUCCESS, proc.stderr
-    decisions = json.loads(log.read_text(encoding="utf-8"))["decisions"]
-    calls = [d for d in decisions if d["kind"] == "drop-call"]
-    assert [d["subject"] for d in calls] == ["worked_out"], decisions
+    reports = json.loads(log.read_text(encoding="utf-8"))["reports"]
+    calls = [d for d in reports if d["kind"] == "drop-call"]
+    assert [d["subject"] for d in calls] == ["worked_out"], reports
     # At the call, which is neither where the line begins nor where the
     # statement does: `_ \N{LEFTWARDS ARROW} ` stands before it.
     assert (calls[0]["where"]["line"], calls[0]["where"]["column"]) \
@@ -316,13 +317,13 @@ def test_a_call_that_is_not_made_goes_at_every_level(tmp_path: Path) -> None:
     """
     source = tmp_path / "t.pl4g"
     source.write_text(DROPPED_CALL, encoding="utf-8")
-    log = tmp_path / "decisions.json"
+    log = tmp_path / "reports.json"
     proc = run_compiler(["-o", str(tmp_path / "out"),
-                         "".join(("--decision-log=", str(log))), str(source)])
+                         "".join(("--report-log=", str(log))), str(source)])
     assert proc.returncode == ExitCode.SUCCESS, proc.stderr
-    decisions = json.loads(log.read_text(encoding="utf-8"))["decisions"]
-    assert [d["subject"] for d in decisions if d["kind"] == "drop-call"] \
-        == ["worked_out"], decisions
+    reports = json.loads(log.read_text(encoding="utf-8"))["reports"]
+    assert [d["subject"] for d in reports if d["kind"] == "drop-call"] \
+        == ["worked_out"], reports
 
 
 MANY_GLYPHS = "".join((
@@ -342,13 +343,13 @@ def test_a_column_counts_characters_and_not_bytes(tmp_path: Path) -> None:
     """
     source = tmp_path / "t.pl4g"
     source.write_text(MANY_GLYPHS, encoding="utf-8")
-    log = tmp_path / "decisions.json"
+    log = tmp_path / "reports.json"
     proc = run_compiler(["-o", str(tmp_path / "out"),
-                         "".join(("--decision-log=", str(log))), str(source)])
+                         "".join(("--report-log=", str(log))), str(source)])
     assert proc.returncode == ExitCode.SUCCESS, proc.stderr
-    decisions = json.loads(log.read_text(encoding="utf-8"))["decisions"]
+    reports = json.loads(log.read_text(encoding="utf-8"))["reports"]
     lines = MANY_GLYPHS.split("\n")
-    for entry in decisions:
+    for entry in reports:
         where = entry["where"]
         at = lines[where["line"] - 1][where["column"] - 1:]
         assert at.startswith("worked_out"), (entry, at)

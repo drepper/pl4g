@@ -73,7 +73,7 @@ class Options:
     #: terminal gets it and a pipe does not; `NO_COLOR` is honoured whatever
     #: this says.
     colour: ColourWhen = ColourWhen.AUTO
-    decision_log: Path | None = None
+    report_log: Path | None = None
     #: Where to look for modules, in the order to look, as the command line
     #: gave them.  An entry that is not absolute is relative to the importing
     #: file first and to where the compiler was run second.
