@@ -40,7 +40,7 @@ from ..runs import lower_trapping as lower_trapping_run
 from . import ops as a64ops
 from ...ir.function import DEFAULT_CCONV, SYSTEM_CCONV
 from .abi import lookup as lookup_cconv
-from .startup import ABORT_SYMBOL
+from .startup import ABORT_SYMBOL, SYSCALLS
 from .opcodes import AARCH64_INSTRS
 from .regs import GPR, INFO, SP, VEC, X30
 
@@ -969,7 +969,7 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                             CondBrInst,
                             FrameInst, AssertInst,
                             LoadInst, MemStartInst, RetInst, SplatInst, StoreInst,
-                            UnaryInst, UnreachableInst)
+                            UnaryInst, UnreachableInst, SyscallInst)
     from ...ir.function import Function as _Function
     from ...ir.mangle import symbol_name
     from ...ir.module import GlobalVar
@@ -1789,6 +1789,23 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                               if inst is returned else None))
                     held[id(inst)] = destination
                     lower_comparison(asm, inst, operands, destination)
+                case SyscallInst():
+                    # Everything in it is a machine word by the time it gets
+                    # here, so there is nothing to widen and nothing to place by
+                    # a convention: the kernel names the registers.
+                    handed = [Move(into=registers.view(SYSCALLS.number.unit, 64),
+                                   source=operands.value(inst.number, span))]
+                    for at, one in enumerate(inst.arguments):
+                        handed.append(Move(into=SYSCALLS.arguments[at],
+                                           source=operands.value(one, span)))
+                    for move in sequenced(handed, asm.temporary):
+                        asm.loadreg(move.into, move.source, span)
+                    asm.kernel(SYSCALLS.enter, span,
+                               clobbers=(SYSCALLS.answer, *SYSCALLS.clobbers),
+                               reads=[move.into for move in handed])
+                    taken_back = _new_value(inst.ty, registers)
+                    held[id(inst)] = taken_back
+                    asm.loadreg(taken_back, MCReg(SYSCALLS.answer), span)
                 case CallInst():
                     callee = inst.callee
                     # A call through a value rather than to a definition: what

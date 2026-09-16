@@ -13,7 +13,7 @@ from typing import Iterable
 from ..diag.engine import InternalError
 from .function import BasicBlock, Function, SpecialKind
 from .mangle import symbol_name
-from .inst import (AddressInst, AnyLaneInst, AssertInst, BinaryInst, BinOp,
+from .inst import (AddressInst, SyscallInst, AnyLaneInst, AssertInst, BinaryInst, BinOp,
                    BlockTarget, CastInst, FrameInst, SplatInst,
                    CastKind, CmpInst,
                    ErrorInst, ExtractInst, FailedInst,
@@ -25,6 +25,7 @@ from .types import (ArrayType, BOOL, BoolType, CharType, DictType, EnumType,
                     without_units,
                     FuncType, IntType,
                     MEM, PtrType, ResultType, SetType, TupleType, Type,
+                    U64,
                     VecType, VOID, parts_of)
 from .value import Const, IntConst, Value
 
@@ -213,6 +214,20 @@ class Verifier:
                     self._fail(where, "".join((
                         "a check of ", inst.operands[0].ty.render(),
                         ", which is not a truth value")))
+            case SyscallInst():
+                # Everything the kernel is given is a machine word: a number, a
+                # descriptor, a length, or the address of something.  Nothing
+                # else fits in a register the kernel reads, and a floating-point
+                # value in one would be a program that meant something else.
+                if not isinstance(inst.ty, IntType):
+                    self._fail(where, "".join((
+                        "a request to the kernel answering '",
+                        inst.ty.render(), "'")))
+                for one in inst.operands:
+                    if not isinstance(one.ty, (IntType, PtrType)):
+                        self._fail(where, "".join((
+                            "a request to the kernel given '", one.ty.render(),
+                            "'")))
             case AddressInst():
                 if not isinstance(inst.operands[0].ty, PtrType):
                     self._fail(where, "the address of something that is not a place")
@@ -499,6 +514,10 @@ def _held_as(one: Type, other: Type) -> bool:
     one wider.  That an enumeration holds only its own values is the checker's
     to keep; nothing structural about an instruction can say it.
 
+    And an address read as the whole number a register holds it as, which is
+    what a request to the kernel is given: the kernel takes registers, and an
+    address is one of the things that goes in one.
+
     And two function types differing only in whether what they name walks an
     array it is given.  That is a promise to a caller and nothing a value
     carries: both are the same two addresses in the same two registers, and
@@ -506,6 +525,10 @@ def _held_as(one: Type, other: Type) -> bool:
     """
     if isinstance(one, FuncType) and isinstance(other, FuncType):
         return one.params == other.params and one.ret is other.ret
+    if isinstance(one, PtrType) and other is U64:
+        return True
+    if isinstance(other, PtrType) and one is U64:
+        return True
     return (isinstance(one, (CharType, EnumType)) and other is one.holder) \
         or (isinstance(other, (CharType, EnumType)) and one is other.holder)
 

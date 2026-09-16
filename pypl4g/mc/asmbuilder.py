@@ -25,7 +25,7 @@ hands the instructions to the streamer.
 
 from __future__ import annotations
 
-from typing import Protocol, Sequence
+from typing import Callable, Protocol, Sequence
 
 from ..source.location import INVALID_SPAN, Span
 from .inst import MCInst
@@ -726,6 +726,26 @@ class Assembler:
                 inst.clobbers = tuple(clobbers)
                 inst.reads = tuple(reads)
         self._emit(selected)
+
+    def kernel(self, enter: Callable[[Assembler], None],
+               span: Span = INVALID_SPAN,
+               clobbers: Sequence[Reg] = (),
+               reads: Sequence[Reg] = ()) -> None:
+        """Enter the kernel, saying what it destroys and what it reads.
+
+        *enter* is the one instruction an architecture enters the kernel with,
+        which is the architecture's to name; what it destroys and what it reads
+        are the kernel's to name, and are given here for the reason a call's
+        are -- a register holding an argument would look dead from the moment it
+        was written if nothing said the call wanted it.
+        """
+        del span
+        assert self._block is not None
+        before = len(self._block.insts)
+        enter(self)
+        for inst in self._block.insts[before:]:
+            inst.clobbers = tuple(clobbers)
+            inst.reads = tuple(reads)
 
     def jump(self, target: str, span: Span = INVALID_SPAN) -> None:
         """Transfer control to the block called *target*."""

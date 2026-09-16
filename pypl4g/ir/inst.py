@@ -451,6 +451,47 @@ class CallInst(Instruction):
         return "call"
 
 
+class SyscallInst(Instruction):
+    """A request to the kernel: a number, and what it is given.
+
+    It is one instruction and not a call because there is no function: what
+    enters the kernel is one instruction of the architecture, what it takes is
+    named by the kernel rather than by any calling convention, and nothing about
+    it is the language's to choose.
+
+    It is outside the memory token chain, as a call is and for the same reason:
+    what the kernel does to memory is not something the program can write down,
+    so it is kept by saying the instruction has effects rather than by naming
+    what it read and wrote.
+    """
+
+    __slots__ = ()
+
+    def __init__(self, number: Value, args: Sequence[Value],
+                 result_ty: Type, span: Span = INVALID_SPAN) -> None:
+        super().__init__(result_ty, (number, *args), span)
+
+    @property
+    def has_effects(self) -> bool:
+        """Always: what the kernel does is the reason for asking it."""
+        return True
+
+    @property
+    def number(self) -> Value:
+        """Which call it is."""
+        return self.operands[0]
+
+    @property
+    def arguments(self) -> Sequence[Value]:
+        """What the call is given, in the order the kernel takes them."""
+        return self.operands[1:]
+
+    @property
+    def opcode(self) -> str:
+        """The mnemonic used in the textual form."""
+        return "syscall"
+
+
 class AddressInst(Instruction):
     """The address of a variable, as a value a register can hold.
 

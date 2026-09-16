@@ -13,7 +13,7 @@ from typing import Sequence
 from .function import (DEFAULT_CCONV, BasicBlock, FuncAttrs, Function,
                        InlineHint, Linkage,
                        SpecialKind)
-from .inst import (AddressInst, AnyLaneInst, BinaryInst, BinOp, BlockTarget,
+from .inst import (AddressInst, SyscallInst, AnyLaneInst, BinaryInst, BinOp, BlockTarget,
                    BrInst, CastInst, CastKind, SplatInst,
                    CmpInst, CmpPred, CondBrInst, LoadInst, MemStartInst, RetInst,
                    StoreInst, UnaryInst, UnOp, UnreachableInst)
@@ -286,6 +286,11 @@ class _FunctionReader:
         parts = _split_top(rest)
         if head == "address":
             return block.append(AddressInst(self._value(parts[0], ty, number)))
+        if head == "syscall":
+            # Everything in one is a machine word, so each operand is read at
+            # the width the answer is: the checker widened them before this.
+            given = [self._value(one, ty, number) for one in parts]
+            return block.append(SyscallInst(given[0], given[1:], ty))
         if head in _BINOPS:
             lhs = self._value(parts[0], ty, number)
             # What moves an address is a number of bytes, not another address,

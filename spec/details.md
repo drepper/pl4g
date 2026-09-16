@@ -2364,6 +2364,34 @@ and the run then disagreed with the compiler about a program that was perfectly
 all right.  Generating into a copy is what settles it.  The built library is
 read by nobody here, so building it disturbs nothing.
 
+Asking the kernel
+-----------------
+
+`SyscallInst` is one instruction and not a call: what enters the kernel is one
+instruction of the architecture, what it takes is named by the kernel rather
+than by any calling convention, and nothing about it is the language's to
+choose.  It is outside the memory token chain, as a call is and for the same
+reason -- what the kernel does to memory is not something the program can write
+down, so it is kept by saying the instruction has effects.
+
+**Everything in one is a machine word before a back end sees it.**  The checker
+widens a narrower number by its own signedness and reads a reference as the
+address it is, so each selector has one shape and no widening of its own: move
+the number and the arguments into the registers the kernel names, enter, take
+the answer.  The verifier learnt that an address read as a `u64` is the same
+bits, which is what that reading is.
+
+**`SyscallABI` already said where everything goes.**  The number register, the
+argument registers, the answer register and the entering instruction were
+written down per target for the allocator's own `mmap`; what this added is what
+the entering instruction destroys, which is nothing on two of the three and is
+`rcx` and `r11` on x86-64 -- the instruction's doing rather than the kernel's.
+
+**The assembler gained `kernel`**, which emits the entering instruction and then
+says what it destroys and what it reads.  `op` cannot say either, and a register
+holding an argument would look dead from the moment it was written if nothing
+said the kernel wanted it; `call` is the shape it copies.
+
 Tests
 -----
 

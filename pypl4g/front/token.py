@@ -173,6 +173,12 @@ NARROW_NAME: Final[str] = "".join((BUILTIN_GLYPH, "narrow"))
 #: the checker.
 IMPORT_NAME: Final[str] = "".join((BUILTIN_GLYPH, "import"))
 
+#: A request to the kernel, written out.  The number and the arguments are the
+#: kernel's, not the language's: nothing here knows what call 1 is, and a program
+#: that asks for it is asking the system and not the compiler.  It is how the
+#: `std` module reaches anything outside the process, and it is the only way.
+SYSCALL_NAME: Final[str] = "".join((BUILTIN_GLYPH, "syscall"))
+
 DROP_NAME: Final[str] = "".join((BUILTIN_GLYPH, "drop"))
 UNIT_NAME: Final[str] = "".join((BUILTIN_GLYPH, "unit"))
 

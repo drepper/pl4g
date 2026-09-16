@@ -4,11 +4,13 @@ To Do List for the pypl4g compiler
 `[ ]` open, `[x]` done, `[?]` needs a decision before it can be started -- such an entry carries a
 `Question:` paragraph saying what is undecided and what the choices are.
 
-[ ] a system call from the language: `⎕syscall(NUMBER, ARG...)`, answering the kernel's own `i64` -- negative for an
-    error, as the kernel returns it.  `SyscallABI` already says per target where the number goes, where the arguments go, where
-    the answer comes back and which instruction enters the kernel, so what is missing is an IR instruction, an assembler entry
-    point that can declare what a syscall destroys -- `asm.op` cannot, and `asm.call` is the shape to copy -- and one selection
-    arm per back end.  Everything the `std` module does rests on it.
+[x] a system call from the language: `⎕syscall(NUMBER, ARG...)`, answering the kernel's own `i64`.  Done, on all three
+    targets: an IR instruction outside the token chain, `asm.kernel` to say what the entering instruction destroys and reads,
+    and one selection arm each.  What is still the standard library's is naming the numbers, which differ per architecture.
+
+[ ] give a program a way to know which architecture it is built for, so that the `std` module can name the system call numbers.
+    `write` is 1 on x86-64 and 64 on the other two; a module that is one file has to choose between them while compiling, which
+    is what `comptime` is for and what nothing yet answers.
 
 [ ] acquire and release ordering in the IR.  io_uring's submission and completion rings are shared with the kernel and their head
     and tail indices are read and written with ordering, which the memory token does not express: the token says *that* two

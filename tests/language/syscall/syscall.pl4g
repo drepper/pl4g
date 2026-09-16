@@ -1,0 +1,52 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ `⎕syscall(NUMBER, ARG...)` asks the kernel for something.  The number and the
+※ arguments are the kernel's and not the language's: nothing in the compiler
+※ knows what call one is, and a program that asks for it is asking the system.
+※
+※ **What comes back is what the kernel put in the register it answers in** -- an
+※ `i64`, negative where it refused, which is the kernel's own convention and not
+※ one invented here.  Reading an error out of it is the caller's business, and
+※ will be the `std` module's.
+※
+※ **Everything given is a machine word.**  A number of any width is widened by
+※ its own signedness and a reference is read as the address it is; anything else
+※ is refused (4572), there being no register a value of it would go in.  Doing
+※ that here rather than in three back ends is what keeps each of them to one
+※ shape: by the time one sees a request to the kernel, everything in it is the
+※ width of a register.
+※
+※ **Asking the kernel changes what outlives the call**, so a function that does
+※ it says `impure`, which is the rule everything else of that sort follows.
+※
+※ **The numbers are the architecture's**: `write` is 1 on x86-64 and 64 on the
+※ other two, and nothing in the language hides that yet -- giving them names is
+※ the `std` module's work.  So what is asked here is a call no kernel has, which
+※ every one of them refuses in the same way, and what is checked is the
+※ mechanism: six arguments go in, an answer comes back, and a refusal is
+※ negative.
+※
+※ Compare: **Zig**, whose `std.os.linux.syscall1` and the rest are the same
+※ thing with the number named; **Go**, whose `syscall.Syscall` takes three
+※ machine words and answers two; **C**, where `syscall(2)` is a variadic
+※ function of the library and not of the language; **Rust**, which has no such
+※ thing in its standard library at all and reaches for a crate.
+
+※ A number no kernel has a call for, which every one of the three refuses.
+let NO_SUCH_CALL: i64 = 0x4000i64
+
+@[startup, impure]
+fn main() → u6:
+    let room: u8⟦6⟧ = ⟦0u8, 0u8, 0u8, 0u8, 0u8, 0u8⟧
+    ※ the number alone
+    let bare: i64 = ⎕syscall(NO_SUCH_CALL)
+    ※ and with every argument the kernel takes, one of them an address and one
+    ※ of them narrower than a register
+    let full: i64 = ⎕syscall(NO_SUCH_CALL, 1i64, &room⟦0⟧, 6u8,
+                             ⁻1i64, 0i64, 0i64)
+    if bare ≥ 0i64:
+        1u6
+    elif full ≥ 0i64:
+        2u6
+    else:
+        0u6

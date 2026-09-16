@@ -186,6 +186,7 @@ GROUPS: tuple[Group, ...] = (
            "line-breaks-inside-brackets": "every kind of bracket written down the page",
            "block-on-one-line": "eight blocks written after the colon on their own line",
            "tests-of-three-kinds": "a test of each kind, and what each binary holds",
+           "syscall": "two requests to the kernel, one of them with every argument",
            "loop-break-nested": "two loops and all four jumps between them",
            "loop-continue": "two loops each begun again from inside the body",
            "loop-break-value": "a search whose loop comes to what it found",

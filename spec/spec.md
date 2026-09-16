@@ -1946,6 +1946,25 @@ either way; writing it where the place may not be written is refused (4537) whic
 `rows⌖⟦2⟧` is an element of what `rows` names.  That is what Pascal, Modula, Ada and Odin put a mark after a pointer for, and it
 is why the mark is not a prefix as C's is.  Written after anything that is not a reference there is no place to read (4534).
 
+**`⎕syscall(NUMBER, ARG...)` asks the kernel for something**, and answers what the kernel put in the register it answers
+in: an `i64`, negative where it refused, which is the kernel's convention and not one invented here.
+
+```
+let wrote: i64 = ⎕syscall(1i64, 1i64, &message⟦0⟧, 6i64)   ※ write(1, message, 6) on x86-64
+```
+
+The number and the arguments are the kernel's and not the language's: nothing in the compiler knows what call one is, and the
+numbers differ between architectures -- `write` is 1 on x86-64 and 64 on the other two.  Giving them names is the standard
+library's work and not the language's.
+
+**Everything given is a machine word** (4572): a whole number of any width, widened by its own signedness, or a reference, read
+as the address it is.  Nothing else fits in a register the kernel reads.  At most six arguments follow the number (4573), there
+being six such registers on every architecture this compiler generates for.  **Asking the kernel changes what outlives the
+call**, so a function that does it says `impure`.
+
+It is how the standard library will reach anything outside the process, and it is the only way: there is no C library underneath
+and nothing else to call.
+
 **A reference that promises more stands where less is wanted.**  `&mut T` promises everything `&T` does and adds writing, and
 `&static T` promises everything `&T` does and adds the time, so each stands where the weaker one is asked for -- in a call, a
 definition, a return.  The bits are the same bits, so nothing is emitted for it.  Both go one way only: a place nothing may write

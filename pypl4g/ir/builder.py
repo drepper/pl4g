@@ -11,7 +11,8 @@ from ..source.location import INVALID_SPAN, Span
 from .function import BasicBlock, Function
 from typing import Sequence
 
-from .inst import (AddressInst, AnyLaneInst, AssertInst, CallInst, BinaryInst,
+from .inst import (SyscallInst,
+                   AddressInst, AnyLaneInst, AssertInst, CallInst, BinaryInst,
                    CodeInst,
                    BinOp, BlockTarget, BrInst, FrameInst, SplatInst,
                    CastInst, CastKind,
@@ -218,6 +219,11 @@ class IRBuilder:
         written = self._append(StoreInst(self.memory(), address, value, span))
         self._memory = written
         return written
+
+    def syscall(self, number: Value, args: Sequence[Value], result_ty: Type,
+                span: Span = INVALID_SPAN) -> Value:
+        """Append a request to the kernel, and take what it answered."""
+        return self._append(SyscallInst(number, args, result_ty, span))
 
     def ret(self, value: Value | None = None, span: Span = INVALID_SPAN) -> Terminator:
         """Append a return."""

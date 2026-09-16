@@ -5243,6 +5243,43 @@ hides the whole question behind a scheduler and a thread pool; **Zig**, whose
 hand as this will be; **C**, where the descriptors are three integers anyone may
 write to at any time, which is the thing being designed away.
 
+## 2026-09-17T15:00+02:00 — language
+
+**`⎕syscall(NUMBER, ARG...)`: the one way out of the process**
+
+The first of the things I/O waits on, and the one that waits on nothing.
+
+**It is the language's, not a library's.**  There is no C library underneath and
+nothing else to call, so a program that is to reach anything outside itself
+reaches the kernel, and the compiler is what knows how to enter it.  `C` makes
+`syscall(2)` a variadic function of its library; **Zig** names one per arity in
+its own; **Go** has `syscall.Syscall`; **Rust** has none and reaches for a
+crate.  Here it is written with the sigil every name the compiler provides
+carries.
+
+**The number and the arguments are the kernel's.**  Nothing in the compiler
+knows what call one is, and the numbers differ between architectures -- `write`
+is 1 on x86-64 and 64 on the other two.  Naming them is the standard library's
+work: putting a table of them in the compiler would be the compiler carrying a
+copy of somebody else's header.
+
+**What comes back is the kernel's own `i64`**, negative where it refused, and
+not a result.  Turning `-EAGAIN` into a failure is reading, and what does the
+reading is whatever knows which call it asked for; a compiler that wrapped it
+would have to know the calls to know what an error means for each.
+
+**Everything given is a machine word** (4572), widened by the checker rather
+than by three back ends.  That is what keeps each selector to one shape: by the
+time one sees a request to the kernel, everything in it is the width of a
+register.  At most six follow the number (4573), there being six such registers
+everywhere this compiler generates for.
+
+**It is one instruction and not a call.**  What enters the kernel is one
+instruction of the architecture and what it takes is named by the kernel, so a
+calling convention has nothing to say about it.  It stays outside the memory
+token chain as a call does: what the kernel does to memory is not something the
+program can write down.
+
 Open questions
 --------------
 

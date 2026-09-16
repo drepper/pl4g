@@ -6185,6 +6185,58 @@
       "option": null
     },
     {
+      "number": 4572,
+      "name": "LANG_SYSCALL_BAD_ARGUMENT",
+      "severity": "error",
+      "message": "a request to the kernel is given machine words, and argument {position} is '{found}'",
+      "args": [
+        {
+          "name": "position",
+          "type": "integer",
+          "description": "which argument it is, counting the number as the first"
+        },
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type that was written there"
+        }
+      ],
+      "cause": "What the kernel takes is registers: a number, a descriptor, a length, or the address of something.  Nothing else fits in one, and a floating-point value or a value of a type the program made up would be a program that meant something the kernel cannot be asked.  A reference counts, being an address, and so does a whole number of any width.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Compiler-Provided Names"
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4573,
+      "name": "LANG_SYSCALL_TOO_MANY",
+      "severity": "error",
+      "message": "the kernel takes at most {expected} arguments after the number, and this gives {found}",
+      "args": [
+        {
+          "name": "expected",
+          "type": "integer",
+          "description": "how many the architecture passes"
+        },
+        {
+          "name": "found",
+          "type": "integer",
+          "description": "how many were written"
+        }
+      ],
+      "cause": "A system call is made by putting its arguments in registers the kernel names, and there are six of them on every architecture this compiler generates for.  A call wanting more is not a call any of them has.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Compiler-Provided Names"
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 5001,
       "name": "LANG_STMT_UNREACHABLE",
       "severity": "warning",

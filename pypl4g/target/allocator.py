@@ -129,6 +129,10 @@ class SyscallABI:
     answer: Reg
     #: The instruction that enters the kernel.
     enter: Callable[[Assembler], None]
+    #: What the kernel does not give back, beyond the register it answers in.
+    #: Two of the three give everything else back; the one that does not says so
+    #: here rather than having the fact written into its selector.
+    clobbers: Sequence[Reg] = ()
 
 
 @dataclass(frozen=True, slots=True)

@@ -225,7 +225,10 @@ NR_MUNMAP: Final[int] = 11
 SYSCALLS: Final[SyscallABI] = SyscallABI(
     mmap=NR_MMAP, munmap=NR_MUNMAP, number=EAX,
     arguments=(RDI, RSI, RDX, reg("r10"), reg("r8"), reg("r9")),
-    answer=RAX, enter=lambda asm: asm.op(x86ops.SYSCALL))
+    answer=RAX, enter=lambda asm: asm.op(x86ops.SYSCALL),
+    # What `syscall` itself destroys: it puts the return address in rcx and the
+    # flags in r11, which is the instruction's doing and not the kernel's.
+    clobbers=(RCX, reg("r11")))
 
 #: Where the allocator's own arguments arrive and its answer goes, and two
 #: registers a caller does not expect back.

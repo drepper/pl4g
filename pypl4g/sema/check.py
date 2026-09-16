@@ -21,7 +21,7 @@ from ..front.token import (BOTTOM_GLYPH, BUILTIN_GLYPH, CHR_NAME, DEREF_GLYPH,
                           ENUMERATE_NAME, TYPEOF_NAME,
                           EMPTY_ARENA_NAME, ORD_NAME,
                           WRAP_NAME,
-                          HEAP_NAME, TOLERANCE_DEFAULT,
+                          HEAP_NAME, SYSCALL_NAME, TOLERANCE_DEFAULT,
                           TOLERANCE_NAME, WILDCARD_NAME)
 from ..ir.builder import IRBuilder
 from ..ir.reports import ReportKind
@@ -339,6 +339,10 @@ def _filled_in(shell: Type | None, made: Type) -> Type:
 #: single letter is a name a program might want.
 #: What a lambda's function is called, with a number after it.  The glyph is
 #: the compiler's, so nothing a program can write collides with one.
+#: How many arguments the kernel takes after the number.  Six on every
+#: architecture this compiler generates for, and the same six on all of them.
+SYSCALL_ARGUMENTS: Final[int] = 6
+
 LAMBDA_PREFIX: Final[str] = "".join((BUILTIN_GLYPH, "lambda"))
 
 #: What the code standing between an indirect call and a named function is
@@ -9949,6 +9953,9 @@ class Checker:
                 and expr.callee.name == NARROW_NAME:
             return self._lower_narrow(builder, expr, expected)
         if isinstance(expr.callee, ast.NameRef) \
+                and expr.callee.name == SYSCALL_NAME:
+            return self._lower_syscall(builder, expr, expected)
+        if isinstance(expr.callee, ast.NameRef) \
                 and expr.callee.name == TYPEOF_NAME:
             # Reaching here means it stood somewhere a value was wanted, since
             # a condition the compiler settles never lowers what is in it.
@@ -10195,6 +10202,63 @@ class Checker:
             case _:
                 self._diags.emit(D.LANG_SYNTAX_EXPECTED_UNIT, expr.span)
                 return None
+
+    def _lower_syscall(self, builder: IRBuilder, expr: ast.Call,
+                       expected: Type | None) -> Value:
+        """Lower `⎕syscall(NUMBER, ARG...)`: what the kernel answered.
+
+        The number and the arguments are the kernel's and not the language's:
+        nothing here knows what call one is, and a program asking for it is
+        asking the system.  What comes back is what the kernel put in the
+        register it answers in -- an `i64`, negative where it refused, which is
+        the kernel's own convention and not one invented here.
+
+        It changes what outlives the call by definition, so a function making
+        one says `impure`, which is the rule every other such thing follows.
+        """
+        if not expr.args:
+            self._diags.emit(D.LANG_CALL_WRONG_ARGUMENT_COUNT, expr.span,
+                             name=SYSCALL_NAME, expected=1, found=0)
+            return UndefConst(ERROR)
+        if len(expr.args) - 1 > SYSCALL_ARGUMENTS:
+            self._diags.emit(D.LANG_SYSCALL_TOO_MANY, expr.span,
+                             expected=SYSCALL_ARGUMENTS,
+                             found=len(expr.args) - 1)
+            return UndefConst(ERROR)
+        self._an_effect(D.LANG_PURE_CALLS_IMPURE, expr.span, name=SYSCALL_NAME)
+        given: list[Value] = []
+        for at, one in enumerate(expr.args):
+            value = self._lower_expr(builder, one, None)
+            ty = self._value_type_of(value)
+            if ty is ERROR:
+                return UndefConst(ERROR)
+            if not isinstance(ty, (IntType, PtrType)):
+                self._diags.emit(D.LANG_SYSCALL_BAD_ARGUMENT, one.span,
+                                 position=at + 1, found=ty.render())
+                return UndefConst(ERROR)
+            given.append(self._as_a_word(builder, value, ty, expr.span))
+        answer = builder.syscall(given[0], given[1:], I64, expr.span)
+        if not self._accepts(expected, answer.ty):
+            self._report_mismatch(expr.span, answer.ty, expected)
+            return UndefConst(ERROR)
+        return answer
+
+    def _as_a_word(self, builder: IRBuilder, value: Value, ty: Type,
+                   span: Span) -> Value:
+        """*value* as the machine word the kernel reads out of a register.
+
+        Widened where it is narrower, by its own signedness, and read as a whole
+        number where it is an address.  Doing it here rather than in three back
+        ends is what keeps them each to one shape: by the time one sees a
+        request to the kernel, everything in it is the width of a register.
+        """
+        if isinstance(ty, PtrType):
+            return builder.cast(CastKind.BITCAST, value, U64, span)
+        assert isinstance(ty, IntType)
+        if ty.bits == 64:
+            return value
+        return builder.cast(CastKind.SEXT if ty.signed else CastKind.ZEXT,
+                            value, I64 if ty.signed else U64, span)
 
     def _lower_narrow(self, builder: IRBuilder, expr: ast.Call,
                       expected: Type | None) -> Value:
