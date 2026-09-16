@@ -79,7 +79,7 @@ fn main() → u6:
     ※ lasts as long as the program, which is what the type here demands
     let lasting: &static u8 = first(&total)
     ※ handed on and written through
-    let m: mut u8 = 40u8
+    let m: mut u8 = 40u8   ※ named no more: `b` is the only way to it now
     let b: &mut u8 = bump(&mut m)
     b⌖ ← b⌖ + 1u8
     if total ≠ 6u8:
@@ -90,7 +90,7 @@ fn main() → u6:
         3u6
     elif lasting⌖ ≠ 6u8:
         4u6
-    elif m ≠ 42u8:
+    elif b⌖ ≠ 42u8:
         5u6
     elif ignoring(&n)⌖ ≠ 0u8:
         6u6

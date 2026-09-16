@@ -1,0 +1,25 @@
+※ pl4g-test: compile=error diag=4563
+
+※ A `&mut` is the only reference to what it names for as long as it lives, and
+※ a `&` may share with other `&`s.  That is what makes a reference worth having:
+※ whoever holds a `&mut` knows nothing else can change the place under it, and
+※ whoever holds a `&` knows nothing can change it at all.  Two references where
+※ either may write would give up both promises at once, so the second is
+※ refused and a note points at the first.
+※
+※ How long the first one lives is what decides whether there is a clash.  A
+※ reference a name was bound to lives as long as that name's scope; one nothing
+※ bound -- handed straight to a call -- is gone when the statement is, which is
+※ why `bump(&mut n); bump(&mut n)` is two turns and not two references at once.
+※ That is the lexical rule, and it is Rust's before non-lexical lifetimes: a
+※ borrow there now ends at its last use, which reads more programs but needs a
+※ liveness analysis to say where a reference stops existing.
+
+@[startup, impure]
+fn main() → u6:
+    let n: mut u8 = 1u8
+    let r: &mut u8 = &mut n
+    let second: &mut u8 = &mut n
+    r⌖ ← 2u8
+    second⌖ ← 3u8
+    0u6

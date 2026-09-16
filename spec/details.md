@@ -1903,6 +1903,25 @@ be found by name.
 may answer with a variable at the top level, and `_shorter_life` in `_lower_into` bitcasts a lasting reference where a shorter one
 is wanted.  The other direction is an ordinary type mismatch and is left to be one.
 
+**A reference that is out is one row in a list.**  `_Borrow` holds the name, whether it may write, where it was taken, and how
+deep the scope is that keeps it.  `_lend` walks the list at `&`, `_lent_out` walks it at a name, `_statement_ended` drops the rows
+nothing bound and `_pop_scope` drops the rows that scope kept.  There is no dataflow and no fixpoint: the list is the whole of the
+analysis, which is what a lexical rule buys.
+
+**What promotes a row is a name being bound to something holding a reference.**  A row starts at
+`_UNTIL_THE_STATEMENT_ENDS`, and `_kept_by_a_name` is called from the four places a name takes a value -- a definition with a
+written type, one whose type is read off the value, and the two arms of an assignment -- with the type that name will have.  So
+`let r: &mut u8 = &mut n` keeps the row and `bump(&mut n)` does not, and nothing has to match the reference value up with the row
+that made it.
+
+**Working the place out reads the name, and that read is the reference.**  `_lower_address` asks `_lend` before
+`_place_written`, and sets `_taking_a_reference` to the name while the place is worked out, so that `_lower_name` does not report
+the operand of `&` as a read of a name that is lent.  Every local a reference is taken of is `placed`, so that one branch of
+`_lower_name` is where every such read arrives.
+
+**A lambda's body gets an empty list**, saved and put back around it, because it binds its own names and a reference out in the
+body around it says nothing about a name of the same spelling inside.  `_lower_body` clears it for the same reason.
+
 **`static` and `from` are read by looking, not by lexing.**  Making either a keyword broke programs the suite already had -- a
 product type with a field called `from`.  `_reading(word)` matches an identifier by text, and `static` additionally needs
 `_begins_a_type(1)`, so a reference type whose pointee is a type called `static` still reads.  The tree-sitter grammar cannot look

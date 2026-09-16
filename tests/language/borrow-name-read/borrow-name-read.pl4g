@@ -1,0 +1,19 @@
+※ pl4g-test: compile=error diag=4565
+
+※ A `&mut` is the only way to the place it names while it lives, and the name
+※ is a second one.  Reading through the reference says the same thing and says
+※ it once, which is the rule about one meaning and one spelling applied to a
+※ place: `r⌖` is what this line is for.
+※
+※ A `&` lends nothing away that a read would disturb -- it shares, and the name
+※ is another sharer -- so a name lent that way stays readable.
+
+@[startup, impure]
+fn main() → u6:
+    let n: mut u8 = 1u8
+    let r: &mut u8 = &mut n
+    r⌖ ← 2u8
+    if n ≠ 2u8:
+        1u6
+    else:
+        0u6

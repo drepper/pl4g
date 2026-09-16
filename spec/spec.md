@@ -1990,6 +1990,41 @@ fn bump(at: &mut i8):
     at⌖ ← at⌖ + 1i8
 ```
 
+**A `&mut` is the only reference to its place while it lives**, and a `&` may share with other `&`s (4563).  That is what makes
+a reference worth having rather than merely convenient: whoever holds a `&mut` knows nothing else can change the place under it,
+and whoever holds a `&` knows nothing can change it at all.  Two references where either may write would give up both promises at
+once, so the second one is refused and a note points at the first.
+
+```
+let n: mut u8 = 1u8
+let r: &mut u8 = &mut n
+let second: &mut u8 = &mut n   ※ refused: r is still out
+```
+
+**The name itself counts as a way to the place.**  While a `&mut` is out, the name may not be read (4565) -- reading through the
+reference says the same thing and says it once -- and while any reference is out, the name may not be written (4566), that being
+exactly the change whoever holds it was promised would not happen.  A `&` lends nothing away that a read would disturb, so a name
+lent that way stays readable.
+
+**A reference lives until the name that kept it does, and no longer.**  One nothing bound -- handed straight to a call -- is gone
+when the statement is, so the same place may be lent again on the next line:
+
+```
+bump(&mut p)                   ※ lent for this statement
+bump(&mut p)                   ※ and again, which is one at a time
+```
+
+That is the lexical rule, and it is Rust's before non-lexical lifetimes.  Rust now ends a borrow at its last use, which reads more
+programs at the price of a liveness analysis to say where a reference stops existing; here a generator that wants the place back
+opens a scope or writes the statement, and the rule can be read off the source with nothing computed.  **An element is part of its
+array**, so lending one lends the array: two elements are two places, but telling one index from another is arithmetic, and a
+promise that depends on arithmetic is no promise.  **A variable at the top level is not tracked** -- it is reachable from every
+function and no one of them can see what the others do -- so the rule is about names a body binds.
+
+C++ has no such rule and two references to one object is the ordinary case, which is why `std::vector` invalidating its own
+iterators is a hazard rather than an error.  Swift enforces the same exclusivity for `inout` and does it partly at run time.  ML
+and Haskell reach the same place by having nothing to write through.
+
 **A function that writes through a reference is impure** unless the place is storage the call itself made.  That is not a rule of
 its own: it is the rule about writing memory the function did not make, asked of a reference, and the compiler answers it by
 looking at where the address came from.  A reference handed in by a caller names the caller's storage, so writing through it is a

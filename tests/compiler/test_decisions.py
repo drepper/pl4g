@@ -98,7 +98,7 @@ def test_a_variable_put_in_storage_is_recorded() -> None:
         "    let n: mut u8 = 1u8\n",
         "    let r: &mut u8 = &mut n\n",
         "    r", DEREF, " ", ASSIGN, " 2u8\n",
-        "    if n ", NE, " 2u8:\n        1u6\n    else:\n        0u6\n")))
+        "    if r", DEREF, " ", NE, " 2u8:\n        1u6\n    else:\n        0u6\n")))
     placed = module.decisions.of_kind(DecisionKind.PLACE_LOCAL)
     assert [d.subject for d in placed] == ["n"]
     assert "address" in placed[0].reason

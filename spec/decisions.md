@@ -4734,6 +4734,27 @@ dangling reference is a program nobody notices is wrong; **Go** and **Java**, wh
 collector for it; **Cyclone**, whose region annotations are the ancestor of all of this; **C**, **Zig** and **Odin**, which do
 not ask.
 
+**A `&mut` is the only reference to its place while it lives** (4563), and a `&` may share with other `&`s.  The user asked for
+this alongside the lifetimes, and it is what makes a reference worth having rather than merely convenient: the promise a `&mut`
+carries is that nothing else changes the place under it.  The name itself is a way to the place and counts as one, so a name lent
+by a `&mut` may not be read (4565) and a name lent at all may not be written (4566).
+
+**How long a reference lives is lexical**, not worked out from where it is last used.  A reference a name was bound to lives as
+long as that name's scope; one nothing bound is gone when the statement is, which is what keeps `bump(&mut n); bump(&mut n)`
+legal.  That is Rust's rule before non-lexical lifetimes, and NLL was the alternative: it reads more programs, at the price of a
+liveness analysis to say where a reference stops existing.  What decided it is that the whole of this analysis is a list of the
+references that are out, walked at two places -- and that a generator wanting the place back can open a scope, which is one line
+and needs nothing inferred.
+
+**An element is part of its array**, so lending one lends the array.  Two elements are two places, but telling one index from
+another is arithmetic, and a promise that depends on arithmetic is no promise.  Rust says the same and offers `split_at_mut` for
+where it matters; there is nothing to offer here yet.  **A variable at the top level is not tracked at all**, being reachable
+from every function with no one of them able to see what the others do.
+
+Compare: **C++**, where two references to one object is the ordinary case and `std::vector` invalidating its own iterators is a
+hazard rather than an error; **Swift**, which enforces the same exclusivity for `inout` and does part of it at run time;
+**ML** and **Haskell**, which reach the same place by having nothing to write through.
+
 Open questions
 --------------
 

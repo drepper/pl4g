@@ -131,6 +131,33 @@ class _Local:
 
 
 @dataclass(slots=True)
+class _Borrow:
+    """One reference that is out, and what it keeps anything else from doing.
+
+    A `&mut` is the only reference to its place while it lives and a `&` may
+    share with other `&`s, so what has to be known at the moment a second one
+    is taken is which references are still alive and whether any of the two may
+    write.
+    """
+
+    #: The name the place belongs to, which is what a message calls it.
+    name: str
+    #: Whether the place may be written through it.
+    mutable: bool
+    #: Where it was taken, for pointing at it beside the one that clashes.
+    span: Span
+    #: How deep the scope is that it lives in, or `_UNTIL_THE_STATEMENT_ENDS`
+    #: while nothing has kept it: a reference handed straight to a call is gone
+    #: when the call is, so `bump(&mut n); bump(&mut n)` is two turns and not
+    #: two references at once.
+    depth: int
+
+
+#: A reference nothing has bound yet, which lives to the end of the statement.
+_UNTIL_THE_STATEMENT_ENDS: Final[int] = -1
+
+
+@dataclass(slots=True)
 class _ArmPlan:
     """One arm to run: its body, the block it runs in, and what it binds.
 
@@ -1075,6 +1102,12 @@ class Checker:
         self._name_spans: dict[str, Span] = {}
         #: The names bound inside the function being checked, innermost last.
         self._scopes: list[dict[str, _Local]] = []
+        #: The name a reference is being taken of, while one is: working the
+        #: place out reads the name, and that read is the reference itself.
+        self._taking_a_reference: str | None = None
+        #: The references that are out, oldest first.  One is dropped when the
+        #: statement that made it ends, or when the scope that kept it does.
+        self._borrows: list[_Borrow] = []
         #: The variable being given a value, while one is being checked.  It is
         #: what lets a type that does not match say which variable it is about
         #: rather than borrow the wording of a return.
@@ -1664,6 +1697,10 @@ class Checker:
 
     def _pop_scope(self) -> None:
         """Leave the innermost scope, reporting values nothing read."""
+        # A reference kept by a name in this scope is gone with the name, so
+        # the place it named is free to be lent again.
+        depth = len(self._scopes)
+        self._borrows = [b for b in self._borrows if b.depth < depth]
         self._unit_scopes.pop()
         for local in self._scopes.pop().values():
             self._report_unused(local)
@@ -2727,6 +2764,7 @@ class Checker:
     def _lower_body(self, entry: _Collected) -> None:
         """Check and lower the statements of one function."""
         node, func = entry.node, entry.func
+        self._borrows = []
         block = func.add_block()
         builder = IRBuilder(self._module, func)
         outer_answer, self._answering = self._answering, func.ty.ret
@@ -2785,9 +2823,10 @@ class Checker:
                 return None
             if is_last and produces:
                 answer = self._lower_yielding(builder, stmt, func, wanted)
-                continue
-            self._lower_attributed_stmt(builder, stmt, func,
-                                        as_result and is_last)
+            else:
+                self._lower_attributed_stmt(builder, stmt, func,
+                                            as_result and is_last)
+            self._statement_ended()
         if produces and answer is None and not builder.is_terminated:
             self._diags.emit(D.LANG_MATCH_ARM_HAS_NO_VALUE, block.span)
         return answer
@@ -4259,6 +4298,9 @@ class Checker:
                     for one in (_ENVIRONMENT, *params)]
         outer = (self._scopes, self._addressed, self._answering, self._impure,
                  self._carried, self._loops, self._outside)
+        # A lambda's body binds its own names, so a reference out in the body
+        # around it says nothing about a name of the same spelling in here.
+        outer_borrows, self._borrows = self._borrows, []
         self._outside = self._outside + self._scopes
         self._scopes, self._addressed = [], set()
         self._answering, self._impure = answer, True
@@ -4304,6 +4346,7 @@ class Checker:
         finally:
             (self._scopes, self._addressed, self._answering, self._impure,
              self._carried, self._loops, self._outside) = outer
+            self._borrows = outer_borrows
         return func
 
     def _all_of_it_used(self,
@@ -4377,10 +4420,100 @@ class Checker:
             self._report_mismatch(expr.span, answer.ty, expected)
         return answer
 
+    def _statement_ended(self) -> None:
+        """Drop the references nothing kept, the statement that made them being
+        over.
+
+        A reference handed straight to a call is gone when the call is, so
+        `bump(&mut n); bump(&mut n)` is two turns and not two references at
+        once.  One a name was bound to was promoted when the name was bound and
+        lives until its scope does.
+        """
+        if self._borrows:
+            self._borrows = [b for b in self._borrows
+                             if b.depth != _UNTIL_THE_STATEMENT_ENDS]
+
+    def _kept_by_a_name(self, ty: Type | None) -> None:
+        """Let the references this statement made live as long as this scope.
+
+        Called where a name was bound to something holding one: what keeps a
+        reference alive is a name, and until one does the reference is the
+        call's own and goes with the statement.
+        """
+        if ty is None or not _holds_a_reference(ty):
+            return
+        depth = len(self._scopes) - 1
+        for one in self._borrows:
+            if one.depth == _UNTIL_THE_STATEMENT_ENDS:
+                one.depth = depth
+
+    def _borrowed_name(self, expr: ast.Expr) -> str | None:
+        """Which local's place `&expr` reaches, where it reaches one.
+
+        An element is part of the array, so lending one lends the array: two
+        elements of it are two places, but nothing here tells one index from
+        another and a promise that depends on arithmetic is no promise.  A
+        reference reached through another reference belongs to whoever owns
+        that one, and there is nothing here to hold to it.
+        """
+        seen = expr
+        while True:
+            match seen:
+                case ast.NameRef():
+                    return (seen.name if self._find_local(seen.name) is not None
+                            else None)
+                case ast.Element():
+                    seen = seen.base
+                case _:
+                    return None
+
+    def _lend(self, name: str | None, mutable: bool, span: Span) -> None:
+        """Take a reference of *name*'s place, refusing one that clashes.
+
+        A `&mut` is the only reference to its place while it lives and a `&`
+        may share with other `&`s, so a second one is refused exactly when
+        either of the two may write.
+        """
+        if name is None:
+            return
+        for one in self._borrows:
+            if one.name != name or not (one.mutable or mutable):
+                continue
+            self._diags.emit(D.LANG_BORROW_ALIASED, span, name=name) \
+                .note(D.LANG_BORROW_LENT_HERE, one.span, name=name)
+            return
+        self._borrows.append(_Borrow(name, mutable, span,
+                                     _UNTIL_THE_STATEMENT_ENDS))
+
+    def _lent_out(self, name: str, span: Span, writing: bool) -> bool:
+        """Report using *name*'s own name while a reference to it is out.
+
+        Whoever holds the reference was promised that nothing else changes the
+        place, so writing the name is refused whichever kind is out.  Reading it
+        is refused only where a `&mut` is out, that one being the only way to
+        its place while it lives; a `&` shares, and the name is another sharer.
+        """
+        for one in self._borrows:
+            if one.name != name or not (writing or one.mutable):
+                continue
+            self._diags.emit(D.LANG_BORROW_NAME_WRITTEN if writing
+                             else D.LANG_BORROW_NAME_READ, span, name=name) \
+                .note(D.LANG_BORROW_LENT_HERE, one.span, name=name)
+            return True
+        return False
+
     def _lower_address(self, builder: IRBuilder, expr: ast.AddressOf,
                        expected: Type | None) -> Value:
         """Lower `&x` and `&mut x`: a reference to the place *x* names."""
-        found = self._place_written(builder, expr.operand)
+        # Asked before the place is worked out: working it out reads the name,
+        # and a name being lent out is what is being asked about.
+        lent = self._borrowed_name(expr.operand)
+        self._lend(lent, expr.mutable, expr.span)
+        outer, self._taking_a_reference = self._taking_a_reference, lent
+        try:
+            found = self._place_written(builder, expr.operand)
+        finally:
+            self._taking_a_reference = outer
         if found is None:
             return UndefConst(ERROR)
         address, held, may_change, what, lasting = found
@@ -6549,6 +6682,7 @@ class Checker:
             self._bind_apart(builder, node, value)
             return
         bound = self._as_declared(value, declared)
+        self._kept_by_a_name(declared)
         self._name_value(bound, node.name, node.name_span)
         self._bind_local(node.name, bound, node.name_span, node.mutable,
                          value_span=node.span, builder=builder)
@@ -6563,6 +6697,7 @@ class Checker:
         if node.more:
             self._bind_apart(builder, node, value)
             return
+        self._kept_by_a_name(self._value_type_of(value))
         self._name_value(value, node.name, node.name_span)
         self._bind_local(node.name, value, node.name_span, node.mutable,
                          value_span=node.span, builder=builder)
@@ -6634,8 +6769,11 @@ class Checker:
             # says the program may put something else there.
             if not self._check_mutable(node, local.mutable, local.span):
                 return None
+            if self._lent_out(node.name, node.span, True):
+                return None
             assert local.held is not None
             value = self._checked_value(builder, node, local.held)
+            self._kept_by_a_name(local.held)
             builder.store(local.value, value, node.span)
             local.written = True
             local.is_parameter = False
@@ -6644,6 +6782,7 @@ class Checker:
             if not self._check_mutable(node, local.mutable, local.span):
                 return None
             value = self._checked_value(builder, node, local.value.ty)
+            self._kept_by_a_name(local.value.ty)
             # The value the name stood for is gone; if nothing read it, giving
             # it cannot have affected what the program does.
             if id(local) not in self._carried:
@@ -10250,6 +10389,9 @@ class Checker:
             # The name stands for storage of its own, because somewhere in this
             # body a reference to it is taken.  Reading it is therefore a load,
             # exactly as reading a variable at the top level is.
+            if ref.name != self._taking_a_reference \
+                    and self._lent_out(ref.name, ref.span, False):
+                return UndefConst(ERROR)
             local.read = True
             found = builder.load(local.value, ref.span)
             if not self._accepts(expected, found.ty):

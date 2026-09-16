@@ -593,6 +593,19 @@ Runtime
     `static` on the field is the obvious half; borrowing per field would need what was deliberately not built, a way of naming
     several lifetimes at once.
 
+[ ] end a reference where it is last used rather than where its scope does.  A reference a name kept lives as long as the name
+    (4563), which refuses programs that are plainly fine -- a `&mut` written through and then never mentioned again, followed by
+    a second one.  Rust's non-lexical lifetimes are the design to compare against, and what it costs is a liveness analysis where
+    today there is a list.
+
+[ ] release a reference when the name that kept it is bound to something else.  `moving ← &mut m` makes a second row and leaves
+    the first, so what `moving` used to name stays lent for the rest of the scope.  Nothing is wrong with the programs that
+    result; what is refused is a place that could have been lent again.
+
+[ ] tell two elements of one array apart when lending them.  An element is part of the array, so lending one lends the array
+    (4563); `&mut v⟦0⟧` and `&mut v⟦1⟧` are two places and are refused as one.  Rust offers `split_at_mut` for
+    exactly this, and what it needs here is a way of saying that two indices differ.
+
 [ ] let a lifetime be borrowed from something that is not a parameter of this call -- a field of a parameter, or a parameter of
     an enclosing lambda.  `from` names a parameter (4560) and provenance is checked against it (4561); both would follow a
     longer path, and what stops it today is that nothing needs it yet.

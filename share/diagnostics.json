@@ -5935,6 +5935,94 @@
       "option": null
     },
     {
+      "number": 4563,
+      "name": "LANG_BORROW_ALIASED",
+      "severity": "error",
+      "message": "'{name}' is already lent out, and a '&mut' is the only reference to its place",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the name the reference is taken of"
+        }
+      ],
+      "cause": "A '&mut' is the only reference to what it names for as long as it lives, and a '&' may share with other '&'s.  That is what makes a reference worth having: the one who holds a '&mut' knows nothing else can change the place under it, and the one who holds a '&' knows nothing can change it at all.  Two references where one of them may write would give up both promises at once.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / References",
+        "requirement": "A '&mut' is the only reference to its place while it lives; a '&' may share with other '&'s."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4564,
+      "name": "LANG_BORROW_LENT_HERE",
+      "severity": "note",
+      "message": "'{name}' was lent out here",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the name the reference was taken of"
+        }
+      ],
+      "cause": "Points at the reference that is still alive, which is the thing a reader cannot see from where the second one is written.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / References",
+        "requirement": "A '&mut' is the only reference to its place while it lives; a '&' may share with other '&'s."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4565,
+      "name": "LANG_BORROW_NAME_READ",
+      "severity": "error",
+      "message": "'{name}' is lent out by a '&mut', so its own name may not be read",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the name that was lent out"
+        }
+      ],
+      "cause": "A '&mut' is the only way to the place it names while it lives, and the name is a second one.  Reading through the reference says the same thing and says it once, which is the rule about one meaning and one spelling applied to a place.  A '&' lends nothing away that reading would disturb, so the name stays readable there.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / References",
+        "requirement": "A '&mut' is the only reference to its place while it lives; a '&' may share with other '&'s."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4566,
+      "name": "LANG_BORROW_NAME_WRITTEN",
+      "severity": "error",
+      "message": "'{name}' is lent out, so its own name may not be written",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the name that was lent out"
+        }
+      ],
+      "cause": "Whoever holds the reference was promised that nothing else changes the place: a '&mut' that it is alone, a '&' that the place does not change at all.  Writing the name would be exactly the change that was promised not to happen, whichever kind of reference is out.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / References",
+        "requirement": "A '&mut' is the only reference to its place while it lives; a '&' may share with other '&'s."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 5001,
       "name": "LANG_STMT_UNREACHABLE",
       "severity": "warning",

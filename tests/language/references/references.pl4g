@@ -17,10 +17,11 @@
 ※ what it answers -- an element of it -- reads left to right without brackets.
 ※ That is what Pascal, Modula, Ada and Odin put a mark after a pointer for.
 ※
-※ **What a reference names has to outlive it**, and nothing yet says how long
-※ anything lives.  So a reference may be a parameter, a local and a field, and
-※ may not be what a function answers with nor what a variable at the top level
-※ holds; lifetime annotations are what will say when it may.
+※ **A `&mut` is the only reference to its place while it lives**, and a `&` may
+※ share with other `&`s.  So each variable here is lent once: while `r` is out,
+※ `n` is reached through `r` and not by its own name, and a second `&mut n`
+※ would be refused.  A reference nothing binds lives only to the end of the
+※ statement that made it, which is why `bump(&mut p)` may stand twice.
 
 let counter: mut u16 = 0u16
 
@@ -36,16 +37,22 @@ fn main() → u6:
     r⌖ ← 3i8
     let seen: i8 = r⌖ + 1i8
     ※ one that may be pointed elsewhere, which is what mut on the binding says
+    let a: mut i8 = 3i8
     let m: mut i8 = 10i8
-    let moving: mut &mut i8 = &mut n
+    let moving: mut &mut i8 = &mut a
     let first: i8 = moving⌖
     moving ← &mut m
     moving⌖ ← 20i8
     ※ a parameter, which is what a reference is mostly for: the callee writes
-    ※ the caller's variable and the call says so
-    bump(&mut n)
-    ※ one that may not be written through, which the type refuses
-    let only: &i8 = &n
+    ※ the caller's variable and the call says so.  The reference is nobody's
+    ※ once the call is over, so the next statement may make another
+    let p: mut i8 = 28i8
+    bump(&mut p)
+    bump(&mut p)
+    ※ two that may not be written through, sharing the same place
+    let only_at: i8 = 30i8
+    let only: &i8 = &only_at
+    let also: &i8 = &only_at
     ※ an element of an array, which is a place like any other
     let v: u8⟦4⟧ = ⟦1u8, 2u8, 3u8, 4u8⟧
     let e: &mut u8 = &mut v⟦2⟧
@@ -54,7 +61,8 @@ fn main() → u6:
     let g: &mut u16 = &mut counter
     g⌖ ← 7u16
     ※ a reference to a reference, which is a place holding a place
-    let deep: mut &mut i8 = &mut n
+    let d: mut i8 = 1i8
+    let deep: mut &mut i8 = &mut d
     let over: &mut &mut i8 = &mut deep
     over⌖⌖ ← 30i8
     ※ every other kind of value a place holds as one
@@ -63,15 +71,15 @@ fn main() → u6:
     let f: mut f64 = 1.5
     let hue: mut Colour = Colour.red
     set(&mut c, &mut t, &mut f, &mut hue)
-    if n ≠ 30i8:
+    if r⌖ ≠ 3i8:
         1u6
     elif seen ≠ 4i8:
         2u6
-    elif first ≠ 3i8 ∨ m ≠ 20i8:
+    elif first ≠ 3i8 ∨ moving⌖ ≠ 20i8:
         3u6
-    elif only⌖ ≠ 30i8:
+    elif only⌖ ≠ 30i8 ∨ also⌖ ≠ 30i8:
         4u6
-    elif v⟦2⟧ ≠ 9u8:
+    elif e⌖ ≠ 9u8:
         5u6
     elif counter ≠ 7u16:
         6u6
@@ -80,6 +88,11 @@ fn main() → u6:
     ※ handed on from one call to the next, still naming the same place
     elif twice(&mut counter) ≠ 9u16:
         8u6
+    elif over⌖⌖ ≠ 30i8:
+        9u6
+    ※ bumped twice, each call lending the place for its own statement only
+    elif bump_read(&mut p) ≠ 31i8:
+        10u6
     else:
         0u6
 
@@ -87,6 +100,11 @@ fn main() → u6:
 @[impure]
 fn bump(at: &mut i8):
     at⌖ ← at⌖ + 1i8
+
+@[impure]
+fn bump_read(at: &mut i8) → i8:
+    bump(at)
+    at⌖
 
 @[impure]
 fn set(c: &mut char, t: &mut bool, f: &mut f64, hue: &mut Colour):

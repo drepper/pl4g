@@ -1,0 +1,17 @@
+※ pl4g-test: compile=error diag=4566
+
+※ Whoever holds the reference was promised that nothing else changes the place:
+※ a `&mut` that it is alone, a `&` that the place does not change at all.
+※ Writing the name would be exactly the change that was promised not to happen,
+※ whichever kind of reference is out -- so this is refused where the `&` is
+※ shared as much as where a `&mut` is not.
+
+@[startup, impure]
+fn main() → u6:
+    let n: mut u8 = 1u8
+    let only: &u8 = &n
+    n ← 2u8
+    if only⌖ ≠ 2u8:
+        1u6
+    else:
+        0u6
