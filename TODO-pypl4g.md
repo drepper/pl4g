@@ -8,9 +8,10 @@ To Do List for the pypl4g compiler
     targets: an IR instruction outside the token chain, `asm.kernel` to say what the entering instruction destroys and reads,
     and one selection arm each.  What is still the standard library's is naming the numbers, which differ per architecture.
 
-[ ] give a program a way to know which architecture it is built for, so that the `std` module can name the system call numbers.
-    `write` is 1 on x86-64 and 64 on the other two; a module that is one file has to choose between them while compiling, which
-    is what `comptime` is for and what nothing yet answers.
+[x] give a program a way to name a system call whatever it is built for.  Done as `⎕sc@NAME`, a name the compiler provides
+    carrying a key: the compiler holds the numbers per architecture and answers the one for the target.  What is still open is
+    a module asking *which* architecture it is, for anything other than a call number -- `comptime if` compares types and
+    refuses a question about a value (4502), so the shape that would answer it is not there.
 
 [ ] acquire and release ordering in the IR.  io_uring's submission and completion rings are shared with the kernel and their head
     and tail indices are read and written with ordering, which the memory token does not express: the token says *that* two

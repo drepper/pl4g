@@ -2381,6 +2381,14 @@ the number and the arguments into the registers the kernel names, enter, take
 the answer.  The verifier learnt that an address read as a `u64` is the same
 bits, which is what that reading is.
 
+**The numbers live in one table and nowhere else.**  `target/syscalls.py` holds
+what each call is numbered on each architecture: two of the three share the
+numbering the kernel calls generic, so that is written once and x86-64 is
+written out.  What is in it is what the runtime and the standard library ask
+for, each number checked against the kernel's own table; a call nothing has
+asked for is not there, and adding one is a line.  It is somebody else's table
+and is kept small and honest for that reason.
+
 **`SyscallABI` already said where everything goes.**  The number register, the
 argument registers, the answer register and the entering instruction were
 written down per target for the allocator's own `mmap`; what this added is what

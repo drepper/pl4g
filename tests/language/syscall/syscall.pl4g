@@ -19,12 +19,16 @@
 ※ **Asking the kernel changes what outlives the call**, so a function that does
 ※ it says `impure`, which is the rule everything else of that sort follows.
 ※
-※ **The numbers are the architecture's**: `write` is 1 on x86-64 and 64 on the
-※ other two, and nothing in the language hides that yet -- giving them names is
-※ the `std` module's work.  So what is asked here is a call no kernel has, which
-※ every one of them refuses in the same way, and what is checked is the
-※ mechanism: six arguments go in, an answer comes back, and a refusal is
-※ negative.
+※ **The numbers are the architecture's, and `⎕sc@NAME` is how one is named**:
+※ `write` is 1 on x86-64 and 64 on the other two, and one source says `⎕sc@write`
+※ and means whichever it is being built for.  The compiler holds the table
+※ because the compiler is what knows the architecture; a name it has no number
+※ for is refused (4574), and one no architecture has is refused differently
+※ (4575), so a mistyped call and a call that is simply not there read apart.
+※
+※ **A name the compiler provides may carry a key**, written after `@`, and only
+※ such a name may: `a@b` is still two things with nothing between them, and `@[`
+※ still begins an attribute list.
 ※
 ※ Compare: **Zig**, whose `std.os.linux.syscall1` and the rest are the same
 ※ thing with the number named; **Go**, whose `syscall.Syscall` takes three
@@ -37,16 +41,20 @@ let NO_SUCH_CALL: i64 = 0x4000i64
 
 @[startup, impure]
 fn main() → u6:
-    let room: u8⟦6⟧ = ⟦0u8, 0u8, 0u8, 0u8, 0u8, 0u8⟧
+    ※ one source, three architectures: `⎕sc@write` is 1 here and 64 there
+    let message: u8⟦6⟧ = ⟦104u8, 101u8, 108u8, 108u8, 111u8, 10u8⟧
+    let wrote: i64 = ⎕syscall(⎕sc@write, 1i64, &message⟦0⟧, 6i64)
     ※ the number alone
     let bare: i64 = ⎕syscall(NO_SUCH_CALL)
     ※ and with every argument the kernel takes, one of them an address and one
     ※ of them narrower than a register
-    let full: i64 = ⎕syscall(NO_SUCH_CALL, 1i64, &room⟦0⟧, 6u8,
+    let full: i64 = ⎕syscall(NO_SUCH_CALL, 1i64, &message⟦0⟧, 6u8,
                              ⁻1i64, 0i64, 0i64)
-    if bare ≥ 0i64:
+    if wrote ≠ 6i64:
         1u6
-    elif full ≥ 0i64:
+    elif bare ≥ 0i64:
         2u6
+    elif full ≥ 0i64:
+        3u6
     else:
         0u6

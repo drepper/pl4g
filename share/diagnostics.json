@@ -6237,6 +6237,53 @@
       "option": null
     },
     {
+      "number": 4574,
+      "name": "LANG_SYSCALL_UNKNOWN_NAME",
+      "severity": "error",
+      "message": "'{name}' is not a system call this compiler knows a number for",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the name that was asked for"
+        }
+      ],
+      "cause": "The compiler holds the number each system call has on each architecture, because it is the compiler that knows which architecture it is building for.  What is in that table is what the runtime and the standard library ask for, each number checked against the kernel\u0027s own; a call nothing has asked for yet is not there, and adding one is a line per architecture rather than anything a program can do.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Compiler-Provided Names"
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4575,
+      "name": "LANG_SYSCALL_NOT_ON_THIS_ARCHITECTURE",
+      "severity": "error",
+      "message": "'{name}' is not a system call '{architecture}' has",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the call that was asked for"
+        },
+        {
+          "name": "architecture",
+          "type": "string",
+          "description": "what is being built for"
+        }
+      ],
+      "cause": "The call exists on some architecture this compiler generates for and not on this one.  A module that wants it on the ones that have it asks inside an arm the compiler settles, so that the arm is never lowered where the call is not there.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Compiler-Provided Names"
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 5001,
       "name": "LANG_STMT_UNREACHABLE",
       "severity": "warning",

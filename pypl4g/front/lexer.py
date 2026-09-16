@@ -21,7 +21,8 @@ from .token import (ABOVE_NOT_ALIKE_GLYPH, ABOVE_OR_ALIKE_GLYPH, ALIKE_GLYPH,
                     COMMENT_GLYPH, CONCAT_GLYPH, FLOAT_TYPE_NAMES,
                     CEILING_GLYPH, FLOOR_GLYPH, MAX_GLYPH, MIN_GLYPH,
                     DIVIDES_GLYPH, NOT_DIVIDES_GLYPH,
-                    DEREF_GLYPH, LAMBDA_GLYPH, LIFETIME_GLYPH, UNIT_GLYPH,
+                    DEREF_GLYPH, KEY_GLYPH, LAMBDA_GLYPH, LIFETIME_GLYPH,
+                    UNIT_GLYPH,
                     LIFT_CLOSE_GLYPH, LIFT_OPEN_GLYPH,
                     NEAREST_GLYPH, POWER_GLYPH, ROUNDED_GLYPH,
                     SHAPE_GLYPH, SUPERSCRIPT_DIGITS,
@@ -375,7 +376,13 @@ class Lexer:
         quad that begins one the compiler provides answers only the first.
         """
         self._pos += 1
-        while _is_ident_continue(self._peek()):
+        # A name the compiler provides may carry a key: `⎕sc@write` is one name
+        # and the compiler looks the whole of it up.  Only such a name may, so
+        # the mark stays what it is everywhere else and `a@b` is still two
+        # things with nothing between them.
+        provided = self._text[start] == BUILTIN_GLYPH
+        while _is_ident_continue(self._peek()) or (provided
+                                                   and self._peek() == KEY_GLYPH):
             self._pos += 1
         text = self._text[start:self._pos]
         self._emit(KEYWORDS.get(text, TokKind.IDENT), start)

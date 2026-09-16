@@ -1953,9 +1953,14 @@ in: an `i64`, negative where it refused, which is the kernel's convention and no
 let wrote: i64 = ⎕syscall(1i64, 1i64, &message⟦0⟧, 6i64)   ※ write(1, message, 6) on x86-64
 ```
 
-The number and the arguments are the kernel's and not the language's: nothing in the compiler knows what call one is, and the
-numbers differ between architectures -- `write` is 1 on x86-64 and 64 on the other two.  Giving them names is the standard
-library's work and not the language's.
+**The number is named rather than written out**: `⎕sc@write` is 1 on x86-64 and 64 on the other two, so one source says
+`⎕sc@write` and means whichever it is being built for.  The compiler holds that table, because the compiler is what knows
+which architecture it is; a name it has no number for is refused (4574), and one that some architecture has and this one does not
+is refused differently (4575), so a mistyped call and a call that is simply not here read apart.
+
+**A name the compiler provides may carry a key**, written after `@`, and only such a name may: `a@b` is still two things with
+nothing between them, and `@[` still begins an attribute list.  The key is looked up by the compiler, so `⎕sc@write` is one
+name and not a name and an operator.
 
 **Everything given is a machine word** (4572): a whole number of any width, widened by its own signedness, or a reference, read
 as the address it is.  Nothing else fits in a register the kernel reads.  At most six arguments follow the number (4573), there

@@ -999,7 +999,7 @@ module.exports = grammar({
     // cannot begin one, so `'a'` is still a character; the only thing it costs
     // is a name immediately followed by a character literal with nothing
     // between them, which nothing readable writes.
-    identifier: _ => /[\u2395A-Za-z_][A-Za-z0-9_']*/,
+    identifier: _ => /[A-Za-z_][A-Za-z0-9_']*|\u2395[A-Za-z_][A-Za-z0-9_'@]*/,
 
     // Neither kind swallows the newline after it: the layout depends on that
     // newline, and a comment that took it would end a block.

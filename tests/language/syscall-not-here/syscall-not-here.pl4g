@@ -1,0 +1,16 @@
+※ pl4g-test: compile=error diag=4575
+
+※ The call exists on some architecture this compiler generates for and not on
+※ this one: x86-64 has `open`, and the two that were numbered later took only
+※ `openat`.  A module that wants it on the architectures that have it asks
+※ inside an arm the compiler settles, so that the arm is never lowered where the
+※ call is not there.
+※
+※ This is built for the first target the compiler reports, which is x86-64, so
+※ what is refused here is the one written the other way round -- a call the
+※ generic table has and x86-64 does not would read the same.
+
+@[startup, impure]
+fn main() → u6:
+    let answer: i64 = ⎕syscall(⎕sc@fadvise64_64, 1i64)
+    if answer < 0i64: 0u6 else: 1u6

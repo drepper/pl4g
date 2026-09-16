@@ -21,7 +21,8 @@ from ..front.token import (BOTTOM_GLYPH, BUILTIN_GLYPH, CHR_NAME, DEREF_GLYPH,
                           ENUMERATE_NAME, TYPEOF_NAME,
                           EMPTY_ARENA_NAME, ORD_NAME,
                           WRAP_NAME,
-                          HEAP_NAME, SYSCALL_NAME, TOLERANCE_DEFAULT,
+                          HEAP_NAME, SYSCALL_NAME, SYSCALL_NUMBER_PREFIX,
+                          TOLERANCE_DEFAULT,
                           TOLERANCE_NAME, WILDCARD_NAME)
 from ..ir.builder import IRBuilder
 from ..ir.reports import ReportKind
@@ -30,6 +31,8 @@ from ..ir.inst import (AddressInst, BinaryInst, BinOp, CallInst, CastInst,
                        CastKind, CmpPred,
                        ExtractInst, FrameInst, Instruction, LoadInst, RetInst,
                        Terminator, TupleInst, UnOp)
+from ..target.registry import architecture_of
+from ..target.syscalls import KNOWN as SYSCALL_NAMES, number_of
 from . import tables
 from ..ir.function import (DEFAULT_CCONV, SYSTEM_CCONV, BasicBlock, FuncAttrs,
                            FuncType, Function,
@@ -10203,6 +10206,26 @@ class Checker:
                 self._diags.emit(D.LANG_SYNTAX_EXPECTED_UNIT, expr.span)
                 return None
 
+    def _syscall_number(self, ref: ast.NameRef) -> Value:
+        """Lower `⎕sc@NAME`: the number that call has where this is built for.
+
+        The compiler holds the table because the compiler is what knows which
+        architecture it is, and a module has no other way to ask: `write` is 1
+        on x86-64 and 64 on the other two, and a standard library written once
+        has to be able to say `write` and mean the right one.
+        """
+        call = ref.name[len(SYSCALL_NUMBER_PREFIX):]
+        architecture = architecture_of(self._module.triple)
+        found = number_of(architecture, call)
+        if found is not None:
+            return self._module.int_const(U32, found)
+        if call in SYSCALL_NAMES:
+            self._diags.emit(D.LANG_SYSCALL_NOT_ON_THIS_ARCHITECTURE, ref.span,
+                             name=call, architecture=architecture)
+        else:
+            self._diags.emit(D.LANG_SYSCALL_UNKNOWN_NAME, ref.span, name=call)
+        return UndefConst(ERROR)
+
     def _lower_syscall(self, builder: IRBuilder, expr: ast.Call,
                        expected: Type | None) -> Value:
         """Lower `⎕syscall(NUMBER, ARG...)`: what the kernel answered.
@@ -10912,6 +10935,8 @@ class Checker:
             # value could stand for.
             self._diags.emit(D.LANG_WRAP_IS_NOT_A_VALUE, ref.span)
             return UndefConst(ERROR)
+        if ref.name.startswith(SYSCALL_NUMBER_PREFIX):
+            return self._syscall_number(ref)
         local = self._find_local(ref.name)
         if local is None and isinstance(self._top.get(ref.name), _Generic):
             # Written once and compiled once per set of types, and which sets

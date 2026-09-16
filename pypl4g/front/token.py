@@ -179,6 +179,18 @@ IMPORT_NAME: Final[str] = "".join((BUILTIN_GLYPH, "import"))
 #: `std` module reaches anything outside the process, and it is the only way.
 SYSCALL_NAME: Final[str] = "".join((BUILTIN_GLYPH, "syscall"))
 
+#: What stands between a name the compiler provides and the key it is asked
+#: about: `⎕sc@write` is one name and the whole of it is looked up.  Only a name
+#: beginning with the quad may carry one, so the mark means nothing new
+#: anywhere else -- `@[` still begins an attribute list and nothing else does.
+KEY_GLYPH: Final[str] = "@"
+
+#: The number of a system call, for the architecture being built for:
+#: `⎕sc@write` is 1 on x86-64 and 64 on the other two.  The compiler holds the
+#: table because it is the compiler that knows which architecture it is, and a
+#: module cannot ask the question any other way.
+SYSCALL_NUMBER_PREFIX: Final[str] = "".join((BUILTIN_GLYPH, "sc", KEY_GLYPH))
+
 DROP_NAME: Final[str] = "".join((BUILTIN_GLYPH, "drop"))
 UNIT_NAME: Final[str] = "".join((BUILTIN_GLYPH, "unit"))
 

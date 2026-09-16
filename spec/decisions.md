@@ -5280,6 +5280,43 @@ calling convention has nothing to say about it.  It stays outside the memory
 token chain as a call does: what the kernel does to memory is not something the
 program can write down.
 
+## 2026-09-17T15:45+02:00 — language
+
+**`⎕sc@write`: a name the compiler provides, carrying a key**
+
+Directed by the user, who gave both the shape and the reason: the compiler must
+know the numbers for every architecture and it knows which one it is building
+for, so a module says `write` and means whichever it is.
+
+**The mark is `@`, and only a name beginning with the quad may carry one.**
+`a@b` is still two things with nothing between them and `@[` still begins an
+attribute list; what changed is one line of the lexer, which lets a name the
+compiler provides go on past an `@`.  The whole of `⎕sc@write` is one name and
+one lookup, which is what "a dictionary key inside the compiler" means.
+
+**It turns over what the previous entry gave to the library.**  An hour earlier
+this log said naming the calls was the standard library's work, and that a table
+of numbers in the compiler would be the compiler carrying a copy of somebody
+else's header.  It is carrying one -- and the reason is that the alternative is
+worse: `comptime if` compares types and refuses a question about a value (4502),
+so a module choosing between 1 and 64 for itself would have needed either three
+builtin type names existing only to be compared, or comptime evaluation of
+values, to say something the compiler already knows.  The table is kept small
+and honest instead: what the runtime and the library ask for, each number
+checked, and a call nothing asks for is not in it.
+
+**A call one architecture has and another has not is its own refusal** (4575),
+told apart from a name that is simply mistyped (4574).  `open` is on x86-64 and
+not on the two numbered later, which took only `openat`; `fadvise64_64` is the
+other way round.  A module that wants such a call asks inside an arm the
+compiler settles.
+
+Compare: **Zig**, whose `std.os.linux` has the numbers in the library, per
+architecture, written out; **Go**, whose `zsysnum_linux_*.go` are generated per
+architecture and live in the library too; **C**, where they come from the
+system's headers and not from the compiler at all -- which is the arrangement
+this has no equivalent of, there being no headers and no system library here.
+
 Open questions
 --------------
 
