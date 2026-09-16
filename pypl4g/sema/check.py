@@ -23,6 +23,7 @@ from ..front.token import (BOTTOM_GLYPH, BUILTIN_GLYPH, CHR_NAME,
                           HEAP_NAME, TOLERANCE_DEFAULT,
                           TOLERANCE_NAME, WILDCARD_NAME)
 from ..ir.builder import IRBuilder
+from ..ir.decisions import DecisionKind
 from ..ir.layout import DataLayout, member_offsets_of, stride_of
 from ..ir.inst import (BinaryInst, BinOp, CastInst, CastKind, CmpPred,
                        ExtractInst, FrameInst, Instruction, UnOp)
@@ -1626,6 +1627,14 @@ class Checker:
                   and _can_be_referred_to(held))
         if placed:
             assert builder is not None
+            # A variable the program wrote as an ordinary name and the compiler
+            # put in memory: the program did not ask for that, so the log says
+            # so and says why.
+            self._module.decisions.record(
+                DecisionKind.PLACE_LOCAL, name,
+                "something takes its address, so it is kept in storage of its "
+                "own rather than in a register",
+                span)
             place = builder.frame(held, span)
             builder.store(place, value, span)
             value = place
@@ -3531,7 +3540,16 @@ class Checker:
         else, which is what makes the capture list the list of what it depends
         on rather than something a reader works out by reading the body.
         """
-        taken = self._captures_of(expr)
+        # The name comes first so that everything recorded about this lambda
+        # can say which one it was: a lambda is written with none, so the log
+        # is where the two are tied together.
+        self._lambdas += 1
+        name = "".join((LAMBDA_PREFIX, str(self._lambdas)))
+        self._module.decisions.record(
+            DecisionKind.NAME_LAMBDA, name,
+            "the code of a lambda written here, which the program left unnamed",
+            expr.span)
+        taken = self._captures_of(expr, name)
         if taken is None:
             return UndefConst(ERROR)
         params = tuple(self._resolve_type(one.type) for one in expr.params)
@@ -3544,7 +3562,7 @@ class Checker:
             return UndefConst(ERROR)
         place, offsets = self._environment(builder, taken, held, expr.span)
         func = self._function_of_a_lambda(expr, params, answer, held, offsets,
-                                          taken)
+                                          taken, name)
         if func is None:
             return UndefConst(ERROR)
         # What it carries is an address and says nothing about what is there:
@@ -3560,11 +3578,11 @@ class Checker:
             return UndefConst(ERROR)
         return made
 
-    def _captures_of(self, expr: ast.Lambda
+    def _captures_of(self, expr: ast.Lambda, name: str
                      ) -> list[tuple[ast.Capture, _Local]] | None:
         """What the lambda brings in, looked up where the lambda is written."""
-        written = (self._everything_reached(expr) if expr.brings_in is not None
-                   else expr.captures)
+        written = (self._everything_reached(expr, name)
+                   if expr.brings_in is not None else expr.captures)
         found: list[tuple[ast.Capture, _Local]] = []
         seen: set[str] = set()
         spoiled = False
@@ -3583,7 +3601,8 @@ class Checker:
             found.append((one, local))
         return None if spoiled else found
 
-    def _everything_reached(self, expr: ast.Lambda) -> tuple[ast.Capture, ...]:
+    def _everything_reached(self, expr: ast.Lambda,
+                            name: str) -> tuple[ast.Capture, ...]:
         """What `[=]` or `[&]` brings in: everything the body reaches outside.
 
         A name the body writes and does not bind for itself, that stands for
@@ -3600,11 +3619,23 @@ class Checker:
         _named_in(expr.body, seen)
         inside: set[str] = {one.name for one in expr.params}
         _bound_in(expr.body, inside)
-        return tuple(
-            ast.Capture(span=expr.span, name=name,
-                        by_reference=expr.brings_in is ast.CaptureAll.BY_REFERENCE)
+        by_reference = expr.brings_in is ast.CaptureAll.BY_REFERENCE
+        found = tuple(
+            ast.Capture(span=expr.span, name=name, by_reference=by_reference)
             for name in seen
             if name not in inside and self._find_local(name) is not None)
+        # The program wrote `[=]` or `[&]` and not the names, so which names
+        # those turned out to be is the compiler's answer and not the
+        # program's -- which is what the log is for.
+        for one in found:
+            self._module.decisions.record(
+                DecisionKind.CAPTURE, one.name,
+                "".join(("brought into '", name, "' ",
+                         "by reference" if by_reference else "by value",
+                         ", which is what '", expr.brings_in.value,
+                         "' said of every name its body reaches")),
+                expr.span)
+        return found
 
     def _held_by_capture(self, one: ast.Capture, local: _Local) -> Type:
         """What the environment holds for one capture.
@@ -3717,8 +3748,8 @@ class Checker:
     def _function_of_a_lambda(self, expr: ast.Lambda, params: Sequence[Type],
                               answer: Type, held: Sequence[Type],
                               offsets: Sequence[int],
-                              taken: Sequence[tuple[ast.Capture, _Local]]
-                              ) -> Function | None:
+                              taken: Sequence[tuple[ast.Capture, _Local]],
+                              name: str) -> Function | None:
         """The function a lambda's body becomes, checked and lowered.
 
         It takes one parameter nobody wrote -- where what the lambda brought in
@@ -3726,8 +3757,6 @@ class Checker:
         scope holding those and nothing else, so a name from around the lambda
         that was not brought in is not a name here at all.
         """
-        self._lambdas += 1
-        name = "".join((LAMBDA_PREFIX, str(self._lambdas)))
         func = Function(
             name=name,
             ty=self._module.types.func_type((_ENVIRONMENT, *params), answer),
@@ -3735,6 +3764,11 @@ class Checker:
             span=expr.span, name_span=expr.span, source_path=self._path.as_posix(),
             param_names=("", *(one.name for one in expr.params)))
         self._module.add_function(func, key=self._key(name))
+        # Owned by the file it is written in, as every other definition is: the
+        # module's name goes in front of it when the routes to that module are
+        # settled, and without that two files each holding a lambda would
+        # produce one symbol twice.
+        self._owned.append(func)
         block = func.add_block()
         inner = IRBuilder(self._module, func)
         arriving = [block.add_param(one, "")

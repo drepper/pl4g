@@ -1,0 +1,10 @@
+※ pl4g-test: module
+※※ A module whose own lambda would be called what the importing file's is.
+※
+※ This is not a test of its own but a module the test beside it imports.  What
+※ it is here for is that its lambda is the first one *it* writes, so the name
+※ the compiler gives it is the name the other file's first lambda gets too.
+@[export, impure]
+fn run(x: u8) → u8:
+    let f: fn(u8) → u8 = λ a: u8 → u8 { a + 1u8 }
+    f(x)

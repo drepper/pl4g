@@ -36,6 +36,17 @@ class DecisionKind(StrEnum):
     DROP_LOCAL = "drop-local"
     DROP_CALL = "drop-call"
     ANSWER_IN_STORAGE = "answer-in-storage"
+    #: A name a lambda brought in that its capture list did not write down,
+    #: which is what `[=]` and `[&]` leave to the compiler.  One entry per
+    #: name, so that "which variables were brought in" is a question the log
+    #: answers without anything reading prose.
+    CAPTURE = "capture"
+    #: The name a lambda's code was given, so that a symbol in the binary can
+    #: be matched back to the place it was written.
+    NAME_LAMBDA = "name-lambda"
+    #: A variable put in storage of its own rather than kept in a register,
+    #: because something takes its address.
+    PLACE_LOCAL = "place-local"
 
 
 @dataclass(frozen=True, slots=True)

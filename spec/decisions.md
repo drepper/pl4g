@@ -4608,6 +4608,32 @@ Checked both ways: the tree-sitter grammar generates with no conflict, and a pro
 parameter with no capture list, with a named one, with `[=]`, with `[&]`, and two list parameters before a capture list --
 compiles, parses and runs.
 
+---
+
+## 2026-09-16T22:30+02:00 — compiler
+
+**What a capture list saying "all of them" brought in goes in the decision log**
+
+On the user's direction.  A decision is something the compiler chose that the program did not state, and `[=]` and `[&]` are
+exactly that: the program says "whatever the body reaches" and the compiler says which names those are.  It is the one thing
+about such a lambda a reader cannot get from the source, which is what makes it worth recording rather than merely knowable.
+
+**One entry per name.**  The log's `kind` is the part a reader matches on and `subject` is what the decision is about, so a
+`capture` entry whose subject is the variable makes "which variables were brought in" a question the log answers directly.  An
+entry per lambda listing them in prose would have made a tool parse English.
+
+**A list that wrote its names decided nothing** and is recorded as nothing, which is the line the log has always drawn.
+
+Two more went in with it, both of the same kind.  `name-lambda` records the name a lambda's code was given, because the program
+left it unwritten -- it is what ties a symbol in the binary back to the line, and it is what a `capture` entry names to say which
+lambda brought the variable in.  `place-local` records a variable put in storage of its own rather than a register, which is a
+placement the program did not ask for; it is also what `[&]` costs, since every name such a body writes is given storage before
+it is known which ones are brought in.
+
+Writing the tests for it turned up a real defect: a lambda's function was not owned by the file it was written in, so the
+module's name never went in front of it and two files each writing one produced the same symbol.  The compiler caught it -- it
+refuses a module in which two definitions come to one symbol -- and there is a language test for it now.
+
 Open questions
 --------------
 

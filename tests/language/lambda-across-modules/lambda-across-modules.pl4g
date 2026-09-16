@@ -1,0 +1,23 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ A lambda is written with no name, so the compiler gives its code one -- and
+※ two files each writing one would give the same name twice.  What keeps them
+※ apart is what keeps every other definition apart: a lambda belongs to the
+※ file it is written in, and the module's name goes in front of it once every
+※ route to that module is known.
+※
+※ So `⎕lambda1` here and `⎕lambda1` in the module beside it are two symbols,
+※ and a build that linked them as one would be caught: the compiler refuses a
+※ module in which two definitions come to one symbol.
+
+let h := ⎕import("lambda-across-modules-helper")
+
+@[startup, impure]
+fn main() → u6:
+    let g: fn(u8) → u8 = λ a: u8 → u8 { a + 2u8 }
+    if g(1u8) ≠ 3u8:
+        1u6
+    elif h.run(1u8) ≠ 2u8:
+        2u6
+    else:
+        0u6

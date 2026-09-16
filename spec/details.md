@@ -756,12 +756,32 @@ begins" would say nothing a reader could not have worked out, so every named thi
 `name_span` beside its `name_hint`, and a `Function` and a variable at the top level have one of their own.  A call needs none,
 its instruction already beginning at the callee.
 
-What is recorded today is what is left out, and one thing that is put somewhere the program did not write it:
-`drop-function` and `drop-variable` from the reachability pass, `drop-local` and `drop-call` from the dead-code sweep, and
-`answer-in-storage` from the pass that rewrites a function answering with more than the registers hold.  The first two happen at
-every optimization level, because a function nothing can reach is code the program cannot run; the sweep's two happen from `-O1`,
-because an unoptimized build keeps what the program wrote and so decides nothing about it.  Recording happens whether or not the
-log was asked for, because a decision recorded only when someone is watching is one a test cannot check.
+What is recorded today is what is left out, what is put somewhere the program did not write it, and what the program left for the
+compiler to work out:
+
+| kind | what it says |
+| --- | --- |
+| `drop-function`, `drop-variable` | what the reachability pass left out |
+| `drop-local`, `drop-call` | what the dead-code sweep left out |
+| `answer-in-storage` | a function answering with more than the registers hold |
+| `name-lambda` | the name a lambda's code was given |
+| `capture` | a name a capture list saying "all of them" brought in, and how |
+| `place-local` | a variable put in storage of its own rather than a register |
+
+The first two happen at every optimization level, because a function nothing can reach is code the program cannot run; the
+sweep's two happen from `-O1`, because an unoptimized build keeps what the program wrote and so decides nothing about it.  The
+last three are the checker's and happen always, there being no level at which a lambda does not need a name.  Recording happens
+whether or not the log was asked for, because a decision recorded only when someone is watching is one a test cannot check.
+
+**A capture list is recorded where it said "all of them" and not where it named names.**  `[=]` and `[&]` leave which variables
+to the compiler, and that is the one thing about such a lambda a reader cannot get from the source -- so there is one entry per
+name, with the lambda's own name in the reason, and "which variables were brought in" is answered by asking for the `capture`
+entries rather than by reading prose.  A list that wrote the names decided nothing and is recorded as nothing.
+
+**A lambda's name is recorded because the program left it unwritten.**  It is what ties a symbol in the finished binary back to
+the line the lambda was written on, and it is what every `capture` entry names to say which lambda it belongs to.  The name
+carries the module's own name in front of it, as every definition does, so two files each writing a lambda do not produce one
+symbol twice.
 
 **A call the program said it did not want goes at every optimization level**, which the `dropignored` pass does before anything
 else runs.  That is the rule the reachability pass already follows and for the same reason: what it acts on is not something the
