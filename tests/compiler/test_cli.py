@@ -2,17 +2,22 @@
 
 Both compiler implementations accept the same options, so every way the command
 line can be wrong maps onto a numbered diagnostic rather than onto text of some
-library's choosing.
+library's choosing.  `argparse` does the parsing here; the shared table says
+what there is to parse, and the first two tests below are what keeps the two
+from drifting apart.
 """
 
 from __future__ import annotations
 
+import argparse
 import json
 from pathlib import Path
 
 import pytest
 
 from conftest import run_compiler
+from pypl4g.diag.engine import DiagEngine
+from pypl4g.driver.cli import SUBCOMMANDS, CommandLine
 from pypl4g.driver.options import ExitCode, load_option_table
 
 GOOD = """@[startup, impure]
@@ -66,8 +71,54 @@ def test_help_json_round_trips() -> None:
     assert "--print-targets" in declared, "the shared option table is out of date"
 
 
+def test_the_parser_and_the_shared_table_name_the_same_options() -> None:
+    """Both sides of the contract, checked against it.
+
+    The table is what another implementation reads to know what a command line
+    may say, so an option this compiler takes and the table does not name is one
+    that works with one compiler and not the other -- and an option the table
+    names and this does not take is the same thing the other way round.  The
+    parser is written out rather than generated from the table because a
+    contract wants both sides checked, not one side built from it; this is the
+    check that makes that safe.
+    """
+    table = load_option_table()
+    declared: set[str] = set()
+    for option in table["options"]:
+        for name in (option.get("short"), option.get("long"),
+                     option.get("alias")):
+            if name:
+                declared.add(name)
+    parser = CommandLine(DiagEngine(lambda _: None))._parser()
+    taken: set[str] = set()
+    for action in _subparser_of(parser, "build")._actions:
+        taken.update(action.option_strings)
+    assert taken == declared, "".join((
+        "only the parser takes: ", str(sorted(taken - declared)),
+        "; only the table names: ", str(sorted(declared - taken))))
+
+
+def test_every_command_of_the_table_is_one_the_parser_takes() -> None:
+    """The same, for what the compiler can be asked to do."""
+    named = {c["name"] for c in load_option_table()["commands"]}
+    assert named == set(SUBCOMMANDS)
+    assert load_option_table()["default_command"] == "build"
+
+
+def _subparser_of(parser: argparse.ArgumentParser, name: str
+                  ) -> argparse.ArgumentParser:
+    """The parser `argparse` made for one subcommand."""
+    for action in parser._actions:
+        if isinstance(action, argparse._SubParsersAction):
+            return action.choices[name]
+    raise AssertionError("the parser has no subcommands")
+
+
 @pytest.mark.parametrize(("argv", "number"), [
-    ([], 1001),
+    # 1001 is retired: the output no longer has to be named, the sources saying
+    # what the program is called.  An empty command line names no source, which
+    # is the thing that is actually missing.
+    ([], 1002),
     (["-o", "out"], 1002),
     (["-o", "out", "x.txt"], 1003),
     (["-o", "out", "--nonsense", "x.pl4g"], 1004),

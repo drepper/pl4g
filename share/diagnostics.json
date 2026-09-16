@@ -138,21 +138,6 @@
   ],
   "diagnostics": [
     {
-      "number": 1001,
-      "name": "IMPL_CLI_MISSING_OUTPUT",
-      "severity": "error",
-      "message": "no output file given; use -o FILE or --output FILE",
-      "cause": "The output file name is a mandatory parameter, so that the compiler never guesses where to put the generated binary and never overwrites a file the caller did not name.  Add -o followed by the path of the executable to create.",
-      "spec": {
-        "document": "spec/details.md",
-        "section": "Implementation",
-        "requirement": "Initially, the compiler will require a parameter `-o` or `--output` with a mandatory argument to specify the output file name (just like existing compilers like gcc).  Additional parameters are the names of the source files, ending with the extension `.pl4g`."
-      },
-      "since": "0.1",
-      "default_enabled": true,
-      "option": null
-    },
-    {
       "number": 1002,
       "name": "IMPL_CLI_NO_INPUT",
       "severity": "error",
@@ -184,6 +169,28 @@
         "document": "spec/details.md",
         "section": "Implementation",
         "requirement": "Initially, the compiler will require a parameter `-o` or `--output` with a mandatory argument to specify the output file name (just like existing compilers like gcc).  Additional parameters are the names of the source files, ending with the extension `.pl4g`."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 1013,
+      "name": "IMPL_CLI_BAD_COMMAND_LINE",
+      "severity": "error",
+      "message": "the command line cannot be read: {detail}",
+      "args": [
+        {
+          "name": "detail",
+          "type": "string",
+          "description": "what the argument parser said was wrong with it"
+        }
+      ],
+      "cause": "Something about the command line that no other number covers.  The argument parser found it and its own words are what the detail carries, since inventing a sentence for a thing that has one already would say the same in worse words.  A command line that reaches this is one the compiler could not begin to read.",
+      "spec": {
+        "document": "spec/details.md",
+        "section": "The Command Line",
+        "requirement": "Every way a command line can be wrong is a numbered diagnostic."
       },
       "since": "0.1",
       "default_enabled": true,

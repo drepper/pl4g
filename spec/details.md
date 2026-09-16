@@ -2364,6 +2364,55 @@ and the run then disagreed with the compiler about a program that was perfectly
 all right.  Generating into a copy is what settles it.  The built library is
 read by nobody here, so building it disturbs nothing.
 
+The Command Line
+----------------
+
+`argparse` does the parsing; `share/options.json` says what there is to parse.
+The two are kept in step by a test rather than by generating one from the other:
+the table is the contract between this compiler and any other, and what a
+contract needs is both sides checked against it, not one side built from it.  A
+test compares the option names `argparse` was given against the names the table
+declares, in both directions, and another does the same for the commands.
+`--help` is still rendered from the table, so that two implementations print the
+same list.
+
+**Every refusal is a numbered diagnostic.**  `argparse` writes prose of its own
+and exits; here it does neither.  `ArgumentParser.error` and `.exit` are both
+overridden -- the first turns what it found into an entry of the shared catalog,
+the second raises -- so that a build reading the errors sees the same numbers
+whichever compiler produced them.  One number, 1013, carries `argparse`'s own
+words for the things no other number covers, since inventing a sentence for
+something that has one already says the same in worse words.
+
+**Two forms are written out before `argparse` sees them.**  A short option whose
+value is stuck to it and a long option whose value may be left out are both
+places where `argparse` takes the *next* word instead: `--color prog.pl4g` would
+colour "prog.pl4g" and compile nothing.  So `-O` becomes `-O1` and `--color`
+becomes `--color=yes` first, and after `--` nothing is touched.
+
+**What `argparse` accepts that the table does not describe** is the separated
+form of an option the table calls `joined_equals`: `--emit asm` as well as
+`--emit=asm`.  `argparse` cannot be told to refuse it.  It is a widening and not
+a narrowing -- every command line the table describes still works, and a build
+system writing the documented form is right with either compiler -- so it is
+recorded here rather than fought.
+
+**A command line names what the compiler is to do**, and one that names nothing
+means `build`, which is what every command line meant before there were any.
+The word is looked for in the first position and nowhere else: an option's value
+may be spelled like a command, and `-o test prog.pl4g` writes a file called
+`test`.  `test` is declared and reports that it is not implemented yet, the way
+`--incremental` does; what it needs is something to run the functions
+`@[test(...)]` marks, which are collected as reachability roots today and
+nothing else.
+
+**The output no longer has to be named.**  The sources say what the program is
+called, so `pypl4g prog.pl4g` writes `prog`, and `--emit` decides the suffix --
+`.s` for assembly, `.ir`, `.ast`, `.tokens`, and nothing at all for an
+executable, which is what every compiler on a system without file types does.
+Diagnostic 1001, which said the output was missing, is retired; an empty command
+line names no source, and that is the thing actually missing.
+
 Colour in a diagnostic
 ----------------------
 

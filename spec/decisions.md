@@ -5081,6 +5081,48 @@ values are `never`, `always`, `auto`; **GCC** and **Clang**, whose colour
 options take `never|always|auto` and test the stream they write to; **`NO_COLOR`**,
 which all of them honour and which wins here over anything the option says.
 
+## 2026-09-17T12:00+02:00 — compiler
+
+**`argparse` parses the command line, and there is a `build` command**
+
+Directed by the user, who asked for `argparse` and for subcommand handling, and
+added that `build` must not require `-o`.
+
+**The shared table stays the contract, and a test keeps both sides on it.**  The
+options were parsed by hand so that every refusal was a numbered diagnostic;
+that reason is kept by overriding `ArgumentParser.error` and `.exit` rather than
+by parsing by hand.  What is *not* done is generating the parser from the table:
+a contract wants both sides checked against it, so the parser is written out and
+a test compares the two sets of names in both directions.  It caught a typo the
+moment it was written.
+
+**`build` and `test`, and a command line naming neither means `build`.**  Every
+command line that worked before this still works and means the same thing.
+`test` is declared and reports that it is not implemented, as `--incremental`
+does: there is nothing behind it yet, the functions `@[test(...)]` marks being
+collected as reachability roots and nothing more, and a command that quietly did
+the wrong thing would be worse than one that says so.  What was *not* done is
+turning `--version` and `--print-targets` into commands as well: they work, they
+are what every build script writes, and a second spelling for each would buy
+nothing.
+
+**The output is no longer something the command line has to say**, at the user's
+direction.  The sources say what the program is called: `pypl4g prog.pl4g`
+writes `prog`, and `--emit` decides the suffix.  Diagnostic 1001 is retired, an
+empty command line naming no source being the thing actually missing.  It is
+`cc`'s `a.out` question answered the other way, and the way `rustc` and `go
+build` answer it: a name that was written down is better than one that was not.
+
+**Two forms are normalised before `argparse` sees them**, `-O` and `--color`.
+Both may be written with no value, and `argparse` would take the next word --
+`--color prog.pl4g` would colour "prog.pl4g" and compile nothing.
+
+Compare: **`cc`**, whose `-o` defaults to `a.out` and whose options are parsed by
+hand for exactly the reasons this one was; **`cargo`** and **`go`**, whose
+subcommands this follows and whose default output is the package's name;
+**Python's `argparse`**, whose greediness over optional values is the one thing
+here that had to be worked around.
+
 Open questions
 --------------
 

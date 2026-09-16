@@ -12,7 +12,6 @@ from .catalog import DiagID
 
 
 # 1000-1099: driver and command line
-IMPL_CLI_MISSING_OUTPUT: Final[DiagID] = 1001
 IMPL_CLI_NO_INPUT: Final[DiagID] = 1002
 IMPL_CLI_BAD_SUFFIX: Final[DiagID] = 1003
 IMPL_CLI_UNKNOWN_OPTION: Final[DiagID] = 1004
@@ -24,6 +23,7 @@ IMPL_CLI_UNKNOWN_TARGET: Final[DiagID] = 1009
 IMPL_CLI_UNKNOWN_WARNING: Final[DiagID] = 1010
 IMPL_CLI_UNKNOWN_MCLEVEL: Final[DiagID] = 1011
 IMPL_CLI_NO_MCLEVELS: Final[DiagID] = 1012
+IMPL_CLI_BAD_COMMAND_LINE: Final[DiagID] = 1013
 
 # 1100-1199: input and output files
 IMPL_INPUT_UNREADABLE: Final[DiagID] = 1101

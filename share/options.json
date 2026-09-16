@@ -1,8 +1,22 @@
 {
   "format_version": 1,
   "description": "The command line accepted by every PL4G compiler implementation.  Both pypl4g and pl4gc parse this table, so that a build system need not know which implementation it is invoking.",
-  "usage": "pypl4g -o OUTPUT [OPTION]... SOURCE.pl4g...",
+  "usage": "pypl4g [COMMAND] [OPTION]... SOURCE.pl4g...",
   "source_suffix": ".pl4g",
+  "default_command": "build",
+  "commands": [
+    {
+      "name": "build",
+      "since": "0.1",
+      "help": "compile the sources; what a command line naming no command means"
+    },
+    {
+      "name": "test",
+      "implemented": false,
+      "since": "0.1",
+      "help": "build the sources and run the tests in them"
+    }
+  ],
   "exit_codes": {
     "0": "compilation succeeded",
     "1": "the program contains errors",
@@ -15,9 +29,8 @@
       "long": "--output",
       "arg": "separate_or_joined",
       "metavar": "FILE",
-      "required": true,
       "since": "0.1",
-      "help": "write the generated binary to FILE"
+      "help": "write the output to FILE; the default is the first source renamed"
     },
     {
       "short": null,

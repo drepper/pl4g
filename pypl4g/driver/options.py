@@ -83,6 +83,9 @@ class Options:
     show_help_json: bool = False
     show_targets: bool = False
     show_version: bool = False
+    #: What the compiler was asked to do.  A command line that names none means
+    #: `build`, which is what every command line meant before there were any.
+    command: str = "build"
 
 
 def load_option_table() -> Mapping[str, Any]:
@@ -94,6 +97,16 @@ def load_option_table() -> Mapping[str, Any]:
 def render_help(table: Mapping[str, Any]) -> str:
     """Render the help text from the shared option table."""
     out: list[str] = ["".join(("usage: ", table["usage"])), ""]
+    commands = table.get("commands")
+    if commands:
+        out.append("commands:")
+        for command in commands:
+            note = ("" if command.get("implemented", True)
+                    else "  (not implemented yet)")
+            out.append("".join(("  ", str(command["name"]).ljust(28),
+                                command["help"], note)))
+        out.append("")
+        out.append("options:")
     for option in table["options"]:
         names: list[str] = []
         if option.get("short"):
