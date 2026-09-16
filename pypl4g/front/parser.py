@@ -528,7 +528,9 @@ class Parser:
             return ast.RefTypeRef(span=start.to(pointee.span), pointee=pointee,
                                   mutable=mutable, lasting=lasting,
                                   lifetime=lifetime)
-        if self._check(TokKind.KW_FN):
+        if self._check(TokKind.KW_FN) or self._check(TokKind.AT_LBRACKET):
+            # What a caller reads off a function type is written before it, the
+            # way it is written before the function itself.
             return self._parse_function_type()
         if self._check(TokKind.SET_OPEN):
             found: ast.TypeExpr = self._parse_collection_type()
@@ -667,6 +669,8 @@ class Parser:
         definition: what a caller has to know is the types, and what the names
         are is the body's business.
         """
+        attrs = (self._parse_attributes()
+                 if self._check(TokKind.AT_LBRACKET) else ())
         start = self._expect(TokKind.KW_FN).span
         self._expect(TokKind.LPAREN)
         params: list[ast.TypeExpr] = []
@@ -679,9 +683,11 @@ class Parser:
         if self._accept(TokKind.ARROW) is not None:
             ret = self._parse_type_ref()
             end = ret.span
-        return ast.FuncTypeRef(span=start.to(end), params=tuple(params), ret=ret)
+        return ast.FuncTypeRef(span=start.to(end), params=tuple(params),
+                               ret=ret, attrs=attrs)
 
-    def _parse_lambda(self) -> ast.Lambda:
+    def _parse_lambda(self, attrs: tuple[ast.Attribute, ...] = ()
+                      ) -> ast.Lambda:
         """Parse `\N{GREEK SMALL LETTER LAMDA} PARM: TYPE, \N{HORIZONTAL ELLIPSIS} [CAPTURES] \N{RIGHTWARDS ARROW} TYPE` and the body after it.
 
         The parameter list has no parentheses round it, there being nothing
@@ -705,7 +711,7 @@ class Parser:
         body = self._parse_body()
         return ast.Lambda(span=start.to(body.span), params=tuple(params),
                           body=body, captures=captures, ret_type=ret,
-                          brings_in=brings_in)
+                          brings_in=brings_in, attrs=attrs)
 
     def _parse_lambda_param(self) -> ast.Param:
         """Parse one parameter of a lambda, which is one of a function without
@@ -807,13 +813,15 @@ class Parser:
     def _begins_a_type(self, ahead: int = 0) -> bool:
         """Whether a type is written here rather than left out.
 
-        Five things begin one: a name, a collection, a tuple, a list and the
-        mark of a reference.  It is asked wherever a type may be written and may
+        Six things begin one: a name, a collection, a tuple, a list, the mark of
+        a reference, and what a function type says about itself, which stands
+        before the `fn`.  It is asked wherever a type may be written and may
         equally be absent, which is a variable and a binding in a loop.
         """
         kind = self._peek(ahead).kind if ahead else self._current.kind
         return kind in (TokKind.IDENT, TokKind.SET_OPEN, TokKind.TUPLE_OPEN,
-                        TokKind.LBRACKET, TokKind.AMPERSAND, TokKind.KW_FN)
+                        TokKind.LBRACKET, TokKind.AMPERSAND, TokKind.KW_FN,
+                        TokKind.AT_LBRACKET)
 
     def _parse_list_type(self) -> ast.ListTypeRef:
         """Parse ``'[' TYPE ']'``, which is written the way a value of one is."""
@@ -1815,6 +1823,13 @@ class Parser:
             # body, so nothing may follow it on the line -- which is the rule
             # everything ending in a block already follows.
             return self._parse_lambda()
+        if token.kind is TokKind.AT_LBRACKET:
+            # What is said about a lambda is said the way it is said about a
+            # function, before the thing it describes.  Nothing else begins an
+            # expression with a bracket after an at sign, so there is nothing
+            # for this to be confused with.
+            attrs = self._parse_attributes()
+            return self._parse_lambda(attrs)
         if token.kind is TokKind.LPAREN:
             self._advance()
             inner = self._parse_expression()

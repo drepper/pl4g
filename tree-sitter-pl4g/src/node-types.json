@@ -3324,6 +3324,16 @@
           }
         ]
       }
+    },
+    "children": {
+      "multiple": false,
+      "required": false,
+      "types": [
+        {
+          "type": "attribute_list",
+          "named": true
+        }
+      ]
     }
   },
   {
@@ -6684,6 +6694,10 @@
       "multiple": true,
       "required": false,
       "types": [
+        {
+          "type": "attribute_list",
+          "named": true
+        },
         {
           "type": "identifier",
           "named": true

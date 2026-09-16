@@ -1,0 +1,76 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ `@[listable]` says an array handed where one of its elements is wanted is
+※ walked, and the answers make an array of the same shape.  A lambda says it the
+※ way a function does: written before the thing it describes.
+※
+※ **It is part of the type**, and has to be.  A lambda is nearly always called
+※ through a name, and what a name holds is a type -- so a promise the type did
+※ not carry would be one the caller never heard.  That is the argument a
+※ reference already makes for `mut` being part of its type: both sides of the
+※ call reach the thing, so the caller cannot be left to guess.  The type is
+※ therefore written `@[listable] fn(u8) → u8`, with the same word in the same
+※ place.
+※
+※ **Only what a caller reads off the type may be said there.**  `inline`,
+※ `impure` and the rest are about a body, and a body is not what a name holds;
+※ writing one before a lambda is an attribute that does not apply (3204).
+※
+※ **A listable function stands where a plain one is wanted**, dropping the walk:
+※ it promises everything the plain one does and adds to it, which is the rule
+※ `&mut T` follows where `&T` is wanted.  One way only -- a plain one put where
+※ a listable one is wanted would be a promise nobody made.  The two are the same
+※ two addresses in the same two registers, so nothing is emitted for it.
+※
+※ Compare: **APL**, **BQN** and **UIUA**, where every primitive walks and there
+※ is nothing to write; **Julia**, whose `f.(v)` puts the mark at the call rather
+※ than on the function, so the caller decides and no type carries it;
+※ **NumPy**, whose `vectorize` wraps a function in another one, which is what
+※ this would be if the answer had not been to put it in the type.
+
+@[listable]
+fn twice(a: u8) → u8:
+    a + a
+
+@[startup, impure]
+fn main() → u6:
+    ※ a lambda that walks, called with an array and with a single value
+    let double: @[listable] fn(u8) → u8 = @[listable] λ a: u8 → u8:
+        a + a
+    let v: u8⟦3⟧ = ⟦1u8, 2u8, 3u8⟧
+    let doubled: u8⟦3⟧ = double(v)
+    let one: u8 = double(7u8)
+    ※ two parameters, one walked and one not, which is what makes
+    ※ `scaled(v, 2u8)` mean what it looks like
+    let scaled: @[listable] fn(u8, u8) → u8 = @[listable] λ a: u8, b: u8 → u8:
+        a × b
+    let up: u8⟦3⟧ = scaled(v, 2u8)
+    ※ a table, walked twice because the parameter takes a single value
+    let rows: u8⟦2, 3⟧ = ⟦⟦1u8, 2u8, 3u8⟧, ⟦4u8, 5u8, 6u8⟧⟧
+    let grown: u8⟦2, 3⟧ = double(rows)
+    ※ one that brings something in with it, which changes nothing about the walk
+    let by: u8 = 10u8
+    let shifted: @[listable] fn(u8) → u8 = @[listable] λ a: u8 [by] → u8:
+        a + by
+    let moved: u8⟦3⟧ = shifted(v)
+    ※ handed to a name that does not ask for the walk, which drops it
+    let plain: fn(u8) → u8 = double
+    let alone: u8 = plain(9u8)
+    ※ and a function defined the ordinary way, unchanged
+    let named: u8⟦3⟧ = twice(v)
+    if doubled⟦0⟧ ≠ 2u8 ∨ doubled⟦2⟧ ≠ 6u8:
+        1u6
+    elif one ≠ 14u8:
+        2u6
+    elif up⟦1⟧ ≠ 4u8 ∨ up⟦2⟧ ≠ 6u8:
+        3u6
+    elif grown⟦0, 2⟧ ≠ 6u8 ∨ grown⟦1, 1⟧ ≠ 10u8:
+        4u6
+    elif moved⟦0⟧ ≠ 11u8 ∨ moved⟦2⟧ ≠ 13u8:
+        5u6
+    elif alone ≠ 18u8:
+        6u6
+    elif named⟦1⟧ ≠ 4u8:
+        7u6
+    else:
+        0u6

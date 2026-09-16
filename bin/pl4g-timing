@@ -177,6 +177,7 @@ GROUPS: tuple[Group, ...] = (
            "one-element-says-the-type": "seven literals whose type one entry settles",
            "narrow": "every way a value can fail to fit, and the ones that cannot",
            "lambda": "lambdas made, captured both ways, handed on and called through",
+           "listable-lambda": "a lambda that walks, over a vector, a table and two arguments",
            "generic-functions": "one function compiled for seven sets of types",
            "lifetimes": "how long six references live, said both ways and worked out",
            "named-lifetimes": "one lifetime name over three types, and both answers",

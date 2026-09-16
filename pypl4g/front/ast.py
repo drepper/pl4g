@@ -967,6 +967,10 @@ class Lambda(Expr):
     #: What `[=]` or `[&]` said, where one of them was written instead of a
     #: list of names.  The names are then worked out from the body.
     brings_in: CaptureAll | None = None
+    #: What was written before the `λ`.  Only what a caller reads off the
+    #: type can be said here, since that is all a value handed from one name to
+    #: another still carries.
+    attrs: tuple[Attribute, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -980,6 +984,9 @@ class FuncTypeRef(Node):
 
     params: tuple[TypeExpr, ...]
     ret: TypeExpr | None = None
+    #: What was written before the `fn`, which is the same thing written before
+    #: the `λ` of a lambda this type can hold.
+    attrs: tuple[Attribute, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

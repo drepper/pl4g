@@ -23,7 +23,7 @@ from .inst import (AddressInst, AnyLaneInst, AssertInst, BinaryInst, BinOp,
 from .module import GlobalVar, Module
 from .types import (ArrayType, BOOL, BoolType, CharType, DictType, EnumType,
                     without_units,
-                    IntType,
+                    FuncType, IntType,
                     MEM, PtrType, ResultType, SetType, TupleType, Type,
                     VecType, VOID, parts_of)
 from .value import Const, IntConst, Value
@@ -498,7 +498,14 @@ def _held_as(one: Type, other: Type) -> bool:
     an enumeration, asked here of reading one as the other rather than of making
     one wider.  That an enumeration holds only its own values is the checker's
     to keep; nothing structural about an instruction can say it.
+
+    And two function types differing only in whether what they name walks an
+    array it is given.  That is a promise to a caller and nothing a value
+    carries: both are the same two addresses in the same two registers, and
+    which of the two a name holds is what decides whether the caller walks.
     """
+    if isinstance(one, FuncType) and isinstance(other, FuncType):
+        return one.params == other.params and one.ret is other.ret
     return (isinstance(one, (CharType, EnumType)) and other is one.holder) \
         or (isinstance(other, (CharType, EnumType)) and one is other.holder)
 

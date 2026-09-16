@@ -1,0 +1,21 @@
+※ pl4g-test: compile=error diag=4203
+
+※ A listable function stands where a plain one is wanted, dropping the walk: it
+※ promises everything the plain one does and adds to it.  The other way round is
+※ a promise nobody made -- the lambda was written without the word, so nothing
+※ about it says an array handed to it means anything at all.
+※
+※ It is the rule `&mut T` follows where `&T` is wanted, and `&static T` where
+※ `&T` is: a value that promises more may stand for one that promises less, one
+※ way only.
+
+@[startup, impure]
+fn main() → u6:
+    let plain: fn(u8) → u8 = λ a: u8 → u8:
+        a + a
+    let walks: @[listable] fn(u8) → u8 = plain
+    let v: u8⟦3⟧ = ⟦1u8, 2u8, 3u8⟧
+    if walks(v)⟦0⟧ ≠ 2u8:
+        1u6
+    else:
+        0u6

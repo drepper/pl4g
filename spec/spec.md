@@ -3674,6 +3674,32 @@ neither can one the walk never reaches the parameter's type from.
 
 **A function that takes nothing may not be marked** (4483): there is nothing to hand it an array in place of.
 
+**A lambda says it the same way**, written before the thing it describes -- and there the word is part of the *type*:
+
+```
+let double: @[listable] fn(u8) → u8 = @[listable] λ a: u8 → u8:
+    a + a
+
+double(v)                        ※ u8⟦3⟧, holding 2, 4, 6
+double(7u8)                      ※ u8, holding 14
+```
+
+It has to be.  A lambda is nearly always called through a name, and what a name holds is a type, so a promise the type did not
+carry would be one the caller never heard.  That is the argument a reference already makes for `mut`: both sides of the call
+reach the thing, and the caller cannot be left to guess.  A function definition needs none of this -- a call names it, so the
+definition is in view -- which is why `@[listable] fn twice(...)` is written with no such word in any type.
+
+**Only what a caller reads off the type may be written before a lambda** (3204).  `inline`, `impure`, `abi` and the rest are
+about a body, and a body is not what a name holds; `listable` is the one thing so far that a caller acts on.
+
+**A listable function stands where a plain one is wanted**, dropping the walk, by the rule every other promise follows: it
+promises what the plain one does and adds to it.  One way only, and the two are the same two addresses in the same two
+registers, so nothing is emitted for it.
+
+Compare: **APL**, **BQN** and **UIUA**, where every primitive walks and there is nothing to write at all; **Julia**, whose
+`f.(v)` puts the mark at the call, so the caller decides and no type carries anything; **NumPy**, whose `vectorize` wraps a
+function in another function, which is what this would have to be if the answer were not to put it in the type.
+
 **The operators walk arrays too**, and by the same rule.  No attribute is written on them: an operator is not a definition, so
 there is nowhere to write one, and every operator that would be marked would be marked -- which is what saying it of all of them
 says.

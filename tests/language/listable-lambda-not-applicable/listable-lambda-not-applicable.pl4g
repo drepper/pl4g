@@ -1,0 +1,20 @@
+※ pl4g-test: compile=error diag=3204
+
+※ What may be written before a lambda is what a caller reads off the type, and
+※ that is `listable` and nothing else so far.  Everything else a function can
+※ say about itself -- how it is inlined, whether it is pure, what convention it
+※ follows -- is about its body, and a body is not what a name holds: a lambda
+※ handed from one name to another carries two addresses and its type, and an
+※ attribute the type does not carry is one the caller never hears.
+※
+※ So the list is checked against a target of its own, and `inline` written here
+※ is an attribute that does not apply to a lambda or a function type.
+
+@[startup, impure]
+fn main() → u6:
+    let f: fn(u8) → u8 = @[inline] λ a: u8 → u8:
+        a + a
+    if f(1u8) ≠ 2u8:
+        1u6
+    else:
+        0u6

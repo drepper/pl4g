@@ -52,6 +52,11 @@ module.exports = grammar({
     // generalized parse carries both readings until one of them ends at the
     // closing bracket.
     [$._non_range, $._plain_type],
+    // A statement may carry attributes and so may a lambda, so `@[...] \u03bb ...`
+    // written as a whole statement has two readings.  The compiler takes the
+    // statement's, the statement parser reading the list before it looks at
+    // what follows; the dynamic precedence below is what says the same here.
+    [$.lambda_expression],
   ],
 
   word: $ => $.identifier,
@@ -252,7 +257,8 @@ module.exports = grammar({
       // type or the return type of a lambda whose parameter it is, and the
       // inner reading is the one the compiler takes: the type is read first
       // and takes what follows it.
-      prec.right(seq('fn', '(', sepBy(',', field('parameter', $.type)), ')',
+      prec.right(seq(optional($.attribute_list),
+                     'fn', '(', sepBy(',', field('parameter', $.type)), ')',
                      optional(seq($._return_arrow,
                                   field('return_type', $.type))))),
     ),
@@ -735,13 +741,19 @@ module.exports = grammar({
     // it, there being nothing before it for them to separate it from -- what
     // ends it is the capture list, the arrow or the body, and none of the
     // three can be part of a parameter.
-    lambda_expression: $ => prec.right(seq(
+    lambda_expression: $ => prec.dynamic(-1, prec.right(seq(
+      // What is said about a lambda is said the way it is said about a
+      // function, before the thing it describes.  Only what a caller reads off
+      // the type may stand here, which the compiler checks and this does not.
+      // The lower dynamic precedence is for the one place the list could
+      // belong to either: written as a whole statement, it is the statement's.
+      optional($.attribute_list),
       '\u03bb',
       sepBy(',', field('parameter', $.lambda_parameter)),
       optional(field('captures', $.capture_list)),
       optional(seq($._return_arrow, field('return_type', $.type))),
       field('body', $._block),
-    )),
+    ))),
 
     lambda_parameter: $ => seq(
       field('name', $.identifier), ':', optional($.mutable),

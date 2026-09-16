@@ -536,7 +536,7 @@ def _lifetimes_of(node: object, found: set[str] | None = None) -> set[str]:
 
 
 def _promises_as_much(expected: Type | None, found: Type) -> bool:
-    """Whether the reference *found* promises at least what *expected* asks.
+    """Whether *found* promises at least what *expected* asks.
 
     Two promises, each of which may be given away without anything being lost:
     one that lasts as long as the program lasts long enough for a call, and one
@@ -545,8 +545,17 @@ def _promises_as_much(expected: Type | None, found: Type) -> bool:
     no use where writing is -- and the bits are the same either way, so what
     carries a value across is a bitcast and the generated code is unchanged.
     """
+    if found is expected:
+        return False
+    if isinstance(expected, FuncType) and isinstance(found, FuncType):
+        # A function that walks what it is given does everything one that does
+        # not does, and the walk is the caller's business: a name that does not
+        # ask for it simply does not do it.
+        return (found.listable and not expected.listable
+                and found.params == expected.params
+                and found.ret is expected.ret)
     if not isinstance(expected, PtrType) or not isinstance(found, PtrType) \
-            or found is expected or found.pointee is not expected.pointee:
+            or found.pointee is not expected.pointee:
         return False
     return ((found.lasting or not expected.lasting)
             and (found.mutable or not expected.mutable))
@@ -2583,7 +2592,8 @@ class Checker:
             ret = self._return_type(ref.ret)
             if ret is ERROR or any(one is ERROR for one in params):
                 return ERROR
-            return self._module.types.func_type(params, ret)
+            return self._module.types.func_type(
+                params, ret, self._walks_what_it_is_given(ref.attrs))
         return self._named_type(ref)
 
     # -- units -----------------------------------------------------------------
@@ -3818,7 +3828,11 @@ class Checker:
         ty = self._held_by(local)
         assert isinstance(ty, FuncType)
         held = self._read_capture(builder, local, expr.span)
-        args = self._one_by_one(builder, expr.args, ty.params, local.name)
+        outer_listing, self._listing = self._listing, ty.listable
+        try:
+            args = self._one_by_one(builder, expr.args, ty.params, local.name)
+        finally:
+            self._listing = outer_listing
         if args is None:
             return UndefConst(ERROR)
         if len(args) != len(ty.params):
@@ -3829,10 +3843,20 @@ class Checker:
         if any(one.ty is ERROR for one in args):
             return UndefConst(ERROR)
         self._an_effect(D.LANG_PURE_CALLS_IMPURE, expr.span, name=local.name)
-        answer = builder.call(
-            builder.extract(held, 0, _ENVIRONMENT, expr.span),
-            (builder.extract(held, 1, _ENVIRONMENT, expr.span), *args),
-            ty.ret, expr.span)
+        # Both halves are read once, before any call is made: a walk makes one
+        # call per element and they all go to the same code with the same
+        # environment.
+        code = builder.extract(held, 0, _ENVIRONMENT, expr.span)
+        environment = builder.extract(held, 1, _ENVIRONMENT, expr.span)
+
+        def make(given: Sequence[Value], span: Span) -> Value:
+            return builder.call(code, (environment, *given), ty.ret, span)
+
+        if ty.listable \
+                and any(one.ty is not wanted
+                        for one, wanted in zip(args, ty.params)):
+            return self._walked(builder, ty, make, args, expr, expected)
+        answer = make(args, expr.span)
         if ty.ret is VOID and expected is not None:
             self._diags.emit(D.LANG_CALL_HAS_NO_VALUE, expr.span, name=local.name)
             return UndefConst(ERROR)
@@ -4136,6 +4160,19 @@ class Checker:
             return UndefConst(ERROR)
         return answer
 
+    def _walks_what_it_is_given(self,
+                                attrs: Sequence[ast.Attribute]) -> bool:
+        """Whether what is written before a lambda or a function type says
+        `listable`.
+
+        A caller is who does the walking, so what may be said in either place is
+        what a caller reads off the type; everything else a function can say is
+        about its body, and a body is not what a name holds.  Anything else
+        written here is reported as an attribute that does not apply.
+        """
+        return any(one.name == "listable"
+                   for one in self._bind_attributes(attrs, AttrTarget.CALLABLE))
+
     def _lower_lambda(self, builder: IRBuilder, expr: ast.Lambda,
                       expected: Type | None) -> Value:
         """Lower `\N{GREEK SMALL LETTER LAMDA} \N{HORIZONTAL ELLIPSIS}`: a function written where a value is wanted.
@@ -4167,7 +4204,13 @@ class Checker:
         answer = self._return_type(expr.ret_type)
         if answer is ERROR or any(one is ERROR for one in params):
             return UndefConst(ERROR)
-        ty = self._module.types.func_type(params, answer)
+        walks = self._walks_what_it_is_given(expr.attrs)
+        ty = self._module.types.func_type(params, answer, walks)
+        if walks and not params:
+            # Named the way the decision log names it, that being the one name
+            # this function has and the one a reader can look up.
+            self._diags.emit(D.LANG_LISTABLE_TAKES_NOTHING, expr.span,
+                             name=name)
         held = tuple(self._held_by_capture(one, local) for one, local in taken)
         if any(one is ERROR for one in held):
             return UndefConst(ERROR)
@@ -9627,11 +9670,18 @@ class Checker:
             return UndefConst(ERROR)
         if any(value.ty is ERROR for value in args):
             return UndefConst(ERROR)
+        if func.attrs.impure:
+            # Asked before the walk and not after, a walked call being as much
+            # a call as any other: what the callee does, it does once for every
+            # element.
+            self._an_effect(D.LANG_PURE_CALLS_IMPURE, expr.span, name=func.name)
         if func.attrs.listable \
                 and any(value.ty is not ty for value, ty in zip(args, wanted)):
-            return self._walked(builder, func, args, expr, expected)
-        if func.attrs.impure:
-            self._an_effect(D.LANG_PURE_CALLS_IMPURE, expr.span, name=func.name)
+            return self._walked(
+                builder, func.ty,
+                lambda given, span: builder.call(func, tuple(given),
+                                                 func.ty.ret, span),
+                args, expr, expected)
         answer = builder.call(func, args, func.ty.ret, expr.span)
         answer = self._as_long_as_given(builder, func, args, answer, expr.span)
         if func.ty.ret is VOID and expected is not None:
@@ -10200,10 +10250,11 @@ class Checker:
             taken[name] = _Ready(span=expr.span, value=picked)
         return self._lower_expr(builder, replace(expr, **taken), None)
 
-    def _walked(self, builder: IRBuilder, func: Function,
+    def _walked(self, builder: IRBuilder, ty: FuncType,
+                make: Callable[[Sequence[Value], Span], Value],
                 args: list[Value], expr: ast.Call,
                 expected: Type | None) -> Value:
-        """Call *func* once for each element of what was handed it as an array.
+        """Call *make* once for each element of what was handed it as an array.
 
         An array handed where one of its elements is wanted is walked: the
         function is called for each, and what the call comes to is an array of
@@ -10222,19 +10273,19 @@ class Checker:
         answer is an array of is the dimensions that were walked, in order, and
         its elements are what the function answers with.
         """
-        shape = self._walking_shape(func, args, expr)
+        shape = self._walking_shape(ty, args, expr)
         if shape is None:
             return UndefConst(ERROR)
-        answer = self._module.types.array_type(func.ty.ret, shape)
+        answer = self._module.types.array_type(ty.ret, shape)
         place = builder.frame(answer, expr.span)
-        self._each_of(builder, func, args, shape, place, 0, expr.span)
+        self._each_of(builder, ty, make, args, shape, place, 0, expr.span)
         made = builder.cast(CastKind.BITCAST, place, answer, expr.span)
         if not self._accepts(expected, answer):
             self._report_mismatch(expr.span, answer, expected)
             return UndefConst(ERROR)
         return made
 
-    def _walking_shape(self, func: Function, args: Sequence[Value],
+    def _walking_shape(self, ty: FuncType, args: Sequence[Value],
                        expr: ast.Call) -> tuple[int, ...] | None:
         """How many along each dimension the walk goes, outermost first.
 
@@ -10244,29 +10295,29 @@ class Checker:
         found: list[int] = []
         seen = [value.ty for value in args]
         while True:
-            walked = [at for at, (ty, wanted) in enumerate(zip(seen, func.ty.params))
-                      if ty is not wanted]
+            walked = [at for at, (one, wanted) in enumerate(zip(seen, ty.params))
+                      if one is not wanted]
             if not walked:
                 return tuple(found)
             along: int | None = None
             for at in walked:
-                ty = seen[at]
-                if not (isinstance(ty, ArrayType) and ty.fixed):
+                one = seen[at]
+                if not (isinstance(one, ArrayType) and one.fixed):
                     self._diags.emit(D.LANG_LISTABLE_CANNOT_WALK,
                                      expr.args[at].span if at < len(expr.args)
                                      else expr.span,
-                                     found=ty.render(),
-                                     wanted=func.ty.params[at].render())
+                                     found=one.render(),
+                                     wanted=ty.params[at].render())
                     return None
                 if along is None:
-                    along = ty.shape[0]
-                elif along != ty.shape[0]:
+                    along = one.shape[0]
+                elif along != one.shape[0]:
                     self._diags.emit(D.LANG_LISTABLE_SHAPES_DIFFER,
                                      expr.args[at].span if at < len(expr.args)
                                      else expr.span,
-                                     found=ty.shape[0], wanted=along)
+                                     found=one.shape[0], wanted=along)
                     return None
-                seen[at] = self._one_less(ty)
+                seen[at] = self._one_less(one)
             assert along is not None
             found.append(along)
 
@@ -10276,7 +10327,8 @@ class Checker:
             return ty.element
         return self._module.types.array_type(ty.element, ty.shape[1:])
 
-    def _each_of(self, builder: IRBuilder, func: Function,
+    def _each_of(self, builder: IRBuilder, ty: FuncType,
+                 make: Callable[[Sequence[Value], Span], Value],
                  args: Sequence[Value], shape: tuple[int, ...],
                  place: Value, at: int, span: Span) -> None:
         """Make the calls one dimension at a time, writing the answers in order.
@@ -10286,9 +10338,9 @@ class Checker:
         uses, and for the same reason.
         """
         if not shape:
-            answer = builder.call(func, tuple(args), func.ty.ret, span)
+            answer = make(tuple(args), span)
             builder.store(
-                self._element_place(builder, place, func.ty.ret,
+                self._element_place(builder, place, ty.ret,
                                     builder.int_const(U64, at), span),
                 answer, span)
             return
@@ -10296,9 +10348,9 @@ class Checker:
         for along in shape[1:]:
             step *= along
         for index in range(shape[0]):
-            self._each_of(builder, func,
+            self._each_of(builder, ty, make,
                           [self._one_of(builder, value, wanted, index, span)
-                           for value, wanted in zip(args, func.ty.params)],
+                           for value, wanted in zip(args, ty.params)],
                           shape[1:], place, at + index * step, span)
 
     def _one_of(self, builder: IRBuilder, value: Value, wanted: Type,
@@ -10563,15 +10615,25 @@ class Checker:
 
     def _shorter_life(self, builder: IRBuilder, value: Value, expected: Type,
                       span: Span) -> Value:
-        """A reference promising more than is wanted, read as what is wanted.
+        """A value promising more than is wanted, read as what is wanted.
 
         A place that is there as long as the program is there for as long as
         any one call, and a place that may be written may certainly be read.
         So such a reference stands where the weaker one is wanted -- and what
         stands there has that type, the same bits read as the smaller promise.
         """
-        if not _promises_as_much(expected, self._value_type_of(value)):
+        found = self._value_type_of(value)
+        if not _promises_as_much(expected, found):
             return value
+        if isinstance(expected, FuncType):
+            # A function is two addresses and not one, so there is nothing for
+            # one instruction to read differently: the two are taken out and put
+            # back under the type that promises less, which is the same pair of
+            # registers and no work at all.
+            return builder.make_tuple(
+                (builder.extract(value, 0, _ENVIRONMENT, span),
+                 builder.extract(value, 1, _ENVIRONMENT, span)),
+                expected, span)
         return builder.cast(CastKind.BITCAST, value, expected, span)
 
     def _spread(self, builder: IRBuilder, expr: ast.Expr, expected: ArrayType,

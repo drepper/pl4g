@@ -2140,6 +2140,25 @@ parts**, laid out as a tuple of them would be, because a store writes one part a
 Indirect calls
 --------------
 
+**The walk takes a way of making one call, not a function.**  `_walked`, `_walking_shape` and `_each_of` were written against a
+`Function`; they now take the `FuncType` and a callable that makes one call, so a direct call passes `builder.call(func, ...)`
+and an indirect one passes a closure over the two halves it read out of the value.  Both halves are read once, before any call is
+made: a walk makes one call per element and they all go to the same code with the same environment.
+
+**A bitcast cannot carry a function from one type to the other**, a function being two addresses and not one.  `_shorter_life`
+takes the two out and puts them back under the type that promises less, which is the same pair of registers and no work; the
+verifier's `_held_as` gained the arm that says two function types differing only in the walk are the same bits.
+
+**`@[listable]` before a lambda is an attribute list where an expression is wanted.**  Nothing else begins an expression with
+`@[`, so `_parse_atom` reads it and hands it to `_parse_lambda`; `_begins_a_type` gained it too, a function type now being able
+to start that way.  The tree-sitter grammar has the one ambiguity the compiler does not: written as a whole statement the list
+could be the statement's or the lambda's, and a declared conflict with a lower dynamic precedence on the lambda is what makes the
+generalized parse take the statement's, which is what the compiler's statement parser does by reading the list first.
+
+**Purity is asked before the walk and not after.**  It was asked after, and a walked call returned before reaching it -- so a
+pure function calling an impure listable one with an array said nothing.  Moving the question above the branch is the whole fix;
+a walked call is as much a call as any other, and what the callee does it does once for every element.
+
 **The callee of an indirect call is an operand and not a reference.**  It was a reference at first, beside the `Function` a
 direct call names, and the optimizer removed the instruction computing it: everything that asks what an instruction uses asks its
 operands, so a callee kept anywhere else is a value nothing counts as used.  `CallInst` now puts a computed callee first among

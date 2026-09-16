@@ -4790,6 +4790,38 @@ variables are the ancestor; **C++**, which has none of it and where a dangling r
 **Go** and **Java**, which move what escapes to the heap; **ML** and **Haskell**, which reach the same place by having nothing
 to write through.
 
+## 2026-09-17T04:15+02:00 — language
+
+**A lambda may be `@[listable]`, and so its type carries it**
+
+Asked for by the user, who asked for a syntax to be suggested and chose the one offered.
+
+**The same word in the same place.**  `@[listable] λ a: u8 → u8` is what a function already writes, before the
+thing it describes, and nothing else begins an expression or a type with `@[` -- so it parses with nothing to disambiguate.
+Considered beside it: the list after the `λ`, which keeps it out of statement position at the cost of writing the same thing
+two ways; and a glyph on the arrow, `λ a: u8 ⇝ u8`, which is shorter and says it in the type by construction but is a
+second spelling for what a `fn` already says with a word.
+
+**It is part of the type**, which is what makes it worth anything.  A lambda is nearly always called through a name, and what a
+name holds is a type; a promise the type did not carry would be one the caller never heard, since the caller is who does the
+walking.  It is the argument references already make for `mut`: both sides reach the thing, so the caller cannot be left to
+guess.  A function definition needs none of it, a call naming one having the definition in view.
+
+**Only what a caller reads off the type may be said there** (3204).  `inline`, `impure` and the rest are about a body, and a body
+is not what a name holds.  They get a target of their own, `AttrTarget.CALLABLE`, so the existing "does not apply" diagnostic
+says it.
+
+**A listable function stands where a plain one is wanted**, dropping the walk, chosen by the user over two unrelated types.  It
+promises everything the plain one does and adds to it, which is the rule `&mut T` and `&static T` follow, and it goes one way
+only.  The pair of addresses is taken apart and put back under the plainer type -- a function is two addresses, so no one
+instruction can read it as another type -- and the registers are the same registers.
+
+Compare: **APL**, **BQN** and **UIUA**, where every primitive walks and there is nothing to write; **Julia**, whose `f.(v)` puts
+the mark at the call, so the caller decides and no type carries it -- the honest alternative to all of this, and one that would
+have meant a second spelling for what `@[listable]` says on a `fn`; **NumPy**, whose `vectorize` wraps a function in a function,
+which is what this would have to be if the answer were not to put it in the type; **C++**, whose `std::function` carries no such
+thing and whose ranges say it at the call.
+
 Open questions
 --------------
 

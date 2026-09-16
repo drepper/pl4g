@@ -349,11 +349,17 @@ class FuncType(Type):
 
     params: tuple[Type, ...]
     ret: Type
+    #: Whether an array handed where one of its elements is wanted is walked.
+    #: It is part of the type because the caller is who does the walking, so a
+    #: value that travels has to carry the promise with it -- the same reason
+    #: a reference carries whether its place may be written.
+    listable: bool = False
 
     def render(self) -> str:
         """The name of this type in the textual form of the IR."""
         inner = ", ".join(p.render() for p in self.params)
-        return "".join(("fn(", inner, ") \N{RIGHTWARDS ARROW} ", self.ret.render()))
+        return "".join(("listable " if self.listable else "",
+                        "fn(", inner, ") \N{RIGHTWARDS ARROW} ", self.ret.render()))
 
     def mangled(self) -> str:
         """The normalized name of this type, for use inside a symbol name.
@@ -362,7 +368,8 @@ class FuncType(Type):
         in parentheses, then the result.
         """
         inner = ",".join(p.mangled() for p in self.params)
-        return "".join(("fn(", inner, ")", self.ret.mangled()))
+        return "".join(("listable " if self.listable else "",
+                        "fn(", inner, ")", self.ret.mangled()))
 
 
 @dataclass(frozen=True, slots=True)
@@ -947,12 +954,13 @@ class TypeContext:
             self._pointers[key] = found
         return found
 
-    def func_type(self, params: tuple[Type, ...], ret: Type) -> FuncType:
+    def func_type(self, params: tuple[Type, ...], ret: Type,
+                  listable: bool = False) -> FuncType:
         """Return the function type with the given signature."""
-        key = (params, ret)
+        key = (params, ret, listable)
         found = self._functions.get(key)
         if found is None:
-            found = FuncType(params, ret)
+            found = FuncType(params, ret, listable)
             self._functions[key] = found
         return found
 

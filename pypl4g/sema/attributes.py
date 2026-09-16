@@ -29,7 +29,12 @@ class AttrTarget(Flag):
     MODULE = auto()
     PARAMETER = auto()
     STATEMENT = auto()
-    ANY = FUNCTION | TYPE | VARIABLE | MODULE | PARAMETER | STATEMENT
+    #: A lambda, and the function type a lambda is held by.  What may be said
+    #: there is only what a caller reads off the type, since that is all a
+    #: value handed from one name to another still carries.
+    CALLABLE = auto()
+    ANY = (FUNCTION | TYPE | VARIABLE | MODULE | PARAMETER | STATEMENT
+           | CALLABLE)
 
 
 #: How a target is named in a diagnostic.
@@ -40,6 +45,7 @@ TARGET_NAMES: Final[dict[AttrTarget, str]] = {
     AttrTarget.MODULE: "a module",
     AttrTarget.PARAMETER: "a parameter",
     AttrTarget.STATEMENT: "a statement",
+    AttrTarget.CALLABLE: "a lambda or a function type",
 }
 
 
@@ -115,7 +121,7 @@ REGISTRY: Final[Mapping[str, AttrSpec]] = {
         AttrSpec("cdecl", AttrTarget.FUNCTION | AttrTarget.VARIABLE,
                  (_param("variadic", "boolean", default=False, required=False),),
                  doc="the definition follows the system's conventions"),
-        AttrSpec("listable", AttrTarget.FUNCTION,
+        AttrSpec("listable", AttrTarget.FUNCTION | AttrTarget.CALLABLE,
                  doc="an array argument is walked and the answers make an array"),
         AttrSpec("impure", AttrTarget.FUNCTION,
                  doc="the function may change things that outlive the call"),
