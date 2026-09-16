@@ -1,0 +1,10 @@
+※ pl4g-test: compile=error diag=4558
+
+※ A function with type parameters is written once and compiled once for each
+※ set of types a call gives it, so there is no one function for something
+※ outside to reach: the runtime's entry point, a constructor and a test are
+※ each one thing the program has, and a template is none.
+
+@[startup]
+fn main(a: T') → u6:
+    0u6

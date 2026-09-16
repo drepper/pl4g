@@ -1,0 +1,15 @@
+※ pl4g-test: compile=error diag=4555
+
+※ The types a generic function is called with are worked out from the types of
+※ its arguments, so a type parameter standing nowhere among them is one no call
+※ could settle.  Written only in what the function answers with, it would have
+※ to be said at the call -- and there is no way to say it, on purpose: a call
+※ that wrote its types would be a second way of saying what the arguments
+※ already say everywhere else.
+
+fn make() → T':
+    0u8
+
+@[startup]
+fn main() → u6:
+    0u6

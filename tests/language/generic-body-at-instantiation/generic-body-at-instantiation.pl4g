@@ -1,0 +1,23 @@
+※ pl4g-test: compile=error diag=4205
+
+※ The body of a generic function is checked for each set of types a call gives
+※ it: what may be done to a value of a type parameter is what may be done to
+※ the type it turned out to be, and nothing before the call knows what that is.
+※
+※ So the message points at the line the mistake is written on, in the
+※ definition, and a note says which call asked for those types -- the one thing
+※ a reader cannot see from there.  That is C++'s bargain, and it is what this
+※ language can promise without a language for constraints.
+
+fn largest(a: T', b: T') → T':
+    a ⌈ b
+
+@[startup, impure]
+fn main() → u6:
+    let s: ⸨u8⸩ = ⸨1u8⸩
+    let t: ⸨u8⸩ = ⸨2u8⸩
+    let n: ⸨u8⸩ = largest(s, t)
+    if #n = 2:
+        0u6
+    else:
+        1u6

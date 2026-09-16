@@ -157,8 +157,8 @@ def _is_ident_continue(ch: str) -> bool:
     `a²` a name rather than a square.  The same goes for the letter written
     raised, which is the operator itself.
     """
-    return (ch.isalnum() or ch == "_") \
-        and ch not in SUPERSCRIPT_DIGITS and ch != POWER_GLYPH
+    return ((ch.isalnum() or ch == "_" or ch == "'")
+            and ch not in SUPERSCRIPT_DIGITS and ch != POWER_GLYPH)
 
 
 class Lexer:

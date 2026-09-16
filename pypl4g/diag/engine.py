@@ -118,6 +118,10 @@ class DiagEngine:
         self._control = control if control is not None else WarningControl()
         self._catalog = cat
         self.error_count: int = 0
+        #: Notes to hang on every error raised just now, innermost last.  What
+        #: it is for is a thing compiled because something else asked for it:
+        #: the message points at what is wrong and this says what asked.
+        self._because: list[tuple[DiagID, Span, dict[str, object]]] = []
         self.warning_count: int = 0
         #: The expectations in force, innermost last.
         self._expectations: list[Expectation] = []
@@ -190,6 +194,14 @@ class DiagEngine:
         info = diag.info
         if self._absorb(info):
             return diag
+        if self._because and info.is_error:
+            # Something is being compiled because something else asked for it,
+            # and what is wrong with it is only wrong for what was asked.  The
+            # note says what asked, which is the thing a reader cannot see from
+            # where the message points.
+            for ident_of, span_of, args_of in self._because:
+                note = self.make(ident_of, span_of, **args_of)
+                diag.notes.append(note)
         if info.severity == "warning" and not self._control.is_enabled(info):
             return diag
         if info.is_error or (info.severity == "warning" and self._control.warnings_are_errors):
@@ -198,7 +210,26 @@ class DiagEngine:
             self.warning_count += 1
         diag.reported = True
         self._sink(diag)
+        for note in diag.notes:
+            self.report_note(note)
         return diag
+
+    def because(self, ident: DiagID, span: Span,
+                **args: object) -> object:
+        """Hang a note on every error raised until this is given back.
+
+        Used where something is compiled because something else asked for it --
+        a generic function instantiated by a call -- so that what is wrong with
+        it says what asked, which is the one thing a reader cannot see from
+        where the message points.
+        """
+        self._because.append((ident, span, dict(args)))
+        return len(self._because)
+
+    def and_no_longer(self, mark: object) -> None:
+        """Take back what `because` put on, and everything after it."""
+        assert isinstance(mark, int)
+        del self._because[mark - 1:]
 
     def report_note(self, note: Diagnostic) -> None:
         """Hand a note that was attached to an already reported diagnostic on."""

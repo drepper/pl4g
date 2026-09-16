@@ -1,0 +1,16 @@
+※ pl4g-test: compile=error diag=4556
+
+※ The type a parameter is written with says how to read the argument's type:
+※ `T'⟦⟧` against `u8⟦4⟧` says `T'` is `u8`.  Where the two are not the same
+※ shape there is nothing to read, and what the type parameter is stays unknown.
+
+fn first(v: T'⟦⟧) → T':
+    v⟦⎕unit(0u64, ⌜idx⌝)⟧
+
+@[startup, impure]
+fn main() → u6:
+    let n: u8 = first(3u8)
+    if n = 3u8:
+        0u6
+    else:
+        1u6

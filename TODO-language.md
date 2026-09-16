@@ -572,6 +572,18 @@ Runtime
     escaped would read storage that is gone.  The same lifetime annotations that lift the rule for references lift it here, and
     a lambda that brought nothing in could be let out sooner: it carries an address nobody reads.
 
+[ ] decide whether a type parameter may say what it must support.  The body of a generic function is checked for each set of
+    types, so a mistake in one is found by whoever calls it and a generic function nobody calls is never checked at all.  What
+    would change that is a language for constraints -- a name for "can be added", "can be ordered" -- which is a design of its
+    own and is what Rust, Swift and Go each spend one on.
+
+[ ] let a generic function call itself with the types it was given.  What it would call is the instance being made, which is not
+    finished, so it is refused; what it needs is the function to be registered before its body is lowered, which is a
+    rearrangement of the instantiation and nothing deeper.
+
+[ ] let a type definition take type parameters.  Only functions have them, so a `type Pair T’ = first : T’ ; second : T’` cannot
+    be written -- which matters less than it would elsewhere, products having no values yet.
+
 [ ] design lifetime annotations, which are what say how long what a reference names lives.  Until they exist a reference may not
     be what a function answers with (4531) and may not be held at the top level (4532), which refuses good programs -- `fn
     first(a: &mut u8) → &mut u8` among them -- to refuse every dangling one.  Rust's lifetimes are the design to compare against,

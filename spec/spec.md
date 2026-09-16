@@ -3878,6 +3878,74 @@ A definition's hash covers its attributes as well as its body, because what a de
 Every definition of every source read is named, including one the image did not need and dropped: what the bill of materials is
 about is what went in.
 
+#### Generic Functions
+
+**A name with a mark after it is a type a call settles.**
+
+```
+fn largest(a: T’, b: T’) → T’:
+    a ⌈ b
+
+largest(1u8, 2u8)                 ※ u8
+largest(5u32, 3u32)               ※ u32
+```
+
+`T’` is a **type parameter**: it stands for whatever type a call turns out to give it.  The mark is written after the name and
+not before it, so that the name reads as a name and the mark as a note about it -- which is what the prime has meant in
+mathematics for three hundred years and in ML and Haskell for fifty.
+
+**A type parameter is declared by being used.**  What a function's type parameters are is which marked names its parameters
+mention, so there is no list to write and none to keep in step with the parameters.  A name a program has not defined and that
+carries the mark is one, which is also what keeps a mistyped type from quietly becoming a parameter: an unmarked name that is not
+a type is still unknown.
+
+**The types come from the arguments.**  Each argument is lowered where it stands, as any call's is, and what it turns out to be
+says more about the types -- so an argument is lowered knowing what the ones to its left already said, and a literal with no
+suffix takes the type an earlier argument settled:
+
+```
+largest(9u8, 4)                   ※ the 4 is a u8, because the 9u8 said so
+```
+
+**The type a parameter is written with says how to read the argument's.**  `T’⟦⟧` against `u8⟦4⟧` says `T’` is `u8`, and
+so do `&T’`, `[T’]`, `⸨T’⸩`, `〈T’, U’〉` and `fn(T’) → T’` against the shapes they name.  Where the two are not
+the same shape there is nothing to read (4556), and where two places in one argument say different things about one parameter
+they cannot both be right (4557).
+
+**Every type parameter stands in a parameter's type** (4555).  One written only in what the function answers with is one no call
+could settle, and a call that wrote its types outright would be a second way of saying what the arguments already say everywhere
+else.
+
+**The body is checked for each set of types.**  What may be done to a value of a type parameter is what may be done to the type
+it turned out to be, and nothing before the call knows what that is -- so an operation the types do not admit is reported where
+it is written, in the definition, with a note saying which call asked for those types:
+
+```
+error: ⌈ is defined on integers, not on ⸨u8⸩
+    a ⌈ b
+note: largest was compiled for ⸨u8⸩ because of this call
+    let n: ⸨u8⸩ = largest(s, t)
+```
+
+That is C++'s bargain and not Rust's: there is no language for saying what a type parameter must support, so there is nothing to
+check a body against until a call says what the types are.  What it costs is that a generic function nobody calls is never
+checked at all, and that a mistake in one is found by whoever calls it.  What it buys is that nothing has to be said twice --
+a generator emitting a function knows what it will call it with.
+
+**One function is made per set of types**, not one per call: a second call saying what an earlier one said gets that same
+function.  The two are told apart by their symbols on their own, a symbol being the signature written out.  Which sets of types a
+generic function was compiled for is written to the decision log (`instantiate`), since the program said nothing about them.
+
+**A generic function is not the runtime's entry point, a constructor or a test** (4558): each of those is one thing the program
+has, and something written once per set of types is none of them.
+
+Compare: **C++** templates, whose instantiation-time checking this is, and whose `template<typename T>` this leaves out -- the
+parameters being named by being used, as C++20's abbreviated `void f(auto x)` does.  **Rust** and **Swift**, which check a
+generic body once against bounds written on it, which is stronger and needs a language for the bounds.  **Go**, whose type
+parameters are written in brackets and constrained by interfaces.  **ML** and **Haskell**, whose `’a` and `a` are inferred rather than
+written, and from whom the mark is borrowed.  **Zig**, where a type is an ordinary value at compile time and a generic function
+is a function taking one -- the most economical answer of the lot, and one that needs types to be values.
+
 #### Names in the Generated Program
 
 The name a function is known by in the generated program is its signature written out: the name, the parameter types in

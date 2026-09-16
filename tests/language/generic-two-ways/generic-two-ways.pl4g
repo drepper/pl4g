@@ -1,0 +1,20 @@
+※ pl4g-test: compile=error diag=4557
+
+※ A type parameter is one type in one call, so two places that say different
+※ things about it are two that cannot both be right.  Nothing is widened to
+※ make them meet, here as everywhere else.
+※
+※ Two *arguments* cannot disagree, the first settling the parameter and the
+※ second then being lowered into what it settled -- which reports the ordinary
+※ mismatch.  Two places inside one argument's type can, which is what this is.
+
+fn both(p: 〈T', T'〉) → T':
+    p⟦0⟧
+
+@[startup, impure]
+fn main() → u6:
+    let n: u8 = both(〈1u8, 2u16〉)
+    if n = 1u8:
+        0u6
+    else:
+        1u6

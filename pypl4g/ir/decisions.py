@@ -47,6 +47,10 @@ class DecisionKind(StrEnum):
     #: A variable put in storage of its own rather than kept in a register,
     #: because something takes its address.
     PLACE_LOCAL = "place-local"
+    #: A generic function compiled for one set of types.  The program wrote it
+    #: once and said nothing about which types; which ones it was built for is
+    #: what the calls turned out to ask for.
+    INSTANTIATE = "instantiate"
 
 
 @dataclass(frozen=True, slots=True)

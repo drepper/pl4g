@@ -399,6 +399,52 @@ def _bound_in(node: object, into: set[str]) -> None:
             _bound_in(one, into)
 
 
+#: What marks a name as standing for a type a call settles rather than for a
+#: type.  A trailing mark rather than a leading one, so that the name reads as
+#: a name and the mark as a note about it -- which is what the prime has meant
+#: in mathematics for three hundred years and in ML and Haskell for fifty.
+GENERIC_MARK: Final[str] = "'"
+
+
+def _is_generic(name: str) -> bool:
+    """Whether a name written as a type stands for one a call settles."""
+    return name.endswith(GENERIC_MARK)
+
+
+def _parameters_in(written: object, into: list[str]) -> None:
+    """Every type parameter named below *written*, in the order they are written."""
+    if isinstance(written, ast.TypeRef) and written.module is None \
+            and _is_generic(written.name) and written.name not in into:
+        into.append(written.name)
+    if isinstance(written, ast.Node):
+        for one in fields_of(written):
+            _parameters_in(getattr(written, one.name), into)
+    elif isinstance(written, (list, tuple)):
+        for one in written:
+            _parameters_in(one, into)
+
+
+@dataclass(slots=True)
+class _Generic:
+    """A function with type parameters: what was written, kept to be repeated.
+
+    Nothing of it is compiled until a call says what the types are.  A call
+    that says what an earlier one said gets that same function back -- one
+    instantiation per set of types, not one per call.
+    """
+
+    node: ast.FuncDef
+    path: str
+    attrs: list[BoundAttr]
+    #: The type parameters, in the order they are first written.
+    parameters: tuple[str, ...]
+    #: What has been made of it so far, by what the types turned out to be.
+    made: dict[tuple[Type, ...], Function] = field(default_factory=dict)
+    #: Whether it is being made just now, so that a function that calls itself
+    #: with the types it already has does not do so for ever.
+    making: set[tuple[Type, ...]] = field(default_factory=set)
+
+
 def _can_be_referred_to(ty: Type) -> bool:
     """Whether a reference may name a place holding a value of this type.
 
@@ -955,6 +1001,10 @@ class Checker:
         #: reach.  Kept so that a name it names and did not bring in is
         #: reported as one it did not bring in rather than as one nobody has.
         self._outside: list[dict[str, _Local]] = []
+        #: What each type parameter is, while an instantiation of a generic
+        #: function is being checked.  Empty everywhere else, a type parameter
+        #: being a thing only a call gives a meaning to.
+        self._bound: dict[str, Type] = {}
         #: Whether an array stands where one of its elements is wanted, which
         #: is so while the arguments of a call to a function marked `listable`
         #: are lowered and nowhere else.
@@ -1719,6 +1769,19 @@ class Checker:
         if not self._declare(node.name, node.name_span, path):
             return None
         attrs = self._bind_attributes(node.attrs, AttrTarget.FUNCTION)
+        written: list[str] = []
+        for param in node.params:
+            _parameters_in(param.type, written)
+        if written:
+            return self._collect_generic(node, path, attrs, tuple(written))
+        answered: list[str] = []
+        _parameters_in(node.ret_type, answered)
+        if answered:
+            # A type parameter only in what it answers with: the types are
+            # worked out from the arguments, so nothing at a call could say it.
+            self._diags.emit(D.LANG_GENERIC_NOT_DETERMINED, node.name_span,
+                             name=answered[0])
+            return None
         # What a definition says it raises holds while its signature is checked
         # here and again while its body is checked in the second pass, so the
         # same expectation is put back in force there.
@@ -1817,6 +1880,35 @@ class Checker:
                            name_span=param.span, type=param.type, value=written)
         value = self._constant_value(stood, ty)
         return value if isinstance(value, Const) else None
+
+    def _collect_generic(self, node: ast.FuncDef, path: str,
+                         attrs: list[BoundAttr],
+                         written: tuple[str, ...]) -> _Collected | None:
+        """Register a function whose types a call settles, without building one.
+
+        Nothing of it is compiled here: what it is, is what was written, and
+        what it comes to depends on the types a call gives it.  So the tree is
+        kept and each call that says something new about the types makes a
+        function of its own out of it.
+        """
+        answered: list[str] = []
+        _parameters_in(node.ret_type, answered)
+        for one in answered:
+            if one not in written:
+                self._diags.emit(D.LANG_GENERIC_NOT_DETERMINED, node.name_span,
+                                 name=one)
+                return None
+        kind = self._function_attrs(attrs)[0].special
+        if kind is not None:
+            # The runtime's entry point, a constructor and a test are each one
+            # thing the program has, and something written once per set of types
+            # is none of them.
+            self._diags.emit(D.LANG_GENERIC_IS_SPECIAL, node.name_span,
+                             name=node.name, attribute=str(kind))
+            return None
+        self._top[node.name] = _Generic(node=node, path=path, attrs=attrs,
+                                        parameters=written)
+        return None
 
     def _register_special(self, func: Function, node: ast.FuncDef) -> None:
         """Record the function in the module's caches and check its signature."""
@@ -2489,6 +2581,11 @@ class Checker:
         wherever the type would have been checked.
         """
         found = BUILTIN_TYPES.get(ref.name) if ref.module is None else None
+        if found is None and ref.module is None and _is_generic(ref.name):
+            # A type a call settled.  Outside an instantiation there is nothing
+            # for it to be, which is reported where the definition is written
+            # rather than here.
+            found = self._bound.get(ref.name)
         if found is None:
             found = self._defined_type(ref)
         if found is None:
@@ -3542,7 +3639,298 @@ class Checker:
             return UndefConst(ERROR)
         return answer
 
-    # -- lambdas ---------------------------------------------------------------    # -- lambdas ---------------------------------------------------------------
+    # -- lambdas ---------------------------------------------------------------
+
+    def _make_instance(self, written: _Generic, bound: dict[str, Type],
+                       key: tuple[Type, ...], span: Span) -> Function | None:
+        """Compile the generic function for one set of types.
+
+        The body is checked here and not where the function was written, which
+        is the whole of what "checked at each instantiation" means: what may be
+        done to a value of a type parameter is what may be done to the type it
+        turned out to be, and nothing before this knows what that is.  So an
+        operation the types do not admit is reported at the call that asked for
+        them, with a note pointing at the line it is written on.
+
+        It is a function of the module like any other once it is made.  Two sets
+        of types make two, and the symbol tells them apart on its own: a symbol
+        is the signature written out, and two instantiations have two.
+        """
+        node = written.node
+        outer_bound, self._bound = self._bound, dict(bound)
+        outer_discard = self._discard_function
+        self._discard_function = False
+        try:
+            params = tuple(self._resolve_type(one.type) for one in node.params)
+            answer = self._return_type(node.ret_type)
+            if answer is ERROR or any(one is ERROR for one in params):
+                return None
+            attrs, linkage = self._function_attrs(written.attrs)
+            func = Function(
+                name=node.name,
+                ty=self._module.types.func_type(params, answer),
+                attrs=attrs, linkage=linkage, exported=False,
+                cconv=attrs.abi if attrs.abi is not None else DEFAULT_CCONV,
+                span=node.span, name_span=node.name_span,
+                source_path=written.path,
+                param_names=tuple(one.name for one in node.params),
+                defaults=self._defaults_of(node, params))
+            self._module.add_function(
+                func, key=self._key("".join((node.name, "\N{TOP LEFT CORNER}",
+                                             ",".join(one.mangled() for one in key),
+                                             "\N{TOP RIGHT CORNER}"))))
+            self._owned.append(func)
+            written.made[key] = func
+            self._module.decisions.record(
+                DecisionKind.INSTANTIATE, node.name,
+                "".join(("compiled for ",
+                         ", ".join(one.render() for one in key),
+                         ", which is what a call gave it")),
+                span)
+            mark = self._diags.because(
+                D.LANG_GENERIC_ASKED_HERE, span, name=node.name,
+                types=", ".join(one.render() for one in key))
+            try:
+                self._lower_instance(func, node, span)
+            finally:
+                self._diags.and_no_longer(mark)
+            return func
+        finally:
+            self._bound = outer_bound
+            self._discard_function = outer_discard
+
+    def _lower_instance(self, func: Function, node: ast.FuncDef,
+                        span: Span) -> None:
+        """Check and lower one instantiation's body, as a function's own is.
+
+        Everything about the function being checked is put aside and put back,
+        the way a lambda's is: a call to a generic function stands in the middle
+        of another body, and what is being checked has to be this one while its
+        body is.
+        """
+        block = func.add_block()
+        inner = IRBuilder(self._module, func)
+        outer = (self._scopes, self._addressed, self._answering, self._impure,
+                 self._carried, self._loops, self._outside, self._initializing,
+                 self._assigning, self._operand_of, self._handing_over)
+        self._scopes, self._addressed = [], set()
+        self._answering, self._impure = func.ty.ret, func.attrs.impure
+        self._carried, self._loops, self._outside = set(), [], []
+        self._initializing = self._assigning = self._operand_of = None
+        self._handing_over = None
+        self._push_scope()
+        try:
+            assert node.body is not None
+            _addressed_in(node.body, self._addressed)
+            arriving = [block.add_param(one, param.name)
+                        for one, param in zip(func.ty.params, node.params)]
+            for param, value in zip(node.params, arriving):
+                self._bind_local(param.name, value, param.span, param.mutable,
+                                 is_parameter=True, builder=inner)
+            self._lower_block(inner, node.body, func)
+            if not inner.is_terminated:
+                if func.ty.ret is VOID:
+                    inner.ret()
+                else:
+                    self._diags.emit(D.LANG_FUNCDEF_RETURN_MISSING,
+                                     node.name_span, name=func.name,
+                                     type=func.ty.ret.render())
+                    inner.unreachable(node.span)
+            self._pop_scope()
+        finally:
+            (self._scopes, self._addressed, self._answering, self._impure,
+             self._carried, self._loops, self._outside, self._initializing,
+             self._assigning, self._operand_of, self._handing_over) = outer
+
+    def _lower_generic(self, builder: IRBuilder, expr: ast.Call,
+                       written: _Generic, expected: Type | None) -> Value:
+        """Lower a call to a function whose types the call settles.
+
+        The arguments are lowered left to right as any call's are, and what
+        each one turns out to be says more about the types -- so an argument is
+        lowered knowing what the ones to its left already said, and a literal
+        with no suffix takes the type an earlier argument settled.  That is the
+        rule an ordinary call follows, with the parameter's type worked out
+        rather than looked up.
+        """
+        if len(expr.args) != len(written.node.params):
+            self._diags.emit(D.LANG_CALL_WRONG_ARGUMENT_COUNT, expr.span,
+                             name=written.node.name,
+                             expected=len(written.node.params),
+                             found=len(expr.args))
+            return UndefConst(ERROR)
+        bound: dict[str, Type] = {}
+        args: list[Value] = []
+        for at, (one, param) in enumerate(zip(expr.args, written.node.params)):
+            wanted = self._worked_out(param.type, bound)
+            outer = self._handing_over
+            self._handing_over = (written.node.name, at + 1)
+            try:
+                value = (self._lower_into(builder, one, wanted, one.span)
+                         if wanted is not None
+                         else self._lower_expr(builder, one, None))
+            finally:
+                self._handing_over = outer
+            found = self._value_type_of(value)
+            if found is ERROR:
+                return UndefConst(ERROR)
+            if wanted is None and not self._reading(param.type, found, bound,
+                                                   one.span, param.name):
+                return UndefConst(ERROR)
+            args.append(value)
+        missing = [name for name in written.parameters if name not in bound]
+        if missing:
+            self._diags.emit(D.LANG_GENERIC_NOT_DETERMINED, expr.span,
+                             name=missing[0])
+            return UndefConst(ERROR)
+        func = self._instance_of(written, bound, expr.span)
+        if func is None:
+            return UndefConst(ERROR)
+        return self._made_call(builder, expr, func, args, expected)
+
+    def _worked_out(self, param: ast.TypeExpr,
+                    bound: dict[str, Type]) -> Type | None:
+        """What a parameter's type is, where everything in it is settled.
+
+        Nothing where some type parameter in it is not, which is what says the
+        argument has to be lowered on its own and read rather than lowered into
+        something.
+        """
+        named: list[str] = []
+        _parameters_in(param, named)
+        if any(one not in bound for one in named):
+            return None
+        outer, self._bound = self._bound, bound
+        try:
+            found = self._resolve_type(param)
+        finally:
+            self._bound = outer
+        return None if found is ERROR else found
+
+    def _reading(self, param: ast.TypeExpr, found: Type,
+                 bound: dict[str, Type], span: Span, name: str) -> bool:
+        """Read what the type parameters are out of an argument's type.
+
+        The type a parameter is written with says how to read the argument's:
+        a bare type parameter against `u8` says it is `u8`, and one with the
+        array brackets after it against an array of `u8` says the same.  Where
+        the two are not the same shape there is nothing to read.
+        """
+        match param:
+            case ast.TypeRef() if param.module is None \
+                    and _is_generic(param.name) and not param.result:
+                earlier = bound.get(param.name)
+                if earlier is not None and earlier is not found:
+                    self._diags.emit(D.LANG_GENERIC_TWO_WAYS, span,
+                                     name=param.name, first=earlier.render(),
+                                     second=found.render())
+                    return False
+                bound[param.name] = found
+                return True
+            case ast.ArrayTypeRef() if isinstance(found, ArrayType):
+                return self._reading(param.element, found.element, bound, span,
+                                     name)
+            case ast.ListTypeRef() if isinstance(found, ListType):
+                return self._reading(param.element, found.element, bound, span,
+                                     name)
+            case ast.RefTypeRef() if isinstance(found, PtrType):
+                return self._reading(param.pointee, found.pointee, bound, span,
+                                     name)
+            case ast.CollectionTypeRef() if param.value is None \
+                    and isinstance(found, SetType):
+                return self._reading(param.element, found.element, bound, span,
+                                     name)
+            case ast.CollectionTypeRef() if param.value is not None \
+                    and isinstance(found, DictType):
+                return (self._reading(param.element, found.key, bound, span, name)
+                        and self._reading(param.value, found.value, bound, span,
+                                          name))
+            case ast.TupleTypeRef() if isinstance(found, TupleType) \
+                    and len(param.members) == len(found.members):
+                return all(self._reading(one, other, bound, span, name)
+                           for one, other in zip(param.members, found.members))
+            case ast.FuncTypeRef() if isinstance(found, FuncType) \
+                    and len(param.params) == len(found.params):
+                if not all(self._reading(one, other, bound, span, name)
+                           for one, other in zip(param.params, found.params)):
+                    return False
+                if param.ret is None:
+                    return found.ret is VOID
+                return self._reading(param.ret, found.ret, bound, span, name)
+            case _:
+                self._diags.emit(D.LANG_GENERIC_NOT_MATCHED, span, name=name)
+                return False
+
+    def _as_wanted(self, builder: IRBuilder, value: Value, wanted: Type,
+                   span: Span) -> Value:
+        """A value already worked out, standing where *wanted* is asked for.
+
+        An argument of a generic call is lowered before the types are settled,
+        so it cannot be lowered *into* its parameter's type the way an ordinary
+        call's is.  What that path does and this one has to do too is let an
+        array's length go: a fixed array stands where one of no stated length is
+        wanted, which is the one thing the language converts and is a rewriting
+        of the value rather than of what it came from.
+        """
+        found = self._value_type_of(value)
+        if found is wanted or found is ERROR:
+            return value
+        if isinstance(found, ArrayType) and isinstance(wanted, ArrayType) \
+                and _lets_go_of(found, wanted):
+            start, lengths = self._shape_of(builder, value, found, span)
+            return builder.make_tuple((start, *lengths), wanted, span)
+        self._report_mismatch(span, found, wanted)
+        return UndefConst(ERROR)
+
+    def _instance_of(self, written: _Generic, bound: dict[str, Type],
+                     span: Span) -> Function | None:
+        """The function this generic one comes to for these types.
+
+        One per set of types and not one per call: a second call saying what an
+        earlier one said gets the same function back, which is what keeps a loop
+        that calls one from emitting a copy each time round.
+        """
+        key = tuple(bound[name] for name in written.parameters)
+        found = written.made.get(key)
+        if found is not None:
+            return found
+        if key in written.making:
+            # It calls itself with the types it already has.  What it will come
+            # to is the one being made just now, which is not finished -- so
+            # this is refused rather than looped over for ever.
+            self._diags.emit(D.IMPL_UNIMPLEMENTED_FEATURE, span,
+                             feature="a generic function that calls itself "
+                                     "with the types it was given")
+            return None
+        written.making.add(key)
+        try:
+            found = self._make_instance(written, bound, key, span)
+        finally:
+            written.making.discard(key)
+        return found
+
+    def _made_call(self, builder: IRBuilder, expr: ast.Call, func: Function,
+                   args: Sequence[Value], expected: Type | None) -> Value:
+        """Lower the call itself, once the function it names has been made."""
+        if any(one.ty is ERROR for one in args):
+            return UndefConst(ERROR)
+        made: list[Value] = []
+        for at, (one, wanted) in enumerate(zip(args, func.ty.params)):
+            given = self._as_wanted(builder, one, wanted, expr.args[at].span)
+            if self._value_type_of(given) is ERROR:
+                return UndefConst(ERROR)
+            made.append(given)
+        args = made
+        if func.attrs.impure:
+            self._an_effect(D.LANG_PURE_CALLS_IMPURE, expr.span, name=func.name)
+        answer = builder.call(func, list(args), func.ty.ret, expr.span)
+        if func.ty.ret is VOID and expected is not None:
+            self._diags.emit(D.LANG_CALL_HAS_NO_VALUE, expr.span, name=func.name)
+            return UndefConst(ERROR)
+        if not self._accepts(expected, answer.ty):
+            self._report_mismatch(expr.span, answer.ty, expected)
+            return UndefConst(ERROR)
+        return answer
 
     def _lower_lambda(self, builder: IRBuilder, expr: ast.Lambda,
                       expected: Type | None) -> Value:
@@ -8823,6 +9211,13 @@ class Checker:
         held = self._callee_value(expr.callee)
         if held is not None:
             return self._lower_indirect(builder, expr, held, expected)
+        if isinstance(expr.callee, ast.NameRef):
+            # A function whose types this call settles, which is not a function
+            # yet: what it comes to depends on what the arguments turn out to
+            # be, so the call is what makes it.
+            template = self._top.get(expr.callee.name)
+            if isinstance(template, _Generic):
+                return self._lower_generic(builder, expr, template, expected)
         func = self._callee(expr.callee)
         if func is None:
             return UndefConst(ERROR)

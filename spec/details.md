@@ -2093,6 +2093,46 @@ Three instructions were added, one per target: `call r/m64`, `blr Xn` and `jalr 
 differential tests against the GNU assemblers.
 
 
+A function written once and compiled many times
+-----------------------------------------------
+
+**A generic function is not a `Function` at all until a call makes one.**  `_collect_function` sees a type parameter among the
+written parameter types and keeps a `_Generic` instead: the tree, the attributes, and the parameters in the order they are first
+written.  Nothing of it reaches the module, so a generic function nobody calls costs nothing and is never checked.
+
+**A call is what makes one.**  `_lower_generic` walks the arguments left to right, and for each one asks whether the parameter's
+written type is settled by what the arguments to its left already said.  Where it is, the argument is lowered *into* it, so a
+literal with no suffix takes that type; where it is not, the argument is lowered on its own and `_reading` matches the written
+type against what it turned out to be.  That is what makes `largest(9u8, 4)` work, and it is the same left-to-right rule an
+ordinary call follows with the parameter's type worked out rather than looked up.
+
+`_reading` is a structural walk: a bare type parameter binds, and an array, a list, a reference, a set, a dictionary, a tuple and
+a function type each match their own shape and recurse.  A shape that does not match is where a type parameter stays unknown, and
+is reported rather than guessed at.
+
+**Instantiating is the lambda's trick again.**  `_lower_instance` puts aside everything about the function being checked and puts
+it back, because a call to a generic function stands in the middle of another body and what is being checked has to be this one
+while its body is.  `self._bound` carries what each type parameter is, and `_named_type` reads it -- which is the whole of the
+substitution: there is no rewriting of the tree, only a map consulted while the types in it are resolved.
+
+**One instance per set of types**, held on the `_Generic` and keyed by the types.  A second call saying what an earlier one said
+gets the same function back, which is what keeps a loop that calls one from emitting a copy each time round.  A function that
+calls itself with the types it already has is refused rather than looped over: what it would call is the one being made, which is
+not finished.
+
+**Two instances are two symbols on their own.**  A symbol is the signature written out, and two instantiations have two, so
+nothing had to be invented for it -- only the module's key, which the name alone no longer tells apart.
+
+**An error in a body says which call asked for it.**  `DiagEngine.because` hangs a note on every error raised until it is given
+back, which is how the note reaches diagnostics raised deep inside the body by code that knows nothing about generics.  It is the
+one mechanism for it: a note is attached to a diagnostic, and nothing that reports one inside an instantiated body has the
+instantiation in hand.
+
+**`T’` cost the lexer one rule**: a quotation mark continues an identifier.  It cannot begin one, so `’a’` is still a character
+literal, and the only thing it costs is a name immediately followed by a character literal with nothing between them -- which
+nothing readable writes, and which the whole test suite confirmed nothing does.  It is Haskell's rule and ML's.
+
+
 Expectations
 ------------
 

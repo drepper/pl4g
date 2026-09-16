@@ -957,7 +957,12 @@ module.exports = grammar({
     // from ever being a name a program wrote.  A program may read and assign
     // the ones that exist and may not define one, which the grammar does not
     // say: it is a rule about what a name means, not about how one is written.
-    identifier: _ => /[\u2395A-Za-z_][A-Za-z0-9_]*/,
+    // A trailing quotation mark is part of the name, which is what makes `T'`
+    // a type a call settles rather than a name and a character literal.  It
+    // cannot begin one, so `'a'` is still a character; the only thing it costs
+    // is a name immediately followed by a character literal with nothing
+    // between them, which nothing readable writes.
+    identifier: _ => /[\u2395A-Za-z_][A-Za-z0-9_']*/,
 
     // Neither kind swallows the newline after it: the layout depends on that
     // newline, and a comment that took it would end a block.

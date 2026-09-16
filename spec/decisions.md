@@ -4660,6 +4660,38 @@ a rule that says so when the reasoning behind it breaks.  It did break once whil
 the target of an assignment was not found, an assignment keeping its target as a string rather than as a name -- and this is what
 found it.
 
+---
+
+## 2026-09-17T00:30+02:00 — language
+
+**Generic functions: `fn f(p: T’, q: u32) → T’`**
+
+Decided on the user's direction, with the notation asked for and checked.
+
+**`T’` is free.**  The user asked whether it clashes, and it does not: making a quotation mark continue an identifier is enough,
+and it cannot begin one, so `'a'` is still a character literal.  The whole suite passes with the rule in place, and the only
+thing it costs is a name immediately followed by a character literal with nothing between them -- which nothing readable writes.
+It is Haskell's rule and ML's, and the mark has meant "another one of these" in mathematics since Newton.
+
+**A type parameter is declared by being used**, as the user's example writes it.  There is no `<T>` to write and none to keep in
+step with the parameters, which is C++20's abbreviated `void f(auto x)` with a name for the type.  What keeps a mistyped type
+from becoming a parameter by accident is the mark: an unmarked name that is not a type is still unknown.
+
+**The body is checked at each instantiation**, chosen by the user over checking it once against written constraints.  There is no
+language here for saying what a type parameter must support, and designing one is larger than the generics; what instantiation-
+time checking costs is that a generic function nobody calls is never checked, and that a mistake in one is found by whoever calls
+it.  The error points at the line it is written on and a note says which call asked for those types, which is C++'s "required
+from here" and is the half of it that matters.
+
+**Every type parameter stands in a parameter's type**, chosen by the user over letting a call write its types outright.  So the
+types always come from the arguments and nothing is ever written at a call -- and a call that wrote them would be a second way of
+saying what the arguments say everywhere else.
+
+Compare: **C++**, whose instantiation-time checking this is; **Rust**, **Swift** and **Go**, which check once against bounds and
+need a language for them; **ML** and **Haskell**, which infer rather than write and from whom the mark comes; **Zig**, where a
+type is a value at compile time and a generic function is one taking it -- the most economical of the lot, and one that needs
+types to be values.
+
 Open questions
 --------------
 

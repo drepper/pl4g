@@ -1,0 +1,74 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ A name written with a mark after it -- `T'` -- is a type a call settles
+※ rather than a type.  It is declared by being used: what a function's type
+※ parameters are is which marked names its parameters mention, so there is no
+※ list to write and none to keep in step with the parameters.
+※
+※ **The types come from the arguments.**  Each argument is lowered where it
+※ stands, as any call's is, and what it turns out to be says more about the
+※ types -- so an argument is lowered knowing what the ones to its left said,
+※ and a literal with no suffix takes the type an earlier argument settled.
+※
+※ **The body is checked for each set of types.**  What may be done to a value
+※ of a type parameter is what may be done to the type it turned out to be, so
+※ an operation the types do not admit is reported where it is written, with a
+※ note saying which call asked for it.  That is C++'s bargain, and it is what
+※ this language can promise without a language for constraints.
+※
+※ One function is made per set of types and not one per call: a second call
+※ saying what an earlier one said gets that same function.
+
+fn largest(a: T', b: T') → T':
+    a ⌈ b
+
+※ The mark may stand inside a type rather than as the whole of it, and what
+※ the argument is read against is the shape it was written with.
+fn first(v: T'⟦⟧) → T':
+    v⟦⎕unit(0u64, ⌜idx⌝)⟧
+
+fn through(r: &T') → T':
+    r⌖
+
+fn left(p: 〈T', U'〉) → T':
+    p⟦0⟧
+
+fn right(p: 〈T', U'〉) → U':
+    p⟦1⟧
+
+※ A generic function may take a lambda, and a lambda's type may mention a type
+※ parameter like any other type.
+@[impure]
+fn applied(g: fn(T') → T', x: T') → T':
+    g(g(x))
+
+@[startup, impure]
+fn main() → u6:
+    let v: u8⟦3⟧ = ⟦7u8, 8u8, 9u8⟧
+    let w: u16⟦2⟧ = ⟦40u16, 50u16⟧
+    let n: u16 = 4u16
+    ※ one function, two sets of types
+    if largest(1u8, 2u8) ≠ 2u8:
+        1u6
+    elif largest(5u32, 3u32) ≠ 5u32:
+        2u6
+    ※ a literal with no suffix, taking the type the first argument settled
+    elif largest(9u8, 4) ≠ 9u8:
+        3u6
+    ※ read out of an array, whose length the call lets go of
+    elif first(v) ≠ 7u8 ∨ first(w) ≠ 40u16:
+        4u6
+    ※ and out of a reference
+    elif through(&n) ≠ 4u16:
+        5u6
+    ※ two type parameters, settled by the two members of one tuple
+    elif left(〈1u8, 2u16〉) ≠ 1u8 ∨ right(〈1u8, 2u16〉) ≠ 2u16:
+        6u6
+    ※ a lambda handed to one, which is a value like any other
+    elif applied(λ a: u8 → u8 { a + 1u8 }, 5u8) ≠ 7u8:
+        7u6
+    ※ the same types again, which is the same function and not another
+    elif largest(1u8, 3u8) ≠ 3u8:
+        8u6
+    else:
+        0u6

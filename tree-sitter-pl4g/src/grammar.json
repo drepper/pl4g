@@ -4881,7 +4881,7 @@
     },
     "identifier": {
       "type": "PATTERN",
-      "value": "[\\u2395A-Za-z_][A-Za-z0-9_]*"
+      "value": "[\\u2395A-Za-z_][A-Za-z0-9_']*"
     },
     "doc_comment": {
       "type": "TOKEN",
