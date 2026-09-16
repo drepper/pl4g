@@ -1,0 +1,53 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ A record is its fields, and a value of one gives a value for each:
+※ `Point(.x ← 3u32, .y ← 4u32)`.  It is written the way a call names a
+※ parameter, which is the same idea asked of a field -- the mark says the name
+※ is the thing's and not a variable's -- and it is the spelling C, Odin and Zig
+※ give a structure's initializer.
+※
+※ **Every field is given and each once** (4577, 4578).  There is no default to
+※ fall back on and nothing that would be right to leave behind: a field left out
+※ would be storage holding whatever was there, which is the thing this language
+※ does not have.  A name that is not a field is refused (4576) and a value given
+※ without naming one is refused as well (4579), a record's fields having names
+※ and a tuple being the shape for several values that go by position.
+※
+※ **A field is read with the same mark**: `p.x`.  It is the third thing that
+※ mark does -- a module's name, an enumeration's value, and now a record's
+※ field -- told apart by what stands on its left, which is what Go, Rust and Zig
+※ all do.
+※
+※ **A record travels as its fields.**  To everything below the checker it is
+※ what a tuple is: several values going together, placed by the convention the
+※ same way, so a record handed to a call and answered with needs nothing of its
+※ own.  What differs is that one of them named its parts.
+※
+※ Compare: **Rust**, **Go** and **Zig**, whose structure literals name the
+※ fields and whose access is the same mark; **C**, whose designated initializer
+※ this is written like and which also lets a field be left out, filling it with
+※ zero -- which is the half not taken here.
+
+type Point = x : u32 ; y : u32
+
+fn total(p: Point) → u32:
+    p.x + p.y
+
+fn moved(p: Point, by: u32) → Point:
+    Point(.x ← p.x + by, .y ← p.y + by)
+
+@[startup]
+fn main() → u6:
+    let p : Point = Point(.x ← 3u32, .y ← 4u32)
+    ※ handed to a call, and answered with
+    let q : Point = moved(p, 10u32)
+    ※ a field read out of each
+    let both : u32 = total(p) + total(q)
+    if p.x ≠ 3u32 ∨ p.y ≠ 4u32:
+        1u6
+    elif q.x ≠ 13u32 ∨ q.y ≠ 14u32:
+        2u6
+    elif both ≠ 34u32:
+        3u6
+    else:
+        0u6

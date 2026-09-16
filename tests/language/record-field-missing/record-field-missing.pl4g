@@ -1,0 +1,17 @@
+※ pl4g-test: compile=error diag=4577
+
+※ A record is its fields, so a value of one is a value for each of them.  There
+※ is no default to fall back on and nothing that would be right to leave behind:
+※ a field left out would be storage holding whatever was there, which is the
+※ thing this language does not have.
+※
+※ C fills such a field with zero, which is the half of the designated
+※ initializer not taken here: zero is a value like any other and a program that
+※ meant it can write it.
+
+type Point = x : u32 ; y : u32
+
+@[startup]
+fn main() → u6:
+    let p : Point = Point(.x ← 1u32)
+    if p.x = 1u32: 0u6 else: 1u6

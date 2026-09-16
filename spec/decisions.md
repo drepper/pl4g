@@ -5317,6 +5317,48 @@ architecture and live in the library too; **C**, where they come from the
 system's headers and not from the compiler at all -- which is the arrangement
 this has no equivalent of, there being no headers and no system library here.
 
+## 2026-09-17T16:30+02:00 — language
+
+**A record has values: `Point(.x ← 3u32, .y ← 4u32)` and `p.x`**
+
+The syntax was settled earlier today as the call shape with the arguments named.
+What that turned out to mean, once it met the language as it stands, is the
+`.name ← value` a call already has and not a `name: value` of its own: the
+first spelling exists, already parses inside a call's argument list, and is
+documented in the syntax tree as the spelling a structure's initializer takes in
+C, Odin and Zig.  Adding the second would have been a second way to name a thing
+in an argument list, which is the rule this language is built on.  *(The option
+chosen was labelled `Point(x: 1f64, y: 2f64)`; this is the same idea in the
+spelling the language already had, and going back to the other is a parser
+addition rather than a redesign.)*
+
+**A record travels as its fields.**  `parts_of` answers a record with its field
+types, so to everything below the checker it is what a tuple is: several values
+going together, placed by a convention the same way.  A record handed to a call
+or answered with therefore needed no rule of its own, and the code generator
+that refused one (8501) stopped refusing it.  What differs between a record and
+a tuple is that one of them named its parts, which is a question for the checker
+and for nothing else.
+
+**Every field is given and each once** (4577, 4578).  C fills a field left out
+with zero; that half of the designated initializer is not taken, zero being a
+value like any other and a program that meant it being able to write it.  A
+field left out would otherwise be storage holding whatever was there, which is
+the thing this language does not have.
+
+**What is still refused**, and both for one reason: a record holding a record,
+and a record reached through a reference.  A record travels as its fields, so a
+field that is itself several values has no one register to go in, and a load of
+a multi-part value is not a thing the back ends do.  The answer to both is the
+same -- a record that lives in memory as a fixed array does, with a field read
+at an offset and `&p.x` an address -- and `member_offsets_of` already computes
+that layout.  `std.Init` needs both, so it is the next step and not a someday.
+
+Compare: **Rust**, **Go** and **Zig**, whose structure literals name the fields
+and whose access is the same mark; **C**, whose designated initializer this is
+written like; **ML** and **Haskell**, whose records are the same idea with the
+type inferred rather than written.
+
 Open questions
 --------------
 

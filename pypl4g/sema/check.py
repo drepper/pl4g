@@ -602,6 +602,14 @@ def _and_then(names: Sequence[str]) -> str:
     return " and ".join((", ".join(quoted[:-1]), quoted[-1]))
 
 
+def _field_index(ty: ProductType, name: str) -> int | None:
+    """Where *name* stands among the fields of *ty*, if it is one of them."""
+    for at, (written, _) in enumerate(ty.fields):
+        if written == name:
+            return at
+    return None
+
+
 def _written_as(expr: ast.Expr) -> str:
     """What to call a place in a message, where the program wrote a name.
 
@@ -1528,10 +1536,12 @@ class Checker:
         two enumerations may each have a `red`.
         """
         base = expr.base
-        if not isinstance(base, ast.NameRef):
-            self._diags.emit(D.LANG_IMPORT_NOT_A_MODULE, expr.span,
-                             name="an expression")
-            return UndefConst(ERROR)
+        if not isinstance(base, ast.NameRef) \
+                or self._holds_a_record(base.name):
+            # A field of a record: what stands on the left is a value and not
+            # something names are reached through, so what follows the mark is
+            # one of the fields its type wrote down.
+            return self._field_of(builder, expr, expected)
         provided = BUILTIN_TYPES.get(base.name)
         if isinstance(provided, EnumType):
             # An enumeration the compiler provides.  Its values are written the
@@ -1556,6 +1566,48 @@ class Checker:
         # something there is nothing to do with.
         self._diags.emit(D.LANG_CALL_NOT_A_FUNCTION, expr.span, name=expr.name)
         return UndefConst(ERROR)
+
+    def _holds_a_record(self, name: str) -> bool:
+        """Whether *name* stands for a value here rather than for a module.
+
+        Asked of a name before it is read as a module or as an enumeration,
+        because those two are reached through a name that is not a value and a
+        field is reached through one that is.  A name bound to something that
+        was already reported answers yes, so that what follows the mark is
+        looked at as a field and nothing further is said about either.
+        """
+        local = self._find_local(name)
+        if local is None:
+            return False
+        held = self._held_by(local)
+        return isinstance(held, ProductType) or held is ERROR
+
+    def _field_of(self, builder: IRBuilder, expr: ast.Member,
+                  expected: Type | None) -> Value:
+        """Lower `VALUE.NAME`: one field of a record.
+
+        A record is its fields travelling together, which is what a tuple is as
+        well, so what reads one out is what reads a tuple member out -- the
+        difference between the two being that one of them named its parts, and
+        that is a question here and nowhere below.
+        """
+        value = self._lower_expr(builder, expr.base, None)
+        ty = self._value_type_of(value)
+        if ty is ERROR:
+            return UndefConst(ERROR)
+        if not isinstance(ty, ProductType):
+            self._diags.emit(D.LANG_IMPORT_NOT_A_MODULE, expr.base.span,
+                             name="an expression")
+            return UndefConst(ERROR)
+        at = _field_index(ty, expr.name)
+        if at is None:
+            self._diags.emit(D.LANG_PRODUCT_NO_SUCH_FIELD, expr.name_span,
+                             type=ty.render(), name=expr.name)
+            return UndefConst(ERROR)
+        found = builder.extract(value, at, ty.fields[at][1], expr.span)
+        if not self._accepts(expected, found.ty):
+            self._report_mismatch(expr.span, found.ty, expected)
+        return found
 
     def _enum_value(self, defined: _NamedType, expr: ast.Member) -> Value:
         """The value of an enumeration written as `TYPE.NAME`."""
@@ -9964,6 +10016,12 @@ class Checker:
             # a condition the compiler settles never lowers what is in it.
             self._diags.emit(D.LANG_TYPEOF_OUTSIDE_COMPTIME, expr.span)
             return UndefConst(ERROR)
+        if isinstance(expr.callee, ast.NameRef):
+            named = self._top.get(expr.callee.name)
+            if isinstance(named, _NamedType) \
+                    and isinstance(self._resolved(named), ProductType):
+                return self._lower_record(builder, expr,
+                                          self._resolved(named), expected)
         held = self._callee_value(expr.callee)
         if held is not None:
             return self._lower_indirect(builder, expr, held, expected)
@@ -10225,6 +10283,52 @@ class Checker:
         else:
             self._diags.emit(D.LANG_SYSCALL_UNKNOWN_NAME, ref.span, name=call)
         return UndefConst(ERROR)
+
+    def _lower_record(self, builder: IRBuilder, expr: ast.Call,
+                      ty: Type, expected: Type | None) -> Value:
+        """Lower `Point(.x ← 1f64, .y ← 2f64)`: a value of a record.
+
+        Written the way a call names a parameter, which is the same idea asked
+        of a field: the mark says the name is the thing's and not a variable's.
+        Every field is given and each once -- there is no default to fall back
+        on, and a field left out would be storage holding whatever was there,
+        which is what this language does not have.
+        """
+        assert isinstance(ty, ProductType)
+        given: dict[str, Value] = {}
+        spoiled = False
+        for one in expr.args:
+            if not isinstance(one, ast.Named):
+                self._diags.emit(D.LANG_PRODUCT_FIELD_NOT_NAMED, one.span,
+                                 type=ty.render())
+                spoiled = True
+                continue
+            at = _field_index(ty, one.name)
+            if at is None:
+                self._diags.emit(D.LANG_PRODUCT_NO_SUCH_FIELD, one.span,
+                                 type=ty.render(), name=one.name)
+                spoiled = True
+                continue
+            if one.name in given:
+                self._diags.emit(D.LANG_PRODUCT_FIELD_TWICE, one.span,
+                                 name=one.name)
+                spoiled = True
+                continue
+            given[one.name] = self._lower_into(builder, one.value,
+                                               ty.fields[at][1], one.span)
+        for name, _ in ty.fields:
+            if name not in given:
+                self._diags.emit(D.LANG_PRODUCT_FIELD_MISSING, expr.span,
+                                 type=ty.render(), name=name)
+                spoiled = True
+        if spoiled:
+            return UndefConst(ERROR)
+        made = builder.make_tuple(tuple(given[name] for name, _ in ty.fields),
+                                  ty, expr.span)
+        if not self._accepts(expected, ty):
+            self._report_mismatch(expr.span, ty, expected)
+            return UndefConst(ERROR)
+        return made
 
     def _lower_syscall(self, builder: IRBuilder, expr: ast.Call,
                        expected: Type | None) -> Value:

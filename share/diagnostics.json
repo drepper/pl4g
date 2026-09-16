@@ -6284,6 +6284,100 @@
       "option": null
     },
     {
+      "number": 4576,
+      "name": "LANG_PRODUCT_NO_SUCH_FIELD",
+      "severity": "error",
+      "message": "'{type}' has no field called '{name}'",
+      "args": [
+        {
+          "name": "type",
+          "type": "string",
+          "description": "the record"
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the field that was asked for"
+        }
+      ],
+      "cause": "A record is its fields and nothing else, and which fields it has is what its definition says.  A name that is not one of them names nothing: there is no value to read and nothing to give, whichever end asked.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Product Types"
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4577,
+      "name": "LANG_PRODUCT_FIELD_MISSING",
+      "severity": "error",
+      "message": "'{type}' is made with every field, and '{name}' is not given",
+      "args": [
+        {
+          "name": "type",
+          "type": "string",
+          "description": "the record"
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the field nothing was given for"
+        }
+      ],
+      "cause": "A record is its fields, so a value of one is a value for each of them.  There is no default to fall back on and nothing that would be right to leave behind: a field left out would be storage holding whatever was there, which is the thing this language does not have.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Product Types"
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4578,
+      "name": "LANG_PRODUCT_FIELD_TWICE",
+      "severity": "error",
+      "message": "'{name}' is given twice",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the field named more than once"
+        }
+      ],
+      "cause": "One field, one value.  Two would be a value whose meaning depended on which of them the compiler chose, and there is no reading of it that is not a guess about what was meant.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Product Types"
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4579,
+      "name": "LANG_PRODUCT_FIELD_NOT_NAMED",
+      "severity": "error",
+      "message": "a value of '{type}' names every field it gives",
+      "args": [
+        {
+          "name": "type",
+          "type": "string",
+          "description": "the record"
+        }
+      ],
+      "cause": "A record\u0027s fields have names and its value uses them, so that a value reads as what it is rather than as a list whose order has to be checked against the definition.  A tuple is the shape for several values that go by position.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Product Types"
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 5001,
       "name": "LANG_STMT_UNREACHABLE",
       "severity": "warning",

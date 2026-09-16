@@ -1,0 +1,13 @@
+※ pl4g-test: compile=error diag=4579
+
+※ A record's fields have names and its value uses them, so that a value reads as
+※ what it is rather than as a list whose order has to be checked against the
+※ definition.  A tuple is the shape for several values that go by position, and
+※ is what a program wanting that should write.
+
+type Point = x : u32 ; y : u32
+
+@[startup]
+fn main() → u6:
+    let p : Point = Point(1u32, 2u32)
+    if p.x = 1u32: 0u6 else: 1u6

@@ -1017,6 +1017,12 @@ def parts_of(ty: Type) -> tuple[Type, ...]:
         return (ty.ok, BOOL) if ty.err is None else (ty.ok, BOOL, ty.err)
     if isinstance(ty, TupleType):
         return ty.members
+    if isinstance(ty, ProductType):
+        # Its fields, in the order the definition wrote them.  A record and a
+        # tuple are the same thing to everything below here -- several values
+        # travelling together -- and differ in that one of them named its
+        # parts, which is a question for the checker and for nothing else.
+        return tuple(ty for _, ty in ty.fields)
     if isinstance(ty, ArrayType) and not ty.fixed:
         return (_pointer_to(ty.element), *(U64 for _ in ty.shape))
     if isinstance(ty, ListType):

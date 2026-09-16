@@ -176,17 +176,18 @@ To Do List for the PL4g language
     another module exports, and may not reach itself.  Layout is computed: a product is its fields in declaration order, a sum is
     its largest variant with a one-byte tag after it.
 
-[ ] write a value of a product or a sum: `Point(x: 1f64, y: 2f64)`, decided on 2026-09-17.  The call shape reused, with the
-    named arguments a call already takes, and a sum naming its variant the same way -- one shape for the two, since the
-    definitions are one construct.  Nothing else can be done with these types until it is written: a function that takes or
-    answers with one compiles as far as the code generator, which refuses it (8501).
+[x] write a value of a product: `Point(.x ← 1f64, .y ← 2f64)`, read a field with `p.x`, and hand one to a call and
+    answer with one.  Done for a record whose fields are each one value: to everything below the checker it is what a tuple is,
+    which is what `parts_of` now says, so a convention places it with no rule of its own.
 
-[ ] read a field of a product: `p.x`, and `r⌖.x` through a reference.  The mark `.` already reaches into a module and names a
-    value of an enumeration, and a field is the third thing of that shape; today it reaches neither, and `c⌖.fd` is "not a module"
-    (4103).  Needed before anything can be built out of a product.
+[ ] write a value of a sum.  The decision was that the two are one shape, the definitions being one construct, so it is
+    `Colour(.red ← …)` -- but a sum is a tag and a payload rather than its parts side by side, and nothing places one yet.
 
-[ ] hand a product to a call and answer with one.  The type is accepted in a signature today and the code generator refuses the
-    value (8501).  `parts_of` already says what a multi-part value is made of, which is what a convention needs to place one.
+[ ] let a record hold a record, and let one be reached through a reference.  Both are refused by the code generator today
+    (8501): a record travels as its fields, so a field that is itself several values has no one register to go in, and a load of
+    a multi-part value is not a thing the back ends do.  Both want the same answer -- a record that lives in memory, as a fixed
+    array does, with a field read at an offset and `&p.x` an address -- and `member_offsets_of` already computes the layout.
+    `std.Init` needs both: it holds an `Io`, and `&mut init.io.output` is a reference into it.
 
 [ ] the `std` module, and I/O through io_uring.  Designed on 2026-09-17 and written down in the decision log; what it waits on is
     the three entries above, since `std.Init` is a product and `init.io.out` is a field of one.

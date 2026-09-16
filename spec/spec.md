@@ -1970,6 +1970,23 @@ call**, so a function that does it says `impure`.
 It is how the standard library will reach anything outside the process, and it is the only way: there is no C library underneath
 and nothing else to call.
 
+**A value of a record gives a value for each of its fields**: `Point(.x ← 3u32, .y ← 4u32)`.  It is written the way a
+call names a parameter, which is the same idea asked of a field -- the mark says the name is the thing's and not a variable's --
+and it is the spelling C, Odin and Zig give a structure's initializer.
+
+**Every field is given and each once** (4577, 4578).  There is no default to fall back on and nothing that would be right to
+leave behind: a field left out would be storage holding whatever was there, which is what this language does not have.  C fills
+such a field with zero, which is the half of the designated initializer not taken here -- zero is a value like any other and a
+program that meant it can write it.  A name that is not a field is refused (4576), and a value given without naming one is
+refused as well (4579): a record's fields have names and a tuple is the shape for several values that go by position.
+
+**A field is read with the same mark**: `p.x`.  That mark does three things -- a module's name, an enumeration's value, and a
+record's field -- told apart by what stands on its left, which is what Go, Rust and Zig all do.
+
+**A record travels as its fields.**  To everything below the checker it is what a tuple is: several values going together,
+placed by a convention the same way, so a record handed to a call or answered with needs no rule of its own.  What differs
+between the two is that one of them named its parts.
+
 **A reference that promises more stands where less is wanted.**  `&mut T` promises everything `&T` does and adds writing, and
 `&static T` promises everything `&T` does and adds the time, so each stands where the weaker one is asked for -- in a call, a
 definition, a return.  The bits are the same bits, so nothing is emitted for it.  Both go one way only: a place nothing may write
