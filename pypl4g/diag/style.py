@@ -6,6 +6,11 @@ why the default is to look -- a terminal gets colour and a pipe does not -- and
 why `NO_COLOR` is honoured whatever the option says, a program reading this
 output being the one case where a decision has already been made.
 
+What is looked at is the standard output, although the diagnostics go to the
+standard error.  What that answers is "is a person watching this run", which is
+a question about the run and not about one of its streams; a build that keeps
+the errors in a file is still a build someone is sitting in front of.
+
 The codes are the eight colours and the two attributes every terminal has had
 since the 1970s.  A palette of 256 would look better on the terminals that have
 them and worse on the ones that do not, and what is gained is a shade.
@@ -14,9 +19,10 @@ them and worse on the ones that do not, and what is gained is a shade.
 from __future__ import annotations
 
 import os
+import sys
 from dataclasses import dataclass
 from enum import Enum
-from typing import Final, TextIO
+from typing import Final
 
 #: What ends every run of colour.  One code rather than the exact opposite of
 #: what was turned on, because what follows a diagnostic is not this program's.
@@ -35,9 +41,11 @@ CYAN: Final[str] = "36"
 class ColourWhen(Enum):
     """When the compiler writes colour."""
 
+    YES = "yes"
+    NO = "no"
+    #: Where the standard output is a terminal, and not otherwise.  The default,
+    #: and what is meant by writing nothing at all.
     AUTO = "auto"
-    ALWAYS = "always"
-    NEVER = "never"
 
 
 #: How each severity is written.  Red for what stops the compilation, yellow for
@@ -69,23 +77,23 @@ _CAPTURES: Final[dict[str, str]] = {
 }
 
 
-def _wanted(when: ColourWhen, stream: TextIO) -> bool:
+def _wanted(when: ColourWhen) -> bool:
     """Whether to write colour at all.
 
-    `NO_COLOR` wins over `always` because a program that sets it has said it is
+    `NO_COLOR` wins over `yes` because a program that sets it has said it is
     reading this, and nothing a command line says about how output looks is
     about that.  A terminal calling itself dumb is taken at its word.
     """
     if os.environ.get("NO_COLOR"):
         return False
-    if when is ColourWhen.NEVER:
+    if when is ColourWhen.NO:
         return False
-    if when is ColourWhen.ALWAYS:
+    if when is ColourWhen.YES:
         return True
     if os.environ.get("TERM") == "dumb":
         return False
     try:
-        return stream.isatty()
+        return sys.stdout.isatty()
     except (AttributeError, ValueError):
         return False
 
@@ -101,9 +109,9 @@ class Palette:
     on: bool = False
 
     @staticmethod
-    def chosen(when: ColourWhen, stream: TextIO) -> Palette:
-        """The palette for writing to *stream* under *when*."""
-        return Palette(on=_wanted(when, stream))
+    def chosen(when: ColourWhen) -> Palette:
+        """The palette this run writes with under *when*."""
+        return Palette(on=_wanted(when))
 
     def _in(self, code: str, text: str) -> str:
         """*text* written in *code*, or as it stands where there is no colour."""

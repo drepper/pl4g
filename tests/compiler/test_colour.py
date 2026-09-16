@@ -10,12 +10,15 @@ program rather than merely about how it looks.
 
 from __future__ import annotations
 
-import io
+import os
+import pty
 import re
+import subprocess
+import sys
 
 import pytest
 
-from conftest import run_compiler
+from conftest import ROOT, run_compiler
 from pypl4g.diag.highlight import Highlighter
 from pypl4g.diag.style import ColourWhen, Palette
 
@@ -35,34 +38,75 @@ def written(tmp_path) -> object:
 
 
 def test_a_pipe_gets_no_colour(written, tmp_path) -> None:
-    """The default looks at the stream, and a pipe is not a terminal."""
+    """The default looks at the standard output, and a pipe is not a terminal."""
     proc = run_compiler(["-o", str(tmp_path / "out"), str(written)])
     assert "\N{ESCAPE}[" not in proc.stderr
     assert "PL4G-4003" in proc.stderr
 
 
-def test_always_colours_and_never_does_not(written, tmp_path) -> None:
-    """The two that say outright say it whatever the stream is."""
-    always = run_compiler(["--color=always", "-o", str(tmp_path / "a"),
-                           str(written)])
-    never = run_compiler(["--color=never", "-o", str(tmp_path / "n"),
-                          str(written)])
-    assert "\N{ESCAPE}[" in always.stderr
-    assert "\N{ESCAPE}[" not in never.stderr
-    assert ESCAPE.sub("", always.stderr) == never.stderr, \
+def test_yes_colours_and_no_does_not(written, tmp_path) -> None:
+    """The two that say outright say it whatever the streams are."""
+    yes = run_compiler(["--color=yes", "-o", str(tmp_path / "a"), str(written)])
+    no = run_compiler(["--color=no", "-o", str(tmp_path / "n"), str(written)])
+    assert "\N{ESCAPE}[" in yes.stderr
+    assert "\N{ESCAPE}[" not in no.stderr
+    assert ESCAPE.sub("", yes.stderr) == no.stderr, \
         "colour is decoration: taking it away leaves what was there without it"
 
 
-def test_no_color_wins_over_always(written, tmp_path) -> None:
+def test_the_word_on_its_own_means_yes(written, tmp_path) -> None:
+    """`--color` with nothing after it asks for the thing it names.
+
+    And it may stand anywhere, which is worth a test of its own: an option that
+    took the wrong number of words would quietly read the next one twice.
+    """
+    proc = run_compiler(["-o", str(tmp_path / "out"), "--color", str(written)])
+    assert "\N{ESCAPE}[" in proc.stderr
+    assert proc.returncode != 0 and "PL4G-4003" in proc.stderr, \
+        "the program after the option was still compiled"
+
+
+def test_a_value_after_other_options_is_read_where_it_stands(written,
+                                                             tmp_path) -> None:
+    """The same, for the form that carries a value."""
+    proc = run_compiler(["-o", str(tmp_path / "out"), "--color=yes",
+                         str(written)])
+    assert "\N{ESCAPE}[" in proc.stderr
+    assert "PL4G-4003" in proc.stderr
+
+
+def test_auto_looks_at_the_standard_output(written, tmp_path) -> None:
+    """A terminal there is a person watching, whatever the errors go to.
+
+    The diagnostics go to the standard error and the question asked is of the
+    standard output, because what it answers is "is someone sitting in front of
+    this run": a build that keeps the errors in a file is still one being
+    watched.  So a terminal on the one gets colour on the other.
+    """
+    reader, writer = pty.openpty()
+    try:
+        proc = subprocess.run(
+            [sys.executable, "-m", "pypl4g", "-o", str(tmp_path / "out"),
+             str(written)],
+            stdout=writer, stderr=subprocess.PIPE, text=True, timeout=120,
+            cwd=ROOT)
+    finally:
+        os.close(writer)
+        os.close(reader)
+    assert "\N{ESCAPE}[" in proc.stderr, \
+        "the standard output was a terminal, so the default said yes"
+
+
+def test_no_color_wins_over_yes(written, tmp_path) -> None:
     """A program that sets it has said it is reading this."""
-    proc = run_compiler(["--color=always", "-o", str(tmp_path / "out"),
+    proc = run_compiler(["--color=yes", "-o", str(tmp_path / "out"),
                          str(written)], env={"NO_COLOR": "1"})
     assert "\N{ESCAPE}[" not in proc.stderr
 
 
 def test_the_severity_and_the_carets_are_coloured(written, tmp_path) -> None:
     """What a reader looks for first, and what says where."""
-    proc = run_compiler(["--color=always", "-o", str(tmp_path / "out"),
+    proc = run_compiler(["--color=yes", "-o", str(tmp_path / "out"),
                          str(written)])
     assert "\N{ESCAPE}[1;31merror\N{ESCAPE}[0m" in proc.stderr
     assert "\N{ESCAPE}[1;32m" in proc.stderr, "the carets are written in green"
@@ -76,7 +120,7 @@ def test_the_snippet_is_highlighted(written, tmp_path) -> None:
     a type is the thing the grammar knows and the reason the highlighting comes
     from there.
     """
-    proc = run_compiler(["--color=always", "-o", str(tmp_path / "out"),
+    proc = run_compiler(["--color=yes", "-o", str(tmp_path / "out"),
                          str(written)])
     assert "\N{ESCAPE}[35mlet\N{ESCAPE}[0m" in proc.stderr
     assert "\N{ESCAPE}[36mu8\N{ESCAPE}[0m" in proc.stderr
@@ -121,7 +165,7 @@ def test_no_grammar_is_no_highlighting_and_no_complaint(monkeypatch) -> None:
 
 def test_a_palette_that_is_off_hands_back_what_it_was_given() -> None:
     """One object either way, so that nothing asks whether there is colour."""
-    plain = Palette.chosen(ColourWhen.NEVER, io.StringIO())
+    plain = Palette.chosen(ColourWhen.NO)
     assert plain.severity("error") == "error"
     assert plain.capture("keyword", "let") == "let"
     assert plain.caret("^~~") == "^~~"

@@ -2369,10 +2369,17 @@ Colour in a diagnostic
 
 Colour is decoration and never information: everything a colour says is said by
 the text as well, so a terminal that shows none loses nothing and the suite
-compares the two and finds the same characters under the codes.  That is why
-the default is to look at the stream -- a terminal gets colour and a pipe does
-not -- and why `NO_COLOR` is honoured whatever `--color` says, a program reading
-this output being the one case where the decision has already been made.
+compares the two and finds the same characters under the codes.  That is why the
+default is to look, and why `NO_COLOR` is honoured whatever `--color` says, a
+program reading this output being the one case where the decision has already
+been made.
+
+**`--color[=WHEN]`** takes `yes`, `no` or `auto`, and written with nothing after
+it means `yes` -- a switch with no value asks for the thing it names.  `auto` is
+the default and looks at the **standard output**, although the diagnostics go to
+the standard error.  What that answers is "is a person watching this run", which
+is a question about the run rather than about one of its streams: a build that
+keeps the errors in a file is still a build someone is sitting in front of.
 
 **The eight colours and the two attributes**, and no more.  A palette of 256
 would look better where there are 256 and worse where there are not, and what is

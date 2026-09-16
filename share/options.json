@@ -94,16 +94,16 @@
     {
       "short": null,
       "long": "--color",
-      "arg": "joined_equals",
+      "arg": "joined_equals_optional",
       "metavar": "WHEN",
       "values": [
-        "auto",
-        "always",
-        "never"
+        "yes",
+        "no",
+        "auto"
       ],
       "default": "auto",
       "since": "0.1",
-      "help": "colour the diagnostics: when writing to a terminal, always, or never"
+      "help": "colour the diagnostics; written with no value it means yes"
     },
     {
       "short": null,

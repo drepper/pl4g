@@ -4993,9 +4993,10 @@ Asked for by the user, who said which highlighter to use.
 
 **Colour is decoration and never information.**  Everything a colour says is
 said by the text as well, so the plain output is unchanged to the byte and a
-test compares the two.  `--color=auto` is the default and looks at the stream;
-`NO_COLOR` wins over `always`, a program that sets it having said it is reading
-this.
+test compares the two.  `NO_COLOR` wins over the option, a program that sets it
+having said it is reading this.  *(The option was `--color=auto|always|never`
+when this was written; the user settled it on 2026-09-17 as
+`--color[=yes|no|auto]`, looking at the standard output.  See below.)*
 
 **The grammar highlights, not the lexer.**  The compiler has a lexer and could
 have coloured a line from it with no dependency at all -- but a lexer knows a
@@ -5050,6 +5051,35 @@ named, since naming one would read as though the other had been turned down.
 
 **The log's format version goes to 3**, and the viewer reads all three: the key was renamed and entries of a new shape appeared,
 and a log written by an older compiler is still a log someone has.
+
+## 2026-09-17T11:15+02:00 — compiler
+
+**`--color[=WHEN]` takes `yes`, `no` or `auto`, and looks at the standard output**
+
+Settled by the user, who gave the spelling, the values and the test.
+
+**The value may be left out, and leaving it out means `yes`.**  A switch written
+with nothing after it asks for the thing it names, which is what `--color` alone
+has meant since GNU `ls`; the value is what says *when*, and whoever wrote no
+value meant now.  The help text spells it `--color[=WHEN]`, brackets and all,
+being the first option here whose value is optional.
+
+**`yes`, `no`, `auto` rather than `always`, `never`, `auto`.**  The words a
+person would answer the question with.  `auto` is the default, so a run that
+says nothing behaves the way a run has always behaved.
+
+**`auto` looks at the standard output**, although the diagnostics go to the
+standard error.  What it answers is "is a person watching this run", which is a
+question about the run and not about one of its streams -- a build that keeps
+the errors in a file is still a build someone is sitting in front of.  It is the
+reading GCC takes for `-fdiagnostics-color=auto`… which looks at the stream it is
+writing to, and the one settled here is the other.  Both are defensible and this
+one was chosen.
+
+Compare: **GNU `ls`**, whose `--color` with no value means `yes` and whose
+values are `never`, `always`, `auto`; **GCC** and **Clang**, whose colour
+options take `never|always|auto` and test the stream they write to; **`NO_COLOR`**,
+which all of them honour and which wins here over anything the option says.
 
 Open questions
 --------------

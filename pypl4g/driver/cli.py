@@ -75,6 +75,11 @@ class CommandLine:
                 self._options.debug_info = True
             case "-Werror":
                 self._options.warnings_are_errors = True
+            case "--color":
+                # Written with nothing after it, which is the plainest way of
+                # asking for the thing an option names.  The value is what says
+                # *when*, and the one who wrote no value meant now.
+                self._options.colour = ColourWhen.YES
             case "--incremental":
                 self._options.incremental = True
                 self._diags.emit(D.IMPL_CLI_NOT_IMPLEMENTED, option=word)
@@ -103,7 +108,7 @@ class CommandLine:
             self._options.colour = self._choice(
                 word, word[len("--color="):], ColourWhen,
                 self._options.colour)
-            return True
+            return index
         if word.startswith("--diag-format="):
             self._options.diag_format = self._choice(
                 word, word[len("--diag-format="):], DiagFormat, self._options.diag_format)

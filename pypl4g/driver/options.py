@@ -103,7 +103,13 @@ def render_help(table: Mapping[str, Any]) -> str:
         spelled = ", ".join(names)
         metavar = option.get("metavar")
         if metavar is not None:
-            spelled = "".join((spelled, " ", metavar))
+            # An option whose value may be left out is spelled the way it is
+            # written, brackets and all: `--color[=WHEN]` says both that the
+            # value goes after an equals sign and that it need not be there.
+            spelled = "".join(
+                (spelled, "[=", metavar, "]")
+                if option.get("arg") == "joined_equals_optional"
+                else (spelled, " ", metavar))
         note = "" if option.get("implemented", True) else "  (not implemented yet)"
         out.append("".join(("  ", spelled.ljust(28), option["help"], note)))
     out.append("")

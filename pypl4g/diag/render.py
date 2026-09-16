@@ -36,7 +36,7 @@ class TextRenderer:
         self._sources = sources
         self._stream = stream
         self._engine_ref = engine_ref
-        self._palette = Palette.chosen(when, stream)
+        self._palette = Palette.chosen(when)
         self._highlighter = Highlighter() if self._palette.on else None
 
     def recolour(self, when: ColourWhen) -> None:
@@ -46,7 +46,7 @@ class TextRenderer:
         and they are made before it has been read -- so the renderer is built
         looking, and told once the option is known.
         """
-        self._palette = Palette.chosen(when, self._stream)
+        self._palette = Palette.chosen(when)
         self._highlighter = Highlighter() if self._palette.on else None
 
     def _severity(self, diag: Diagnostic) -> str:
