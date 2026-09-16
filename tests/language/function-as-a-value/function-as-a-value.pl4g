@@ -1,0 +1,73 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ A function named where a value is wanted is one, with the type its definition
+※ gives it -- `@[listable]` and all.  So `twice` and a lambda that does the same
+※ thing are two ways of writing one kind of value, and either stands where
+※ `fn(u8) → u8` does.
+※
+※ **What such a value holds is two addresses**, where the code is and where what
+※ was brought in is.  A function brings nothing in, so the second is the address
+※ of nothing in particular -- but the first cannot be the function itself, since
+※ everything called through such a name is called with the environment first and
+※ a definition has no such parameter.  So the compiler makes a small piece of
+※ code that takes the environment, drops it, and hands the rest on; one per
+※ function however many times the name is written, which the decision log
+※ records under `⎕through` and the name it was made for.
+※
+※ **The type carries `@[listable]`**, so a listable function handed over keeps
+※ its walk -- and put where a plain one is wanted it drops it, by the rule every
+※ other promise follows.
+※
+※ Compare: **C**, where a function name decays to a pointer and there is nothing
+※ to carry, which is why a C callback needs a `void *` written out beside it;
+※ **C++**, whose `std::function` does exactly what is done here and at the same
+※ price; **Go**, where a method value is the same pair; **Rust**, which tells
+※ the two apart in the type system -- `fn` for the bare address and `Fn` for the
+※ pair -- and so needs no shim for the first.
+
+@[listable]
+fn twice(a: u8) → u8:
+    a + a
+
+fn onwards(a: u8) → u8:
+    a + 1u8
+
+let seen: mut u8 = 0u8
+
+@[impure]
+fn note(a: u8):
+    seen ← a
+
+@[startup, impure]
+fn main() → u6:
+    let v: u8⟦3⟧ = ⟦1u8, 2u8, 3u8⟧
+    ※ named where a value is wanted, and its walk comes with it
+    let walks: @[listable] fn(u8) → u8 = twice
+    let each: u8⟦3⟧ = walks(v)
+    ※ the same name written twice, which is one piece of code and one symbol
+    let again: @[listable] fn(u8) → u8 = twice
+    ※ and put where a plain one is wanted, which drops the walk
+    let plain: fn(u8) → u8 = twice
+    ※ one that was never listable, handed over the same way
+    let step: fn(u8) → u8 = onwards
+    ※ one that answers with nothing
+    let told: fn(u8) = note
+    told(5u8)
+    ※ chosen between at run time, which is what holding one in a name is for
+    let picked: mut fn(u8) → u8 = plain
+    if each⟦0⟧ = 2u8:
+        picked ← step
+    if each⟦2⟧ ≠ 6u8:
+        1u6
+    elif again(4u8) ≠ 8u8:
+        2u6
+    elif plain(9u8) ≠ 18u8:
+        3u6
+    elif step(1u8) ≠ 2u8:
+        4u6
+    elif seen ≠ 5u8:
+        5u6
+    elif picked(7u8) ≠ 8u8:
+        6u6
+    else:
+        0u6

@@ -601,10 +601,10 @@ Runtime
     the answer, which is what a function handing one of its arguments back needs.  What it cannot yet say is that one parameter
     outlives another, which is the thing Rust's `'a: 'b` is for and the thing a type holding a reference would want.
 
-[ ] let a named function be handed over as a value and keep its walk.  `@[listable] fn twice(...)` referred to by name gives a
-    plain `fn(u8) → u8`, the attribute living on the definition and not on the type there; a lambda now carries it and a
-    function does not, which is one idea with two lives.  What it needs is for a function's type to be built from its attributes
-    the way a lambda's is.
+[ ] call a named function handed over as a value without going through a shim.  Such a value is two addresses and a definition
+    takes no environment, so what the pair points at is code that drops the environment and hands the rest on -- one call more
+    than the program wrote.  Rust's answer is to tell the two apart in the type system; the answer here would be a tag, and a
+    tag costs a branch at every indirect call to save a call at some of them.
 
 [ ] say more about a lambda than `listable`.  Everything else a function writes is about its body, and a body is not what a name
     holds -- but `can_ignore` is about a caller, and `impure` would let a pure function call one that is not.  Both want the type

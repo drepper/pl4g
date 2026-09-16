@@ -1,0 +1,21 @@
+※ pl4g-test: compile=error diag=4569
+
+※ A generic function is written once and compiled once per set of types, and
+※ which sets those are is what the calls turn out to ask for.  Named where a
+※ value is wanted there is no call to ask, so there is no one function for the
+※ name to stand for and no type for it to have.
+※
+※ What can be handed over is a function whose signature is settled, which a
+※ generic becomes at each instantiation -- but an instantiation is made by a
+※ call, and this is not one.
+
+fn pick(a: T', b: T') → T':
+    a
+
+@[startup, impure]
+fn main() → u6:
+    let f: fn(u8, u8) → u8 = pick
+    if f(1u8, 2u8) ≠ 1u8:
+        1u6
+    else:
+        0u6

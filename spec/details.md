@@ -2145,6 +2145,22 @@ Indirect calls
 and an indirect one passes a closure over the two halves it read out of the value.  Both halves are read once, before any call is
 made: a walk makes one call per element and they all go to the same code with the same environment.
 
+**A named function becomes a value through a shim.**  Everything called through a name of function type is called with the
+environment first, and a definition has no such parameter -- so `_function_as_a_value` points the pair at `⎕through<name>`, which
+takes the environment, drops it, and hands the rest on.  One per function and not one per mention, kept in `_shims` by identity,
+and recorded in the decision log beside the lambdas: it is code the program did not write.  The other half is the address of a
+frame byte, which is what `_environment` already hands a lambda that brought nothing in.
+
+The cost is one call.  Rust avoids it by telling the two apart in the type system, `fn` for the bare address and `Fn` for the
+pair; C avoids it by having nothing to carry, which is why a C callback needs a `void *` written out beside it; C++'s
+`std::function` pays exactly what is paid here.  A second representation, tagged so that a call could tell a bare address from a
+pair, would cost a branch at every indirect call to save one call at some of them.
+
+**A function's own type says whether it walks.**  `_collect_function` and `_make_instance` build it with `func_attrs.listable`,
+so `func.ty.listable` is the one place it is written down and a named function handed over carries it.  The symbol does not
+move: `mangle` writes the parameters and the result one by one rather than the whole type, so the word appears in a symbol only
+where a *parameter* has such a type.
+
 **A bitcast cannot carry a function from one type to the other**, a function being two addresses and not one.  `_shorter_life`
 takes the two out and puts them back under the type that promises less, which is the same pair of registers and no work; the
 verifier's `_held_as` gained the arm that says two function types differing only in the walk are the same bits.

@@ -178,6 +178,7 @@ GROUPS: tuple[Group, ...] = (
            "narrow": "every way a value can fail to fit, and the ones that cannot",
            "lambda": "lambdas made, captured both ways, handed on and called through",
            "listable-lambda": "a lambda that walks, over a vector, a table and two arguments",
+           "function-as-a-value": "four functions named where a value is wanted, one of them walking",
            "generic-functions": "one function compiled for seven sets of types",
            "lifetimes": "how long six references live, said both ways and worked out",
            "named-lifetimes": "one lifetime name over three types, and both answers",

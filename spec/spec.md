@@ -3674,6 +3674,23 @@ neither can one the walk never reaches the parameter's type from.
 
 **A function that takes nothing may not be marked** (4483): there is nothing to hand it an array in place of.
 
+**A function named where a value is wanted is one**, with the type its definition gives it, `@[listable]` and all:
+
+```
+@[listable]
+fn twice(a: u8) → u8:
+    a + a
+
+let walks: @[listable] fn(u8) → u8 = twice
+walks(v)                         ※ u8⟦3⟧: the walk came with it
+let plain: fn(u8) → u8 = twice   ※ which drops it
+```
+
+So a function and a lambda are two ways of writing one kind of value, and either stands where the other does.  What such a value
+holds is two addresses, where the code is and where what was brought in is; a function brings nothing in, so the second is the
+address of nothing in particular.  **A generic function is not one** (4569): it is compiled once per set of types and which sets
+those are is what the calls ask for, so named where a value is wanted there is no call to ask and no type for the name to have.
+
 **A lambda says it the same way**, written before the thing it describes -- and there the word is part of the *type*:
 
 ```

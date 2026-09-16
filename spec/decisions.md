@@ -4822,6 +4822,30 @@ have meant a second spelling for what `@[listable]` says on a `fn`; **NumPy**, w
 which is what this would have to be if the answer were not to put it in the type; **C++**, whose `std::function` carries no such
 thing and whose ranges say it at the call.
 
+## 2026-09-17T05:00+02:00 — language
+
+**A named function is a value, and its type carries `@[listable]`**
+
+Asked for by the user, closing the gap the previous entry left open: a lambda carried the walk in its type and a function did
+not, which was one idea with two lives.  It turned out that a named function could not be handed over as a value at all.
+
+**One representation, not two.**  A function value is two addresses whether it came from a `λ` or from a definition, so a
+definition needs a shim -- code that takes the environment nobody wrote, drops it, and hands the rest on.  The alternative was a
+second representation with a tag saying which kind it holds, which costs a branch at every indirect call to save one call at
+some of them; the shim costs one call and nothing else, and is made once per function however many times the name is written.
+
+**Its type is built from its attributes**, as a lambda's is, so `func.ty.listable` is the one place the walk is written down.
+The symbol does not move, `mangle` writing the parameters and the result one by one rather than the whole type.
+
+**A generic function is not a value** (4569).  It is compiled once per set of types and which sets those are is what the calls
+ask for; named where a value is wanted there is no call to ask, so there is no one function for the name to stand for.  What was
+said before was that the name was not defined, which was not true of it.
+
+Compare: **C**, where a function name decays to a bare address and a callback needs a `void *` written out beside it; **C++**,
+whose `std::function` is this pair at this price; **Go**, where a method value is the same pair; **Rust**, which tells the two
+apart in the type system -- `fn` for the address, `Fn` for the pair -- and so needs no shim for the first, at the cost of a
+distinction every signature has to make.
+
 Open questions
 --------------
 

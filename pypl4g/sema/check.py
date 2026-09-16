@@ -336,6 +336,11 @@ def _filled_in(shell: Type | None, made: Type) -> Type:
 #: the compiler's, so nothing a program can write collides with one.
 LAMBDA_PREFIX: Final[str] = "".join((BUILTIN_GLYPH, "lambda"))
 
+#: What the code standing between an indirect call and a named function is
+#: called.  It is no lambda, but it is the same kind of thing -- code the
+#: program did not write and the log ties to what it was written for.
+SHIM_PREFIX: Final[str] = "".join((BUILTIN_GLYPH, "through"))
+
 #: What a lambda carries what it brought in through.  An address and nothing
 #: more: what is there is the lambda's own business and no caller reads it.
 _ENVIRONMENT: Final[PtrType] = PtrType(U8, mutable=True)
@@ -1096,6 +1101,9 @@ class Checker:
         #: The definitions this file owns, which carry its module's name once
         #: that name is settled.
         self._owned: list[object] = []
+        #: The shim made for each function named where a value was wanted, so
+        #: that a name written twice is one shim and one symbol.
+        self._shims: dict[int, Function] = {}
         #: Where this file is, which is what an import written in it is relative
         #: to, and what tells its definitions from another file's.
         self._path: Path = path if path is not None else Path("")
@@ -1953,7 +1961,8 @@ class Checker:
             borrows = self._borrowed_from(node, ret)
             func_attrs, linkage = self._function_attrs(attrs)
             func = Function(name=node.name,
-                            ty=self._module.types.func_type(params, ret),
+                            ty=self._module.types.func_type(
+                                params, ret, func_attrs.listable),
                             attrs=func_attrs, linkage=linkage,
                             param_names=tuple(p.name for p in node.params),
                             defaults=self._defaults_of(node, params),
@@ -3894,7 +3903,8 @@ class Checker:
             attrs, linkage = self._function_attrs(written.attrs)
             func = Function(
                 name=node.name,
-                ty=self._module.types.func_type(params, answer),
+                ty=self._module.types.func_type(params, answer,
+                                                attrs.listable),
                 attrs=attrs, linkage=linkage, exported=False,
                 cconv=attrs.abi if attrs.abi is not None else DEFAULT_CCONV,
                 span=node.span, name_span=node.name_span,
@@ -4231,6 +4241,75 @@ class Checker:
             self._report_mismatch(expr.span, ty, expected)
             return UndefConst(ERROR)
         return made
+
+    def _function_as_a_value(self, builder: IRBuilder, func: object,
+                             ref: ast.NameRef, expected: Type | None) -> Value:
+        """A named function where a value is wanted, shaped the way a lambda is.
+
+        What a name of function type holds is two addresses, where the code is
+        and where what was brought in is.  A function brings nothing in, so the
+        second is the address of nothing in particular -- but the first cannot
+        be the function itself: everything called through such a name is called
+        with the environment first, and a definition has no such parameter.
+
+        So what the value points at is a shim, made once per function, that
+        takes the environment, drops it, and calls the function.  One per
+        function and not one per mention, since two mentions of one name are
+        two ways of writing the same value.
+        """
+        assert isinstance(func, Function)
+        shim = self._shim_for(func, ref.span)
+        if shim is None:
+            return UndefConst(ERROR)
+        made = builder.make_tuple(
+            (builder.code_address(shim, ref.span),
+             builder.cast(CastKind.BITCAST, builder.frame(U8, ref.span),
+                          _ENVIRONMENT, ref.span)),
+            func.ty, ref.span)
+        if not self._accepts(expected, func.ty):
+            self._report_mismatch(ref.span, func.ty, expected)
+            return UndefConst(ERROR)
+        return made
+
+    def _shim_for(self, func: Function, span: Span) -> Function | None:
+        """The function that stands between an indirect call and *func*.
+
+        It takes the environment nobody wrote, drops it, and hands the rest on.
+        Made on the first mention and kept, so that a name written twice is one
+        shim and one symbol.
+        """
+        found = self._shims.get(id(func))
+        if found is not None:
+            return found
+        if func.attrs.abi is not None and func.attrs.extra.get("variadic"):
+            # What such a call takes is not what its type says, so there is no
+            # shim that could stand for it.
+            self._diags.emit(D.LANG_CALL_NOT_A_FUNCTION, span, name=func.name)
+            return None
+        name = "".join((SHIM_PREFIX, func.name))
+        shim = Function(
+            name=name,
+            ty=self._module.types.func_type((_ENVIRONMENT, *func.ty.params),
+                                            func.ty.ret),
+            attrs=FuncAttrs(impure=True), linkage=Linkage.INTERNAL,
+            span=func.span, name_span=func.name_span,
+            source_path=self._path.as_posix(),
+            param_names=("", *func.param_names))
+        self._module.add_function(shim, key=self._key(name))
+        self._owned.append(shim)
+        block = shim.add_block()
+        inner = IRBuilder(self._module, shim)
+        arriving = [block.add_param(one, "")
+                    for one in (_ENVIRONMENT, *func.ty.params)]
+        answer = inner.call(func, tuple(arriving[1:]), func.ty.ret, func.span)
+        inner.ret(None if func.ty.ret is VOID else answer, func.span)
+        self._shims[id(func)] = shim
+        self._module.decisions.record(
+            DecisionKind.NAME_LAMBDA, name,
+            "".join(("code that hands an indirect call on to '", func.name,
+                     "', which the program named where a value was wanted")),
+            span)
+        return shim
 
     def _captures_of(self, expr: ast.Lambda, name: str
                      ) -> list[tuple[ast.Capture, _Local]] | None:
@@ -10537,6 +10616,18 @@ class Checker:
             self._diags.emit(D.LANG_WRAP_IS_NOT_A_VALUE, ref.span)
             return UndefConst(ERROR)
         local = self._find_local(ref.name)
+        if local is None and isinstance(self._top.get(ref.name), _Generic):
+            # Written once and compiled once per set of types, and which sets
+            # those are is what the calls ask for.  There is no call here to
+            # ask, so there is no one function for the name to stand for.
+            self._diags.emit(D.LANG_GENERIC_IS_NOT_A_VALUE, ref.span,
+                             name=ref.name)
+            return UndefConst(ERROR)
+        if local is None and isinstance(self._provided(ref.name), Function):
+            # A function named where a value is wanted, which a call is not: a
+            # call names its callee and resolves it before ever coming here.
+            return self._function_as_a_value(
+                builder, self._provided(ref.name), ref, expected)
         if local is not None and local.placed:
             # The name stands for storage of its own, because somewhere in this
             # body a reference to it is taken.  Reading it is therefore a load,
