@@ -22,12 +22,13 @@ from collections.abc import Sequence
 from dataclasses import replace
 
 from ..ir.layout import (DataLayout, align_of, encode_float, encode_scalar,
-                         size_of, stride_of, tag_offset_of)
+                         offsets_of, size_of, stride_of, tag_offset_of)
 from ..ir.function import Linkage
 from ..ir.module import GlobalVar, Module
-from ..ir.types import ArrayType, CharType, EnumType, ResultType, Type
+from ..ir.types import (ArrayType, CharType, EnumType, ProductType,
+                        ResultType, Type)
 from ..ir.value import (ArrayConst, BoolConst, CharConst, EnumConst, FloatConst,
-                        IntConst, ResultConst)
+                        IntConst, RecordConst, ResultConst)
 from ..mc.asmbuilder import Assembler
 from ..mc.symbol import SymBinding, SymKind, SymVisibility
 
@@ -130,6 +131,18 @@ def _encoded(initializer: object, ty: Type, layout: DataLayout) -> bytes:
             for index, element in enumerate(initializer.elements):
                 written = _encoded(element, ty.element, layout)
                 out[index * step:index * step + len(written)] = written
+            return bytes(out)
+        case RecordConst() if isinstance(ty, ProductType):
+            # Each field where `offsets_of` puts it, and whatever padding lies
+            # between them left as zeroes.  The one thing that says where a
+            # field went says it here too, so what an image holds and what a
+            # program reads out of it cannot drift.
+            out = bytearray(size_of(ty, layout))
+            for offset, (written, (_, held)) in zip(
+                    offsets_of(ty, layout),
+                    zip(initializer.fields, ty.fields)):
+                bits = _encoded(written, held, layout)
+                out[offset:offset + len(bits)] = bits
             return bytes(out)
         case ResultConst() if isinstance(ty, ResultType):
             # The answer where an answer goes, the truth value where the layout

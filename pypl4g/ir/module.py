@@ -10,10 +10,10 @@ from .reports import ReportLog
 from .function import Function, Linkage
 from .types import (ArrayType, BoolType, CHAR, CharType, EnumType, FloatType,
                     IntType, MEM,
-                    PtrType, ResultType, Type,
+                    ProductType, PtrType, ResultType, Type,
                     TypeContext)
 from .value import (ArrayConst, BoolConst, CharConst, Const, EnumConst,
-                    FloatConst, IntConst, ResultConst, Value)
+                    FloatConst, IntConst, RecordConst, ResultConst, Value)
 
 
 class GlobalVar(Value):
@@ -103,6 +103,8 @@ class Module:
     _bool_consts: dict[bool, BoolConst] = field(default_factory=dict)
     _array_consts: dict[tuple[int, tuple[int, ...]], ArrayConst] = field(
         default_factory=dict, repr=False)
+    _record_consts: dict[tuple[int, tuple[int, ...]], RecordConst] = field(
+        default_factory=dict, repr=False)
     _result_consts: dict[tuple[int, int, bool], ResultConst] = field(
         default_factory=dict)
     _enum_consts: dict[tuple[int, int], EnumConst] = field(default_factory=dict)
@@ -189,6 +191,16 @@ class Module:
         if found is None:
             found = ArrayConst(ty, tuple(elements))
             self._array_consts[key] = found
+        return found
+
+    def record_const(self, ty: ProductType,
+                     fields: Sequence[Const]) -> RecordConst:
+        """Return the interned record constant with these fields."""
+        key = (id(ty), tuple(id(f) for f in fields))
+        found = self._record_consts.get(key)
+        if found is None:
+            found = RecordConst(ty, tuple(fields))
+            self._record_consts[key] = found
         return found
 
     def bool_const(self, ty: BoolType, value: bool) -> BoolConst:

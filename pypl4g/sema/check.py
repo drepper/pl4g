@@ -1606,10 +1606,12 @@ class Checker:
         looked at as a field and nothing further is said about either.
         """
         local = self._find_local(name)
-        if local is None:
-            return False
-        held = self._held_by(local)
-        return isinstance(held, ProductType) or held is ERROR
+        if local is not None:
+            held = self._held_by(local)
+            return isinstance(held, ProductType) or held is ERROR
+        found = self._provided(name)
+        return isinstance(found, GlobalVar) \
+            and isinstance(found.value_type, ProductType)
 
     def _field_of(self, builder: IRBuilder, expr: ast.Member,
                   expected: Type | None) -> Value:
@@ -1685,6 +1687,15 @@ class Checker:
                         return None
                     local.read = True
                     return (local.value, local.held)
+                if local is not None:
+                    return None
+                # A variable at the top level is a place for as long as the
+                # program is, which is the same kind of place a record local
+                # got given and is reached the same way from here down.
+                found = self._provided(expr.name)
+                if isinstance(found, GlobalVar) \
+                        and isinstance(found.value_type, ProductType):
+                    return (builder.address(found, expr.span), found.value_type)
                 return None
             case ast.Deref():
                 value = self._lower_expr(builder, expr.operand, None)
@@ -1859,6 +1870,12 @@ class Checker:
                 held = self._constant_elements(node, ty, node.value, ty.shape)
                 return (None if held is None
                         else self._module.array_const(ty, held))
+            case ast.Call() if isinstance(ty, ProductType):
+                # A record written out, every field of which the compiler
+                # knows: bytes in the image and not something a program works
+                # out.  It is the same shape a definition inside a body writes
+                # and is checked by the same rules -- every field, each once.
+                return self._constant_record(node, ty)
             case ast.Member():
                 # A value of an enumeration is written `TYPE.NAME` and is known
                 # while compiling, so it is a constant like any literal.
@@ -1873,6 +1890,28 @@ class Checker:
                     D.IMPL_UNIMPLEMENTED_FEATURE, node.value.span,
                     feature="a top-level variable whose value is not a literal")
                 return None
+
+    def _constant_record(self, node: ast.VarDef,
+                         ty: ProductType) -> Const | None:
+        """A record written out at the top level, as the bytes it comes to."""
+        written = node.value
+        assert isinstance(written, ast.Call)
+        if not self._is_record_literal(written, ty):
+            self._diags.emit(
+                D.IMPL_UNIMPLEMENTED_FEATURE, written.span,
+                feature="a top-level variable whose value is not a literal")
+            return None
+        given = self._fields_given(written, ty)
+        if given is None:
+            return None
+        held: list[Const] = []
+        for name, field_ty in ty.fields:
+            found = self._constant_value(
+                replace(node, value=given[name].value), field_ty)
+            if not isinstance(found, Const):
+                return None
+            held.append(found)
+        return self._module.record_const(ty, held)
 
     def _constant_elements(self, node: ast.VarDef, ty: ArrayType,
                            written: ast.ArrayLit,
@@ -4262,14 +4301,19 @@ class Checker:
                 return True
             case ast.NameRef():
                 local = self._find_local(expr.name)
-                if local is None:
-                    return True
-                if local.mutable:
-                    return True
-                self._diags.emit(D.LANG_VARDEF_NOT_MUTABLE, where,
-                                 name=expr.name).note(
-                    D.LANG_VARDEF_DEFINED_HERE, local.span, name=expr.name)
-                return False
+                if local is not None:
+                    if local.mutable:
+                        return True
+                    self._diags.emit(D.LANG_VARDEF_NOT_MUTABLE, where,
+                                     name=expr.name).note(
+                        D.LANG_VARDEF_DEFINED_HERE, local.span, name=expr.name)
+                    return False
+                found = self._provided(expr.name)
+                if isinstance(found, GlobalVar) and not found.mutable:
+                    self._diags.emit(D.LANG_VARDEF_NOT_MUTABLE, where,
+                                     name=expr.name)
+                    return False
+                return True
             case _:
                 return True
 

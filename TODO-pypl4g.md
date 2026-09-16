@@ -474,6 +474,11 @@ To Do List for the pypl4g compiler
     asked of the type (`made_of_parts`) rather than counted, so a record of one field is made of parts and has one.  Found while
     flattening `parts_of`; it predated that.
 
+[ ] render a global's initializer in the textual IR.  An array's and now a record's both come out as `undef`, so a module
+    printed and read back loses what its globals started with.  Nothing depends on it today -- the round trip is a test of the
+    form and the driver never reads a module back -- but a written IR that does not say what a program holds is a written IR that
+    cannot be used for anything else.
+
 [ ] report a tuple holding an array.  `〈⟦1u8, 2u8⟧〉` reaches the code generator and fails there (9901, "making a 〈u8⟦2⟧〉, which
     is one value and not several"), so what a reader is told is an internal error about a program the front end accepted.  Either
     an array is a thing a tuple may hold, in which case `parts_of` has to say what its parts are, or it is not and the checker

@@ -1,0 +1,53 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ A variable at the top level may hold a record.
+※
+※ **Its value is bytes in the image**, laid out by the one thing that says where
+※ a field goes, so what the image holds and what the program reads out of it
+※ cannot drift.  Every field is given and each once, which is the rule a record
+※ written anywhere follows; padding between fields is zeroes, which a program
+※ cannot read and so cannot tell from anything.
+※
+※ **It is a place for as long as the program is**, so a field of it is read at an
+※ offset, written at one, and `&moving.to.x` is an address like any other -- the
+※ same three things a record local got, reached the same way from here down.
+※
+※ **A record without `mut` is a record that cannot be written**, field or no
+※ field, which is the rule every other variable follows.
+※
+※ Compare: **C**, whose static initializer this is, down to the zero padding;
+※ **Rust**, where a `static` wants a `const` expression and this is one;
+※ **Go**, whose package-level variable is initialized by generated code where
+※ the value is not constant, which is the other answer; **Zig**, whose
+※ `comptime` evaluation makes far more than this constant.
+
+type Point = x : u32 ; y : u32
+type Line = from : Point ; to : Point
+
+let origin: Line = Line(.from ← Point(.x ← 1u32, .y ← 2u32),
+                        .to ← Point(.x ← 3u32, .y ← 4u32))
+let moving: mut Line = Line(.from ← Point(.x ← 0u32, .y ← 0u32),
+                            .to ← Point(.x ← 0u32, .y ← 0u32))
+
+@[impure]
+fn bump(at: &mut u32):
+    at⌖ ← at⌖ + 1u32
+
+@[startup, impure]
+fn main() → u6:
+    moving.to.x ← 5u32
+    ※ a whole nested field, copied out of the one that cannot be written
+    moving.from ← origin.from
+    ※ and a reference into it
+    bump(&moving.to.x)
+    if origin.to.y ≠ 4u32:
+        1u6
+    elif moving.to.x ≠ 6u32:
+        2u6
+    elif moving.from.x ≠ 1u32 ∨ moving.from.y ≠ 2u32:
+        3u6
+    ※ what nothing wrote is what it started as
+    elif moving.to.y ≠ 0u32:
+        4u6
+    else:
+        0u6

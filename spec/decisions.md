@@ -5624,10 +5624,12 @@ path a definition's literal takes: there is no register a value of one could be
 made in, and going through one would be the thing records-in-records already
 does not do.
 
-Left open, and now in the to-do list: a record at the *top level*.  A global's
-initializer must be a literal the image can hold and a record literal is not one
-of them yet (9902), and `_record_at` reaches a local and not a global, so
-neither holding nor writing one works.  The ring will want it.
+Left open at the time and done an hour later: a record at the *top level*.  A
+record literal of constants is laid out into the bytes a global holds, field by
+field where `offsets_of` puts each and zeroes between, and the global's address
+stands where a placed local's does -- so reading a field, writing one and taking
+a reference into one work there as they do for a local.  `RecordConst` is what
+carries it, beside the array constant that was already there.
 
 Compare: **C**, **Rust**, **Go** and **Zig**, where this is the same statement
 written the same way; **Haskell**, which has no such statement and builds a new

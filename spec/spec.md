@@ -2089,6 +2089,11 @@ read.  Such a record is handed to a call and answered with like any other, becau
 of and a field that is itself a record is not one of them**: a `Line` goes as four `u32`s and not as two `Point`s.  Which of them
 a field is, and where it lies, is the compiler's to remember -- nothing in the language says it.
 
+**A variable at the top level may hold one**, and its value is bytes in the image: every field is given and each once, padding
+between them is zeroes, and it is a place for as long as the program is -- so a field of it is read at an offset, written at one,
+and `&moving.to.x` is an address like any other.  That is C's static initializer and Rust's `const` one; Go, whose package-level
+variable may be initialized by generated code, is the other answer and is not taken.
+
 **A record of one field is a record**, made, passed, answered with and referred into like any other.  Nothing about a record asks
 how many fields it has, so `type Handle = fd : i32` is what says which of the things that may be done with a number may be done
 with this one -- which is what C's structure of one member, Rust's newtype and Haskell's `newtype` are each for.

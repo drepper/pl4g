@@ -134,6 +134,21 @@ class ArrayConst(Const):
         self.elements = elements
 
 
+class RecordConst(Const):
+    """A record every field of which is known while compiling.
+
+    What a variable of a record type starts out holding.  A record is not a
+    constant anywhere else: a value of one is the several values it is made of,
+    and several values in registers are not a thing to write in an image.
+    """
+
+    __slots__ = ("fields",)
+
+    def __init__(self, ty: Type, fields: tuple[Const, ...]) -> None:
+        super().__init__(ty)
+        self.fields = fields
+
+
 class ResultConst(Const):
     """A result whose answer, or whose absence of one, is known while compiling.
 
