@@ -4985,6 +4985,43 @@ Compare: **Rust**, which writes the relation and refuses the call, and which can
 **C++**, where a reference member outliving what it refers to is the ordinary hazard; **Go** and **Java**, which move what
 escapes to the heap and so never ask.
 
+## 2026-09-17T10:00+02:00 — compiler
+
+**Colour in the diagnostics, and the snippets highlighted by the grammar**
+
+Asked for by the user, who said which highlighter to use.
+
+**Colour is decoration and never information.**  Everything a colour says is
+said by the text as well, so the plain output is unchanged to the byte and a
+test compares the two.  `--color=auto` is the default and looks at the stream;
+`NO_COLOR` wins over `always`, a program that sets it having said it is reading
+this.
+
+**The grammar highlights, not the lexer.**  The compiler has a lexer and could
+have coloured a line from it with no dependency at all -- but a lexer knows a
+name is a name and not that this one is a type and that one a parameter.  The
+grammar knows, and its queries are the ones an editor already uses, so a snippet
+is coloured the way the same line is coloured where it was written.  One
+description of the language rather than two that drift.
+
+**The dependency is optional and stays optional.**  `tree-sitter` is a named
+extra and nothing else; without it the snippet is plain and nothing is said,
+since a compiler complaining about its own decoration would complain on every
+line.  That the compiler needs nothing outside the standard library is worth
+more than a coloured snippet.
+
+**Eight colours, not 256.**  What is gained by the larger palette is a shade,
+and what is lost is every terminal that has not got it.  What is coloured is
+what a reader looks for -- the severity, the place, the carets, and the pieces
+of a line that carry meaning; operators, brackets and ordinary names are left
+alone, a line in which everything is coloured being one in which nothing stands
+out.
+
+Compare: **Clang**, whose `-fcolor-diagnostics` and green carets this follows,
+and which highlights nothing inside the snippet; **Rust**, which colours more
+and draws more; **GCC**, which added `-fdiagnostics-color` and the same
+`auto`/`always`/`never`; the **`NO_COLOR`** convention, which all three honour.
+
 Open questions
 --------------
 

@@ -361,6 +361,9 @@ def main(argv: Sequence[str], stdout: TextIO | None = None,
     collected.append(diags)
 
     options = parse_command_line(argv, diags)
+    # Now that the command line has been read, and not before: the diagnostics
+    # a bad command line makes are made by the renderer built above.
+    renderer.recolour(options.colour)
     if options.show_version:
         print("".join(("pypl4g ", VERSION)), file=out)
         return ExitCode.SUCCESS

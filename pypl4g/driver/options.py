@@ -13,6 +13,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Final, Mapping
 
+from ..diag.style import ColourWhen
 from ..paths import share_file
 
 OPTIONS_FILE: Final[str] = "options.json"
@@ -68,6 +69,10 @@ class Options:
     verbose: bool = False
     time_report: bool = False
     diag_format: DiagFormat = DiagFormat.TEXT
+    #: When to write colour.  Looking at the stream is the default, so that a
+    #: terminal gets it and a pipe does not; `NO_COLOR` is honoured whatever
+    #: this says.
+    colour: ColourWhen = ColourWhen.AUTO
     decision_log: Path | None = None
     #: Where to look for modules, in the order to look, as the command line
     #: gave them.  An entry that is not absolute is relative to the importing

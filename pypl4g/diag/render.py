@@ -13,6 +13,8 @@ from typing import Any, TextIO
 from ..source.location import Span
 from ..source.manager import SourceManager
 from .engine import DiagEngine, Diagnostic
+from .highlight import Highlighter
+from .style import ColourWhen, Palette
 
 
 def _caret_line(line: str, column: int, width: int) -> str:
@@ -29,10 +31,23 @@ class TextRenderer:
     """Renders diagnostics in the customary ``file:line:column: severity:`` form."""
 
     def __init__(self, sources: SourceManager, stream: TextIO,
-                 engine_ref: list[DiagEngine] | None = None) -> None:
+                 engine_ref: list[DiagEngine] | None = None,
+                 when: ColourWhen = ColourWhen.AUTO) -> None:
         self._sources = sources
         self._stream = stream
         self._engine_ref = engine_ref
+        self._palette = Palette.chosen(when, stream)
+        self._highlighter = Highlighter() if self._palette.on else None
+
+    def recolour(self, when: ColourWhen) -> None:
+        """Say again when to write colour, the command line having been read.
+
+        The first diagnostics a run can make are about the command line itself,
+        and they are made before it has been read -- so the renderer is built
+        looking, and told once the option is known.
+        """
+        self._palette = Palette.chosen(when, self._stream)
+        self._highlighter = Highlighter() if self._palette.on else None
 
     def _severity(self, diag: Diagnostic) -> str:
         """The severity to print, honouring -Werror when an engine is known."""
@@ -45,10 +60,15 @@ class TextRenderer:
         head: list[str] = [indent]
         position = self._sources.position(diag.span.start) if diag.span.is_valid else None
         if position is not None:
-            head.append("".join((position.path, ":", str(position.line), ":",
-                                 str(position.column), ": ")))
-        head.append("".join((self._severity(diag), ": ", diag.text,
-                             " [PL4G-", str(diag.info.number), "]")))
+            head.append(self._palette.where(
+                "".join((position.path, ":", str(position.line), ":",
+                         str(position.column), ":"))))
+            head.append(" ")
+        head.append("".join((
+            self._palette.severity(self._severity(diag)), ": ",
+            self._palette.message(diag.text), " ",
+            self._palette.number("".join(("[PL4G-", str(diag.info.number),
+                                          "]"))))))
         print("".join(head), file=self._stream)
         if position is not None:
             self._render_snippet(diag.span, position.line, position.column)
@@ -61,8 +81,36 @@ class TextRenderer:
         number = str(line)
         gutter = " " * len(number)
         width = max(1, min(span.end - span.start, len(text) - column + 1))
-        print("".join((" ", number, " | ", text)), file=self._stream)
-        print("".join((" ", gutter, " | ", _caret_line(text, column, width))), file=self._stream)
+        print("".join((self._palette.gutter("".join((" ", number, " |"))), " ",
+                       self._coloured(span, text))), file=self._stream)
+        print("".join((self._palette.gutter("".join((" ", gutter, " |"))), " ",
+                       self._palette.caret(_caret_line(text, column, width)))),
+              file=self._stream)
+
+    def _coloured(self, span: Span, text: str) -> str:
+        """The source line, written as the grammar says its pieces are.
+
+        Where there is no highlighter -- no colour asked for, or no grammar to
+        load -- the line is what it was, which is what every other renderer of
+        this kind falls back to and loses nothing by.
+        """
+        if self._highlighter is None:
+            return text
+        found = self._sources.line_within(span.start)
+        if found is None:
+            return text
+        whole, start, length = found
+        runs = self._highlighter.of_line(whole, start, min(length, len(text)))
+        if not runs:
+            return text
+        pieces: list[str] = []
+        at = 0
+        for begins, ends, name in runs:
+            pieces.append(text[at:begins])
+            pieces.append(self._palette.capture(name, text[begins:ends]))
+            at = ends
+        pieces.append(text[at:])
+        return "".join(pieces)
 
     def __call__(self, diag: Diagnostic) -> None:
         """Render *diag* and everything attached to it."""

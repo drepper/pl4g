@@ -2335,6 +2335,49 @@ and the run then disagreed with the compiler about a program that was perfectly
 all right.  Generating into a copy is what settles it.  The built library is
 read by nobody here, so building it disturbs nothing.
 
+Colour in a diagnostic
+----------------------
+
+Colour is decoration and never information: everything a colour says is said by
+the text as well, so a terminal that shows none loses nothing and the suite
+compares the two and finds the same characters under the codes.  That is why
+the default is to look at the stream -- a terminal gets colour and a pipe does
+not -- and why `NO_COLOR` is honoured whatever `--color` says, a program reading
+this output being the one case where the decision has already been made.
+
+**The eight colours and the two attributes**, and no more.  A palette of 256
+would look better where there are 256 and worse where there are not, and what is
+gained is a shade.  What is coloured is what a reader looks for: the severity,
+the place, the carets, and the pieces of the source line that carry meaning --
+keywords, types, numbers, strings, comments.  Operators, brackets and ordinary
+names are left as they are, a line in which everything is coloured being one in
+which nothing stands out.
+
+**The snippet is highlighted by the grammar**, not by the compiler's own lexer.
+A lexer knows a name is a name; the grammar knows that this one is a type and
+that one a parameter, and the queries beside it are the ones an editor already
+uses -- so a line in a diagnostic is coloured the way the same line is coloured
+where it was written, from one description of the language rather than two that
+drift apart.
+
+**The whole file is parsed, not the line.**  One line of a block does not parse
+on its own, so what is asked is always about the file, the answer is cut to the
+line afterwards, and it is remembered per file: a hundred diagnostics in one
+file are one parse.
+
+**Where the two ways of counting meet.**  tree-sitter counts bytes and
+everything above counts characters, and this language is written in glyphs of
+three bytes -- so a run measured in one and used in the other lands in the
+middle of a bracket.  `Highlighter` converts once per file, with a table from
+byte to character built in the same pass, rather than per capture.
+
+**Nothing of it is required.**  The grammar is loaded on the first snippet that
+wants colour, and where the module or the built library is missing -- or where
+the library was built for another version of tree-sitter, or a query names a
+node the grammar has not got -- there is simply no highlighting.  A compiler
+that said it could not colour something would say it about every line of every
+diagnostic, and none of it is about the program.
+
 Expectations
 ------------
 

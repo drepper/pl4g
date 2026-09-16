@@ -15,6 +15,7 @@ from typing import Sequence, TypeVar
 
 from ..diag import ids as D
 from ..diag.engine import DiagEngine
+from ..diag.style import ColourWhen
 from .options import (DiagFormat, EmitKind, Options, SOURCE_SUFFIX)
 
 
@@ -98,6 +99,11 @@ class CommandLine:
             self._options.emit = self._choice(word, word[len("--emit="):], EmitKind,
                                               self._options.emit)
             return index
+        if word.startswith("--color="):
+            self._options.colour = self._choice(
+                word, word[len("--color="):], ColourWhen,
+                self._options.colour)
+            return True
         if word.startswith("--diag-format="):
             self._options.diag_format = self._choice(
                 word, word[len("--diag-format="):], DiagFormat, self._options.diag_format)

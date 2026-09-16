@@ -156,6 +156,25 @@ class SourceManager:
         end = source.text.find("\n", start)
         return source.text[start:] if end < 0 else source.text[start:end]
 
+    def line_within(self, loc: Loc) -> tuple[str, int, int] | None:
+        """The whole file, where the line holding *loc* begins in it, and how
+        long that line is.
+
+        What wants this is something that reads the line in its place rather
+        than on its own: a parser given one line of a block has nothing to make
+        of it, so what is asked is about the file and the answer is cut to the
+        line afterwards.
+        """
+        source = self.file_of(loc)
+        if source is None:
+            return None
+        offset = loc - source.base
+        line_index = bisect_right(source.line_starts, offset) - 1
+        start = source.line_starts[line_index]
+        end = source.text.find("\n", start)
+        return (source.text, start,
+                (len(source.text) if end < 0 else end) - start)
+
     def snippet(self, span: Span) -> str | None:
         """Return the source text covered by *span*."""
         source = self.file_of(span.start)

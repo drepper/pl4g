@@ -9,13 +9,14 @@ will still be valid once the final compiler replaces this one.
 from __future__ import annotations
 
 import fcntl
+import os
 import platform
 import shutil
 import subprocess
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any, Mapping, Sequence
 
 import pytest
 
@@ -194,10 +195,17 @@ def grammar_is_built() -> None:
             pass
 
 
-def run_compiler(args: Sequence[str]) -> subprocess.CompletedProcess[str]:
-    """Invoke the compiler as a separate process, the way a user would."""
+def run_compiler(args: Sequence[str],
+                 env: Mapping[str, str] | None = None
+                 ) -> subprocess.CompletedProcess[str]:
+    """Invoke the compiler as a separate process, the way a user would.
+
+    *env* adds to what this process has rather than replacing it, since what a
+    test is saying with it is one variable and not a whole environment.
+    """
     return subprocess.run([sys.executable, "-m", "pypl4g", *args], cwd=ROOT,
-                          capture_output=True, text=True, timeout=120)
+                          capture_output=True, text=True, timeout=120,
+                          env=None if env is None else {**os.environ, **env})
 
 
 def describe(proc: subprocess.CompletedProcess[Any]) -> str:

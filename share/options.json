@@ -93,6 +93,20 @@
     },
     {
       "short": null,
+      "long": "--color",
+      "arg": "joined_equals",
+      "metavar": "WHEN",
+      "values": [
+        "auto",
+        "always",
+        "never"
+      ],
+      "default": "auto",
+      "since": "0.1",
+      "help": "colour the diagnostics: when writing to a terminal, always, or never"
+    },
+    {
+      "short": null,
       "long": "--diag-format",
       "arg": "joined_equals",
       "metavar": "FORMAT",

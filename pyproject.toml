@@ -9,6 +9,11 @@ requires-python = ">=3.14"
 # does; without it `pytest` stops at the option rather than running serially,
 # so it is named here and not merely assumed.
 test = ["pytest", "pytest-xdist"]
+# What colours the source line in a diagnostic.  The compiler needs nothing
+# outside the standard library and this does not change that: without the
+# module the snippet is written plain and nothing is said about it.  It is named
+# here so that someone who wants the colour knows what to install.
+colour = ["tree-sitter"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
