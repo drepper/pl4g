@@ -1018,11 +1018,17 @@ def parts_of(ty: Type) -> tuple[Type, ...]:
     if isinstance(ty, TupleType):
         return ty.members
     if isinstance(ty, ProductType):
-        # Its fields, in the order the definition wrote them.  A record and a
-        # tuple are the same thing to everything below here -- several values
-        # travelling together -- and differ in that one of them named its
-        # parts, which is a question for the checker and for nothing else.
-        return tuple(ty for _, ty in ty.fields)
+        # Its fields, in the order the definition wrote them, and a field that
+        # is itself a record spread out where it stands.  A record and a tuple
+        # are the same thing to everything below here -- several values
+        # travelling together -- and what travels is values, so a part that was
+        # itself several of them would be a part nothing could put in a
+        # register.  Where each of them went is the checker's to remember.
+        found: list[Type] = []
+        for _, held in ty.fields:
+            found.extend(parts_of(held) if isinstance(held, ProductType)
+                         else (held,))
+        return tuple(found)
     if isinstance(ty, ArrayType) and not ty.fixed:
         return (_pointer_to(ty.element), *(U64 for _ in ty.shape))
     if isinstance(ty, ListType):

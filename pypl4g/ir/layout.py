@@ -245,6 +245,29 @@ def member_offsets_of(ty: TupleType, layout: DataLayout) -> tuple[int, ...]:
     return tuple(found)
 
 
+def part_offsets_of(ty: ProductType | TupleType,
+                    layout: DataLayout) -> tuple[int, ...]:
+    """Where each *part* of *ty* starts, one offset for each of `parts_of`.
+
+    A field that is itself a record is not one part but all of its own, so this
+    is not `offsets_of`: it walks down to the leaves and adds where each of them
+    lies to where the field holding it does.  Whatever writes a value into a
+    place part by part and whatever reads one back ask this, so the two agree
+    without either counting fields.
+    """
+    found: list[int] = []
+    held = (ty.members if isinstance(ty, TupleType)
+            else tuple(field for _, field in ty.fields))
+    starts = (member_offsets_of(ty, layout) if isinstance(ty, TupleType)
+              else offsets_of(ty, layout))
+    for one, start in zip(held, starts):
+        if isinstance(one, ProductType):
+            found.extend(start + inner for inner in part_offsets_of(one, layout))
+            continue
+        found.append(start)
+    return tuple(found)
+
+
 def tag_offset_of(ty: SumType | ResultType, layout: DataLayout) -> int:
     """Where the tag of a sum, or the truth value of a result, starts."""
     if isinstance(ty, ResultType):

@@ -1,0 +1,58 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ A record holding a record is handed to a function and answered with, which is
+※ the whole of what a record being a value means.
+※
+※ **What travels is leaves and not fields.**  A record goes where a value goes as
+※ the several values it is made of, and a field that is itself a record is not
+※ one of them -- nothing could put it in a register.  So `Line` travels as four
+※ `u32`s and not as two `Point`s, and `l.to.x` is the third of them wherever the
+※ record came from.  That is what `parts_of` says and what the caller, the callee
+※ and the pass that routes a large answer through storage all read.
+※
+※ **A record that arrived as a value is put somewhere before a field is read.**
+※ `made(10u32).to.y` has no place to take the offset of, so one is made: the
+※ answer is written into a frame and the field read out of it.  One rule then
+※ reads a field however the record got here, and a field of a field needs no
+※ second one.
+※
+※ Compare: **C**, where a structure is passed and returned by value and the ABI
+※ spreads it over registers by the same rule -- a nested member is not a unit;
+※ **Go** and **Rust**, the same; **Zig**, which passes a large structure by
+※ pointer and says so in the language; **ML** and **Haskell**, where a record is
+※ boxed and what travels is one pointer, which is the other answer to the same
+※ question.
+
+type Point = x : u32 ; y : u32
+type Line = from : Point ; to : Point
+
+fn reach(l: Line) → u32:
+    l.to.x + l.from.y
+
+fn made(a: u32) → Line:
+    Line(.from ← Point(.x ← a, .y ← a + 1u32),
+         .to ← Point(.x ← a + 2u32, .y ← a + 3u32))
+
+fn copied(l: Line) → Line:
+    l
+
+fn whole(l: Line) → Point:
+    l.to
+
+@[startup]
+fn main() → u6:
+    let l : Line = made(1u32)
+    if reach(l) ≠ 5u32:
+        1u6
+    ※ asked in a block of its own, and it writes: the arms below begin with the
+    ※ token it left and the arm above it with the one it did not
+    elif made(10u32).to.y ≠ 13u32:
+        2u6
+    else:
+        let again : Line = copied(l)
+        if again.to.y ≠ 4u32 ∨ again.from.x ≠ 1u32:
+            3u6
+        elif whole(l).x ≠ 3u32:
+            4u6
+        else:
+            0u6

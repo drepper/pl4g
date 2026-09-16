@@ -192,10 +192,10 @@ To Do List for the PL4g language
     behind a reference is read without reading the whole record, and a literal is written into the place that will hold it --
     which is what lets a field be a record, there being no register such a value could be made in.
 
-[ ] hand a record holding a record to a call, or answer with one.  Building and reading work; what does not is the value
-    existing at all, which is what a convention needs to place.  `parts_of` answers a record with its field types, so a field
-    that is itself several values has no one register; the answer is either flattening that recursively -- and then a whole
-    nested field is no longer one extract -- or saying such a record travels through storage, which is what the C ABI does.
+[x] hand a record holding a record to a call, or answer with one.  Done on 2026-09-17 by flattening: `parts_of` walks a
+    nested field down to its leaves, so every part of a record is one value and a `Line` travels as four `u32`s.  The cost named
+    when the two ways out were written down is the one paid -- a whole nested field is not one extract -- and where one is
+    wanted from a value the record is put in a frame and the field read from there.
 
 [ ] decide whether a fixed array is copied or shared when it is bound to a name.  `let b = a` names the same elements today --
     `a⟦0⟧ ← 9u8` is seen through `b` -- because a value of an array type is where the elements are.  Nothing in the

@@ -179,6 +179,12 @@ class _ArmPlan:
     body: ast.Block
     block: BasicBlock | None = None
     binds: tuple[str, Span, Span, Value, Type] | None = None
+    #: The memory token the arm begins with, where that is not the one current
+    #: where the plan was made.  An `elif` asks its condition in a block of its
+    #: own, so a condition that writes leaves a token that only the arms below
+    #: it may read; each arm therefore carries the token of the block that
+    #: branches to it.
+    memory: Value | None = None
     #: Whether what it binds is what the error carries rather than the answer.
     #: The two are read out of a result by different instructions, being of
     #: different types.
@@ -1599,19 +1605,7 @@ class Checker:
             # for, and a record holding a record has no register to be read
             # into at all.
             where, ty = somewhere
-            at = _field_index(ty, expr.name)
-            if at is None:
-                self._diags.emit(D.LANG_PRODUCT_NO_SUCH_FIELD, expr.name_span,
-                                 type=ty.render(), name=expr.name)
-                return UndefConst(ERROR)
-            place = self._field_place(builder, where, ty, at, expr.span)
-            held = ty.fields[at][1]
-            found = (self._record_from(builder, place, held, expr.span)
-                     if isinstance(held, ProductType)
-                     else builder.load(place, expr.span))
-            if not self._accepts(expected, found.ty):
-                self._report_mismatch(expr.span, found.ty, expected)
-            return found
+            return self._field_of_place(builder, where, ty, expr, expected)
         value = self._lower_expr(builder, expr.base, None)
         ty = self._value_type_of(value)
         if ty is ERROR:
@@ -1620,12 +1614,32 @@ class Checker:
             self._diags.emit(D.LANG_IMPORT_NOT_A_MODULE, expr.base.span,
                              name="an expression")
             return UndefConst(ERROR)
+        if _field_index(ty, expr.name) is None:
+            self._diags.emit(D.LANG_PRODUCT_NO_SUCH_FIELD, expr.name_span,
+                             type=ty.render(), name=expr.name)
+            return UndefConst(ERROR)
+        # A record that arrived as a value and not as a place -- what a call
+        # answered with -- is put somewhere first, so that one rule reads a
+        # field however the record got here and a field of a field needs no
+        # second one.
+        place = builder.frame(ty, expr.span)
+        self._record_into(builder, place, value, ty, expr.span)
+        return self._field_of_place(builder, place, ty, expr, expected)
+
+    def _field_of_place(self, builder: IRBuilder, where: Value,
+                        ty: ProductType, expr: ast.Member,
+                        expected: Type | None) -> Value:
+        """One field of the record at *where*, read and nothing else."""
         at = _field_index(ty, expr.name)
         if at is None:
             self._diags.emit(D.LANG_PRODUCT_NO_SUCH_FIELD, expr.name_span,
                              type=ty.render(), name=expr.name)
             return UndefConst(ERROR)
-        found = builder.extract(value, at, ty.fields[at][1], expr.span)
+        place = self._field_place(builder, where, ty, at, expr.span)
+        held = ty.fields[at][1]
+        found = (self._record_from(builder, place, held, expr.span)
+                 if isinstance(held, ProductType)
+                 else builder.load(place, expr.span))
         if not self._accepts(expected, found.ty):
             self._report_mismatch(expr.span, found.ty, expected)
         return found
@@ -3570,32 +3584,57 @@ class Checker:
         return None if spoiled else given
 
     def _record_into(self, builder: IRBuilder, where: Value, value: Value,
-                     ty: ProductType, span: Span) -> None:
+                     ty: ProductType, span: Span, first: int = 0) -> int:
         """Write a record into the place *where*, a field at a time.
 
         A field at a time rather than all at once, because a record is its
         fields and each of them is something a store already knows how to
-        write; a field that is itself a record is written the same way, one
-        offset further in.
+        write.  What a record is made of is its *leaves*: a field that is itself
+        a record is spread out where it stands, so `first` is which of them this
+        one begins at and what comes back is where the next would.
         """
+        at_part = first
         for at, (_, held) in enumerate(ty.fields):
             place = self._field_place(builder, where, ty, at, span)
-            part = builder.extract(value, at, held, span)
             if isinstance(held, ProductType):
-                self._record_into(builder, place, part, held, span)
+                at_part = self._record_into(builder, place, value, held, span,
+                                            at_part)
                 continue
-            builder.store(place, part, span)
+            builder.store(place, builder.extract(value, at_part, held, span),
+                          span)
+            at_part += 1
+        return at_part
 
     def _record_from(self, builder: IRBuilder, where: Value, ty: ProductType,
                      span: Span) -> Value:
-        """Read a record out of the place *where*, a field at a time."""
-        parts: list[Value] = []
+        """Read a record out of the place *where*, a leaf at a time."""
+        return builder.make_tuple(
+            tuple(self._leaves_from(builder, where, ty, span)), ty, span)
+
+    def _leaves_of(self, builder: IRBuilder, value: Value, ty: Type,
+                   span: Span) -> list[Value]:
+        """What *value* is made of, which for a record is its leaves.
+
+        A record travels as its leaves and not as its fields, so a field that is
+        itself a record contributes all of them and not one of it: what is put
+        together here is the same list either way down.
+        """
+        if not isinstance(ty, ProductType):
+            return [value]
+        return [builder.extract(value, at, held, span)
+                for at, held in enumerate(parts_of(ty))]
+
+    def _leaves_from(self, builder: IRBuilder, where: Value, ty: ProductType,
+                     span: Span) -> list[Value]:
+        """Every leaf of the record at *where*, in the order it is made of."""
+        found: list[Value] = []
         for at, (_, held) in enumerate(ty.fields):
             place = self._field_place(builder, where, ty, at, span)
-            parts.append(self._record_from(builder, place, held, span)
-                         if isinstance(held, ProductType)
-                         else builder.load(place, span))
-        return builder.make_tuple(tuple(parts), ty, span)
+            if isinstance(held, ProductType):
+                found.extend(self._leaves_from(builder, place, held, span))
+                continue
+            found.append(builder.load(place, span))
+        return found
 
     def _element_place(self, builder: IRBuilder, base: Value, element: Type,
                        index: Value, span: Span) -> Value:
@@ -5922,6 +5961,9 @@ class Checker:
             return UndefConst(ERROR)
         asked = [arm for arm in stmt.arms if arm.condition is not None]
         blocks = [builder.new_block("then") for _ in asked]
+        # One per condition: the token current where that condition branched,
+        # which is what the arm it branches to begins with.
+        asked_memory: list[Value] = []
         otherwise = builder.new_block("otherwise") if has_else else None
         spoiled = False
         for index, arm in enumerate(asked):
@@ -5948,17 +5990,21 @@ class Checker:
                 following = builder.new_block("otherwise")
                 otherwise = following
             builder.condbr(condition, blocks[index], following, span=arm.span)
+            asked_memory.append(builder.memory())
             builder.position_at(following)
         if spoiled:
             return UndefConst(ERROR)
-        plan = [_ArmPlan(body=arm.body, block=block)
-                for arm, block in zip(asked, blocks)]
+        plan = [_ArmPlan(body=arm.body, block=block, memory=token)
+                for arm, block, token in zip(asked, blocks, asked_memory)]
+        # What falls past every condition begins with the last one's token.
+        after = asked_memory[-1] if asked_memory else builder.memory()
         if has_else:
             assert otherwise is not None
-            plan.append(_ArmPlan(body=last.body, block=otherwise))
+            plan.append(_ArmPlan(body=last.body, block=otherwise,
+                                 memory=after))
             return self._run_arms(builder, stmt, func, plan, wanted, produces)
         return self._run_arms(builder, stmt, func, plan, wanted, produces,
-                              otherwise=otherwise)
+                              otherwise=otherwise, otherwise_memory=after)
 
     # -- loops -----------------------------------------------------------------
 
@@ -7160,7 +7206,8 @@ class Checker:
                   func: Function,
                   plan: Sequence[_ArmPlan], wanted: Type | None = None,
                   produces: bool = False,
-                  otherwise: BasicBlock | None = None) -> Value:
+                  otherwise: BasicBlock | None = None,
+                  otherwise_memory: Value | None = None) -> Value:
         """Lower each arm into its block and join what the arms leave behind.
 
         A name bound outside the match and assigned inside one arm stands for
@@ -7175,6 +7222,8 @@ class Checker:
         outer_carried = self._carried
         self._carried = outer_carried | {id(local) for local, _, _ in before}
         before_memory = builder.memory()
+        if otherwise_memory is None:
+            otherwise_memory = before_memory
         outcomes: list[tuple[BasicBlock, dict[int, Value], Value, Value | None]] = []
         changed: dict[int, _Local] = {}
         touched = False
@@ -7182,7 +7231,8 @@ class Checker:
         for arm in plan:
             if arm.block is not None:
                 builder.position_at(arm.block)
-            builder.set_memory(before_memory)
+            builder.set_memory(arm.memory if arm.memory is not None
+                               else before_memory)
             self._push_scope()
             if arm.binds is not None:
                 name, name_span, where_span, value, answer_ty = arm.binds
@@ -7213,7 +7263,7 @@ class Checker:
         if otherwise is not None:
             # A way through that runs no arm at all, which is what an `if` with
             # no `else` has.  Nothing changed along it and nothing was written.
-            outcomes.append((otherwise, {}, before_memory, None))
+            outcomes.append((otherwise, {}, otherwise_memory, None))
         self._carried = outer_carried
         if not outcomes:
             # Every arm left the function, so nothing arrives at the join and a
@@ -10558,8 +10608,11 @@ class Checker:
                 spoiled = True
         if spoiled:
             return UndefConst(ERROR)
-        made = builder.make_tuple(tuple(given[name] for name, _ in ty.fields),
-                                  ty, expr.span)
+        leaves: list[Value] = []
+        for name, held in ty.fields:
+            leaves.extend(self._leaves_of(builder, given[name], held,
+                                          expr.span))
+        made = builder.make_tuple(tuple(leaves), ty, expr.span)
         if not self._accepts(expected, ty):
             self._report_mismatch(expr.span, ty, expected)
             return UndefConst(ERROR)

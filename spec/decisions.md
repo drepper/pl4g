@@ -5390,6 +5390,39 @@ thing is a reference and copying is a method call; **collections here**, which
 the log already settled as handles that are shared -- a record is not one of
 those, being its fields rather than a way to reach them.
 
+## 2026-09-17T18:00+02:00 — implementation
+
+**A record travels as its leaves, so `parts_of` flattens a nested field**
+
+The question was how a record holding a record is handed to a call and answered
+with, the last thing records could not do.  Two answers were written down: make
+`parts_of` flatten recursively, so a nested field is no longer one `extract`; or
+say that such a record travels through storage, which is what the C ABI does for
+anything that does not fit its classes.  Flattening was taken, being the smaller
+change and the one that keeps a small record in registers.
+
+**What it costs** is exactly the thing named: nothing can take a whole nested
+field out of a record *value* with one instruction, because the value has no
+part that is that field.  Reading one is reading its leaves, and `_leaves_of`
+and `_leaves_from` are the two directions of that.  Where a whole nested field is
+wanted from a value -- `whole(l)` answering a `Point` -- the record is put in a
+frame and the field read from there, which is a store and some loads that the
+optimiser may remove and the language never mentions.
+
+**What it buys** is that every part of a record is one value, which is what
+everything below the checker already assumed: `through_storage` asks exactly
+that question and now always gets yes, the instruction selectors see only
+leaves, and `part_offsets_of` is the single place saying where each of them
+lies.
+
+Compare: **C**, whose System V ABI classifies a structure by its *fields
+recursively* into eight-byte units -- flattening, with the classes on top;
+**Rust** and **Go**, which pass anything large through storage and small
+aggregates in registers by a similar flattening; **Zig**, which puts the rule in
+the language and passes a large structure by pointer visibly; **ML** and
+**Haskell**, where a record is boxed and one pointer travels, which is the
+answer this does not take.
+
 Open questions
 --------------
 

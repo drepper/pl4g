@@ -460,6 +460,12 @@ To Do List for the pypl4g compiler
     becoming external tokens it lexes itself.  The direction is the safe one -- the grammar takes a few programs the compiler
     does not -- so this is fidelity and not a defect.
 
+[ ] let a record with exactly one field be a value.  `type Inner = a : u32` binds and reads fine -- a name is storage and a
+    field is an offset -- but a function answering with one reaches the code generator and fails there (9901, "making a Inner,
+    which is one value and not several", and the same about taking one out).  The verifier's rule is that a tuple instruction
+    wants several parts, and a record of one field has one; either such a record is its field to everything below the checker,
+    or the rule counts a record separately.  Found while flattening `parts_of`; predates it.
+
 [ ] report a tuple holding an array.  `〈⟦1u8, 2u8⟧〉` reaches the code generator and fails there (9901, "making a 〈u8⟦2⟧〉, which
     is one value and not several"), so what a reader is told is an internal error about a program the front end accepted.  Either
     an array is a thing a tuple may hold, in which case `parts_of` has to say what its parts are, or it is not and the checker

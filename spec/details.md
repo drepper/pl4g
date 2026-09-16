@@ -2395,9 +2395,30 @@ a field that is itself written out recurses into that field's place.  Nothing is
 an economy about it; it is the only way the value can exist.  Reading follows
 the same offsets, so `l.to.x` is one load and `&l.to.x` one address.
 
-What is *not* written out -- a call answering with a record, another name -- is
-lowered the ordinary way and copied in, which works for a record whose fields
-are each one value and is where the register representation still shows through.
+**What travels is leaves and not fields.**  `parts_of` answers a record with the
+values it is made of, and a field that is itself a record is spread out where it
+stands rather than counted as one: a part that was several values would be a
+part nothing could put in a register.  So `parts_of(Line)` is four `u32`s, and
+`extract` on such a value takes the *n*-th of them.  `part_offsets_of` says where
+each of those lies in a place holding the record, walking to the same leaves and
+adding where the field holding each lies; `largeanswers` reads it, so a record
+whose answer goes through storage is written and read back by the same rule the
+checker builds one with.
+
+That leaves a value made of a record value, and the two directions are one
+helper each: `_leaves_of` takes a field that is itself a record apart into its
+own leaves, so a literal builds one flat tuple; `_leaves_from` reads a place the
+same way.  Where a record arrived as a value and a field of it is wanted -- what
+a call answered with -- it is written into a frame first and the field read out
+of that, so one rule reads a field however the record got here and a field of a
+field needs no second one.
+
+**An `elif` asks its condition in a block of its own**, and a condition that
+writes -- which is what such a frame is -- leaves a memory token only the arms
+below it may read.  Each arm therefore begins with the token current where the
+branch to it was made, and what falls past every condition begins with the last
+one's; before this there was one token for all of them, which was the entry
+block's only because nothing asked in an `elif` had ever written.
 
 
 Asking the kernel

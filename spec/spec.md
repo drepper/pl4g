@@ -2003,7 +2003,9 @@ bump(&l.to.x)                    ※ a reference to a field of a field
 ```
 
 Reading one follows the offsets -- `l.to.x` is where `l` is, plus where `to` lies, plus where `x` lies -- and only the field is
-read.
+read.  Such a record is handed to a call and answered with like any other, because **what travels is the values a record is made
+of and a field that is itself a record is not one of them**: a `Line` goes as four `u32`s and not as two `Point`s.  Which of them
+a field is, and where it lies, is the compiler's to remember -- nothing in the language says it.
 
 **A reference that promises more stands where less is wanted.**  `&mut T` promises everything `&T` does and adds writing, and
 `&static T` promises everything `&T` does and adds the time, so each stands where the weaker one is asked for -- in a call, a

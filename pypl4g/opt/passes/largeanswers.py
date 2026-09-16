@@ -29,10 +29,10 @@ from ...ir.inst import (BinOp, BinaryInst, CallInst, CastInst, CastKind,
                         MemStartInst, RetInst, StoreInst, Terminator,
                         TupleInst, UnwrapInst, WrapInst)
 from ...ir.layout import (DataLayout, error_offset_of,
-                          member_offsets_of, tag_offset_of)
+                          part_offsets_of, tag_offset_of)
 from ...ir.module import Module
-from ...ir.types import (MEM, ResultType, TupleType, Type, U64, VOID,
-                         parts_of)
+from ...ir.types import (MEM, ProductType, ResultType, TupleType, Type, U64,
+                         VOID, parts_of)
 from ...ir.value import IntConst, Value
 
 #: The one layout this compiler has.  Where it grows a second, the pass is
@@ -176,8 +176,8 @@ def _offsets(answer: Type) -> tuple[int, ...]:
         assert answer.err is not None
         return (0, tag_offset_of(answer, LAYOUT),
                 error_offset_of(answer, LAYOUT))
-    assert isinstance(answer, TupleType), answer
-    return member_offsets_of(answer, LAYOUT)
+    assert isinstance(answer, TupleType | ProductType), answer
+    return part_offsets_of(answer, LAYOUT)
 
 
 def _part(value: Value, index: int, part: Type, answer: Type,
