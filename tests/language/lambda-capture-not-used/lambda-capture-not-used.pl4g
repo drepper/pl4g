@@ -1,0 +1,23 @@
+※ pl4g-test: compile=error diag=4554
+
+※ A capture list says what a lambda depends on, so a name in it the body never
+※ reaches is a thing the list says and the lambda does not do.  It costs room
+※ in what the lambda carries and a copy where it is written, and -- worse than
+※ either -- it tells a reader the lambda depends on something it does not.
+※
+※ Reading it is using it and so is writing it: a name brought in by reference
+※ may be brought in *to* be written, which is the whole of what `&` is for.
+※
+※ `[=]` and `[&]` bring in what the body reaches, so they cannot bring in too
+※ much; the rule is asked of them all the same, and where it ever fires of one
+※ it is the compiler that has got it wrong and not the program.
+
+@[startup, impure]
+fn main() → u6:
+    let n: u8 = 1u8
+    let m: u8 = 2u8
+    let f: fn(u8) → u8 = λ a: u8 [n, m] → u8 { a + n }
+    if f(1u8) ≠ 2u8:
+        1u6
+    else:
+        0u6

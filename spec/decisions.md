@@ -4634,6 +4634,32 @@ Writing the tests for it turned up a real defect: a lambda's function was not ow
 module's name never went in front of it and two files each writing one produced the same symbol.  The compiler caught it -- it
 refuses a module in which two definitions come to one symbol -- and there is a language test for it now.
 
+---
+
+## 2026-09-16T23:15+02:00 — language
+
+**Everything a capture list brings in is used**
+
+On the user's direction, for named lists and for `[=]` and `[&]` alike.  A name in a list the body never reaches costs room in
+what the lambda carries and a copy where it is written, and tells a reader the lambda depends on something it does not -- which
+is the worst of the three, a capture list being worth reading only where it is true.
+
+It was a warning before, and the generic one: "the value given to 'n' here is never read", from the rule about a value nothing
+reads.  That rule is still what answers the question -- `_Local.read` is asked after the body is lowered rather than the body
+being walked a second time -- but what is said about it is now its own error, because a list that brings in what it does not need
+is a statement about the program and not a value that went to waste.
+
+**Writing a name is using it.**  A name brought in by reference may be brought in *to* be written, which is the whole of what `&`
+is for, and the place it stands for is then never read.  That needed a flag beside `read`, and it corrected the older rule too: a
+place written and not read is not a value nobody read, it is the reason the place is there.  C++ says nothing about either, which
+is why an unused capture there is a warning at best.
+
+**`[=]` and `[&]` cannot bring in too much**, what they bring in being what the body reaches.  The rule is asked of them anyway:
+where it ever fires of one it is the compiler that has got the reaching wrong, and a rule that is checked where it cannot fail is
+a rule that says so when the reasoning behind it breaks.  It did break once while this was written -- a name mentioned only as
+the target of an assignment was not found, an assignment keeping its target as a string rather than as a name -- and this is what
+found it.
+
 Open questions
 --------------
 

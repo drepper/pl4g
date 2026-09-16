@@ -104,6 +104,12 @@ class _Local:
     mutable: bool = False
     #: Whether anything has read the value the name currently stands for.
     read: bool = False
+    #: Whether anything has written the place the name stands for, which only a
+    #: name that stands for one can have.  Reading and writing are two ways of
+    #: using such a name and the rules about them differ, so they are two
+    #: flags: a value nothing reads is worth reporting, and a place nothing
+    #: reads may still be the reason the place exists.
+    written: bool = False
     #: Where that value was given, for reporting one that nothing reads.
     value_span: Span = INVALID_SPAN
     #: A parameter arrives with a value the caller chose, so not reading it says
@@ -361,6 +367,13 @@ def _named_in(node: object, into: list[str]) -> None:
         into.append(node.name)
     if isinstance(node, ast.Capture) and node.name not in into:
         into.append(node.name)
+    if isinstance(node, ast.AssignStmt):
+        # A name written as the target of an assignment is a name the body
+        # reaches, and is kept as a string rather than as a name of its own --
+        # so it is not found by looking for names, and has to be looked for.
+        for one in (node.name, *(name for name, _ in node.more)):
+            if one not in into:
+                into.append(one)
     if isinstance(node, ast.Node):
         for one in fields_of(node):
             _named_in(getattr(node, one.name), into)
@@ -1576,6 +1589,12 @@ class Checker:
         definition -- covers a diagnostic only discovered later.
         """
         if local.read or local.is_parameter or local.value.ty is ERROR:
+            return
+        if local.placed and local.written:
+            # What such a name stands for is a place, and the value bound to it
+            # is where the place is.  Writing through it is using that value as
+            # much as reading through it is, so a place written and not read is
+            # not a value nobody read -- it is the reason the place is there.
             return
         if local.expectation is not None:
             self._diags.resume(local.expectation)
@@ -3782,6 +3801,7 @@ class Checker:
         self._push_scope()
         try:
             _addressed_in(expr.body, self._addressed)
+            brought: list[tuple[ast.Capture, _Local]] = []
             for at, ((one, local), what) in enumerate(zip(taken, held)):
                 # What is in the environment is what was put there: the value
                 # for a capture by value, and the address of the variable for
@@ -3796,10 +3816,14 @@ class Checker:
                                  placed_as=(what.pointee
                                             if isinstance(what, PtrType)
                                             else None))
+                bound = self._find_local(one.name)
+                if bound is not None:
+                    brought.append((one, bound))
             for one, value in zip(expr.params, arriving[1:]):
                 self._bind_local(one.name, value, one.span, one.mutable,
                                  is_parameter=True, builder=inner)
             self._lower_block(inner, expr.body, func)
+            self._all_of_it_used(brought)
             if not inner.is_terminated:
                 if answer is VOID:
                     inner.ret()
@@ -3816,6 +3840,31 @@ class Checker:
             (self._scopes, self._addressed, self._answering, self._impure,
              self._carried, self._loops, self._outside) = outer
         return func
+
+    def _all_of_it_used(self,
+                        brought: Sequence[tuple[ast.Capture, _Local]]) -> None:
+        """Report anything the list brought in that the body never reaches.
+
+        A capture list says what a lambda depends on, so a name in it the body
+        never reaches is a thing the list says and the lambda does not do.  It
+        costs room in what the lambda carries and a copy where it is written,
+        and -- worse than either -- it tells a reader the lambda depends on
+        something it does not.
+
+        Asked of the binding rather than of the writing, because whether a name
+        was read is a thing the scope already knows: it is what the rule about a
+        value nothing reads is built on, and asking it twice in two ways would
+        be two answers to one question.  Where this reports, that rule is told
+        the name was read, so that one mistake is reported once.
+        """
+        for one, bound in brought:
+            if bound.read or bound.written:
+                # Written and not read is using it: a name brought in by
+                # reference may be brought in *to* be written, which is the
+                # whole of what `&` is for.
+                continue
+            self._diags.emit(D.LANG_CAPTURE_NOT_USED, one.span, name=one.name)
+            bound.read = True
 
     def _lower_deref_assign(self, builder: IRBuilder,
                             stmt: ast.DerefAssign) -> None:
@@ -6048,6 +6097,7 @@ class Checker:
             assert local.held is not None
             value = self._checked_value(builder, node, local.held)
             builder.store(local.value, value, node.span)
+            local.written = True
             local.is_parameter = False
             return builder.load(local.value, node.span) if wants_value else None
         if local is not None:

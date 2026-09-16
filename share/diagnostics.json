@@ -5685,6 +5685,28 @@
       "option": null
     },
     {
+      "number": 4554,
+      "name": "LANG_CAPTURE_NOT_USED",
+      "severity": "error",
+      "message": "'{name}' is brought in and the body does not use it",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the capture"
+        }
+      ],
+      "cause": "A capture list says what a lambda depends on, so a name in it that the body never reaches is a thing the list says and the lambda does not do.  It costs room in what the lambda carries and a copy where it is written, and -- worse than either -- it tells a reader the lambda depends on something it does not.  A list that says `=` or `&` brings in what the body reaches and cannot bring in too much, so one that does is the compiler having got it wrong rather than the program.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Lambdas",
+        "requirement": "Everything a capture list brings in is used."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 4537,
       "name": "LANG_REF_PLACE_NOT_MUTABLE",
       "severity": "error",

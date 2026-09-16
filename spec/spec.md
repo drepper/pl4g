@@ -510,6 +510,18 @@ and C++'s mark for it, and the mark is the same `&` a reference type is written 
 A name is brought in once (4553), and a name that is not there to bring in is refused (4551).  A lambda that brings nothing in is
 written with no list at all, an empty one being a second spelling of that (3041).
 
+**Everything a capture list brings in is used** (4554).  A name in it the body never reaches is a thing the list says and the
+lambda does not do: it costs room in what the lambda carries and a copy where the lambda is written, and -- worse than either --
+it tells a reader the lambda depends on something it does not.  A capture list is worth reading only where it is true.
+
+**Writing a name is using it** as much as reading it is, a name brought in by reference sometimes being brought in *to* be
+written:
+
+```
+let put: fn(u8) = λ a: u8 [&n]:
+    n ← a                                   ※ the only mention of n, and a use
+```
+
 **`[=]` and `[&]` say the same of every name the body reaches** rather than of named ones, which is what those two say in C++:
 
 ```
@@ -525,6 +537,9 @@ program differ.
 A list that says "all of them" says less than one that names them: what a lambda depends on is then found by reading the body
 rather than read off its first line.  It is here because a lambda reaching many names is a lambda whose list is mostly noise, and
 because a generator emitting one knows what it emitted.
+
+Because what they bring in is what the body reaches, **they cannot bring in too much**.  The rule above is asked of them all the
+same: where it ever fires of one, it is the compiler that has got the reaching wrong and not the program.
 
 **They are told from a list of names by what follows the mark.**  `&` begins a capture of a named variable as well, so which it
 is, is what comes after it: a name in a list, and the closing bracket here.

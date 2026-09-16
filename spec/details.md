@@ -2046,12 +2046,23 @@ checked in a scope stack of its own, holding the captures and the parameters and
 is the difference worth telling a reader about.
 
 **`[=]` and `[&]` are worked out in the checker**, from two walks over the body: every name it writes, in the order it writes
-them, less every name it binds for itself and less its own parameters.  A nested lambda's capture list counts as names *this*
+them, less every name it binds for itself and less its own parameters.  A name written as the target of an assignment counts --
+it is kept as a string rather than as a name of its own, so it is not found by looking for names and has to be looked for.  A nested lambda's capture list counts as names *this*
 body reaches, since that is what they are.
 
 `[&]` needs the names placed, and which names those are is not known until the body is checked -- which is after `_addressed_in`
 has decided.  So every name written in such a body is given storage: one that turns out not to be brought in has paid a load for
 it, which is the price of a list that says "all of them" rather than saying which.
+
+**Whether a capture was used is the scope's answer and not a second walk.**  `_Local.read` is what the rule about a value nothing
+reads is already built on, so the check after the body is lowered is that flag -- asking the same question twice in two ways
+would be two answers to one question.  Where it reports, the local is marked read, so that one mistake is reported once rather
+than as an error and a warning.
+
+Writing is a use, which needed a flag of its own.  A name brought in by reference may be brought in *to* be written, and the
+place it stands for is then never read; `_Local.written` says so, and the rule about a value nothing reads learned it too -- for
+a name that stands for a place, the value bound to it is where the place is, and writing through it uses that value as much as
+reading through it does.
 
 **A capture by reference is a placed local inside the lambda.**  `_addressed_in` collects the names written after `&` in a
 capture list beside the ones written after `&` in an expression, because both need the variable to be somewhere; the environment
