@@ -1355,6 +1355,22 @@
       "option": null
     },
     {
+      "number": 3044,
+      "name": "LANG_SYNTAX_INLINE_INSIDE_INLINE",
+      "severity": "error",
+      "message": "a block written on one line may not open another",
+      "args": [],
+      "cause": "What closes a block written after a colon on one line is the end of that line.  A second one opened inside it would end at the same place, so an `else` after the two would belong to either and a reader would have to know a rule to say which.  Writing the inner one in braces says it, and so does writing the outer one out.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Blocks",
+        "requirement": "A block written on one line may not open another."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 3031,
       "name": "LANG_SYNTAX_SPREAD_OUTSIDE_A_CALL",
       "severity": "error",

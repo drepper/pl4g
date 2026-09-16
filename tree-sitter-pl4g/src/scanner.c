@@ -28,6 +28,7 @@ enum TokenType {
   NEWLINE,
   INDENT,
   DEDENT,
+  INLINE_OPEN,
 };
 
 // Deep enough for any program a person or a generator writes; the serialized
@@ -37,12 +38,22 @@ enum TokenType {
 typedef struct {
   uint8_t depth;
   uint16_t columns[MAX_DEPTH];
+  // Whether each level was opened by a colon with something after it on the
+  // same line.  Such a level is closed by the end of that line and by whatever
+  // else on it cannot continue a statement, rather than by a shrinking column.
+  bool inline_[MAX_DEPTH];
+  // Whether the end of line closing the innermost such level has been given
+  // out and its dedent has not.  The grammar takes any number of ends of line
+  // there, so without this the empty one would repeat for ever.
+  bool closing;
 } Scanner;
 
 void *tree_sitter_pl4g_external_scanner_create(void) {
   Scanner *scanner = malloc(sizeof(Scanner));
   scanner->depth = 1;
   scanner->columns[0] = 0;
+  scanner->inline_[0] = false;
+  scanner->closing = false;
   return scanner;
 }
 
@@ -55,9 +66,11 @@ unsigned tree_sitter_pl4g_external_scanner_serialize(void *payload,
   Scanner *scanner = (Scanner *)payload;
   unsigned size = 0;
   buffer[size++] = (char)scanner->depth;
+  buffer[size++] = (char)(scanner->closing ? 1 : 0);
   for (uint8_t i = 0; i < scanner->depth; i++) {
     buffer[size++] = (char)(scanner->columns[i] & 0xFF);
     buffer[size++] = (char)(scanner->columns[i] >> 8);
+    buffer[size++] = (char)(scanner->inline_[i] ? 1 : 0);
   }
   return size;
 }
@@ -68,17 +81,21 @@ void tree_sitter_pl4g_external_scanner_deserialize(void *payload,
   Scanner *scanner = (Scanner *)payload;
   scanner->depth = 1;
   scanner->columns[0] = 0;
-  if (length == 0)
+  scanner->inline_[0] = false;
+  scanner->closing = false;
+  if (length < 2)
     return;
   unsigned size = 0;
   uint8_t depth = (uint8_t)buffer[size++];
   if (depth > MAX_DEPTH)
     depth = MAX_DEPTH;
   scanner->depth = depth;
-  for (uint8_t i = 0; i < depth && size + 1 < length; i++) {
+  scanner->closing = buffer[size++] != 0;
+  for (uint8_t i = 0; i < depth && size + 2 < length; i++) {
     uint16_t low = (uint8_t)buffer[size++];
     uint16_t high = (uint8_t)buffer[size++];
     scanner->columns[i] = (uint16_t)(low | (high << 8));
+    scanner->inline_[i] = buffer[size++] != 0;
   }
 }
 
@@ -86,6 +103,17 @@ static void skip(TSLexer *lexer) { lexer->advance(lexer, true); }
 
 // The reference mark that introduces a comment, in UTF-8.
 static bool at_comment(TSLexer *lexer) { return lexer->lookahead == 0x203B; }
+
+// Whether what stands here closes a block written on one line.  Asked only
+// where the parser would take the end of a statement, which is what makes one
+// character enough: at such a place the only things that may follow on the line
+// are a semicolon continuing the block, the brace of a block it stands in, a
+// comment taking the rest of the line, and the `else` or `elif` of the same
+// chain -- and of those only the last begins with a letter.
+static bool closes_one_line(TSLexer *lexer, bool saw_newline) {
+  return saw_newline || lexer->eof(lexer) || at_comment(lexer) ||
+         lexer->lookahead == '}' || lexer->lookahead == 'e';
+}
 
 bool tree_sitter_pl4g_external_scanner_scan(void *payload, TSLexer *lexer,
                                             const bool *valid_symbols) {
@@ -108,10 +136,46 @@ bool tree_sitter_pl4g_external_scanner_scan(void *payload, TSLexer *lexer,
     }
   }
 
+  bool one_line = scanner->inline_[scanner->depth - 1];
+
+  // A colon with something after it on the same line opens a block written on
+  // that line.  Whether anything follows the colon is a question about the text
+  // and not about the parse, so the parser asks for this and the scanner
+  // answers by looking.  One such block may not open another: the inner one
+  // would end where the outer does, and an `else` after the two would belong to
+  // either.
+  if (valid_symbols[INLINE_OPEN] && !one_line && !saw_newline
+      && !lexer->eof(lexer) && !at_comment(lexer)
+      && scanner->depth < MAX_DEPTH) {
+    scanner->inline_[scanner->depth] = true;
+    scanner->columns[scanner->depth++] = (uint16_t)lexer->get_column(lexer);
+    lexer->result_symbol = INLINE_OPEN;
+    return true;
+  }
+
+  // What closes such a block, given out here rather than left to the column,
+  // which says nothing until the line has ended.  The two come one after the
+  // other because the grammar ends a line before it closes a block.
+  if (one_line && lexer->lookahead != ';'
+      && closes_one_line(lexer, saw_newline)) {
+    if (valid_symbols[NEWLINE] && !scanner->closing) {
+      scanner->closing = true;
+      lexer->result_symbol = NEWLINE;
+      return true;
+    }
+    if (valid_symbols[DEDENT]) {
+      scanner->closing = false;
+      scanner->depth--;
+      lexer->result_symbol = DEDENT;
+      return true;
+    }
+  }
+
   if (lexer->eof(lexer)) {
     // Every block a file opened is closed at its end, so that a file ending
     // inside one still parses as far as it went.
     if (valid_symbols[DEDENT] && scanner->depth > 1) {
+      scanner->closing = false;
       scanner->depth--;
       lexer->result_symbol = DEDENT;
       return true;
@@ -141,12 +205,14 @@ bool tree_sitter_pl4g_external_scanner_scan(void *payload, TSLexer *lexer,
   uint16_t current = scanner->columns[scanner->depth - 1];
 
   if (valid_symbols[INDENT] && column > current && scanner->depth < MAX_DEPTH) {
+    scanner->inline_[scanner->depth] = false;
     scanner->columns[scanner->depth++] = (uint16_t)column;
     lexer->result_symbol = INDENT;
     return true;
   }
 
   if (valid_symbols[DEDENT] && column < current) {
+    scanner->closing = false;
     scanner->depth--;
     lexer->result_symbol = DEDENT;
     return true;

@@ -184,6 +184,7 @@ GROUPS: tuple[Group, ...] = (
            "named-lifetimes": "one lifetime name over three types, and both answers",
            "type-reaches-itself-through-a-reference": "four definitions that reach themselves through references",
            "line-breaks-inside-brackets": "every kind of bracket written down the page",
+           "block-on-one-line": "eight blocks written after the colon on their own line",
            "loop-break-nested": "two loops and all four jumps between them",
            "loop-continue": "two loops each begun again from inside the body",
            "loop-break-value": "a search whose loop comes to what it found",

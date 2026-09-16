@@ -3635,6 +3635,36 @@ there -- and `RETVALTYPE` is the type of the return value.  `BLOCK` is the code 
 the function header is followed by a colon, a newline, and then the properly indented code.  When the function header is followed by
 a `{` it uses the explicit syntax and continues until the respective closing `}`.
 
+**A colon with something after it on the same line opens a block that the end of that line closes.**  It is the layout notation
+with the indentation left out and not a third one: the same statements, the same separators, the same everything -- so what it
+buys is a short thing written short.
+
+```
+fn twice(a: u8) → u8: a + a
+
+if b: 0u6 else: 1u6
+if b: n ← 5u8
+while n < 3u8: n ← n + 1u8
+if n = 1u8: 1u8 elif n = 2u8: 2u8 else: 3u8
+```
+
+**What closes it** is the end of the line, or anything on that line that cannot continue it: the `else` or `elif` of the same
+chain, the brace of a block it stands in, or a comment taking the rest of the line.  A semicolon *can* continue it, so two
+statements may stand there the way two may stand on any line.
+
+**A block written this way may not open another** (3044).  The inner one would end where the outer one does, so an `else` after
+the two would belong to either and a reader would have to know a rule to say which.  C, Java and their family settle that by
+binding to the nearest `if`, and pay for it with a mistake nobody sees; here the question is never asked.  Writing the inner block
+in braces says where it ends, and so does writing the outer one out:
+
+```
+if a: if b: 1u6 else: 2u6              ※ refused (3044)
+if a: if b { 1u6 } else { 2u6 }        ※ the inner block says where it ends
+```
+
+Compare: **Python**, whose `if b: x` this is and which refuses the nested case for the same reason; **Haskell**, whose layout rule
+has the same notion of a block opened without a newline; **Go**, which requires the braces always and so never asks.
+
 ##### Walking an array
 
 **`@[listable]` says what it means to hand the function an array where one of its elements is wanted**: the function is called for

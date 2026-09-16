@@ -4901,6 +4901,36 @@ program, it is fatal, and a reader has no way to tell it from the real thing.  A
 answers nothing, quietly.  It is a rule about this compiler and not about the language, so it is written down in the
 implementation notes rather than the specification.
 
+## 2026-09-17T07:30+02:00 — language
+
+**A block may be written on the line its colon stands on**
+
+Asked for by the user, who asked whether it could be done without creating conflicts in the grammar.  It can, and the measuring
+is what decided how.
+
+**It is the layout notation with the indentation left out**, not a third one.  The same statements, the same separators, the same
+everything: what it buys is a short thing written short, and what it costs is nothing to learn.  `if b: 0u6 else: 1u6`,
+`while n < 3u8: n ← n + 1u8` and `fn twice(a: u8) → u8: a + a` all follow from the one rule.
+
+**The scanner opens it, not the grammar.**  Written as a grammar rule it does create conflicts, and they were counted: a rule
+holding any statement converges only after nine declared conflicts, spread through the expression grammar, assignments, units and
+loops; a rule holding a single statement still needs one, `if b: x ⊼ y` being readable as the arm's operator or the whole
+`if`'s.  A fourth external token standing where the end of line and the indent stand in the other reading costs none, because the
+two readings then differ by a token rather than by a guess.
+
+**A block written this way may not open another** (3044), chosen by the user over the rule C and its family use.  The inner block
+would end where the outer one does, so an `else` after the two would belong to either; binding to the nearest `if` settles it at
+the price of a mistake nobody sees.  Refusing it costs nothing a reader wants: the inner block in braces says where it ends, and
+the outer one written out says it the other way.
+
+**The arm takes the whole expression.**  `if b: x ⊕ y` is an arm of `x ⊕ y` and never an `if` an operator is applied to;
+parentheses say the other.  That is what every language with this form does, and the only reading in which the colon opens a
+block rather than introducing one operand.
+
+Compare: **Python**, whose `if b: x` this is and which refuses the nested case for the same reason; **Haskell**, whose layout
+rule has the same notion of a block opened without a newline; **C**, **Java** and **Go**, where the braces are the block and the
+dangling `else` is settled by a rule or by requiring them.
+
 Open questions
 --------------
 

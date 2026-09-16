@@ -18,6 +18,11 @@ module.exports = grammar({
     $._newline,
     $._indent,
     $._dedent,
+    // What a colon with something after it on the same line opens.  It stands
+    // where the end of line and the indent stand in the other reading, and the
+    // scanner produces one or the other: which of the two a block is, is a
+    // question about the text after the colon, and the parser cannot ask it.
+    $._inline_open,
   ],
 
   // A comment may stand anywhere, so it is an extra; both kinds are single
@@ -348,8 +353,14 @@ module.exports = grammar({
     // block, but it is still a line: the newline before it is given out, and
     // another follows the next line that has something on it.  Letting the
     // newlines repeat is what lets a comment stand anywhere a statement can.
+    // A block written on one line is the same block with its indentation left
+    // out: what opens it is the colon and what closes it is the end of the
+    // line, or an `else` or `elif` of the same chain, or a brace.  Both of
+    // those are produced by the scanner, so the two readings differ by one
+    // token and there is nothing here to decide between them.
     layout_block: $ => seq(
-      ':', repeat1($._newline), $._indent,
+      ':',
+      choice(seq(repeat1($._newline), $._indent), $._inline_open),
       repeat1($._statement_line), $._dedent,
     ),
 

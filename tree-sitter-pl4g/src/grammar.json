@@ -1688,15 +1688,29 @@
           "value": ":"
         },
         {
-          "type": "REPEAT1",
-          "content": {
-            "type": "SYMBOL",
-            "name": "_newline"
-          }
-        },
-        {
-          "type": "SYMBOL",
-          "name": "_indent"
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "SEQ",
+              "members": [
+                {
+                  "type": "REPEAT1",
+                  "content": {
+                    "type": "SYMBOL",
+                    "name": "_newline"
+                  }
+                },
+                {
+                  "type": "SYMBOL",
+                  "name": "_indent"
+                }
+              ]
+            },
+            {
+              "type": "SYMBOL",
+              "name": "_inline_open"
+            }
+          ]
         },
         {
           "type": "REPEAT1",
@@ -5034,6 +5048,10 @@
     {
       "type": "SYMBOL",
       "name": "_dedent"
+    },
+    {
+      "type": "SYMBOL",
+      "name": "_inline_open"
     }
   ],
   "inline": [],

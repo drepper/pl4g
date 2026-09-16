@@ -2246,6 +2246,49 @@ literal, and the only thing it costs is a name immediately followed by a charact
 nothing readable writes, and which the whole test suite confirmed nothing does.  It is Haskell's rule and ML's.
 
 
+A block written on one line
+---------------------------
+
+The two parsers decide it in two different places, because the two know
+different things.
+
+**The compiler's parser decides it on one token.**  `_parse_layout_block` reads
+the colon and looks: an end of line means the indented reading, anything else
+means the block is on this line, and `_parse_separated` then reads the
+statements the way it reads them anywhere.  What ends the run is what ends any
+run -- the end of the line, a dedent, a brace -- and the `else` of the chain,
+which is not a statement and so ends it by not continuing it.  `_inline` is
+raised while such a block is read, which is what refuses a second one inside it
+(3044).  One flag, one lookahead, and nothing else.
+
+**The grammar cannot look**, so it is told.  A fourth external token,
+`_inline_open`, stands in `layout_block` where the end of line and the indent
+stand in the other reading; the scanner produces one or the other, so the two
+readings differ by a token and there is nothing for the parser to decide
+between.  Writing it as a grammar rule instead was tried and measured: a rule
+holding any statement converges only after **nine** declared conflicts, through
+the expression grammar, assignments, units and loops; one holding a single
+statement still needs `[$._expression, $.logical_expression]`, because
+`if b: x ⊼ y` can read the operator as the arm's or as the whole `if`'s.  With
+the scanner producing the token there are none.
+
+**What closes it, the scanner decides by one character.**  It is asked only
+where the parser would take the end of a statement, and at such a place the only
+things that may follow on the line are a semicolon continuing the block, the
+brace of a block it stands in, a comment taking the rest of the line, and the
+`else` or `elif` of the same chain.  Of those only the last begins with a
+letter, so `e` is enough and no word has to be read.  It is an approximation of
+what the compiler's parser knows exactly, and the direction it errs in is the
+harmless one: a name beginning with `e` can only stand there after a semicolon,
+which is tested first.
+
+**Neither token may be produced where nothing was read.**  Both are empty, so an
+open followed at once by a close would leave the lexer where it was and the
+parse would not move.  What stops it is the grammar rather than a guard: a block
+holds at least one statement, so right after the open neither the end of a line
+nor a dedent is a token the parser would take, and the close cannot fire until
+something has been read.
+
 Expectations
 ------------
 

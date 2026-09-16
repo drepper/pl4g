@@ -1,0 +1,18 @@
+※ pl4g-test: compile=error diag=3044
+
+※ What closes a block written after a colon on one line is the end of that line.
+※ A second one opened inside it would end at the same place, so the `else` here
+※ could belong to either `if` and a reader would have to know a rule to say
+※ which.  C, Java and the rest have such a rule -- the nearest `if` wins -- and
+※ pay for it with a mistake nobody sees; the rule here is that the question is
+※ never asked.
+※
+※ Written in braces the inner block says where it ends, so `if a: if b { 1u6 }
+※ else { 2u6 }` is allowed and means what it says.  Written out over three lines
+※ the indentation says it, which is the other way.
+
+@[startup]
+fn main() → u6:
+    let a: bool = true
+    let b: bool = true
+    if a: if b: 1u6 else: 2u6

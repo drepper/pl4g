@@ -200,6 +200,10 @@ class Parser:
         self._path = path
         self._diags = diags
         self._pos = 0
+        #: Whether a block written on one line is being read.  What closes such
+        #: a block is the end of the line, so a second one opened inside it
+        #: would end where the first does and there would be no saying which.
+        self._inline = False
 
     # -- token access ----------------------------------------------------------
 
@@ -1101,6 +1105,8 @@ class Parser:
         statement is does not depend on which notation it is written in.
         """
         start = self._expect(TokKind.COLON).span
+        if not self._check(TokKind.NEWLINE):
+            return self._parse_inline_block(start)
         self._expect(TokKind.NEWLINE)
         self._expect(TokKind.INDENT)
         stmts: list[ast.Stmt] = []
@@ -1119,6 +1125,28 @@ class Parser:
         end = self._current.span
         self._accept(TokKind.DEDENT)
         return ast.Block(span=start.to(end), style=ast.BlockStyle.LAYOUT, stmts=tuple(stmts))
+
+    def _parse_inline_block(self, start: Span) -> ast.Block:
+        """Parse ``: statement`` written on one line.
+
+        It is the layout notation with the indent left out: what opens the block
+        is the colon and what closes it is the end of the line -- or the `else`
+        or `elif` of the same chain, neither of which can continue a statement.
+        Nothing else could close it, which is why a block written this way may
+        not open another (3044): the inner one would end where the outer one
+        does and there would be no saying which `else` belonged to which `if`.
+        """
+        if self._inline:
+            self._diags.emit(D.LANG_SYNTAX_INLINE_INSIDE_INLINE,
+                             self._current.span)
+            raise _Bail()
+        outer, self._inline = self._inline, True
+        try:
+            stmts = self._parse_separated()
+        finally:
+            self._inline = outer
+        return ast.Block(span=start.to(self._current.span),
+                         style=ast.BlockStyle.INLINE, stmts=tuple(stmts))
 
     def _parse_explicit_block(self) -> ast.Block:
         """Parse ``{ statement ; ... }``.
@@ -1905,15 +1933,32 @@ def _ends_with_a_block(stmt: ast.Stmt) -> bool:
 
 
 def _trailing_match(expr: ast.Expr | None) -> bool:
-    """Whether something with a block of its own ends an expression."""
+    """Whether something with an indented block of its own ends an expression.
+
+    A block written on one line is not one: what closes it is the end of that
+    line, which it therefore leaves for whatever it stands in to ask for.
+    """
     while True:
         if isinstance(expr, (ast.Match, ast.If, ast.While, ast.ForEach,
                              ast.Lambda)):
-            return True
+            return not _ends_inline(expr)
         if isinstance(expr, ast.Binary):
             expr = expr.right
             continue
         return False
+
+
+def _ends_inline(expr: ast.Expr) -> bool:
+    """Whether the last block of *expr* is one written on one line."""
+    last = getattr(expr, "body", None)
+    if isinstance(expr, ast.If) and expr.arms:
+        last = expr.arms[-1].body
+    if isinstance(expr, ast.Match) and expr.arms:
+        last = expr.arms[-1].body
+    if isinstance(expr, (ast.While, ast.ForEach)) and expr.alternative is not None:
+        last = expr.alternative
+    return isinstance(last, ast.Block) \
+        and last.style is ast.BlockStyle.INLINE
 
 
 def parse(tokens: Sequence[Token], path: str, diags: DiagEngine) -> ast.SourceUnit:

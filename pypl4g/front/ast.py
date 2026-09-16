@@ -17,6 +17,10 @@ class BlockStyle(Enum):
 
     LAYOUT = "layout"
     EXPLICIT = "explicit"
+    #: Written on one line after the colon, which the end of the line closes.
+    #: It is the layout notation with the indent left out, and it is told apart
+    #: from it because it does not swallow the end of its own line.
+    INLINE = "inline"
 
 
 @dataclass(frozen=True, slots=True)
