@@ -1,12 +1,12 @@
 ※ pl4g-test: compile=error diag=4531
 
 ※ A function answering with a reference says how long what it names lives:
-※ `static` in the type, or `from` naming the parameter it was borrowed from.
-※ Neither of those can be written about a reference held inside something else.
-※ `static` belongs to a reference and a tuple may hold several; `from` speaks
-※ for the whole answer and there would be nothing to attach it to.  So what is
-※ refused here is not the reference but the wrapping, and the way to write this
-※ is to answer with the reference itself.
+※ `static` in the type, or a lifetime name carried by a parameter as well.
+※ Neither of those can be written about a reference held inside something else:
+※ both belong to one reference, and a tuple may hold several, so a word written
+※ on the whole answer would say nothing about which of them it was about.  What
+※ is refused here is therefore not the reference but the wrapping, and the way to
+※ write this is to answer with the reference itself.
 ※
 ※ Rust does write it, because a lifetime there is a name the signature invents
 ※ and can be put on each reference of a compound separately.  The price is that

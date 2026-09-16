@@ -2040,10 +2040,9 @@ class Checker:
 
         A reference is only worth having while what it names is still there,
         and a caller cannot see into the function to work that out -- so a
-        function handing one back says how long that is.  Three ways of saying
-        it: `static` in the type, as long as the program; a lifetime name, as
-        long as whatever else in the signature carries that name; and `from`,
-        as long as what one parameter named.
+        function handing one back says how long that is.  Two ways of saying
+        it: `static` in the type, as long as the program, and a lifetime name,
+        as long as whatever else in the signature carries that name.
 
         Several parameters carrying one name means the shorter of what they
         named, which is the only promise that holds whichever one the body
@@ -2052,42 +2051,26 @@ class Checker:
         where = (node.ret_type.span if node.ret_type is not None
                  else node.name_span)
         named = _lifetimes_of(node.ret_type)
-        if named and node.borrows_from is not None:
-            self._diags.emit(D.LANG_BORROW_SAID_TWICE, node.borrows_span)
-            return ()
         if not isinstance(ret, PtrType):
-            if node.borrows_from is not None:
-                # `from` is a promise about a reference, and there is none for
-                # it to be about.
-                self._diags.emit(D.LANG_BORROW_NOT_FROM_IT, node.borrows_span,
-                                 name=node.borrows_from)
-            elif _holds_a_reference(ret) and not named:
+            if _holds_a_reference(ret) and not named:
                 # A reference inside something else, written with no lifetime:
                 # there is nowhere to put `static`, which belongs to one
-                # reference, or `from`, which speaks for the whole answer.
+                # reference and there may be several.
                 self._diags.emit(D.LANG_REF_ANSWERED, where)
             return ()
-        if named:
-            carried = tuple(at for at, one in enumerate(node.params)
-                            if named & _lifetimes_of(one.type))
-            if not carried:
-                # A name nothing else carries says nothing, and what the answer
-                # would live for is then undecided -- which is the one thing a
-                # caller needs from the signature.
-                self._diags.emit(D.LANG_LIFETIME_NOT_DETERMINED, where,
-                                 name="".join((LIFETIME_GLYPH,
-                                               sorted(named)[0])))
-            return carried
-        if node.borrows_from is None:
+        if not named:
             if not ret.lasting:
                 self._diags.emit(D.LANG_BORROW_SAYS_NOTHING, where)
             return ()
-        for at, one in enumerate(node.params):
-            if one.name == node.borrows_from:
-                return (at,)
-        self._diags.emit(D.LANG_BORROW_NOT_A_PARAMETER, node.borrows_span,
-                         name=node.borrows_from)
-        return ()
+        carried = tuple(at for at, one in enumerate(node.params)
+                        if named & _lifetimes_of(one.type))
+        if not carried:
+            # A name nothing else carries says nothing, and what the answer
+            # would live for is then undecided -- which is the one thing a
+            # caller needs from the signature.
+            self._diags.emit(D.LANG_LIFETIME_NOT_DETERMINED, where,
+                             name="".join((LIFETIME_GLYPH, sorted(named)[0])))
+        return carried
 
     def _collect_generic(self, node: ast.FuncDef, path: str,
                          attrs: list[BoundAttr],

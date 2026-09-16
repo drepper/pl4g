@@ -1339,22 +1339,6 @@
       "option": null
     },
     {
-      "number": 3042,
-      "name": "LANG_SYNTAX_EXPECTED_BORROWED_FROM",
-      "severity": "error",
-      "message": "expected the name of a parameter after 'from'",
-      "args": [],
-      "cause": "`from` says which parameter the answer names what was named by, so a name is what follows it -- and the name of a parameter of this function, there being nothing else for the answer to outlive.",
-      "spec": {
-        "document": "spec/spec.md",
-        "section": "The Language / Types / References",
-        "requirement": "'from' is followed by the name of a parameter."
-      },
-      "since": "0.1",
-      "default_enabled": true,
-      "option": null
-    },
-    {
       "number": 3043,
       "name": "LANG_SYNTAX_EXPECTED_LIFETIME_NAME",
       "severity": "error",
@@ -5891,28 +5875,6 @@
       "option": null
     },
     {
-      "number": 4560,
-      "name": "LANG_BORROW_NOT_A_PARAMETER",
-      "severity": "error",
-      "message": "'{name}' is not a parameter of this function",
-      "args": [
-        {
-          "name": "name",
-          "type": "string",
-          "description": "the name written after 'from'"
-        }
-      ],
-      "cause": "What the answer names has to be something the caller still has when the call is over, and what a caller still has is what it handed over.  So `from` names a parameter, and a name that is not one names nothing the caller could keep alive.",
-      "spec": {
-        "document": "spec/spec.md",
-        "section": "The Language / Types / References",
-        "requirement": "'from' names a parameter of the function."
-      },
-      "since": "0.1",
-      "default_enabled": true,
-      "option": null
-    },
-    {
       "number": 4561,
       "name": "LANG_BORROW_NOT_FROM_IT",
       "severity": "error",
@@ -5938,9 +5900,9 @@
       "number": 4562,
       "name": "LANG_BORROW_SAYS_NOTHING",
       "severity": "error",
-      "message": "a function answering with a reference says how long it lives: 'static' or 'from'",
+      "message": "a function answering with a reference says how long it lives: 'static' or a lifetime name",
       "args": [],
-      "cause": "A reference is only worth having while what it names is still there, and a caller cannot see into the function to work that out.  So a function that hands one back says which of the two it is: as long as the program, which `static` in the type says, or as long as what a parameter named, which `from` says.  Without either there is nothing a caller could safely do with it.",
+      "cause": "A reference is only worth having while what it names is still there, and a caller cannot see into the function to work that out.  So a function that hands one back says which of the two it is: as long as the program, which `static` in the type says, or as long as whatever else in the signature carries the same lifetime name, which `\u29d6x` says.  Without either there is nothing a caller could safely do with it.",
       "spec": {
         "document": "spec/spec.md",
         "section": "The Language / Types / References",
@@ -6055,22 +6017,6 @@
         "document": "spec/spec.md",
         "section": "The Language / Types / References",
         "requirement": "A lifetime in a return type stands in at least one parameter's type."
-      },
-      "since": "0.1",
-      "default_enabled": true,
-      "option": null
-    },
-    {
-      "number": 4568,
-      "name": "LANG_BORROW_SAID_TWICE",
-      "severity": "error",
-      "message": "how long the answer lives is said twice, by a lifetime and by 'from'",
-      "args": [],
-      "cause": "A lifetime name and `from` answer the same question, one by naming something the signature carries in several places and one by naming a parameter outright.  Written together they would either say the same thing twice or disagree, and neither is worth reading; one of the two is what this signature means.",
-      "spec": {
-        "document": "spec/spec.md",
-        "section": "The Language / Types / References",
-        "requirement": "A signature says how long its answer lives in one way, not two."
       },
       "since": "0.1",
       "default_enabled": true,

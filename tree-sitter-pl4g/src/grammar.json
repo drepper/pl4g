@@ -515,31 +515,6 @@
           ]
         },
         {
-          "type": "CHOICE",
-          "members": [
-            {
-              "type": "SEQ",
-              "members": [
-                {
-                  "type": "SYMBOL",
-                  "name": "borrows"
-                },
-                {
-                  "type": "FIELD",
-                  "name": "borrowed",
-                  "content": {
-                    "type": "SYMBOL",
-                    "name": "identifier"
-                  }
-                }
-              ]
-            },
-            {
-              "type": "BLANK"
-            }
-          ]
-        },
-        {
           "type": "FIELD",
           "name": "body",
           "content": {
@@ -548,10 +523,6 @@
           }
         }
       ]
-    },
-    "borrows": {
-      "type": "STRING",
-      "value": "from"
     },
     "parameter_list": {
       "type": "SEQ",

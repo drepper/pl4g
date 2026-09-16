@@ -1,10 +1,10 @@
 ※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
 
-※ `from v` says the answer lives as long as what one parameter named, which is
-※ enough until the answer may come from either of two.  A **lifetime name** says
-※ the general thing: `⧖x` written on several types in one signature means they
-※ all live as long as each other, and an answer carrying `⧖x` lives as long as
-※ the shortest of them.
+※ A **lifetime name** means "as long as whatever else in this signature carries
+※ it": `⧖x` written on several types in one signature means they all live as
+※ long as each other, and an answer carrying `⧖x` lives as long as the shortest
+※ of them.  One parameter carrying it is the ordinary case; several is what no
+※ shorter form could say, since then neither of them alone is true of the answer.
 ※
 ※ **The name comes after `⧖`** and stands where `static` would, the two being
 ※ the same slot answering the same question: `&mut ⧖x u32`.  U+29D6 WHITE
@@ -29,7 +29,7 @@
 let top: mut u32 = 0u32
 let other: mut u32 = 0u32
 
-※ The answer comes from either parameter, so neither `from b` nor `from c` is
+※ The answer comes from either parameter, so nothing about one of them alone is
 ※ true of it and one name on all three is.
 fn either(a: bool, b: &mut ⧖x u32, c: &mut ⧖x u32) → &mut ⧖x u32:
     if a:
@@ -37,7 +37,7 @@ fn either(a: bool, b: &mut ⧖x u32, c: &mut ⧖x u32) → &mut ⧖x u32:
     else:
         c
 
-※ One parameter carrying the name is what `from` says, written the other way.
+※ One parameter carrying the name, which is the ordinary case.
 fn first(v: &⧖y u32) → &⧖y u32:
     v
 
@@ -60,7 +60,7 @@ fn main() → u6:
     let q: mut u32 = 3u32
     let another: u32 = 4u32
     let mixed: &mut u32 = either(true, &mut top, &mut q)
-    ※ one name on one parameter, which is `from` written the other way.  Each
+    ※ one name on one parameter, which is the ordinary case.  Each
     ※ of these places is lent once: `n` and `q` are already out above
     let plain: u32 = 1u32
     let r: &u32 = first(&plain)

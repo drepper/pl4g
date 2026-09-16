@@ -1884,9 +1884,9 @@ direction produces, and it selects to nothing.
 
 **A lifetime name never reaches the IR.**  `ast.RefTypeRef.lifetime` holds it, `_lifetimes_of` walks a type reference over its
 fields to collect every name written anywhere in it, and `_borrowed_from` turns the names on the return type into the tuple of
-parameter positions carrying them.  From there a named lifetime and a `from` are the same thing, so everything below the
-signature -- the provenance walk, the call site, the decision log -- was already written and needed only to take a tuple where it
-took one index.  `PtrType` gains nothing: inside the body a `&u32 ⧖x` parameter is an ordinary `&u32`.
+parameter positions carrying them.  That tuple is the whole of what the rest of the compiler sees, so the provenance walk, the
+call site and the decision log say nothing about names at all.  `PtrType` gains nothing either: inside the body a `&u32 ⧖x`
+parameter is an ordinary `&u32`.
 
 **A block's parameter is where the walk has to branch.**  A body that answers differently in two arms hands back what the join
 came to, which is a block parameter and not either arm's value.  `_answers_from` builds the map from a block to the branches that
@@ -1895,14 +1895,15 @@ promise being about what the function does and not about what one path through i
 yes, which is what stops a loop going round for ever and is right: what reaches itself round a loop is whatever it was on the way
 in, and that is the branch the walk is already looking at.
 
-**`from` is on the definition, not in the type.**  `ast.FuncDef.borrows_from` holds the name and `Function.borrows_from` the
-parameter's index, worked out once by `_borrowed_from` while the signature is collected.  It is deliberately not in `FuncType`:
-two functions differing only in which parameter they borrow from have the same signature as far as an indirect call is concerned,
-and an indirect call is where the promise stops being checkable anyway.
+**Which parameters are carried is on the definition, not in the type.**  `Function.borrows_from` holds their positions, worked
+out once by `_borrowed_from` while the signature is collected.  It is deliberately not in `FuncType`: two functions differing
+only in which parameters carry the name have the same signature as far as an indirect call is concerned, and an indirect call is
+where the promise stops being checkable anyway.
 
 **Provenance is one walk, used three ways.**  `_reached_from` follows a value back through the instructions that keep a reference
 pointing into the same place -- `LoadInst` to its address, `AddressInst` to its variable, `CastInst`, `ExtractInst` and an `ADD`
-or `SUB` to their first operand, and a `CallInst` whose callee promised `from` to the argument it promised about.  `_answers_from`
+or `SUB` to their first operand, and a `CallInst` whose callee made the same promise to the arguments it promised about.
+`_answers_from`
 walks each `RetInst` in the finished body back to the parameter, `_lasting` walks the same path looking for a `GlobalVar`, and
 `_as_long_as_given` asks `_lasting` of an argument to decide what the call answers with.  The parameter's block parameter and,
 where the parameter was given storage because a reference was taken of it, the place itself, are both accepted as the source.
@@ -1935,10 +1936,11 @@ the operand of `&` as a read of a name that is lent.  Every local a reference is
 **A lambda's body gets an empty list**, saved and put back around it, because it binds its own names and a reference out in the
 body around it says nothing about a name of the same spelling inside.  `_lower_body` clears it for the same reason.
 
-**`static` and `from` are read by looking, not by lexing.**  Making either a keyword broke programs the suite already had -- a
-product type with a field called `from`.  `_reading(word)` matches an identifier by text, and `static` additionally needs
-`_begins_a_type(1)`, so a reference type whose pointee is a type called `static` still reads.  The tree-sitter grammar cannot look
-ahead that way and takes the word wherever a reference type could say it, a difference only a type of that name would show.
+**`static` is read by looking, not by lexing.**  Making it a keyword would take the name from every program, and a suite that
+already had a product type with a field called `from` showed what that costs.  `_reading(word)` matches an identifier by text,
+and `static` additionally needs `_begins_a_type(1)`, so a reference type whose pointee is a type called `static` still reads.
+The tree-sitter grammar cannot look ahead that way and takes the word wherever a reference type could say it, a difference only a
+type of that name would show.
 
 **Purity needed no rule of its own.**  `_made_here` answers whether an address is storage this call made by walking back through
 casts and offsets to a `frame`, and `LANG_PURE_WRITES_ELSEWHERE` is what an array written through already reports.  A reference

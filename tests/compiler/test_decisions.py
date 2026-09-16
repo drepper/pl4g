@@ -25,6 +25,7 @@ LAMBDA = "\N{GREEK SMALL LETTER LAMDA}"
 DEREF = "\N{POSITION INDICATOR}"
 ASSIGN = "\N{LEFTWARDS ARROW}"
 NE = "\N{NOT EQUAL TO}"
+LIFETIME = "\N{WHITE HOURGLASS}"
 
 
 def compiled(body: str) -> Module:
@@ -113,7 +114,8 @@ def test_a_lifetime_worked_out_at_a_call_is_recorded() -> None:
     """
     source = "".join((
         "let total: mut u8 = 3u8\n\n",
-        "fn first(v: &u8) ", ARROW, " &u8 from v:\n    v\n\n",
+        "fn first(v: &", LIFETIME, "a u8) ", ARROW, " &", LIFETIME,
+        "a u8:\n    v\n\n",
         "@[startup, impure]\nfn main() ", ARROW, " u6:\n",
         "    let g: &static u8 = first(&total)\n",
         "    let n: u8 = 1u8\n",

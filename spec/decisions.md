@@ -4700,6 +4700,9 @@ types to be values.
 Asked for by the user, who chose the notation from the alternatives after Rust's was offered: name the source, plus `static`.
 What it lifts is the pair of rules that closed both places a reference could escape to.
 
+*(`from` was removed on 2026-09-17, a lifetime name saying the same thing and more; `static` and everything below about the
+caller, the body and the provenance walk stand unchanged.  4560, 4568 and 3042 are retired and their numbers are not reused.)*
+
 **There are exactly two lifetimes to say, so there are two words and no names.**  A function answers with at most one reference,
 so a named lifetime parameter would only ever have one thing to point at; pointing at the parameter directly says the same with
 nothing to invent.  `static` says as long as the program, `from v` says as long as what the parameter `v` named.  That is the
@@ -4845,6 +4848,25 @@ Compare: **C**, where a function name decays to a bare address and a callback ne
 whose `std::function` is this pair at this price; **Go**, where a method value is the same pair; **Rust**, which tells the two
 apart in the type system -- `fn` for the address, `Fn` for the pair -- and so needs no shim for the first, at the cost of a
 distinction every signature has to make.
+
+## 2026-09-17T05:45+02:00 — language
+
+**`from` is removed, a lifetime name saying the same thing**
+
+Directed by the user, closing the question the named-lifetimes entry left open.  `→ &u8 from v` was exactly `⧖a` written on
+`v` and on the answer, so the language had two spellings for one meaning -- which it does not do anywhere else, and which the
+refusal to write both on one signature (4568) only papered over.
+
+**What goes with it**: 3042, the name expected after the word; 4560, the word naming something that is not a parameter; and 4568
+itself, there being nothing left for it to be about.  Their numbers are retired rather than reused, a number being the contract
+between implementations.  4561 stays and is now about a lifetime name, 4562 stays and now offers `static` or a name.
+
+**`from` becomes an ordinary word again**, which it always was in a program: it was read only after a return type, so a field
+called `from` already worked.  Now nothing reads it anywhere and `static` is the one word the language looks for.
+
+What the shorter form bought was two characters on the most common signature, and what it cost was a second mechanism with its
+own three diagnostics for a case the general one already covered.  Rust keeps a shorter form of its own -- elision, which writes
+nothing at all -- and that is a different trade: it removes a spelling rather than adding one.
 
 Open questions
 --------------

@@ -2771,16 +2771,6 @@
           }
         ]
       },
-      "borrowed": {
-        "multiple": false,
-        "required": false,
-        "types": [
-          {
-            "type": "identifier",
-            "named": true
-          }
-        ]
-      },
       "name": {
         "multiple": false,
         "required": true,
@@ -2813,15 +2803,11 @@
       }
     },
     "children": {
-      "multiple": true,
+      "multiple": false,
       "required": false,
       "types": [
         {
           "type": "attribute_list",
-          "named": true
-        },
-        {
-          "type": "borrows",
           "named": true
         }
       ]
@@ -7689,10 +7675,6 @@
   {
     "type": "and",
     "named": false
-  },
-  {
-    "type": "borrows",
-    "named": true
   },
   {
     "type": "break",

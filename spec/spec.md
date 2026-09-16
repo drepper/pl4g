@@ -1944,25 +1944,24 @@ four references.
 
 **A reference leaving the call says how long what it names lives.**  A reference is only worth having while what it names is
 still there, and a caller cannot see into the function to work that out.  So a function handing one back says which of exactly two
-lifetimes it is, and there is a word for each:
+lifetimes it is, and there is a way of writing each:
 
 ```
-fn counter() → &mut static u8:    ※ as long as the program
+fn counter() → &mut static u8:      ※ as long as the program
     &mut total
 
-fn first(v: &u8) → &u8 from v:    ※ as long as what v named
+fn first(v: &⧖a u8) → &⧖a u8:    ※ as long as what v named
     v
 ```
 
-**`static` belongs to the type and `from` to the signature.**  A lifetime fixed once and for all is a property of the reference
-itself, so it is written where the rest of the type is, after `mut` and before what is pointed at: `&mut static u8`.  A lifetime
-borrowed from a parameter is a relation between two things in the signature, and no type could name a parameter, so it is written
-once, after the type, for the whole answer.  Saying neither is refused (4562): there is no default, because the two answers differ
-and either guess would make a promise the program did not.
+**Both stand in one slot**, after `mut` and before what is pointed at, since they answer one question: `&mut static u8` and
+`&mut ⧖x u8`.  At most one of them is ever written, and writing neither is refused (4562) -- there is no default, because the
+two answers differ and either guess would make a promise the program did not.
 
-**A lifetime name says the general thing.**  `from` names one parameter, which is enough until the answer may come from either
-of two -- and then neither `from b` nor `from c` is true of it.  A name written after `⧖` on several types in one signature says
-they all live as long as each other, and an answer carrying it lives as long as the shortest of them:
+**A lifetime name means "as long as whatever else in this signature carries it".**  Written on one parameter and on the answer it
+says what that parameter's own name could have said; written on several it says they all live as long as each other, and the
+answer lives as long as the shortest of them.  That second case is what no shorter form can say -- when the answer may come from
+either of two, neither of them alone is true of it:
 
 ```
 fn either(a: bool, b: &mut ⧖x u32, c: &mut ⧖x u32) → &mut ⧖x u32:
@@ -1972,26 +1971,23 @@ fn either(a: bool, b: &mut ⧖x u32, c: &mut ⧖x u32) → &mut ⧖x u32:
         c
 ```
 
-The name stands where `static` would, the two being one slot answering one question, so at most one of them is ever written.
 U+29D6 WHITE HOURGLASS is the one glyph in Unicode that means "how long"; it is a single character, so it has no ASCII substitute
 and claims nothing.  **A lifetime is declared by being used**, exactly as a type parameter is: there is no list at the head of the
 signature to write and none to keep in step, and a name the answer carries that stands in no parameter's type is refused (4567).
 A name on a parameter and not on the answer is allowed and says nothing, what makes a promise being the answer carrying it.
 
-`from v` is the shorter way where there is one parameter to name and `⧖x` is the general one; a signature writes one of them,
-and writing both is refused (4568) rather than read twice.
+Rust writes it as `fn either<'a>(b: &'a mut u32, c: &'a mut u32) -> &'a mut u32`: the same idea, with the name declared at the
+head and marked by a leading tick.  Neither is available here.  A leading tick begins a character literal, and written after a
+name the tick is already the type-parameter mark, so `a'` would be one spelling with two meanings; and declaring at the head is
+what the generics decision turned down, for the reason it turned it down -- a list to write and to keep in step with the thing it
+describes.
 
-Rust writes the general form as `fn either<'a>(b: &'a mut u32, c: &'a mut u32) -> &'a mut u32`: the same idea, with the name
-declared at the head and marked by a leading tick.  Neither is available here.  A leading tick begins a character literal, and
-written after a name the tick is already the type-parameter mark, so `a'` would be one spelling with two meanings; and declaring
-at the head is what the generics decision turned down, for the reason it turned it down -- a list to write and to keep in step
-with the thing it describes.
-
-**`from` names a parameter of this function** (4560), and what comes back really has to come from it (4561).  The compiler walks
+**What comes back really has to carry the name** (4561).  The compiler walks
 the answer back the way provenance is walked everywhere else -- reading the parameter out of its storage, offsetting it, reading
 the same bits as another type, through a call that made the same promise about its own parameter, and through what an `if` or a
-loop came to, where every branch has to reach one of them -- and refuses a reference reached by none of those.  A reference that lasts as long as the program keeps any promise, so answering `from v` with a variable
-at the top level is allowed.
+loop came to, where every branch has to reach one of them -- and refuses a reference reached by none of those.  A reference that
+lasts as long as the program keeps any promise, so answering with a variable at the top level is allowed wherever a name was
+written.
 
 **The caller works out the rest.**  A function promises no more than its parameters' lifetime, so the same call read two ways
 gives two answers: `first(&total)` for a variable at the top level answers with a reference that lasts as long as the program, and
@@ -2002,15 +1998,13 @@ came to is written to the decision log (`lifetime`), since neither the signature
 
 **A variable at the top level holds a reference only where it says `static`** (4532), which is that rule asked at the other place
 a value escapes to.  A reference inside something else -- a tuple, a product, a collection -- may not be answered with at all
-(4531): `static` belongs to a reference and there may be several, and `from` speaks for the whole answer, so neither word has
-anything to attach to.
+(4531): `static` belongs to one reference and a tuple may hold several, and a name written on the whole answer would say nothing
+about which of them it was about.
 
-Rust writes both lifetimes as named parameters, `fn first<'a>(v: &'a u8) -> &'a u8` and `&'static u8`, which says more -- several
-lifetimes at once, and relations between them -- at the cost of a name to invent at each signature, softened by the rules that let
-the common case go unwritten.  Here a function answers with at most one reference, so such a name would only ever have one thing to
-point at, and pointing at the parameter directly says the same with nothing invented.  C++ has no rule at all and a dangling
-reference is a program nobody notices is wrong; Go and Java move what escapes to the heap instead, which needs a collector.  Where
-a reference does not leave the call none of this is written, which is most of what references are for:
+Rust softens all of this with elision, which lets the common case go unwritten; nothing here does, because a missing lifetime
+there is still a lifetime being inferred and here the two answers mean different things to a caller.  C++ has no rule at all and
+a dangling reference is a program nobody notices is wrong; Go and Java move what escapes to the heap instead, which needs a
+collector.  Where a reference does not leave the call none of this is written, which is most of what references are for:
 
 ```
 fn main() → u6:

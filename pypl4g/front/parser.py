@@ -14,7 +14,7 @@ from ..diag import ids as D
 from ..diag.engine import DiagEngine
 from ..source.location import INVALID_SPAN, Span
 from . import ast
-from .token import (BORROWS_WORD, COMMENT_GLYPH, IMPORT_NAME, LASTING_WORD,
+from .token import (COMMENT_GLYPH, IMPORT_NAME, LASTING_WORD,
                     TokKind, Token, WILDCARD_NAME)
 
 #: Tokens at which error recovery stops, because a new definition can begin there.
@@ -477,24 +477,12 @@ class Parser:
         # there is no name to write for that, which is what keeps the two from
         # being two ways of saying one thing.
         ret_type: ast.TypeExpr | None = None
-        borrows: Token | None = None
         if self._accept(TokKind.ARROW) is not None:
             ret_type = self._parse_type_ref()
-            # `from NAME` says the answer names what that parameter named, so
-            # it lives as long as that does.  It stands after the type because
-            # it is about the answer and is not part of what the answer is:
-            # nothing in a type can name a parameter.
-            if self._reading(BORROWS_WORD):
-                self._advance()
-                borrows = self._expect(TokKind.IDENT,
-                                       D.LANG_SYNTAX_EXPECTED_BORROWED_FROM)
         body = self._parse_body()
         return ast.FuncDef(span=start.to(body.span), name=name_token.text,
-                           name_span=name_token.span, params=params, ret_type=ret_type,
-                           body=body, attrs=attrs, doc=doc,
-                           borrows_from=borrows.text if borrows is not None else None,
-                           borrows_span=(borrows.span if borrows is not None
-                                         else INVALID_SPAN))
+                           name_span=name_token.span, params=params,
+                           ret_type=ret_type, body=body, attrs=attrs, doc=doc)
 
     def _parse_type_ref(self) -> ast.TypeExpr:
         """Parse a type, which may be a collection written the way a value is.

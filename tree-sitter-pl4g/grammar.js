@@ -156,15 +156,8 @@ module.exports = grammar({
       field('name', $.identifier),
       field('parameters', $.parameter_list),
       optional(seq($._return_arrow, field('return_type', $.type))),
-      // The other thing a signature can say about how long the answer lives:
-      // as long as what this parameter named.  It stands after the type rather
-      // than in it because no type could name a parameter, and there is one for
-      // the whole answer because a function answers with at most one reference.
-      optional(seq($.borrows, field('borrowed', $.identifier))),
       field('body', $._block),
     ),
-
-    borrows: _ => 'from',
 
     parameter_list: $ => seq('(', sepBy(',', $.parameter), ')'),
 

@@ -589,13 +589,10 @@ Runtime
     implemented yet (9902).  What it needs is a relocation in the initializer, which is a compiler job and no language question.
 
 [ ] say how long a reference held in a product lives.  A function may not answer with one inside anything else (4531) because
-    `static` belongs to a reference and `from` speaks for the whole answer, so neither word has somewhere to go.  Writing
+    `static` belongs to one reference and a tuple may hold several, so a name on the whole answer would say nothing about
+    which of them it was about.  Writing
     `static` on the field is the obvious half; borrowing per field would need what was deliberately not built, a way of naming
     several lifetimes at once.
-
-[ ] decide whether `from` should go now that `⧖` says the same thing.  `→ &u8 from v` is exactly `⧖a` written on `v`
-    and on the answer, so the language has two spellings for one meaning -- which it does not do anywhere else.  Writing both on
-    one signature is already refused (4568); what is open is whether the shorter one earns its keep.
 
 [ ] let a lifetime name relate two things that are not the answer and a parameter.  A name may stand on several parameters and on
     the answer, which is what a function handing one of its arguments back needs.  What it cannot yet say is that one parameter
@@ -627,9 +624,9 @@ Runtime
     (4563); `&mut v⟦0⟧` and `&mut v⟦1⟧` are two places and are refused as one.  Rust offers `split_at_mut` for
     exactly this, and what it needs here is a way of saying that two indices differ.
 
-[ ] let a lifetime be borrowed from something that is not a parameter of this call -- a field of a parameter, or a parameter of
-    an enclosing lambda.  `from` names a parameter (4560) and provenance is checked against it (4561); both would follow a
-    longer path, and what stops it today is that nothing needs it yet.
+[ ] let a lifetime name stand on something that is not a parameter of this call -- a field of a parameter, or a parameter of an
+    enclosing lambda.  A name is looked for in the parameters' types (4567) and provenance is checked against those (4561); both
+    would follow a longer path, and what stops it today is that nothing needs it yet.
 
 [ ] let a reference name an array, a list or a string.  A reference names a place holding one value (4536); those are already
     several values or already a place, and what a reference to one would mean -- the place the value is, or the place the elements
