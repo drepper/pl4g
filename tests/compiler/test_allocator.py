@@ -26,7 +26,7 @@ from pypl4g.ir.types import U8, U64, VOID
 from pypl4g.ir.verify import verify
 from pypl4g.mc.streamer import MCStreamer
 from pypl4g.target.allocator import (ALLOC_SYMBOL, CHUNK_MINIMUM, GRAIN,
-                                     RELEASE_SYMBOL)
+                                     GROW_SYMBOL, RELEASE_SYMBOL)
 from pypl4g.target.registry import lookup as lookup_target
 
 
@@ -219,7 +219,12 @@ def test_an_arena_given_back_can_be_used_again(triple: str, tmp_path) -> None:  
 @pytest.mark.parametrize("triple", compiler_targets())
 def test_a_program_that_never_allocates_carries_none_of_it(
         triple: str, tmp_path) -> None:  # noqa: ANN001
-    """The allocator is emitted where something calls it and nowhere else."""
+    """The allocator is emitted where something calls it and nowhere else.
+
+    Its own three and not everything the runtime provides: a program that never
+    allocates still makes itself a stack, and what catches a fault in the guard
+    below that stack is a function like any other.
+    """
     module = Module("t", triple=triple)
     func = Function("main", module.types.func_type((), U8),
                     FuncAttrs(special=SpecialKind.STARTUP))
@@ -233,7 +238,8 @@ def test_a_program_that_never_allocates_carries_none_of_it(
     streamer = MCStreamer(encode=target.encode)
     asm = target.new_assembler(streamer, 0)
     target.generate(module, asm, engine, 0)
-    assert [f.name for f in asm.functions if f.name.startswith("__pl4g_")] == []
+    mine = {ALLOC_SYMBOL, GROW_SYMBOL, RELEASE_SYMBOL}
+    assert [f.name for f in asm.functions if f.name in mine] == []
 
 
 @pytest.mark.parametrize("triple", compiler_targets())

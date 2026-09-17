@@ -100,9 +100,9 @@ def built(request: pytest.FixtureRequest,
     below, on its own, rather than mixed into what a program is.
 
     With no stack of its own, for the same reason.  A program built the default
-    way makes itself a guarded stack before it runs, which is the runtime and is
-    a page of it; --stack-size=0 leaves it on the one the kernel supplied.  What
-    that costs is also said below, on its own.
+    way makes itself a guarded stack before it runs, which is code and is meant
+    to be; --stack-size=0 leaves it on the one the kernel supplied.  What that
+    costs is also said below, on its own.
     """
     triple = str(request.param)
     directory = tmp_path_factory.mktemp("".join(("elf-", architecture_of(triple))))
@@ -331,11 +331,12 @@ def test_making_a_stack_is_what_it_costs(built: Built, tmp_path: Path) -> None:
 
     A program built the default way maps itself a stack with a guard below it
     and a handler that recognizes a fault in the guard, so that running out of
-    stack is a diagnosed exit rather than a signal.  That is runtime code the
-    compiler carries, and it is what the sections named for it hold; the image
-    it is measured against was built with --stack-size=0 and stays on the stack
-    the kernel supplied.  The number is here so that a change to it is a thing
-    somebody chose rather than something that happened.
+    stack is a diagnosed exit rather than a signal.  That is a few dozen
+    instructions in the entry point, one more function, a line of text and the
+    hundred bytes the handler reads; the image it is measured against was built
+    with --stack-size=0 and stays on the stack the kernel supplied.  The number
+    is here so that a change to it is a thing somebody chose rather than
+    something that happened.
     """
     source = tmp_path / "exit0.pl4g"
     source.write_text(SOURCE, encoding="utf-8")
@@ -353,9 +354,11 @@ def test_making_a_stack_is_what_it_costs(built: Built, tmp_path: Path) -> None:
     assert stack.p_memsz == 1 << 20
     assert not stack.p_flags & elfcheck.PF_X
     names = [s.name for s in image.sections]
-    assert ".pl4grt.text" in names, names
+    assert ".data" in names, names
+    assert [n for n in names if n.startswith(".pl4grt")] == [], \
+        "nothing of this is carried; it is emitted"
     grown = output.stat().st_size - built.path.stat().st_size
-    assert 0 < grown < 4096, grown
+    assert 0 < grown < 1024, grown
 
 
 def test_a_group_with_nothing_in_it_costs_no_segment(built: Built) -> None:

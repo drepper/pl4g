@@ -1083,71 +1083,95 @@ The stack a program runs on
 ---------------------------
 
 **A program does not run on the stack the kernel gave it.**  Before anything of
-it runs, the entry point calls `pl4g_stack` in the packaged runtime, which maps
-a stack of the size the program was built with together with a guard below it,
-and answers the top of it; the entry point moves the stack pointer there and
-calls the startup function.  `--stack-size=SIZE` says how much, 1 MiB by
-default, and `--guard-size=SIZE` how much unreachable space sits below it,
-64 KiB by default.  Both take a number of bytes, optionally with `K`, `M` or `G`
-after it, and a size that is not one is refused (1016) rather than quietly
-replaced by the default.
+it runs, its entry point asks the system for one of the size the program was
+built with, with a guard below that nothing may touch, and moves the stack
+pointer there.  Running off the bottom is then a fault in the guard, which a
+handler recognizes and reports as a status of its own rather than as a signal.
+`--stack-size=SIZE` says how much, 1 MiB by default, and `--guard-size=SIZE` how
+much unreachable space sits below it, 64 KiB by default.  Both take a number of
+bytes, optionally with `K`, `M` or `G` after it, and a size that is not one is
+refused (1016) rather than quietly replaced by the default.
 
-**The whole mapping is made unreachable and the stack part is then opened.**
-One `mmap` of `guard + size` with `PROT_NONE`, then one `mprotect` of the upper
-`size` to read and write.  The guard is what is left over, so it is unreachable
-because nothing ever made it otherwise -- there is no second mapping that could
-be placed somewhere else, and no window in which the guard exists as ordinary
-memory.  `MAP_NORESERVE` is asked for because a stack is reserved and not used:
-a megabyte of address space costs nothing until it is written to.
+**None of it is carried in the image.**  `target/stack.py` is written once and
+emitted for every architecture, the way `target/allocator.py` beside it is:
+what differs between them is the number of a system call, which registers its
+arguments go in, and which instruction enters the kernel, and that much is a
+small record each backend fills in.  It was compiled from C and packaged with
+the compiler at first, which put two and a half kilobytes of object code into
+every program that wanted a stack -- which is every program.  Emitting it costs
+about nine hundred bytes, all of it code the compiler selected, and it leaves
+the packaged runtime to the programs that actually reach it.
 
-**Running off the bottom is caught rather than fatal.**  The runtime installs a
-SIGSEGV handler with `SA_SIGINFO`, so that it is told the address that faulted,
-and `SA_ONSTACK` with an alternate stack of its own -- there being no room on
-the stack that just ran out, which is the whole reason a handler for this needs
-one.  The handler compares the address against the guard it recorded: inside
-it, the program ran off the bottom, so it writes `pl4g: the stack ran out` and
-exits with the status reserved for that (67).  Outside it, this is some other
-bad address and not the runtime's business, so the handler takes itself off and
-returns, and the instruction runs again and dies of the signal it really got --
-core file and all.
+**One mapping, then part of it taken away.**  The whole of `guard + size +
+ALT_STACK` is asked for readable and writable and `MAP_NORESERVE`, and the guard
+is then turned to no access at all with `mprotect`.  The guard is what is left
+of the mapping once the rest of it has been kept, so there is no second mapping
+to place and nothing to go wrong between the two calls.  `MAP_NORESERVE`
+because a stack is reserved and not used: a megabyte of address space costs
+nothing until it is written to, and a system that counts commitments should not
+be asked to count this.
 
-**Nothing of it is required to succeed.**  `pl4g_stack` answers nought where the
-mapping was refused, and the entry point then leaves the stack pointer where the
-kernel put it; a program that could not have the stack it asked for still runs,
-on the one it would have had before.  `--stack-size=0` asks for that on purpose,
-and is the only way to build an image that carries none of the runtime -- which
-is why the tests that are about the size of an image build that way.
+**Three regions in a known order**: the guard at the bottom, the program's stack
+above it, and above that the little stack the handler runs on.  One mapping
+rather than three is one call rather than three, and the handler's stack has to
+exist for the reason the whole thing does -- there is no room on the stack that
+just ran out.
+
+**It is asked for below the stack the kernel made**, at an address worked out
+from the stack pointer as the entry point found it, brought down to a two-
+megabyte grain and two megabytes clear of the kernel's stack -- Linux leaves a
+gap below a stack that nothing may be mapped into, so a hint any closer would
+simply be ignored.  It is a hint and not a demand: a kernel that would rather
+put the mapping elsewhere does, and the program is no worse off.  What the hint
+is worth is that the program's stack stays in the part of the address space a
+stack lives in rather than in the middle of where mappings are handed out.
+
+**The guard is rounded up to the largest page the architecture may use.**  What
+`mprotect` takes away is a whole number of pages of whatever the running kernel
+chose, and the program is built once for all of them; a guard of 8 KiB on an
+AArch64 kernel with 64 KiB pages would otherwise take 64 KiB away and leave the
+handler comparing against bounds that are not the ones in force.  So the number
+is brought up where the program is built: 4 KiB on x86-64 and RISC-V, 64 KiB on
+AArch64, which is the same table the segment alignment above comes from.
+
+**Running off the bottom is caught rather than fatal.**  The handler is
+installed with `SA_SIGINFO`, so that it is told the address that faulted, and
+`SA_ONSTACK` with the alternate stack above.  It compares the address against
+the guard it recorded: inside it, the program ran off the bottom, so it writes
+`pl4g: the stack ran out` and exits with the status reserved for that (67).
+Outside it, this is some other bad address and not the runtime's business, so
+the handler puts the default back and returns, and the instruction runs again
+and the program dies of the signal it really got -- core file and all.
+
+**Nothing of it is required to succeed.**  Where the mapping is refused the
+entry point leaves the stack pointer where the kernel put it; a program that
+could not have the stack it asked for still runs, on the one it would have had
+before.  A stack that could not be *guarded* is given back rather than used: a
+stack with no guard below it is the thing this exists to avoid, and having one
+silently would be worse than having none.  `--stack-size=0` asks for the
+kernel's stack on purpose, and is what the tests that measure the smallest image
+build with.
 
 **`PT_GNU_STACK` carries the size.**  It is not what makes any of this work, the
 program having mapped its own; it is filled in because that is where the format
 keeps the number, so a reader of the image finds it there, and because a program
 whose own mapping failed is then left on a stack of the size it asked for.
 
-Three things about it are worth writing down because each cost a debugging
+Two things about it are worth writing down because each cost a debugging
 session:
 
 - **x86-64 needs an `SA_RESTORER`.**  That architecture's kernel does not return
   from a handler by itself; what returns is a few instructions the program
-  supplies, whose address goes in the action.  So there is a naked function in
-  the runtime that does `rt_sigreturn` and nothing else, and the field and the
-  flag exist only under `#if defined(__x86_64__)` -- the other two kernels have
-  neither in their `struct sigaction` at all.
-- **On AArch64 `mov x21, sp` is not a move.**  The stack pointer and the zero
+  supplies, whose address goes in the action.  So the backend emits
+  `__pl4g_stack_return`, which is `rt_sigreturn` and nothing else, and the
+  field and the flag are filled in only there -- the other two kernels put
+  their own trampoline in the return address register and have neither in the
+  structure at all.
+- **On AArch64 `mov x22, sp` is not a move.**  The stack pointer and the zero
   register share encoding 31 and which one is meant is decided by the
   instruction; the move form reads the zero register, so reading or writing SP
-  is `add x21, sp, #0`.  Written as a move it assembled cleanly and set the
+  is `add x22, sp, #0`.  Written as a move it assembled cleanly and set the
   register to nought.
-- **The entry point calls the runtime with the system's convention**, not the
-  language's.  `pl4g_stack` is compiled from C, so its arguments are where that
-  ABI puts them; the entry point's call is written by hand and has to say so
-  (`lookup_cconv(SYSTEM_CCONV)`).  With the language's convention the first
-  symptom was a segmentation fault before anything ran.
-
-**What pulls the runtime into the image** is the entry point wanting it, which
-nothing else can see: the call is hand-written machine code rather than anything
-in the module, so reachability does not find it.  `started.entry_wants_runtime`
-is that question asked directly -- the program asked for a stack, or something
-in it reached the I/O.
 
 What a program is built for
 ---------------------------

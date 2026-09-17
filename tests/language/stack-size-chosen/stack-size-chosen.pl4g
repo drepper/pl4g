@@ -10,10 +10,17 @@
 ※ it needs little has no reason to reserve a megabyte.
 ※
 ※ What this shows is that the smaller stack is the one the program gets and
-※ that the guard below it still catches the overflow: an eighth of the default
-※ with an eighth of the default guard, and a call too deep still ends with the
-※ status reserved for it rather than with a signal.  How far the recursion gets
-※ before that happens is a fact about frame sizes and is not stated here.
+※ that the guard below it still catches the overflow: an eighth of the default,
+※ and a call too deep still ends with the status reserved for it rather than
+※ with a signal.  How far the recursion gets before that happens is a fact
+※ about frame sizes and is not stated here.
+※
+※ The guard asked for here is smaller than one architecture can have.  What is
+※ taken away is a whole number of pages of whatever the running kernel chose,
+※ so the number is brought up to the largest page the architecture may use --
+※ which on AArch64 is 64 KiB, and this asks for eight.  Asking for less than a
+※ page is not an error: it is a smallest, and the program gets the smallest
+※ that can be given.
 ※
 ※ Compare: **Go**'s -ldflags=-stacksize and its runtime maximum; **Rust**'s
 ※ RUST_MIN_STACK, read when a thread starts rather than when it is built;

@@ -26,6 +26,7 @@ from .. import started
 from ..tests import Failure, run_by
 from . import ops as x86ops
 from ..allocator import AllocatorRegs, SyscallABI
+from ..stack import StackABI, emit_make
 from ...mc.ops import Condition
 from . import levels
 from .regs import (EAX, EBP, EBX, ECX, EDI, EDX, ESI, INFO, RAX, RCX,
@@ -149,29 +150,41 @@ HELD_STACK: Final = reg("r13")
 HELD_STATUS: Final = reg("r12d")
 
 
+#: The numbers of the calls the stack is made with, beyond the two the
+#: allocator makes, and the registers that work is done in.  The kernel leaves
+#: every register alone but the one it answers in and the two the instruction
+#: itself destroys, so what is kept across a call is any register the entry
+#: point is not otherwise using.
+NR_MPROTECT: Final[int] = 10
+NR_RT_SIGRETURN: Final[int] = 15
+NR_RT_SIGACTION: Final[int] = 13
+NR_SIGALTSTACK: Final[int] = 131
+
+STACK_ABI: Final[StackABI] = StackABI(
+    mprotect=NR_MPROTECT, sigaltstack=NR_SIGALTSTACK,
+    rt_sigaction=NR_RT_SIGACTION, write=NR_WRITE, exit_group=NR_EXIT_GROUP,
+    # Every processor this runs on has four-kilobyte pages, whatever else it
+    # may also have.
+    page=4096,
+    kept=(reg("rbx"), reg("r14"), reg("r15")),
+    scratch=(RDX, RCX, reg("r11")),
+    read_sp=lambda asm, dst: asm.loadreg(dst, asm.reg(RSP)),
+    write_sp=lambda asm, src: asm.loadreg(RSP, asm.reg(src)),
+    # This kernel does not return from a handler by itself.
+    rt_sigreturn=NR_RT_SIGRETURN)
+
+
 def _make_stack(asm: Assembler, module: Module) -> None:
     """Put the program on a stack of its own, where it asked for one.
 
     Asked for after the constructors would have run and before anything else,
-    so that what runs on the kernel's stack is only what has to.  What comes
-    back is where to set the stack pointer, or nought where the system would not
-    have it -- in which case nothing is switched and the program carries on with
+    so that what runs on the kernel's stack is only what has to.  Where the
+    system will not have it nothing is switched and the program carries on with
     the stack it was given, which is what every program had before this.
     """
     if module.stack_size <= 0:
         return
-    theirs = lookup_cconv(SYSTEM_CCONV)
-    asm.loadreg(theirs.int_arg_regs[0],
-                asm.imm(module.stack_size, 32, signed=False))
-    asm.loadreg(theirs.int_arg_regs[1],
-                asm.imm(module.guard_size, 32, signed=False))
-    asm.call(started.MAKES_STACK)
-    keep = asm.reserve_label("stack.as.it.was")
-    answer = theirs.int_ret_regs[0]
-    asm.branch(Condition.EQ, asm.reg(INFO.view(answer.unit, 64)),
-               asm.imm(0, 32, signed=False), keep)
-    asm.loadreg(RSP, asm.reg(INFO.view(answer.unit, 64)))
-    asm.block(keep)
+    emit_make(asm, SYSCALLS, STACK_ABI, module.stack_size, module.guard_size)
 
 
 def _read_arguments(asm: Assembler, module: Module,

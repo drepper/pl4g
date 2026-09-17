@@ -25,7 +25,8 @@ from pathlib import Path
 import pytest
 
 import elfcheck
-from pypl4g.target import statuses
+from pypl4g.target.stack import (ALT_STACK, GAP, HANDLER_SYMBOL,
+                                 HINT_GRAIN)
 from conftest import (architecture_of, check_conformance, compiler_targets,
                       describe, run_compiler, runner_for)
 
@@ -35,10 +36,8 @@ fn main() \N{RIGHTWARDS ARROW} u6:
     0
 """
 
-#: The name the runtime knows the call by, which every entry point makes.
-MAKES_STACK = "pl4g_stack"
-
 STRACE = "strace"
+SETARCH = "setarch"
 
 
 def _build(tmp_path: Path, name: str, *options: str,
@@ -110,13 +109,14 @@ def test_a_size_that_is_not_one_is_refused(option: str, given: str,
 
 
 @pytest.mark.parametrize("triple", compiler_targets())
-def test_the_entry_point_asks_the_runtime_for_it(triple: str,
-                                                 tmp_path: Path) -> None:
-    """One call, before anything of the program runs, and the runtime carried.
+def test_the_entry_point_makes_it_itself(triple: str, tmp_path: Path) -> None:
+    """A few dozen instructions the compiler selected, and nothing carried.
 
-    The call is written at the entry point rather than being something the
-    program reaches, so what pulls the runtime into the image is the entry
-    point asking for it.  Nothing else here does: the program is a `return 0`.
+    The making of the stack was compiled from C once and carried in the image;
+    it is now emitted like any other code, which is what keeps a program that
+    wanted nothing else from the packaged runtime from carrying any of it.  So
+    what this looks for is the four calls in the entry point itself and no
+    packaged object anywhere.
     """
     output = tmp_path / "out.asm"
     source = tmp_path / "exit0.pl4g"
@@ -126,9 +126,28 @@ def test_the_entry_point_asks_the_runtime_for_it(triple: str,
     assert proc.returncode == 0, describe(proc)
     text = output.read_text(encoding="utf-8")
     entry = text[text.index("_start:"):]
-    called = re.search(r"^\s+\S.*?(?:call|bl|jal) (\S+)", entry, re.MULTILINE)
-    assert called is not None and called.group(1) == MAKES_STACK, entry[:600]
-    assert "".join((MAKES_STACK, ":")) in text, "the runtime was not placed"
+    for number in (MMAP[architecture_of(triple)], MPROTECT[architecture_of(triple)]):
+        assert _mentions(entry, number), entry
+    assert HANDLER_SYMBOL in text, "the handler was not emitted"
+    assert ".pl4grt" not in text, "the packaged runtime was placed"
+
+
+def _mentions(text: str, number: int) -> bool:
+    """Whether the assembly *text* builds *number* as an immediate somewhere.
+
+    Written as a search of the dump rather than of the bytes because what is
+    being checked is that the call is made at all; which instruction builds the
+    number differs between the three, and one of them writes it in hexadecimal.
+    """
+    return any(one in text for one in
+               ("".join((", ", str(number))), "".join((",", str(number))),
+                "".join((" ", str(number))), "".join((" 0x", format(number, "x")))))
+
+
+#: The numbers of the two calls that make the stack, which differ between the
+#: architectures and are the architecture's to say.
+MMAP = {"x86_64": 9, "aarch64": 222, "riscv64": 222}
+MPROTECT = {"x86_64": 10, "aarch64": 226, "riscv64": 226}
 
 
 @pytest.mark.parametrize("triple", compiler_targets())
@@ -166,7 +185,7 @@ def test_the_sizes_asked_for_are_the_ones_mapped(tmp_path: Path) -> None:
     Only for the machine this runs on: an emulator's own mappings are its
     business and would be in the way.
     """
-    stack, guard = 256 << 10, 8 << 10
+    stack, guard = 256 << 10, 64 << 10
     path = _build(tmp_path, "watched",
                   "".join(("--stack-size=", str(stack))),
                   "".join(("--guard-size=", str(guard))),
@@ -177,31 +196,58 @@ def test_the_sizes_asked_for_are_the_ones_mapped(tmp_path: Path) -> None:
     assert proc.returncode == 0, describe(proc)
     lines = proc.stderr.splitlines()
     whole = re.search(
-        r"".join((r"^mmap\(NULL, ", str(stack + guard),
-                  r", PROT_NONE,.*\) = 0x([0-9a-f]+)")),
+        r"".join((r"^mmap\(0x[0-9a-f]+, ", str(stack + guard + ALT_STACK),
+                  r", PROT_READ\|PROT_WRITE, ",
+                  r"MAP_PRIVATE\|MAP_ANONYMOUS\|MAP_NORESERVE, -1, 0\)",
+                  r" = 0x([0-9a-f]+)")),
         proc.stderr, re.MULTILINE)
     assert whole is not None, proc.stderr
-    opened = re.search(
-        r"".join((r"^mprotect\(0x([0-9a-f]+), ", str(stack),
-                  r", PROT_READ\|PROT_WRITE\) = 0")),
+    taken = re.search(
+        r"".join((r"^mprotect\(0x([0-9a-f]+), ", str(guard),
+                  r", PROT_NONE\) = 0")),
         proc.stderr, re.MULTILINE)
-    assert opened is not None, proc.stderr
-    assert int(opened.group(1), 16) == int(whole.group(1), 16) + guard, \
-        "the part made writable is not the part above the guard"
-    assert any(line.startswith("sigaltstack(") for line in lines), proc.stderr
+    assert taken is not None, proc.stderr
+    assert int(taken.group(1), 16) == int(whole.group(1), 16), \
+        "what was taken away is not the bottom of what was mapped"
+    top = re.search(
+        r"".join((r"^sigaltstack\(\{ss_sp=0x([0-9a-f]+), ss_flags=0, ss_size=",
+                  str(ALT_STACK), r"\}")),
+        proc.stderr, re.MULTILINE)
+    assert top is not None, proc.stderr
+    assert int(top.group(1), 16) == int(whole.group(1), 16) + guard + stack, \
+        "the handler's stack is not above the program's"
     assert any(line.startswith("rt_sigaction(SIGSEGV") and "SA_ONSTACK" in line
                and "SA_SIGINFO" in line for line in lines), proc.stderr
 
 
-def test_the_status_is_the_one_the_runtime_reserves() -> None:
-    """The number is in two languages and has to be the same number.
+@pytest.mark.skipif(not shutil.which(STRACE) or not shutil.which(SETARCH),
+                    reason="strace or setarch is not installed")
+def test_it_is_asked_for_below_the_stack_the_kernel_made(tmp_path: Path) -> None:
+    """Where the program asks for its stack, and that the kernel gives it there.
 
-    The handler is compiled from C and carried by the compiler; everything else
-    that names a reserved status is Python.  Neither can see the other, so the
-    one place they meet is checked here.
+    The address is a hint and not a demand, so a kernel that would rather put
+    the mapping elsewhere does; what the hint is worth is that the program's
+    stack stays in the part of the address space a stack lives in rather than
+    in the middle of where mappings are handed out.
+
+    Read with randomisation turned off, so that the two processes' stacks start
+    at the same fixed address and the one seen from outside says where the one
+    inside is.  With it on, every process is somewhere else and there is nothing
+    to compare against.  Only for the machine this runs on, an emulator's
+    address space being its own business.
     """
-    source = (Path(__file__).resolve().parents[2] / "runtime" / "io.c") \
-        .read_text(encoding="utf-8")
-    found = re.search(r"#define\s+PL4G_STACK_OVERFLOW\s+(\d+)", source)
-    assert found is not None, "runtime/io.c does not define the status"
-    assert int(found.group(1)) == statuses.STACK_OVERFLOW
+    path = _build(tmp_path, "placed",
+                  triple="".join((platform.machine(), "-linux-none")))
+    proc = subprocess.run([SETARCH, "-R", STRACE, "-e", "trace=execve,mmap",
+                           str(path)], capture_output=True, text=True, timeout=60)
+    assert proc.returncode == 0, describe(proc)
+    started = re.search(r"^execve\(.*, (0x[0-9a-f]+) /\*", proc.stderr,
+                        re.MULTILINE)
+    mapped = re.search(r"^mmap\((0x[0-9a-f]+), .*\) = (0x[0-9a-f]+)",
+                       proc.stderr, re.MULTILINE)
+    assert started is not None and mapped is not None, proc.stderr
+    assert mapped.group(1) == mapped.group(2), \
+        "".join(("the hint was not taken: ", proc.stderr))
+    below = int(started.group(1), 16) - int(mapped.group(2), 16)
+    assert 0 < below < GAP + (1 << 20) + ALT_STACK + HINT_GRAIN + (1 << 16), \
+        "".join(("it is ", str(below), " below the stack:\n", proc.stderr))

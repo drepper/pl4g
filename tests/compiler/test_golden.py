@@ -74,11 +74,9 @@ def test_asm_matches_golden(root: Path, name: str, triple: str,
     of these files and would bury the thing each file is about; what that code
     is, is checked where it is the subject.
 
-    With no stack of its own, for the same reason and more so: a program that
-    makes itself a guarded stack carries the runtime that does it, and a dump
-    shows every byte of that runtime.  It is the same bytes in every file, it is
-    compiled from C rather than selected here, and it is checked where it is the
-    subject.
+    With no stack of its own, for the same reason: making one is another forty
+    lines at the entry point of every program, the same forty in each of these
+    files.  They have a golden file of their own, below.
     """
     output = tmp_path / "out.asm"
     arguments = ["-o", str(output), "--emit=asm", "-O1", "--stack-size=0",
@@ -89,3 +87,25 @@ def test_asm_matches_golden(root: Path, name: str, triple: str,
     assert proc.returncode == 0, describe(proc)
     golden = GOLDEN / "".join((name, ".", architecture_of(triple), ".asm"))
     _compare(golden, output.read_text(encoding="utf-8"))
+
+
+@pytest.mark.parametrize("triple", compiler_targets())
+def test_the_stack_is_made_as_the_golden_dump_says(root: Path, triple: str,
+                                                   tmp_path: Path) -> None:
+    """And what every other dump here leaves out, recorded once.
+
+    The making of the stack is code the compiler selects like any other, so a
+    change in it is a change in code generation and has to be acknowledged
+    somewhere.  Here rather than in each of the files above, since it is the
+    same instructions in every program: what differs between the programs is
+    what those files are about.
+    """
+    output = tmp_path / "out.asm"
+    arguments = ["-o", str(output), "--emit=asm", "-O1",
+                 "".join(("--target=", triple))]
+    if architecture_of(triple) == "x86_64":
+        arguments.append("--mclevel=v1")
+    proc = run_compiler([*arguments, str(_language_test(root, "exit0"))])
+    assert proc.returncode == 0, describe(proc)
+    _compare(GOLDEN / "".join(("stack.", architecture_of(triple), ".asm")),
+             output.read_text(encoding="utf-8"))

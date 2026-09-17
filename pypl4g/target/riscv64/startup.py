@@ -26,6 +26,7 @@ from .. import started
 from ..tests import Failure, run_by
 from . import ops as rvops
 from ..allocator import AllocatorRegs, SyscallABI
+from ..stack import StackABI, emit_make
 from .regs import A0, A1, A7, FP, RA, S1, SP, ZERO, reg
 
 #: The number of the Linux system call that ends the whole process.  It is the
@@ -201,24 +202,35 @@ def _a_number(asm: Assembler, where: object, value: int) -> None:
     asm.loadreg(where, asm.imm(value, 32))  # type: ignore[arg-type]
 
 
+#: The numbers of the calls the stack is made with, beyond the two the
+#: allocator makes, and the registers that work is done in.  The kernel leaves
+#: every register alone but the one it answers in, so what is kept across a call
+#: is any register the entry point is not otherwise using.
+NR_MPROTECT: Final[int] = 226
+NR_RT_SIGACTION: Final[int] = 134
+NR_SIGALTSTACK: Final[int] = 132
+
+STACK_ABI: Final[StackABI] = StackABI(
+    mprotect=NR_MPROTECT, sigaltstack=NR_SIGALTSTACK,
+    rt_sigaction=NR_RT_SIGACTION, write=NR_WRITE, exit_group=NR_EXIT_GROUP,
+    # The base page of every configuration of this architecture is four
+    # kilobytes; what it adds are larger pages, never a larger smallest one.
+    page=4096,
+    kept=(reg("s4"), reg("s5"), reg("s6")),
+    scratch=(reg("t0"), reg("t1"), reg("t2")),
+    read_sp=lambda asm, dst: asm.loadreg(dst, asm.reg(SP)),
+    write_sp=lambda asm, src: asm.loadreg(SP, asm.reg(src)))
+
+
 def _make_stack(asm: Assembler, module: Module) -> None:
     """Put the program on a stack of its own, where it asked for one.
 
-    What comes back is where to set the stack pointer, or nought where the
-    system would not have it -- in which case nothing is switched and the
-    program carries on with the stack it was given.
+    Where the system will not have it nothing is switched and the program
+    carries on with the stack it was given.
     """
     if module.stack_size <= 0:
         return
-    theirs = lookup_cconv(SYSTEM_CCONV)
-    _a_number(asm, theirs.int_arg_regs[0], module.stack_size)
-    _a_number(asm, theirs.int_arg_regs[1], module.guard_size)
-    asm.call(started.MAKES_STACK)
-    keep = asm.reserve_label("stack.as.it.was")
-    asm.branch(Condition.EQ, asm.reg(theirs.int_ret_regs[0]),
-               asm.imm(0, 12, signed=False), keep)
-    asm.loadreg(SP, asm.reg(theirs.int_ret_regs[0]))
-    asm.block(keep)
+    emit_make(asm, SYSCALLS, STACK_ABI, module.stack_size, module.guard_size)
 
 
 def _read_arguments(asm: Assembler, module: Module,

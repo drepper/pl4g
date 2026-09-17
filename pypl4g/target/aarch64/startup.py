@@ -26,6 +26,7 @@ from .. import started
 from ..tests import Failure, run_by
 from . import ops as a64ops
 from ..allocator import AllocatorRegs, SyscallABI
+from ..stack import StackABI, emit_make
 from .regs import SP, X0, X1, X8, X19, X29, X30, XZR, reg
 
 #: The number of the Linux system call that ends the whole process.  The number
@@ -212,27 +213,52 @@ def _a_number(asm: Assembler, where: object, value: int) -> None:
     asm.loadreg(where, asm.imm(value, 32, signed=False))  # type: ignore[arg-type]
 
 
+#: The numbers of the calls the stack is made with, beyond the two the
+#: allocator makes, and the registers that work is done in.  The kernel leaves
+#: every register alone but the one it answers in, so what is kept across a call
+#: is any register the entry point is not otherwise using.
+NR_MPROTECT: Final[int] = 226
+NR_RT_SIGACTION: Final[int] = 134
+NR_SIGALTSTACK: Final[int] = 132
+
+
+def _read_sp(asm: Assembler, dst: object) -> None:
+    """Read the stack pointer, which an addition of nothing is the way to do.
+
+    A move between registers reads that encoding as the zero register; this is
+    the form that reads it as the stack pointer.
+    """
+    asm.op(ops.PLUS, dst, asm.reg(SP),  # type: ignore[arg-type]
+           asm.imm(0, 12, signed=False))
+
+
+def _write_sp(asm: Assembler, src: object) -> None:
+    """And write it, for the same reason."""
+    asm.op(ops.PLUS, SP, asm.reg(src),  # type: ignore[arg-type]
+           asm.imm(0, 12, signed=False))
+
+
+STACK_ABI: Final[StackABI] = StackABI(
+    mprotect=NR_MPROTECT, sigaltstack=NR_SIGALTSTACK,
+    rt_sigaction=NR_RT_SIGACTION, write=NR_WRITE, exit_group=NR_EXIT_GROUP,
+    # The one of the three architectures whose page size is configured rather
+    # than fixed: sixty-four kilobytes is the largest a kernel may choose, and
+    # what is protected has to be a whole number of whatever it chose.
+    page=64 * 1024,
+    kept=(reg("x22"), reg("x23"), reg("x24")),
+    scratch=(reg("x9"), reg("x10"), reg("x11")),
+    read_sp=_read_sp, write_sp=_write_sp)
+
+
 def _make_stack(asm: Assembler, module: Module) -> None:
     """Put the program on a stack of its own, where it asked for one.
 
-    What comes back is where to set the stack pointer, or nought where the
-    system would not have it -- in which case nothing is switched and the
-    program carries on with the stack it was given.
+    Where the system will not have it nothing is switched and the program
+    carries on with the stack it was given.
     """
     if module.stack_size <= 0:
         return
-    theirs = lookup_cconv(SYSTEM_CCONV)
-    _a_number(asm, theirs.int_arg_regs[0], module.stack_size)
-    _a_number(asm, theirs.int_arg_regs[1], module.guard_size)
-    asm.call(started.MAKES_STACK)
-    keep = asm.reserve_label("stack.as.it.was")
-    asm.branch(Condition.EQ, asm.reg(theirs.int_ret_regs[0]),
-               asm.imm(0, 12, signed=False), keep)
-    # An addition of nothing and not a move, for the reason above: the stack
-    # pointer is the encoding a move reads as the zero register.
-    asm.op(ops.PLUS, SP, asm.reg(theirs.int_ret_regs[0]),
-           asm.imm(0, 12, signed=False))
-    asm.block(keep)
+    emit_make(asm, SYSCALLS, STACK_ABI, module.stack_size, module.guard_size)
 
 
 def _read_arguments(asm: Assembler, module: Module,

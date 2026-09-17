@@ -488,6 +488,11 @@ To Do List for the pypl4g compiler
     being no local arrays of that size, so this is a gap to close before there is.  The two answers are a check against the guard
     size at the point a frame is laid out, or a touch of each page as the frame is made, which is what a stack probe is.
 
+[ ] build the entry point's small constants in the narrow half of a register.  Every number the stack is made with is put in a
+    sixty-four bit register, which on x86-64 is a seven-byte instruction where writing the same number to the thirty-two bit view
+    is five and zero-extends anyway.  About thirty bytes per program, and the reason it is written this way is that the registers
+    come from a record the shared emitter reads and a narrower view of one is the architecture's own idea.
+
 [ ] say what a program that ran out of stack was doing.  The handler writes one line and nothing else -- there is no unwinder,
     and the entry beside this one says why.  When there is one, the recursion that did not end is exactly what a reader needs to
     be shown, and it is the one case where the stack to walk is the one that just overflowed.

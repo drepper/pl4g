@@ -141,4 +141,4 @@ def names() -> Sequence[str]:
 #: as well as in the C so that a program naming one the runtime does not have
 #: is refused where it is written rather than when an image is laid out.
 _NAMES: tuple[str, ...] = ("pl4g_args", "pl4g_io_drain", "pl4g_io_submit",
-                          "pl4g_io_wait", "pl4g_stack")
+                          "pl4g_io_wait")

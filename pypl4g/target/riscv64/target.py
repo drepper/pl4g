@@ -43,7 +43,9 @@ from .isel import RVSelector, UnsupportedOperation, lower_function
 from .opcodes import PAD_BYTE, RISCV_INSTRS
 from .regs import FPR, GPR, INFO
 from .startup import (ALLOCATOR_REGS, ABORT_SYMBOL, ENTRY_SYMBOL,
-                      SYSCALLS, emit_abort, emit_report, emit_start)
+                      SYSCALLS, STACK_ABI, emit_abort, emit_report,
+                      emit_start)
+from ..stack import emit_handler, emit_state
 
 #: What the header's flag word says on this architecture.  The low bit says the
 #: code uses the compressed encoding, the two above it say which floating-point
@@ -178,6 +180,11 @@ class RISCV64Target:
         # What the program was started with, where it takes it: an object of the
         # writable data, laid out by the program's own declaration of the type.
         started.emit(asm, module, layout)
+        # And what the stack the program makes for itself is remembered in,
+        # where it makes one: the bounds of the guard, and the two structures
+        # the calls that install the handler are handed.
+        if module.stack_size > 0:
+            emit_state(asm)
         asm.section(".text", executable=True,
                     alignment=IMAGE_DEFAULTS.text_alignment)
         # What each function turned out to destroy, so that a call to one saves
@@ -237,6 +244,10 @@ class RISCV64Target:
             # Only where a test runs: what says a test failed is a write that
             # comes back, which nothing else has any use for.
             emit_report(asm, lookup_cconv(SYSTEM_CCONV))
+        if module.stack_size > 0:
+            # What the kernel calls where the program follows a bad address,
+            # which is how running off the bottom of the stack is caught.
+            emit_handler(asm, SYSCALLS, STACK_ABI)
         emit_start(asm, module, lookup_cconv(module.startup.cconv),
                    failures, layout)
         runtime.emit(asm, BY_NAME)

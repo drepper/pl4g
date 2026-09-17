@@ -6129,6 +6129,62 @@ operating system.  What none of them has is the size decided when the program is
 built *and* the exhaustion reported as a status a caller can tell from the
 program's own.
 
+## 2026-09-18T12:00+02:00 — runtime
+
+**The stack is made by the entry point, not by anything the image carries**
+
+At the user's direction, and a change to the entry above rather than a new
+feature: the same stack, the same guard, the same status, made by instructions
+the compiler selects instead of by a function compiled from C and packaged with
+it.
+
+**What was wrong with carrying it.**  The call was at the entry point, so every
+program made it, so every program pulled in the packaged runtime: two and a half
+kilobytes of object code, four sections, and a fixed 0.2 ms of placing it, in
+programs that wanted nothing else from it.  The smallest image the compiler
+could produce went from 1424 bytes to 5072.  Emitting the code instead costs
+about nine hundred bytes and leaves the packaged runtime to the programs that
+reach it -- which was the rule everywhere else and had one exception.
+
+**It is written once and emitted for all three**, which is what
+`target/allocator.py` already did and what made this cheap: the architecture
+fills in a record saying which numbers its system calls have, which registers
+they take, and how the stack pointer is read and written, and everything else is
+shared.  Writing the entry point's assembly three times was the alternative and
+was rejected for the reason that record exists.
+
+**Readable and writable first, then the guard taken away.**  The mapping is
+asked for whole and not populated and the guard is turned to no access with
+`mprotect`, which is the order the user asked for; the guard is then what is
+left of the mapping rather than a thing placed beside it.  The order this
+compiler had before -- the whole of it unreachable, then the stack part opened
+-- reaches the same state and was changed because the user said which way round
+it should be.  Neither has a window in which the guard is ordinary memory that
+anything could reach: nothing runs between the two calls.
+
+**Below the stack the kernel made**, at a hint worked out from the stack pointer
+as the entry point found it.  A hint and not a demand, so nothing depends on it;
+what it is worth is that the program's stack stays where a stack lives in the
+address space rather than in the middle of where mappings are handed out.
+
+**The handler's stack is the top of the same mapping.**  One call rather than
+two, and it puts the three regions -- guard, stack, the handler's little stack
+-- in a known order.  The separate mapping the C version made was a second call
+for a second thing of the same kind.
+
+**The guard is rounded up to the largest page the architecture may use** where
+the program is built, because what `mprotect` takes away is a whole number of
+pages of whatever the running kernel chose and the program is built once for all
+of them.  4 KiB on x86-64 and RISC-V, 64 KiB on AArch64.
+
+Compare: **Go**'s runtime, which is linked in and is the thing that makes every
+stack; **Rust**, whose guard page and handler are `std`'s and are therefore in
+every binary that uses `std`; **Zig**, which emits its start code rather than
+linking it, as this now does; **C** on Linux, where none of it exists because
+the kernel's stack is the program's stack.  What this has that none of them has
+is the choice being the compiler's: the stack is made by code the compiler wrote
+for this program, so a program that wants none of it carries none of it.
+
 Open questions
 --------------
 
