@@ -73,9 +73,15 @@ def test_asm_matches_golden(root: Path, name: str, triple: str,
     `CPUID` at the entry point of every program, which would be repeated in each
     of these files and would bury the thing each file is about; what that code
     is, is checked where it is the subject.
+
+    With no stack of its own, for the same reason and more so: a program that
+    makes itself a guarded stack carries the runtime that does it, and a dump
+    shows every byte of that runtime.  It is the same bytes in every file, it is
+    compiled from C rather than selected here, and it is checked where it is the
+    subject.
     """
     output = tmp_path / "out.asm"
-    arguments = ["-o", str(output), "--emit=asm", "-O1",
+    arguments = ["-o", str(output), "--emit=asm", "-O1", "--stack-size=0",
                  "".join(("--target=", triple))]
     if architecture_of(triple) == "x86_64":
         arguments.append("--mclevel=v1")

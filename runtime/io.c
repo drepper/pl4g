@@ -25,6 +25,10 @@ typedef int i32;
 # define NR_MMAP 9
 # define NR_IO_URING_SETUP 425
 # define NR_IO_URING_ENTER 426
+# define NR_MPROTECT 10
+# define NR_RT_SIGACTION 13
+# define NR_SIGALTSTACK 131
+# define NR_EXIT_GROUP 231
 
 static inline i64 sys(i64 n, i64 a, i64 b, i64 c, i64 d, i64 e, i64 f)
 {
@@ -45,6 +49,10 @@ static inline i64 sys(i64 n, i64 a, i64 b, i64 c, i64 d, i64 e, i64 f)
 # define NR_MMAP 222
 # define NR_IO_URING_SETUP 425
 # define NR_IO_URING_ENTER 426
+# define NR_MPROTECT 226
+# define NR_RT_SIGACTION 134
+# define NR_SIGALTSTACK 132
+# define NR_EXIT_GROUP 94
 
 static inline i64 sys(i64 n, i64 a, i64 b, i64 c, i64 d, i64 e, i64 f)
 {
@@ -68,6 +76,10 @@ static inline i64 sys(i64 n, i64 a, i64 b, i64 c, i64 d, i64 e, i64 f)
 # define NR_MMAP 222
 # define NR_IO_URING_SETUP 425
 # define NR_IO_URING_ENTER 426
+# define NR_MPROTECT 226
+# define NR_RT_SIGACTION 134
+# define NR_SIGALTSTACK 132
+# define NR_EXIT_GROUP 94
 
 static inline i64 sys(i64 n, i64 a, i64 b, i64 c, i64 d, i64 e, i64 f)
 {
@@ -211,6 +223,11 @@ static const struct way ways[2] = {
 #define MAP_SHARED_POPULATE 0x8001
 #define MAP_PRIVATE_ANONYMOUS 0x22
 
+/* The status a program stops with when it runs off the bottom of its stack.
+ * One of the range the runtime reserves; `target/statuses.py` is where the
+ * language's side of that table is, and the two say the same number. */
+#define PL4G_STACK_OVERFLOW 67
+
 static inline u32 load_acquire(const u64 at)
 {
   return __atomic_load_n((const u32 *) at, __ATOMIC_ACQUIRE);
@@ -345,6 +362,128 @@ static void submit(struct pl4g_ring *r, long slot, unsigned char op, i32 fd,
   store_release(r->sq_tail, tail + 1);
   r->held[slot] = SUBMITTED;
   r->answer[slot] = 0;
+}
+
+/* -- a stack of the program's own ------------------------------------------ */
+
+/* The kernel gives a process a stack that grows until it runs into something,
+ * and what it runs into is whatever was mapped next.  A stack of the program's
+ * own has an unreachable area below it instead, so that running off the bottom
+ * is a fault at a known address and not a quiet write into something else.
+ *
+ * How much of each is the compiler's to decide and is passed in, since it is
+ * the thing that knows what the program was built with.
+ */
+
+#define PROT_NONE 0
+#define MAP_PRIVATE_ANON_NORESERVE 0x4022
+
+#define SIGSEGV 11
+#define SA_SIGINFO 4
+#define SA_ONSTACK 0x08000000
+#define SA_RESTORER 0x04000000
+
+/* Room for the handler to run in.  It runs when the stack is exhausted, so it
+ * cannot run on the stack; what it does is compare an address and leave, which
+ * wants very little. */
+#define ALT_STACK (16 * 1024)
+
+/* What the handler needs to know, which is the one thing here that outlives a
+ * call.  Nothing else in this runtime holds state of its own. */
+static u64 guard_low;
+static u64 guard_high;
+
+struct kernel_sigaction {
+  void *handler;
+  u64 flags;
+#if defined(__x86_64__)
+  void (*restorer)(void);
+#endif
+  u64 mask;
+};
+
+struct kernel_stack {
+  void *at;
+  i32 flags;
+  u64 size;
+};
+
+/* What the kernel puts in front of a signal's information.  Only the first
+ * fields matter here and their places are the same on every one of these
+ * architectures: three ints, then the address the fault was at. */
+struct fault_info {
+  i32 signo, errno_number, code;
+  i32 pad;
+  void *at;
+};
+
+#if defined(__x86_64__)
+/* This architecture's kernel does not return from a handler by itself: what
+ * returns is a few instructions the program provides, and the address of them
+ * goes in the action.  Nothing calls this; the kernel jumps to it. */
+__attribute__((naked)) static void restorer(void)
+{
+  __asm__ volatile("mov $15, %eax\n\tsyscall");
+}
+#endif
+
+static void on_fault(i32 sig, struct fault_info *info, void *from)
+{
+  (void) sig;
+  (void) from;
+  u64 at = (u64) info->at;
+  if (at >= guard_low && at < guard_high) {
+    static const char said[] = "pl4g: the stack ran out\n";
+    sys(NR_WRITE, 2, (i64) said, sizeof said - 1, 0, 0, 0);
+    sys(NR_EXIT_GROUP, PL4G_STACK_OVERFLOW, 0, 0, 0, 0, 0);
+  }
+  /* Something else faulted, and what it was is not this to say.  The handler
+   * is taken off and the instruction runs again, so the program dies of the
+   * signal it really got -- core file and all. */
+  struct kernel_sigaction plain;
+  for (u64 i = 0; i < sizeof plain / sizeof (u64); ++i)
+    ((u64 *) &plain)[i] = 0;
+  sys(NR_RT_SIGACTION, SIGSEGV, (i64) &plain, 0, sizeof (u64), 0, 0);
+}
+
+/* Put the program on a stack of its own and arrange for running off the bottom
+ * to be caught.  Answers where the stack pointer should be set, or nought where
+ * the system would not have it -- in which case the program carries on with the
+ * stack the kernel gave it, which is what it had before. */
+u64 pl4g_stack(u64 size, u64 guard)
+{
+  if (size == 0)
+    return 0;
+  i64 whole = sys(NR_MMAP, 0, guard + size, PROT_NONE,
+                  MAP_PRIVATE_ANON_NORESERVE, -1, 0);
+  if (whole < 0)
+    return 0;
+  if (sys(NR_MPROTECT, whole + (i64) guard, size, PROT_READ_WRITE,
+          0, 0, 0) < 0)
+    return 0;
+  guard_low = (u64) whole;
+  guard_high = (u64) whole + guard;
+  if (guard != 0) {
+    i64 room = sys(NR_MMAP, 0, ALT_STACK, PROT_READ_WRITE,
+                   MAP_PRIVATE_ANONYMOUS, -1, 0);
+    if (room >= 0) {
+      struct kernel_stack where = { (void *) room, 0, ALT_STACK };
+      sys(NR_SIGALTSTACK, (i64) &where, 0, 0, 0, 0, 0);
+      struct kernel_sigaction act;
+      for (u64 i = 0; i < sizeof act / sizeof (u64); ++i)
+        ((u64 *) &act)[i] = 0;
+      act.handler = (void *) on_fault;
+      act.flags = SA_SIGINFO | SA_ONSTACK;
+#if defined(__x86_64__)
+      act.flags |= SA_RESTORER;
+      act.restorer = restorer;
+#endif
+      sys(NR_RT_SIGACTION, SIGSEGV, (i64) &act, 0, sizeof (u64), 0, 0);
+    }
+  }
+  /* The top, where a stack starts: it grows down on every one of these, and
+   * what it starts at is aligned as far as any of their conventions asks. */
+  return ((u64) whole + guard + size) & ~(u64) 15;
 }
 
 /* -- the arguments the program was started with ---------------------------- */

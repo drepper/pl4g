@@ -97,6 +97,12 @@ class Module:
     #: What the compiler decided about this program, as opposed to what it
     #: reported.  It travels with the module because every stage has the module
     #: and any of them may decide something.
+    #: How much room the program's own stack has, and how much unreachable
+    #: space sits below it.  What the command line said, carried here because
+    #: the entry point is what asks for them and the entry point is generated
+    #: from the module.
+    stack_size: int = 1 << 20
+    guard_size: int = 1 << 16
     reports: ReportLog = field(default_factory=ReportLog)
     _int_consts: dict[tuple[int, bool, int], IntConst] = field(default_factory=dict)
     _float_consts: dict[tuple[int, bytes], FloatConst] = field(default_factory=dict)

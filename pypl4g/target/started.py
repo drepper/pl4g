@@ -45,6 +45,12 @@ ARGUMENTS: Final[str] = "args"
 #: What the runtime is called that reads the arguments off the stack.
 READS_ARGUMENTS: Final[str] = "pl4g_args"
 
+#: And what it is called that puts the program on a stack of its own.  It
+#: answers where the stack pointer should be set, or nought where the system
+#: would not have it -- in which case the program carries on with the stack the
+#: kernel gave it, which is what every program had before this.
+MAKES_STACK: Final[str] = "pl4g_stack"
+
 
 def wanted_by(module: Module) -> ProductType | None:
     """The record the startup function takes a reference to, where it takes one.
@@ -85,6 +91,18 @@ def arguments_at(module: Module, layout: DataLayout) -> int | None:
     if found is None:
         return None
     return where_in(found, ARGUMENTS, layout)[0]
+
+
+def entry_wants_runtime(module: Module) -> bool:
+    """Whether the entry point itself calls into the packaged runtime.
+
+    It does where the program asks for a stack of its own, and where it takes
+    the record it was started with -- both of which the entry point arranges by
+    calling, in instructions it writes rather than in anything the program
+    wrote.  So it is asked here: nothing walking the program's own calls would
+    see either of them.
+    """
+    return module.stack_size > 0 or wanted_by(module) is not None
 
 
 def emit(asm: Assembler, module: Module, layout: DataLayout) -> None:

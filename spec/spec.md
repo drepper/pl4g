@@ -4415,6 +4415,11 @@ and the messages say what, which is the division a test runner makes everywhere 
 with one number.  It has a number of its own because a program that fails a test never started, so nothing it would have answered
 means anything.
 
+**67 is the program running off the bottom of its stack.**  It has a number of its own because what to do about it -- build with
+a larger stack, or find the recursion that does not end -- is a different thing to do, and because it is the one stop a program
+could not report for itself: there is no room left to report it in, which is why the handler that does report it runs on a stack
+of its own.
+
 **The startup function answers a `u6`**, which is that first range and nothing else.  The type is what says the rule rather than
 a paragraph a reader has to have read: a program that tries to exit with 200 is refused where it writes it, and one that works
 its status out arrives at a number that is already in range.  It also means the status has to be *worked out* in `u6` -- there is

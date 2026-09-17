@@ -1,0 +1,31 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=67 diag=none
+※ pl4g-test: args --stack-size=128k --guard-size=8k
+
+※ The same program on a stack of the size it was built with.
+※
+※ How large the stack is and how wide the guard below it is are decided when
+※ the program is compiled, not when it runs: `--stack-size` and `--guard-size`,
+※ which take a number of bytes with an optional K, M or G on the end.  A
+※ generator emitting a program knows how deep it goes, and a program that knows
+※ it needs little has no reason to reserve a megabyte.
+※
+※ What this shows is that the smaller stack is the one the program gets and
+※ that the guard below it still catches the overflow: an eighth of the default
+※ with an eighth of the default guard, and a call too deep still ends with the
+※ status reserved for it rather than with a signal.  How far the recursion gets
+※ before that happens is a fact about frame sizes and is not stated here.
+※
+※ Compare: **Go**'s -ldflags=-stacksize and its runtime maximum; **Rust**'s
+※ RUST_MIN_STACK, read when a thread starts rather than when it is built;
+※ **C**, where the size belongs to the loader and `ulimit -s` sets it; **Zig**
+※ and **Odin**, which say it per thread at the point one is made.
+
+fn deep(n: u64) → u64:
+    if n = 0u64:
+        0u64
+    else:
+        n + deep(n + 1u64)
+
+@[startup]
+fn main() → u6:
+    ⎕narrow(deep(1u64), ⌜u6⌝) ?? 0u6

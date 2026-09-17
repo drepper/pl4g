@@ -83,6 +83,7 @@ def emit_start(asm: Assembler, module: Module, cconv: CallConvDesc,
         # passed, or it left through the helper above and never arrived here.
         asm.loadreg(held, asm.imm(0, 32, signed=False))
     else:
+        _make_stack(asm, module)
         _read_arguments(asm, module, layout)
         if started.wanted_by(module) is not None:
             # Where the record the program was started with is, which is the
@@ -146,6 +147,31 @@ HELD_STACK: Final = reg("r13")
 #: going to run; where none is, the status goes straight where the system call
 #: wants it and nothing is moved twice.
 HELD_STATUS: Final = reg("r12d")
+
+
+def _make_stack(asm: Assembler, module: Module) -> None:
+    """Put the program on a stack of its own, where it asked for one.
+
+    Asked for after the constructors would have run and before anything else,
+    so that what runs on the kernel's stack is only what has to.  What comes
+    back is where to set the stack pointer, or nought where the system would not
+    have it -- in which case nothing is switched and the program carries on with
+    the stack it was given, which is what every program had before this.
+    """
+    if module.stack_size <= 0:
+        return
+    theirs = lookup_cconv(SYSTEM_CCONV)
+    asm.loadreg(theirs.int_arg_regs[0],
+                asm.imm(module.stack_size, 32, signed=False))
+    asm.loadreg(theirs.int_arg_regs[1],
+                asm.imm(module.guard_size, 32, signed=False))
+    asm.call(started.MAKES_STACK)
+    keep = asm.reserve_label("stack.as.it.was")
+    answer = theirs.int_ret_regs[0]
+    asm.branch(Condition.EQ, asm.reg(INFO.view(answer.unit, 64)),
+               asm.imm(0, 32, signed=False), keep)
+    asm.loadreg(RSP, asm.reg(INFO.view(answer.unit, 64)))
+    asm.block(keep)
 
 
 def _read_arguments(asm: Assembler, module: Module,

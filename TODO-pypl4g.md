@@ -482,6 +482,16 @@ To Do List for the pypl4g compiler
     which for the eighteen `std.Error` names is thirty-five instructions and about three milliseconds of compiling.  Sorting the
     values and testing ranges would be fewer of both, and is the compiler's to improve without any program changing.
 
+[ ] refuse, or probe, a frame larger than the guard below the stack.  The guard is 64 KiB by default and a single frame wider
+    than that steps clean over it: the fault is then past the guard, the handler does not recognize the address, and the program
+    dies of the signal rather than reporting that its stack ran out.  Nothing in the language can ask for such a frame yet, there
+    being no local arrays of that size, so this is a gap to close before there is.  The two answers are a check against the guard
+    size at the point a frame is laid out, or a touch of each page as the frame is made, which is what a stack probe is.
+
+[ ] say what a program that ran out of stack was doing.  The handler writes one line and nothing else -- there is no unwinder,
+    and the entry beside this one says why.  When there is one, the recursion that did not end is exactly what a reader needs to
+    be shown, and it is the one case where the stack to walk is the one that just overflowed.
+
 [ ] report a tuple holding an array.  `〈⟦1u8, 2u8⟧〉` reaches the code generator and fails there (9901, "making a 〈u8⟦2⟧〉, which
     is one value and not several"), so what a reader is told is an internal error about a program the front end accepted.  Either
     an array is a thing a tuple may hold, in which case `parts_of` has to say what its parts are, or it is not and the checker

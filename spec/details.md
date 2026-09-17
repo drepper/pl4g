@@ -1079,6 +1079,76 @@ claiming the program meant it.
 
 **The message is still written first**, so nothing is lost either way; what the trap gave up was never the message.
 
+The stack a program runs on
+---------------------------
+
+**A program does not run on the stack the kernel gave it.**  Before anything of
+it runs, the entry point calls `pl4g_stack` in the packaged runtime, which maps
+a stack of the size the program was built with together with a guard below it,
+and answers the top of it; the entry point moves the stack pointer there and
+calls the startup function.  `--stack-size=SIZE` says how much, 1 MiB by
+default, and `--guard-size=SIZE` how much unreachable space sits below it,
+64 KiB by default.  Both take a number of bytes, optionally with `K`, `M` or `G`
+after it, and a size that is not one is refused (1016) rather than quietly
+replaced by the default.
+
+**The whole mapping is made unreachable and the stack part is then opened.**
+One `mmap` of `guard + size` with `PROT_NONE`, then one `mprotect` of the upper
+`size` to read and write.  The guard is what is left over, so it is unreachable
+because nothing ever made it otherwise -- there is no second mapping that could
+be placed somewhere else, and no window in which the guard exists as ordinary
+memory.  `MAP_NORESERVE` is asked for because a stack is reserved and not used:
+a megabyte of address space costs nothing until it is written to.
+
+**Running off the bottom is caught rather than fatal.**  The runtime installs a
+SIGSEGV handler with `SA_SIGINFO`, so that it is told the address that faulted,
+and `SA_ONSTACK` with an alternate stack of its own -- there being no room on
+the stack that just ran out, which is the whole reason a handler for this needs
+one.  The handler compares the address against the guard it recorded: inside
+it, the program ran off the bottom, so it writes `pl4g: the stack ran out` and
+exits with the status reserved for that (67).  Outside it, this is some other
+bad address and not the runtime's business, so the handler takes itself off and
+returns, and the instruction runs again and dies of the signal it really got --
+core file and all.
+
+**Nothing of it is required to succeed.**  `pl4g_stack` answers nought where the
+mapping was refused, and the entry point then leaves the stack pointer where the
+kernel put it; a program that could not have the stack it asked for still runs,
+on the one it would have had before.  `--stack-size=0` asks for that on purpose,
+and is the only way to build an image that carries none of the runtime -- which
+is why the tests that are about the size of an image build that way.
+
+**`PT_GNU_STACK` carries the size.**  It is not what makes any of this work, the
+program having mapped its own; it is filled in because that is where the format
+keeps the number, so a reader of the image finds it there, and because a program
+whose own mapping failed is then left on a stack of the size it asked for.
+
+Three things about it are worth writing down because each cost a debugging
+session:
+
+- **x86-64 needs an `SA_RESTORER`.**  That architecture's kernel does not return
+  from a handler by itself; what returns is a few instructions the program
+  supplies, whose address goes in the action.  So there is a naked function in
+  the runtime that does `rt_sigreturn` and nothing else, and the field and the
+  flag exist only under `#if defined(__x86_64__)` -- the other two kernels have
+  neither in their `struct sigaction` at all.
+- **On AArch64 `mov x21, sp` is not a move.**  The stack pointer and the zero
+  register share encoding 31 and which one is meant is decided by the
+  instruction; the move form reads the zero register, so reading or writing SP
+  is `add x21, sp, #0`.  Written as a move it assembled cleanly and set the
+  register to nought.
+- **The entry point calls the runtime with the system's convention**, not the
+  language's.  `pl4g_stack` is compiled from C, so its arguments are where that
+  ABI puts them; the entry point's call is written by hand and has to say so
+  (`lookup_cconv(SYSTEM_CCONV)`).  With the language's convention the first
+  symptom was a segmentation fault before anything ran.
+
+**What pulls the runtime into the image** is the entry point wanting it, which
+nothing else can see: the call is hand-written machine code rather than anything
+in the module, so reachability does not find it.  `started.entry_wants_runtime`
+is that question asked directly -- the program asked for a stack, or something
+in it reached the I/O.
+
 What a program is built for
 ---------------------------
 

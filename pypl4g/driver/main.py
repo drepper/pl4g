@@ -146,6 +146,8 @@ class Driver:
         start = perf_counter()
         name = self.options.inputs[0].name if self.options.inputs else "<none>"
         module = Module(name=name, triple=self.options.triple,
+                        stack_size=self.options.stack_size,
+                        guard_size=self.options.guard_size,
                         reports=self.reports)
         registry = ModuleRegistry(search=SearchPath(
             given=list(self.options.module_path), system=system_modules()))
@@ -234,7 +236,8 @@ class Driver:
                                  page_size=defaults.page_size,
                                  entry_symbol=target.entry_symbol,
                                  header_flags=defaults.header_flags,
-                                 kind=ImageKind.EXECUTABLE)
+                                 kind=ImageKind.EXECUTABLE,
+                                 stack_size=self.options.stack_size)
         try:
             image, _ = write_image(settings, list(streamer.sections.values()),
                                    list(streamer.symbols.values()), module.source_paths,

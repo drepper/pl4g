@@ -37,6 +37,14 @@ GENERAL: Final[int] = FIRST
 #: first would make a reader fix one thing and run again to be told the next.
 TESTS_FAILED: Final[int] = FIRST + 2
 
+#: The program ran off the bottom of its stack.  It has a number of its own
+#: because what to do about it -- build with a larger stack, or find the
+#: recursion that does not end -- is a different thing to do, and because it is
+#: the one stop a program cannot report for itself: there is no room left to
+#: report it in, which is why the handler that does runs on a stack of its own.
+#: `runtime/io.c` says the same number; the two are one table in two languages.
+STACK_OVERFLOW: Final[int] = FIRST + 3
+
 #: The processor is not the one the program was built for.  It has a number of
 #: its own because it is the one stop that happens before the program has run at
 #: all, and because what to do about it -- build for an older level, or find a

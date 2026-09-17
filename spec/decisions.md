@@ -6070,6 +6070,65 @@ use; **Rust** and **Go**, where they are a call into the runtime and are copied
 into the language's own strings; **Zig**, whose `std.process.args` is an iterator
 over the same memory and whose lengths are found the same way this does.
 
+## 2026-09-18T11:00+02:00 — runtime
+
+**A stack of the program's own, with a guard below it**
+
+At the user's direction.  `--stack-size=SIZE` (1 MiB by default) and
+`--guard-size=SIZE` (64 KiB), a stack mapped by the program before anything of
+it runs, and a handler that turns running off the bottom of it into an exit
+status of its own (67).
+
+**Why not the stack the kernel supplied.**  Its size belongs to whoever started
+the program and is a `ulimit` away from being something else; its guard is one
+page, which a single large frame steps over; and exhausting it is a SIGSEGV
+indistinguishable from following a bad address.  A generator emitting a program
+knows how deep that program goes, and the three things it wants -- to say how
+much, to be sure the bottom is caught, and to be told apart when it is -- are
+none of them things the environment can be asked for.
+
+**One mapping, then part of it opened.**  `mmap` of `guard + size` with
+`PROT_NONE`, then `mprotect` of the upper `size` to read and write.  The guard is
+the remainder, so it is unreachable because nothing ever made it otherwise:
+there is no second mapping that could land elsewhere and no window in which the
+guard is ordinary memory.  The alternative -- map the stack, then map a guard
+below it -- was rejected for both of those.
+
+**The handler needs a stack of its own**, which is the whole difficulty of
+catching this: there is no room on the stack that just ran out.  `SA_ONSTACK`
+with an alternate stack, and `SA_SIGINFO` so that the address that faulted is
+known and can be compared against the guard.  A fault anywhere else is not the
+runtime's business: the handler takes itself off and returns, the instruction
+runs again, and the program dies of the signal it really got.
+
+**A status and not a signal**, which is the rule the reserved range exists for.
+67 says the stack ran out, and what to do about it -- build with more, or find
+the recursion that does not end -- is a different thing to do than what any
+other stop asks for, which is why it is not the general number.
+
+**Nothing of it is required to succeed.**  Where the mapping is refused the
+program carries on with the stack it already had.  `--stack-size=0` asks for
+that deliberately and is the only way to build an image carrying none of the
+packaged runtime, since the call is at the entry point and every program makes
+it otherwise.
+
+**`PT_GNU_STACK` carries the size** although nothing loads a stack from it here.
+It is where the format keeps that number, so a reader of the image finds it in
+the usual place, and it is what the program falls back to.
+
+Compare: **Rust**, which is this exactly -- a guard page, `sigaltstack`, a
+handler that recognizes the address and prints "has overflowed its stack" -- and
+then aborts, so the status is a signal after all; **Go**, which grows its stacks
+instead and only reports "stack overflow" when it will not grow further, at the
+cost of a check in every prologue; **C** on Linux, where the guard is the
+kernel's, the size is the loader's and the program dies of SIGSEGV with nothing
+said; **Java**, which raises `StackOverflowError` and can do so because every
+call already goes through a machine that counts; **Zig**, which has
+`--stack-size` for the same reason this does and leaves catching it to the
+operating system.  What none of them has is the size decided when the program is
+built *and* the exhaustion reported as a status a caller can tell from the
+program's own.
+
 Open questions
 --------------
 

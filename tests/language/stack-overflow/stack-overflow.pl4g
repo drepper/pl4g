@@ -1,0 +1,33 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=67 diag=none
+
+※ A program that runs out of stack ends with a status that says so.
+※
+※ The stack is not the one the kernel supplied.  Before anything of the program
+※ runs, the entry point maps one of the size asked for with a guard below it
+※ that may not be touched at all, and moves the stack pointer onto it.  A call
+※ too deep walks into the guard, and what the processor reports is caught: the
+※ handler runs on a stack of its own -- there being no room on the one that ran
+※ out -- sees that the address is in the guard, says so, and ends the process
+※ with the status reserved for it.
+※
+※ **Why a status rather than a signal.**  A process killed by SIGSEGV is not
+※ distinguishable, by what its parent sees, from one that followed a bad
+※ address; a generator emitting programs wants the two told apart, and this is
+※ the one of them the language can recognize.
+※
+※ Compare: **Go**, which grows its stacks and reports "stack overflow" with a
+※ trace; **Rust**, which does exactly this -- a guard page, an alternate stack
+※ and a handler that prints "has overflowed its stack" -- and then aborts;
+※ **C** on Linux, where the guard is the kernel's and the process dies of
+※ SIGSEGV with nothing said; **Java**, which raises StackOverflowError.
+
+※ Nothing about this is a tail call, so every turn costs a frame.
+fn deep(n: u64) → u64:
+    if n = 0u64:
+        0u64
+    else:
+        n + deep(n + 1u64)
+
+@[startup]
+fn main() → u6:
+    ⎕narrow(deep(1u64), ⌜u6⌝) ?? 0u6

@@ -75,6 +75,7 @@ def emit_start(asm: Assembler, module: Module, cconv: CallConvDesc,
         # passed, or it left through the helper above and never arrived here.
         asm.loadreg(status, asm.imm(0, 16, signed=False))
     else:
+        _make_stack(asm, module)
         _read_arguments(asm, module, layout)
         if started.wanted_by(module) is not None:
             # Where the record the program was started with is, which is the
@@ -199,6 +200,39 @@ SYSCALLS: Final[SyscallABI] = SyscallABI(
 ALLOCATOR_REGS: Final[AllocatorRegs] = AllocatorRegs(
     arena=X0, size=X1, answer=X0,
     scratch=(reg("x9"), reg("x10"), reg("x11")))
+
+
+def _a_number(asm: Assembler, where: object, value: int) -> None:
+    """Put a number in a register, however many instructions that takes here.
+
+    A megabyte does not fit the immediate either of these carries, so the move
+    is what works out how to build it; asking for it this way is what keeps the
+    entry point from knowing.
+    """
+    asm.loadreg(where, asm.imm(value, 32, signed=False))  # type: ignore[arg-type]
+
+
+def _make_stack(asm: Assembler, module: Module) -> None:
+    """Put the program on a stack of its own, where it asked for one.
+
+    What comes back is where to set the stack pointer, or nought where the
+    system would not have it -- in which case nothing is switched and the
+    program carries on with the stack it was given.
+    """
+    if module.stack_size <= 0:
+        return
+    theirs = lookup_cconv(SYSTEM_CCONV)
+    _a_number(asm, theirs.int_arg_regs[0], module.stack_size)
+    _a_number(asm, theirs.int_arg_regs[1], module.guard_size)
+    asm.call(started.MAKES_STACK)
+    keep = asm.reserve_label("stack.as.it.was")
+    asm.branch(Condition.EQ, asm.reg(theirs.int_ret_regs[0]),
+               asm.imm(0, 12, signed=False), keep)
+    # An addition of nothing and not a move, for the reason above: the stack
+    # pointer is the encoding a move reads as the zero register.
+    asm.op(ops.PLUS, SP, asm.reg(theirs.int_ret_regs[0]),
+           asm.imm(0, 12, signed=False))
+    asm.block(keep)
 
 
 def _read_arguments(asm: Assembler, module: Module,

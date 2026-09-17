@@ -81,6 +81,11 @@ class ImageSettings:
     with_symbols: bool = True
     #: Growth slack to reserve after each function, for incremental rebuilds.
     function_padding: int = 0
+    #: How much stack the program wants, which the header says and the program
+    #: then arranges for itself.  Saying it is what lets anything reading the
+    #: image know what it was built to want -- and on the systems that honour
+    #: the header, what lets them give it.
+    stack_size: int = 0
 
 
 class ElfWriter:
@@ -182,7 +187,11 @@ class ElfWriter:
             *loads,
             # Its presence without the executable bit is what makes the stack
             # non-executable; a missing PT_GNU_STACK gives an executable stack.
-            SegmentPlan(p_type=PT_GNU_STACK, p_flags=PF_R | PF_W, p_align=0x10),
+            # How much room it says is what the program was built to want: a
+            # system that honours it gives that much, and one that does not is
+            # what the program arranges its own stack for.
+            SegmentPlan(p_type=PT_GNU_STACK, p_flags=PF_R | PF_W, p_align=0x10,
+                        p_memsz=self._settings.stack_size),
         ]
         layout.entry_vaddr = self._entry_vaddr()
         layout.total_size = offset

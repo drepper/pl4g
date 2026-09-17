@@ -163,7 +163,7 @@ class X86_64Target:
         # The runtime compiled ahead of time, placed only where the program
         # reaches it -- which is where a call names something it defines.
         runtime = Runtime(blob=blob_for(architecture_of(self.triple)))
-        if reaches(module, runtime):
+        if reaches(module, runtime) or started.entry_wants_runtime(module):
             runtime.reached()
         layout = DataLayout(pointer_size=self.pointer_bits // 8)
         # What the front end asked of a whole run of elements at once, brought

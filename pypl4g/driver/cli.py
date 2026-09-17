@@ -179,6 +179,8 @@ class CommandLine:
         parser.add_argument("--diag-format", dest="diag_format")
         parser.add_argument("--module-path", dest="module_path",
                             action="append", default=[])
+        parser.add_argument("--stack-size", dest="stack_size")
+        parser.add_argument("--guard-size", dest="guard_size")
         parser.add_argument("--report-log", dest="report_log")
         parser.add_argument("--test-runner", dest="test_runner")
         parser.add_argument("--incremental", action="store_true")
@@ -248,6 +250,12 @@ class CommandLine:
                                                options.diag_format)
         for given in found.module_path:
             options.module_path.extend(parse_search_path(given))
+        if found.stack_size is not None:
+            options.stack_size = self._size("--stack-size", found.stack_size,
+                                            options.stack_size)
+        if found.guard_size is not None:
+            options.guard_size = self._size("--guard-size", found.guard_size,
+                                            options.guard_size)
         if found.report_log is not None:
             options.report_log = Path(found.report_log)
         options.test_runner = found.test_runner
@@ -279,6 +287,24 @@ class CommandLine:
                              option="".join((word, "=", value)),
                              expected=_enum_values(enum_type))
             return fallback
+
+    #: What a letter after a size multiplies it by.  Powers of 1024 and not of
+    #: 1000: what is being asked for is room in memory, which is counted in
+    #: pages and never in thousands.
+    _MULTIPLES: Final[dict[str, int]] = {
+        "k": 1 << 10, "m": 1 << 20, "g": 1 << 30}
+
+    def _size(self, word: str, value: str, fallback: int) -> int:
+        """A number of bytes, which may be written with a letter after it."""
+        text = value.strip().lower()
+        times = 1
+        if text and text[-1] in self._MULTIPLES:
+            times = self._MULTIPLES[text[-1]]
+            text = text[:-1]
+        if not text.isdigit():
+            self._diags.emit(D.IMPL_CLI_BAD_SIZE, option=word, given=value)
+            return fallback
+        return int(text) * times
 
     def _add_input(self, word: str) -> None:
         """Record a source file, checking its suffix."""

@@ -141,8 +141,14 @@ def test_the_runtime_writes_what_it_was_given(triple: str, tmp_path) -> None:  #
 @pytest.mark.parametrize("triple", compiler_targets())
 def test_a_program_that_does_not_reach_it_carries_none_of_it(
         triple: str, tmp_path) -> None:  # noqa: ANN001
-    """The runtime is placed where something calls it and nowhere else."""
+    """The runtime is placed where something calls it and nowhere else.
+
+    Nothing here calls it, and the module asks for no stack of its own -- which
+    the entry point would make by calling the runtime, whether or not anything
+    the program itself contains reaches it.
+    """
     module = Module("t", triple=triple)
+    module.stack_size = 0
     main = Function("main", module.types.func_type((), U8),
                     FuncAttrs(special=SpecialKind.STARTUP))
     module.add_function(main)

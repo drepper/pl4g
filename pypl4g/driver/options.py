@@ -73,6 +73,12 @@ class Options:
     #: terminal gets it and a pipe does not; `NO_COLOR` is honoured whatever
     #: this says.
     colour: ColourWhen = ColourWhen.AUTO
+    #: How much room the program's own stack has, and how much unreachable
+    #: space sits below it.  A stack of the program's own means running off the
+    #: bottom is a fault at a known address rather than a quiet write into
+    #: whatever was mapped next, which is what the kernel's own stack gives.
+    stack_size: int = 1 << 20
+    guard_size: int = 1 << 16
     report_log: Path | None = None
     #: What to run a test binary through, where this machine does not run what
     #: was built.  An emulator is the usual answer; without one the tests for

@@ -98,13 +98,19 @@ def built(request: pytest.FixtureRequest,
     smallest: every level above it has the program ask the processor whether it
     can run at all, which is code and is meant to be.  What that costs is said
     below, on its own, rather than mixed into what a program is.
+
+    With no stack of its own, for the same reason.  A program built the default
+    way makes itself a guarded stack before it runs, which is the runtime and is
+    a page of it; --stack-size=0 leaves it on the one the kernel supplied.  What
+    that costs is also said below, on its own.
     """
     triple = str(request.param)
     directory = tmp_path_factory.mktemp("".join(("elf-", architecture_of(triple))))
     source = directory / "exit0.pl4g"
     source.write_text(SOURCE, encoding="utf-8")
     output = directory / "exit0"
-    arguments = ["-o", str(output), "-O1", "".join(("--target=", triple))]
+    arguments = ["-o", str(output), "-O1", "--stack-size=0",
+                 "".join(("--target=", triple))]
     if architecture_of(triple) == "x86_64":
         arguments.append("--mclevel=v1")
     proc = run_compiler([*arguments, str(source)])
@@ -318,6 +324,38 @@ def test_asking_the_processor_is_what_a_level_costs(tmp_path: Path) -> None:
     # asked, so it costs nothing beyond the wider mask.
     assert sizes["v4"] == sizes["v3"], sizes
     assert sizes["v4"] - sizes["v1"] < 512, sizes
+
+
+def test_making_a_stack_is_what_it_costs(built: Built, tmp_path: Path) -> None:
+    """What a stack of its own adds to every program, said once and in one place.
+
+    A program built the default way maps itself a stack with a guard below it
+    and a handler that recognizes a fault in the guard, so that running out of
+    stack is a diagnosed exit rather than a signal.  That is runtime code the
+    compiler carries, and it is what the sections named for it hold; the image
+    it is measured against was built with --stack-size=0 and stays on the stack
+    the kernel supplied.  The number is here so that a change to it is a thing
+    somebody chose rather than something that happened.
+    """
+    source = tmp_path / "exit0.pl4g"
+    source.write_text(SOURCE, encoding="utf-8")
+    output = tmp_path / "exit0"
+    arguments = ["-o", str(output), "-O1", "".join(("--target=", built.triple))]
+    if built.arch == "x86_64":
+        arguments.append("--mclevel=v1")
+    proc = run_compiler([*arguments, str(source)])
+    assert proc.returncode == 0, describe(proc)
+    image = elfcheck.parse(output.read_bytes())
+    # The header a loader reads to size the stack it supplies says how large the
+    # program wants one, so that a program whose own mapping failed is left on a
+    # stack of the size it asked for rather than on whatever the default is.
+    stack = next(s for s in image.segments if s.p_type == elfcheck.PT_GNU_STACK)
+    assert stack.p_memsz == 1 << 20
+    assert not stack.p_flags & elfcheck.PF_X
+    names = [s.name for s in image.sections]
+    assert ".pl4grt.text" in names, names
+    grown = output.stat().st_size - built.path.stat().st_size
+    assert 0 < grown < 4096, grown
 
 
 def test_a_group_with_nothing_in_it_costs_no_segment(built: Built) -> None:

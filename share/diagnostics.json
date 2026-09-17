@@ -6764,6 +6764,32 @@
       "option": null
     },
     {
+      "number": 1016,
+      "name": "IMPL_CLI_BAD_SIZE",
+      "severity": "error",
+      "message": "'{option}' wants a size, and '{given}' is not one",
+      "args": [
+        {
+          "name": "option",
+          "type": "string",
+          "description": "the option that was given"
+        },
+        {
+          "name": "given",
+          "type": "string",
+          "description": "what was written after it"
+        }
+      ],
+      "cause": "A size is a number of bytes, and may be written with 'K', 'M' or 'G' after it for a multiple of 1024.  It has to be a number: an option given something else is an option whose value came from somewhere that did not know what it was for.",
+      "spec": {
+        "document": "spec/details.md",
+        "section": "Implementation"
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 5001,
       "name": "LANG_STMT_UNREACHABLE",
       "severity": "warning",
