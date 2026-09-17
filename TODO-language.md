@@ -202,11 +202,21 @@ To Do List for the PL4g language
     specification says so and nothing chose it; a record was settled the other way on 2026-09-17, and the two should agree or
     the difference should be written down.
 
-[ ] the `std` module, and I/O through io_uring.  Designed on 2026-09-17 and written down in the decision log.  What it waited on
-    is done, and the first of it landed on 2026-09-17: `modules/std.pl4g` defines `Reader`, `Writer`, `ReadWriter`, `Io` and
-    `Init`; the startup function may take `std.Init` and the entry point hands over the three descriptors; `write` goes to the
-    kernel directly.  What is left, in order: ordering in the IR that says a request may not be moved past what it depends on;
-    `Ring` and `Pending`, and the ring the startup code makes where something needs one; `read`, and `ReadWriter`.
+[x] the `std` module, and I/O through io_uring.  Done on 2026-09-18: `modules/std.pl4g` defines the descriptor types and
+    `Init`, the startup function may take `std.Init`, and `read` and `write` go through a ring the module makes on first use --
+    `io_uring_setup`, three `mmap`s, and the submit-and-reap cycle, written in pl4g.  qemu-user has no `io_uring`, so where one
+    cannot be made the calls go straight to the kernel and every test still runs on all three targets.
+
+[ ] use `ReadWriter`.  The type is exported and nothing answers one: what would is opening a file or a socket, which wants a path
+    and so wants a `str` the kernel can read -- a NUL-terminated one, which this language has no way to write.
+
+[ ] say how long a buffer handed to the ring must last.  The submission entry holds a reference into the caller's buffer and
+    nothing checks that it outlives the request.  It does today, the request being complete before the call returns, but that is
+    a property of this design and not of the type; a ring that answered later would need the language to say it.  Found together
+    with the hole below.
+
+[ ] check a reference written into a field.  `p⌖.at ← &local` is allowed where `p` is a place from outside, which the same
+    write through `⌖` alone refuses (the rule in `_lower_deref_assign`).  The ring relies on it today.
 
 [x] a way to write an ordering.  Done on 2026-09-17, the user choosing the compiler-provided functions over a reference that
     carries the promise: `⎕acquire(REF)` and `⎕release(REF, VALUE)`, so the same place read the ordinary way elsewhere

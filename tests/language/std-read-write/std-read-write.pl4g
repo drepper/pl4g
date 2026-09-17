@@ -1,0 +1,50 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ `std.read` and `std.write` through a pipe the program makes, which is the one
+※ I/O test that depends on nothing outside itself.
+※
+※ **Everything goes through io_uring where there is one.**  `std` makes a ring on
+※ the first read or write anything does: `io_uring_setup`, three `mmap`s of the
+※ descriptor it answers, and then a submission entry filled in, the index
+※ published with a *releasing* write, `io_uring_enter`, and the completion tail
+※ read with an *acquiring* one.  A request carries the place in `std`'s own table
+※ that says what is known about it, so nothing the kernel reads back is an
+※ address of anything this program holds.
+※
+※ **Where there is none the calls go straight to the kernel.**  Tried once and
+※ not again -- a system without `io_uring` will not grow one, and asking twice
+※ would cost a request for every read and write a program ever does.  That is
+※ what lets this run under an emulator that answers `io_uring_setup` with
+※ `ENOSYS`, and it is why this test runs on all three targets rather than one.
+※
+※ **A descriptor is a type and not a number**, so `std.write` takes a `Writer`
+※ and there is no way to hand it the read end.
+※
+※ Compare: **Rust** and **Go**, whose standard I/O is `read`/`write` and whose
+※ `io_uring` is a library a program chooses; **Zig**, whose `std.os.linux.IoUring`
+※ is driven by hand as this is; **C**, where the three descriptors are integers
+※ and `liburing` is a separate thing to link.
+
+let std := ⎕import("std")
+
+@[startup, impure]
+fn main(init: mut std.Init) → u6:
+    let ends: mut i32⟦2⟧ = ⟦0i32, 0i32⟧
+    if ⎕syscall(⎕sc@pipe2, &mut ends⟦0⟧, 0i64) < 0i64:
+        1u6
+    else:
+        let sink: mut std.Writer = std.Writer(.fd ← ends⟦1⟧)
+        let source: mut std.Reader = std.Reader(.fd ← ends⟦0⟧)
+        let sent: u8⟦4⟧ = ⟦1u8, 2u8, 3u8, 4u8⟧
+        let back: mut u8⟦4⟧ = ⟦0u8, 0u8, 0u8, 0u8⟧
+        if std.write(&mut sink, sent) ≠ 4i64:
+            2u6
+        elif std.read(&mut source, back) ≠ 4i64:
+            3u6
+        elif back⟦0⟧ ≠ 1u8 ∨ back⟦3⟧ ≠ 4u8:
+            4u6
+        ※ and one the program started with, which is the whole point of `Init`
+        elif std.write(&mut init.io.errors, ⟦⟧) ≠ 0i64:
+            5u6
+        else:
+            0u6

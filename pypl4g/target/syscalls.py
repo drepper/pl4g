@@ -23,6 +23,7 @@ from typing import Final, Mapping
 _GENERIC: Final[Mapping[str, int]] = {
     "openat": 56,
     "close": 57,
+    "pipe2": 59,
     "read": 63,
     "write": 64,
     "readv": 65,
@@ -51,6 +52,7 @@ _X86_64: Final[Mapping[str, int]] = {
     "write": 1,
     "close": 3,
     "open": 2,
+    "pipe2": 293,
     "readv": 19,
     "writev": 20,
     "mmap": 9,

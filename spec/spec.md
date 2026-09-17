@@ -222,6 +222,7 @@ type Io   = input : Reader ; output : Writer ; errors : Writer
 type Init = io : Io
 
 fn write(to: &mut Writer, what: u8⟦⟧) → i64
+fn read(from: &mut Reader, into: u8⟦⟧) → i64
 ```
 
 **A descriptor is a type and not a number.**  What says a thing may be written is the type of the name standing for it, so there is
@@ -231,8 +232,21 @@ no way to hand a `Reader` to `write` and no way to write to a number a program m
 **One mutable reference is the whole of the concurrency rule.**  `&mut init.io.output` is exclusive because a second `&mut` to the
 same place is refused, so two names for one device is a thing the compiler refuses rather than a thing a lock prevents.
 
-`write` answers how many bytes went, or what the kernel said where it refused -- a negative number, which is the kernel's own
-convention.  Reading that as a result of the language's own kind is what the module will do once it has somewhere to put the error.
+`write` answers how many bytes went and `read` how many came, or what the kernel said where it refused -- a negative number, which
+is the kernel's own convention.  Reading that as a result of the language's own kind is what the module will do once it has
+somewhere to put the error.  Writing nothing and reading into nowhere are nothing done, and answer nought.
+
+**Everything goes through `io_uring` where there is one.**  `std` makes a ring on the first read or write anything does and drives
+it by hand: a submission entry filled in, the index published with a releasing write, `io_uring_enter`, and the completion tail
+read with an acquiring one.  No thread serves completions; they are taken in by the calls that use the ring, which is what the
+design chose for now.  A request carries the place in `std`'s own table that says what is known about it, so **nothing the kernel
+reads back is an address of anything the program holds**.
+
+**Where there is no ring the calls go straight to the kernel.**  It is tried once and not again: a system without `io_uring` will
+not grow one, and asking twice would cost a request for every read and write a program ever does.  That a ring is there, or is
+not, is not something a program can see -- what it names is a descriptor.
+
+None of the machinery is exported.  `Ring`, `Pending`, the submission entry and the completion entry are the module's own.
 
 Compare **Rust**, whose `std::io::stdout` is taken by a call and guarded by a lock, a run-time check where a static one is
 available; **Go**, whose `os.Stdout` is a package variable anything may write to; **Zig**, which passes a writer explicitly as this

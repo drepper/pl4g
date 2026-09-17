@@ -2431,6 +2431,30 @@ one's; before this there was one token for all of them, which was the entry
 block's only because nothing asked in an `elif` had ever written.
 
 
+The ring, and what it costs
+---------------------------
+
+`modules/std.pl4g` drives `io_uring` itself, in pl4g: one source for three
+architectures, which is what the user chose over per-target assembly beside the
+startup code.  It is `io_uring_setup`, three `mmap`s of the descriptor that
+answers, and then the ordinary shape -- a submission entry written, its index
+put in the array, the tail published with `⎕release`, `io_uring_enter`, the
+completion tail read with `⎕acquire`, and the completion head published with
+`⎕release` when what was there has been taken in.
+
+**qemu-user answers `io_uring_setup` with `ENOSYS`**, so the ring can never run
+under the emulators two of the three targets are tested with.  `std` therefore
+tries once and falls back to the plain `read` and `write` calls, which is what
+the user chose over running the I/O tests natively only: every language test runs
+on all three targets, the native run exercising the ring and the emulated ones
+the fallback.  Whether there is a ring is not something a program can see.
+
+What the module needed from the language, in the order it turned up, is the list
+of what landed on 2026-09-17 and 2026-09-18: a record holding a record and
+handed to a call, a record of one field, a field that may be assigned to, a
+record at the top level, `⎕at` and `⎕span`, `⎕acquire` and `⎕release`,
+and `⎕widen`.  Nothing was added to the language for the ring alone.
+
 What another observer sees
 --------------------------
 

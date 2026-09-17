@@ -5673,6 +5673,54 @@ checks; **Ada**, where a conversion is written out and checked, which is this
 pair split the same way; **Haskell**, whose `fromIntegral` is one function for
 every direction and wraps silently.
 
+## 2026-09-18T01:00+02:00 — language
+
+**The ring: driven in pl4g, and a way out where there is none**
+
+`modules/std.pl4g` now does `io_uring_setup`, the three `mmap`s and the whole
+submit-and-reap cycle, written in pl4g.  One source for three architectures,
+which the user chose over per-target assembly beside the startup code, and it
+put the language on real work: nothing had to be added for the ring alone, every
+piece it wanted having been asked for and decided on its own terms first.
+
+**qemu-user answers `io_uring_setup` with `ENOSYS`.**  It cannot do otherwise --
+the rings are memory shared with the kernel and an emulator would have to
+translate every address in them -- so a ring can never run under the emulators
+two of the three targets are tested with.  That collides with the instruction
+that all I/O go through `io_uring`, and the user chose the way out: `std` tries
+once and falls back to the plain `read` and `write` calls where there is no ring.
+Every language test then runs on all three targets, the native run exercising the
+ring and the emulated ones the fallback.  Turned down: running the I/O tests
+natively only, which would leave the ring code on two architectures compiled and
+never executed; and aborting where no ring can be made, which would make every
+emulated run of any program that does I/O fail.
+
+**Tried once and not again.**  A system without `io_uring` will not grow one, and
+asking a second time would cost a request to the kernel for every read and write
+a program ever does.
+
+**A request carries a place in a table and not an address.**  `user_data` is the
+index of the `Pending` that says what is known about the request, chosen by the
+user over the address of one -- which is what the kernel's own users put there
+and would have wanted `⎕address`, the inverse of `⎕at`.  Nothing the kernel
+reads back is now an address of anything the program holds.
+
+**None of it is exported**, also the user's choice: a program names descriptors
+and calls `read` and `write`, and that there is a ring underneath, or is not, is
+not something it can see.
+
+Left open: the submission entry holds `addr : &u8`, a reference into the caller's
+buffer, and nothing checks that the buffer outlives the request.  It does here --
+the request is complete before the call returns -- but that is a property of this
+design and not of the type, and a ring that answered later would need the
+language to be able to say it.
+
+Compare: **liburing**, whose `io_uring_prep_write` and `io_uring_submit` this is
+by hand and whose memory ordering is the same pair of barriers; **Rust**'s
+`io-uring` crate and **Zig**'s `std.os.linux.IoUring`, which are the same shape
+in a library; **Go**, whose runtime hides the whole question behind a scheduler
+and a thread pool, which is the answer this language has no threads for yet.
+
 Open questions
 --------------
 

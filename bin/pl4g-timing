@@ -197,6 +197,7 @@ GROUPS: tuple[Group, ...] = (
            "assign-a-field": "a field of a record written, through a name and through a reference",
            "record-at-the-top-level": "a record a program starts with, read, written and referred into",
            "widening": "a value made one of a type with room for it, three ways",
+           "std-read-write": "a pipe made, written through the ring and read back",
            "loop-break-nested": "two loops and all four jumps between them",
            "loop-continue": "two loops each begun again from inside the body",
            "loop-break-value": "a search whose loop comes to what it found",

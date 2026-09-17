@@ -1688,10 +1688,12 @@ class Checker:
                    writing: bool = False) -> tuple[Value, ProductType] | None:
         """Where the record *expr* names is, where it is somewhere.
 
-        Three things are: a name given storage of its own, which every record
-        local is; what a reference names; and a field of one of those, which is
-        one offset further in.  A record that is somewhere is read a field at a
-        time, which is the only way one holding a record can be read at all.
+        Four things are: a name given storage of its own, which every record
+        local is, and a variable at the top level; what a reference names; an
+        element of an array, the elements being where the array is; and a field
+        of any of those, which is one offset further in.  A record that is
+        somewhere is read a field at a time, which is the only way one holding a
+        record can be read at all.
         """
         match expr:
             case ast.NameRef():
@@ -1720,6 +1722,14 @@ class Checker:
                         and isinstance(ty.pointee, ProductType):
                     return (value, ty.pointee)
                 return None
+            case ast.Element():
+                # An array's elements are where the array is, so one of them is
+                # a place whatever it holds.  The index is checked here as it is
+                # anywhere else: what this answers is one element and not a run.
+                place = self._place_of_an_element(builder, expr)
+                if place is None or not isinstance(place[1], ProductType):
+                    return None
+                return (place[0], place[1])
             case ast.Member():
                 found = self._record_at(builder, expr.base, writing)
                 if found is None:
