@@ -4292,6 +4292,12 @@ because what went wrong is in the message, which names the operation, the functi
 happens before the program has run at all, and because what to do about it -- build for an older microarchitecture level, or find
 a newer machine -- is a different thing to do.
 
+**66 is a test the binary runs that did not pass.**  Every test is run and every failure named before the binary stops: a run that
+ended at the first would make a reader fix one thing and run again to be told the next.  The status says that something was wrong
+and the messages say what, which is the division a test runner makes everywhere -- Rust's and Go's both report every test and exit
+with one number.  It has a number of its own because a program that fails a test never started, so nothing it would have answered
+means anything.
+
 **The startup function answers a `u6`**, which is that first range and nothing else.  The type is what says the rule rather than
 a paragraph a reader has to have read: a program that tries to exit with 200 is refused where it writes it, and one that works
 its status out arrives at a number that is already in range.  It also means the status has to be *worked out* in `u6` -- there is

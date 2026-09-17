@@ -1,0 +1,37 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=66 diag=none
+
+※ Every test a binary runs is run, and every failure named, before it stops.
+※
+※ **A run that stopped at the first would make a reader fix one thing and run
+※ again to be told the next**, which is the opposite of what a test binary is
+※ for.  So a test that answers false says so through a helper that writes and
+※ *comes back*, the count is kept in a register a call leaves alone, and what the
+※ binary exits with says that something was wrong rather than which thing.
+※
+※ **The status is the runtime's and not the program's.**  66 is in the range
+※ reserved for a stop the runtime reports, so a caller can tell a program that
+※ chose to fail from one that was found to be wrong -- and the startup function
+※ is never reached, so what it would have answered says nothing here.
+※
+※ Compare: **Rust**'s test harness and **Go**'s, which both run every test and
+※ report each, and whose exit status says only that something failed; **C** and
+※ **C++** with an `assert`, which stops at the first and is the behaviour this
+※ replaces.
+
+※ Two of these three do not pass, and both are named.
+@[test(always)]
+fn holds() → bool:
+    1u8 + 1u8 = 2u8
+
+@[test(always)]
+fn does_not() → bool:
+    1u8 + 1u8 = 3u8
+
+@[test(always)]
+fn nor_does_this() → bool:
+    2u8 = 5u8
+
+@[startup]
+fn main() → u6:
+    ※ never reached: the tests are run before the startup function is
+    0u6

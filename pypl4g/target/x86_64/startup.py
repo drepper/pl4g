@@ -102,6 +102,10 @@ STANDARD_ERROR: Final[int] = 2
 #: The name the helper a fault leaves the program through is given.
 ABORT_SYMBOL: Final[str] = "__pl4g_abort"
 
+#: And the one a failing test says so through, which writes the same way and
+#: comes back rather than leaving.
+REPORT_SYMBOL: Final[str] = "__pl4g_report"
+
 
 #: The number of the Linux system call that writes, and the descriptor the
 #: message goes to.
@@ -109,21 +113,32 @@ NR_WRITE_HERE: Final[int] = 1
 STANDARD_ERROR_HERE: Final[int] = 2
 
 
+#: Where the count of tests that did not pass is kept while they run.  A
+#: register a call leaves alone, so that nothing has to be saved around one and
+#: no storage has to be found for a number that lives for a few instructions.
+COUNT_REG: Final = reg("ebx")
+
+
 def _run_tests(asm: Assembler, module: Module, cconv: CallConvDesc,
                failures: Mapping[int, Failure]) -> None:
-    """Call each test this binary runs, leaving through the fault helper.
+    """Call each test this binary runs, and stop if any of them failed.
 
     A test answers a truth value, which comes back widened to the whole of the
     register the compiler's own calls read it out of -- so it is compared the
-    way they compare it.  One that answers false names itself and
-    stops the program: it is a program that has been found to be wrong, which is
-    what that helper is for, and there is nothing further a binary could
-    usefully do after being told it is not fit to run.
+    way they compare it.
+
+    **Every one of them is run.**  One that answers false names itself and the
+    next is tried: a run that stopped at the first would make a reader fix one
+    thing and run again to be told the next, and saying what is wrong is what a
+    test binary is for.  What it exits with says that something was, and the
+    messages say what.
     """
-    for one in run_by(module):
-        found = failures.get(id(one))
-        if found is None:
-            continue
+    ran = [one for one in run_by(module) if id(one) in failures]
+    if not ran:
+        return
+    asm.op(ops.XOR, COUNT_REG, asm.reg(COUNT_REG), asm.reg(COUNT_REG))
+    for one in ran:
+        found = failures[id(one)]
         asm.call(symbol_name(one))
         passed = asm.reserve_label("test.passed")
         answer = INFO.view(cconv.int_ret_regs[0].unit, 32)
@@ -131,8 +146,18 @@ def _run_tests(asm: Assembler, module: Module, cconv: CallConvDesc,
                    asm.imm(0, 32, signed=False), passed)
         asm.address(RDI, found.symbol)
         asm.loadreg(ESI, asm.imm(found.length, 32, signed=False))
-        asm.call(ABORT_SYMBOL)
+        asm.call(REPORT_SYMBOL)
+        asm.op(ops.PLUS, COUNT_REG, asm.reg(COUNT_REG),
+               asm.imm(1, 32, signed=False))
         asm.block(passed)
+    fit = asm.reserve_label("tests.passed")
+    asm.branch(Condition.EQ, asm.reg(COUNT_REG),
+               asm.imm(0, 32, signed=False), fit)
+    asm.loadreg(EDI, asm.imm(statuses.TESTS_FAILED, 32, signed=False))
+    asm.loadreg(EAX, asm.imm(NR_EXIT_GROUP, 32, signed=False))
+    asm.op(x86ops.SYSCALL)
+    asm.op(ops.TRAP)
+    asm.block(fit)
 
 
 def _check_level(asm: Assembler, level: str, refused: str) -> None:
@@ -214,6 +239,24 @@ def emit_abort(asm: Assembler, cconv: CallConvDesc) -> None:
     # exit_group does not return; trapping makes that explicit rather than
     # letting control run off the end of the section.
     asm.op(ops.TRAP)
+    asm.end_function()
+
+
+def emit_report(asm: Assembler, cconv: CallConvDesc) -> None:
+    """Emit the helper a failing test says so through.
+
+    The write the helper above makes, and then a return rather than an exit: a
+    test that did not pass is something to say and not something to stop for,
+    there being the rest of them still to run.
+    """
+    first, second, third = cconv.int_arg_regs[:3]
+    asm.begin_function(REPORT_SYMBOL, exported=False)
+    asm.loadreg(third, asm.reg(second))
+    asm.loadreg(second, asm.reg(first))
+    asm.loadreg(first, asm.imm(STANDARD_ERROR, 32, signed=False))
+    asm.loadreg(EAX, asm.imm(NR_WRITE, 32, signed=False))
+    asm.op(x86ops.SYSCALL)
+    asm.ret()
     asm.end_function()
 
 

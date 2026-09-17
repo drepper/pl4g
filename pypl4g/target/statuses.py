@@ -32,6 +32,11 @@ LAST: Final[int] = 127
 #: names the operation, the function and the line, and a number could say less.
 GENERAL: Final[int] = FIRST
 
+#: A test the binary runs answered that it did not pass.  Every one of them is
+#: run and every failure named before this is reached: a run that stopped at the
+#: first would make a reader fix one thing and run again to be told the next.
+TESTS_FAILED: Final[int] = FIRST + 2
+
 #: The processor is not the one the program was built for.  It has a number of
 #: its own because it is the one stop that happens before the program has run at
 #: all, and because what to do about it -- build for an older level, or find a

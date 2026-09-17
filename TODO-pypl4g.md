@@ -28,10 +28,9 @@ To Do List for the pypl4g compiler
     followed by a read of another place, seen by everyone in one order -- is the one that costs x86-64 an instruction, and
     nothing asks for it yet.
 
-[ ] report every test that failed rather than stopping at the first.  A failing
-    test leaves through the abort helper, which writes a message and exits, so a
-    run ends at the first one; what it needs is a way to write and carry on, and
-    a count to exit with at the end.
+[x] report every test that failed rather than stopping at the first.  Done on 2026-09-18: `__pl4g_report` writes the message and
+    comes back, the count is kept in a register a call leaves alone, and the binary exits with 66 -- the runtime's own status --
+    after every test has run.
 
 [x] By default, all functions and variables are not visible to the outside, including when used as a module.  The `@[export]` attribute
     can be attached to a function or variable.  This also determines ELF symbol visibility.

@@ -17,9 +17,11 @@
 ※ compiler builds to run them and in nothing else -- so this program, built
 ※ ordinarily, holds `runs_at_startup` and neither of the others.
 ※
-※ **A test that answers false names itself and stops the program**, leaving
-※ through the same helper a fault leaves through: it is a program that has been
-※ found to be wrong, which is what that helper is for.
+※ **A test that answers false names itself and the next is tried.**  Every test
+※ a binary runs is run, and the binary stops afterwards if any of them failed --
+※ a run that ended at the first would make a reader fix one thing and run again
+※ to be told the next.  What it exits with is the runtime's own status for it,
+※ which `tests-that-fail` beside this checks.
 ※
 ※ This file is not built with `diag=none`: built for a target this machine does
 ※ not run, the build test cannot be run either, and the compiler says so (1014)

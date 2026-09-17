@@ -36,7 +36,7 @@ from .opcodes import X86_INSTRS
 from .peephole import passes_for
 from .regs import GPR, INFO, VEC
 from .startup import (ALLOCATOR_REGS, ABORT_SYMBOL, ENTRY_SYMBOL,
-                      SYSCALLS, emit_abort, emit_start)
+                      SYSCALLS, emit_abort, emit_report, emit_start)
 
 
 #: EM_X86_64, loaded at the address a fixed-address executable conventionally
@@ -209,6 +209,10 @@ class X86_64Target:
             # function that faults follows: it is written as instructions,
             # and hand-written code names its registers outright.
             emit_abort(asm, lookup_cconv(SYSTEM_CCONV))
+        if failures:
+            # Only where a test runs: what says a test failed is a write that
+            # comes back, which nothing else has any use for.
+            emit_report(asm, lookup_cconv(SYSTEM_CCONV))
         refused = messages.symbol(levels.described(self._mclevel)) \
             if levels.requirements(self._mclevel) else None
         emit_start(asm, module, lookup_cconv(module.startup.cconv),

@@ -97,6 +97,15 @@ STANDARD_ERROR: Final[int] = 2
 #: The name the helper a fault leaves the program through is given.
 ABORT_SYMBOL: Final[str] = "__pl4g_abort"
 
+#: And the one a failing test says so through, which writes the same way and
+#: comes back rather than leaving.
+REPORT_SYMBOL: Final[str] = "__pl4g_report"
+
+#: Where the count of tests that did not pass is kept while they run.  A
+#: register a call leaves alone, so that nothing has to be saved around one and
+#: no storage has to be found for a number that lives for a few instructions.
+COUNT_REG: Final = reg("x20")
+
 
 def emit_abort(asm: Assembler, cconv: CallConvDesc) -> None:
     """Emit the helper that reports a fault and stops the program.
@@ -133,6 +142,24 @@ def emit_abort(asm: Assembler, cconv: CallConvDesc) -> None:
     asm.end_function()
 
 
+def emit_report(asm: Assembler, cconv: CallConvDesc) -> None:
+    """Emit the helper a failing test says so through.
+
+    The write the helper above makes, and then a return rather than an exit: a
+    test that did not pass is something to say and not something to stop for,
+    there being the rest of them still to run.
+    """
+    first, second, third = cconv.int_arg_regs[:3]
+    asm.begin_function(REPORT_SYMBOL, exported=False)
+    asm.loadreg(third, asm.reg(second))
+    asm.loadreg(second, asm.reg(first))
+    asm.loadreg(first, asm.imm(STANDARD_ERROR, 16, signed=False))
+    asm.loadreg(SYSCALL_NUMBER_REG, asm.imm(NR_WRITE, 16, signed=False))
+    asm.op(a64ops.SUPERVISOR_CALL)
+    asm.ret()
+    asm.end_function()
+
+
 #: The numbers of the two system calls the allocator makes, and what a call
 #: looks like here: the number in the register the kernel reads it from, the
 #: arguments in the first six of the convention's, and the answer back in the
@@ -154,17 +181,22 @@ ALLOCATOR_REGS: Final[AllocatorRegs] = AllocatorRegs(
 
 def _run_tests(asm: Assembler, module: Module, cconv: CallConvDesc,
                failures: Mapping[int, Failure]) -> None:
-    """Call each test this binary runs, leaving through the fault helper.
+    """Call each test this binary runs, and stop if any of them failed.
 
     A test answers a truth value, which comes back widened to the register the
-    compiler's own calls read it out of.  One that answers false names itself
-    and stops the program: it is a program that has been found to be wrong,
-    which is what that helper is for.
+    compiler's own calls read it out of.
+
+    **Every one of them is run.**  One that answers false names itself and the
+    next is tried: a run that stopped at the first would make a reader fix one
+    thing and run again to be told the next, and saying what is wrong is what a
+    test binary is for.
     """
-    for one in run_by(module):
-        found = failures.get(id(one))
-        if found is None:
-            continue
+    ran = [one for one in run_by(module) if id(one) in failures]
+    if not ran:
+        return
+    asm.loadreg(COUNT_REG, asm.reg(XZR))
+    for one in ran:
+        found = failures[id(one)]
         asm.call(symbol_name(one))
         passed = asm.reserve_label("test.passed")
         asm.branch(Condition.NE, asm.reg(cconv.int_ret_regs[0]),
@@ -172,5 +204,16 @@ def _run_tests(asm: Assembler, module: Module, cconv: CallConvDesc,
         asm.address(cconv.int_arg_regs[0], found.symbol)
         asm.loadreg(cconv.int_arg_regs[1],
                     asm.imm(found.length, 16, signed=False))
-        asm.call(ABORT_SYMBOL)
+        asm.call(REPORT_SYMBOL)
+        asm.op(ops.PLUS, COUNT_REG, asm.reg(COUNT_REG),
+               asm.imm(1, 12, signed=False))
         asm.block(passed)
+    fit = asm.reserve_label("tests.passed")
+    asm.branch(Condition.EQ, asm.reg(COUNT_REG), asm.reg(XZR), fit)
+    asm.loadreg(cconv.int_ret_regs[0],
+                asm.imm(statuses.TESTS_FAILED, 16, signed=False))
+    asm.loadreg(SYSCALL_NUMBER_REG,
+                asm.imm(NR_EXIT_GROUP, 16, signed=False))
+    asm.op(a64ops.SUPERVISOR_CALL)
+    asm.op(ops.TRAP)
+    asm.block(fit)

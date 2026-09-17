@@ -38,7 +38,7 @@ from .isel import RVSelector, UnsupportedOperation, lower_function
 from .opcodes import PAD_BYTE, RISCV_INSTRS
 from .regs import FPR, GPR, INFO
 from .startup import (ALLOCATOR_REGS, ABORT_SYMBOL, ENTRY_SYMBOL,
-                      SYSCALLS, emit_abort, emit_start)
+                      SYSCALLS, emit_abort, emit_report, emit_start)
 
 #: What the header's flag word says on this architecture.  The low bit says the
 #: code uses the compressed encoding, the two above it say which floating-point
@@ -220,6 +220,10 @@ class RISCV64Target:
             # function that faults follows: it is written as instructions,
             # and hand-written code names its registers outright.
             emit_abort(asm, lookup_cconv(SYSTEM_CCONV))
+        if failures:
+            # Only where a test runs: what says a test failed is a write that
+            # comes back, which nothing else has any use for.
+            emit_report(asm, lookup_cconv(SYSTEM_CCONV))
         emit_start(asm, module, lookup_cconv(module.startup.cconv),
                    failures)
         messages.emit(asm)

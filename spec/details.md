@@ -2431,6 +2431,20 @@ one's; before this there was one token for all of them, which was the entry
 block's only because nothing asked in an `elif` had ever written.
 
 
+Saying which tests failed
+-------------------------
+
+Every test a binary runs is run.  A failing one writes its message through
+`__pl4g_report`, which is `__pl4g_abort`'s write and then a *return*, and the
+count of them is kept in a register a call leaves alone -- `ebx`, `x20`, `s2`,
+all callee-saved in the conventions this compiler generates -- so nothing has to
+be saved around a call and no storage has to be found for a number that lives for
+a few instructions.  Afterwards, a count that is not nought exits with 66.
+
+That is emitted only where a test runs: a write that comes back is of no use to
+anything else, so `emit_report` is asked for beside `emit_abort` and only when
+some test has a message.
+
 The ring, and what it costs
 ---------------------------
 

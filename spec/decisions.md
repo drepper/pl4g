@@ -5756,6 +5756,31 @@ marked; **Go**, whose `uintptr` is the type and whose garbage collector makes th
 question harder than it is here; **Ada**, whose `System.Address` and
 `Address_To_Access_Conversions` are the same two directions with more ceremony.
 
+## 2026-09-18T03:00+02:00 — compiler
+
+**Every test is run, and every failure named**
+
+A failing test left through the helper a fault leaves through, which writes a
+message and exits, so a run ended at the first one.  That makes a reader fix one
+thing and run again to be told the next, which is the opposite of what a test
+binary is for.
+
+`__pl4g_report` is `__pl4g_abort`'s write and then a *return*, emitted only where
+a test runs -- a write that comes back is of no use to anything else.  The count
+is kept in a register a call leaves alone (`ebx`, `x20`, `s2`, all callee-saved
+in the conventions this compiler generates), so nothing has to be saved around a
+call and no storage has to be found for a number that lives for a few
+instructions.  A count that is not nought exits with **66**, a reserved status of
+its own: a program that fails a test never started, so nothing the startup
+function would have answered means anything.
+
+The status says that something was wrong and the messages say what, which is the
+division every test runner makes.  Comparisons: **Rust**'s harness and **Go**'s
+both run every test, report each, and exit with one number; **C** and **C++**
+with an `assert` stop at the first, which is the behaviour this replaces; **D**'s
+`unittest` blocks, which `always` tests are modelled on, stop at the first as
+well.
+
 Open questions
 --------------
 
