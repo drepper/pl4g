@@ -3,7 +3,7 @@
 section .data writable
 __pl4g_stack_state:
                              ※ align 8
-    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 ※ data
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 04 00 00 08 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 40 00 00 00 00 00 00 ※ data
 
 section .rodata
 .Lstack.message:
@@ -35,16 +35,15 @@ __pl4g_stack_fault:
     73 00 00 00              ecall
     73 10 00 c0              unimp
 .L__pl4g_stack_fault.not.the.guard.1:
-    93 05 03 00              mv a1, t1
-    13 05 00 03              li a0, 48
-    b3 85 a5 00              add a1, a1, a0
+    93 02 00 03              li t0, 48
+    b3 05 53 00              add a1, t1, t0
     13 05 b0 00              li a0, 11
     13 06 00 00              li a2, 0
     93 06 80 00              li a3, 8
     93 08 60 08              li a7, 134
     73 00 00 00              ecall
     67 80 00 00              ret
-    00 00 00 00              ※ align 16
+    00 00 00 00 00 00 00 00  ※ align 16
 _start:
     13 04 00 00              mv s0, zero
     93 00 00 00              mv ra, zero
@@ -74,8 +73,7 @@ _start:
     13 06 00 00              li a2, 0
     93 08 20 0e              li a7, 226
     73 00 00 00              ecall
-    93 0a 00 00              li s5, 0
-    63 00 55 01              beq a0, s5, .L_start.stack.guarded.3   ※ fixup riscv_branch → .L_start.stack.guarded.3
+    63 00 05 00              beq a0, zero, .L_start.stack.guarded.3   ※ fixup riscv_branch → .L_start.stack.guarded.3
     13 05 0a 00              mv a0, s4
     b7 45 11 00              lui a1, 276
     93 08 70 0d              li a7, 215
@@ -92,26 +90,13 @@ _start:
     37 0a 10 00              lui s4, 256
     33 0b 4b 01              add s6, s6, s4
     23 b8 6a 05              sd s6, s5, 80
-    13 0a 00 00              li s4, 0
-    23 bc 4a 05              sd s4, s5, 88
-    37 4a 00 00              lui s4, 4
-    23 b0 4a 07              sd s4, s5, 96
-    13 85 0a 00              mv a0, s5
-    93 05 00 05              li a1, 80
-    33 05 b5 00              add a0, a0, a1
+    93 02 00 05              li t0, 80
+    33 85 5a 00              add a0, s5, t0
     93 05 00 00              li a1, 0
     93 08 40 08              li a7, 132
     73 00 00 00              ecall
-    97 02 00 00              auipc.hi20 t0, __pl4g_stack_fault   ※ fixup riscv_pcrel_hi20 → __pl4g_stack_fault
-    93 82 02 00              addi.lo12 t0, t0, __pl4g_stack_fault   ※ fixup riscv_pcrel_lo12_i → __pl4g_stack_fault
-    13 8a 02 00              mv s4, t0
-    23 b8 4a 01              sd s4, s5, 16
-    37 0a 00 08              lui s4, 32768
-    1b 0a 4a 00              addiw s4, s4, 4
-    23 bc 4a 01              sd s4, s5, 24
-    93 85 0a 00              mv a1, s5
-    13 05 00 01              li a0, 16
-    b3 85 a5 00              add a1, a1, a0
+    93 02 00 01              li t0, 16
+    b3 85 5a 00              add a1, s5, t0
     13 05 b0 00              li a0, 11
     13 06 00 00              li a2, 0
     93 06 80 00              li a3, 8

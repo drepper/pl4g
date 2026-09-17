@@ -3,7 +3,7 @@
 section .data writable
 __pl4g_stack_state:
                              ※ align 8
-    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 ※ data
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 04 00 00 0c 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 40 00 00 00 00 00 00 ※ data
 
 section .rodata
 .Lstack.message:
@@ -35,15 +35,14 @@ __pl4g_stack_fault:
     0f 0b                    ud2
 .L__pl4g_stack_fault.not.the.guard.1:
     48 89 ce                 mov rsi, rcx
-    48 c7 c7 30 00 00 00     mov rdi, 48
-    48 01 fe                 add rsi, rdi
+    48 81 c6 30 00 00 00     add rsi, 48
     48 c7 c7 0b 00 00 00     mov rdi, 11
     48 c7 c2 00 00 00 00     mov rdx, 0
     49 c7 c2 08 00 00 00     mov r10, 8
     b8 0d 00 00 00           mov eax, 13
     0f 05                    syscall
     c3                       ret
-    cc cc cc cc cc cc        ※ align 16
+    cc cc cc cc cc cc cc cc cc ※ align 16
 __pl4g_stack_return:
     b8 0f 00 00 00           mov eax, 15
     0f 05                    syscall
@@ -76,8 +75,7 @@ _start:
     48 c7 c2 00 00 00 00     mov rdx, 0
     b8 0a 00 00 00           mov eax, 10
     0f 05                    syscall
-    49 c7 c6 00 00 00 00     mov r14, 0
-    4c 39 f0                 cmp rax, r14
+    48 85 c0                 test rax, rax
     0f 84 00 00 00 00        je .L_start.stack.guarded.3   ※ fixup pcrel32 → .L_start.stack.guarded.3
     48 89 df                 mov rdi, rbx
     48 c7 c6 00 40 11 00     mov rsi, 1130496
@@ -93,25 +91,13 @@ _start:
     48 c7 c3 00 00 10 00     mov rbx, 1048576
     49 01 df                 add r15, rbx
     4d 89 7e 50              mov [r14 + 80], r15
-    48 c7 c3 00 00 00 00     mov rbx, 0
-    49 89 5e 58              mov [r14 + 88], rbx
-    48 c7 c3 00 40 00 00     mov rbx, 16384
-    49 89 5e 60              mov [r14 + 96], rbx
     4c 89 f7                 mov rdi, r14
-    48 c7 c6 50 00 00 00     mov rsi, 80
-    48 01 f7                 add rdi, rsi
+    48 81 c7 50 00 00 00     add rdi, 80
     48 c7 c6 00 00 00 00     mov rsi, 0
     b8 83 00 00 00           mov eax, 131
     0f 05                    syscall
-    48 8d 1d 00 00 00 00     lea rbx, [rip + __pl4g_stack_fault]   ※ fixup pcrel32 → __pl4g_stack_fault
-    49 89 5e 10              mov [r14 + 16], rbx
-    48 c7 c3 04 00 00 0c     mov rbx, 201326596
-    49 89 5e 18              mov [r14 + 24], rbx
-    48 8d 1d 00 00 00 00     lea rbx, [rip + __pl4g_stack_return]   ※ fixup pcrel32 → __pl4g_stack_return
-    49 89 5e 20              mov [r14 + 32], rbx
     4c 89 f6                 mov rsi, r14
-    48 c7 c7 10 00 00 00     mov rdi, 16
-    48 01 fe                 add rsi, rdi
+    48 81 c6 10 00 00 00     add rsi, 16
     48 c7 c7 0b 00 00 00     mov rdi, 11
     48 c7 c2 00 00 00 00     mov rdx, 0
     49 c7 c2 08 00 00 00     mov r10, 8

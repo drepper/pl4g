@@ -12,8 +12,9 @@ from __future__ import annotations
 from typing import Callable, Final
 
 from ...mc.fixedwidth import insert_bits, read_word, write_word
-from ...mc.fixup import (ABS32, ABS64, PCREL32, PCREL32_AT_FIELD, PCREL32_AT_FIELD, FixupBase, FixupKind,
-                         FixupRangeError, MCFixup, signed_fits)
+from ...mc.fixup import (ABS32, ABS64, PCREL32, PCREL32_AT_FIELD, FixupBase,
+                         FixupKind, FixupRangeError, MCFixup,
+                         apply_little_endian, signed_fits)
 from .desc import INSTRUCTION_SIZE
 
 #: A jump or a call: a signed offset of twenty-one bits, measured from the
@@ -86,6 +87,11 @@ def _apply_pcrel_lo12(data: bytearray, offset: int, fixup: MCFixup,
 
 #: How each of this target's relocations is stored.
 APPLIERS: Final[dict[FixupKind, Callable[[bytearray, int, MCFixup, int], None]]] = {
+    # The two that reach a whole address are stored as the bytes they are: they
+    # name no instruction field, so what holds them is as wide as they are and
+    # is overwritten outright.
+    ABS32: apply_little_endian,
+    ABS64: apply_little_endian,
     JAL: _apply_jal,
     BRANCH: _apply_branch,
     PCREL_HI20: _apply_pcrel_hi20,

@@ -3,7 +3,7 @@
 section .data writable
 __pl4g_stack_state:
                              ※ align 8
-    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 ※ data
+    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 04 00 00 08 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 40 00 00 00 00 00 00 ※ data
 
 section .rodata
 .Lstack.message:
@@ -36,17 +36,15 @@ __pl4g_stack_fault:
     01 00 00 d4              svc 0
     01 00 00 00              udf 1
 .L__pl4g_stack_fault.not.the.guard.1:
-    e1 03 0a aa              mov x1, x10
-    00 06 80 d2              movz x0, 48
-    21 00 00 8b              add x1, x1, x0
+    41 c1 00 91              add x1, x10, 48
     60 01 80 d2              movz x0, 11
     02 00 80 d2              movz x2, 0
     03 01 80 d2              movz x3, 8
     c8 10 80 d2              movz x8, 134
     01 00 00 d4              svc 0
     c0 03 5f d6              ret
+    00 00 00 00 00 00 00 00  ※ align 16
 _start:
-                             ※ align 16
     fd 03 1f aa              mov x29, xzr
     fe 03 1f aa              mov x30, xzr
     f6 03 00 91              add x22, sp, 0
@@ -77,9 +75,7 @@ _start:
     02 00 80 d2              movz x2, 0
     48 1c 80 d2              movz x8, 226
     01 00 00 d4              svc 0
-    17 00 80 d2              movz x23, 0
-    1f 00 17 eb              cmp x0, x23
-    00 00 00 54              b.eq .L_start.stack.guarded.3   ※ fixup aarch64_branch19 → .L_start.stack.guarded.3
+    00 00 00 b4              cbz x0, .L_start.stack.guarded.3   ※ fixup aarch64_branch19 → .L_start.stack.guarded.3
     e0 03 16 aa              mov x0, x22
     01 00 88 d2              movz x1, 16384, 0
     21 02 a0 f2              movk x1, 17, 16
@@ -96,25 +92,11 @@ _start:
     16 02 a0 d2              movz x22, 16, 16
     18 03 16 8b              add x24, x24, x22
     f8 2a 00 f9              str x24, x23, 80
-    16 00 80 d2              movz x22, 0
-    f6 2e 00 f9              str x22, x23, 88
-    16 00 88 d2              movz x22, 16384
-    f6 32 00 f9              str x22, x23, 96
-    e0 03 17 aa              mov x0, x23
-    01 0a 80 d2              movz x1, 80
-    00 00 01 8b              add x0, x0, x1
+    e0 42 01 91              add x0, x23, 80
     01 00 80 d2              movz x1, 0
     88 10 80 d2              movz x8, 132
     01 00 00 d4              svc 0
-    16 00 00 90              adrp x22, __pl4g_stack_fault   ※ fixup aarch64_adr_page21 → __pl4g_stack_fault
-    d6 02 00 91              add.lo12 x22, x22, __pl4g_stack_fault   ※ fixup aarch64_add_lo12 → __pl4g_stack_fault
-    f6 0a 00 f9              str x22, x23, 16
-    96 00 80 d2              movz x22, 4, 0
-    16 00 a1 f2              movk x22, 2048, 16
-    f6 0e 00 f9              str x22, x23, 24
-    e1 03 17 aa              mov x1, x23
-    00 02 80 d2              movz x0, 16
-    21 00 00 8b              add x1, x1, x0
+    e1 42 00 91              add x1, x23, 16
     60 01 80 d2              movz x0, 11
     02 00 80 d2              movz x2, 0
     03 01 80 d2              movz x3, 8

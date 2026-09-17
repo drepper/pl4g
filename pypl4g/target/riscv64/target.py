@@ -184,7 +184,7 @@ class RISCV64Target:
         # where it makes one: the bounds of the guard, and the two structures
         # the calls that install the handler are handed.
         if module.stack_size > 0:
-            emit_state(asm)
+            emit_state(asm, STACK_ABI)
         asm.section(".text", executable=True,
                     alignment=IMAGE_DEFAULTS.text_alignment)
         # What each function turned out to destroy, so that a call to one saves

@@ -50,7 +50,8 @@ from typing import Callable, Final, Sequence
 
 from ..mc import ops
 from ..mc.asmbuilder import Assembler
-from ..mc.operand import MCReg
+from ..mc.fixup import ABS64, MCFixup
+from ..mc.operand import MCImm, MCReg, SymExpr
 from ..mc.ops import Condition
 from ..mc.reg import Reg
 from ..mc.symbol import SymBinding, SymKind, SymVisibility
@@ -171,6 +172,13 @@ class StackABI:
     rt_sigreturn: int | None = None
 
 
+def _flags(abi: StackABI) -> int:
+    """What the action asks for: the address that faulted, a stack of the
+    handler's own, and the return the architecture wants said."""
+    flags = SA_SIGINFO | SA_ONSTACK
+    return flags if abi.rt_sigreturn is None else flags | SA_RESTORER
+
+
 def rounded(size: int, grain: int) -> int:
     """*size* brought up to a whole number of *grain*."""
     return (size + grain - 1) & ~(grain - 1)
@@ -242,8 +250,8 @@ def emit_make(asm: Assembler, calls: SyscallABI, abi: StackABI,
     _a_number(asm, calls.number, abi.mprotect)
     calls.enter(asm)
     guarded = asm.reserve_label("stack.guarded")
-    _a_number(asm, other, 0)
-    asm.branch(Condition.EQ, MCReg(calls.answer), MCReg(other), guarded)
+    asm.branch(Condition.EQ, MCReg(calls.answer), MCImm(0, 12, signed=False),
+               guarded)
     # A stack that cannot be guarded is not used: it is given back, and the
     # program stays on the one it was given.  Having one silently unguarded is
     # the thing this exists to avoid.
@@ -264,41 +272,16 @@ def emit_make(asm: Assembler, calls: SyscallABI, abi: StackABI,
     _a_number(asm, base, size)
     asm.op(ops.PLUS, top, MCReg(top), MCReg(base))
     asm.store(asm.mem(base=other, disp=ALT + ALT_SP, size_bits=64), MCReg(top))
-    _a_number(asm, base, 0)
-    asm.store(asm.mem(base=other, disp=ALT + ALT_FLAGS, size_bits=64),
-              MCReg(base))
-    _a_number(asm, base, ALT_STACK)
-    asm.store(asm.mem(base=other, disp=ALT + ALT_SIZE, size_bits=64),
-              MCReg(base))
-    # sigaltstack(&it, 0)
-    asm.loadreg(first, MCReg(other))
-    _a_number(asm, second, ALT)
-    asm.op(ops.PLUS, first, MCReg(first), MCReg(second))
+    # sigaltstack(&it, 0).  Everything in it but where it is was written when
+    # the image was laid out.
+    asm.op(ops.PLUS, first, MCReg(other), MCImm(ALT, 32, signed=False))
     _a_number(asm, second, 0)
     _a_number(asm, calls.number, abi.sigaltstack)
     calls.enter(asm)
-    # The action: the handler, the flags that ask for the address and for the
-    # stack of its own, and -- where the architecture has one -- the few
-    # instructions a handler returns through.  The mask is left as it was made,
-    # which is nothing: a fault in the guard is not returned from.
-    asm.address(base, HANDLER_SYMBOL)
-    asm.store(asm.mem(base=other, disp=ACTION + ACTION_HANDLER, size_bits=64),
-              MCReg(base))
-    flags = SA_SIGINFO | SA_ONSTACK
-    if abi.rt_sigreturn is not None:
-        flags |= SA_RESTORER
-    _a_number(asm, base, flags)
-    asm.store(asm.mem(base=other, disp=ACTION + ACTION_FLAGS, size_bits=64),
-              MCReg(base))
-    if abi.rt_sigreturn is not None:
-        asm.address(base, RESTORER_SYMBOL)
-        asm.store(
-            asm.mem(base=other, disp=ACTION + ACTION_RESTORER, size_bits=64),
-            MCReg(base))
-    # rt_sigaction(SIGSEGV, &action, 0, sizeof mask)
-    asm.loadreg(second, MCReg(other))
-    _a_number(asm, first, ACTION)
-    asm.op(ops.PLUS, second, MCReg(second), MCReg(first))
+    # rt_sigaction(SIGSEGV, &action, 0, sizeof mask).  The whole of the action
+    # was written when the image was laid out: the handler, the flags, and --
+    # where the architecture has one -- what a handler returns through.
+    asm.op(ops.PLUS, second, MCReg(other), MCImm(ACTION, 32, signed=False))
     _a_number(asm, first, SIGSEGV)
     _a_number(asm, third, 0)
     _a_number(asm, fourth, SIGSET_SIZE)
@@ -347,9 +330,7 @@ def emit_handler(asm: Assembler, calls: SyscallABI, abi: StackABI) -> None:
     asm.block(elsewhere)
     # rt_sigaction(SIGSEGV, &nothing, 0, sizeof mask), which is the default
     # back: the structure has been zero since the image was written.
-    asm.loadreg(second, MCReg(state))
-    _a_number(asm, first, PLAIN)
-    asm.op(ops.PLUS, second, MCReg(second), MCReg(first))
+    asm.op(ops.PLUS, second, MCReg(state), MCImm(PLAIN, 32, signed=False))
     _a_number(asm, first, SIGSEGV)
     _a_number(asm, third, 0)
     _a_number(asm, fourth, SIGSET_SIZE)
@@ -377,13 +358,20 @@ def _emit_restorer(asm: Assembler, calls: SyscallABI, abi: StackABI) -> None:
     asm.end_function()
 
 
-def emit_state(asm: Assembler) -> None:
+def emit_state(asm: Assembler, abi: StackABI) -> None:
     """Put the state and the message into the image.
 
-    The state is nothing but zeros: what goes in it is not known until the
-    program runs.  It is written out rather than left to a section of no
-    contents because there is no such section in this image yet, and a hundred
-    bytes is not worth inventing one for.
+    **Everything already known is written here rather than at run time.**  Which
+    is most of it: the action asking for the handler is the handler's address,
+    the flags, and where it returns through, and all three are settled when the
+    image is laid out -- an address in this image is a number, there being no
+    dynamic linker to make it anything else.  What is left for the program to
+    fill in is the two bounds of the guard and where the handler's stack is,
+    which are not known until the system says where the mapping went.
+
+    So the addresses go in as relocations of the ordinary kind, the same ones a
+    packaged runtime's data is placed with, and the instructions that would have
+    written them are not emitted at all.
     """
     asm.section(STATE_SECTION, writable=True, alignment=WORD)
     # The section may already exist, and what it was made with is what it keeps,
@@ -391,7 +379,17 @@ def emit_state(asm: Assembler) -> None:
     asm.align(WORD)
     symbol = asm.label(STATE_SYMBOL, binding=SymBinding.LOCAL,
                        kind=SymKind.OBJECT, visibility=SymVisibility.HIDDEN)
-    asm.bytes(bytes(STATE_SIZE))
+    out = bytearray(STATE_SIZE)
+    out[ACTION + ACTION_FLAGS:ACTION + ACTION_FLAGS + WORD] = \
+        _flags(abi).to_bytes(WORD, "little")
+    out[ALT + ALT_SIZE:ALT + ALT_SIZE + WORD] = \
+        ALT_STACK.to_bytes(WORD, "little")
+    fixups = [MCFixup(offset=ACTION + ACTION_HANDLER, kind=ABS64,
+                      target=SymExpr(asm.symbol_named(HANDLER_SYMBOL)))]
+    if abi.rt_sigreturn is not None:
+        fixups.append(MCFixup(offset=ACTION + ACTION_RESTORER, kind=ABS64,
+                              target=SymExpr(asm.symbol_named(RESTORER_SYMBOL))))
+    asm.bytes(bytes(out), fixups)
     asm.end_label(symbol)
     asm.section(MESSAGE_SECTION, writable=False, alignment=1)
     said = asm.label(MESSAGE_SYMBOL, binding=SymBinding.LOCAL,

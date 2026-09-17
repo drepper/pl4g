@@ -10,8 +10,9 @@ from __future__ import annotations
 from typing import Callable, Final
 
 from ...mc.fixedwidth import insert_bits
-from ...mc.fixup import (ABS32, ABS64, PCREL32, PCREL32_AT_FIELD, PCREL32_AT_FIELD, FixupBase, FixupKind,
-                         FixupRangeError, MCFixup, signed_fits)
+from ...mc.fixup import (ABS32, ABS64, PCREL32, PCREL32_AT_FIELD, FixupBase,
+                         FixupKind, FixupRangeError, MCFixup,
+                         apply_little_endian, signed_fits)
 from .desc import INSTRUCTION_SIZE
 
 #: An unconditional branch or a call: a signed offset in units of four bytes,
@@ -88,8 +89,12 @@ def _lo12_scaled(bytes_touched: int) -> Callable[[bytearray, int, MCFixup, int],
     return apply
 
 
-#: How each of this target's relocations is stored.
+#: How each of this target's relocations is stored.  The two that reach a whole
+#: address are stored as the bytes they are: they name no instruction field, so
+#: what holds them is as wide as they are and is overwritten outright.
 APPLIERS: Final[dict[FixupKind, Callable[[bytearray, int, MCFixup, int], None]]] = {
+    ABS32: apply_little_endian,
+    ABS64: apply_little_endian,
     BRANCH26: _branch(26, 0),
     BRANCH19: _branch(19, 5),
     ADR_PAGE21: _apply_adr_page,
