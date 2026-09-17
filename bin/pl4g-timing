@@ -201,6 +201,7 @@ GROUPS: tuple[Group, ...] = (
            "address-of-a-place": "a place as the number it is, and back again",
            "tests-that-fail": "three tests run, two of them named, and the status that says so",
            "external-function": "the runtime the compiler carries, reached and handed an abi record",
+           "narrow-to-an-enum": "a number read as one of an enumeration's values",
            "loop-break-nested": "two loops and all four jumps between them",
            "loop-continue": "two loops each begun again from inside the body",
            "loop-break-value": "a search whose loop comes to what it found",

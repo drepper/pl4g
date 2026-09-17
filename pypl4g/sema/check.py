@@ -11207,6 +11207,8 @@ class Checker:
         if wanted is None:
             self._diags.emit(D.LANG_NARROW_NOT_A_TYPE, written.span)
             return UndefConst(ERROR)
+        if isinstance(wanted, EnumType):
+            return self._narrowed_to_enum(builder, expr, wanted, expected)
         if not isinstance(wanted, IntType):
             self._diags.emit(D.LANG_NARROW_NOT_AN_INTEGER, written.span,
                              found=wanted.render())
@@ -11281,6 +11283,67 @@ class Checker:
             self._report_mismatch(expr.span, into, expected)
             return UndefConst(ERROR)
         return made
+
+    def _narrowed_to_enum(self, builder: IRBuilder, expr: ast.Call,
+                          wanted: EnumType, expected: Type | None) -> Value:
+        """Lower `⎕narrow(EXPR, ⌜ENUM⌝)`: a number read as one of its values.
+
+        An enumeration is a narrower type than the one it is held as, so making
+        one out of a number is a narrowing like any other and can fail the same
+        way -- what differs is that its values are not a range, so the number
+        has to *be* one of them and `absent` is what says it was not.
+
+        **No branch.**  An enumeration is held as its number, so where the
+        number is one of them the answer is the same bits; what has to be worked
+        out is only whether it is one, which is one comparison per value folded
+        together.  A chain of arms would be the same comparisons with a jump
+        between each, and every program that read a number off a device would
+        have had to write it out.
+        """
+        given = self._lower_expr(builder, expr.args[0], None)
+        found = self._value_type_of(given)
+        if found is ERROR:
+            return UndefConst(ERROR)
+        if not isinstance(found, IntType):
+            self._diags.emit(D.LANG_NARROW_NOT_AN_INTEGER, expr.args[0].span,
+                             found=found.render())
+            return UndefConst(ERROR)
+        span = expr.span
+        answer = self._module.types.result_type(wanted, NARROWING)
+        holds: Value | None = None
+        for number in wanted.values:
+            if not found.holds(number):
+                # A value the number's own type cannot reach: the comparison
+                # would be false however it were written, so it is not written.
+                continue
+            same = builder.compare(CmpPred.EQ, given,
+                                   builder.int_const(found, number), span)
+            holds = same if holds is None else builder.binary(BinOp.OR, holds,
+                                                              same, span)
+        if holds is None:
+            holds = builder.bool_const(False)
+        value = self._as_enum(builder, given, found, wanted, span)
+        made = builder.wrap(value, self._negate(builder, holds, span), answer,
+                            span, self._module.enum_const(NARROWING, 3))
+        if not self._accepts(expected, answer):
+            self._report_mismatch(span, answer, expected)
+            return UndefConst(ERROR)
+        return made
+
+    def _as_enum(self, builder: IRBuilder, given: Value, found: IntType,
+                 wanted: EnumType, span: Span) -> Value:
+        """The number as a value of the enumeration, cut to its width.
+
+        Only read where the number turned out to be one of the values, so
+        nothing is lost by cutting it down: a number that did not fit the width
+        the enumeration is held as was none of them.  A value of an enumeration
+        is a number in a register whatever the language says it means, which is
+        what lets one be made the way a narrower number is.
+        """
+        if found.bits >= wanted.holder.bits:
+            return builder.cast(CastKind.TRUNC, given, wanted, span)
+        return builder.cast(CastKind.SEXT if found.signed else CastKind.ZEXT,
+                            given, wanted, span)
 
     def _fitted(self, builder: IRBuilder, given: Value, found: IntType,
                 into: IntType, span: Span) -> tuple[Value, Value, Value]:

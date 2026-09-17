@@ -835,8 +835,12 @@ SIGNED_WIDTHS: Final[tuple[int, ...]] = (*range(2, 33), 64)
 #: kind, and a reader told "sign" knows which mistake was made.
 NARROWING_NAME: Final[str] = "\N{APL FUNCTIONAL SYMBOL QUAD}narrowing"
 
+#: `absent` is the fourth and is about a type whose values are not a range: an
+#: enumeration holds the numbers its definition named and nothing between them,
+#: so a number that is none of them does not fit -- which is the same question
+#: the other three answer and a different way of not fitting.
 NARROWING: Final[EnumType] = EnumType(
-    members=("overflow", "underflow", "sign"), values=(0, 1, 2),
+    members=("overflow", "underflow", "sign", "absent"), values=(0, 1, 2, 3),
     holder=IntType(8, False), name=NARROWING_NAME)
 
 

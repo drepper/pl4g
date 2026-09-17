@@ -663,6 +663,18 @@ Compare: **C**, which widens silently and whose integer promotions are the reaso
 | `overflow` | the number is above the top of the type |
 | `underflow` | it is below the bottom of the type |
 | `sign` | it is negative and the type has no negative values |
+| `absent` | the type has no value with that number |
+
+**`⎕narrow` reads a number as a value of an enumeration too**, that being a narrower type than the one it is held as:
+
+```
+let why: ⎕narrowing = ⎕narrow(code, ⌜Error⌝) ?? Error.other
+```
+
+What differs is that an enumeration's values are not a range: the number has to *be* one of them, and `absent` is what says it was
+not.  It is the same question the other three answer -- does this number fit this type -- asked of a type whose values have gaps
+between them.  There is no other way to make one: a program that reads a number off a device, a protocol or the kernel and wants
+it named would otherwise write a comparison per value.
 
 `sign` is the case of underflow the language can say more about.  A negative number put where an unsigned type wants one is not
 merely below the bottom: it is of the wrong kind, and a reader told "sign" knows which mistake was made rather than only that one

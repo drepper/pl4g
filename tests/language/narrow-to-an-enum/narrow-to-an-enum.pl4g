@@ -1,0 +1,49 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ `⎕narrow(EXPR, ⌜ENUM⌝)` reads a number as one of an enumeration's values.
+※
+※ **An enumeration is a narrower type than the one it is held as**, so making one
+※ out of a number is a narrowing like any other and fails the same way.  What
+※ differs is that its values are not a range: the number has to *be* one of them,
+※ and `⎕narrowing.absent` is what says it was not.  That is the same question the
+※ other three reasons answer -- does this number fit this type -- asked of a type
+※ whose values have gaps between them.
+※
+※ **There is no other way to do it.**  A program that reads a number off a
+※ device, a protocol or the kernel and wants it as a named thing had to write a
+※ comparison per value; `std` did, eighteen of them, before this.
+※
+※ **No branch.**  An enumeration is held as its number, so where the number is
+※ one of them the answer is the same bits; what has to be worked out is only
+※ whether it is one, which is one comparison per value folded together.
+※
+※ Compare: **Rust**, whose `TryFrom<u8>` a derive writes out and whose error is
+※ the number back again; **Zig**, whose `@enumFromInt` checks in a safe build and
+※ does not in a fast one, which is the thing this language does not do; **C#**,
+※ whose `Enum.IsDefined` is a library call over reflection; **C**, where an
+※ enumeration holds any number of its underlying type and the question cannot be
+※ asked at all.
+
+enum Code:
+    ok = 0 ;
+    again = 5 ;
+    gone = 32
+
+@[startup, impure]
+fn main() → u6:
+    ※ one of them, from a wider type
+    let a: Code = ⎕narrow(5i64, ⌜Code⌝) ?? Code.ok
+    ※ and from a narrower one
+    let b: Code = ⎕narrow(32u8, ⌜Code⌝) ?? Code.ok
+    if a ≠ Code.again:
+        1u6
+    elif b ≠ Code.gone:
+        2u6
+    else:
+        ※ a number the enumeration does not name, which says which way it did
+        ※ not fit
+        match ⎕narrow(99i64, ⌜Code⌝):
+            Code:
+                3u6
+            ⊥(why):
+                if why = ⎕narrowing.absent: 0u6 else: 4u6

@@ -63,47 +63,11 @@ enum Error:
 
 ※※ What the kernel answered, read as one of those.
 ※
-※ An if and not a match: a match takes a value of a sum apart and this is a
-※ number the kernel chose, so what turns one into the other is a comparison per
-※ name.  Written once here rather than at every call.
+※ The enumeration's numbers are the kernel's, so this is the question "is this
+※ number one of them" and nothing else -- which is what narrowing to an
+※ enumeration asks.  Anything it does not name is `other`.
 fn as_error(n: i64) → Error:
-    let code: i64 = 0i64 - n
-    if code = 4i64:
-        Error.interrupted
-    elif code = 5i64:
-        Error.device
-    elif code = 9i64:
-        Error.not_a_device
-    elif code = 11i64:
-        Error.would_block
-    elif code = 12i64:
-        Error.no_memory
-    elif code = 13i64:
-        Error.not_allowed
-    elif code = 14i64:
-        Error.bad_address
-    elif code = 16i64:
-        Error.busy
-    elif code = 2i64:
-        Error.not_there
-    elif code = 21i64:
-        Error.is_a_directory
-    elif code = 22i64:
-        Error.invalid
-    elif code = 24i64:
-        Error.too_many_open
-    elif code = 28i64:
-        Error.no_room
-    elif code = 32i64:
-        Error.broken_pipe
-    elif code = 38i64:
-        Error.not_supported
-    elif code = 104i64:
-        Error.reset
-    elif code = 111i64:
-        Error.refused
-    else:
-        Error.other
+    ⎕narrow(0i64 - n, ⌜Error⌝) ?? Error.other
 
 ※ -- the ring ---------------------------------------------------------------
 

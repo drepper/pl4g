@@ -5883,6 +5883,43 @@ exactly this enumeration and which has no `other` because the set is closed by
 the compiler; **Haskell**, whose `IOException` carries a kind and the text;
 **C**, where it is `errno` and a global.
 
+## 2026-09-18T06:00+02:00 — language
+
+**`⎕narrow` reads a number as a value of an enumeration**
+
+Found by cost.  Answering an I/O result named rather than numbered doubled what a
+program that does I/O takes to compile -- `std-init` 11.0 ms to 22.1 -- and about
+half of that was eighteen `elif` arms in `modules/std.pl4g` turning an errno into
+a name.  Behind the cost was the real thing: **a program could not make a value
+of an enumeration from a number at all**, so every program that reads one off a
+device, a protocol or a kernel would have written that chain out.
+
+An enumeration is a narrower type than the one it is held as, so this is a
+narrowing and fails the way one does.  What differs is that its values are not a
+range -- the number has to *be* one of them -- so `⎕narrowing` grows a fourth
+value, `absent`.  One name for one question: does this number fit this type.
+
+**No branch.**  An enumeration is held as its number, so where the number is one
+of them the answer is the same bits; what has to be worked out is only whether it
+is one, which is one comparison per value folded together with "or".  A chain of
+arms would be the same comparisons with a jump between each.
+
+What it bought: the library's eighteen arms became one line, and the compile time
+came back from 22.1 ms to 20.3 -- less than the whole difference, because the
+comparisons are still eighteen and the compiler now writes them.  Doing better
+wants the values sorted into ranges, which is the compiler's to improve without
+any program changing, and is in the to-do list.
+
+Turned down: a cast that does not check, which is `@enumFromInt` in a fast Zig
+build and is the thing this language does not do; and leaving it out, which
+leaves the chain in every program that needs it.
+
+Compare: **Rust**, whose `TryFrom<u8>` a derive writes out and whose error hands
+the number back; **Zig**, whose `@enumFromInt` checks in a safe build and not in
+a fast one; **C#**, whose `Enum.IsDefined` is a library call over reflection;
+**C**, where an enumeration holds any number of its underlying type and the
+question cannot be asked.
+
 Open questions
 --------------
 

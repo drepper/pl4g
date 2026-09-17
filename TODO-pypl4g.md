@@ -478,6 +478,10 @@ To Do List for the pypl4g compiler
     form and the driver never reads a module back -- but a written IR that does not say what a program holds is a written IR that
     cannot be used for anything else.
 
+[ ] narrow to an enumeration without a comparison per value.  What is emitted is one comparison per value folded with "or",
+    which for the eighteen `std.Error` names is thirty-five instructions and about three milliseconds of compiling.  Sorting the
+    values and testing ranges would be fewer of both, and is the compiler's to improve without any program changing.
+
 [ ] report a tuple holding an array.  `〈⟦1u8, 2u8⟧〉` reaches the code generator and fails there (9901, "making a 〈u8⟦2⟧〉, which
     is one value and not several"), so what a reader is told is an internal error about a program the front end accepted.  Either
     an array is a thing a tuple may hold, in which case `parts_of` has to say what its parts are, or it is not and the checker
