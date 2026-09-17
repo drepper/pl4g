@@ -16,6 +16,7 @@ from ..diag import ids as D
 from ..diag.engine import DiagEngine, Expectation
 from ..front import ast
 from ..front.token import (ACQUIRE_NAME, RELEASE_NAME, AT_NAME, SPAN_NAME,
+                           ADDRESS_NAME,
                            WIDEN_NAME,
                            BOTTOM_GLYPH, BUILTIN_GLYPH, CHR_NAME, DEREF_GLYPH,
                            LIFETIME_GLYPH,
@@ -4284,20 +4285,48 @@ class Checker:
             self._an_effect(D.LANG_PURE_WRITES_ELSEWHERE, stmt.span)
         held = ty.fields[at][1]
         place = self._field_place(builder, where, ty, at, stmt.span)
-        if isinstance(held, ProductType) \
+        if isinstance(held, ProductType) and not _holds_a_reference(held) \
                 and self._is_record_literal(stmt.value, held):
             # A record written out goes straight into the place that will hold
             # it, for the reason a definition's does: there is no register a
-            # value of one could be made in.
+            # value of one could be made in.  One holding a reference goes the
+            # other way, so that how long what it holds lasts is asked below.
             self._build_record(builder, place, stmt.value, held, stmt.span)
             return
         value = self._lower_into(builder, stmt.value, held, stmt.span)
         if self._value_type_of(value) is ERROR:
             return
+        if _holds_a_reference(held) \
+                and not self._long_enough_for(where, value, stmt):
+            return
         if isinstance(held, ProductType):
             self._record_into(builder, place, value, held, stmt.span)
             return
         builder.store(place, value, stmt.span)
+
+    def _long_enough_for(self, where: Value, value: Value,
+                         stmt: ast.MemberAssign) -> bool:
+        """Whether what goes into this field lasts as long as the field does.
+
+        The rule a write through a reference already follows, asked of a field
+        for the same reason: the place written holds a reference, so what goes
+        into it has to last as long as the place does, and how long that is is
+        how long what holds it does.  Before this a field was the way round it.
+        """
+        named = self._named_place_of(where)
+        if named is None:
+            # Nothing here made the place, so it came in from outside and how
+            # long it lasts is not this call's to know.  A reference of this
+            # call's own put there would outlive the call that made it, and
+            # neither end can see it.
+            if self._lasting(value):
+                return True
+            self._diags.emit(D.LANG_REF_WRITTEN_INTO_A_PLACE_FROM_OUTSIDE,
+                             stmt.span)
+            return False
+        return not self._outlives_it(
+            value, named.depth,
+            "".join((_written_as(stmt.base), ".", stmt.name)), stmt.span)
 
     def _record_may_change(self, expr: ast.Expr, where: Span) -> bool:
         """Whether the record *expr* names may be written, said by its root.
@@ -10491,6 +10520,9 @@ class Checker:
                 and expr.callee.name in (AT_NAME, SPAN_NAME):
             return self._lower_place_at(builder, expr, expected)
         if isinstance(expr.callee, ast.NameRef) \
+                and expr.callee.name == ADDRESS_NAME:
+            return self._lower_address_of(builder, expr, expected)
+        if isinstance(expr.callee, ast.NameRef) \
                 and expr.callee.name == TYPEOF_NAME:
             # Reaching here means it stood somewhere a value was wanted, since
             # a condition the compiler settles never lowers what is in it.
@@ -10929,6 +10961,38 @@ class Checker:
             self._report_mismatch(expr.span, answer, expected)
             return UndefConst(ERROR)
         return made
+
+    def _lower_address_of(self, builder: IRBuilder, expr: ast.Call,
+                          expected: Type | None) -> Value:
+        """Lower `⎕address(REF)`: a place as the number it is.
+
+        The way back from `⎕at`, and the compiler's name for the same reason:
+        what a program does with a number that was a place is nothing the
+        compiler can check.  It is what a program has for handing an address to
+        something outside it -- a ring's submission entry holds one in a field,
+        and the kernel reads it.
+
+        It makes no function impure.  Asking where something is changes nothing
+        and reads nothing; what is done through the address says so itself.
+        """
+        if len(expr.args) != 1:
+            self._diags.emit(D.LANG_CALL_WRONG_ARGUMENT_COUNT, expr.span,
+                             name=ADDRESS_NAME, expected=1,
+                             found=len(expr.args))
+            return UndefConst(ERROR)
+        place = self._lower_expr(builder, expr.args[0], None)
+        ty = self._value_type_of(place)
+        if ty is ERROR:
+            return UndefConst(ERROR)
+        if not isinstance(ty, PtrType):
+            self._diags.emit(D.LANG_ADDRESS_OF_NOT_A_REFERENCE,
+                             expr.args[0].span, found=ty.render())
+            return UndefConst(ERROR)
+        found = builder.cast(CastKind.BITCAST, place, U64, expr.span)
+        if not self._accepts(expected, U64):
+            self._report_mismatch(expr.span, U64, expected)
+            return UndefConst(ERROR)
+        return found
 
     def _as_an_address(self, builder: IRBuilder, written: ast.Expr,
                        name: str) -> Value | None:

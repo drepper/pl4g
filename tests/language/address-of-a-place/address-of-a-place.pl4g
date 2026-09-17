@@ -1,0 +1,41 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ `⎕address(REF)` is a place as the number it is: the way back from `⎕at`.
+※
+※ **It is the compiler's name for the same reason its inverse is.**  What a
+※ program does with a number that was a place is nothing the compiler can check,
+※ so the two ways through that door are named and are the only ways.  A program
+※ has this one for handing an address to something outside it: a ring's
+※ submission entry holds one in a field and the kernel reads it, and that is what
+※ the `std` module does with it.
+※
+※ **What has an address is a place**, and a reference is how this language names
+※ one.  A value the program worked out is in a register and has none (4592);
+※ taking a reference of the name it is bound to is what gives it one.
+※
+※ **It makes no function impure.**  Asking where something is changes nothing and
+※ reads nothing; what is done through the address says so itself.
+※
+※ Compare: **C**, where `&x` answers a pointer and a cast turns it into an
+※ integer, two operations this splits the same way; **Rust**, whose `as usize` on
+※ a raw pointer is this and is not `unsafe` -- making the number is safe, using
+※ it is not, which is the line drawn here too; **Zig**, whose `@intFromPtr` is
+※ this exactly and whose `@ptrFromInt` is `⎕at`; **Go**, where `uintptr` is the
+※ type and the garbage collector makes the whole question harder than it is here.
+
+@[startup, impure]
+fn main() → u6:
+    let m: mut u8⟦4⟧ = ⟦1u8, 2u8, 3u8, 4u8⟧
+    let at: u64 = ⎕address(&m⟦0⟧)
+    ※ back through the door it came out of, and the same elements
+    let again: u8⟦⟧ = ⎕span(at, 4u64, ⌜u8⟦⟧⌝)
+    let one: &mut u8 = ⎕at(at + 2u64, ⌜&mut u8⌝)
+    one⌖ ← 9u8
+    if again⟦0⟧ ≠ 1u8:
+        1u6
+    elif m⟦2⟧ ≠ 9u8:
+        2u6
+    elif #again ≠ 4:
+        3u6
+    else:
+        0u6

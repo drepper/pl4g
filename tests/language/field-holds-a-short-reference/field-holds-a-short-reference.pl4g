@@ -1,0 +1,25 @@
+※ pl4g-test: compile=error diag=4571
+
+※ A place that holds a reference is a place whose contents have to last as long
+※ as it does, and a field is no way round that: writing one is the same rule as
+※ writing what the whole reference names.
+※
+※ Nothing here made the place, so it came in from outside and how long it lasts
+※ is not this call's to know.  A reference of this call's own put there would
+※ outlive the call that made it, and neither end can see it: the body does not
+※ know how long the place lasts and the caller does not know what the body did
+※ with it.
+
+type Holder = at : &u8 ; n : u32
+
+@[impure]
+fn keep(h: &mut Holder):
+    let gone: u8 = 5u8
+    h⌖.at ← &gone
+
+@[startup, impure]
+fn main() → u6:
+    let m: u8 = 9u8
+    let h: mut Holder = Holder(.at ← &m, .n ← 0u32)
+    keep(&mut h)
+    if h.at⌖ = 5u8: 0u6 else: 1u6

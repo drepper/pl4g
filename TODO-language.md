@@ -210,13 +210,12 @@ To Do List for the PL4g language
 [ ] use `ReadWriter`.  The type is exported and nothing answers one: what would is opening a file or a socket, which wants a path
     and so wants a `str` the kernel can read -- a NUL-terminated one, which this language has no way to write.
 
-[ ] say how long a buffer handed to the ring must last.  The submission entry holds a reference into the caller's buffer and
-    nothing checks that it outlives the request.  It does today, the request being complete before the call returns, but that is
-    a property of this design and not of the type; a ring that answered later would need the language to say it.  Found together
-    with the hole below.
+[ ] say how long a buffer handed to the ring must last.  The submission entry holds the buffer's address as a number, so nothing
+    relates the two at all: the request is complete before the call returns and that is a property of this design rather than of
+    the type.  A ring that answered later would need the language to say it, and `⎕address` is where it stops being able to.
 
-[ ] check a reference written into a field.  `p⌖.at ← &local` is allowed where `p` is a place from outside, which the same
-    write through `⌖` alone refuses (the rule in `_lower_deref_assign`).  The ring relies on it today.
+[x] check a reference written into a field.  Done on 2026-09-18, together with `⎕address(REF)` -- which is what the ring needed
+    once the rule applied to it as well, its submission entry now holding the `u64` the kernel's field actually is.
 
 [x] a way to write an ordering.  Done on 2026-09-17, the user choosing the compiler-provided functions over a reference that
     carries the promise: `⎕acquire(REF)` and `⎕release(REF, VALUE)`, so the same place read the ordinary way elsewhere

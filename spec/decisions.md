@@ -5721,6 +5721,41 @@ by hand and whose memory ordering is the same pair of barriers; **Rust**'s
 in a library; **Go**, whose runtime hides the whole question behind a scheduler
 and a thread pool, which is the answer this language has no threads for yet.
 
+## 2026-09-18T02:00+02:00 — language
+
+**`⎕address(REF)`, and the hole a field assignment had left open**
+
+Two halves of one thing.  Writing a field did not ask how long what goes into it
+lasts, so `h⌖.at ← &gone` put a reference to a local into a place the caller
+owns -- while `h⌖ ← Holder(.at ← &gone, …)`, the same write one level up, was
+already refused (4571).  A field was the way round the rule, which is a dangling
+reference and not a decision.
+
+Closing it refused what the ring does: its submission entry held `addr : &u8`,
+a reference into the caller's buffer, and a parameter does not last long enough
+for a place from outside.  So the user chose the other name: `⎕address(REF)`,
+the inverse of `⎕at`, and the entry holds the `u64` the kernel's field actually
+is.  The rule then applies everywhere with nothing excused from it.
+
+**Turned down: excusing a place that came from `⎕at`** on the grounds that the
+compiler was never told how long it lasts.  It is arguable and it would need the
+compiler to track where a place came from, which nothing else asks it to do.
+Also turned down: leaving the hole and writing it down, which is what the
+alternative to a decision looked like here.
+
+**Making the number is safe; using it is not**, which is where the line is drawn
+and is where Rust draws it too -- `as usize` on a raw pointer is safe and
+dereferencing one is `unsafe`.  So `⎕address` makes no function impure: asking
+where something is changes nothing, and what is done through the address says so
+itself.  What has an address is a place, so a value the program worked out has
+none (4592).
+
+Compare: **Zig**, whose `@intFromPtr` and `@ptrFromInt` are this pair exactly;
+**C**, where `&x` and a cast to an integer are the same split and neither is
+marked; **Go**, whose `uintptr` is the type and whose garbage collector makes the
+question harder than it is here; **Ada**, whose `System.Address` and
+`Address_To_Access_Conversions` are the same two directions with more ceremony.
+
 Open questions
 --------------
 

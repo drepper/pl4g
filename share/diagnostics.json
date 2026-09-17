@@ -6638,6 +6638,27 @@
       "option": null
     },
     {
+      "number": 4592,
+      "name": "LANG_ADDRESS_OF_NOT_A_REFERENCE",
+      "severity": "error",
+      "message": "'\u2395address' is given a place, and this is '{found}'",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type that was written instead"
+        }
+      ],
+      "cause": "A place is what has an address, and a reference is how this language names one.  A value the program worked out is in a register and has no address to answer with; taking a reference of the name it is bound to is what gives it one.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Compiler-Provided Names"
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 5001,
       "name": "LANG_STMT_UNREACHABLE",
       "severity": "warning",

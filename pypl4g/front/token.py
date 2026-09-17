@@ -206,6 +206,13 @@ RELEASE_NAME: Final[str] = "".join((BUILTIN_GLYPH, "release"))
 AT_NAME: Final[str] = "".join((BUILTIN_GLYPH, "at"))
 SPAN_NAME: Final[str] = "".join((BUILTIN_GLYPH, "span"))
 
+#: And the way back: a place as the number it is.  The inverse of `⎕at`, and
+#: the compiler's name for the same reason -- what a program does with a number
+#: that was a place is nothing the compiler can check.  It is what a program has
+#: for handing an address to something outside it: a request to the kernel takes
+#: one as an argument and a ring's submission entry holds one in a field.
+ADDRESS_NAME: Final[str] = "".join((BUILTIN_GLYPH, "address"))
+
 #: What stands between a name the compiler provides and the key it is asked
 #: about: `⎕sc@write` is one name and the whole of it is looked up.  Only a name
 #: beginning with the quad may carry one, so the mark means nothing new

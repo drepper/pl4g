@@ -2083,6 +2083,22 @@ Compare: **C**, where a cast of an integer to a pointer says this and may be wri
 the word marks a region rather than the operation; **Zig**, whose `@ptrFromInt` is this exactly, one name for the one thing that
 cannot be checked; **Go**, whose `unsafe.Pointer` is the same idea behind a package a program has to name.
 
+**`⎕address(REF)` is the way back**: a place as the number it is.
+
+```
+let at: u64 = ⎕address(&m⟦0⟧)
+```
+
+It is the compiler's name for the same reason its inverse is, and the two are the only ways through that door.  What a program has
+it for is handing an address to something outside itself: a request to the kernel takes one and a ring's submission entry holds one
+in a field.  **What has an address is a place** and a reference is how this language names one, so a value the program worked out
+has none (4592) -- taking a reference of the name it is bound to is what gives it one.  It makes no function impure: asking where
+something is changes nothing, and what is done through the address says so itself.
+
+Compare: **Rust**, whose `as usize` on a raw pointer is this and is *not* `unsafe` -- making the number is safe and using it is
+not, which is the line drawn here too; **Zig**, whose `@intFromPtr` is this exactly; **C**, where `&x` and a cast are the same
+split.
+
 **A value of a record gives a value for each of its fields**: `Point(.x ← 3u32, .y ← 4u32)`.  It is written the way a
 call names a parameter, which is the same idea asked of a field -- the mark says the name is the thing's and not a variable's --
 and it is the spelling C, Odin and Zig give a structure's initializer.
@@ -3774,7 +3790,11 @@ place for a field to be at (4588); binding it to a name is what gives it one.
 
 **A field is as mutable as the record holding it**, and a record reached through a reference is as mutable as the reference.  The
 mark is written once, where the thing was made or where it was lent, and a field does not get to say it again: `p.x ← v` on a `p`
-defined without `mut` is refused (4004), and `r⌖.x ← v` through a `&Point` is refused (4535).  Compare **ML**, whose records are
+defined without `mut` is refused (4004), and `r⌖.x ← v` through a `&Point` is refused (4535).
+
+**A field that holds a reference holds it as long as the field lasts**, which is the rule a write through a reference already
+follows and which a field is no way round: a reference of this call's own written into a place that came from outside would
+outlive the call that made it, and is refused (4571).  Compare **ML**, whose records are
 immutable unless a *field* says `mutable`, which is the other place the mark could go; this language puts it on the binding, as C,
 Rust, Go and Zig all do.
 
