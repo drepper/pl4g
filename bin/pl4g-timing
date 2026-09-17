@@ -204,6 +204,7 @@ GROUPS: tuple[Group, ...] = (
            "narrow-to-an-enum": "a number read as one of an enumeration's values",
            "write-text": "text written to a descriptor the program started with",
            "write-and-flush": "a write started, waited for, and one left to the drain",
+           "arguments": "the words a program was named with, walked",
            "loop-break-nested": "two loops and all four jumps between them",
            "loop-continue": "two loops each begun again from inside the body",
            "loop-break-value": "a search whose loop comes to what it found",

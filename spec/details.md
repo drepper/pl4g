@@ -2451,6 +2451,14 @@ is built freestanding, with no builtin calls -- a call to `memcpy` would be a
 call to something that is not there -- and, on RISC-V, with relaxation off,
 those relocations meaning "a linker may shorten this" and there being no linker.
 
+**A value of several parts is several values one after another in memory.**  A
+load of one is one load per part and a store is one store per part, each at the
+offset `part_offsets_of` gives -- which now answers for every shape and not only
+for a record: a result keeps its truth value and its error where the layout puts
+them, and a string, a list or an array whose type does not say its length is its
+parts in order, each where its alignment puts it.  Before that a record could not
+hold a string at all, which is what `args` needed and what surfaced it.
+
 **The two declarations of the shared record are compared.**  `runtime/io.c` and
 `modules/std.pl4g` each declare the ring, in two languages, and nothing makes
 them one thing -- so the C exports `pl4g_io_shape`, a run of words saying how big
@@ -2588,19 +2596,35 @@ found through `system_modules()` -- and not by its shape, so a record a program
 defines for itself and calls `Init` is a record it defined for itself and is
 refused (4404).
 
-`Init` holds an `Io`, which holds three descriptors, each of them a record around
-the number the kernel knows.  **What the image carries is the record**, an object
-in the writable data called `__pl4g_init`, laid out by the program's own
-declaration of the type: `part_offsets_of` says where each descriptor goes, which
-is the same place a field read anywhere else comes from, so a field added to `Io`
-is one the entry point fills in without being told.  It asserts that there are as
-many leaves as descriptors, which is what catches a record that grew otherwise
-rather than filling it in part way.
+`Init` holds an `Io`, which holds three descriptors, and the words the program
+was named with.  **What the image carries is the record**, an object in the
+writable data called `__pl4g_init`, laid out by the program's own declaration of
+the type.  The fields are found **by name**: `io`, whose every part is a
+descriptor whose number is known before anything runs and is written into the
+image; and `args`, whose two words the runtime fills in when the program starts.
+`offsets_of` and `part_offsets_of` say where they go, which is the same place a
+field read anywhere else comes from, so a field added to `Io` is one the entry
+point reaches without being told where.
 
-The entry point loads that object's address into the register the convention
-names for one argument, and calls.  `target/started.py` is where all of it
-lives, so each of the three entry points only has to know how to put an address
-in a register.
+**Reading the arguments is three instructions and a call.**  What the kernel
+leaves at the stack pointer is the count, then that many pointers, then a null --
+and that is the only moment the stack pointer says so, since everything after it
+puts something there.  The entry point keeps it in a register a call leaves alone
+until the constructors and the level check are done, then hands it to the runtime
+along with where in the record the run of strings goes.  The runtime counts each
+one and asks the system for room to put them in; it is never given back, lasting
+as long as the program does, which is as long as what a program was named with is
+worth having.
+
+Two things that bit while writing it.  The call follows **the system's**
+convention and not the language's, and on x86-64 those put their first arguments
+in different registers -- the callee's is the one that decides.  And on AArch64
+the stack pointer and the zero register share an encoding: a move between
+registers reads it as the zero, and an addition of nothing is the form that reads
+it as the stack pointer.
+
+`target/started.py` is where the rest lives, so each of the three entry points
+only has to know how to put an address in a register.
 
 A program that writes no parameter is started with those registers as the kernel
 left them, which is most of them and is what every test written before this does.

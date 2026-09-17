@@ -186,7 +186,7 @@ class AArch64Target:
             # comes back, which nothing else has any use for.
             emit_report(asm, lookup_cconv(SYSTEM_CCONV))
         emit_start(asm, module, lookup_cconv(module.startup.cconv),
-                   failures)
+                   failures, layout)
         runtime.emit(asm, BY_NAME)
         messages.emit(asm)
         constants.emit(asm)

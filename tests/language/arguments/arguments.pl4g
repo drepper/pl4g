@@ -1,0 +1,44 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ The words a program was named with, in the record it was started with.
+※
+※ **The startup code reads them.**  What the kernel leaves at the stack pointer
+※ is the count, then that many pointers, then a null -- and that is the only
+※ moment the stack pointer says so, since everything after puts something there.
+※ The entry point keeps it in a register a call leaves alone and hands it to the
+※ runtime, which counts each one and writes the run of them into the record.
+※
+※ **Each is a `str`, which is bytes and a length.**  The kernel's own shape is a
+※ nul at the end; the length is counted once before the program starts rather
+※ than by everything that reads one.  The first is the name the program was run
+※ under, as it is everywhere.
+※
+※ **A program that takes no such record carries none of it** -- no run, no
+※ counting, and nothing asked of the system.
+※
+※ Compare: **C**, whose `argc` and `argv` are handed to `main` and whose strings
+※ are the kernel's own, nul and all; **Rust** and **Go**, where they are a call
+※ into the runtime and are copied; **Zig**, whose `std.process.args` is an
+※ iterator over the same memory.
+
+let std := ⎕import("std")
+
+@[startup, impure]
+fn main(init: &mut std.Init) → u6:
+    ※ at least the name the program was run under
+    if #init⌖.args < 1:
+        1u6
+    else:
+        ※ every one of them has bytes, walked as a run of anything else is
+        let empty: mut bool = false
+        foreach one: str = init⌖.args:
+            if #one = 0:
+                empty ← true
+        if empty:
+            2u6
+        else:
+            ※ and the run of them may be handed about like any other
+            named(init⌖.args)
+
+fn named(args: str⟦⟧) → u6:
+    if #args ≥ 1: 0u6 else: 3u6

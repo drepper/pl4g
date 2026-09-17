@@ -208,6 +208,10 @@ To Do List for the PL4g language
     through `@[external]` and handed the ring as an `@[abi]` record.  qemu-user has no `io_uring`, so where one cannot be made the
     calls go straight to the kernel and every test still runs on all three targets.
 
+[ ] the environment, and whatever else a program is started with.  `std.Init` holds the devices and the words the program was
+    named with; what the kernel also leaves on the stack is the environment and the auxiliary vector, and the record is shaped so
+    that they can be added without any signature changing.
+
 [ ] a read that does not wait.  `std.write` answers a handle and `std.read` does not: what a read is for is the bytes, and a
     program that has not waited does not have them.  A program that wants several reads in flight -- from several descriptors --
     wants the same pair `write` and `flush` are, and wants somewhere to say which buffer each filled.

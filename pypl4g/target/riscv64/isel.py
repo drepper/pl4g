@@ -33,7 +33,8 @@ from ..ordering import cannot_order
 from ..pool import Constants
 from ..narrow import normalize
 from ...ir.value import Value
-from ...ir.layout import DataLayout, align_of, size_of, tag_offset_of
+from ...ir.layout import (DataLayout, align_of, part_offsets_of, size_of,
+                          tag_offset_of)
 from ...ir.types import made_of_parts, parts_of
 from ..callconv import TooManyArguments, argument_places, result_places
 from ..saturate import (DIVISION, EXTREMA, NAMES, SATURATING, TRAPPING,
@@ -1117,29 +1118,29 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                     held[id(inst)] = destination
                     asm.address(destination,
                                 symbol_of(inst.operands[0]), inst.span)
-                case LoadInst() if isinstance(inst.ty, ResultType):
+                case LoadInst() if made_of_parts(inst.ty):
+                    # A value of several parts is several values one after
+                    # another in memory, so reading one is one read per part at
+                    # the offset the layout gives it.  A result, a string, an
+                    # array whose type does not say its length: all the same
+                    # shape from here, which is what `part_offsets_of` says.
                     address = inst.operands[1]
-                    answer = inst.ty.ok
-                    destination = _new_value(
-                        answer, registers,
-                        hint=(_result_register(answer, cconv, registers)
-                              if inst is returned else None))
-                    failed = _new_value(
-                        BOOL, registers,
-                        hint=(_result_register(BOOL, cconv, registers, 1)
-                              if inst is returned else None))
-                    held[id(inst)] = destination
-                    extra[id(inst)] = [failed]
-                    # Two reads of one place: the answer where an answer goes,
-                    # and the truth value where the layout puts it.
-                    asm.loadreg(destination,
-                                place_of(address, span,
-                                         size_bits=_width_of(answer),
-                                         signed=_is_signed(answer)), inst.span)
-                    asm.loadreg(failed,
-                                place_of(address, span,
-                                         disp=tag_offset_of(inst.ty, _LAYOUT),
-                                         size_bits=8, signed=False), inst.span)
+                    pieces = parts_of(inst.ty)
+                    taken = []
+                    for at, (one, offset) in enumerate(
+                            zip(pieces, part_offsets_of(inst.ty, _LAYOUT))):
+                        into = _new_value(
+                            one, registers,
+                            hint=(_result_register(one, cconv, registers, at)
+                                  if inst is returned else None))
+                        asm.loadreg(into,
+                                    place_of(address, span, disp=offset,
+                                             size_bits=_width_of(one),
+                                             signed=_is_signed(one)),
+                                    inst.span)
+                        taken.append(into)
+                    held[id(inst)] = taken[0]
+                    extra[id(inst)] = taken[1:]
                 case LoadInst():
                     address = inst.operands[1]
                     destination = _new_value(
@@ -1157,18 +1158,18 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                 case StoreInst():
                     address = inst.operands[1]
                     written = inst.operands[2]
-                    if isinstance(written.ty, ResultType):
-                        # Two writes of one place, as a read of one is two.
-                        answer = written.ty.ok
-                        asm.store(
-                            place_of(address, span, size_bits=_width_of(answer),
-                                     signed=_is_signed(answer)),
-                            MCReg(operands.register_of(written, span)), inst.span)
-                        asm.store(
-                            place_of(address, span,
-                                     disp=tag_offset_of(written.ty, _LAYOUT),
-                                     size_bits=8),
-                            MCReg(operands.flag_of(written, span)), inst.span)
+                    if made_of_parts(written.ty):
+                        # One write per part, as a read of one is one read per
+                        # part, and at the same offsets so the two agree.
+                        for at, (one, offset) in enumerate(
+                                zip(parts_of(written.ty),
+                                    part_offsets_of(written.ty, _LAYOUT))):
+                            asm.store(
+                                place_of(address, span, disp=offset,
+                                         size_bits=_width_of(one),
+                                         signed=_is_signed(one)),
+                                MCReg(operands.part_of(written, at, span)),
+                                inst.span)
                         continue
                     if isinstance(written.ty, FloatType):
                         # A floating-point value goes to memory from a register

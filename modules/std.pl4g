@@ -26,12 +26,20 @@ type ReadWriter = fd : i32
 @[export]
 type Io = input : Reader ; output : Writer ; errors : Writer
 
-※※ What a program is started with.  A record rather than the descriptors
-※※ themselves, so that the arguments, the environment and whatever else a
-※※ program inherits have somewhere to go without changing the one signature
-※※ every program writes.
+※※ What a program is started with: the devices it inherited and the words it
+※※ was named with.
+※
+※ A record rather than the two of them outright, so that the environment and
+※ whatever else a program inherits have somewhere to go without changing the one
+※ signature every program writes.
+※
+※ `args` is what the kernel put on the stack, counted: the first is the name the
+※ program was run under, as it is everywhere, and the rest are what followed it.
+※ Each is a `str`, which is bytes and a length -- the kernel's own shape is a
+※ nul at the end, and the length is counted once before the program starts
+※ rather than by everything that reads one.
 @[export]
-type Init = io : Io
+type Init = io : Io ; args : str⟦⟧
 
 ※※ What the kernel said, where it refused.
 ※

@@ -219,7 +219,7 @@ type Writer     ※ a device that can be written
 type ReadWriter ※ both, which is what a socket and a file opened either way are
 
 type Io   = input : Reader ; output : Writer ; errors : Writer
-type Init = io : Io
+type Init = io : Io ; args : str⟦⟧
 
 type Pending ※ a write that has been started
 enum Error   ※ what the kernel said, where it refused, by name
@@ -233,8 +233,13 @@ fn as_error(n: i32) → Error
 ```
 
 **The three a process inherits are the only devices there are.**  There is no way to open anything and no way to write down the
-name of a file: what a program has is `init.io.input`, `init.io.output` and `init.io.errors`, on the descriptors every system
+name of a file: what a program has is `init⌖.io.input`, `init⌖.io.output` and `init⌖.io.errors`, on the descriptors every system
 gives them.  `ReadWriter` is declared for what will answer one and nothing answers one yet.
+
+**`args` is what the program was named with**, read off the stack before anything runs.  The first is the name it was run under,
+as it is everywhere, and the rest are what followed.  Each is a `str` -- bytes and a length -- and the length is counted once
+before the program starts rather than by everything that reads one; the kernel's own shape is a nul at the end, which nothing in
+this language has a use for.
 
 **A descriptor is a type and not a number.**  What says a thing may be written is the type of the name standing for it, so there is
 no way to hand a `Reader` to `write` and no way to write to a number a program made up.  The three a process inherits arrive in
@@ -4360,10 +4365,13 @@ arguments, the environment and whatever else a program is started with have some
 every program writes.  Which type that is is settled by where it was written down -- the `std` module the installation provides --
 and not by its shape, so a record a program defines for itself and calls `Init` is a record it defined for itself.
 
-**What is handed over is where it is.**  The record is an object the image carries, in the writable data, filled in before the
-program starts; the entry point passes its address and nothing else.  That is what lets the record *grow* without this signature
-changing, and what lets a program **change what it was started with** -- `init⌖.io.output ← std.Writer(.fd ← 2i32)` makes what it
-writes go where it reports.  A program that takes no parameter carries no such object.
+**What is handed over is where it is.**  The record is an object the image carries, in the writable data; the entry point fills it
+in and passes its address.  That is what lets the record *grow* without this signature changing, and what lets a program **change
+what it was started with** -- `init⌖.io.output ← std.Writer(.fd ← 2i32)` makes what it writes go where it reports.
+
+**The entry point reads the arguments into it.**  What the kernel leaves at the stack pointer is the count, then that many
+pointers, then a null, and that is the only moment the stack pointer says so -- everything after it puts something there.  A
+program that takes no parameter carries no such object, reads no arguments and asks the system for nothing.
 
 `init⌖.io.input`, `init⌖.io.output` and `init⌖.io.errors` are what the process inherited open.  Taking `&mut init⌖.io.output` is
 exclusive by the rule that already refuses a second `&mut` to a place, so **two names for one device is a thing the compiler

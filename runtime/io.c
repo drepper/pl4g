@@ -209,6 +209,7 @@ static const struct way ways[2] = {
 #define OFF_SQES 0x10000000UL
 #define PROT_READ_WRITE 3
 #define MAP_SHARED_POPULATE 0x8001
+#define MAP_PRIVATE_ANONYMOUS 0x22
 
 static inline u32 load_acquire(const u64 at)
 {
@@ -344,6 +345,70 @@ static void submit(struct pl4g_ring *r, long slot, unsigned char op, i32 fd,
   store_release(r->sq_tail, tail + 1);
   r->held[slot] = SUBMITTED;
   r->answer[slot] = 0;
+}
+
+/* -- the arguments the program was started with ---------------------------- */
+
+/* A string as the language holds one: where the bytes are and how many there
+ * are.  Not the nul-terminated thing the kernel hands over -- the length is
+ * counted here, once, so that nothing downstream has to walk the bytes to find
+ * out how many there are. */
+struct counted {
+  const unsigned char *at;
+  u64 len;
+};
+
+/* And the pair that is a run of them: where they are and how many. */
+struct run {
+  struct counted *at;
+  u64 len;
+};
+
+static u64 how_long(const unsigned char *s)
+{
+  u64 n = 0;
+  while (s[n] != 0)
+    n += 1;
+  return n;
+}
+
+/* Read the arguments off the stack the kernel set the process up with, and put
+ * them where `out` says.
+ *
+ * What the kernel leaves at the stack pointer is the count, then that many
+ * pointers, then a null.  Each of them is nul-terminated, which is the kernel's
+ * shape and not this language's, so each is counted here and what comes out is
+ * a run of counted strings.
+ *
+ * The run itself is asked of the system, since how many there are is not known
+ * until the program starts.  It is never given back: it lasts as long as the
+ * program does, which is exactly how long what a program was started with is
+ * worth having.  Where the system will not give it, the answer is no arguments
+ * at all rather than some of them. */
+void pl4g_args(const u64 *stack, struct run *out)
+{
+  out->at = 0;
+  out->len = 0;
+  if (stack == 0)
+    return;
+  u64 count = stack[0];
+  const unsigned char *const *argv = (const unsigned char *const *) &stack[1];
+  if (count == 0)
+    return;
+  i64 room = sys(NR_MMAP, 0, count * sizeof (struct counted),
+                 PROT_READ_WRITE, MAP_PRIVATE_ANONYMOUS, -1, 0);
+  /* What the kernel refuses with is a small negative number and what it gives
+     is an address, which on every one of these systems is a long way below the
+     top -- so the refusals are the range and not merely the sign. */
+  if (room < 0)
+    return;
+  struct counted *made = (struct counted *) room;
+  for (u64 at = 0; at < count; ++at) {
+    made[at].at = argv[at];
+    made[at].len = argv[at] == 0 ? 0 : how_long(argv[at]);
+  }
+  out->at = made;
+  out->len = count;
 }
 
 /* -- what the language calls ----------------------------------------------- */

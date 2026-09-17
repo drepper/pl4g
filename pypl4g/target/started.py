@@ -16,9 +16,10 @@ from __future__ import annotations
 
 from typing import Final
 
-from ..ir.layout import DataLayout, align_of, part_offsets_of, size_of
+from ..ir.layout import (DataLayout, align_of, offsets_of, part_offsets_of,
+                         size_of)
 from ..ir.module import Module
-from ..ir.types import IntType, ProductType, PtrType, parts_of
+from ..ir.types import IntType, ProductType, PtrType, Type, parts_of
 from ..mc.asmbuilder import Assembler
 from ..mc.symbol import SymBinding, SymKind, SymVisibility
 
@@ -28,10 +29,21 @@ from ..mc.symbol import SymBinding, SymKind, SymVisibility
 INHERITED: Final[tuple[int, ...]] = (0, 1, 2)
 
 #: What the object is called in the image, and where it goes.  It is written --
-#: the program may change what it was started with, and something that arrives
-#: later will be put there -- so it is the section that may be written.
+#: the program may change what it was started with, and the entry point fills
+#: part of it in before anything runs -- so it is the section that may be
+#: written.
 SYMBOL: Final[str] = "__pl4g_init"
 SECTION: Final[str] = ".data"
+
+#: The field holding the devices, whose every part is one of them, and the field
+#: holding the words the program was named with.  Found by name: the record is
+#: the program's own declaration and what the entry point knows about it is
+#: which fields it has to reach, not where they are.
+DEVICES: Final[str] = "io"
+ARGUMENTS: Final[str] = "args"
+
+#: What the runtime is called that reads the arguments off the stack.
+READS_ARGUMENTS: Final[str] = "pl4g_args"
 
 
 def wanted_by(module: Module) -> ProductType | None:
@@ -51,28 +63,54 @@ def wanted_by(module: Module) -> ProductType | None:
     return found
 
 
+def where_in(found: ProductType, name: str,
+             layout: DataLayout) -> tuple[int, Type]:
+    """How far into the record the field *name* lies, and what it is."""
+    for at, (called, held) in enumerate(found.fields):
+        if called == name:
+            return offsets_of(found, layout)[at], held
+    raise KeyError("".join((
+        "the record a program is started with has no '", name,
+        "'; ", SYMBOL, " is filled in by name and not by position")))
+
+
+def arguments_at(module: Module, layout: DataLayout) -> int | None:
+    """How far into the record the words it was named with go.
+
+    Nothing where the program takes no such record.  What is there is the two
+    words a run of strings is -- where they are and how many -- which the
+    runtime fills in before the startup function is reached.
+    """
+    found = wanted_by(module)
+    if found is None:
+        return None
+    return where_in(found, ARGUMENTS, layout)[0]
+
+
 def emit(asm: Assembler, module: Module, layout: DataLayout) -> None:
-    """Put the record in the image, filled in with what the process inherited.
+    """Put the record in the image, with the descriptors filled in.
 
     Laid out by the program's own declaration of the type -- the offsets come
     from the same place a field read anywhere else comes from -- so a field
-    added to it is a field the entry point fills in without being told.  Every
-    one of them is a descriptor, and there are as many as there are descriptors;
-    a record that had grown otherwise would stop here rather than be filled in
-    part way.
+    added to it is one the entry point reaches without being told where.  What
+    is written here is the descriptors, whose numbers are known before anything
+    runs; everything else starts as nought, and what the runtime fills in it
+    fills in when the program starts.
     """
     found = wanted_by(module)
     if found is None:
         return
-    parts = parts_of(found)
-    assert len(parts) == len(INHERITED), (len(parts), len(INHERITED))
     out = bytearray(size_of(found, layout))
+    start, devices = where_in(found, DEVICES, layout)
+    assert isinstance(devices, ProductType), devices
+    parts = parts_of(devices)
+    assert len(parts) == len(INHERITED), (len(parts), len(INHERITED))
     for number, one, offset in zip(INHERITED, parts,
-                                   part_offsets_of(found, layout)):
+                                   part_offsets_of(devices, layout)):
         assert isinstance(one, IntType), one
         width = one.bits // 8
-        out[offset:offset + width] = number.to_bytes(width, "little",
-                                                     signed=one.signed)
+        out[start + offset:start + offset + width] = \
+            number.to_bytes(width, "little", signed=one.signed)
     asm.section(SECTION, writable=True, alignment=align_of(found, layout))
     asm.align(align_of(found, layout))
     symbol = asm.label(SYMBOL, binding=SymBinding.LOCAL, kind=SymKind.OBJECT,

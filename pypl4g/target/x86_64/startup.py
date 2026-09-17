@@ -14,11 +14,14 @@ from __future__ import annotations
 from typing import Final, Mapping
 
 from ...ir.mangle import symbol_name
+from ...ir.function import SYSTEM_CCONV
+from ...ir.layout import DataLayout
 from ...ir.module import Module
 from ...mc import ops
 from ...mc.asmbuilder import Assembler
 from .. import statuses
 from ..callconv import CallConvDesc
+from .abi import lookup as lookup_cconv
 from .. import started
 from ..tests import Failure, run_by
 from . import ops as x86ops
@@ -26,7 +29,7 @@ from ..allocator import AllocatorRegs, SyscallABI
 from ...mc.ops import Condition
 from . import levels
 from .regs import (EAX, EBP, EBX, ECX, EDI, EDX, ESI, INFO, RAX, RCX,
-                   RDI, RDX, RSI, reg)
+                   RDI, RDX, RSI, RSP, reg)
 
 #: The number of the Linux system call that ends the whole process.
 NR_EXIT_GROUP: Final[int] = 231
@@ -38,7 +41,8 @@ ENTRY_SYMBOL: Final[str] = "_start"
 def emit_start(asm: Assembler, module: Module, cconv: CallConvDesc,
                level: str = levels.DEFAULT,
                refused: str | None = None,
-               failures: Mapping[int, Failure] | None = None) -> None:
+               failures: Mapping[int, Failure] | None = None,
+               layout: DataLayout | None = None) -> None:
     """Emit the entry point for *module*.
 
     The constructor and destructor loops emit nothing while a program has none,
@@ -52,9 +56,15 @@ def emit_start(asm: Assembler, module: Module, cconv: CallConvDesc,
     """
     startup = module.startup
     assert startup is not None
+    layout = layout if layout is not None else DataLayout(pointer_size=8)
     status32 = INFO.view(cconv.int_ret_regs[0].unit, 32)
 
     asm.begin_function(ENTRY_SYMBOL, exported=True)
+    # What the kernel set the process up with is at the stack pointer, and this
+    # is the only moment it is: everything below pushes something.  It is kept
+    # in a register a call leaves alone until the runtime is asked to read it.
+    if started.arguments_at(module, layout) is not None:
+        asm.loadreg(HELD_STACK, asm.reg(RSP))
     # The outermost stack frame is marked by a null frame pointer, so that a
     # debugger unwinding the stack knows where to stop.
     asm.op(ops.XOR, EBP, asm.reg(EBP), asm.reg(EBP))
@@ -73,6 +83,7 @@ def emit_start(asm: Assembler, module: Module, cconv: CallConvDesc,
         # passed, or it left through the helper above and never arrived here.
         asm.loadreg(held, asm.imm(0, 32, signed=False))
     else:
+        _read_arguments(asm, module, layout)
         if started.wanted_by(module) is not None:
             # Where the record the program was started with is, which is the
             # whole of what is handed over.
@@ -123,6 +134,11 @@ STANDARD_ERROR_HERE: Final[int] = 2
 #: no storage has to be found for a number that lives for a few instructions.
 COUNT_REG: Final = reg("ebx")
 
+#: And where what the kernel set the process up with waits until the runtime is
+#: asked to read it.  A register a call leaves alone, since the constructors and
+#: the level check run in between.
+HELD_STACK: Final = reg("r13")
+
 #: And where the exit status waits while the destructors run.  A register a call
 #: leaves alone, which the one a system call takes its first argument in is not:
 #: that one is where an ordinary call puts its own first argument, so a
@@ -130,6 +146,30 @@ COUNT_REG: Final = reg("ebx")
 #: going to run; where none is, the status goes straight where the system call
 #: wants it and nothing is moved twice.
 HELD_STATUS: Final = reg("r12d")
+
+
+def _read_arguments(asm: Assembler, module: Module,
+                    layout: DataLayout) -> None:
+    """Have the runtime read the arguments into the record, where one is taken.
+
+    Two arguments: what the kernel set the process up with, and where in the
+    record the run of them goes.  Where that is comes from the program's own
+    declaration of the type, so the runtime is told and does not have to know.
+
+    **The system's convention and not the language's.**  What is being called is
+    the runtime, which is C: the two put their arguments in different registers
+    here, and the callee's is the one that decides.
+    """
+    at = started.arguments_at(module, layout)
+    if at is None:
+        return
+    theirs = lookup_cconv(SYSTEM_CCONV)
+    asm.loadreg(theirs.int_arg_regs[0], asm.reg(HELD_STACK))
+    asm.address(theirs.int_arg_regs[1], started.SYMBOL)
+    if at:
+        asm.op(ops.PLUS, theirs.int_arg_regs[1],
+               asm.reg(theirs.int_arg_regs[1]), asm.imm(at, 32, signed=True))
+    asm.call(started.READS_ARGUMENTS)
 
 
 def _run_tests(asm: Assembler, module: Module, cconv: CallConvDesc,

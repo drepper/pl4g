@@ -6028,6 +6028,48 @@ handle; **C**'s `fwrite` and `fflush`, which is this with a buffer between the
 program and the device rather than a request; **Go** and **Rust**, whose writes
 are synchronous and whose asynchrony is somewhere else entirely.
 
+## 2026-09-18T10:00+02:00 — language
+
+**The words a program was named with, read by the entry point**
+
+At the user's direction.  `std.Init` gains `args : str⟦⟧`; the entry point reads
+what the kernel left at the stack pointer and the runtime counts each one.
+
+**Counted and not nul-terminated.**  The kernel's shape is a pointer to bytes
+ending in a nul, which nothing in this language has a use for: a `str` is where
+the bytes are and how many there are.  So each is counted once, before the
+program starts, rather than by everything that ever reads one.  The run of them
+is asked of the system, since how many there are is not known until the program
+runs, and is never given back -- it lasts as long as the program does, which is
+as long as what a program was named with is worth having.
+
+**A record may hold a string**, which it could not before this and which is what
+`args` needed.  A value of several parts is several values one after another in
+memory, so a load of one is one load per part and a store one store per part;
+`part_offsets_of` now answers for every shape and not only for a record.  The
+three instruction selectors had an arm for a *result* and nothing else, so a
+record holding a string was refused (8501) -- which is a gap `args` surfaced
+rather than one it made.
+
+Three things that bit, all worth writing down because none of them is obvious:
+
+- **The call follows the system's convention**, and on x86-64 the language's own
+  and the system's put their first arguments in different registers.  The callee
+  decides, and the entry point was using the caller's.
+- **On AArch64 the stack pointer and the zero register share an encoding.**  A
+  move between registers reads it as the zero; an addition of nothing is the
+  form that reads it as the stack pointer.  The first version silently read
+  nought and answered no arguments.
+- **An mmap that succeeds answers an address, not a small number.**  The check
+  for a refusal was written as a range test that every successful address also
+  passes, so the arguments were read, put somewhere, and thrown away.
+
+Compare: **C**, whose `argc` and `argv` are handed to `main` and whose strings
+are the kernel's own, nul and all -- so every length is walked for again at each
+use; **Rust** and **Go**, where they are a call into the runtime and are copied
+into the language's own strings; **Zig**, whose `std.process.args` is an iterator
+over the same memory and whose lengths are found the same way this does.
+
 Open questions
 --------------
 
