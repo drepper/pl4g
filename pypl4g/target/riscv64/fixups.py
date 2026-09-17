@@ -12,8 +12,8 @@ from __future__ import annotations
 from typing import Callable, Final
 
 from ...mc.fixedwidth import insert_bits, read_word, write_word
-from ...mc.fixup import (FixupBase, FixupKind, FixupRangeError, MCFixup,
-                         signed_fits)
+from ...mc.fixup import (ABS32, ABS64, PCREL32, FixupBase, FixupKind,
+                         FixupRangeError, MCFixup, signed_fits)
 from .desc import INSTRUCTION_SIZE
 
 #: A jump or a call: a signed offset of twenty-one bits, measured from the
@@ -99,3 +99,26 @@ def apply_fixup(data: bytearray, offset: int, fixup: MCFixup, value: int) -> Non
     if applier is None:
         raise FixupRangeError(fixup.kind, value)
     applier(data, offset, fixup, value)
+
+
+#: Which of these kinds the object format's relocation types come to.  A number
+#: here is a promise about what `bin/pl4g-runtime` may find in the runtime's
+#: object; one it finds and this does not have stops the extraction rather than
+#: being filled in wrongly.  The runtime as it stands needs none of them: this
+#: architecture reaches what it needs without a relocation, which is what
+#: `-mno-relax` and a small runtime between them come to.
+FROM_ELF: Final[dict[int, str]] = {
+    1: ABS32.name,             # R_RISCV_32
+    2: ABS64.name,             # R_RISCV_64
+    16: BRANCH.name,           # R_RISCV_BRANCH
+    17: JAL.name,              # R_RISCV_JAL
+    23: PCREL_HI20.name,       # R_RISCV_PCREL_HI20
+    24: PCREL_LO12_I.name,     # R_RISCV_PCREL_LO12_I
+}
+
+#: Every kind a packaged patch may name, by the name the patch carries.  The
+#: generic ones are here too: a relocation reaching a whole address uses the
+#: same field every target does.
+BY_NAME: Final[dict[str, FixupKind]] = {
+    one.name: one for one in
+    (ABS32, ABS64, PCREL32, JAL, BRANCH, PCREL_HI20, PCREL_LO12_I)}

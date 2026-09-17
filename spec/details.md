@@ -2431,6 +2431,34 @@ one's; before this there was one token for all of them, which was the entry
 block's only because nothing asked in an `elif` had ever written.
 
 
+The I/O runtime, compiled ahead of time
+---------------------------------------
+
+The runtime is C, in `runtime/io.c`, and is compiled once for every architecture
+the compiler generates for.  What is packaged with the compiler is neither the C
+nor an object file but **the code and its relocations**: `bin/pl4g-runtime` runs
+clang for the three triples, reads the objects and writes
+`pypl4g/runtime/<architecture>.py`, a `Blob` of pieces, the names in them, and
+the patches to fill in once the pieces have addresses.  So building a pl4g
+program needs no C compiler and the compiler needs no reader for relocatable
+objects; only changing the runtime needs either.  A test recompiles and
+compares, which is what stops a package falling behind the source it was made
+from.
+
+One compiler for all three rather than three cross-compilers: what has to be the
+same about the three objects is easier to believe when one thing made them.  It
+is built freestanding, with no builtin calls -- a call to `memcpy` would be a
+call to something that is not there -- and, on RISC-V, with relaxation off,
+those relocations meaning "a linker may shorten this" and there being no linker.
+
+**A relocation becomes a fixup the target already has.**  `FROM_ELF` in each
+target's `fixups.py` says which relocation number is which kind, and `BY_NAME`
+says which kind a packaged patch names; a relocation the table has no kind for
+stops the extraction rather than being filled in wrongly.  Only one kind had to
+be added for the runtime as it stands -- the family of load-and-store offsets
+AArch64 scales by the width of the access -- and two architectures need no
+relocations at all.
+
 Saying which tests failed
 -------------------------
 

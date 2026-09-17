@@ -1,0 +1,302 @@
+#!/usr/bin/env python
+"""Compile the I/O runtime and package it with the compiler.
+
+The runtime is C, in `runtime/`.  This compiles it once for every architecture
+the compiler generates for, reads the object that comes out, and writes a
+generated module per architecture holding the code, where each name in it is,
+and what has to be filled in once the code has an address.
+
+What is packaged is the extracted data and not the object, so that building a
+pl4g program needs no C compiler and the compiler needs no reader for
+relocatable objects.  This runs when the C changes, and a test recompiles and
+compares so that a stale module fails the suite.
+"""
+
+from __future__ import annotations
+
+import argparse
+import struct
+import subprocess
+import sys
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Mapping, Sequence
+
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+
+from pypl4g.target.registry import architecture_of, canonical_triples  # noqa: E402
+
+#: The compiler used, and how.  One compiler for all three architectures rather
+#: than three cross-compilers: what has to be the same about the three objects
+#: is easier to believe when one thing made them.
+COMPILER = "clang"
+
+#: Freestanding because there is no library underneath; no unwind tables and no
+#: stack protector because neither has anything to attach to here; no builtin
+#: calls, because a call to `memcpy` would be a call to something that is not
+#: there.  `-mno-relax` keeps RISC-V from emitting relaxation relocations, which
+#: mean "a linker may shorten this" and there is no linker.
+FLAGS = ("-O2", "-ffreestanding", "-fno-stack-protector", "-fno-builtin",
+         "-fno-asynchronous-unwind-tables", "-fno-unwind-tables",
+         "-fno-addrsig", "-fno-ident")
+
+#: Which triple to build each architecture for.
+TRIPLES: Mapping[str, str] = {
+    "x86_64": "x86_64-linux-gnu",
+    "aarch64": "aarch64-linux-gnu",
+    "riscv64": "riscv64-linux-gnu",
+}
+
+#: Sections worth keeping: what the program runs and what it reads.  A comment,
+#: a note and a table of addresses that something else would have used are not
+#: part of the runtime and are dropped.
+KEPT_PREFIXES = (".text", ".rodata", ".data", ".bss")
+
+SHT_PROGBITS = 1
+SHT_NOBITS = 8
+SHT_RELA = 4
+SHT_SYMTAB = 2
+
+SHF_WRITE = 0x1
+SHF_ALLOC = 0x2
+SHF_EXECINSTR = 0x4
+
+
+@dataclass(frozen=True, slots=True)
+class Section:
+    """One section of the object, as read."""
+
+    name: str
+    sh_type: int
+    flags: int
+    alignment: int
+    contents: bytes
+    info: int
+
+
+@dataclass(frozen=True, slots=True)
+class Symbol:
+    """One entry of the object's symbol table."""
+
+    name: str
+    section: int
+    value: int
+    binding: int
+
+
+@dataclass(frozen=True, slots=True)
+class Relocation:
+    """One entry of a relocation section."""
+
+    where: int
+    offset: int
+    symbol: int
+    kind: int
+    addend: int
+
+
+class NotAnObject(Exception):
+    """The file is not a relocatable ELF64 object for one architecture."""
+
+
+def read_object(data: bytes) -> tuple[list[Section], list[Symbol],
+                                      list[Relocation]]:
+    """Read a little-endian ELF64 relocatable object.
+
+    Only what is needed: the sections, the symbols and the relocations.  It is
+    here rather than in the compiler because the compiler never reads one --
+    what it is handed is the result of this.
+    """
+    if data[:4] != b"\x7fELF" or data[4] != 2 or data[5] != 1:
+        raise NotAnObject("not a little-endian ELF64 file")
+    (e_shoff,) = struct.unpack_from("<Q", data, 0x28)
+    e_shentsize, e_shnum, e_shstrndx = struct.unpack_from("<HHH", data, 0x3A)
+    raw = []
+    for index in range(e_shnum):
+        at = e_shoff + index * e_shentsize
+        (sh_name, sh_type, sh_flags, _addr, sh_offset, sh_size, sh_link,
+         sh_info, sh_addralign, _entsize) = struct.unpack_from(
+            "<IIQQQQIIQQ", data, at)
+        raw.append((sh_name, sh_type, sh_flags, sh_offset, sh_size, sh_link,
+                    sh_info, sh_addralign))
+    strings = raw[e_shstrndx]
+    table = data[strings[3]:strings[3] + strings[4]]
+
+    def named(at: int, where: bytes) -> str:
+        end = where.index(b"\0", at)
+        return where[at:end].decode("utf-8")
+
+    sections = [
+        Section(name=named(one[0], table), sh_type=one[1], flags=one[2],
+                alignment=max(1, one[7]), info=one[6],
+                contents=(b"\0" * one[4] if one[1] == SHT_NOBITS
+                          else data[one[3]:one[3] + one[4]]))
+        for one in raw]
+
+    symbols: list[Symbol] = []
+    relocations: list[Relocation] = []
+    for index, one in enumerate(raw):
+        if one[1] == SHT_SYMTAB:
+            names = raw[one[5]]
+            text = data[names[3]:names[3] + names[4]]
+            for at in range(one[3], one[3] + one[4], 24):
+                st_name, st_info, _other, st_shndx, st_value, _size = \
+                    struct.unpack_from("<IBBHQQ", data, at)
+                symbols.append(Symbol(name=named(st_name, text),
+                                      section=st_shndx, value=st_value,
+                                      binding=st_info >> 4))
+        elif one[1] == SHT_RELA:
+            for at in range(one[3], one[3] + one[4], 24):
+                r_offset, r_info, r_addend = struct.unpack_from("<QQq", data, at)
+                relocations.append(Relocation(
+                    where=one[6], offset=r_offset, symbol=r_info >> 32,
+                    kind=r_info & 0xFFFFFFFF, addend=r_addend))
+        del index
+    return sections, symbols, relocations
+
+
+def kept(sections: Sequence[Section]) -> list[int]:
+    """Which sections are part of the runtime, in the order they are placed."""
+    return [index for index, one in enumerate(sections)
+            if one.flags & SHF_ALLOC
+            and one.sh_type in (SHT_PROGBITS, SHT_NOBITS)
+            and any(one.name.startswith(p) for p in KEPT_PREFIXES)]
+
+
+def build(source: Path, triple: str, into: Path) -> bytes:
+    """Compile the runtime for *triple* and answer the object's bytes."""
+    flags = list(FLAGS)
+    if triple.startswith("riscv"):
+        flags.append("-mno-relax")
+    proc = subprocess.run(
+        [COMPILER, "".join(("--target=", triple)), *flags, "-c",
+         "-o", str(into), str(source)],
+        capture_output=True, text=True, check=False)
+    if proc.returncode != 0:
+        raise SystemExit("".join((COMPILER, " ", triple, ":\n", proc.stderr)))
+    return into.read_bytes()
+
+
+def extracted(architecture: str, data: bytes,
+              wanted: Sequence[str]) -> tuple[list[Section], dict[str, tuple[int, int]],
+                                              list[tuple[int, int, str, int, int]]]:
+    """The pieces, the names in them and the patches, for one architecture."""
+    from importlib import import_module
+    fixups = import_module("".join(("pypl4g.target.", architecture, ".fixups")))
+    by_type = getattr(fixups, "FROM_ELF")
+
+    sections, symbols, relocations = read_object(data)
+    order = kept(sections)
+    place = {index: at for at, index in enumerate(order)}
+    pieces = [sections[index] for index in order]
+
+    names: dict[str, tuple[int, int]] = {}
+    for one in symbols:
+        if one.name in wanted:
+            if one.section not in place:
+                raise SystemExit("".join((one.name, " is not in a kept section")))
+            names[one.name] = (place[one.section], one.value)
+    missing = [one for one in wanted if one not in names]
+    if missing:
+        raise SystemExit("".join(("the runtime does not define ",
+                                  ", ".join(missing))))
+
+    patches: list[tuple[int, int, str, int, int]] = []
+    for one in relocations:
+        if one.where not in place:
+            continue
+        kind = by_type.get(one.kind)
+        if kind is None:
+            raise SystemExit("".join((
+                architecture, ": relocation type ", str(one.kind),
+                " has no fixup; add it to target/", architecture,
+                "/fixups.py")))
+        target = symbols[one.symbol]
+        if target.section not in place:
+            raise SystemExit("".join((
+                architecture, ": a relocation reaches '", target.name,
+                "', which is not part of the runtime")))
+        patches.append((place[one.where], one.offset, kind,
+                        place[target.section], one.addend + target.value))
+    return pieces, names, patches
+
+
+def rendered(architecture: str, triple: str, pieces: Sequence[Section],
+             names: Mapping[str, tuple[int, int]],
+             patches: Sequence[tuple[int, int, str, int, int]]) -> str:
+    """The generated module for one architecture."""
+    out = ['"""The I/O runtime for ', architecture, '.\n\n',
+           'Generated by `bin/pl4g-runtime` from `runtime/io.c`; do not edit.\n',
+           'A test recompiles the C and compares, so a module older than the\n',
+           'source it was made from fails the suite.\n"""\n\n',
+           'from __future__ import annotations\n\n',
+           'from . import Blob, Patch, Piece\n\n',
+           'BLOB = Blob(\n    triple="', triple, '",\n    pieces=(\n']
+    for one in pieces:
+        out.extend(['        Piece(name="', one.name, '", alignment=',
+                    str(one.alignment), ',\n',
+                    '              writable=', str(bool(one.flags & SHF_WRITE)),
+                    ', executable=', str(bool(one.flags & SHF_EXECINSTR)),
+                    ',\n              contents=bytes.fromhex('])
+        # Hex rather than a byte string: a run of bytes split across lines has
+        # to be split where a literal may be, and hex may be split anywhere.
+        # It also makes a difference between two builds a difference a reader
+        # can see, which is what makes the test that compares them useful.
+        text = one.contents.hex()
+        for at in range(0, len(text), 56):
+            out.extend(['\n                  "', text[at:at + 56], '"'])
+        out.append(')),\n')
+    out.append('    ),\n    symbols={\n')
+    for name in sorted(names):
+        piece, offset = names[name]
+        out.extend(['        "', name, '": (', str(piece), ', ', str(offset),
+                    '),\n'])
+    out.append('    },\n    patches=(\n')
+    for piece, offset, kind, target, addend in patches:
+        out.extend(['        Patch(piece=', str(piece), ', offset=',
+                    str(offset), ', kind="', kind, '",\n',
+                    '              target=', str(target), ', addend=',
+                    str(addend), '),\n'])
+    out.append('    ),\n)\n')
+    return "".join(out)
+
+
+def main(argv: Sequence[str]) -> int:
+    """Compile the runtime and write, or check, the generated modules."""
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--check", action="store_true",
+                        help="answer whether what is committed is what the C "
+                             "compiles to, and write nothing")
+    found = parser.parse_args(list(argv))
+    source = ROOT / "runtime" / "io.c"
+    from pypl4g.runtime import names as wanted
+    stale: list[str] = []
+    for architecture in sorted({architecture_of(t)
+                               for t in canonical_triples()}):
+        triple = TRIPLES.get(architecture)
+        if triple is None:
+            raise SystemExit("".join(("no triple for ", architecture)))
+        into = ROOT / "pypl4g" / "runtime" / "".join((architecture, ".py"))
+        work = into.with_suffix(".o")
+        data = build(source, triple, work)
+        work.unlink(missing_ok=True)
+        pieces, symbols, patches = extracted(architecture, data, wanted())
+        text = rendered(architecture, triple, pieces, symbols, patches)
+        if found.check:
+            if not into.exists() or into.read_text(encoding="utf-8") != text:
+                stale.append(architecture)
+            continue
+        into.write_text(text, encoding="utf-8")
+        print("".join(("wrote ", str(into.relative_to(ROOT)), ": ",
+                       str(sum(len(p.contents) for p in pieces)), " bytes in ",
+                       str(len(pieces)), " pieces, ", str(len(patches)),
+                       " to fill in")))
+    if stale:
+        print("".join(("out of date: ", ", ".join(stale))), file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv[1:]))

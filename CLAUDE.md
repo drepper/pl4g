@@ -39,6 +39,10 @@ that the committed parser and the shared library beside it both match.  A test r
 every program in the test suite, so a syntax added to one and not the other fails the suite; two more check that the parser is the
 one the grammar produces and rebuild the library whenever anything it is made from is newer.
 
+The I/O runtime is C, in `runtime/`, compiled ahead of time for every architecture and packaged with the compiler as extracted
+code and relocations.  Run `bin/pl4g-runtime` when the C changes; a test recompiles and compares, so a stale package fails the
+suite.  Building a pl4g program needs no C compiler -- only changing the runtime does.
+
 Every change that lands is timed.  Run `bin/pl4g-timing` after committing it, which appends a column for that commit to
 `spec/timings.md`, and report what it shows.  Add a sample to the list in the script whenever a feature lands that could plausibly
 cost time; samples are never removed, so that an older column stays meaningful.
