@@ -1,0 +1,62 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ `@[external("SYMBOL")]` says the body lives somewhere else and the compiler
+※ fills it in, and `@[abi]` says a record is laid out the way one compiled by
+※ something else is.  Between them they are how a program reaches the runtime.
+※
+※ **The runtime is C, compiled ahead of time.**  What the compiler carries is
+※ the code and its relocations, extracted once per architecture; reaching it
+※ places those bytes in the image and fills in what the object format said had
+※ to be filled in.  There is no linker and nothing else to reach, so the only
+※ symbols `@[external]` may name are the ones the compiler carries (4595).
+※
+※ **A declaration has no body**, which is what the end of the line after the
+※ header says.  A function with neither a body nor the attribute is refused
+※ (4593), and one with both is refused as well (4594): a body and a definition
+※ elsewhere are two answers to "where is this", and exactly one may be given.
+※
+※ **An `@[abi]` record crosses a call as a reference and never whole** (4596).
+※ Something compiled by something else passes a record by rules of its own --
+※ rules this compiler does not follow and does not have to, a reference being
+※ passed the same way by every one of them.
+※
+※ **The call follows the system's convention**, which is what lets the two sides
+※ agree without either knowing how the other compiles a call of its own.
+※
+※ Compare: **C**, whose `extern` declaration this is, with a linker behind it
+※ rather than a compiler that carries the code; **Rust**, whose `extern "C"` and
+※ `#[repr(C)]` are this pair almost exactly; **Zig**, whose `extern fn` and
+※ `extern struct` likewise; **Go**, whose cgo compiles the C as part of the
+※ build, which is the answer not taken here.
+
+※ The ring the runtime keeps, laid out the way it reads it.  Every field is a
+※ machine word, so that the two declarations are the same by inspection rather
+※ than by argument.
+@[abi]
+type Ring =
+    state : u64 ; fd : u64 ;
+    sq_head : u64 ; sq_tail : u64 ; sq_mask : u64 ; sq_array : u64 ;
+    sqes : u64 ;
+    cq_head : u64 ; cq_tail : u64 ; cq_mask : u64 ; cqes : u64
+
+@[external("pl4g_io_write"), impure]
+fn io_write(r: &mut Ring, fd: i32, at: u64, len: u64) → i64
+
+let ring: mut Ring = Ring(
+    .state ← 0u64, .fd ← 0u64,
+    .sq_head ← 0u64, .sq_tail ← 0u64, .sq_mask ← 0u64, .sq_array ← 0u64,
+    .sqes ← 0u64,
+    .cq_head ← 0u64, .cq_tail ← 0u64, .cq_mask ← 0u64, .cqes ← 0u64)
+
+@[startup, impure]
+fn main() → u6:
+    let message: u8⟦6⟧ = ⟦104u8, 101u8, 108u8, 108u8, 111u8, 10u8⟧
+    ※ standard error, so that a run under a test suite says nothing that has
+    ※ to be filtered out of what the program answered
+    if io_write(&mut ring, 2i32, ⎕address(&message⟦0⟧), 6u64) ≠ 6i64:
+        1u6
+    ※ nothing written is nothing done, which the runtime answers for
+    elif io_write(&mut ring, 2i32, ⎕address(&message⟦0⟧), 0u64) ≠ 0i64:
+        2u6
+    else:
+        0u6

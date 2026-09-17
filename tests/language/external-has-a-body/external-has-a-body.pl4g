@@ -1,0 +1,14 @@
+※ pl4g-test: compile=error diag=4594
+
+※ A body and a definition elsewhere are two answers to "where is this", and
+※ exactly one of them may be given: a body written here as well would be a
+※ second definition of one thing, and nothing could say which of the two a call
+※ reached.
+
+@[external("pl4g_io_read")]
+fn read_it() → i64:
+    0i64
+
+@[startup, impure]
+fn main() → u6:
+    0u6

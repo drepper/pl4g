@@ -6659,6 +6659,90 @@
       "option": null
     },
     {
+      "number": 4593,
+      "name": "LANG_FUNCDEF_NO_BODY",
+      "severity": "error",
+      "message": "'{name}' has no body, so something has to say where it is defined",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the function"
+        }
+      ],
+      "cause": "A function with no body is the declaration of one defined somewhere else, and the only somewhere else this compiler has is the runtime it carries: the 'external' attribute, given a symbol, is what names it.  A function that was meant to have a body is one whose body was left off, and the two read alike until the attribute says which was meant.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition"
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4594,
+      "name": "LANG_FUNCDEF_EXTERNAL_HAS_A_BODY",
+      "severity": "error",
+      "message": "'{name}' is defined somewhere else, so it may not be defined here as well",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the function"
+        }
+      ],
+      "cause": "The 'external' attribute says the body lives elsewhere and the compiler fills it in.  A body written here would be a second definition of one thing, and nothing could say which of the two a call reached.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition"
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4595,
+      "name": "LANG_FUNCDEF_EXTERNAL_UNKNOWN",
+      "severity": "error",
+      "message": "nothing the compiler carries is called '{symbol}'",
+      "args": [
+        {
+          "name": "symbol",
+          "type": "string",
+          "description": "the symbol that was named"
+        }
+      ],
+      "cause": "What the 'external' attribute may name is what the runtime packaged with the compiler defines; there is no linker and nothing else to reach.  A name that is not one of those is a call to something that will not be there, which is worth saying where it is written rather than leaving to whatever reads the image.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition"
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4596,
+      "name": "LANG_ABI_TYPE_BY_VALUE",
+      "severity": "error",
+      "message": "'{type}' is laid out for something else to read, so only a reference to one crosses a call",
+      "args": [
+        {
+          "name": "type",
+          "type": "string",
+          "description": "the type"
+        }
+      ],
+      "cause": "A record marked with the 'abi' attribute is shared with code compiled by something else, which passes a record by rules of its own -- rules this compiler does not follow and does not have to, since a reference is passed the same way by every one of them.  Bind it to a name and hand over a reference to that name.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Product and sum types"
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 5001,
       "name": "LANG_STMT_UNREACHABLE",
       "severity": "warning",

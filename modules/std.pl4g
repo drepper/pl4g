@@ -3,6 +3,11 @@
 ※ One module for now, named `std` and found beside the compiler.  What a program
 ※ names here is a *descriptor* -- something that may be read, or written, or
 ※ both -- and never the machinery underneath it.
+※
+※ The machinery is the runtime the compiler carries: C, compiled ahead of time
+※ for every architecture, reached through `@[external]` and handed the ring as a
+※ record laid out the way it reads one.  That there is a ring, and that there is
+※ sometimes not one, is not something a program can see.
 
 ※※ A device that can be read.
 @[export]
@@ -29,224 +34,34 @@ type Io = input : Reader ; output : Writer ; errors : Writer
 type Init = io : Io
 
 ※ -- the ring ---------------------------------------------------------------
+
+※※ What the runtime keeps about the ring, laid out the way it reads it.
 ※
-※ Everything below here is this module's own.  A program names descriptors and
-※ calls `read` and `write`; that there is a ring underneath, and that there is
-※ sometimes not one, is not a thing it can see.
-
-※※ `struct io_sqring_offsets`: where each index lives in the submission ring.
-type SqOffsets =
-    head : u32 ; tail : u32 ; ring_mask : u32 ; ring_entries : u32 ;
-    flags : u32 ; dropped : u32 ; array : u32 ; resv1 : u32 ;
-    user_addr : u64
-
-※※ `struct io_cqring_offsets`, the same for the completion ring.
-type CqOffsets =
-    head : u32 ; tail : u32 ; ring_mask : u32 ; ring_entries : u32 ;
-    overflow : u32 ; cqes : u32 ; flags : u32 ; resv1 : u32 ;
-    user_addr : u64
-
-※※ `struct io_uring_params`: what the kernel is asked for and what it answers.
-type Params =
-    sq_entries : u32 ; cq_entries : u32 ; flags : u32 ; sq_thread_cpu : u32 ;
-    sq_thread_idle : u32 ; features : u32 ; wq_fd : u32 ;
-    resv0 : u32 ; resv1 : u32 ; resv2 : u32 ;
-    sq_off : SqOffsets ; cq_off : CqOffsets
-
-※※ `struct io_uring_sqe`: one request, as the kernel reads it.  Sixty-four
-※※ bytes, and every one of them written -- the kernel reads what it is given and
-※※ a field left alone would be whatever the last request put there.
-type Sqe =
-    opcode : u8 ; flags : u8 ; ioprio : u16 ; fd : i32 ;
-    off : u64 ; addr : u64 ; len : u32 ; rw_flags : u32 ;
-    user_data : u64 ; buf_index : u16 ; personality : u16 ;
-    splice_fd_in : i32 ; addr3 : u64 ; pad2 : u64
-
-※※ `struct io_uring_cqe`: one answer.
-type Cqe = user_data : u64 ; res : i32 ; flags : u32
-
-※※ What is known about one request that has been submitted.  `user_data` is the
-※※ place in this table and not an address, so nothing the kernel reads back is
-※※ anywhere this program lives.
-type Pending = in_use : bool ; done : bool ; res : i32
-
-※※ A ring, and what has to be known to drive it.  Every address is an `i64`
-※※ because that is what the kernel answers `mmap` with; `⎕at` reads a word of
-※※ either signedness as a place.
+※ Every field is a machine word, so that this declaration and the one in
+※ `runtime/io.c` are the same by inspection rather than by argument.  Nothing
+※ here reads any of it: what this module does with it is hand over a reference,
+※ which is what an `@[abi]` record does and all it does.
+@[abi]
 type Ring =
-    fd : i64 ;
-    tried : bool ; ready : bool ;
-    sq_head : i64 ; sq_tail : i64 ; sq_mask : i64 ; sq_array : i64 ;
-    sqes : i64 ;
-    cq_head : i64 ; cq_tail : i64 ; cq_mask : i64 ; cqes : i64
+    state : u64 ; fd : u64 ;
+    sq_head : u64 ; sq_tail : u64 ; sq_mask : u64 ; sq_array : u64 ;
+    sqes : u64 ;
+    cq_head : u64 ; cq_tail : u64 ; cq_mask : u64 ; cqes : u64
 
-※※ How many requests may be outstanding.  Eight is what one program doing one
-※※ thing at a time needs and is what the kernel rounds nothing up from.
-let ENTRIES: u32 ¤idx = 8
-
-※※ `PROT_READ | PROT_WRITE`, and `MAP_SHARED | MAP_POPULATE`.
-let READ_WRITE: i64 = 3i64
-let SHARED_POPULATE: i64 = 0x8001i64
-
-※※ Where in the ring's descriptor each of the three mappings begins.
-let OFF_SQ_RING: i64 = 0i64
-let OFF_CQ_RING: i64 = 0x8000000i64
-let OFF_SQES: i64 = 0x10000000i64
-
-※※ `IORING_OP_READV`'s neighbours: the two that take an address and a length.
-let OP_READ: u8 = 22u8
-let OP_WRITE: u8 = 23u8
-
-※※ `IORING_ENTER_GETEVENTS`: wait for at least what was asked for.
-let ENTER_GETEVENTS: i64 = 1i64
-
+※※ The one ring, made by the runtime the first time anything reads or writes.
 let ring: mut Ring = Ring(
-    .fd ← ⁻1i64, .tried ← false, .ready ← false,
-    .sq_head ← 0i64, .sq_tail ← 0i64, .sq_mask ← 0i64, .sq_array ← 0i64,
-    .sqes ← 0i64,
-    .cq_head ← 0i64, .cq_tail ← 0i64, .cq_mask ← 0i64, .cqes ← 0i64)
+    .state ← 0u64, .fd ← 0u64,
+    .sq_head ← 0u64, .sq_tail ← 0u64, .sq_mask ← 0u64, .sq_array ← 0u64,
+    .sqes ← 0u64,
+    .cq_head ← 0u64, .cq_tail ← 0u64, .cq_mask ← 0u64, .cqes ← 0u64)
 
-let waiting: mut Pending⟦8⟧ = ⟦
-    Pending(.in_use ← false, .done ← false, .res ← 0i32),
-    Pending(.in_use ← false, .done ← false, .res ← 0i32),
-    Pending(.in_use ← false, .done ← false, .res ← 0i32),
-    Pending(.in_use ← false, .done ← false, .res ← 0i32),
-    Pending(.in_use ← false, .done ← false, .res ← 0i32),
-    Pending(.in_use ← false, .done ← false, .res ← 0i32),
-    Pending(.in_use ← false, .done ← false, .res ← 0i32),
-    Pending(.in_use ← false, .done ← false, .res ← 0i32)⟧
+@[external("pl4g_io_write"), impure]
+fn io_write(r: &mut Ring, fd: i32, at: u64, len: u64) → i64
 
-※※ Make the ring, once, and answer whether there is one.
-※
-※ Tried once and not again: a system that has no `io_uring` will not grow one,
-※ and asking it a second time would cost a request to the kernel for every read
-※ and write a program ever does.  What happens where there is none is that the
-※ calls below go straight to the kernel, which is what lets a program run
-※ anywhere and what lets these be tested under an emulator that has no ring.
-@[impure]
-fn started() → bool:
-    if ring.tried:
-        return ring.ready
-    ring.tried ← true
-    let p: mut Params = Params(
-        .sq_entries ← 0u32, .cq_entries ← 0u32, .flags ← 0u32,
-        .sq_thread_cpu ← 0u32, .sq_thread_idle ← 0u32, .features ← 0u32,
-        .wq_fd ← 0u32, .resv0 ← 0u32, .resv1 ← 0u32, .resv2 ← 0u32,
-        .sq_off ← SqOffsets(.head ← 0u32, .tail ← 0u32, .ring_mask ← 0u32,
-                            .ring_entries ← 0u32, .flags ← 0u32,
-                            .dropped ← 0u32, .array ← 0u32, .resv1 ← 0u32,
-                            .user_addr ← 0u64),
-        .cq_off ← CqOffsets(.head ← 0u32, .tail ← 0u32, .ring_mask ← 0u32,
-                            .ring_entries ← 0u32, .overflow ← 0u32,
-                            .cqes ← 0u32, .flags ← 0u32, .resv1 ← 0u32,
-                            .user_addr ← 0u64))
-    let fd: i64 = ⎕syscall(⎕sc@io_uring_setup,
-                           ⎕widen(⎕drop(ENTRIES), ⌜i64⌝), &mut p)
-    if fd < 0i64:
-        return false
-    let sq_len: i64 = (⎕widen(p.sq_off.array, ⌜i64⌝)
-                       + ⎕widen(p.sq_entries × 4u32, ⌜i64⌝))
-    let cq_len: i64 = (⎕widen(p.cq_off.cqes, ⌜i64⌝)
-                       + ⎕widen(p.cq_entries × 16u32, ⌜i64⌝))
-    let sqe_len: i64 = ⎕widen(p.sq_entries × 64u32, ⌜i64⌝)
-    let sq: i64 = ⎕syscall(⎕sc@mmap, 0i64, sq_len, READ_WRITE,
-                           SHARED_POPULATE, fd, OFF_SQ_RING)
-    let cq: i64 = ⎕syscall(⎕sc@mmap, 0i64, cq_len, READ_WRITE,
-                           SHARED_POPULATE, fd, OFF_CQ_RING)
-    let sqes: i64 = ⎕syscall(⎕sc@mmap, 0i64, sqe_len, READ_WRITE,
-                             SHARED_POPULATE, fd, OFF_SQES)
-    if sq < 0i64 ∨ cq < 0i64 ∨ sqes < 0i64:
-        return false
-    ring.fd ← fd
-    ring.sq_head ← sq + ⎕widen(p.sq_off.head, ⌜i64⌝)
-    ring.sq_tail ← sq + ⎕widen(p.sq_off.tail, ⌜i64⌝)
-    ring.sq_mask ← sq + ⎕widen(p.sq_off.ring_mask, ⌜i64⌝)
-    ring.sq_array ← sq + ⎕widen(p.sq_off.array, ⌜i64⌝)
-    ring.sqes ← sqes
-    ring.cq_head ← cq + ⎕widen(p.cq_off.head, ⌜i64⌝)
-    ring.cq_tail ← cq + ⎕widen(p.cq_off.tail, ⌜i64⌝)
-    ring.cq_mask ← cq + ⎕widen(p.cq_off.ring_mask, ⌜i64⌝)
-    ring.cqes ← cq + ⎕widen(p.cq_off.cqes, ⌜i64⌝)
-    ring.ready ← true
-    true
+@[external("pl4g_io_read"), impure]
+fn io_read(r: &mut Ring, fd: i32, at: u64, len: u64) → i64
 
-※※ A place in the table for a request about to be submitted, or as many as
-※※ there are where every one is taken.
-@[impure]
-fn a_slot() → u32 ¤idx:
-    let free: mut u32 ¤idx = 0
-    while §look free < ENTRIES:
-        if ¬ waiting⟦free⟧.in_use:
-            break §look
-        free ← free + 1
-    free
-
-※※ Take in every answer the kernel has put in the completion ring.
-@[impure]
-fn reap():
-    let head: mut u32 = ⎕at(ring.cq_head, ⌜&u32⌝)⌖
-    let tail: u32 = ⎕acquire(⎕at(ring.cq_tail, ⌜&u32⌝))
-    let mask: u32 = ⎕at(ring.cq_mask, ⌜&u32⌝)⌖
-    while head ≠ tail:
-        let c: &Cqe = ⎕at(ring.cqes + ⎕widen((head & mask) × 16u32, ⌜i64⌝),
-                          ⌜&Cqe⌝)
-        let who: u64 = c⌖.user_data
-        let got: i32 = c⌖.res
-        if who < ⎕widen(⎕drop(ENTRIES), ⌜u64⌝):
-            let at: u32 ¤idx = ⎕unit(⎕narrow(who, ⌜u32⌝) ?? 0u32, ⌜idx⌝)
-            waiting⟦at⟧.done ← true
-            waiting⟦at⟧.res ← got
-        head ← head + 1u32
-    ※ what has been taken in is the kernel's to reuse, and saying so is a
-    ※ release: nothing this program wrote to a completion may be seen after it
-    ⎕release(⎕at(ring.cq_head, ⌜&mut u32⌝), head)
-
-※※ Submit one request and wait for its answer, which is what the kernel said.
-@[impure]
-fn through_the_ring(op: u8, fd: i32, at: &u8, len: u32, off: u64) → i64:
-    let slot: u32 ¤idx = a_slot()
-    if slot ≥ ENTRIES:
-        ※ every request this module can hold is outstanding, which one thread
-        ※ submitting one thing at a time cannot reach
-        return ⁻11i64
-    waiting⟦slot⟧.in_use ← true
-    waiting⟦slot⟧.done ← false
-    waiting⟦slot⟧.res ← 0i32
-    let mask: u32 = ⎕at(ring.sq_mask, ⌜&u32⌝)⌖
-    let tail: u32 = ⎕acquire(⎕at(ring.sq_tail, ⌜&u32⌝))
-    let index: u32 = tail & mask
-    let e: &mut Sqe = ⎕at(ring.sqes + ⎕widen(index × 64u32, ⌜i64⌝),
-                          ⌜&mut Sqe⌝)
-    e⌖.opcode ← op
-    e⌖.flags ← 0u8
-    e⌖.ioprio ← 0u16
-    e⌖.fd ← fd
-    e⌖.off ← off
-    e⌖.addr ← ⎕address(at)
-    e⌖.len ← len
-    e⌖.rw_flags ← 0u32
-    e⌖.user_data ← ⎕widen(⎕drop(slot), ⌜u64⌝)
-    e⌖.buf_index ← 0u16
-    e⌖.personality ← 0u16
-    e⌖.splice_fd_in ← 0i32
-    e⌖.addr3 ← 0u64
-    e⌖.pad2 ← 0u64
-    ⎕at(ring.sq_array + ⎕widen(index × 4u32, ⌜i64⌝), ⌜&mut u32⌝)⌖ ← index
-    ※ the entry is written before the kernel is told it is there, which is the
-    ※ whole of what a releasing write says
-    ⎕release(⎕at(ring.sq_tail, ⌜&mut u32⌝), tail + 1u32)
-    let answer: mut i64 = 0i64
-    while §until ¬ waiting⟦slot⟧.done:
-        let entered: i64 = ⎕syscall(⎕sc@io_uring_enter, ring.fd, 1i64, 1i64,
-                                    ENTER_GETEVENTS, 0i64, 0i64)
-        if entered < 0i64:
-            answer ← entered
-            break §until
-        reap()
-    if waiting⟦slot⟧.done:
-        answer ← ⎕widen(waiting⟦slot⟧.res, ⌜i64⌝)
-    waiting⟦slot⟧.in_use ← false
-    answer
+※ -- what a program calls ---------------------------------------------------
 
 ※※ Write `what` to `to`, answering how many bytes went or what the kernel said.
 ※
@@ -259,10 +74,7 @@ fn write(to: &mut Writer, what: u8⟦⟧) → i64:
     ※ of no elements is asking for a place that is not there.
     if #what = 0:
         return 0i64
-    if started():
-        through_the_ring(OP_WRITE, to⌖.fd, &what⟦0⟧, ⎕drop(⎕narrow(#what, ⌜u32⌝) ?? 0), 0u64)
-    else:
-        ⎕syscall(⎕sc@write, to⌖.fd, &what⟦0⟧, #what)
+    io_write(&mut ring, to⌖.fd, ⎕address(&what⟦0⟧), ⎕drop(#what))
 
 ※※ Read from `from` into `into`, answering how many bytes came or what the
 ※※ kernel said.  Nought means there is no more to come.
@@ -271,7 +83,4 @@ fn read(from: &mut Reader, into: u8⟦⟧) → i64:
     ※ Nowhere to put anything is nothing read, for the reason above.
     if #into = 0:
         return 0i64
-    if started():
-        through_the_ring(OP_READ, from⌖.fd, &into⟦0⟧, ⎕drop(⎕narrow(#into, ⌜u32⌝) ?? 0), 0u64)
-    else:
-        ⎕syscall(⎕sc@read, from⌖.fd, &into⟦0⟧, #into)
+    io_read(&mut ring, from⌖.fd, ⎕address(&into⟦0⟧), ⎕drop(#into))

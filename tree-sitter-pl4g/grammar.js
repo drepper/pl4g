@@ -155,13 +155,16 @@ module.exports = grammar({
     // Leaving them off is how a function says it answers with nothing; there is
     // no name to write for that, which is what keeps the two from being two ways
     // of saying one thing.
+    // A header with no body is the declaration of a function defined somewhere
+    // else, which `@[external]` is what says: the line ends after the header,
+    // there being nothing here to run.
     function_definition: $ => seq(
       optional($.attribute_list),
       'fn',
       field('name', $.identifier),
       field('parameters', $.parameter_list),
       optional(seq($._return_arrow, field('return_type', $.type))),
-      field('body', $._block),
+      optional(field('body', $._block)),
     ),
 
     parameter_list: $ => seq('(', sepBy(',', $.parameter), ')'),

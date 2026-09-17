@@ -1,0 +1,12 @@
+※ pl4g-test: compile=error diag=4593
+
+※ A function with no body is the declaration of one defined somewhere else, and
+※ the attribute is what says so.  A function that was meant to have a body is
+※ one whose body was left off, and the two read alike until the attribute says
+※ which was meant.
+
+fn nowhere() → i64
+
+@[startup, impure]
+fn main() → u6:
+    if nowhere() = 0i64: 0u6 else: 1u6

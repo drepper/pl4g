@@ -236,17 +236,17 @@ same place is refused, so two names for one device is a thing the compiler refus
 is the kernel's own convention.  Reading that as a result of the language's own kind is what the module will do once it has
 somewhere to put the error.  Writing nothing and reading into nowhere are nothing done, and answer nought.
 
-**Everything goes through `io_uring` where there is one.**  `std` makes a ring on the first read or write anything does and drives
-it by hand: a submission entry filled in, the index published with a releasing write, `io_uring_enter`, and the completion tail
-read with an acquiring one.  No thread serves completions; they are taken in by the calls that use the ring, which is what the
-design chose for now.  A request carries the place in `std`'s own table that says what is known about it, so **nothing the kernel
-reads back is an address of anything the program holds**.
+**Everything goes through `io_uring` where there is one.**  A ring is made on the first read or write anything does and driven by
+hand: a submission entry filled in, the index published with a releasing write, `io_uring_enter`, and the completion tail read with
+an acquiring one.  No thread serves completions; they are taken in by the calls that use the ring.
 
 **Where there is no ring the calls go straight to the kernel.**  It is tried once and not again: a system without `io_uring` will
 not grow one, and asking twice would cost a request for every read and write a program ever does.  That a ring is there, or is
 not, is not something a program can see -- what it names is a descriptor.
 
-None of the machinery is exported.  `Ring`, `Pending`, the submission entry and the completion entry are the module's own.
+**None of that is written in this language.**  It is the runtime the compiler carries: C, compiled ahead of time for every
+architecture, reached through `@[external]` and handed the ring as a record marked `@[abi]`.  What `std` is, is the descriptor
+types and two calls; `Ring` is its own and is not exported.
 
 Compare **Rust**, whose `std::io::stdout` is taken by a call and guarded by a lock, a run-time check where a static one is
 available; **Go**, whose `os.Stdout` is a package variable anything may write to; **Zig**, which passes a writer explicitly as this
@@ -3604,6 +3604,35 @@ that overloads can coexist; Go, which changed its own convention from the stack 
 outside the toolchain depended on it; Rust, whose `extern "C"` is this `@[cdecl]` and whose default `extern "Rust"` is explicitly
 unspecified for the same reason.  This language is emitted by generators and compiled whole, so the freedom Go and Rust reserve is
 the ordinary case here and the system's convention is the exception asked for by name.
+
+##### Functions defined somewhere else
+
+**A function with no body is the declaration of one defined somewhere else**, and `@[external("SYMBOL")]` is what says where:
+
+```
+@[external("pl4g_io_write"), impure]
+fn io_write(r: &mut Ring, fd: i32, at: u64, len: u64) → i64
+```
+
+What says there is no body is that **the line ends after the header**.  A body begins with `:` or `{`, so the two readings never
+both hold; anything else after the header is neither, which is the error it already was.  A function with neither a body nor the
+attribute is refused (4593) and one with both is refused as well (4594): a body and a definition elsewhere are two answers to
+"where is this", and exactly one may be given.
+
+**What may be named is what the compiler carries.**  There is no linker and nothing else to reach, so the symbols `@[external]`
+accepts are the ones the packaged runtime defines (4595) -- which is what makes a name that will not be there something said where
+it is written rather than left to whatever reads the image.  The call follows the system's convention, which is what lets the two
+sides agree without either knowing how the other compiles a call of its own.
+
+**`@[abi]` on a record says it is laid out the way one compiled by something else is**: the fields are never reordered, and
+**only a reference to one crosses a call** (4596).  Something compiled by something else passes a record by rules of its own --
+rules this compiler does not follow and does not have to, a reference being passed the same way by every convention there is.
+`@[abi]` on a *function* is the same request about the same thing, and says which convention by name; written with no name it says
+the system's, which is what `@[cdecl]` says.
+
+Compare: **C**, whose `extern` declaration this is, with a linker behind it rather than a compiler that carries the code;
+**Rust**, whose `extern "C"` and `#[repr(C)]` are this pair almost exactly; **Zig**, whose `extern fn` and `extern struct`
+likewise; **Go**, whose cgo compiles the C as part of the build, which is the answer not taken here.
 
 ##### Exporting and Being Visible
 

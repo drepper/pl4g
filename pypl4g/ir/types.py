@@ -425,6 +425,12 @@ class ProductType(Type):
     #: The file the definition is in, which is part of which type this is and
     #: no part of what it is called.
     origin: str = ""
+    #: Whether the record is laid out the way the system's C ABI lays one out,
+    #: which is what `@[abi]` says.  Such a record is shared with something
+    #: compiled by something else, so its fields are never reordered and a value
+    #: of it never crosses a call: what crosses is a reference, which every
+    #: convention agrees about and which this one does not have to classify.
+    abi: bool = False
 
     def __eq__(self, other: object) -> bool:
         """Nominal, so one of these is the same type only as itself.

@@ -203,16 +203,21 @@ To Do List for the PL4g language
     the difference should be written down.
 
 [x] the `std` module, and I/O through io_uring.  Done on 2026-09-18: `modules/std.pl4g` defines the descriptor types and
-    `Init`, the startup function may take `std.Init`, and `read` and `write` go through a ring the module makes on first use --
-    `io_uring_setup`, three `mmap`s, and the submit-and-reap cycle, written in pl4g.  qemu-user has no `io_uring`, so where one
-    cannot be made the calls go straight to the kernel and every test still runs on all three targets.
+    `Init`, the startup function may take `std.Init`, and `read` and `write` reach the runtime the compiler carries.  Written in
+    pl4g first, which is where the language learned what a ring needs; moved to C the same day at the user's direction, reached
+    through `@[external]` and handed the ring as an `@[abi]` record.  qemu-user has no `io_uring`, so where one cannot be made the
+    calls go straight to the kernel and every test still runs on all three targets.
 
 [ ] use `ReadWriter`.  The type is exported and nothing answers one: what would is opening a file or a socket, which wants a path
     and so wants a `str` the kernel can read -- a NUL-terminated one, which this language has no way to write.
 
-[ ] say how long a buffer handed to the ring must last.  The submission entry holds the buffer's address as a number, so nothing
-    relates the two at all: the request is complete before the call returns and that is a property of this design rather than of
+[ ] say how long a buffer handed to the runtime must last.  `std` hands over the buffer's address as a number, so nothing relates
+    the two at all: the request is complete before the call returns and that is a property of the runtime's design rather than of
     the type.  A ring that answered later would need the language to say it, and `⎕address` is where it stops being able to.
+
+[ ] let `@[external]` reach something the compiler does not carry.  What it may name today is what the packaged runtime defines,
+    there being no linker.  A program that wants to call something else wants either a linker or a way to add to what is
+    packaged, and neither is decided.
 
 [x] check a reference written into a field.  Done on 2026-09-18, together with `⎕address(REF)` -- which is what the ring needed
     once the rule applied to it as well, its submission entry now holding the `u64` the kernel's field actually is.

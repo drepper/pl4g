@@ -1,0 +1,16 @@
+※ pl4g-test: compile=error diag=4596
+
+※ A record laid out for something else to read is shared with code compiled by
+※ something else, which passes a record by rules of its own -- rules this
+※ compiler does not follow and does not have to, since a reference is passed the
+※ same way by every one of them.
+
+@[abi]
+type Ring = state : u64 ; fd : u64
+
+fn holds(r: Ring) → u64:
+    r.state
+
+@[startup, impure]
+fn main() → u6:
+    0u6

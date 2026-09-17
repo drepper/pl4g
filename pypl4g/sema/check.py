@@ -37,6 +37,7 @@ from ..ir.inst import (AddressInst, BinaryInst, BinOp, CallInst, CastInst,
                        Ordering, Terminator, TupleInst, UnOp)
 from ..target.registry import architecture_of
 from ..target.syscalls import KNOWN as SYSCALL_NAMES, number_of
+from ..runtime import names as runtime_names
 from . import tables
 from ..ir.function import (DEFAULT_CCONV, SYSTEM_CCONV, BasicBlock, FuncAttrs,
                            FuncType, Function,
@@ -221,6 +222,9 @@ class _NamedType:
     node: ast.TypeDef | ast.EnumDef
     origin: str
     exported: bool = False
+    #: Whether the definition said `@[abi]`, which is what makes the record one
+    #: shared with something compiled by something else.
+    abi: bool = False
     ty: Type | None = None
     resolving: bool = False
     shell: Type | None = None
@@ -333,7 +337,8 @@ def _shell_for(defined: _NamedType) -> Type | None:
         return None
     if defined.node.kind is ast.TypeKind.SUM:
         return SumType((), name=defined.name, origin=defined.origin)
-    return ProductType((), name=defined.name, origin=defined.origin)
+    return ProductType((), name=defined.name, origin=defined.origin,
+                       abi=defined.abi)
 
 
 def _filled_in(shell: Type | None, made: Type) -> Type:
@@ -2264,6 +2269,14 @@ class Checker:
             if func_attrs.listable and not params:
                 self._diags.emit(D.LANG_LISTABLE_TAKES_NOTHING, node.name_span,
                                  name=node.name)
+            self._check_external(node, func_attrs)
+            # Wherever it stands and whoever wrote it: a record laid out for
+            # something else to read travels as a reference or not at all, so
+            # that one type is not passed two ways.
+            for at, one in enumerate(params):
+                self._not_by_value(one, node.params[at].type.span)
+            if node.ret_type is not None:
+                self._not_by_value(ret, node.ret_type.span)
             self._module.add_function(func, key=self._key(node.name))
             self._top[node.name] = func
             self._owned.append(func)
@@ -2272,6 +2285,36 @@ class Checker:
             if expectation is not None:
                 self._diags.release(expectation)
         return _Collected(node=node, attrs=attrs, func=func, expectation=expectation)
+
+    def _check_external(self, node: ast.FuncDef, attrs: FuncAttrs) -> None:
+        """Check a function said to be defined somewhere else, and one not.
+
+        The two questions are one: a body and a definition elsewhere are two
+        answers to "where is this", and exactly one of them has to be given.
+        What may be named is what the runtime packaged with the compiler
+        defines, there being no linker and nothing else to reach.
+        """
+        if attrs.external is None:
+            if node.body is None:
+                self._diags.emit(D.LANG_FUNCDEF_NO_BODY, node.name_span,
+                                 name=node.name)
+            return
+        if node.body is not None:
+            self._diags.emit(D.LANG_FUNCDEF_EXTERNAL_HAS_A_BODY, node.name_span,
+                             name=node.name)
+        if attrs.external not in runtime_names():
+            self._diags.emit(D.LANG_FUNCDEF_EXTERNAL_UNKNOWN, node.name_span,
+                             symbol=attrs.external)
+
+    def _not_by_value(self, ty: Type, where: Span) -> None:
+        """Report a record laid out for something else crossing a call whole.
+
+        Such a record is passed by rules this compiler does not follow: what
+        crosses is a reference, which every convention agrees about and which
+        this one therefore does not have to classify.
+        """
+        if isinstance(ty, ProductType) and ty.abi:
+            self._diags.emit(D.LANG_ABI_TYPE_BY_VALUE, where, type=ty.render())
 
     def _defaults_of(self, node: ast.FuncDef,
                      types: Sequence[Type]) -> tuple[Const | None, ...]:
@@ -2606,6 +2649,7 @@ class Checker:
         priority: int | None = None
         inline = InlineHint.DEFAULT
         abi: str | None = None
+        external: str | None = None
         can_ignore = False
         impure = False
         listable = False
@@ -2640,8 +2684,19 @@ class Checker:
                     abi = SYSTEM_CCONV
                     extra["variadic"] = attr.as_bool("variadic")
                 case "abi":
-                    abi = attr.as_str("name")
+                    # A name where the program named one, and the system's
+                    # otherwise: `@[abi]` on a function says the same thing
+                    # `@[cdecl]` does, and on a type it says how one is laid
+                    # out and is no business of the convention.
+                    abi = attr.as_str("name") or SYSTEM_CCONV
                     extra["variadic"] = attr.as_bool("variadic")
+                case "external":
+                    # Defined somewhere else, under a name of its own, and
+                    # called the way this system calls things: there is no
+                    # other way to reach something this compiler did not
+                    # compile.
+                    external = attr.as_str("symbol")
+                    abi = SYSTEM_CCONV
                 case "align":
                     extra["align"] = attr.as_int("bytes")
                 case "section":
@@ -2649,7 +2704,7 @@ class Checker:
                 case _:
                     pass
         return FuncAttrs(special=special, priority=priority, inline=inline, abi=abi,
-                         can_ignore=can_ignore, impure=impure,
+                         external=external, can_ignore=can_ignore, impure=impure,
                          listable=listable, extra=extra), linkage
 
     # -- types -----------------------------------------------------------------
@@ -2668,7 +2723,8 @@ class Checker:
             return
         attrs = self._bind_attributes(node.attrs, AttrTarget.TYPE)
         defined = _NamedType(name=node.name, node=node, origin=path,
-                             exported=self._is_export(attrs))
+                             exported=self._is_export(attrs),
+                             abi=any(one.name == "abi" for one in attrs))
         self._top[node.name] = defined
         self._named_types.append(defined)
 
@@ -2851,7 +2907,8 @@ class Checker:
         made = tuple(parts)
         if node.kind is ast.TypeKind.SUM:
             return SumType(made, name=defined.name, origin=defined.origin)
-        return ProductType(made, name=defined.name, origin=defined.origin)
+        return ProductType(made, name=defined.name, origin=defined.origin,
+                           abi=defined.abi)
 
     def _defined_type(self, ref: ast.TypeRef) -> Type | None:
         """The type a name stands for, where a definition gave it one."""

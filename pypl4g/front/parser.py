@@ -483,6 +483,17 @@ class Parser:
         ret_type: ast.TypeExpr | None = None
         if self._accept(TokKind.ARROW) is not None:
             ret_type = self._parse_type_ref()
+        # A function with no body is the declaration of one defined somewhere
+        # else.  What says there is none is that the *line ends* here: a body
+        # begins with a colon or a brace, and anything else after the header is
+        # neither a body nor the end of one -- which is the error it already
+        # was and stays.
+        if self._check(TokKind.NEWLINE) or self._check(TokKind.EOF):
+            end = ret_type.span if ret_type is not None else name_token.span
+            return ast.FuncDef(span=start.to(end), name=name_token.text,
+                               name_span=name_token.span, params=params,
+                               ret_type=ret_type, body=None, attrs=attrs,
+                               doc=doc)
         body = self._parse_body()
         return ast.FuncDef(span=start.to(body.span), name=name_token.text,
                            name_span=name_token.span, params=params,

@@ -1,0 +1,13 @@
+※ pl4g-test: compile=error diag=4595
+
+※ What `@[external]` may name is what the runtime packaged with the compiler
+※ defines; there is no linker and nothing else to reach.  A name that is not one
+※ of those is a call to something that will not be there, which is worth saying
+※ where it is written rather than leaving to whatever reads the image.
+
+@[external("no_such_thing")]
+fn missing() → i64
+
+@[startup, impure]
+fn main() → u6:
+    if missing() = 0i64: 0u6 else: 1u6

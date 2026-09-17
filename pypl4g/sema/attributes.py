@@ -128,10 +128,16 @@ REGISTRY: Final[Mapping[str, AttrSpec]] = {
                  doc="the function may change things that outlive the call"),
         AttrSpec("can_ignore", AttrTarget.FUNCTION,
                  doc="a caller need not take what the function answers with"),
-        AttrSpec("abi", AttrTarget.FUNCTION,
-                 (_param("name", "string"),
+        AttrSpec("abi", AttrTarget.FUNCTION | AttrTarget.TYPE,
+                 (_param("name", "string", default="", required=False),
                   _param("variadic", "boolean", default=False, required=False)),
-                 doc="the function follows the named calling convention"),
+                 doc="the definition follows the system's ABI: a function is "
+                     "called the way the named convention says, and a record is "
+                     "laid out the way one compiled by something else is"),
+        AttrSpec("external", AttrTarget.FUNCTION,
+                 (_param("symbol", "string"),),
+                 doc="the function is defined somewhere else, under this "
+                     "symbol, and the compiler fills it in"),
         AttrSpec("export",
                  AttrTarget.FUNCTION | AttrTarget.VARIABLE | AttrTarget.TYPE,
                  doc="a file importing this module may name the definition"),

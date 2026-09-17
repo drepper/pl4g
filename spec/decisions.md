@@ -5781,6 +5781,51 @@ with an `assert` stop at the first, which is the behaviour this replaces; **D**'
 `unittest` blocks, which `always` tests are modelled on, stop at the first as
 well.
 
+## 2026-09-18T04:00+02:00 — implementation
+
+**The I/O runtime is C, compiled ahead of time and packaged with the compiler**
+
+At the user's direction, and a change of where the runtime is written rather
+than of what it does.  It had been pl4g, in `modules/std.pl4g`, which is what
+put the language on real work and is where it learned what driving a ring needs;
+every piece it asked for was decided on its own terms and every one stayed.
+
+**What is packaged is the code and its relocations.**  Chosen by the user from
+three: the extracted data rather than the object files, and rather than
+compiling when the compiler is built.  So building a pl4g program needs no C
+compiler and the compiler needs no reader for relocatable objects -- only
+changing the runtime needs either.  The cost is that what is committed can fall
+behind the C, and a test that recompiles and compares is what stops it.
+
+**`@[external("SYMBOL")]`** says the body lives elsewhere, under a symbol of its
+own, and that the call follows the system's convention.  The user chose the
+symbol being named over the function's own name being it: what a program calls
+something and what the thing it calls is called need not agree, one being a name
+in a language and the other a name in an image.  Turned down as well: naming the
+convention too, which nothing needs while the only somewhere else is the
+runtime the compiler carries.
+
+**`@[abi]` on a record** says it is laid out the way one compiled by something
+else is, and that **only a reference to one crosses a call**.  The user chose
+that over implementing the three system ABIs' aggregate classification, which is
+what passing one by value would have needed; a reference is passed the same way
+by every convention there is, so the rule costs nothing and asks for nothing.
+Turned down: a layout-only meaning, which would leave a by-value `@[abi]` record
+wrong at the boundary with nothing saying so.
+
+**A function with no body is a declaration**, and what says there is none is
+that the line ends after the header.  A body begins with `:` or `{`, so the two
+readings never both hold, and anything else after a header is the error it
+already was.
+
+Compare: **C**, whose `extern` and separate compilation this is, with a linker
+where this has a compiler that carries the code; **Rust**, whose `extern "C"`
+and `#[repr(C)]` are this pair almost exactly and whose `build.rs` compiles the
+C at build time; **Zig**, which compiles C itself and needs neither; **Go**,
+whose cgo compiles the C as part of the build and pays a calling-convention
+crossing for it; **Java**, whose JNI is the same two halves with a much wider
+boundary.
+
 Open questions
 --------------
 
