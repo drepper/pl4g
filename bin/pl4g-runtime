@@ -302,6 +302,7 @@ def main(argv: Sequence[str]) -> int:
                              "compiles to, and write nothing")
     found = parser.parse_args(list(argv))
     source = ROOT / "runtime" / "io.c"
+    from pypl4g.runtime import SHAPE_SYMBOL
     from pypl4g.runtime import names as wanted
     stale: list[str] = []
     for architecture in sorted({architecture_of(t)
@@ -313,7 +314,8 @@ def main(argv: Sequence[str]) -> int:
         work = into.with_suffix(".o")
         data = build(source, architecture, triple, work)
         work.unlink(missing_ok=True)
-        pieces, symbols, patches = extracted(architecture, data, wanted())
+        pieces, symbols, patches = extracted(architecture, data,
+                                             (*wanted(), SHAPE_SYMBOL))
         text = rendered(architecture, triple, pieces, symbols, patches)
         if found.check:
             if not into.exists() or into.read_text(encoding="utf-8") != text:

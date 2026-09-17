@@ -83,6 +83,51 @@ def blob_for(architecture: str) -> Blob | None:
     return found if isinstance(found, Blob) else None
 
 
+#: The name of the run of numbers the runtime says its shared record is.  Not
+#: something the language may call -- it is bytes and not code -- so it is kept
+#: apart from the names `@[external]` accepts.
+SHAPE_SYMBOL: str = "pl4g_io_shape"
+
+
+def shape_of(blob: Blob) -> tuple[int, ...]:
+    """How big the shared record is, how it is aligned, and each field's place.
+
+    Where a field is *and* how wide it is: where alone would not do, a field
+    made narrower being able to leave every offset where it was -- padding takes
+    up what it gave back -- and a reader of the wrong width being exactly what
+    this is here to catch.
+
+    Read out of the bytes the runtime carries rather than written down twice:
+    the C says it once and this reads what the C said.  A test works the same
+    numbers out for the record the `std` module declares, which is what keeps
+    two declarations in two languages from drifting apart silently.
+    """
+    found = blob.symbols.get(SHAPE_SYMBOL)
+    if found is None:
+        return ()
+    piece, offset = found
+    held = blob.pieces[piece].contents
+    # Every number is a machine word, little-endian, which is what all three of
+    # these architectures are.
+    words = 2 * len(_RING_FIELDS) + 2
+    return tuple(int.from_bytes(held[offset + 8 * at:offset + 8 * at + 8],
+                                "little")
+                 for at in range(words))
+
+
+#: The fields of the shared record, in the order the runtime lists them.  The
+#: names are the language's; what they are called in the C is the C's business
+#: and is not compared.
+_RING_FIELDS: tuple[str, ...] = (
+    "state", "fd", "sq_head", "sq_tail", "sq_mask", "sq_array", "sqes",
+    "cq_head", "cq_tail", "cq_mask", "cqes")
+
+
+def ring_fields() -> Sequence[str]:
+    """The fields the shared record has, in the order the runtime lists them."""
+    return _RING_FIELDS
+
+
 def names() -> Sequence[str]:
     """Every name the runtime defines, which is the same set everywhere.
 

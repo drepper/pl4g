@@ -137,6 +137,27 @@ struct pl4g_ring {
   u64 cq_head, cq_tail, cq_mask, cqes;
 };
 
+/* What the language has to agree with about the record it hands over.  The
+ * two declarations are written in two languages and nothing makes them one, so
+ * this is what they are compared through: a test reads these numbers out of the
+ * packaged runtime and works the same ones out for the `@[abi]` record in
+ * `modules/std.pl4g`.  A field added on one side and not the other is then a
+ * failing test rather than a program reading the wrong word. */
+/* Where each field is *and* how wide it is.  Where alone would not do: a field
+ * made narrower can leave every offset where it was -- padding takes up what it
+ * gave back -- and a reader of the wrong width is exactly the bug this is here
+ * to catch. */
+#define FIELD(name) __builtin_offsetof(struct pl4g_ring, name), \
+                    sizeof (((struct pl4g_ring *) 0)->name)
+
+const u64 pl4g_io_shape[] = {
+  sizeof (struct pl4g_ring), _Alignof (struct pl4g_ring),
+  FIELD(state), FIELD(fd),
+  FIELD(sq_head), FIELD(sq_tail), FIELD(sq_mask), FIELD(sq_array),
+  FIELD(sqes),
+  FIELD(cq_head), FIELD(cq_tail), FIELD(cq_mask), FIELD(cqes),
+};
+
 #define UNTRIED 0
 #define READY 1
 #define NO_RING 2

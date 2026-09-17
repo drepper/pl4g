@@ -2451,6 +2451,16 @@ is built freestanding, with no builtin calls -- a call to `memcpy` would be a
 call to something that is not there -- and, on RISC-V, with relaxation off,
 those relocations meaning "a linker may shorten this" and there being no linker.
 
+**The two declarations of the shared record are compared.**  `runtime/io.c` and
+`modules/std.pl4g` each declare the ring, in two languages, and nothing makes
+them one thing -- so the C exports `pl4g_io_shape`, a run of words saying how big
+the record is, how it is aligned, and where each field is *and how wide*, and a
+test works the same numbers out for the `@[abi]` record the module declares.
+Where alone would not do: a field made narrower can leave every offset where it
+was, padding taking up what it gave back, and a reader of the wrong width is
+exactly the bug this is here to catch.  A field added on one side and not the
+other is then a failing test rather than a program reading the wrong word.
+
 **Placing it is the machinery that was already there.**  `target/runtime.py`
 puts each piece in a section of its own -- `.pl4grt.text` and whatever else the
 object had -- defines the names in it by cutting the bytes where a name falls,

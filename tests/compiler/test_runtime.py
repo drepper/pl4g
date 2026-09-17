@@ -85,6 +85,69 @@ def test_every_patch_names_a_fixup_the_target_has(architecture: str) -> None:
         assert one.offset + kind.size <= len(held)
 
 
+def std_ring() -> object:
+    """The record `modules/std.pl4g` hands the runtime, as the compiler sees it.
+
+    Checked as a program, with a second file beside it naming the type: the
+    files given on the command line share one namespace, so a function there may
+    take the record and its parameter is then the type itself.  Reading the
+    module the compiler actually uses is the point -- a copy of the declaration
+    written here would be a third statement of one thing.
+    """
+    from pathlib import Path as _Path
+    from pypl4g.diag.engine import collecting_engine
+    from pypl4g.front.lexer import tokenize
+    from pypl4g.front.parser import parse
+    from pypl4g.ir.module import Module
+    from pypl4g.sema.check import check
+    from pypl4g.sema.modules import ModuleRegistry
+    from pypl4g.source.manager import SourceManager
+
+    sources = SourceManager()
+    std = ROOT / "modules" / "std.pl4g"
+    units = []
+    engine, collected = collecting_engine(None)
+    for path, text in ((std, std.read_text(encoding="utf-8")),
+                       (_Path("probe.pl4g"),
+                        "fn shape(r: &Ring) \N{RIGHTWARDS ARROW} u64:\n    r\N{POSITION INDICATOR}.state\n")):
+        units.append(parse(tokenize(sources.add(path, text), engine),
+                           str(path), engine))
+    module = Module("std")
+    check(module, units, engine, ModuleRegistry(), sources)
+    # Everything but "this is not a program": it is a module and a file naming
+    # one type in it, and neither was ever going to start anything.
+    bad = [d.info.name for d in collected if d.info.severity == "error"
+           and d.info.name != "LANG_FUNCDEF_SPECIAL_NO_STARTUP"]
+    assert bad == [], bad
+    probe = next(f for f in module.functions.values() if f.name == "shape")
+    held = probe.ty.params[0]
+    return held.pointee
+
+
+def test_the_shared_record_is_laid_out_as_the_runtime_reads_it() -> None:
+    """Two declarations in two languages, and nothing but this makes them one.
+
+    A field added on one side and not the other is a program reading the wrong
+    word, which nothing else would catch: the call would be made, the addresses
+    would be right, and every number after the missing field would be somewhere
+    else.
+    """
+    from pypl4g.ir.layout import DataLayout, align_of, offsets_of, size_of
+    from pypl4g.runtime import ring_fields, shape_of
+
+    ring = std_ring()
+    assert [name for name, _ in ring.fields] == list(ring_fields())
+    layout = DataLayout(pointer_size=8)
+    places: list[int] = []
+    for offset, (_, held) in zip(offsets_of(ring, layout), ring.fields):
+        places.extend((offset, size_of(held, layout)))
+    wanted = (size_of(ring, layout), align_of(ring, layout), *places)
+    for architecture in ARCHITECTURES:
+        blob = blob_for(architecture)
+        assert blob is not None
+        assert shape_of(blob) == wanted, architecture
+
+
 def test_the_architectures_agree_on_what_they_define() -> None:
     """One source compiled three ways answers the same names three times."""
     found = {a: sorted(blob_for(a).symbols) for a in ARCHITECTURES  # type: ignore[union-attr]

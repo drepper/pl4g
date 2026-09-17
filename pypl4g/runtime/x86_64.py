@@ -40,6 +40,16 @@ BLOB = Blob(
                   "c174d5488b5338488b4348488b73508b0021c848c1e0044863440608"
                   "ffc1890a5b415c415d415e415f5dc3666666662e0f1f840000000000"
                   "4989c84889d189f231f6e961fdffff")),
+        Piece(name=".rodata", alignment=16,
+              writable=False, executable=False,
+              contents=bytes.fromhex(
+                  "58000000000000000800000000000000000000000000000008000000"
+                  "00000000080000000000000008000000000000001000000000000000"
+                  "08000000000000001800000000000000080000000000000020000000"
+                  "00000000080000000000000028000000000000000800000000000000"
+                  "30000000000000000800000000000000380000000000000008000000"
+                  "00000000400000000000000008000000000000004800000000000000"
+                  "080000000000000050000000000000000800000000000000")),
         Piece(name=".rodata.cst8", alignment=2,
               writable=False, executable=False,
               contents=bytes.fromhex(
@@ -47,12 +57,13 @@ BLOB = Blob(
     ),
     symbols={
         "pl4g_io_read": (0, 672),
+        "pl4g_io_shape": (1, 0),
         "pl4g_io_write": (0, 0),
     },
     patches=(
         Patch(piece=0, offset=292, kind="pcrel32_at_field",
-              target=1, addend=-4),
+              target=2, addend=-4),
         Patch(piece=0, offset=451, kind="pcrel32_at_field",
-              target=1, addend=-4),
+              target=2, addend=-4),
     ),
 )
