@@ -5813,6 +5813,15 @@ by every convention there is, so the rule costs nothing and asks for nothing.
 Turned down: a layout-only meaning, which would leave a by-value `@[abi]` record
 wrong at the boundary with nothing saying so.
 
+**A function defined somewhere else is impure by being external.**  Nothing here
+can see what it does, so it is taken to do everything, which is the rule a call
+through a value already follows.  Found by testing rather than by reasoning: a
+call to one the program had not marked `@[impure]` was silently dropped at every
+optimisation level, the write removed and nothing printed, with no diagnostic
+anywhere.  A program that meant to do I/O and quietly did not is the worst kind
+of wrong, and a promise the compiler cannot check is not worth offering -- so
+there is no way to declare an external function pure.
+
 **A function with no body is a declaration**, and what says there is none is
 that the line ends after the header.  A body begins with `:` or `{`, so the two
 readings never both hold, and anything else after a header is the error it

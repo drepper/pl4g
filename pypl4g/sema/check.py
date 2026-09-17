@@ -2697,6 +2697,13 @@ class Checker:
                     # compile.
                     external = attr.as_str("symbol")
                     abi = SYSTEM_CCONV
+                    # And impure by being external.  Nothing here can see what
+                    # it does, so it is taken to do everything -- which is the
+                    # rule a call through a value already follows, asked here
+                    # of a call to a body that is not in this compilation.
+                    # Believing one pure would let a call nobody read be
+                    # dropped, and the I/O would go with it.
+                    impure = True
                 case "align":
                     extra["align"] = attr.as_int("bytes")
                 case "section":

@@ -3624,6 +3624,11 @@ accepts are the ones the packaged runtime defines (4595) -- which is what makes 
 it is written rather than left to whatever reads the image.  The call follows the system's convention, which is what lets the two
 sides agree without either knowing how the other compiles a call of its own.
 
+**Such a function is impure by being external**, so `@[impure]` need not be written and a pure function that calls one is refused
+(4480).  Nothing here can see what it does, so it is taken to do everything -- the rule a call through a value already follows,
+asked of a call to a body that is not in this compilation.  Believing one pure would let a call nobody read be dropped, and the
+I/O would go with it.
+
 **`@[abi]` on a record says it is laid out the way one compiled by something else is**: the fields are never reordered, and
 **only a reference to one crosses a call** (4596).  Something compiled by something else passes a record by rules of its own --
 rules this compiler does not follow and does not have to, a reference being passed the same way by every convention there is.

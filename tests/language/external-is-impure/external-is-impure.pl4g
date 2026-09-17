@@ -1,0 +1,36 @@
+※ pl4g-test: compile=error diag=4480
+
+※ A function defined somewhere else is one nothing here can see into, so it is
+※ taken to do everything: `@[external]` says impure by saying external, and a
+※ pure function that calls one is refused.
+※
+※ **What it stops is worse than what it refuses.**  Believing such a function
+※ pure would let a call nobody read be dropped -- which is exactly what happened
+※ before this rule: the write was removed at every optimisation level and the
+※ program printed nothing, with no diagnostic anywhere.  A program that meant to
+※ do I/O and silently did not is the worst kind of wrong.
+※
+※ It is the rule a call through a value already follows, asked here of a call to
+※ a body that is not in this compilation.  Compare **C**, where a declaration
+※ says nothing about effects and a compiler must assume the worst for the same
+※ reason; **Rust**, where an `extern "C"` function is `unsafe` to call and the
+※ word covers this among much else; **Haskell**, whose foreign import says `IO`
+※ or promises purity, and where promising wrongly is the programmer's to answer
+※ for.
+
+@[abi]
+type Ring = state : u64 ; fd : u64
+
+@[external("pl4g_io_write")]
+fn io_write(r: &mut Ring, fd: i32, at: u64, len: u64) → i64
+
+let ring: mut Ring = Ring(.state ← 0u64, .fd ← 0u64)
+
+fn reads_nothing() → u6:
+    let m: u8⟦1⟧ = ⟦10u8⟧
+    _ ← io_write(&mut ring, 2i32, ⎕address(&m⟦0⟧), 1u64)
+    0u6
+
+@[startup, impure]
+fn main() → u6:
+    reads_nothing()

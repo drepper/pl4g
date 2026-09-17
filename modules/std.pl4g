@@ -55,10 +55,10 @@ let ring: mut Ring = Ring(
     .sqes ← 0u64,
     .cq_head ← 0u64, .cq_tail ← 0u64, .cq_mask ← 0u64, .cqes ← 0u64)
 
-@[external("pl4g_io_write"), impure]
+@[external("pl4g_io_write")]
 fn io_write(r: &mut Ring, fd: i32, at: u64, len: u64) → i64
 
-@[external("pl4g_io_read"), impure]
+@[external("pl4g_io_read")]
 fn io_read(r: &mut Ring, fd: i32, at: u64, len: u64) → i64
 
 ※ -- what a program calls ---------------------------------------------------
