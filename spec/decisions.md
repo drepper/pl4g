@@ -5955,6 +5955,41 @@ Compare: **Rust**'s `as_bytes`, this exactly and free for the same reason;
 because its strings are not UTF-8; **C**, where a string *is* its bytes and the
 question cannot be asked.
 
+## 2026-09-18T08:00+02:00 — language
+
+**What a program is started with is an object it holds, and what it is handed is
+where that object is**
+
+At the user's direction, and a change from what landed a day earlier: the
+startup function took `std.Init` by value, arriving as its three leaves in three
+registers.  It now takes `&mut std.Init`, and the record is an object of the
+writable data that the image carries, filled in before anything runs.
+
+**Two things follow that could not before.**  The record may *grow* -- the
+arguments, the environment, whatever else arrives with a program -- without the
+one signature every program writes changing, which is the reason `Init` was a
+record rather than three descriptors in the first place and which passing it by
+value quietly gave up: three leaves in three registers is a convention that
+breaks the moment there are four.  And a program may **change what it was
+started with**: `init⌖.io.output ← std.Writer(.fd ← 2i32)` makes what it writes
+go where it reports, which a value handed over in registers could not be made to
+do.
+
+**Laid out by the program's own declaration.**  `part_offsets_of` says where each
+descriptor goes, which is the same place a field read anywhere else comes from,
+so a field added to `Io` is one the entry point fills in without being told.  It
+asserts there are as many leaves as descriptors rather than filling in part way.
+
+A program that takes no parameter carries no such object and no writable data at
+all, which is what it did before and what most programs will do.
+
+Compare: **C**, whose `main` is handed `argc` and `argv` by value and whose
+environment is a global; **Rust**, where `std::env::args` is a call into the
+runtime and nothing is handed to `main` at all; **Go**, the same; **Zig**, whose
+`std.process.args` is likewise a call.  This hands over one address and lets the
+program see everything through it, which is the shape that grows without
+anything being rewritten.
+
 Open questions
 --------------
 

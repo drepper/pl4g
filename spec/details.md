@@ -2571,13 +2571,18 @@ defines for itself and calls `Init` is a record it defined for itself and is
 refused (4404).
 
 `Init` holds an `Io`, which holds three descriptors, each of them a record around
-the number the kernel knows; flattened, `parts_of(Init)` is three `i32`s.  The
-entry point puts the numbers every system opens them under -- 0, 1 and 2 -- into
-the registers `argument_places` says that one argument arrives in, and calls the
-startup function.  `target/started.py` is where both of those live, so each of
-the three entry points only has to know how to write a number into a register;
-it asserts that there are as many registers as descriptors, which is what catches
-a field added to `Io` on one side and not the other.
+the number the kernel knows.  **What the image carries is the record**, an object
+in the writable data called `__pl4g_init`, laid out by the program's own
+declaration of the type: `part_offsets_of` says where each descriptor goes, which
+is the same place a field read anywhere else comes from, so a field added to `Io`
+is one the entry point fills in without being told.  It asserts that there are as
+many leaves as descriptors, which is what catches a record that grew otherwise
+rather than filling it in part way.
+
+The entry point loads that object's address into the register the convention
+names for one argument, and calls.  `target/started.py` is where all of it
+lives, so each of the three entry points only has to know how to put an address
+in a register.
 
 A program that writes no parameter is started with those registers as the kernel
 left them, which is most of them and is what every test written before this does.

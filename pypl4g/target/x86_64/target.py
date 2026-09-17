@@ -25,6 +25,7 @@ from ..faults import Messages
 from ..tests import failures_of
 from ..pool import Constants
 from ..registry import architecture_of
+from .. import started
 from ..runtime import Runtime, reaches
 from ...runtime import blob_for
 from .fixups import BY_NAME
@@ -171,6 +172,9 @@ class X86_64Target:
         # operations it can emit.
         settle_vectors(module, self.vectors, layout)
         emit_globals(asm, module, layout)
+        # What the program was started with, where it takes it: an object of the
+        # writable data, laid out by the program's own declaration of the type.
+        started.emit(asm, module, layout)
         asm.section(".text", executable=True,
                     alignment=self.image_defaults().text_alignment)
         # What each function turned out to destroy, so that a call to one saves

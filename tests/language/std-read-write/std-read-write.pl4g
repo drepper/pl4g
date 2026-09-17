@@ -28,7 +28,7 @@
 let std := ⎕import("std")
 
 @[startup, impure]
-fn main(init: mut std.Init) → u6:
+fn main(init: &mut std.Init) → u6:
     let ends: mut i32⟦2⟧ = ⟦0i32, 0i32⟧
     if ⎕syscall(⎕sc@pipe2, &mut ends⟦0⟧, 0i64) < 0i64:
         1u6

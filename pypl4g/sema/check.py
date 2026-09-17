@@ -822,16 +822,26 @@ def _every_value_fits(found: IntType, into: IntType) -> bool:
 
 
 def _is_startup_argument(ty: Type) -> bool:
-    """Whether *ty* is the record a program is started with.
+    """Whether *ty* is a reference to the record a program is started with.
 
-    By where it was written down and not by its shape: a record a program
-    defines for itself and calls `Init` is a record it defined for itself, and
-    the compiler passes the descriptors to nothing but the one type it knows.
+    A reference and not the record: what the program is started with is an
+    object the image carries, so what the entry point hands over is where it is.
+    That is what lets it grow -- the arguments, the environment, whatever else
+    arrives -- without the signature every program writes changing, and what
+    lets the program write into it.
+
+    Which record it is, is settled by where it was written down and not by its
+    shape: one a program defines for itself and calls `Init` is a record it
+    defined for itself, and the compiler hands the descriptors to nothing but
+    the one type it knows.
     """
-    if not isinstance(ty, ProductType) \
-            or ty.name != STARTUP_ARGUMENT_TYPE_NAME or ty.origin is None:
+    if not isinstance(ty, PtrType):
         return False
-    return any(Path(ty.origin) == (where / STD_MODULE_NAME).with_suffix(SUFFIX)
+    held = ty.pointee
+    if not isinstance(held, ProductType) \
+            or held.name != STARTUP_ARGUMENT_TYPE_NAME or held.origin is None:
+        return False
+    return any(Path(held.origin) == (where / STD_MODULE_NAME).with_suffix(SUFFIX)
                for where in system_modules())
 
 

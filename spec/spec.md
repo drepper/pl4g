@@ -4330,19 +4330,25 @@ fn main() → u6:
 let std := ⎕import("std")
 
 @[startup, impure]
-fn main(init: mut std.Init) → u6:
+fn main(init: &mut std.Init) → u6:
     ※ the devices the process inherited, as descriptors and not as numbers
-    if std.write(&mut init.io.output, greeting) < 0i64: 1u6 else: 0u6
+    ⎕drop(std.write(&mut init⌖.io.output, ⎕bytes("hello\n")) ?? 0)
+    0u6
 ```
 
-The value it returns becomes the exit status of the process.  The one parameter it may take is **the record the `std` module calls
-`Init`**, and no other: the entry point has the devices the process inherited to hand over and nothing else, so a parameter of any
-other type would be left undefined (4404).  It is `Init` rather than the descriptors themselves so that the arguments, the
-environment and whatever else a program is started with have somewhere to go without changing the one signature every program
-writes.  Which type that is is settled by where it was written down -- the `std` module the installation provides -- and not by its
-shape, so a record a program defines for itself and calls `Init` is a record it defined for itself.
+The value it returns becomes the exit status of the process.  The one parameter it may take is **a reference to the record the
+`std` module calls `Init`**, and no other: the entry point has the devices the process inherited to hand over and nothing else, so
+a parameter of any other type would be left undefined (4404).  It is `Init` rather than the descriptors themselves so that the
+arguments, the environment and whatever else a program is started with have somewhere to go without changing the one signature
+every program writes.  Which type that is is settled by where it was written down -- the `std` module the installation provides --
+and not by its shape, so a record a program defines for itself and calls `Init` is a record it defined for itself.
 
-`init.io.input`, `init.io.output` and `init.io.errors` are what the process inherited open.  Taking `&mut init.io.output` is
+**What is handed over is where it is.**  The record is an object the image carries, in the writable data, filled in before the
+program starts; the entry point passes its address and nothing else.  That is what lets the record *grow* without this signature
+changing, and what lets a program **change what it was started with** -- `init⌖.io.output ← std.Writer(.fd ← 2i32)` makes what it
+writes go where it reports.  A program that takes no parameter carries no such object.
+
+`init⌖.io.input`, `init⌖.io.output` and `init⌖.io.errors` are what the process inherited open.  Taking `&mut init⌖.io.output` is
 exclusive by the rule that already refuses a second `&mut` to a place, so **two names for one device is a thing the compiler
 refuses rather than a thing a lock prevents**, and nothing is checked while the program runs.
 
