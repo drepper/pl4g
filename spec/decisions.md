@@ -5920,6 +5920,41 @@ a fast one; **C#**, whose `Enum.IsDefined` is a library call over reflection;
 **C**, where an enumeration holds any number of its underlying type and the
 question cannot be asked.
 
+## 2026-09-18T07:00+02:00 — language
+
+**Three descriptors and no way to open anything, and `⎕bytes` for writing text**
+
+The user settled the scope: there is no `open` call and no representation for a
+file name, and what a program has is standard input, output and error on the
+descriptors every system gives them.  `std.write` is the free function that
+writes, taking the writer first and writing unbuffered.
+
+All of that was already built but for one thing: **a program could not write
+text.**  `write` takes bytes, which is what a device takes, and nothing reached
+inside a string -- there is no index, the *n*-th byte of UTF-8 not being the
+*n*-th character, and `#` answers characters.
+
+`⎕bytes(TEXT)` answers them.  It costs nothing: a string and an array of bytes
+whose length is not in its type are the same two words, so it says which of the
+two is meant and emits no instruction.
+
+**Saying it is the point.**  Turned down: letting a string stand where bytes are
+wanted, which every other conversion in this language refuses to do on its own,
+and which would make a walk over characters and a walk over bytes read alike.
+Also turned down: `write` taking a `str`, which would read better at the one call
+site and leave a program with a buffer of bytes -- what `read` fills -- unable to
+write it back.
+
+**The error list is what a read or a write can give.**  With no way to open
+anything, the refusals that belong to opening were names nothing could reach, and
+each was a comparison every program paid for: four went, two that reading and
+writing really do give came in.
+
+Compare: **Rust**'s `as_bytes`, this exactly and free for the same reason;
+**Go**'s `[]byte(s)`, which copies; **Java**'s `getBytes`, which takes a charset
+because its strings are not UTF-8; **C**, where a string *is* its bytes and the
+question cannot be asked.
+
 Open questions
 --------------
 

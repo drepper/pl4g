@@ -208,8 +208,9 @@ To Do List for the PL4g language
     through `@[external]` and handed the ring as an `@[abi]` record.  qemu-user has no `io_uring`, so where one cannot be made the
     calls go straight to the kernel and every test still runs on all three targets.
 
-[ ] use `ReadWriter`.  The type is exported and nothing answers one: what would is opening a file or a socket, which wants a path
-    and so wants a `str` the kernel can read -- a NUL-terminated one, which this language has no way to write.
+[ ] use `ReadWriter`.  The type is exported and nothing answers one, and nothing will while the three inherited descriptors are
+    all there is -- the user settled on 2026-09-18 that there is no `open` call and no representation for a file name.  It is
+    declared for what will answer one.
 
 [ ] say how long a buffer handed to the runtime must last.  `std` hands over the buffer's address as a number, so nothing relates
     the two at all: the request is complete before the call returns and that is a property of the runtime's design rather than of
@@ -244,8 +245,12 @@ To Do List for the PL4g language
     `other`, which loses which one it was.  The tidy answer is a record of a named kind and the raw number -- but a record as a
     result's error is a part that is itself several values, which `parts_of` and `through_storage` would both have to be taught.
 
-[ ] write a `str`.  `std.write` takes `u8⟦⟧` and a `str` is characters, so a program with text to
-    write has no way to say so.  Either a `str` answers its bytes, or `write` takes either.
+[x] write a `str`.  Done on 2026-09-18: `⎕bytes(TEXT)` answers what a string is made of, which is what a device takes.
+
+[ ] stop a program writing through the bytes of a literal.  `⎕bytes` answers a `u8⟦⟧` over bytes that may be the image's, and
+    nothing says an array may not be written; bound to a `mut` name and assigned into, it would write where the image is and the
+    program would fault.  It is the fixed-array question below asked of something that is definitely not writable, and the two
+    want one answer.
 
 [x] ask which variant a sum holds: `match`.  Done, and it takes an enumeration and a result apart as well.  A result and an
     enumeration run; for a sum every rule about the arms is checked and the compiler then says it cannot generate for one, what is

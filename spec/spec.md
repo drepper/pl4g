@@ -227,6 +227,10 @@ fn write(to: &mut Writer, what: u8⟦⟧) → u64 ¤size ? Error
 fn read(from: &mut Reader, into: u8⟦⟧) → u64 ¤size ? Error
 ```
 
+**The three a process inherits are the only devices there are.**  There is no way to open anything and no way to write down the
+name of a file: what a program has is `init.io.input`, `init.io.output` and `init.io.errors`, on the descriptors every system
+gives them.  `ReadWriter` is declared for what will answer one and nothing answers one yet.
+
 **A descriptor is a type and not a number.**  What says a thing may be written is the type of the name standing for it, so there is
 no way to hand a `Reader` to `write` and no way to write to a number a program made up.  The three a process inherits arrive in
 `init.io`, which is what the startup function may take.
@@ -241,7 +245,21 @@ done, and answer nought.
 **What the kernel said comes back named.**  `Error` is an enumeration whose numbers are the kernel's own, so a reader who knows
 what `EAGAIN` means knows what `would_block` is, and whose names are the language's, so a reader who does not need not learn them.
 `other` is what anything the list does not name comes to, which is honest about a list that is not the whole table rather than
-pretending it is.
+pretending it is.  What is named is what a read or a write of an inherited descriptor can actually give: a refusal that belongs to
+opening is not there, because a name nothing can reach is a comparison every program pays for and none of them needs.
+
+**Every write is one request and nothing is held back.**  A program that wants fewer, larger writes makes them itself; there is
+nothing between it and the device.
+
+**Text is written as its bytes**, which `⎕bytes` answers:
+
+```
+⎕drop(std.write(&mut init.io.output, ⎕bytes("hello\n")) ?? 0)
+```
+
+A device takes bytes and a program has text, and the two are not one thing said twice: a string is UTF-8 and says so, and this is
+where the encoding is named.  It costs nothing -- a string and an array of bytes whose length is not in its type are the same two
+words -- and saying it is the point, since `#` answers characters of the one and bytes of the other.
 
 **Everything goes through `io_uring` where there is one.**  A ring is made on the first read or write anything does and driven by
 hand: a submission entry filled in, the index published with a releasing write, `io_uring_enter`, and the completion tail read with
@@ -1756,6 +1774,21 @@ bytes it is and a turn moves it on by however many that character took.
 **There is no index and no length.**  The *n*-th byte of UTF-8 is not the *n*-th character, so an index whose obvious reading is
 wrong is worse than no index; a walk is what a string offers, and it reaches the characters in order because that is the order
 they are encoded in.
+
+**`⎕bytes(TEXT)` answers what it is made of**, as a `u8⟦⟧` (4597 for anything that is not text):
+
+```
+let raw: u8⟦⟧ = ⎕bytes("a£€")      ※ three characters, six bytes
+```
+
+It costs nothing: a string and an array of bytes whose length is not in its type are the same two words, so this says which of the
+two is meant and emits no instruction.  Saying it is the point -- `#` answers characters of the one and bytes of the other -- and
+it is the compiler's name because nothing else in the language reaches inside a string.  It is how text goes to anything that
+takes bytes, a device among them, and being the one thing that answers them is what names the encoding.
+
+Compare: **Rust**'s `as_bytes`, which is this exactly and free for the same reason; **Go**'s `[]byte(s)`, which copies because a
+Go string is immutable and a slice is not; **Java**'s `getBytes`, which takes a charset because its strings are not UTF-8; **C**,
+where a string *is* its bytes and the question cannot be asked.
 
 **All six comparisons are defined on strings**, and the order is the order the code points are in -- the first character that
 differs deciding, and a string that is a prefix of another coming first.

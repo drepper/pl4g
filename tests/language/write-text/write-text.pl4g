@@ -1,0 +1,53 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ Writing text: `std.write` takes the bytes, and `⎕bytes` is what a string
+※ answers them with.
+※
+※ **A device takes bytes.**  What a program has is text, and the two are not the
+※ same thing said twice: a string is UTF-8 and says so, and `⎕bytes` is where the
+※ encoding is named.  A language where one became the other on its own would be
+※ one where a walk over characters and a walk over bytes read alike.
+※
+※ **It costs nothing.**  A string and an array of bytes whose length is not in
+※ its type are the same two words -- where they are and how many there are -- so
+※ this says which of the two is meant and emits no instruction.  `#` on the two
+※ answers different numbers, which is the whole reason they are different types:
+※ five characters here and eleven bytes.
+※
+※ **It is the compiler's name because nothing in the language reaches inside a
+※ string.**  There is no index -- the *n*-th byte of UTF-8 is not the *n*-th
+※ character -- and `#` answers characters, so what a value of one *is* has no
+※ other way out.
+※
+※ **Unbuffered**: each call is one request, and nothing is held back.  A program
+※ that wants fewer, larger writes makes them itself.
+※
+※ Compare: **Go**, whose `[]byte(s)` is this and copies, where this does not;
+※ **Rust**, whose `as_bytes` is this exactly and is free for the same reason;
+※ **C**, where a string *is* its bytes and the question cannot be asked; **Java**,
+※ whose `getBytes` takes a charset because its strings are not UTF-8.
+
+let std := ⎕import("std")
+
+@[startup, impure]
+fn main(init: mut std.Init) → u6:
+    ※ a literal, written straight out
+    let first: u64 ¤size = std.write(&mut init.io.errors,
+                                     ⎕bytes("hello\n")) ?? 0
+    ※ text whose characters are wider than a byte
+    let text: str = "a£€𐀀\n"
+    let second: u64 ¤size = std.write(&mut init.io.errors, ⎕bytes(text)) ?? 0
+    ※ and the bytes bound to a name, which is an array like any other
+    let raw: u8⟦⟧ = ⎕bytes(text)
+    if first ≠ 6:
+        1u6
+    elif #text ≠ 5:
+        2u6
+    elif second ≠ 11:
+        3u6
+    elif #raw ≠ 11:
+        4u6
+    elif raw⟦0⟧ ≠ 97u8:
+        5u6
+    else:
+        0u6

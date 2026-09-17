@@ -16,7 +16,7 @@ from ..diag import ids as D
 from ..diag.engine import DiagEngine, Expectation
 from ..front import ast
 from ..front.token import (ACQUIRE_NAME, RELEASE_NAME, AT_NAME, SPAN_NAME,
-                           ADDRESS_NAME,
+                           ADDRESS_NAME, BYTES_NAME,
                            WIDEN_NAME,
                            BOTTOM_GLYPH, BUILTIN_GLYPH, CHR_NAME, DEREF_GLYPH,
                            LIFETIME_GLYPH,
@@ -10598,6 +10598,9 @@ class Checker:
                 and expr.callee.name == ADDRESS_NAME:
             return self._lower_address_of(builder, expr, expected)
         if isinstance(expr.callee, ast.NameRef) \
+                and expr.callee.name == BYTES_NAME:
+            return self._lower_bytes(builder, expr, expected)
+        if isinstance(expr.callee, ast.NameRef) \
                 and expr.callee.name == TYPEOF_NAME:
             # Reaching here means it stood somewhere a value was wanted, since
             # a condition the compiler settles never lowers what is in it.
@@ -11032,6 +11035,43 @@ class Checker:
         made = builder.make_tuple(
             (place, self._as_count(builder, count, counting, expr.span)),
             answer, expr.span)
+        if not self._accepts(expected, answer):
+            self._report_mismatch(expr.span, answer, expected)
+            return UndefConst(ERROR)
+        return made
+
+    def _lower_bytes(self, builder: IRBuilder, expr: ast.Call,
+                     expected: Type | None) -> Value:
+        """Lower `⎕bytes(TEXT)`: what a string is made of.
+
+        The compiler's name because nothing in the language reaches inside a
+        string: there is no index, `#` answers characters, and what a value of
+        one *is* -- where the bytes are and how many there are -- is the
+        representation's business.
+
+        **It costs nothing.**  A string and an array of bytes whose length is
+        not in its type are the same two words, so this says which of the two is
+        meant and emits no instruction of its own.  Saying it is the point: a
+        language where one became the other on its own would be a language where
+        a walk over characters and a walk over bytes read alike.
+        """
+        if len(expr.args) != 1:
+            self._diags.emit(D.LANG_CALL_WRONG_ARGUMENT_COUNT, expr.span,
+                             name=BYTES_NAME, expected=1, found=len(expr.args))
+            return UndefConst(ERROR)
+        given = self._lower_expr(builder, expr.args[0], STR)
+        found = self._value_type_of(given)
+        if found is ERROR:
+            return UndefConst(ERROR)
+        if found is not STR:
+            self._diags.emit(D.LANG_BYTES_NOT_TEXT, expr.args[0].span,
+                             found=found.render())
+            return UndefConst(ERROR)
+        answer = self._module.types.array_type(U8, (None,))
+        parts = parts_of(STR)
+        made = builder.make_tuple(
+            tuple(builder.extract(given, at, one, expr.span)
+                  for at, one in enumerate(parts)), answer, expr.span)
         if not self._accepts(expected, answer):
             self._report_mismatch(expr.span, answer, expected)
             return UndefConst(ERROR)

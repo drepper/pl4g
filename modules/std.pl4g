@@ -39,7 +39,12 @@ type Init = io : Io
 ※ knows what `would_block` is; the names are the language's, so a reader who
 ※ does not need not learn them.  `other` is what anything this list does not
 ※ name comes to -- honest about what it cannot say rather than pretending the
-※ list is closed, and the entry in the to-do list is to name the whole table.
+※ list is closed.
+※
+※ What is named is what a read or a write of a descriptor the program was
+※ started with can actually give.  There is no way to open anything, so the
+※ refusals that belong to opening are not here: a name nothing can reach would
+※ be a comparison every program pays for and none of them needs.
 @[export]
 enum Error:
     other = 0 ;
@@ -48,18 +53,14 @@ enum Error:
     not_a_device = 9 ;       ※ EBADF
     would_block = 11 ;       ※ EAGAIN
     no_memory = 12 ;         ※ ENOMEM
-    bad_address = 14 ;       ※ EFAULT
     not_allowed = 13 ;       ※ EACCES
-    busy = 16 ;              ※ EBUSY
-    not_there = 2 ;          ※ ENOENT
+    bad_address = 14 ;       ※ EFAULT
     is_a_directory = 21 ;    ※ EISDIR
     invalid = 22 ;           ※ EINVAL
-    too_many_open = 24 ;     ※ EMFILE
+    too_big = 27 ;           ※ EFBIG
     no_room = 28 ;           ※ ENOSPC
     broken_pipe = 32 ;       ※ EPIPE
-    not_supported = 38 ;     ※ ENOSYS
-    reset = 104 ;            ※ ECONNRESET
-    refused = 111            ※ ECONNREFUSED
+    reset = 104              ※ ECONNRESET
 
 ※※ What the kernel answered, read as one of those.
 ※

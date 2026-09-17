@@ -206,6 +206,14 @@ RELEASE_NAME: Final[str] = "".join((BUILTIN_GLYPH, "release"))
 AT_NAME: Final[str] = "".join((BUILTIN_GLYPH, "at"))
 SPAN_NAME: Final[str] = "".join((BUILTIN_GLYPH, "span"))
 
+#: The bytes a string is made of.  The compiler's name because nothing in the
+#: language reaches inside a string: there is no index, `#` answers characters,
+#: and what a value of one *is* -- where the bytes are and how many there are --
+#: is the representation's business.  It is how text reaches anything that takes
+#: bytes, a device among them, and it says which encoding is being written by
+#: being the one thing that answers them.
+BYTES_NAME: Final[str] = "".join((BUILTIN_GLYPH, "bytes"))
+
 #: And the way back: a place as the number it is.  The inverse of `⎕at`, and
 #: the compiler's name for the same reason -- what a program does with a number
 #: that was a place is nothing the compiler can check.  It is what a program has

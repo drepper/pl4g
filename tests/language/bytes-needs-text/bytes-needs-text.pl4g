@@ -1,0 +1,12 @@
+※ pl4g-test: compile=error diag=4597
+
+※ What a string is made of is bytes, and what it is encoded as is UTF-8, so the
+※ bytes of one are a thing to ask for.  Nothing else in this language has bytes
+※ to answer with: an array already is its elements, and a number is a number
+※ whatever width it is held in.
+
+@[startup, impure]
+fn main() → u6:
+    let n: u32 = 5u32
+    let b: u8⟦⟧ = ⎕bytes(n)
+    if #b = 4: 0u6 else: 1u6

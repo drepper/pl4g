@@ -6743,6 +6743,27 @@
       "option": null
     },
     {
+      "number": 4597,
+      "name": "LANG_BYTES_NOT_TEXT",
+      "severity": "error",
+      "message": "'\u2395bytes' answers the bytes of text, and this is '{found}'",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type that was written"
+        }
+      ],
+      "cause": "What a string is made of is bytes, and what it is encoded as is UTF-8, so the bytes of one are a thing to ask for.  Nothing else in this language has bytes to answer with: an array already is its elements, and a number is a number whatever width it is held in.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Strings"
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 5001,
       "name": "LANG_STMT_UNREACHABLE",
       "severity": "warning",
