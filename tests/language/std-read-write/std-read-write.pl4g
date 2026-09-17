@@ -37,14 +37,21 @@ fn main(init: mut std.Init) → u6:
         let source: mut std.Reader = std.Reader(.fd ← ends⟦0⟧)
         let sent: u8⟦4⟧ = ⟦1u8, 2u8, 3u8, 4u8⟧
         let back: mut u8⟦4⟧ = ⟦0u8, 0u8, 0u8, 0u8⟧
-        if std.write(&mut sink, sent) ≠ 4i64:
+        ※ how many bytes went, or why none did
+        let went: u64 ¤size = std.write(&mut sink, sent) ?? 0
+        let came: u64 ¤size = std.read(&mut source, back) ?? 0
+        if went ≠ 4:
             2u6
-        elif std.read(&mut source, back) ≠ 4i64:
+        elif came ≠ 4:
             3u6
         elif back⟦0⟧ ≠ 1u8 ∨ back⟦3⟧ ≠ 4u8:
             4u6
-        ※ and one the program started with, which is the whole point of `Init`
-        elif std.write(&mut init.io.errors, ⟦⟧) ≠ 0i64:
-            5u6
+        ※ a descriptor nothing opened, which the kernel refuses and which comes
+        ※ back named rather than as a number
         else:
-            0u6
+            let nowhere: mut std.Writer = std.Writer(.fd ← 77i32)
+            match std.write(&mut nowhere, sent):
+                u64 ¤size:
+                    5u6
+                ⊥(why):
+                    if why = std.Error.not_a_device: 0u6 else: 6u6

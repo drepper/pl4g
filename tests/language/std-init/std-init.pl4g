@@ -37,8 +37,11 @@ fn main(init: mut std.Init) → u6:
         2u6
     elif init.io.errors.fd ≠ 2i32:
         3u6
-    ※ and one of them written through, which answers how many bytes went
-    elif std.write(&mut init.io.output, message) ≠ 6i64:
-        4u6
     else:
-        0u6
+        ※ and one of them written through, which answers how many bytes went or
+        ※ why none did
+        match std.write(&mut init.io.output, message):
+            u64 ¤size(n):
+                if n = 6: 0u6 else: 4u6
+            ⊥:
+                5u6

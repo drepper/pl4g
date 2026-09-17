@@ -5835,6 +5835,54 @@ whose cgo compiles the C as part of the build and pays a calling-convention
 crossing for it; **Java**, whose JNI is the same two halves with a much wider
 boundary.
 
+## 2026-09-18T05:00+02:00 — language
+
+**`std.read` and `std.write` answer a result, and the error is a named thing**
+
+**Decided here rather than asked about.**  The user was offered the question
+three times and said "continue" each time, which is direction to get on with it;
+so this is mine, it is written down with what was turned down, and it is cheap to
+overrule -- the whole of it is one enumeration and one function in
+`modules/std.pl4g`.
+
+The design of 2026-09-17 wrote the signature as `→ u64 ¤size?`, a result with no
+error value at all.  That is not what landed: losing *why* a write failed is the
+thing a caller most wants and the thing hardest to get back.  What landed is
+`→ u64 ¤size ? Error`.
+
+**`Error` is an enumeration whose numbers are the kernel's own.**  A reader who
+knows what `EAGAIN` means knows what `would_block` is, and a reader who does not
+need not learn the numbers.  Eighteen of them are named -- the ones a read, a
+write or an open can give -- and `other` is what anything else comes to.
+
+Turned down, and why:
+
+- **The kernel's number, as an `i32`.**  Loses nothing and is what the kernel's
+  own interface is, but it is a number where this language has spent the whole
+  I/O design making things types: a descriptor is a type and not a number, and an
+  error should not be the exception.
+- **An enumeration the *compiler* provides**, as `⎕narrowing` is.  The errno
+  table is the system's and changes with it, which makes it the library's
+  business and not the language's.
+- **A record of a named kind and the raw number**, which loses nothing at all.
+  A record as a result's error is a part that is itself several values, which is
+  the one shape `parts_of` and `through_storage` would both have to be taught;
+  it is the right answer eventually and is in the to-do list.
+
+**What `other` costs** is the number, for an errno the list does not name.  That
+is the known hole, and naming the whole table is what closes it.
+
+Also here: **a value of an enumeration another module exports may be named**,
+`std.Error.would_block` being the two readings of the mark one after the other
+rather than a third one.  It was simply missing.
+
+Compare: **Rust**, whose `io::Error` carries the raw number and a kind, which is
+the record turned down above; **Go**, whose `error` is an interface and whose
+`syscall.Errno` is the number with names beside it; **Zig**, whose error sets are
+exactly this enumeration and which has no `other` because the set is closed by
+the compiler; **Haskell**, whose `IOException` carries a kind and the text;
+**C**, where it is `errno` and a global.
+
 Open questions
 --------------
 

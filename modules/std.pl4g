@@ -33,6 +33,78 @@ type Io = input : Reader ; output : Writer ; errors : Writer
 @[export]
 type Init = io : Io
 
+※※ What the kernel said, where it refused.
+※
+※ The numbers are the kernel's own, so a reader who knows what `EAGAIN` means
+※ knows what `would_block` is; the names are the language's, so a reader who
+※ does not need not learn them.  `other` is what anything this list does not
+※ name comes to -- honest about what it cannot say rather than pretending the
+※ list is closed, and the entry in the to-do list is to name the whole table.
+@[export]
+enum Error:
+    other = 0 ;
+    interrupted = 4 ;        ※ EINTR
+    device = 5 ;             ※ EIO
+    not_a_device = 9 ;       ※ EBADF
+    would_block = 11 ;       ※ EAGAIN
+    no_memory = 12 ;         ※ ENOMEM
+    bad_address = 14 ;       ※ EFAULT
+    not_allowed = 13 ;       ※ EACCES
+    busy = 16 ;              ※ EBUSY
+    not_there = 2 ;          ※ ENOENT
+    is_a_directory = 21 ;    ※ EISDIR
+    invalid = 22 ;           ※ EINVAL
+    too_many_open = 24 ;     ※ EMFILE
+    no_room = 28 ;           ※ ENOSPC
+    broken_pipe = 32 ;       ※ EPIPE
+    not_supported = 38 ;     ※ ENOSYS
+    reset = 104 ;            ※ ECONNRESET
+    refused = 111            ※ ECONNREFUSED
+
+※※ What the kernel answered, read as one of those.
+※
+※ An if and not a match: a match takes a value of a sum apart and this is a
+※ number the kernel chose, so what turns one into the other is a comparison per
+※ name.  Written once here rather than at every call.
+fn as_error(n: i64) → Error:
+    let code: i64 = 0i64 - n
+    if code = 4i64:
+        Error.interrupted
+    elif code = 5i64:
+        Error.device
+    elif code = 9i64:
+        Error.not_a_device
+    elif code = 11i64:
+        Error.would_block
+    elif code = 12i64:
+        Error.no_memory
+    elif code = 13i64:
+        Error.not_allowed
+    elif code = 14i64:
+        Error.bad_address
+    elif code = 16i64:
+        Error.busy
+    elif code = 2i64:
+        Error.not_there
+    elif code = 21i64:
+        Error.is_a_directory
+    elif code = 22i64:
+        Error.invalid
+    elif code = 24i64:
+        Error.too_many_open
+    elif code = 28i64:
+        Error.no_room
+    elif code = 32i64:
+        Error.broken_pipe
+    elif code = 38i64:
+        Error.not_supported
+    elif code = 104i64:
+        Error.reset
+    elif code = 111i64:
+        Error.refused
+    else:
+        Error.other
+
 ※ -- the ring ---------------------------------------------------------------
 
 ※※ What the runtime keeps about the ring, laid out the way it reads it.
@@ -63,24 +135,34 @@ fn io_read(r: &mut Ring, fd: i32, at: u64, len: u64) → i64
 
 ※ -- what a program calls ---------------------------------------------------
 
-※※ Write `what` to `to`, answering how many bytes went or what the kernel said.
+※※ Write `what` to `to`, answering how many bytes went or why none did.
 ※
 ※ The reference is exclusive, which is what says nothing else is writing to the
 ※ same device at the same time; it is checked where it is taken and costs
 ※ nothing here.
 @[export, impure]
-fn write(to: &mut Writer, what: u8⟦⟧) → i64:
+fn write(to: &mut Writer, what: u8⟦⟧) → u64 ¤size ? Error:
     ※ Nothing to write is nothing done, and asking for the address of the first
     ※ of no elements is asking for a place that is not there.
     if #what = 0:
-        return 0i64
-    io_write(&mut ring, to⌖.fd, ⎕address(&what⟦0⟧), ⎕drop(#what))
+        return 0
+    let went: i64 = io_write(&mut ring, to⌖.fd, ⎕address(&what⟦0⟧),
+                             ⎕drop(#what))
+    if went < 0i64:
+        ⊥ as_error(went)
+    else:
+        ⎕unit(⎕narrow(went, ⌜u64⌝) ?? 0u64, ⌜size⌝)
 
-※※ Read from `from` into `into`, answering how many bytes came or what the
-※※ kernel said.  Nought means there is no more to come.
+※※ Read from `from` into `into`, answering how many bytes came or why none
+※※ did.  Nought means there is no more to come.
 @[export, impure]
-fn read(from: &mut Reader, into: u8⟦⟧) → i64:
+fn read(from: &mut Reader, into: u8⟦⟧) → u64 ¤size ? Error:
     ※ Nowhere to put anything is nothing read, for the reason above.
     if #into = 0:
-        return 0i64
-    io_read(&mut ring, from⌖.fd, ⎕address(&into⟦0⟧), ⎕drop(#into))
+        return 0
+    let came: i64 = io_read(&mut ring, from⌖.fd, ⎕address(&into⟦0⟧),
+                            ⎕drop(#into))
+    if came < 0i64:
+        ⊥ as_error(came)
+    else:
+        ⎕unit(⎕narrow(came, ⌜u64⌝) ?? 0u64, ⌜size⌝)

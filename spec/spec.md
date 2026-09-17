@@ -221,8 +221,10 @@ type ReadWriter ※ both, which is what a socket and a file opened either way ar
 type Io   = input : Reader ; output : Writer ; errors : Writer
 type Init = io : Io
 
-fn write(to: &mut Writer, what: u8⟦⟧) → i64
-fn read(from: &mut Reader, into: u8⟦⟧) → i64
+enum Error   ※ what the kernel said, where it refused
+
+fn write(to: &mut Writer, what: u8⟦⟧) → u64 ¤size ? Error
+fn read(from: &mut Reader, into: u8⟦⟧) → u64 ¤size ? Error
 ```
 
 **A descriptor is a type and not a number.**  What says a thing may be written is the type of the name standing for it, so there is
@@ -232,9 +234,14 @@ no way to hand a `Reader` to `write` and no way to write to a number a program m
 **One mutable reference is the whole of the concurrency rule.**  `&mut init.io.output` is exclusive because a second `&mut` to the
 same place is refused, so two names for one device is a thing the compiler refuses rather than a thing a lock prevents.
 
-`write` answers how many bytes went and `read` how many came, or what the kernel said where it refused -- a negative number, which
-is the kernel's own convention.  Reading that as a result of the language's own kind is what the module will do once it has
-somewhere to put the error.  Writing nothing and reading into nowhere are nothing done, and answer nought.
+`write` answers how many bytes went and `read` how many came, **or why none did** -- a result of the language's own kind, so that a
+program that ignores the failure is one the compiler can see ignoring it.  Writing nothing and reading into nowhere are nothing
+done, and answer nought.
+
+**What the kernel said comes back named.**  `Error` is an enumeration whose numbers are the kernel's own, so a reader who knows
+what `EAGAIN` means knows what `would_block` is, and whose names are the language's, so a reader who does not need not learn them.
+`other` is what anything the list does not name comes to, which is honest about a list that is not the whole table rather than
+pretending it is.
 
 **Everything goes through `io_uring` where there is one.**  A ring is made on the first read or write anything does and driven by
 hand: a submission entry filled in, the index published with a releasing write, `io_uring_enter`, and the completion tail read with

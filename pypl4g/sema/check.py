@@ -1585,8 +1585,19 @@ class Checker:
         the base names, which is what Go, Rust and Zig all do -- and an
         enumeration's values are written with the type in front of them so that
         two enumerations may each have a `red`.
+
+        Both at once where the enumeration came from a module: `std.Error.again`
+        is the value of a type reached through the name the module was bound to,
+        which is the two readings one after the other and not a third one.
         """
         base = expr.base
+        if isinstance(base, ast.Member):
+            # A type another module exports, and a value of it.  Nothing else a
+            # module holds is reached through two marks, so what stands here is
+            # an enumeration or it is a mistake.
+            through = self._type_exported(base)
+            if isinstance(through, EnumType):
+                return self._value_of_enum(through, expr)
         if not isinstance(base, ast.NameRef) \
                 or self._holds_a_record(base.name):
             # A field of a record: what stands on the left is a value and not

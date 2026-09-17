@@ -237,9 +237,12 @@ To Do List for the PL4g language
 [x] a way to widen.  Done on 2026-09-18, at the user's direction: `⎕widen(EXPR, ⌜TYPE⌝)`, answering the value and not a
     result because it cannot fail, and refusing anything that is not "every value of the one type is a value of the other".
 
-[ ] answer a result rather than the kernel's number.  `std.write` answers an `i64` that is negative where the kernel refused,
-    which is the kernel's convention and not the language's.  It should answer `u64 ¤size?`, which wants somewhere for the error
-    to go -- an enumeration of what the kernel says -- and that is a table the compiler does not have yet.
+[x] answer a result rather than the kernel's number.  Done on 2026-09-18: `→ u64 ¤size ? Error`, where `Error` is an
+    enumeration `std` exports whose numbers are the kernel's own.
+
+[ ] name the whole errno table, or carry the number beside the name.  `std.Error` names eighteen of them and everything else is
+    `other`, which loses which one it was.  The tidy answer is a record of a named kind and the raw number -- but a record as a
+    result's error is a part that is itself several values, which `parts_of` and `through_storage` would both have to be taught.
 
 [ ] write a `str`.  `std.write` takes `u8⟦⟧` and a `str` is characters, so a program with text to
     write has no way to say so.  Either a `str` answers its bytes, or `write` takes either.
