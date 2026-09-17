@@ -1,0 +1,54 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ `⎕widen(EXPR, ⌜TYPE⌝)` makes a value of a type with room for it.
+※
+※ **It answers the value and not a result**, which it may do only because it
+※ cannot fail.  That is what makes it the opposite of `⎕narrow` rather than a
+※ second spelling of it: narrowing can fail, so what it answers says whether it
+※ did; widening cannot, so there is nothing to say.
+※
+※ **The rule is "does every value of the one type fit the other"**, not "is it
+※ wider".  An unsigned type goes into a signed one only where there is room to
+※ spare for the bit the sign takes, and a signed type goes into no unsigned one
+※ at all -- a negative number is somewhere the unsigned type does not reach.
+※ Anything else is a narrowing and is refused (4591), which points at `⎕narrow`.
+※
+※ **Nothing widens on its own**, here as everywhere: a value that is to become
+※ one of another type is written as becoming one.  That is the rule the
+※ comparisons, the arithmetic and the arguments all already state, and this is
+※ the name that lets a program obey it without paying for a check it does not
+※ need.
+※
+※ **What it counts is its own and travels with it.**  The type says how much room
+※ the number has and nothing about what the number is of, which is what a
+※ narrowing already does.
+※
+※ Compare: **C**, which widens silently and famously, and whose integer
+※ promotions are the reason this language has a name for it; **Rust**, whose
+※ `as` is one word for both directions and says nothing about which happened;
+※ **Zig**, whose `@intCast` checks and whose widening is implicit; **Ada**, where
+※ a conversion is written out and checked, which is this pair split the same way.
+
+fn seconds(n: u32 ¤second) → u64 ¤second:
+    ⎕widen(n, ⌜u64⌝)
+
+@[startup, impure]
+fn main() → u6:
+    let a: u32 = 3u32
+    let b: i32 = ⁻3i32
+    ※ wider, and the same signedness
+    let n: u64 = ⎕widen(a, ⌜u64⌝) + 1u64
+    ※ unsigned into signed, which has room to spare
+    let m: i64 = ⎕widen(a, ⌜i64⌝) + ⎕widen(b, ⌜i64⌝)
+    ※ and no wider at all, which fits trivially
+    let s: u32 = ⎕widen(a, ⌜u32⌝)
+    if n ≠ 4u64:
+        1u6
+    elif m ≠ 0i64:
+        2u6
+    elif s ≠ 3u32:
+        3u6
+    else:
+        ※ what it counts travels with it
+        let took: u64 ¤second = seconds(5)
+        if took ≠ 5: 4u6 else: 0u6

@@ -1,0 +1,12 @@
+※ pl4g-test: compile=error diag=4591
+
+※ `⎕widen` answers the value itself and not a result, which it may do only
+※ because it cannot fail.  A signed type goes into no unsigned one: a negative
+※ number is somewhere the unsigned type does not reach, so this is a narrowing
+※ and `⎕narrow` is what answers whether it fitted.
+
+@[startup, impure]
+fn main() → u6:
+    let b: i64 = ⁻3i64
+    let q: u64 = ⎕widen(b, ⌜u64⌝)
+    if q = 0u64: 0u6 else: 1u6

@@ -165,6 +165,14 @@ ENUMERATE_NAME: Final[str] = "".join((BUILTIN_GLYPH, "enumerate"))
 #: of a type it is not yet of.
 NARROW_NAME: Final[str] = "".join((BUILTIN_GLYPH, "narrow"))
 
+#: Making a value of a wider type out of one of a narrower.  It answers the
+#: value itself and not a result, which it may do only because it cannot fail:
+#: every value of the type written is a value of the type wanted.  It is the
+#: compiler's name for the reason its opposite is -- nothing in this language
+#: widens or narrows on its own, so a value that is to become one of another
+#: type is written as becoming one.
+WIDEN_NAME: Final[str] = "".join((BUILTIN_GLYPH, "widen"))
+
 #: Bringing a module into a file.  It carries the sigil every name the
 #: compiler provides carries, for the reason every one of them does: a program
 #: that wanted a variable called `import` should not have to give it up because

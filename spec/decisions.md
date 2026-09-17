@@ -5636,6 +5636,43 @@ written the same way; **Haskell**, which has no such statement and builds a new
 record naming the fields that differ; **APL**, where the whole idea is an
 indexed assignment into a nested array.
 
+## 2026-09-18T00:00+02:00 — language
+
+**`⎕widen(EXPR, ⌜TYPE⌝)`, which answers the value and not a result**
+
+Chosen by the user from three.  The language had `⎕narrow` and nothing going the
+other way, so the only route from a `u32` to a `u64` was
+`⎕narrow(a, ⌜u64⌝) ?? 0u64` -- a check that cannot fail and a default that
+cannot be reached.  A ring's offsets are `u32` and its addresses `u64`, which is
+where it became unavoidable.
+
+**It answers the value itself**, which it may do only because it cannot fail.
+That is what makes it the opposite of `⎕narrow` rather than a second spelling of
+it: narrowing can fail, so what it answers says whether it did; widening cannot,
+so there is nothing to say.
+
+**Turned down: widening implicitly** where the wider type is known and nothing
+can be lost.  It is what C and Zig do and it would reverse a rule the
+specification states in so many words -- nothing widens or narrows on its own --
+which is the rule behind `1u8 & 2u16` not compiling.  Also turned down: one name
+for both directions, answering a result or a value depending on the types, which
+would make what a call comes to depend on a reader working out which case it is.
+
+**The rule is "does every value of the one type fit the other"**, not "is it
+wider", also at the user's direction.  An unsigned type goes into a signed one
+where there is room to spare for the bit the sign takes; a signed type goes into
+no unsigned one at all.  The alternative was reinterpreting the bits at one
+width, which is fast and would let `⁻1i64` become a very large `u64` quietly --
+exactly the surprising interpretation of a value this language is built to
+avoid.
+
+Compare: **C**, whose integer promotions are the reason this language has a name
+for it; **Rust**, whose `as` is one word for both directions and says nothing
+about which happened; **Zig**, whose widening is implicit and whose `@intCast`
+checks; **Ada**, where a conversion is written out and checked, which is this
+pair split the same way; **Haskell**, whose `fromIntegral` is one function for
+every direction and wraps silently.
+
 Open questions
 --------------
 

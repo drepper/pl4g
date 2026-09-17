@@ -618,6 +618,23 @@ Nothing in this language widens or narrows on its own, so a value that is to bec
 one.  What makes narrowing different from widening is that it can fail, so **what it answers with is a result**: the value where
 it fits, and why not where it does not.
 
+**Widening is `⎕widen(EXPR, ⌜TYPE⌝)` and answers the value itself**, which it may do only because it cannot fail:
+
+```
+let n: u64 = ⎕widen(small, ⌜u64⌝) + 1u64
+```
+
+The rule is **does every value of the one type fit the other**, and not "is it wider".  A narrower type goes into a wider one of
+the same signedness; an unsigned type goes into a signed one where there is room to spare for the bit the sign takes; a signed
+type goes into no unsigned one at all, a negative number being somewhere the unsigned type does not reach.  Anything else is a
+narrowing and is refused (4591), which is what `⎕narrow` is for.  A value that is already of the type wanted is widened
+trivially, so a program that writes it uniformly need not ask whether it had to.  What the number counts is its own and travels
+with it (4590 for a type that is not a whole number, 4589 for a second argument that is not a lifted type).
+
+Compare: **C**, which widens silently and whose integer promotions are the reason this language has a name for it; **Rust**, whose
+`as` is one word for both directions and says nothing about which happened; **Zig**, whose widening is implicit and whose
+`@intCast` checks; **Ada**, where a conversion is written out and checked, which is this pair split the same way.
+
 **The error carries which way it did not fit**, as a value of `⎕narrowing`, an enumeration the compiler provides:
 
 | value | when |

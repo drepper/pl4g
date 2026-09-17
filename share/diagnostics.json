@@ -6576,6 +6576,68 @@
       "option": null
     },
     {
+      "number": 4589,
+      "name": "LANG_WIDEN_NOT_A_TYPE",
+      "severity": "error",
+      "message": "the type '\u2395widen' makes a value of is written between '\u231c' and '\u231d'",
+      "args": [],
+      "cause": "What a value is to become is a type and not an expression, and a type's name and a variable's name are both identifiers, so the brackets are what says which was meant.  Without them the meaning of the call would depend on what the names turned out to be.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Narrowing"
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4590,
+      "name": "LANG_WIDEN_NOT_AN_INTEGER",
+      "severity": "error",
+      "message": "'\u2395widen' makes a whole number out of a whole number, and '{found}' is not one",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type that was written"
+        }
+      ],
+      "cause": "Widening is about how much room a number has, which is a question only a whole number has an answer to.  A floating-point value of another format is a different question with a different answer, and a value of a type the program made up is not a number at all.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Narrowing"
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4591,
+      "name": "LANG_WIDEN_DOES_NOT_FIT",
+      "severity": "error",
+      "message": "not every '{found}' is a '{wanted}', so this is a narrowing and can fail",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type of the value"
+        },
+        {
+          "name": "wanted",
+          "type": "string",
+          "description": "the type it was to become"
+        }
+      ],
+      "cause": "'\u2395widen' answers the value itself and not a result, which it may do only because it cannot fail: every value of the type written has to be a value of the type wanted.  A narrower type into a wider one of the same signedness is such a case, and so is an unsigned type into a signed one with room to spare.  Anything else -- fewer bits, or a negative number where the type has none -- is a narrowing, and '\u2395narrow' is what answers a result saying whether it fitted.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Narrowing"
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 5001,
       "name": "LANG_STMT_UNREACHABLE",
       "severity": "warning",

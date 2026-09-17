@@ -16,6 +16,7 @@ from ..diag import ids as D
 from ..diag.engine import DiagEngine, Expectation
 from ..front import ast
 from ..front.token import (ACQUIRE_NAME, RELEASE_NAME, AT_NAME, SPAN_NAME,
+                           WIDEN_NAME,
                            BOTTOM_GLYPH, BUILTIN_GLYPH, CHR_NAME, DEREF_GLYPH,
                            LIFETIME_GLYPH,
                            DROP_NAME, NARROW_NAME, UNIT_NAME,
@@ -797,6 +798,21 @@ def _can_be_a_key(ty: Type) -> bool:
     from ..ir.types import BoolType
 
     return isinstance(ty, (IntType, BoolType, EnumType))
+
+
+def _every_value_fits(found: IntType, into: IntType) -> bool:
+    """Whether every value of *found* is a value of *into*.
+
+    Which is the question a widening asks, and not "is it wider": an unsigned
+    type goes into a signed one only where there is room to spare for the bit
+    the sign takes, and a signed type goes into no unsigned one at all, a
+    negative number being somewhere the unsigned type does not reach.
+    """
+    if found.signed and not into.signed:
+        return False
+    if not found.signed and into.signed:
+        return found.bits < into.bits
+    return found.bits <= into.bits
 
 
 def _is_startup_argument(ty: Type) -> bool:
@@ -10453,6 +10469,9 @@ class Checker:
                 and expr.callee.name == NARROW_NAME:
             return self._lower_narrow(builder, expr, expected)
         if isinstance(expr.callee, ast.NameRef) \
+                and expr.callee.name == WIDEN_NAME:
+            return self._lower_widen(builder, expr, expected)
+        if isinstance(expr.callee, ast.NameRef) \
                 and expr.callee.name == SYSCALL_NAME:
             return self._lower_syscall(builder, expr, expected)
         if isinstance(expr.callee, ast.NameRef) \
@@ -11059,6 +11078,58 @@ class Checker:
         made = builder.wrap(value, failed, answer, expr.span, why)
         if not self._accepts(expected, answer):
             self._report_mismatch(expr.span, answer, expected)
+            return UndefConst(ERROR)
+        return made
+
+    def _lower_widen(self, builder: IRBuilder, expr: ast.Call,
+                     expected: Type | None) -> Value:
+        """Lower `⎕widen(EXPR, ⌜TYPE⌝)`: the value, as a type with room for it.
+
+        It answers the value itself and not a result, which it may do only
+        because it cannot fail: every value of the type written has to be a
+        value of the type wanted.  That is the rule and not "is it wider" -- an
+        unsigned type goes into a signed one with room to spare, and a signed
+        one goes into no unsigned type at all, a negative number being
+        somewhere the unsigned type does not reach.
+
+        What it counts is its own and travels with it, as a narrowing's does:
+        the type says how much room the number has and nothing about what the
+        number is of.
+        """
+        if len(expr.args) != 2:
+            self._diags.emit(D.LANG_CALL_WRONG_ARGUMENT_COUNT, expr.span,
+                             name=WIDEN_NAME, expected=2, found=len(expr.args))
+            return UndefConst(ERROR)
+        written = expr.args[1]
+        if not isinstance(written, ast.Lifted):
+            self._diags.emit(D.LANG_WIDEN_NOT_A_TYPE, written.span)
+            return UndefConst(ERROR)
+        wanted = self._lifted_type(written)
+        if wanted is None:
+            self._diags.emit(D.LANG_WIDEN_NOT_A_TYPE, written.span)
+            return UndefConst(ERROR)
+        if not isinstance(wanted, IntType):
+            self._diags.emit(D.LANG_WIDEN_NOT_AN_INTEGER, written.span,
+                             found=wanted.render())
+            return UndefConst(ERROR)
+        given = self._lower_expr(builder, expr.args[0], None)
+        found = self._value_type_of(given)
+        if found is ERROR:
+            return UndefConst(ERROR)
+        if not isinstance(found, IntType):
+            self._diags.emit(D.LANG_WIDEN_NOT_AN_INTEGER, expr.args[0].span,
+                             found=found.render())
+            return UndefConst(ERROR)
+        into = _carrying(wanted, found.unit)
+        if not _every_value_fits(found, into):
+            self._diags.emit(D.LANG_WIDEN_DOES_NOT_FIT, expr.span,
+                             found=found.render(), wanted=into.render())
+            return UndefConst(ERROR)
+        made = (given if found.bits == into.bits
+                else builder.cast(CastKind.SEXT if found.signed else CastKind.ZEXT,
+                                  given, into, expr.span))
+        if not self._accepts(expected, into):
+            self._report_mismatch(expr.span, into, expected)
             return UndefConst(ERROR)
         return made
 
