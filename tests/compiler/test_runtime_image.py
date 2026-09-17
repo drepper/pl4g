@@ -38,10 +38,12 @@ from pypl4g.target.registry import lookup as lookup_target
 MESSAGE = b"ring\n"
 STANDARD_ERROR = 2
 
-#: How many machine words the runtime's ring is.  The language will declare a
-#: record for it; here it is room of the right size, zeroed, which is what the
-#: runtime asks for and all it asks for.
-RING_WORDS = 11
+#: Which direction the runtime numbers a write as.
+WRITING = 1
+
+#: How many machine words the runtime's ring is, which the runtime itself says.
+#: Room of the right size, zeroed, is what it asks for and all it asks for.
+RING_WORDS = 27
 
 
 def writing(module: Module) -> Module:
@@ -62,13 +64,17 @@ def writing(module: Module) -> Module:
                          MESSAGE.ljust(8, b"\0"), "little")))
     module.add_global(text)
 
-    wrote = Function(
-        "pl4g_io_write",
-        module.types.func_type((module.types.ptr_type(U64, mutable=True),
-                                I32, U64, U64), I64),
-        FuncAttrs(external="pl4g_io_write", impure=True),
+    place = module.types.ptr_type(U64, mutable=True)
+    started = Function(
+        "pl4g_io_submit",
+        module.types.func_type((place, I32, I32, U64, U64), I64),
+        FuncAttrs(external="pl4g_io_submit", impure=True),
         cconv=SYSTEM_CCONV)
-    module.add_function(wrote)
+    module.add_function(started)
+    waited = Function(
+        "pl4g_io_wait", module.types.func_type((place, I64), I64),
+        FuncAttrs(external="pl4g_io_wait", impure=True), cconv=SYSTEM_CCONV)
+    module.add_function(waited)
 
     main = Function("main", module.types.func_type((), U8),
                     FuncAttrs(special=SpecialKind.STARTUP, impure=True),
@@ -78,14 +84,17 @@ def writing(module: Module) -> Module:
     block = main.add_block()
     token = block.append(MemStartInst())
     del token
-    answer = block.append(CallInst(
-        wrote,
+    slot = block.append(CallInst(
+        started,
         (block.append(AddressInst(ring)),
+         module.int_const(I32, WRITING),
          module.int_const(I32, STANDARD_ERROR),
          block.append(CastInst(CastKind.BITCAST,
                                block.append(AddressInst(text)), U64)),
          module.int_const(U64, len(MESSAGE))),
         I64))
+    answer = block.append(CallInst(
+        waited, (block.append(AddressInst(ring)), slot), I64))
     block.append(RetInst(block.append(
         CastInst(CastKind.TRUNC, answer, U8))))
     verify(module)

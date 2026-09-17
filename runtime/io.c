@@ -128,14 +128,32 @@ struct cqe {
 
 /* -- the ring, as the language declares it --------------------------------- */
 
-/* Every field is a machine word, so that the record the language writes beside
- * this one is laid out the same by inspection rather than by argument. */
+#define ENTRIES 8
+
+/* Every field is a machine word or a run of them, so that the record the
+ * language writes beside this one is laid out the same by inspection rather
+ * than by argument.
+ *
+ * `held` says what is known about each request that has been given a slot, and
+ * `answer` what the kernel said about it once it has said anything.  A slot is
+ * taken when a request is submitted and given back when what the kernel said
+ * has been read out of it, so what is outstanding is exactly the slots that are
+ * taken and not yet answered. */
 struct pl4g_ring {
   u64 state;                    /* 0 untried, 1 ready, 2 no ring here */
   u64 fd;
   u64 sq_head, sq_tail, sq_mask, sq_array, sqes;
   u64 cq_head, cq_tail, cq_mask, cqes;
+  u64 held[ENTRIES];            /* 0 free, 1 submitted, 2 answered */
+  i64 answer[ENTRIES];
 };
+
+#define FREE 0
+#define SUBMITTED 1
+#define ANSWERED 2
+
+/* What `pl4g_io_submit` answers where it could not take a slot. */
+#define NO_SLOT (-1)
 
 /* What the language has to agree with about the record it hands over.  The
  * two declarations are written in two languages and nothing makes them one, so
@@ -156,13 +174,13 @@ const u64 pl4g_io_shape[] = {
   FIELD(sq_head), FIELD(sq_tail), FIELD(sq_mask), FIELD(sq_array),
   FIELD(sqes),
   FIELD(cq_head), FIELD(cq_tail), FIELD(cq_mask), FIELD(cqes),
+  FIELD(held), FIELD(answer),
 };
 
 #define UNTRIED 0
 #define READY 1
 #define NO_RING 2
 
-#define ENTRIES 8
 #define OP_READ 22
 #define OP_WRITE 23
 
@@ -183,6 +201,9 @@ static const struct way ways[2] = {
 #define READING 0
 #define WRITING 1
 #define ENTER_GETEVENTS 1
+
+/* The one refusal this file makes up rather than passes on. */
+#define EINVAL 22
 #define OFF_SQ_RING 0UL
 #define OFF_CQ_RING 0x8000000UL
 #define OFF_SQES 0x10000000UL
@@ -243,9 +264,68 @@ static int started(struct pl4g_ring *r)
   return 1;
 }
 
-/* Submit one request and wait for its answer, which is what the kernel said. */
-static i64 through_the_ring(struct pl4g_ring *r, unsigned char op, i32 fd,
-                            u64 at, u64 len, u64 off)
+/* Take in every answer the kernel has put in the completion ring.  Answers how
+ * many were taken, which is what says whether waiting again would help. */
+static int reap(struct pl4g_ring *r)
+{
+  u32 head = load_plain(r->cq_head);
+  u32 tail = load_acquire(r->cq_tail);
+  u32 mask = load_plain(r->cq_mask);
+  int taken = 0;
+  while (head != tail) {
+    const struct cqe *c = (const struct cqe *) r->cqes + (head & mask);
+    u64 who = c->user_data;
+    if (who < ENTRIES) {
+      r->answer[who] = c->res;
+      r->held[who] = ANSWERED;
+    }
+    head += 1;
+    taken += 1;
+  }
+  /* what has been taken in is the kernel's to reuse, and saying so is a
+   * release: nothing read out of a completion may be seen after it */
+  store_release(r->cq_head, head);
+  return taken;
+}
+
+/* Hand the kernel what has been written and wait for at least one answer. */
+static i64 enter(struct pl4g_ring *r, long least)
+{
+  return sys(NR_IO_URING_ENTER, (i64) r->fd, ENTRIES, least,
+             least ? ENTER_GETEVENTS : 0, 0, 0);
+}
+
+/* How many requests have been submitted and not yet answered. */
+static int outstanding(const struct pl4g_ring *r)
+{
+  int found = 0;
+  for (int at = 0; at < ENTRIES; ++at)
+    if (r->held[at] == SUBMITTED)
+      found += 1;
+  return found;
+}
+
+/* A slot nothing is using, waiting for one where every one is taken. */
+static long a_slot(struct pl4g_ring *r)
+{
+  for (int round = 0; round < 2; ++round) {
+    for (int at = 0; at < ENTRIES; ++at)
+      if (r->held[at] == FREE)
+        return at;
+    /* Every slot is taken: what frees one is an answer being read, so ask the
+     * kernel for the ones it owes.  Once only -- a second round that found
+     * nothing means every slot holds an answer nobody has read, which is the
+     * program's to sort out and not this. */
+    if (r->state != READY || outstanding(r) == 0 || enter(r, 1) < 0)
+      break;
+    reap(r);
+  }
+  return NO_SLOT;
+}
+
+/* Write one request into the submission ring, without telling the kernel. */
+static void submit(struct pl4g_ring *r, long slot, unsigned char op, i32 fd,
+                   u64 at, u64 len, u64 off)
 {
   u32 mask = load_plain(r->sq_mask);
   u32 tail = load_acquire(r->sq_tail);
@@ -258,44 +338,80 @@ static i64 through_the_ring(struct pl4g_ring *r, unsigned char op, i32 fd,
   e->off = off;
   e->addr = at;
   e->len = (u32) len;
-  e->user_data = index;
+  e->user_data = (u64) slot;
   ((u32 *) r->sq_array)[index] = index;
   /* the entry is written before the kernel is told it is there */
   store_release(r->sq_tail, tail + 1);
-  for (;;) {
-    i64 entered = sys(NR_IO_URING_ENTER, (i64) r->fd, 1, 1,
-                      ENTER_GETEVENTS, 0, 0);
-    if (entered < 0)
-      return entered;
-    u32 head = load_plain(r->cq_head);
-    u32 ctail = load_acquire(r->cq_tail);
-    if (head == ctail)
-      continue;
-    u32 cmask = load_plain(r->cq_mask);
-    const struct cqe *c = (const struct cqe *) r->cqes + (head & cmask);
-    i64 res = c->res;
-    store_release(r->cq_head, head + 1);
-    return res;
-  }
+  r->held[slot] = SUBMITTED;
+  r->answer[slot] = 0;
 }
 
 /* -- what the language calls ----------------------------------------------- */
 
-static i64 go(struct pl4g_ring *r, int which, i32 fd, u64 at, u64 len)
+/* Start a request, answering the slot it is in.
+ *
+ * The kernel is not told yet: what tells it is waiting for an answer, or the
+ * drain a program does before it ends.  So a write is outstanding until one of
+ * those happens, which is what lets several be in flight at once.
+ *
+ * A slot is taken either way -- with a ring and without one -- so the handle a
+ * program holds is the same thing whichever it got, and reading it is one
+ * question with one answer. */
+i64 pl4g_io_submit(struct pl4g_ring *r, i32 which, i32 fd, u64 at, u64 len)
 {
-  if (len == 0)
-    return 0;
-  if (started(r))
-    return through_the_ring(r, (unsigned char) ways[which].op, fd, at, len, 0);
-  return sys(ways[which].nr, fd, (i64) at, (i64) len, 0, 0, 0);
+  int ready = started(r);
+  long slot = a_slot(r);
+  if (slot < 0)
+    return NO_SLOT;
+  if (!ready || len == 0) {
+    /* No ring, or nothing to do: the work is done here and the answer put
+     * where an answer goes.  A slot is taken for it all the same, so that what
+     * the program holds is the same handle either way and what it reads out of
+     * it is the number the kernel gave -- which is the whole of what emulating
+     * a ring has to get right. */
+    r->answer[slot] = len == 0 ? 0
+        : sys(ways[which].nr, fd, (i64) at, (i64) len, 0, 0, 0);
+    r->held[slot] = ANSWERED;
+    return slot;
+  }
+  submit(r, slot, (unsigned char) ways[which].op, fd, at, len, 0);
+  return slot;
 }
 
-i64 pl4g_io_write(struct pl4g_ring *r, i32 fd, u64 at, u64 len)
+/* Wait for the request in `slot` and answer what the kernel said about it.
+ * The slot is given back, so an answer is read once. */
+i64 pl4g_io_wait(struct pl4g_ring *r, i64 slot)
 {
-  return go(r, WRITING, fd, at, len);
+  if (slot < 0 || slot >= ENTRIES)
+    return -EINVAL;
+  while (r->held[slot] == SUBMITTED) {
+    i64 got = enter(r, 1);
+    if (got < 0)
+      return got;
+    reap(r);
+  }
+  i64 answer = r->held[slot] == ANSWERED ? r->answer[slot] : -EINVAL;
+  r->held[slot] = FREE;
+  return answer;
 }
 
-i64 pl4g_io_read(struct pl4g_ring *r, i32 fd, u64 at, u64 len)
+/* Wait for every request that is outstanding, and give its slot back.
+ *
+ * What a program does before it ends: a request the kernel has not answered is
+ * a write that may not have happened, and a program that ended without knowing
+ * would have written nothing and said nothing about it. */
+void pl4g_io_drain(struct pl4g_ring *r)
 {
-  return go(r, READING, fd, at, len);
+  while (r->state == READY && outstanding(r) > 0) {
+    /* Asking for one answer is not being given one: `io_uring_enter` may come
+     * back with nothing ready, and what makes that right is asking again.  The
+     * wait is in the kernel, so a turn that finds nothing costs a call and not
+     * a spin -- and a request that will never be answered hangs here exactly as
+     * waiting for that one request would. */
+    if (enter(r, 1) < 0)
+      break;
+    reap(r);
+  }
+  for (int at = 0; at < ENTRIES; ++at)
+    r->held[at] = FREE;
 }

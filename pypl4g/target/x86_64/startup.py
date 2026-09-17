@@ -63,22 +63,26 @@ def emit_start(asm: Assembler, module: Module, cconv: CallConvDesc,
     for ctor in module.ctors:
         asm.call(symbol_name(ctor))
     _run_tests(asm, module, cconv, failures or {})
+    # Where the status waits.  A register a call leaves alone where a destructor
+    # is going to run, and the one the system call wants where none is: a
+    # destructor is an ordinary call and may use that one for its own argument,
+    # and a program with no destructor should not pay a move for the question.
+    held = HELD_STATUS if module.dtors else EDI
     if module.test_plan:
         # A binary built to run tests and nothing else: every one of them
         # passed, or it left through the helper above and never arrived here.
-        asm.loadreg(EDI, asm.imm(0, 32, signed=False))
+        asm.loadreg(held, asm.imm(0, 32, signed=False))
     else:
         if started.wanted_by(module) is not None:
             # Where the record the program was started with is, which is the
             # whole of what is handed over.
             asm.address(cconv.int_arg_regs[0], started.SYMBOL)
         asm.call(symbol_name(startup))
-        # The status is moved out of the return register before the destructors
-        # run, because a destructor is an ordinary call and may use that
-        # register.
-        asm.loadreg(EDI, asm.reg(status32))
+        asm.loadreg(held, asm.reg(status32))
     for dtor in module.dtors:
         asm.call(symbol_name(dtor))
+    if module.dtors:
+        asm.loadreg(EDI, asm.reg(HELD_STATUS))
     asm.loadreg(EAX, asm.imm(NR_EXIT_GROUP, 32, signed=False))
     asm.op(x86ops.SYSCALL)
     # exit_group does not return; trapping makes that explicit rather than
@@ -118,6 +122,14 @@ STANDARD_ERROR_HERE: Final[int] = 2
 #: register a call leaves alone, so that nothing has to be saved around one and
 #: no storage has to be found for a number that lives for a few instructions.
 COUNT_REG: Final = reg("ebx")
+
+#: And where the exit status waits while the destructors run.  A register a call
+#: leaves alone, which the one a system call takes its first argument in is not:
+#: that one is where an ordinary call puts its own first argument, so a
+#: destructor that calls anything destroys it.  Only used where a destructor is
+#: going to run; where none is, the status goes straight where the system call
+#: wants it and nothing is moved twice.
+HELD_STATUS: Final = reg("r12d")
 
 
 def _run_tests(asm: Assembler, module: Module, cconv: CallConvDesc,

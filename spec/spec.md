@@ -221,10 +221,15 @@ type ReadWriter ※ both, which is what a socket and a file opened either way ar
 type Io   = input : Reader ; output : Writer ; errors : Writer
 type Init = io : Io
 
-enum Error   ※ what the kernel said, where it refused
+type Pending ※ a write that has been started
+enum Error   ※ what the kernel said, where it refused, by name
 
-fn write(to: &mut Writer, what: u8⟦⟧) → u64 ¤size ? Error
-fn read(from: &mut Reader, into: u8⟦⟧) → u64 ¤size ? Error
+fn write(to: &mut Writer, what: u8⟦⟧) → Pending ? i32
+fn flush(of: Pending)                 → u64 ¤size ? i32
+fn write_sync(to: &mut Writer, what: u8⟦⟧) → u64 ¤size ? i32
+fn read(from: &mut Reader, into: u8⟦⟧)     → u64 ¤size ? i32
+fn drain()
+fn as_error(n: i32) → Error
 ```
 
 **The three a process inherits are the only devices there are.**  There is no way to open anything and no way to write down the
@@ -238,15 +243,27 @@ no way to hand a `Reader` to `write` and no way to write to a number a program m
 **One mutable reference is the whole of the concurrency rule.**  `&mut init.io.output` is exclusive because a second `&mut` to the
 same place is refused, so two names for one device is a thing the compiler refuses rather than a thing a lock prevents.
 
-`write` answers how many bytes went and `read` how many came, **or why none did** -- a result of the language's own kind, so that a
-program that ignores the failure is one the compiler can see ignoring it.  Writing nothing and reading into nowhere are nothing
-done, and answer nought.
+**Starting a write is not doing it.**  `write` submits the request and answers a `Pending`; the kernel is not told about it until
+something waits, so several may be in flight at once.  `flush` waits for one and says how it went, and `write_sync` is the two
+together -- which is what a program with nothing else to do while it waits should say.
 
-**What the kernel said comes back named.**  `Error` is an enumeration whose numbers are the kernel's own, so a reader who knows
-what `EAGAIN` means knows what `would_block` is, and whose names are the language's, so a reader who does not need not learn them.
-`other` is what anything the list does not name comes to, which is honest about a list that is not the whole table rather than
-pretending it is.  What is named is what a read or a write of an inherited descriptor can actually give: a refusal that belongs to
-opening is not there, because a name nothing can reach is a comparison every program pays for and none of them needs.
+**Nothing is lost by not asking.**  Every request still outstanding when the startup function returns is waited for before the
+process ends; `drain` is the same thing a program may do itself.  A request the kernel has not answered is a write that may not
+have happened, and a program that ended without waiting would have written nothing and said nothing about it.
+
+**The handle is the same thing whether there is a ring or not.**  Where there is none the work is done as it is asked for and what
+the kernel said is put where an answer goes, so `flush` reads one number out of one place either way.
+
+`flush`, `write_sync` and `read` answer how many bytes went or came, **or why none did** -- a result of the language's own kind, so
+that a program that ignores the failure is one the compiler can see ignoring it.  Writing nothing and reading into nowhere are
+nothing done, and answer nought.
+
+**What the kernel said comes back as the number it said**, which cannot be wrong.  `as_error` names one for a program that would
+rather compare a name: `Error` is an enumeration whose numbers are the kernel's own, so a reader who knows what `EAGAIN` means
+knows what `would_block` is, and whose names are the language's, so a reader who does not need not learn them.  `other` is what
+anything the list does not name comes to.  What is named is what a read or a write of an inherited descriptor can actually give: a
+refusal that belongs to opening is not there, because a name nothing can reach is a comparison every program pays for and none of
+them needs.
 
 **Every write is one request and nothing is held back.**  A program that wants fewer, larger writes makes them itself; there is
 nothing between it and the device.

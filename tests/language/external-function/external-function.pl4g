@@ -37,26 +37,36 @@ type Ring =
     state : u64 ; fd : u64 ;
     sq_head : u64 ; sq_tail : u64 ; sq_mask : u64 ; sq_array : u64 ;
     sqes : u64 ;
-    cq_head : u64 ; cq_tail : u64 ; cq_mask : u64 ; cqes : u64
+    cq_head : u64 ; cq_tail : u64 ; cq_mask : u64 ; cqes : u64 ;
+    held : u64⟦8⟧ ; answer : i64⟦8⟧
 
-@[external("pl4g_io_write"), impure]
-fn io_write(r: &mut Ring, fd: i32, at: u64, len: u64) → i64
+@[external("pl4g_io_submit")]
+fn io_submit(r: &mut Ring, which: i32, fd: i32, at: u64, len: u64) → i64
+
+@[external("pl4g_io_wait")]
+fn io_wait(r: &mut Ring, slot: i64) → i64
 
 let ring: mut Ring = Ring(
     .state ← 0u64, .fd ← 0u64,
     .sq_head ← 0u64, .sq_tail ← 0u64, .sq_mask ← 0u64, .sq_array ← 0u64,
     .sqes ← 0u64,
-    .cq_head ← 0u64, .cq_tail ← 0u64, .cq_mask ← 0u64, .cqes ← 0u64)
+    .cq_head ← 0u64, .cq_tail ← 0u64, .cq_mask ← 0u64, .cqes ← 0u64,
+    .held ← ⟦0u64, 0u64, 0u64, 0u64, 0u64, 0u64, 0u64, 0u64⟧,
+    .answer ← ⟦0i64, 0i64, 0i64, 0i64, 0i64, 0i64, 0i64, 0i64⟧)
 
 @[startup, impure]
 fn main() → u6:
     let message: u8⟦6⟧ = ⟦104u8, 101u8, 108u8, 108u8, 111u8, 10u8⟧
     ※ standard error, so that a run under a test suite says nothing that has
     ※ to be filtered out of what the program answered
-    if io_write(&mut ring, 2i32, ⎕address(&message⟦0⟧), 6u64) ≠ 6i64:
+    let one: i64 = io_submit(&mut ring, 1i32, 2i32, ⎕address(&message⟦0⟧),
+                             6u64)
+    if one < 0i64:
         1u6
-    ※ nothing written is nothing done, which the runtime answers for
-    elif io_write(&mut ring, 2i32, ⎕address(&message⟦0⟧), 0u64) ≠ 0i64:
+    elif io_wait(&mut ring, one) ≠ 6i64:
         2u6
     else:
-        0u6
+        ※ nothing written is nothing done, which the runtime answers for
+        let none: i64 = io_submit(&mut ring, 1i32, 2i32,
+                                  ⎕address(&message⟦0⟧), 0u64)
+        if none < 0i64: 3u6 elif io_wait(&mut ring, none) ≠ 0i64: 4u6 else: 0u6

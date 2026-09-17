@@ -67,67 +67,123 @@ enum Error:
 ※ The enumeration's numbers are the kernel's, so this is the question "is this
 ※ number one of them" and nothing else -- which is what narrowing to an
 ※ enumeration asks.  Anything it does not name is `other`.
-fn as_error(n: i64) → Error:
-    ⎕narrow(0i64 - n, ⌜Error⌝) ?? Error.other
+※
+※ What `read`, `write` and `flush` carry is the number itself, which cannot be
+※ wrong; this is here for a program that would rather compare against a name.
+@[export]
+fn as_error(n: i32) → Error:
+    ⎕narrow(n, ⌜Error⌝) ?? Error.other
 
 ※ -- the ring ---------------------------------------------------------------
 
 ※※ What the runtime keeps about the ring, laid out the way it reads it.
 ※
-※ Every field is a machine word, so that this declaration and the one in
-※ `runtime/io.c` are the same by inspection rather than by argument.  Nothing
-※ here reads any of it: what this module does with it is hand over a reference,
-※ which is what an `@[abi]` record does and all it does.
+※ This declaration and the one in `runtime/io.c` are written in two languages
+※ and nothing makes them one thing, so the C says how big the record is, how it
+※ is aligned and where each field lies and how wide, and a test compares.
+※
+※ Nothing here reads any of it: what this module does with it is hand over a
+※ reference, which is what an `@[abi]` record does and all it does.
 @[abi]
 type Ring =
     state : u64 ; fd : u64 ;
     sq_head : u64 ; sq_tail : u64 ; sq_mask : u64 ; sq_array : u64 ;
     sqes : u64 ;
-    cq_head : u64 ; cq_tail : u64 ; cq_mask : u64 ; cqes : u64
+    cq_head : u64 ; cq_tail : u64 ; cq_mask : u64 ; cqes : u64 ;
+    held : u64⟦8⟧ ; answer : i64⟦8⟧
 
 ※※ The one ring, made by the runtime the first time anything reads or writes.
 let ring: mut Ring = Ring(
     .state ← 0u64, .fd ← 0u64,
     .sq_head ← 0u64, .sq_tail ← 0u64, .sq_mask ← 0u64, .sq_array ← 0u64,
     .sqes ← 0u64,
-    .cq_head ← 0u64, .cq_tail ← 0u64, .cq_mask ← 0u64, .cqes ← 0u64)
+    .cq_head ← 0u64, .cq_tail ← 0u64, .cq_mask ← 0u64, .cqes ← 0u64,
+    .held ← ⟦0u64, 0u64, 0u64, 0u64, 0u64, 0u64, 0u64, 0u64⟧, .answer ← ⟦0i64, 0i64, 0i64, 0i64, 0i64, 0i64, 0i64, 0i64⟧)
 
-@[external("pl4g_io_write")]
-fn io_write(r: &mut Ring, fd: i32, at: u64, len: u64) → i64
+※※ Which direction a request goes, as the runtime numbers them.
+let READING: i32 = 0i32
+let WRITING: i32 = 1i32
 
-@[external("pl4g_io_read")]
-fn io_read(r: &mut Ring, fd: i32, at: u64, len: u64) → i64
+@[external("pl4g_io_submit")]
+fn io_submit(r: &mut Ring, which: i32, fd: i32, at: u64, len: u64) → i64
 
-※ -- what a program calls ---------------------------------------------------
+@[external("pl4g_io_wait")]
+fn io_wait(r: &mut Ring, slot: i64) → i64
 
-※※ Write `what` to `to`, answering how many bytes went or why none did.
+@[external("pl4g_io_drain")]
+fn io_drain(r: &mut Ring)
+
+※※ A request that has been started, and may not have been answered yet.
 ※
-※ The reference is exclusive, which is what says nothing else is writing to the
-※ same device at the same time; it is checked where it is taken and costs
-※ nothing here.
-@[export, impure]
-fn write(to: &mut Writer, what: u8⟦⟧) → u64 ¤size ? Error:
-    ※ Nothing to write is nothing done, and asking for the address of the first
-    ※ of no elements is asking for a place that is not there.
-    if #what = 0:
-        return 0
-    let went: i64 = io_write(&mut ring, to⌖.fd, ⎕address(&what⟦0⟧),
-                             ⎕drop(#what))
-    if went < 0i64:
-        ⊥ as_error(went)
-    else:
-        ⎕unit(⎕narrow(went, ⌜u64⌝) ?? 0u64, ⌜size⌝)
+※ What it holds is where the runtime is keeping the request, and nothing else:
+※ what the kernel said goes there too, so a request the ring is still working on
+※ and one that was done on the spot are the same handle read the same way.  A
+※ program that never flushes one loses nothing -- the drain before it ends reads
+※ every one that is left.
+@[export]
+type Pending = slot : i64
 
-※※ Read from `from` into `into`, answering how many bytes came or why none
-※※ did.  Nought means there is no more to come.
+※※ What the kernel said, where it refused, as it says it: a positive number,
+※※ which is the number `⎕errno` would have been.
+fn refusal(of: i64) → i32:
+    ⎕narrow(0i64 - of, ⌜i32⌝) ?? 0i32
+
+※※ Wait for everything outstanding.  A program does this before it ends, and
+※※ the compiler arranges for it; nothing stops a program doing it itself.
 @[export, impure]
-fn read(from: &mut Reader, into: u8⟦⟧) → u64 ¤size ? Error:
-    ※ Nowhere to put anything is nothing read, for the reason above.
-    if #into = 0:
-        return 0
-    let came: i64 = io_read(&mut ring, from⌖.fd, ⎕address(&into⟦0⟧),
-                            ⎕drop(#into))
-    if came < 0i64:
-        ⊥ as_error(came)
+fn drain():
+    io_drain(&mut ring)
+
+※※ And what makes every program do it.  A destructor runs when the startup
+※※ function returns, which is what "exits normally" means.
+@[destructor, impure]
+fn finish():
+    drain()
+
+※※ Start writing `what` to `to`, answering the request that was started.
+※
+※ It does not wait: the kernel is told about the request when something waits
+※ for it, which is `flush` or the drain a program does before it ends.  So
+※ several writes may be in flight at once, and a program that wants to know one
+※ of them happened says so.
+@[export, impure]
+fn write(to: &mut Writer, what: u8⟦⟧) → Pending ? i32:
+    let at: u64 = if #what = 0: 0u64 else: ⎕address(&what⟦0⟧)
+    let slot: i64 = io_submit(&mut ring, WRITING, to⌖.fd, at, ⎕drop(#what))
+    if slot < 0i64:
+        ※ every slot is holding an answer nobody has read: `EAGAIN`, since what
+        ※ would make it work is flushing one of them
+        ⊥ 11i32
     else:
-        ⎕unit(⎕narrow(came, ⌜u64⌝) ?? 0u64, ⌜size⌝)
+        Pending(.slot ← slot)
+
+※※ Wait for a request and answer how many bytes went, or what the kernel said.
+@[export, impure]
+fn flush(of: Pending) → u64 ¤size ? i32:
+    let got: i64 = io_wait(&mut ring, of.slot)
+    if got < 0i64:
+        ⊥ refusal(got)
+    else:
+        ⎕unit(⎕narrow(got, ⌜u64⌝) ?? 0u64, ⌜size⌝)
+
+※※ Write `what` to `to` and wait for it, answering how many bytes went.
+※
+※ `write` and `flush` in one, which is what a program that has nothing else to
+※ do while it waits should say.
+@[export, impure]
+fn write_sync(to: &mut Writer, what: u8⟦⟧) → u64 ¤size ? i32:
+    flush(write(to, what)?)
+
+※※ Read from `from` into `into`, answering how many bytes came or what the
+※※ kernel said.  Nought means there is no more to come.
+※
+※ There is no form of this that does not wait: what a read is for is the bytes,
+※ and a program that has not waited does not have them.
+@[export, impure]
+fn read(from: &mut Reader, into: u8⟦⟧) → u64 ¤size ? i32:
+    let at: u64 = if #into = 0: 0u64 else: ⎕address(&into⟦0⟧)
+    let slot: i64 = io_submit(&mut ring, READING, from⌖.fd, at, ⎕drop(#into))
+    if slot < 0i64:
+        ⊥ 11i32
+    else:
+        flush(Pending(.slot ← slot))

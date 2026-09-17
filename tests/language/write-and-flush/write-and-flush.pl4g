@@ -1,0 +1,82 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ `std.write` starts a write and answers the request; `std.flush` waits for one
+※ and says how it went; `std.write_sync` is the two together.
+※
+※ **Starting is not doing.**  A write is submitted and the kernel is not told
+※ about it: what tells it is waiting for an answer.  So several may be in flight
+※ at once, and a program that wants to know one of them happened says so.
+※
+※ **Nothing is lost by not asking.**  Every request outstanding when the startup
+※ function returns is waited for before the process ends -- `std` has a
+※ destructor that does it, and `std.drain` is the same thing a program may call
+※ itself.  A request the kernel has not answered is a write that may not have
+※ happened, and a program that ended without waiting would have written nothing
+※ and said nothing about it.
+※
+※ **The handle is the same thing whether there is a ring or not.**  Where there
+※ is none the work is done as it is asked for and what the kernel said is put
+※ where an answer goes, so `flush` reads one number out of one place either way.
+※ That is what emulating a ring has to get right, and it is why the answer lives
+※ in the ring's table rather than in the handle.
+※
+※ **What comes back is the number.**  How many bytes went, or what the kernel
+※ said where it refused -- the error number itself, which cannot be wrong.
+※ `std.as_error` names one for a program that would rather compare a name.
+※
+※ Compare: **liburing**, whose `io_uring_submit` and `io_uring_wait_cqe` this
+※ pair is; **POSIX AIO**, whose `aio_write` and `aio_return` are the same shape
+※ with a control block for a handle; **C**'s `fwrite` and `fflush`, which is
+※ this with a buffer in between rather than a request; **Go** and **Rust**,
+※ whose writes are synchronous and whose asynchrony is elsewhere.
+
+let std := ⎕import("std")
+
+@[startup, impure]
+fn main(init: &mut std.Init) → u6:
+    ※ started, waited for, and the count read back
+    match std.write(&mut init⌖.io.errors, ⎕bytes("one\n")):
+        std.Pending(h):
+            match std.flush(h):
+                u64 ¤size(n):
+                    if n ≠ 4:
+                        1u6
+                    else:
+                        rest(init)
+                ⊥:
+                    2u6
+        ⊥:
+            3u6
+
+@[impure]
+fn rest(init: &mut std.Init) → u6:
+    ※ the two in one
+    match std.write_sync(&mut init⌖.io.errors, ⎕bytes("two\n")):
+        u64 ¤size(n):
+            if n ≠ 4:
+                4u6
+            else:
+                refused(init)
+        ⊥:
+            5u6
+
+@[impure]
+fn refused(init: &mut std.Init) → u6:
+    ※ a descriptor nothing opened: the number comes back as the kernel gave it
+    let nowhere: mut std.Writer = std.Writer(.fd ← 77i32)
+    match std.write_sync(&mut nowhere, ⎕bytes("three\n")):
+        u64 ¤size:
+            6u6
+        ⊥(code):
+            if code ≠ 9i32:
+                7u6
+            elif std.as_error(code) ≠ std.Error.not_a_device:
+                8u6
+            else:
+                ※ started and never waited for: the drain before the program
+                ※ ends is what makes it happen
+                match std.write(&mut init⌖.io.errors, ⎕bytes("four\n")):
+                    std.Pending:
+                        0u6
+                    ⊥:
+                        9u6

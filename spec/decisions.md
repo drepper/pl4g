@@ -5990,6 +5990,44 @@ runtime and nothing is handed to `main` at all; **Go**, the same; **Zig**, whose
 program see everything through it, which is the shape that grows without
 anything being rewritten.
 
+## 2026-09-18T09:00+02:00 — language
+
+**A write is started and waited for separately, and nothing outstanding
+survives the program**
+
+At the user's direction.  `std.write` submits a request and answers a `Pending`;
+`std.flush` waits for one and says how it went; `std.write_sync` is the two
+together; `std.drain` waits for everything.  Every request still outstanding
+when the startup function returns is waited for before the process ends, which
+a destructor in `std` arranges.
+
+**The handle holds a slot and nothing else.**  What the kernel said goes in the
+ring's own table, so a request the ring is still working on and one that was
+done on the spot are read the same way.  That is what makes emulating a ring
+right: where there is none the work is done as it is asked for and the answer is
+put where an answer goes, and `flush` reads one number out of one place either
+way.  It also keeps the handle *one value*, which a result's answer has to be --
+a record of two words there would be a part that is itself several values, which
+is the one shape nothing below the checker can place.
+
+**The error is the number the kernel said**, which cannot be wrong.  That
+replaces carrying the enumeration, which lost the number for anything it did not
+name; `std.as_error` names one for a program that would rather compare a name,
+and the enumeration is still there for it.
+
+**A record of one value lives in one register.**  `Pending` is a record of one
+field, and a result whose answer is one asked for a register of the record's own
+type -- which the three instruction selectors refused outright, a record having
+been a thing only memory held.  A record is what it is made of, and one made of
+a single value is that value's register.
+
+Compare: **liburing**, whose `io_uring_submit` and `io_uring_wait_cqe` this pair
+is and whose users must drain before exit themselves; **POSIX AIO**, whose
+`aio_write` and `aio_return` are the same shape with a control block for a
+handle; **C**'s `fwrite` and `fflush`, which is this with a buffer between the
+program and the device rather than a request; **Go** and **Rust**, whose writes
+are synchronous and whose asynchrony is somewhere else entirely.
+
 Open questions
 --------------
 

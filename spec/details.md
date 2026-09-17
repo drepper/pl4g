@@ -2514,11 +2514,29 @@ the top level, `⎕at` and `⎕span`, `⎕acquire` and `⎕release`,
 `⎕widen`, `⎕address`.  Every one of those was asked for and decided on its own
 terms, and every one of them stayed when the ring moved.
 
-It is now C, in `runtime/io.c`, at the user's direction, and `std` is the
-descriptor types and two calls.  What it does is the same: `io_uring_setup`,
-three `mmap`s of the descriptor that answers, a submission entry written, the
-tail published with a releasing store, `io_uring_enter`, and the completion tail
-read with an acquiring load.
+It is now C, in `runtime/io.c`, at the user's direction.  What it offers is
+three things: **submit**, which takes a slot in the ring's own table and writes
+the request without telling the kernel; **wait**, which tells the kernel and
+reads the answer out of that slot; and **drain**, which waits for every slot
+that is outstanding.  A slot is taken either way -- with a ring and without one
+-- so the handle a program holds is the same thing whichever it got, and where
+there is no ring the answer is put in the slot as the work is done.
+
+**`io_uring_enter` asking for one answer is not being given one.**  It may come
+back with nothing ready, and what makes that right is asking again: `wait` loops
+until the slot it cares about is answered.  The drain did not, and broke on a
+turn that found nothing -- so a write nobody had waited for was abandoned and
+the process exited with it still in flight.  To a terminal or a pipe it landed
+anyway and to a file it did not, which is what made the bug look like a
+difference between devices rather than a race.
+
+**A destructor in `std` drains before the process ends**, which is what "exits
+normally" means: a destructor runs when the startup function returns.  That is
+also what first exercised a destructor that *calls* anything, and it found a
+second bug -- on x86-64 the exit status was moved into the register a system
+call takes its first argument in *before* the destructors ran, and an ordinary
+call puts its own first argument there.  The status now waits in a register a
+call leaves alone, and only where a destructor is going to run.
 
 **qemu-user answers `io_uring_setup` with `ENOSYS`**, so a ring can never run
 under the emulators two of the three targets are tested with.  The runtime

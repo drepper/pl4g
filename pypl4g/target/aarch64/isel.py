@@ -2104,11 +2104,20 @@ def _new_value(ty: Type, registers: RegisterInfo,
     """
     from ...ir.types import FloatType, ProductType, SumType, VecType
 
-    if isinstance(ty, (ProductType, SumType)):
-        # A product is every one of its fields at once and a sum is one of its
-        # variants and a tag; neither is a thing a register holds.  What they
-        # want is a place in memory, and nothing in the language makes a value
-        # of one yet, so this is where saying so belongs.
+    if isinstance(ty, ProductType):
+        # A record travels as the values it is made of, and whatever asks for a
+        # register asks once per value -- so what arrives here is a record whose
+        # values are one, which is a register of whatever that one is.  A record
+        # of more than one has no register to be in and says so.
+        inner = parts_of(ty)
+        if len(inner) == 1 and not made_of_parts(inner[0]):
+            return _new_value(inner[0], registers, hint=hint)
+        raise UnsupportedOperation("".join((
+            "a value of type '", ty.render(), "'")), None)
+    if isinstance(ty, SumType):
+        # A sum is one of its variants and a tag, which is not a thing a
+        # register holds; what it wants is a place in memory, and nothing in
+        # the language makes a value of one yet.
         raise UnsupportedOperation("".join((
             "a value of type '", ty.render(), "'")), None)
     if isinstance(ty, VecType):
@@ -2175,7 +2184,7 @@ def _width_of(ty: Type) -> int:
     writing one any wider would touch whatever is laid out beside it.
     """
     from ...ir.types import (BoolType, CharType, EnumType, FloatType,
-                             IntType)
+                             IntType, ProductType)
 
     if isinstance(ty, IntType):
         # What holds it: a type narrower than a machine width is read and
@@ -2186,6 +2195,12 @@ def _width_of(ty: Type) -> int:
         return ty.bits
     if isinstance(ty, (CharType, EnumType)):
         return ty.holder.bits
+    if isinstance(ty, ProductType):
+        # A record of one value is that value, which is what it is held as and
+        # what a load or a store of it touches.
+        inner = parts_of(ty)
+        if len(inner) == 1 and not made_of_parts(inner[0]):
+            return _width_of(inner[0])
     return 8 if isinstance(ty, BoolType) else 64
 
 

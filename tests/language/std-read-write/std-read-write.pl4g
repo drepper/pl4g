@@ -38,7 +38,7 @@ fn main(init: &mut std.Init) → u6:
         let sent: u8⟦4⟧ = ⟦1u8, 2u8, 3u8, 4u8⟧
         let back: mut u8⟦4⟧ = ⟦0u8, 0u8, 0u8, 0u8⟧
         ※ how many bytes went, or why none did
-        let went: u64 ¤size = std.write(&mut sink, sent) ?? 0
+        let went: u64 ¤size = std.write_sync(&mut sink, sent) ?? 0
         let came: u64 ¤size = std.read(&mut source, back) ?? 0
         if went ≠ 4:
             2u6
@@ -50,8 +50,8 @@ fn main(init: &mut std.Init) → u6:
         ※ back named rather than as a number
         else:
             let nowhere: mut std.Writer = std.Writer(.fd ← 77i32)
-            match std.write(&mut nowhere, sent):
+            match std.write_sync(&mut nowhere, sent):
                 u64 ¤size:
                     5u6
                 ⊥(why):
-                    if why = std.Error.not_a_device: 0u6 else: 6u6
+                    if why = 9i32: 0u6 else: 6u6

@@ -9,7 +9,7 @@ width of a pointer is the target's business and not the type's.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Final
 
 from .types import (ArrayType, BoolType, CharType, DictType, EnumType,
@@ -52,8 +52,23 @@ class DataLayout:
 WIDE_ENOUGH: Final[int] = 16
 
 
+def _as_the_system_would(ty: Type, layout: DataLayout) -> DataLayout:
+    """The layout to use for *ty*, which the type itself may settle.
+
+    A record marked `@[abi]` is read by something compiled by something else, so
+    it is laid out the way that world lays one out and the freedom the
+    specification gives is given up -- for the record and for everything inside
+    it, since a field laid out one way inside a record laid out the other would
+    be the disagreement this is here to stop.
+    """
+    if layout.system or not isinstance(ty, ProductType) or not ty.abi:
+        return layout
+    return replace(layout, system=True)
+
+
 def size_of(ty: Type, layout: DataLayout) -> int:
     """The number of bytes a value of *ty* occupies."""
+    layout = _as_the_system_would(ty, layout)
     match ty:
         case IntType():
             # What holds it and not what it is: a `u3` is three bits of
@@ -147,6 +162,7 @@ def size_of(ty: Type, layout: DataLayout) -> int:
 
 def align_of(ty: Type, layout: DataLayout) -> int:
     """The boundary a value of *ty* must start on."""
+    layout = _as_the_system_would(ty, layout)
     match ty:
         case IntType():
             return ty.held // 8
@@ -221,6 +237,7 @@ def offsets_of(ty: ProductType, layout: DataLayout) -> tuple[int, ...]:
     specification lets a later pass choose a better order; when one does, this
     is the single place that says where a field went.
     """
+    layout = _as_the_system_would(ty, layout)
     found: list[int] = []
     total = 0
     for _, field in ty.fields:

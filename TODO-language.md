@@ -208,6 +208,10 @@ To Do List for the PL4g language
     through `@[external]` and handed the ring as an `@[abi]` record.  qemu-user has no `io_uring`, so where one cannot be made the
     calls go straight to the kernel and every test still runs on all three targets.
 
+[ ] a read that does not wait.  `std.write` answers a handle and `std.read` does not: what a read is for is the bytes, and a
+    program that has not waited does not have them.  A program that wants several reads in flight -- from several descriptors --
+    wants the same pair `write` and `flush` are, and wants somewhere to say which buffer each filled.
+
 [ ] use `ReadWriter`.  The type is exported and nothing answers one, and nothing will while the three inherited descriptors are
     all there is -- the user settled on 2026-09-18 that there is no `open` call and no representation for a file name.  It is
     declared for what will answer one.

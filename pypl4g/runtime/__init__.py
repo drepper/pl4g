@@ -120,7 +120,7 @@ def shape_of(blob: Blob) -> tuple[int, ...]:
 #: and is not compared.
 _RING_FIELDS: tuple[str, ...] = (
     "state", "fd", "sq_head", "sq_tail", "sq_mask", "sq_array", "sqes",
-    "cq_head", "cq_tail", "cq_mask", "cqes")
+    "cq_head", "cq_tail", "cq_mask", "cqes", "held", "answer")
 
 
 def ring_fields() -> Sequence[str]:
@@ -140,4 +140,5 @@ def names() -> Sequence[str]:
 #: What `runtime/io.c` defines and the `std` module reaches.  Written down here
 #: as well as in the C so that a program naming one the runtime does not have
 #: is refused where it is written rather than when an image is laid out.
-_NAMES: tuple[str, ...] = ("pl4g_io_read", "pl4g_io_write")
+_NAMES: tuple[str, ...] = ("pl4g_io_drain", "pl4g_io_submit",
+                          "pl4g_io_wait")

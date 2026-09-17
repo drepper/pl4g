@@ -45,7 +45,7 @@ fn main(init: &mut std.Init) → u6:
     else:
         ※ and one of them written through, which answers how many bytes went or
         ※ why none did
-        match std.write(&mut init⌖.io.errors, message):
+        match std.write_sync(&mut init⌖.io.errors, message):
             u64 ¤size(n):
                 if n ≠ 6:
                     4u6
