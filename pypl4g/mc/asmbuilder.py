@@ -30,6 +30,7 @@ from typing import Callable, Protocol, Sequence
 from ..source.location import INVALID_SPAN, Span
 from .inst import MCInst
 from .desc import InstFlags
+from .fixup import MCFixup
 from .machine import MachineBasicBlock, MachineFunction, MalformedGraph
 from .operand import MCImm, MCMem, MCOperand, MCReg, MCSymRef, RelocKind, SymExpr
 from .ops import Condition, Op, Rounding
@@ -456,9 +457,18 @@ class Assembler:
         """Pad to the next multiple of *alignment*."""
         self._streamer.emit_align(alignment, self._pad_byte)
 
-    def bytes(self, data: bytes) -> None:
-        """Emit literal bytes, as the initial contents of a variable."""
-        self._streamer.emit_bytes(data)
+    def bytes(self, data: bytes, fixups: Sequence[MCFixup] = ()) -> None:
+        """Emit literal bytes, as the initial contents of a variable.
+
+        *fixups* is what has to be filled in once addresses are known, which
+        bytes that came from somewhere already compiled carry and bytes a
+        program wrote do not.  Each one's offset is within *data*.
+        """
+        self._streamer.emit_bytes(data, fixups)
+
+    def symbol_named(self, name: str) -> MCSymbol:
+        """The symbol *name*, whether or not anything has defined it yet."""
+        return self._streamer.symbol(name)
 
     def label(self, name: str, *, binding: SymBinding = SymBinding.LOCAL,
               kind: SymKind = SymKind.NOTYPE,

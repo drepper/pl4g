@@ -11,7 +11,8 @@ from __future__ import annotations
 
 from typing import Final
 
-from ...mc.fixup import ABS32, ABS64, PCREL32, FixupKind
+from ...mc.fixup import (ABS32, ABS64, PCREL32, PCREL32_AT_FIELD,
+                         FixupKind)
 
 #: Which of these kinds the object format's relocation types come to.  A number
 #: here is a promise about what `bin/pl4g-runtime` may find in the runtime's
@@ -23,8 +24,8 @@ from ...mc.fixup import ABS32, ABS64, PCREL32, FixupKind
 #: displacement a call already carries.
 FROM_ELF: Final[dict[int, str]] = {
     1: ABS64.name,       # R_X86_64_64
-    2: PCREL32.name,     # R_X86_64_PC32
-    4: PCREL32.name,     # R_X86_64_PLT32
+    2: PCREL32_AT_FIELD.name,     # R_X86_64_PC32
+    4: PCREL32_AT_FIELD.name,     # R_X86_64_PLT32
     10: ABS32.name,      # R_X86_64_32
     11: ABS32.name,      # R_X86_64_32S
 }
@@ -32,4 +33,4 @@ FROM_ELF: Final[dict[int, str]] = {
 
 #: Every kind a packaged patch may name, by the name the patch carries.
 BY_NAME: Final[dict[str, FixupKind]] = {
-    one.name: one for one in (ABS32, ABS64, PCREL32)}
+    one.name: one for one in (ABS32, ABS64, PCREL32, PCREL32_AT_FIELD)}

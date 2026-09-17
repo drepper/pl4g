@@ -12,7 +12,7 @@ from __future__ import annotations
 from typing import Callable, Final
 
 from ...mc.fixedwidth import insert_bits, read_word, write_word
-from ...mc.fixup import (ABS32, ABS64, PCREL32, FixupBase, FixupKind,
+from ...mc.fixup import (ABS32, ABS64, PCREL32, PCREL32_AT_FIELD, PCREL32_AT_FIELD, FixupBase, FixupKind,
                          FixupRangeError, MCFixup, signed_fits)
 from .desc import INSTRUCTION_SIZE
 
@@ -122,3 +122,14 @@ FROM_ELF: Final[dict[int, str]] = {
 BY_NAME: Final[dict[str, FixupKind]] = {
     one.name: one for one in
     (ABS32, ABS64, PCREL32, JAL, BRANCH, PCREL_HI20, PCREL_LO12_I)}
+
+
+#: Which relocation types name another relocation rather than what they reach.
+#: This architecture computes an address in two instructions and the second is
+#: written against the first: what the format puts in it is a label at the
+#: `auipc`, and what is wanted is what *that* one reaches.  The value says which
+#: types the first may be, so a pair that does not go together is caught.
+PAIRED_WITH: Final[dict[int, tuple[int, ...]]] = {
+    24: (23,),      # R_RISCV_PCREL_LO12_I names an R_RISCV_PCREL_HI20
+    25: (23,),      # R_RISCV_PCREL_LO12_S, the same for a store
+}

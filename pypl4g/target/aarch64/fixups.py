@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import Callable, Final
 
 from ...mc.fixedwidth import insert_bits
-from ...mc.fixup import (ABS32, ABS64, PCREL32, FixupBase, FixupKind,
+from ...mc.fixup import (ABS32, ABS64, PCREL32, PCREL32_AT_FIELD, PCREL32_AT_FIELD, FixupBase, FixupKind,
                          FixupRangeError, MCFixup, signed_fits)
 from .desc import INSTRUCTION_SIZE
 

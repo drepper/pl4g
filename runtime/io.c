@@ -144,6 +144,23 @@ struct pl4g_ring {
 #define ENTRIES 8
 #define OP_READ 22
 #define OP_WRITE 23
+
+/* Which direction a call goes, and what each of the two ways of going there
+ * calls it.  One table rather than two constants at each call site: the ring
+ * and the kernel number the same operation differently, and saying so once is
+ * what keeps a reader from having to check that they were paired correctly. */
+struct way {
+  unsigned short op;            /* what the ring calls it */
+  unsigned short nr;            /* what the kernel calls it */
+};
+
+static const struct way ways[2] = {
+  { OP_READ, NR_READ },
+  { OP_WRITE, NR_WRITE },
+};
+
+#define READING 0
+#define WRITING 1
 #define ENTER_GETEVENTS 1
 #define OFF_SQ_RING 0UL
 #define OFF_CQ_RING 0x8000000UL
@@ -243,20 +260,21 @@ static i64 through_the_ring(struct pl4g_ring *r, unsigned char op, i32 fd,
 
 /* -- what the language calls ----------------------------------------------- */
 
-i64 pl4g_io_write(struct pl4g_ring *r, i32 fd, u64 at, u64 len)
+static i64 go(struct pl4g_ring *r, int which, i32 fd, u64 at, u64 len)
 {
   if (len == 0)
     return 0;
   if (started(r))
-    return through_the_ring(r, OP_WRITE, fd, at, len, 0);
-  return sys(NR_WRITE, fd, (i64) at, (i64) len, 0, 0, 0);
+    return through_the_ring(r, (unsigned char) ways[which].op, fd, at, len, 0);
+  return sys(ways[which].nr, fd, (i64) at, (i64) len, 0, 0, 0);
+}
+
+i64 pl4g_io_write(struct pl4g_ring *r, i32 fd, u64 at, u64 len)
+{
+  return go(r, WRITING, fd, at, len);
 }
 
 i64 pl4g_io_read(struct pl4g_ring *r, i32 fd, u64 at, u64 len)
 {
-  if (len == 0)
-    return 0;
-  if (started(r))
-    return through_the_ring(r, OP_READ, fd, at, len, 0);
-  return sys(NR_READ, fd, (i64) at, (i64) len, 0, 0, 0);
+  return go(r, READING, fd, at, len);
 }

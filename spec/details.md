@@ -2451,6 +2451,27 @@ is built freestanding, with no builtin calls -- a call to `memcpy` would be a
 call to something that is not there -- and, on RISC-V, with relaxation off,
 those relocations meaning "a linker may shorten this" and there being no linker.
 
+**Placing it is the machinery that was already there.**  `target/runtime.py`
+puts each piece in a section of its own -- `.pl4grt.text` and whatever else the
+object had -- defines the names in it by cutting the bytes where a name falls,
+and hands each run of bytes to `asm.bytes` with the patches that lie in it
+turned into `MCFixup`s.  From there the runtime is laid out and patched exactly
+as the compiler's own code is, and nothing about it is special.  It is emitted
+only where a call in the program names something it defines, so a program that
+does no I/O carries none of it.
+
+A patch measures **to** the piece it names plus how far into it, and **from**
+itself unless the format said otherwise -- which is what RISC-V needs, computing
+an address in two instructions of which the second is written against the first.
+The extractor resolves that pairing, so what is packaged already says what it
+reaches rather than naming another relocation.
+
+**The runtime is built position-independently**, `-fPIE` on two architectures
+and `-mcmodel=medany` on the third, because it is placed wherever the compiler
+is putting things: anything absolute would be a promise about an address nobody
+has made.  That is also what makes the relocations exercised rather than
+assumed -- each architecture reaches its own constant table through one.
+
 **A relocation becomes a fixup the target already has.**  `FROM_ELF` in each
 target's `fixups.py` says which relocation number is which kind, and `BY_NAME`
 says which kind a packaged patch names; a relocation the table has no kind for

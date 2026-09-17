@@ -49,6 +49,10 @@ def symbol_name(func: Function) -> str:
     This is a function of the IR alone, so every stage that needs the symbol
     computes the same one without anything having to be stored or passed along.
     """
+    if func.attrs.external is not None:
+        # Defined somewhere else and under a name of its own: nothing here
+        # chose it, so nothing here may decorate it.
+        return func.attrs.external
     if func.attrs.abi is not None:
         return func.name
     return mangle(func.name, func.ty, func.module)

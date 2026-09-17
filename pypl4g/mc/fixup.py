@@ -74,6 +74,14 @@ ABS64: Final[FixupKind] = FixupKind("abs64", 8)
 PCREL8: Final[FixupKind] = FixupKind("pcrel8", 1, FixupBase.FIELD_END)
 PCREL32: Final[FixupKind] = FixupKind("pcrel32", 4, FixupBase.FIELD_END)
 
+#: A displacement measured from where it is *stored* rather than from the end of
+#: the field.  That is what an object format means by a relative relocation --
+#: how far the end of the instruction is, is in the addend -- and the two are
+#: different conventions for the same number, which is why both are here rather
+#: than one being made to serve.
+PCREL32_AT_FIELD: Final[FixupKind] = FixupKind("pcrel32_at_field", 4,
+                                               FixupBase.FIELD_START)
+
 
 @dataclass(slots=True)
 class MCFixup:

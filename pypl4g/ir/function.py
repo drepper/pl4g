@@ -68,6 +68,11 @@ class FuncAttrs:
     priority: int | None = None
     inline: InlineHint = InlineHint.DEFAULT
     abi: str | None = None
+    #: The symbol a function defined somewhere else lives under, where that is
+    #: not the name the program gave it.  What the program calls it and what the
+    #: thing it calls is called need not agree: one is a name in a language and
+    #: the other a name in an image.
+    external: str | None = None
     #: Whether a caller may let what the function answers with go nowhere.  It
     #: may not by default: a function that answers is a function whose answer is
     #: the point of calling it, and the ones that may be called for what they do

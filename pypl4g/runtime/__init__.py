@@ -50,6 +50,11 @@ class Patch:
     #: Which piece the value is measured to, and how far into it.
     target: int
     addend: int = 0
+    #: How far from this patch the value is measured, where that is not from
+    #: the patch itself.  RISC-V computes an address in two instructions and
+    #: the second measures from the first, which is the one thing that needs
+    #: this; everywhere else it is nought.
+    measured_from: int = 0
 
 
 @dataclass(frozen=True, slots=True)

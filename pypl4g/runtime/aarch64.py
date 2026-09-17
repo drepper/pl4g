@@ -15,56 +15,47 @@ BLOB = Blob(
         Piece(name=".text", alignment=4,
               writable=False, executable=True,
               contents=bytes.fromhex(
-                  "fd7bbda9f65701a9fd030091f44f02a9430600b4f40303aaf50302aa"
-                  "f603012af30300aa3b000094c005003469a241a90b0000906001c03d"
-                  "080140b929fddf886a1a40f92801080a290500114a19088b5ffd02a9"
-                  "5f1d00f94001803d557d01a9560500b96b1640f9541900b9481100f9"
-                  "6a0e40f9685928b849fd9f88600640f9483580522100805222008052"
-                  "23008052e4031faae5031faa010000d42003f8b768a643a9080140b9"
-                  "29fddf881f01096b60feff5469aa44a9290140b92901080a08050011"
-                  "4951298b6a1e40f9200980b948fd9f880b000014e0031faa09000014"
-                  "c07e409308088052e10315aae20314aae3031faae4031faae5031faa"
-                  "010000d4f44f42a9f65741a9fd7bc3a8c0035fd6080040f9a80000b4"
-                  "1f0500f1e8179f1ae003082ac0035fd600e4006f48008052ec0300aa"
-                  "080000f9e003bcade00301ad00018052e1030091e00302ad28358052"
-                  "e2031faae01b803de3031faae4031faaff3b00f9e5031faa010000d4"
-                  "2007f8b7ea2f4029e84340b9e96740b9e40300aae0031faae5031faa"
-                  "6200805201090a8b29110b8bc81b805223009052010000d44be57ad3"
-                  "ea0300aae0031faac81b8052e10309aa62008052230090520500a152"
-                  "010000d4e90300aae0031faaed031f2ac81b8052e1030baa62008052"
-                  "230090520500a252010000d4e8030daa4a03f8b72903f8b70003f8b7"
-                  "e83340b9eb4340b9400d084e220d084ee11740fde32b40fd4801088b"
-                  "4a010b8b801900f9882902a9e85b40b9ea6740b90010a12e4110a32e"
-                  "2801088b29010a8b88a504a9280080528005803d8181833c881100a9"
-                  "02000014e8031f2aff030291e003082ac0035fd6fd7bbda9f65701a9"
-                  "fd030091f44f02a9430600b4f40303aaf50302aaf603012af30300aa"
-                  "a3ffff97c005003469a241a90b0000906001c03d080140b929fddf88"
-                  "6a1a40f92801080a290500114a19088b5ffd02a95f1d00f94001803d"
-                  "557d01a9560500b96b1640f9541900b9481100f96a0e40f9685928b8"
-                  "49fd9f88600640f948358052210080522200805223008052e4031faa"
-                  "e5031faa010000d42003f8b768a643a9080140b929fddf881f01096b"
-                  "60feff5469aa44a9290140b92901080a080500114951298b6a1e40f9"
-                  "200980b948fd9f880b000014e0031faa09000014c07e4093e8078052"
-                  "e10315aae20314aae3031faae4031faae5031faa010000d4f44f42a9"
-                  "f65741a9fd7bc3a8c0035fd6")),
-        Piece(name=".rodata.cst16", alignment=16,
+                  "e40303aae30302aae203012a2100805201000014a41000b4ff0302d1"
+                  "080040f9e90300aa1f0500f1000a0054a81000b500e4006f48008052"
+                  "ed0301aaee0302aaef0303aaf00304aa280100f900018052e1030091"
+                  "ff3b00f928358052e2031faae00300ade3031faae4031faae00301ad"
+                  "e5031faae00302ade01b803d010000d4800df8b7eb334029e84340b9"
+                  "ea6740b9e40300aae0031faae5031faa6200805201090b8b4a110c8b"
+                  "c81b805223009052010000d46ce57ad3eb0300aae0031faac81b8052"
+                  "e1030aaa62008052230090520500a152010000d4ea0300aae0031faa"
+                  "c81b8052e1030caa62008052230090520500a252010000d4cb09f8b7"
+                  "aa09f8b78009f8b7e83340b9ec4340b9600d084e420d084ee11740fd"
+                  "e32b40fd6801088b6b010c8be3030faa282d02a9e85b40b9eb6740b9"
+                  "0010a12e4110a32ee2030eaa4801088b4a010b8be1030daa28a904a9"
+                  "28008052281100a9e40310aa201900f92005803d2181833c2ba941a9"
+                  "287c7ed30c0000908c01009100e4006f886968384a0140b96bfddf88"
+                  "2c1940f96a010a0a6b0500118c190a8b8081823c9f1d00f98001803d"
+                  "837d01a988010039281540f9820500b9841900b98a1100f92c0d40f9"
+                  "0a592ab88bfd9f88200540f948358052210080522200805223008052"
+                  "e4031faae5031faa010000d4c001f8b728a943a9080140b94afddf88"
+                  "1f010a6b60feff542aad44a9291d40f94a0140b94a01080a08050011"
+                  "6a512a8b400980b928fd9f88ff030291c0035fd6e0031faac0035fd6"
+                  "e40310aae3030faae2030eaae1030daa0800009008010091407c4093"
+                  "0849218be10303aae20304aae3031faae4031faae5031faa08054079"
+                  "010000d4ff030291c0035fd6e40303aae30302aae203012ae1031f2a"
+                  "64ffff17")),
+        Piece(name=".rodata.cst8", alignment=2,
               writable=False, executable=False,
               contents=bytes.fromhex(
-                  "17000000000000000000000000000000160000000000000000000000"
-                  "00000000")),
+                  "16003f0017004000")),
     ),
     symbols={
-        "pl4g_io_read": (0, 608),
+        "pl4g_io_read": (0, 628),
         "pl4g_io_write": (0, 0),
     },
     patches=(
-        Patch(piece=0, offset=48, kind="aarch64_adr_page21",
+        Patch(piece=0, offset=368, kind="aarch64_adr_page21",
               target=1, addend=0),
-        Patch(piece=0, offset=52, kind="aarch64_ldst128_lo12",
+        Patch(piece=0, offset=372, kind="aarch64_add_lo12",
               target=1, addend=0),
-        Patch(piece=0, offset=656, kind="aarch64_adr_page21",
-              target=1, addend=16),
-        Patch(piece=0, offset=660, kind="aarch64_ldst128_lo12",
-              target=1, addend=16),
+        Patch(piece=0, offset=576, kind="aarch64_adr_page21",
+              target=1, addend=0),
+        Patch(piece=0, offset=580, kind="aarch64_add_lo12",
+              target=1, addend=0),
     ),
 )

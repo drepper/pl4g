@@ -24,6 +24,10 @@ from ..allocator import OUT_OF_MEMORY, emit_allocator, wanted_by
 from ..faults import Messages
 from ..tests import failures_of
 from ..pool import Constants
+from ..registry import architecture_of
+from ..runtime import Runtime, reaches
+from ...runtime import blob_for
+from .fixups import BY_NAME
 from ..globals import emit_globals
 from ..vectors import EVERY, Vectors, settle as settle_vectors
 from ...ir.inst import BinOp, UnOp
@@ -155,6 +159,11 @@ class X86_64Target:
         del opt_level
         messages = Messages()
         constants = Constants()
+        # The runtime compiled ahead of time, placed only where the program
+        # reaches it -- which is where a call names something it defines.
+        runtime = Runtime(blob=blob_for(architecture_of(self.triple)))
+        if reaches(module, runtime):
+            runtime.reached()
         layout = DataLayout(pointer_size=self.pointer_bits // 8)
         # What the front end asked of a whole run of elements at once, brought
         # down to what this machine has -- which is done to the program before a
@@ -217,6 +226,7 @@ class X86_64Target:
             if levels.requirements(self._mclevel) else None
         emit_start(asm, module, lookup_cconv(module.startup.cconv),
                    self._mclevel, refused, failures)
+        runtime.emit(asm, BY_NAME)
         messages.emit(asm)
         constants.emit(asm)
 
