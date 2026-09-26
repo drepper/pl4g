@@ -112,11 +112,12 @@ class Highlighter:
                     found.append((at_byte[node.start_byte],
                                   at_byte[node.end_byte], pattern, name))
         # Earliest first; of two beginning together the longer first, and of two
-        # the same the one written earlier in the query file.  That last is the
-        # rule tree-sitter's own highlighter follows, and it is what the queries
-        # are written to: `(type (identifier) @type)` stands above the line that
-        # calls every name a variable, and so wins wherever both match.
-        found.sort(key=lambda one: (one[0], -one[1], one[2]))
+        # the same the one written *later* in the query file.  That last is the
+        # rule tree-sitter's own highlighter follows and the one Neovim follows,
+        # and it is what the queries are written to: the line that calls every
+        # name a variable stands above `(type (identifier) @type)`, which is the
+        # finer answer and so wins wherever both match.
+        found.sort(key=lambda one: (one[0], -one[1], -one[2]))
         runs = [(begins, ends, name) for begins, ends, _, name in found]
         self._cache[id(text)] = (text, runs)
         return runs

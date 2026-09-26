@@ -1,0 +1,26 @@
+Editor support: what is open
+============================
+
+`editors/nvim` is the one configuration there is, and `tree-sitter-pl4g/queries`
+is what it and the compiler both read.  What is missing from either belongs here.
+
+[ ] an indentation query, so that an editor knows a line ending in `:` opens a block.  What there is instead is the indent of the
+    line before, which is right inside a block and wrong at the start of one -- so every block begins with a `>>`.  Neovim reads
+    `queries/pl4g/indents.scm` for this and so does Helix; the difficulty is that the line being typed is not yet part of any
+    block, so what the query has to say something about is the line above and the shape it opened.  A wrong answer is worse than
+    none, which is why there is none yet.
+
+[ ] a `folds.scm` that folds a match's arms.  It folds a definition and a block today, which is every block the layout makes, but
+    an arm of a `match` is not one of those: its body is a block and the arm itself -- the pattern and the body together -- is
+    what a reader wants to put away.
+
+[ ] read the compiler's diagnostics in the editor.  `:make` wants `makeprg` and an `errorformat`, and the compiler's output is
+    already the shape `errorformat` reads: path, line, column, severity, message.  The number in brackets at the end is what needs
+    saying in the format.  Beyond that is a language server, which is a larger thing and is not planned.
+
+[ ] a configuration for an editor that is not Neovim.  Helix reads the same queries with a `languages.toml` entry, Emacs has
+    `treesit` and wants the capture names mapped to its own faces, and Zed wants an extension.  None of them needs anything of the
+    grammar that is not already there, which is the point of the queries being where they are.
+
+[ ] a highlight for a name the program defined against one it only mentioned.  `queries/locals.scm` is what tree-sitter has for
+    that, and with it an editor can tell a definition from a use and rename by scope.  Nothing here needs it yet.

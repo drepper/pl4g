@@ -6185,12 +6185,60 @@ the kernel's stack is the program's stack.  What this has that none of them has
 is the choice being the compiler's: the stack is made by code the compiler wrote
 for this program, so a program that wants none of it carries none of it.
 
+## 2026-09-26T22:00+02:00 — tooling
+
+**An editor reads the grammar the compiler reads**
+
+At the user's direction: a configuration for Neovim, so that a `.pl4g` file is
+coloured by the tree-sitter grammar this project keeps.  `editors/nvim` is a
+Neovim package of four files and three links.
+
+**It holds no copy of anything.**  `parser/pl4g.so` links to what
+`bin/pl4g-grammar` builds and `queries/pl4g/*.scm` link to the grammar's own
+queries under the names the editor looks them up by.  The alternative -- copy the
+queries into the shape an editor wants -- is two statements of one thing, and the
+project has one of those already (the grammar and the compiler) with a test to
+keep them together.  A link needs no test beyond one that it still points
+somewhere, which is what `tests/compiler/test_editors.py` begins with.
+
+**Nothing computes a path.**  What finds the parser and the queries is the
+runtime path, which is the mechanism the editor already has; a package that
+worked out where it was installed and registered the grammar by hand would work
+too and would be a second mechanism.  So installing is a link into
+`pack/*/start/`, and pulling the project brings the grammar with it.
+
+**The queries are written coarse first, because the later pattern wins.**  This
+was a bug found by writing the configuration: tree-sitter's own highlighter and
+Neovim both take the *last* pattern that matches, and this project's queries were
+written for the opposite rule -- so the compiler coloured `u64` as a type while
+every editor and `tree-sitter highlight` coloured it as a variable.  The queries
+are now ordered the way both of those read them, and the compiler's colouriser
+breaks a tie the same way.  One rule, written down in the query file, in
+`spec/details.md` and in the grammar's README.
+
+**The configuration says what the language settles and no more.**  Four spaces
+and no tab, because a tab in indentation is an error (2103); the two comment
+markers, because the grammar has two; a name holding an apostrophe or an `@` as
+one word, because the lexer says so.  It does not turn folding on although the
+fold query is there, and it does not set a colour scheme: both are the reader's,
+and a package that decided would be deciding for every file.
+
+Compare: **Rust**, whose editor support is `rust-analyzer` and whose tree-sitter
+grammar lives in another repository entirely, so its queries are somebody else's
+to keep current; **Go**, the same with `gopls` and `vim-go`; **Zig**, which ships
+`zig.vim` beside the compiler and leaves the tree-sitter grammar out of the tree;
+**nvim-treesitter**, where the queries for two hundred languages live in one
+repository apart from every one of those languages, which is what makes a query
+drift from the grammar it is about.  What this does instead is keep the grammar,
+the queries, the compiler that reads them and the editor configuration that reads
+them in one tree, with a test that opens the editor.
+
 Open questions
 --------------
 
 Questions that are open, and tasks not yet done, are kept in the to-do lists rather than here:
-[TODO-language.md](../TODO-language.md) for the language and [TODO-pypl4g.md](../TODO-pypl4g.md) for the compiler, with a list of
-its own for each further tool as one is needed.
+[TODO-language.md](../TODO-language.md) for the language, [TODO-pypl4g.md](../TODO-pypl4g.md) for the compiler and
+[TODO-editors.md](../TODO-editors.md) for what an editor reads, with a list of its own for each further tool as one is needed.
 
 This file records decisions that were made.  A decision that leaves something open says so in its own entry, and the thing left
 open belongs in a list.

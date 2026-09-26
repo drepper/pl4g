@@ -1,0 +1,1 @@
+../../../../tree-sitter-pl4g/queries/highlights.scm

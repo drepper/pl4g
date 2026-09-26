@@ -15,6 +15,7 @@ Separate generated files in subdirectories:
 - `spec` for the Markdown documentation of the language specification, the compiler documentations (Python and final), and the logs of the
   design and implementations
 - `share` for data files such as the error message list etc which might have to be shared with other implementations as well
+- `editors` for the configuration an editor needs, which reads the tree-sitter grammar rather than restating it
 
 
 How to proceed

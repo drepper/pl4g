@@ -2892,6 +2892,15 @@ uses -- so a line in a diagnostic is coloured the way the same line is coloured
 where it was written, from one description of the language rather than two that
 drift apart.
 
+**Of two patterns over the same thing, the one written later wins.**  That is
+what tree-sitter's own highlighter does and what Neovim does, so it is what this
+does: the sort that puts the runs in order breaks a tie by taking the *later*
+pattern of the query file.  It read them the other way round at first, which
+made the compiler the only thing in the world that coloured `u64` as a type --
+an editor and `tree-sitter highlight` both took the line that calls every name a
+variable, because it stood below.  The queries are now written coarse-first, and
+that one rule is what all three of them follow.
+
 **The whole file is parsed, not the line.**  One line of a block does not parse
 on its own, so what is asked is always about the file, the answer is cut to the
 line afterwards, and it is remembered per file: a hundred diagnostics in one
@@ -2909,6 +2918,45 @@ the library was built for another version of tree-sitter, or a query names a
 node the grammar has not got -- there is simply no highlighting.  A compiler
 that said it could not colour something would say it about every line of every
 diagnostic, and none of it is about the program.
+
+An editor that reads the same grammar
+-------------------------------------
+
+`editors/nvim` is a Neovim package, and it **holds no copy of anything**: the
+parser in it and the queries in it are links to `tree-sitter-pl4g`.  So an editor
+colours a program the way a diagnostic colours the same line, for the same reason
+the diagnostic does it that way -- one description of the language, read by
+everything that needs one.
+
+Four files, and what each is for: the suffix says what a `.pl4g` file is, since
+the language has no shebang line; the ftplugin sets what editing one is like and
+turns the grammar on; `parser/pl4g.so` is a link to what `bin/pl4g-grammar`
+builds, and `queries/pl4g/` links to the grammar's own queries under the names
+Neovim looks them up by.  Nothing computes a path and nothing is copied on
+install, so pulling the project brings the grammar with it.
+
+**What the ftplugin says is what the language settles and nothing else.**
+Indentation is four characters and never a tab, because a tab in indentation is
+an error the compiler reports (2103) -- so a tab that is there already is shown
+rather than left to be found by the compiler.  The comment markers are the two
+the grammar has.  A name may hold an apostrophe and one the compiler provides may
+hold an `@`, which is said so that a word-wise motion treats such a name as one
+word; the `⎕` that begins it needs no saying, every character above 255 being a
+word character to that editor already.
+
+**It does not turn folding on** although the fold query is there, and it does not
+work out the indent of a new line.  The first is the reader's business and a
+package that decided would be deciding for every file.  The second wants a rule
+that knows a line ending in `:` opens a block, which is what an indentation query
+would be; `TODO-editors.md` has the entry.
+
+**A test opens a program in the editor.**  `tests/compiler/test_editors.py`
+checks that the links resolve, that every query compiles, that every token of
+every program in the suite is something the queries colour, that every name they
+capture by is one the editor knows -- and then runs Neovim over a program with
+nothing but this package on its runtime path and asks what each token came out
+as.  That last is the one test that reads the type of the buffer, the parser, the
+queries and the order of the patterns in one go.
 
 Expectations
 ------------

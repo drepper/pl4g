@@ -10,6 +10,7 @@
 !/CLAUDE.md
 !/TODO-language.md
 !/TODO-pypl4g.md
+!/TODO-editors.md
 !/pyproject.toml
 
 # What a build leaves, anywhere.  These come after the rule above because the
