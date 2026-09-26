@@ -52,11 +52,25 @@ the queries with it.
 another language -- with `lazy.nvim`:
 
 ```lua
-{ dir = "/path/to/pl4g/editors/nvim", ft = "pl4g" }
+{ dir = "/path/to/pl4g/editors/nvim", lazy = false }
 ```
+
+`lazy = false` and not `ft = "pl4g"`, which is what a plugin for one language
+usually says: a lazy-loaded package is on the runtime path only once something
+has already decided the file is of this type, and what decides that is in the
+package.  It is four files and three links, so there is nothing to defer.
 
 `nvim-treesitter` is not wanted and is not in the way: what it installs is
 parsers and queries, and both are here already.
+
+**However it was installed, this is how to see that it was:**
+
+```vim
+:echo nvim_get_runtime_file('lua/pl4g/health.lua', v:true)
+```
+
+An empty list means Neovim cannot see the package, and nothing below will work
+until it can.
 
 What it does
 ------------
@@ -81,13 +95,15 @@ What it does
 When nothing is coloured
 ------------------------
 
-Run **`:checkhealth pl4g`** in a window with the file open.  Five things have to
+Run **`:checkhealth pl4g`** in a window with the file open.  Six things have to
 hold and each of them fails looking exactly like the others from the outside, so
-the check says which one it was:
+the check says which one it was -- except the first, where the check is one of the
+things that is not there:
 
 | What it says | What to do |
 |---|---|
-| nothing says what a `.pl4g` file is | the package is not on the runtime path: `:echo &runtimepath` and see the three ways above |
+| `No healthcheck found for "pl4g" plugin` | the package is not on the runtime path, so not even the check is there -- see the three ways above, and the one line that says whether Neovim can see it |
+| nothing says what a `.pl4g` file is | the package is on the path but its `ftdetect` never ran: `filetype on` |
 | no `parser/pl4g.so` on the runtime path | run `bin/pl4g-grammar`; the link points at what it builds |
 | the parser does not load | Neovim 0.11 or later reads the committed parser; an older one does not |
 | the query does not compile | the parser and the queries are out of step: `bin/pl4g-grammar` again |
