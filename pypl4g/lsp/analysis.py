@@ -28,6 +28,7 @@ from ..ir.reports import ReportLog
 from ..driver.main import Driver
 from ..driver.options import EmitKind, Options
 from ..front import ast
+from ..sema.notes import Notes
 from ..source.manager import SourceManager, SourceReadError
 
 
@@ -66,6 +67,9 @@ class Analysis:
     sources: SourceManager | None = None
     #: Whether this went as far as code generation.
     whole: bool = False
+    #: What the checker made of every name it resolved, for the questions that
+    #: are not about diagnostics: what this is, and where it was defined.
+    notes: Notes | None = None
 
 
 def analyse(path: Path, held: Mapping[Path, str], *, whole: bool = False,
@@ -74,13 +78,19 @@ def analyse(path: Path, held: Mapping[Path, str], *, whole: bool = False,
 
     Every kind of failure is one of the compiler's own, so nothing here raises:
     what a caller gets back is an analysis, with whatever diagnostics there were.
+
+    The checker is always asked to write down what it resolved.  It costs one
+    test against nothing per name and it is what every question that is not a
+    diagnostic is answered from, so there is no version of this that would not
+    want it.
     """
     collected: list[Diagnostic] = []
     reports = ReportLog()
     diags = DiagEngine(collected.append, log=reports)
     sources = BufferSources(held)
+    notes = Notes()
     found = Analysis(path=path, diagnostics=collected, sources=sources,
-                     whole=whole)
+                     whole=whole, notes=notes)
     with TemporaryDirectory(prefix="pl4g-lsp-") as room:
         # The default target, whatever it is: what is wanted is the
         # diagnostics, and the only ones that differ between targets are the
@@ -92,7 +102,7 @@ def analyse(path: Path, held: Mapping[Path, str], *, whole: bool = False,
         # protocol; what the driver would say about its stages goes to the
         # standard error, which is the log an editor shows.
         driver = Driver(options=options, diags=diags, sources=sources,
-                        stderr=sys.stderr, reports=reports)
+                        stderr=sys.stderr, reports=reports, notes=notes)
         try:
             if whole:
                 driver.run()

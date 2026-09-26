@@ -43,6 +43,7 @@ from ..opt.pass_ import build_manager
 from ..sema.check import check
 from ..sema.modules import (ModuleRegistry, SearchPath,
                             system_modules)
+from ..sema.notes import Notes
 from ..source.manager import (SourceDecodeError, SourceManager, SourceReadError)
 from ..target.registry import (canonical_triples, known_triples,
                                lookup as lookup_target)
@@ -81,6 +82,10 @@ class Driver:
     #: they are reported, and the module writes its choices into the same log --
     #: so a compilation that failed early still leaves one rather than none.
     reports: ReportLog = field(default_factory=ReportLog)
+    #: Where to write down what each name in the program turned out to be, for
+    #: whoever will be asked about one later.  Nothing for a build, which is
+    #: never asked; the language server hands one in.
+    notes: Notes | None = None
 
     def _timed(self, name: str, start: float) -> None:
         """Record that a stage finished."""
@@ -161,7 +166,7 @@ class Driver:
                         reports=self.reports)
         registry = ModuleRegistry(search=SearchPath(
             given=list(self.options.module_path), system=system_modules()))
-        check(module, units, self.diags, registry, self.sources)
+        check(module, units, self.diags, registry, self.sources, self.notes)
         # Before anything is dropped: which tests this binary runs is what
         # decides which of them are reachable at all.
         module.test_plan.extend(_planned(module, self.wanted_tests))

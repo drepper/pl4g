@@ -18,6 +18,10 @@ is what it and the compiler both read.  What is missing from either belongs here
     server and the compiler is what answers it, so the diagnostics arrive as you type with the numbers and the words and the places
     the compiler gives them.  `:make` with an `errorformat` would still be worth having for a build of many files at once.
 
+[ ] hover shows a reference the way the compiler writes one, `ptr<mut Init>`, and not the way a program writes one, `&mut Init`.
+    It is the entry in TODO-pypl4g.md about the renderer, and this is where it became something a reader sees rather than something
+    only a diagnostic said.
+
 [ ] the rest of what a language server can be asked.  It answers diagnostics, an outline, what a name is and where it was defined.
     What it does not answer yet: every use of a name (`references`), renaming one, completing one, and formatting a file -- the last
     being a thing the language has no statement about yet, since nothing says what the one true layout of a program is.

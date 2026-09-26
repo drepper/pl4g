@@ -6279,6 +6279,20 @@ the first being exactly the characters the compiler counts -- and converts throu
 the line's own text for the other two.  Most servers implement `utf-16` alone and
 are quietly wrong on a line like this one.
 
+**What a name is comes from a side table, not from a second walk.**  The checker
+resolves every name already and forgets what it found; a server needs exactly
+that, so the checker writes it down when it is handed somewhere to write it --
+four call sites, one test against nothing per name, and nothing recorded for a
+build.  The alternative was for the server to resolve names itself over the syntax
+tree, which is the reimplementation this whole design exists to avoid: it would be
+right about the easy cases and wrong about the ones a reader asks about.
+
+**Uses come from the checker, definitions from the tree.**  Where a definition is
+and what its documentation says is in the syntax tree already, so nothing is
+recorded for one; standing on a definition is answered from the tree and standing
+on a use from the table.  Hover therefore shows a record's own documentation
+comment without the checker having carried it anywhere.
+
 **The editor's text and not the file's**, through a source manager that hands out
 what the editor holds and reads the disk for everything else.  So an import from a
 buffer with unsaved changes is read as the buffer has it, which is eleven lines

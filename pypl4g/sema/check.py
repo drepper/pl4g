@@ -66,6 +66,8 @@ from ..ir.value import (BlockParam, BoolConst, CharConst, Const, EnumConst,
 from pathlib import Path
 
 from ..source.location import INVALID_SPAN, Span
+from .notes import (FUNCTION, MODULE, PARAMETER, TYPE, VARIABLE, Note,
+                    Notes)
 from ..source.manager import SourceManager
 from .attributes import (AttrSpec, AttrTarget, BoundAttr, SPECIAL_OF_TEST_KIND,
                          TARGET_NAMES, lookup)
@@ -1211,9 +1213,14 @@ class Checker:
                  registry: ModuleRegistry | None = None,
                  path: Path | None = None, prefix: str = "",
                  sources: SourceManager | None = None,
-                 top_level: list[_Global] | None = None) -> None:
+                 top_level: list[_Global] | None = None,
+                 notes: Notes | None = None) -> None:
         self._module = module
         self._diags = diags
+        #: Where to write down what each name turned out to be, for whoever
+        #: wants to be asked about one later -- the language server, and nothing
+        #: else.  Nothing where nobody asked, which is every build.
+        self._notes = notes
         self._defined: dict[str, tuple[Span, str]] = {}
         #: What this file's top-level names stand for.  It is the file's own,
         #: not the compilation's: two files may each define a `counter`, and
@@ -1628,6 +1635,16 @@ class Checker:
             self._diags.emit(D.LANG_IMPORT_NOT_A_MODULE, base.span, name=base.name)
             return UndefConst(ERROR)
         found = held.exports.get(expr.name)
+        if self._notes is not None:
+            # The module the name is reached through, and then the name itself:
+            # two notes over two spans, the narrower of which is the one an
+            # editor asks about when the cursor is on it.
+            where = self._defined.get(base.name)
+            self._note(base.span, MODULE, base.name, held.path.as_posix(),
+                       where[0] if where is not None else INVALID_SPAN)
+            if isinstance(found, Function):
+                self._note(expr.name_span, FUNCTION, expr.name,
+                           found.ty.render(), found.name_span)
         if found is None:
             self._diags.emit(D.LANG_IMPORT_NOT_EXPORTED, expr.name_span,
                              name=expr.name, module=base.name)
@@ -2213,6 +2230,18 @@ class Checker:
                 return found
         return None
 
+    def _note(self, span: Span, kind: str, name: str, detail: str,
+              defined: Span = INVALID_SPAN, doc: str | None = None) -> None:
+        """Write down what a name turned out to be, where anything is listening.
+
+        One test against nothing where nobody is, which is what makes it
+        affordable to call this wherever a name is resolved.
+        """
+        if self._notes is None:
+            return
+        self._notes.add(Note(span=span, kind=kind, name=name, detail=detail,
+                             defined=defined, doc=doc))
+
     def _lookup(self, ref: ast.NameRef) -> Value | None:
         """Resolve a name: the innermost binding first, then the top level.
 
@@ -2226,9 +2255,20 @@ class Checker:
         found = self._find_local(ref.name)
         if found is not None:
             found.read = True
+            if self._notes is not None:
+                # Nothing is worked out unless something asked: a build never
+                # reaches past this test.
+                held = found.held if found.placed and found.held is not None \
+                    else found.value.ty
+                self._note(ref.span,
+                           PARAMETER if found.is_parameter else VARIABLE,
+                           ref.name, held.render(), found.span)
             return found.value
         found_global = self._provided(ref.name)
         if isinstance(found_global, GlobalVar):
+            if self._notes is not None:
+                self._note(ref.span, VARIABLE, ref.name,
+                           found_global.value_type.render(), found_global.span)
             return found_global
         if isinstance(found_global, LoadedModule):
             self._diags.emit(D.LANG_IMPORT_MODULE_AS_VALUE, ref.span, name=ref.name)
@@ -3184,6 +3224,22 @@ class Checker:
             found = self._bound.get(ref.name)
         if found is None:
             found = self._defined_type(ref)
+            # Where the program defined it, there is somewhere to send a reader:
+            # this file's own definition, or the one the module it came from has.
+            named = None
+            if self._notes is not None:
+                named = self._top.get(ref.name)
+                if ref.module is not None:
+                    held = self._top.get(ref.module)
+                    named = held.exports.get(ref.name) \
+                        if isinstance(held, LoadedModule) else None
+            if found is not None and isinstance(named, _NamedType):
+                self._note(ref.span, TYPE, ref.name, found.render(),
+                           named.node.name_span, named.node.doc)
+        elif found is not None and self._notes is not None:
+            # A built-in: there is nowhere to send a reader, the specification
+            # being where it is defined, but what it is, is still worth saying.
+            self._note(ref.span, TYPE, ref.name, found.render())
         if found is None:
             self._diags.emit(D.LANG_TYPE_UNKNOWN, ref.span, name=ref.name)
             return ERROR
@@ -5655,6 +5711,10 @@ class Checker:
         local = self._find_local(expr.name)
         if local is not None:
             local.read = True
+            if self._notes is not None and local.held is not None:
+                self._note(expr.span,
+                           PARAMETER if local.is_parameter else VARIABLE,
+                           expr.name, local.held.render(), local.span)
             if not local.placed:
                 # Every name a reference is taken of anywhere in the body was
                 # given storage before the body was walked, so a name that has
@@ -11943,6 +12003,9 @@ class Checker:
             case ast.NameRef():
                 found = self._top.get(expr.name)
                 if isinstance(found, Function):
+                    if self._notes is not None:
+                        self._note(expr.span, FUNCTION, expr.name,
+                                   found.ty.render(), found.name_span)
                     return found
                 if found is None and self._find_local(expr.name) is None:
                     self._diags.emit(D.LANG_FILESTRUCT_UNDEFINED_NAME, expr.span,
@@ -11993,6 +12056,15 @@ class Checker:
         if not isinstance(found, Function):
             self._diags.emit(D.LANG_CALL_NOT_A_FUNCTION, expr.span, name=expr.name)
             return None
+        if self._notes is not None:
+            # The module the name is reached through, and then the function
+            # itself, which is defined in that module's file: two notes over two
+            # spans, and the narrower is the one the cursor is on.
+            where = self._defined.get(base.name)
+            self._note(base.span, MODULE, base.name, held.path.as_posix(),
+                       where[0] if where is not None else INVALID_SPAN)
+            self._note(expr.name_span, FUNCTION, expr.name,
+                       found.ty.render(), found.name_span)
         return found
 
     def _lower_name(self, builder: IRBuilder, ref: ast.NameRef,
@@ -12387,7 +12459,8 @@ class Checker:
 
 def check(module: Module, units: Sequence[ast.SourceUnit], diags: DiagEngine,
           registry: ModuleRegistry | None = None,
-          sources: SourceManager | None = None) -> Module:
+          sources: SourceManager | None = None,
+          notes: Notes | None = None) -> Module:
     """Check *units* and lower them into *module*.
 
     The units are the files named on the command line, which share one
@@ -12396,6 +12469,7 @@ def check(module: Module, units: Sequence[ast.SourceUnit], diags: DiagEngine,
     """
     found = registry if registry is not None else ModuleRegistry()
     path = Path(units[0].path) if units else None
-    result = Checker(module, diags, found, path, "", sources).run(units)
+    result = Checker(module, diags, found, path, "", sources,
+                     notes=notes).run(units)
     found.settle_names()
     return result

@@ -447,3 +447,145 @@ def test_neovim_starts_the_server_and_shows_what_it_says(tmp_path: Path) -> None
     # The same place the compiler's own diagnostic names, and the same words.
     assert (int(line), int(column), code) == (3, 16, "2006")
     assert "300" in message
+
+
+#: A program whose names are worth asking about: a parameter, a variable, a type
+#: the file defines, a type another module defines, a function of this file's and
+#: a function of another module's.
+NAMES = """\
+let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
+
+\N{REFERENCE MARK}\N{REFERENCE MARK} two numbers that belong together
+type Pair = first : u8 ; second : u8
+
+fn total(p: Pair) \N{RIGHTWARDS ARROW} u8:
+    p.first
+
+@[startup, impure]
+fn main(init: &mut std.Init) \N{RIGHTWARDS ARROW} u6:
+    let both: Pair = Pair(.first \N{LEFTWARDS ARROW} 1u8, .second \N{LEFTWARDS ARROW} 2u8)
+    let sum: u8 = total(both)
+    match std.write_sync(&mut init\N{POSITION INDICATOR}.io.errors,
+                         \N{APL FUNCTIONAL SYMBOL QUAD}bytes("hi\\n")):
+        u64 \N{CURRENCY SIGN}size: \N{APL FUNCTIONAL SYMBOL QUAD}narrow(sum, \N{TOP LEFT CORNER}u6\N{TOP RIGHT CORNER}) ?? 0u6
+        \N{UP TACK}: 1u6
+"""
+
+
+def _at(text: str, line: int, needle: str) -> dict[str, int]:
+    """The position of *needle* on *line* of *text*, counted in characters."""
+    found = text.splitlines()[line]
+    at = found.index(needle)
+    return {"line": line, "character": at}
+
+
+def test_hover_says_what_a_name_is(session: Session, tmp_path: Path) -> None:
+    """The checker's answer, which is the type the compiler gave the name.
+
+    Not a guess from the syntax: `sum` is `u8` because the checker worked out
+    that it is, and `init` is a reference to the record the program started with
+    because that is what the signature said.
+    """
+    source = tmp_path / "names.pl4g"
+    source.write_text(NAMES, encoding="utf-8")
+    session.start(["utf-32"])
+    session.open(source)
+    uri, found = session.diagnostics()
+    assert found == [], found
+
+    def hover(line: int, needle: str) -> str:
+        answered = session.request("textDocument/hover", {
+            "textDocument": {"uri": uri_of(source)},
+            "position": _at(NAMES, line, needle)})
+        assert isinstance(answered, dict), (line, needle, answered)
+        return str(answered["contents"]["value"])
+
+    assert "variable sum : u8" in hover(14, "sum")
+    assert "parameter init : " in hover(12, "init")
+    # Said once: the name of a record is what the type is called, so a hover
+    # that wrote it twice would be saying `type Pair : Pair`.
+    assert "type Pair\n" in hover(10, "Pair")
+    assert "function total" in hover(11, "total")
+    # A function of another module, with the signature the module gave it.
+    said = hover(12, "write_sync")
+    assert "function write_sync" in said and "u8" in said
+    # And the module itself, which says where it came from.
+    assert "module std" in hover(12, "std")
+    # A documentation comment is shown under what the thing is.
+    assert "two numbers that belong together" in hover(10, "Pair")
+    assert session.close() == 0
+
+
+def test_where_a_name_was_defined(session: Session, tmp_path: Path) -> None:
+    """In this file and in another, which is the same question either way.
+
+    A module's function is defined in the module, and the compiler read that file
+    too -- so the span it wrote down places itself, and the answer names a
+    different file with no more work than the ones that do not.
+    """
+    source = tmp_path / "names.pl4g"
+    source.write_text(NAMES, encoding="utf-8")
+    session.start(["utf-32"])
+    session.open(source)
+    session.diagnostics()
+
+    def defined(line: int, needle: str) -> tuple[str, int]:
+        answered = session.request("textDocument/definition", {
+            "textDocument": {"uri": uri_of(source)},
+            "position": _at(NAMES, line, needle)})
+        assert isinstance(answered, dict), (line, needle, answered)
+        return str(answered["uri"]), int(answered["range"]["start"]["line"])
+
+    here = uri_of(source)
+    # A local, a type and a function of this file's: the line the name is on.
+    assert defined(14, "sum") == (here, 11)
+    assert defined(10, "Pair") == (here, 3)
+    assert defined(11, "total") == (here, 5)
+    assert defined(12, "init") == (here, 9)
+    assert defined(12, "std") == (here, 0)
+    # And one of the module's, which is in the module's own file.
+    where, line = defined(12, "write_sync")
+    assert where.endswith("/modules/std.pl4g"), where
+    text = (ROOT / "modules" / "std.pl4g").read_text(encoding="utf-8")
+    assert "write_sync" in text.splitlines()[line]
+    assert session.close() == 0
+
+
+def test_standing_on_a_definition_answers_with_itself(session: Session,
+                                                      tmp_path: Path) -> None:
+    """Which is what makes the same key work whichever end you are at.
+
+    The checker records what a *use* resolved to and says nothing about a
+    definition, there being nothing to resolve; what answers for one is the
+    syntax tree, which is where a definition's name and its documentation are.
+    """
+    source = tmp_path / "names.pl4g"
+    source.write_text(NAMES, encoding="utf-8")
+    session.start(["utf-32"])
+    session.open(source)
+    session.diagnostics()
+    on_the_definition = _at(NAMES, 5, "total")
+    answered = session.request("textDocument/definition", {
+        "textDocument": {"uri": uri_of(source)}, "position": on_the_definition})
+    assert answered["uri"] == uri_of(source)
+    assert answered["range"]["start"] == on_the_definition
+    said = session.request("textDocument/hover", {
+        "textDocument": {"uri": uri_of(source)}, "position": on_the_definition})
+    assert "function total" in said["contents"]["value"]
+    assert session.close() == 0
+
+
+def test_nothing_is_said_about_a_place_that_is_not_a_name(session: Session,
+                                                          tmp_path: Path) -> None:
+    """A server that answered for every position would be guessing at most."""
+    source = tmp_path / "names.pl4g"
+    source.write_text(NAMES, encoding="utf-8")
+    session.start(["utf-32"])
+    session.open(source)
+    session.diagnostics()
+    empty = {"line": 1, "character": 0}
+    assert session.request("textDocument/hover", {
+        "textDocument": {"uri": uri_of(source)}, "position": empty}) is None
+    assert session.request("textDocument/definition", {
+        "textDocument": {"uri": uri_of(source)}, "position": empty}) is None
+    assert session.close() == 0

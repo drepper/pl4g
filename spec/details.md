@@ -2973,6 +2973,23 @@ printed about its stages goes to the standard error, which is the log an editor
 keeps -- and which is where a reader looks when the server itself is what is
 wrong.
 
+**What a name is, and where it was defined**, are answered from a side table the
+checker fills in when it is handed one.  `sema/notes.py` is that table: for every
+name the checker resolved it records where the name is, what kind of thing it
+turned out to be, the type it got rendered as the language writes one, and where
+it was defined -- which may be in another file, a module's function being defined
+in the module and the compiler having read that file too.  A build hands in
+nothing and pays one test against nothing per name resolved; that is why it is a
+table handed in rather than something the checker keeps.
+
+**It is about uses, not definitions.**  Where a definition is and what its
+documentation comment says is in the syntax tree, which the server already has, so
+standing on a definition is answered from the tree and standing on a use from the
+table.  That is what makes the same key work at either end, and it is why the
+checker needed four hooks and not forty: `_lookup` for a local, a parameter or a
+global, `_place_of_a_name` for one a reference is taken of, `_callee` and
+`_callee_of_module` for a function, and `_named_type` for a type.
+
 **A test drives it the way an editor does**, over pipes, from the handshake to the
 last notification: that is the only way to check a server, what it is being what
 it says on those two streams.  And one test runs Neovim with nothing but this

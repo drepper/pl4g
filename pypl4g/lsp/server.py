@@ -116,6 +116,8 @@ class Server:
             "textDocument/didSave": self._did_save,
             "textDocument/didClose": self._did_close,
             "textDocument/documentSymbol": self._document_symbol,
+            "textDocument/hover": self._hover,
+            "textDocument/definition": self._definition,
         }
 
     def _answer(self, ident: object, result: object) -> None:
@@ -151,6 +153,8 @@ class Server:
                     "save": {"includeText": False},
                 },
                 "documentSymbolProvider": True,
+                "hoverProvider": True,
+                "definitionProvider": True,
             },
             "serverInfo": {"name": NAME, "version": VERSION},
         }
@@ -350,6 +354,137 @@ class Server:
             out.append({"name": name, "kind": kind, "range": whole,
                         "selectionRange": where})
         return out
+
+    # -- what a name is, and where it was defined ------------------------------
+
+    def _hover(self, params: Mapping[str, object]) -> object:
+        """What the name under the cursor is.
+
+        The checker's own answer where it resolved a name there, and the syntax
+        tree's where the cursor is on a definition rather than on a use -- what a
+        definition is, is written where it is written, and the checker has
+        nothing to add to it.  Nothing at all anywhere else: a server that made
+        something up for every position would be guessing at most of them.
+        """
+        found, loc = self._asked_about(params)
+        if found is None or loc is None or found.sources is None:
+            return None
+        note = found.notes.at(loc) if found.notes is not None else None
+        if note is not None:
+            return self._as_hover(found, note.span, note.kind, note.name,
+                                  note.detail, note.doc)
+        made = self._definition_at(found, loc)
+        if made is None:
+            return None
+        item, kind = made
+        detail = getattr(item, "doc", None)
+        return self._as_hover(found, item.name_span, kind, item.name, "",
+                              detail if isinstance(detail, str) else None)
+
+    def _as_hover(self, found: Analysis, span: Span, kind: str, name: str,
+                  detail: str, doc: str | None) -> object:
+        """One answer, written the way an editor renders one.
+
+        A fenced block holding what the thing is, in this language, so that an
+        editor with the grammar colours it the way it colours the program; then
+        the documentation comment as prose, where the definition has one.
+        """
+        assert found.sources is not None
+        # A type whose name is what it is says it once: `type Pair`, not
+        # `type Pair : Pair`.
+        said = " ".join((kind, name)) if not detail or detail == name \
+            else "".join((kind, " ", name, " : ", detail))
+        lines = ["".join(("```pl4g\n", said, "\n```"))]
+        if doc:
+            lines.append(doc.strip())
+        answer: dict[str, object] = {
+            "contents": {"kind": "markdown", "value": "\n\n".join(lines)}}
+        where = places.range_of(found.sources, span, self._encoding)
+        if where is not None:
+            answer["range"] = where
+        return answer
+
+    def _definition(self, params: Mapping[str, object]) -> object:
+        """Where the name under the cursor was defined.
+
+        In this file or in another: a module's function is defined in the
+        module, and the compiler read that file too, so the span it recorded
+        places itself.  A name that is on its own definition answers with that
+        definition, which is what makes the same key work either way round.
+        """
+        found, loc = self._asked_about(params)
+        if found is None or loc is None or found.sources is None:
+            return None
+        note = found.notes.at(loc) if found.notes is not None else None
+        if note is not None and note.defined.is_valid:
+            spot = self._range_in(found, note.defined, path=None)
+            if spot is not None:
+                at, where = spot
+                return {"uri": places.to_uri(at), "range": where}
+        made = self._definition_at(found, loc)
+        if made is None:
+            return None
+        item, _ = made
+        where = places.range_of(found.sources, item.name_span, self._encoding)
+        if where is None:
+            return None
+        return {"uri": places.to_uri(found.path), "range": where}
+
+    def _definition_at(self, found: Analysis, loc: int
+                       ) -> tuple[object, str] | None:
+        """The definition whose name is written at *loc*, where one is.
+
+        Only the name and not the whole definition: standing anywhere inside a
+        function is not standing on its name, and answering with the function
+        for every position in it would make hover say the same thing about every
+        line of a body.
+        """
+        if found.unit is None:
+            return None
+        kinds = ((ast.FuncDef, "function"), (ast.TypeDef, "type"),
+                 (ast.EnumDef, "type"), (ast.ModuleImport, "module"),
+                 (ast.UnitDef, "unit"), (ast.VarDef, "variable"))
+        for item in found.unit.items:
+            kind = next((word for what, word in kinds if isinstance(item, what)),
+                        None)
+            named = getattr(item, "name_span", None)
+            if kind is None or named is None or not isinstance(named, Span):
+                continue
+            if named.is_valid and named.start <= loc < named.end:
+                return (item, kind)
+        return None
+
+    def _asked_about(self, params: Mapping[str, object]
+                     ) -> tuple[Analysis | None, int | None]:
+        """Which analysis a question is about, and where in the file it points.
+
+        The position comes in the editor's units and has to be brought back to a
+        place in the text; what does that is the line's own text, which the
+        source manager holds.
+        """
+        path = self._path_of(self._uri_of(params))
+        if path is None:
+            return (None, None)
+        found = self._seen.get(path)
+        position = params.get("position")
+        if found is None or found.sources is None \
+                or not isinstance(position, dict):
+            return (None, None)
+        line = position.get("line")
+        character = position.get("character")
+        if not isinstance(line, int) or not isinstance(character, int):
+            return (found, None)
+        for one in found.sources.files:
+            if one.path != path and one.path.resolve() != path.resolve():
+                continue
+            if line >= len(one.line_starts):
+                return (found, None)
+            start = one.line_starts[line]
+            ends = one.text.find("\n", start)
+            text = one.text[start:] if ends < 0 else one.text[start:ends]
+            return (found, one.base + start
+                    + places.characters(text, character, self._encoding))
+        return (found, None)
 
     # -- odds and ends ---------------------------------------------------------
 
