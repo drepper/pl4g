@@ -6233,6 +6233,57 @@ drift from the grammar it is about.  What this does instead is keep the grammar,
 the queries, the compiler that reads them and the editor configuration that reads
 them in one tree, with a test that opens the editor.
 
+## 2026-09-26T23:30+02:00 — tooling
+
+**The compiler is the language server**
+
+At the user's direction: a server an editor can use, reusing the compiler, asked
+for by a word on its command line.  `pypl4g lsp`, and what answers every question
+is the compiler -- the same lexer, parser, checker and code generation, over the
+text the editor holds.
+
+**Confirmed with the user before it was written**, which is what this file is for:
+what the first server can do (diagnostics, an outline, and -- next -- hover and
+where a name is defined), how it is asked for (a command word beside `build` and
+`test`, rather than the option that was proposed), and what makes it recompile
+(the front end while typing, the whole compiler on save).
+
+**Why not a server beside the compiler.**  Every other answer in this space is a
+reimplementation of the front end: **rust-analyzer** and **gopls** are that, and
+have to be, their languages' batch compilers being far too slow to run on a
+keystroke; **zls** parses Zig itself; **pylsp** wraps a pile of tools that each
+read the file again.  **clangd** is the other shape -- the compiler's own front end
+in a server -- and it is the one to copy here, because this compiler already runs
+in a few milliseconds and an incremental reimplementation would buy nothing and
+cost a second statement of what the language is.  The project has one second
+statement already, the tree-sitter grammar, and it is kept honest by a test; a
+third would drift, and the one a reader would notice drifting is the one in the
+editor.
+
+**A command word rather than an option.**  The user proposed `--lsp` and chose the
+word: what the compiler is being asked to *do* is what a command word says, and
+every option is about how it does it.  It takes no source file, and one named
+beside it is refused (1017) rather than ignored.
+
+**Front end while typing, everything on save.**  Nearly every diagnostic is in the
+front end, which is the fast part; the back end has a handful that nothing else
+can find (8501, 9901), and the moment they matter is the moment there is a file.
+The alternative -- everything on every keystroke -- was rejected on the largest
+sample in the suite, which is 115 ms of work and would be felt.
+
+**Three ways of counting, and the editor picks.**  The protocol counts along a
+line in sixteen-bit units unless both ends agree otherwise, and this language is
+written in glyphs of three bytes with characters outside the basic plane in the
+test suite.  So the server offers `utf-32`, `utf-8` and `utf-16` in that order --
+the first being exactly the characters the compiler counts -- and converts through
+the line's own text for the other two.  Most servers implement `utf-16` alone and
+are quietly wrong on a line like this one.
+
+**The editor's text and not the file's**, through a source manager that hands out
+what the editor holds and reads the disk for everything else.  So an import from a
+buffer with unsaved changes is read as the buffer has it, which is eleven lines
+and no change to the compiler.
+
 Open questions
 --------------
 

@@ -234,7 +234,7 @@
           "description": "which tests were run"
         }
       ],
-      "cause": "A test answered that it did not pass, and named itself as it stopped.  What is wrong is in the program rather than in the compiler, so the message naming it is the test binary\u0027s own; this is what makes the run that built it fail as well.",
+      "cause": "A test answered that it did not pass, and named itself as it stopped.  What is wrong is in the program rather than in the compiler, so the message naming it is the test binary's own; this is what makes the run that built it fail as well.",
       "spec": {
         "document": "spec/details.md",
         "section": "Tests"
@@ -460,6 +460,27 @@
         "document": "spec/details.md",
         "section": "Targets",
         "requirement": "'--mclevel' is given only for a target that has levels."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 1017,
+      "name": "IMPL_CLI_LSP_TAKES_NO_SOURCE",
+      "severity": "error",
+      "message": "the 'lsp' command takes no source file, and was given '{path}'",
+      "args": [
+        {
+          "name": "path",
+          "type": "string",
+          "description": "the file the command line named"
+        }
+      ],
+      "cause": "A language server compiles what the editor sends it, which is the text in a buffer and not a file on disk -- so a source named on the command line is a file the server would never look at.  It is refused rather than ignored, a command line that names one having been written by somebody who expected it to matter.",
+      "spec": {
+        "document": "spec/details.md",
+        "section": "Implementation"
       },
       "since": "0.1",
       "default_enabled": true,
@@ -1252,13 +1273,13 @@
       "number": 3030,
       "name": "LANG_SYNTAX_EXPECTED_CLOSING_ARRAY",
       "severity": "error",
-      "message": "expected '\u27e7'",
+      "message": "expected '⟧'",
       "args": [],
-      "cause": "An array, the type of one and a lookup in one are all written between `\u27e6` and `\u27e7`, and the closing one is missing here.  What is usually behind it is a comma left out between two elements.",
+      "cause": "An array, the type of one and a lookup in one are all written between `⟦` and `⟧`, and the closing one is missing here.  What is usually behind it is a comma left out between two elements.",
       "spec": {
         "document": "spec/spec.md",
         "section": "The Language / Types / Arrays",
-        "requirement": "An array is closed with `\u27e7`."
+        "requirement": "An array is closed with `⟧`."
       },
       "since": "0.1",
       "default_enabled": true,
@@ -1284,13 +1305,13 @@
       "number": 3035,
       "name": "LANG_SYNTAX_EXPECTED_CLOSING_LIFT",
       "severity": "error",
-      "message": "expected '\u231d'",
+      "message": "expected '⌝'",
       "args": [],
-      "cause": "What is lifted out of the program and into the compiler is written between `\u231c` and `\u231d`, and the closing one is missing here.  The brackets are what says where what is lifted ends, so there is no reading of the rest without them.",
+      "cause": "What is lifted out of the program and into the compiler is written between `⌜` and `⌝`, and the closing one is missing here.  The brackets are what says where what is lifted ends, so there is no reading of the rest without them.",
       "spec": {
         "document": "spec/spec.md",
         "section": "The Language / Settled while compiling / Lifting",
-        "requirement": "What is lifted is closed with `\u231d`."
+        "requirement": "What is lifted is closed with `⌝`."
       },
       "since": "0.1",
       "default_enabled": true,
@@ -1306,7 +1327,7 @@
       "spec": {
         "document": "spec/spec.md",
         "section": "The Language / Expressions / Calls",
-        "requirement": "A named argument is written '.NAME \u2190 VALUE'."
+        "requirement": "A named argument is written '.NAME ← VALUE'."
       },
       "since": "0.1",
       "default_enabled": true,
@@ -1316,13 +1337,13 @@
       "number": 3037,
       "name": "LANG_SYNTAX_EXPECTED_NAMED_VALUE",
       "severity": "error",
-      "message": "expected '\u2190' after the name of a parameter",
+      "message": "expected '←' after the name of a parameter",
       "args": [],
       "cause": "An argument that names its parameter binds a value to that name, and an assignment is how this language writes binding a value to a name.  So the arrow follows the name, and what follows the arrow is the argument.",
       "spec": {
         "document": "spec/spec.md",
         "section": "The Language / Expressions / Calls",
-        "requirement": "A named argument is written '.NAME \u2190 VALUE'."
+        "requirement": "A named argument is written '.NAME ← VALUE'."
       },
       "since": "0.1",
       "default_enabled": true,
@@ -1348,13 +1369,13 @@
       "number": 3039,
       "name": "LANG_SYNTAX_EXPECTED_UNIT_ARROW",
       "severity": "error",
-      "message": "expected '\u2192' after the unit that may stand elsewhere",
+      "message": "expected '→' after the unit that may stand elsewhere",
       "args": [],
-      "cause": "`unit \u00a4FROM \u2192 \u00a4TO` is the form that says where a unit may stand, and the arrow is what tells it from the form that introduces a name.",
+      "cause": "`unit ¤FROM → ¤TO` is the form that says where a unit may stand, and the arrow is what tells it from the form that introduces a name.",
       "spec": {
         "document": "spec/spec.md",
         "section": "The Language / Types / Units",
-        "requirement": "Standing elsewhere is written 'unit \u00a4FROM \u2192 \u00a4TO'."
+        "requirement": "Standing elsewhere is written 'unit ¤FROM → ¤TO'."
       },
       "since": "0.1",
       "default_enabled": true,
@@ -1396,7 +1417,7 @@
       "number": 3043,
       "name": "LANG_SYNTAX_EXPECTED_LIFETIME_NAME",
       "severity": "error",
-      "message": "expected the name of a lifetime after '\u29d6'",
+      "message": "expected the name of a lifetime after '⧖'",
       "args": [],
       "cause": "The hourglass says a lifetime name follows, and a lifetime is named the way anything else is.  What the name means is settled by where else in the same signature it stands, so there is nothing else the mark could be followed by.",
       "spec": {
@@ -1428,7 +1449,7 @@
       "number": 3031,
       "name": "LANG_SYNTAX_SPREAD_OUTSIDE_A_CALL",
       "severity": "error",
-      "message": "'\u2042' stands among the arguments of a call or the members of a tuple, and nowhere else",
+      "message": "'⁂' stands among the arguments of a call or the members of a tuple, and nowhere else",
       "args": [],
       "cause": "The asterism says that several things stand where one is written, which is a thing only a list of things has room for.  An argument list is one and a tuple's members are another; somewhere else exactly one value is wanted, so the glyph would have to mean something else and there is nothing for it to mean -- it is not an expression, and what follows it is not an operand.",
       "spec": {
@@ -1444,13 +1465,13 @@
       "number": 3032,
       "name": "LANG_SYNTAX_EXPECTED_LABEL_NAME",
       "severity": "error",
-      "message": "expected the name of a loop after '\u00a7'",
+      "message": "expected the name of a loop after '§'",
       "args": [],
       "cause": "The section sign says that a loop is being named, so a name is what follows it.  Nothing else can: the glyph does nothing on its own.",
       "spec": {
         "document": "spec/spec.md",
         "section": "The Language / Statements / Loops",
-        "requirement": "A label is written '\u00a7' followed by a name."
+        "requirement": "A label is written '§' followed by a name."
       },
       "since": "0.1",
       "default_enabled": true,
@@ -3423,7 +3444,7 @@
           "description": "the type of what was written"
         }
       ],
-      "cause": "A condition asks a question, and a question is answered by a truth value.  A number is not one: C treats any scalar as a condition, which is why `while (n)` counts down in C and means nothing here.  Where the question is whether a number has reached zero, `n \u2260 0u8` asks it.",
+      "cause": "A condition asks a question, and a question is answered by a truth value.  A number is not one: C treats any scalar as a condition, which is why `while (n)` counts down in C and means nothing here.  Where the question is whether a number has reached zero, `n ≠ 0u8` asks it.",
       "spec": {
         "document": "spec/spec.md",
         "section": "The Language / Statements / while",
@@ -3662,7 +3683,7 @@
           "description": "the type of what was written"
         }
       ],
-      "cause": "Square brackets after a value ask for one of its elements, which an array and a tuple have and nothing else does.  A set or a dictionary is looked in with `\u2e28` and `\u2e29` instead, because it is found by its key and the other two by their place.",
+      "cause": "Square brackets after a value ask for one of its elements, which an array and a tuple have and nothing else does.  A set or a dictionary is looked in with `⸨` and `⸩` instead, because it is found by its key and the other two by their place.",
       "spec": {
         "document": "spec/spec.md",
         "section": "The Language / Types / Arrays",
@@ -3958,7 +3979,7 @@
       "number": 4464,
       "name": "LANG_SPREAD_NOT_SEVERAL",
       "severity": "error",
-      "message": "'{found}' is one value, and '\u2042' stands for several",
+      "message": "'{found}' is one value, and '⁂' stands for several",
       "args": [
         {
           "name": "found",
@@ -4018,7 +4039,7 @@
       "number": 4467,
       "name": "LANG_LOOP_LABEL_UNKNOWN",
       "severity": "error",
-      "message": "no loop around this one is labelled '\u00a7{name}'",
+      "message": "no loop around this one is labelled '§{name}'",
       "args": [
         {
           "name": "name",
@@ -4040,7 +4061,7 @@
       "number": 4468,
       "name": "LANG_LOOP_LABEL_REUSED",
       "severity": "error",
-      "message": "a loop this one is inside is already labelled '\u00a7{name}'",
+      "message": "a loop this one is inside is already labelled '§{name}'",
       "args": [
         {
           "name": "name",
@@ -4062,7 +4083,7 @@
       "number": 4469,
       "name": "LANG_LOOP_LABEL_UNUSED",
       "severity": "warning",
-      "message": "nothing in this loop names '\u00a7{name}'",
+      "message": "nothing in this loop names '§{name}'",
       "args": [
         {
           "name": "name",
@@ -4167,7 +4188,7 @@
           "description": "the function that was called"
         }
       ],
-      "cause": "A function that answers with something is a function whose answer is the point of calling it, so a call whose answer goes nowhere is either a mistake or a leftover -- and in a language emitted by a generator a leftover is a defect in the generator.  Where the call is meant to be made for what it does and the answer is genuinely not wanted, `_ \u2190 f()` says so in one line; where that is true of every call to the function, `@[can_ignore]` on the function says it once.",
+      "cause": "A function that answers with something is a function whose answer is the point of calling it, so a call whose answer goes nowhere is either a mistake or a leftover -- and in a language emitted by a generator a leftover is a defect in the generator.  Where the call is meant to be made for what it does and the answer is genuinely not wanted, `_ ← f()` says so in one line; where that is true of every call to the function, `@[can_ignore]` on the function says it once.",
       "spec": {
         "document": "spec/spec.md",
         "section": "The Language / Expressions / Calls",
@@ -5161,11 +5182,11 @@
           "description": "the result being matched"
         }
       ],
-      "cause": "A result whose type names what its error carries -- `bool?u8` -- has something for the arm written `\u22a5` to bind; one written `bool?` has not, its error being the fact that there is no answer and nothing more.  A name written there would stand for nothing, which is a thing to say rather than a thing to allow.",
+      "cause": "A result whose type names what its error carries -- `bool?u8` -- has something for the arm written `⊥` to bind; one written `bool?` has not, its error being the fact that there is no answer and nothing more.  A name written there would stand for nothing, which is a thing to say rather than a thing to allow.",
       "spec": {
         "document": "spec/spec.md",
         "section": "The Language / Expressions / Results",
-        "requirement": "A name in a '\u22a5' arm needs an error that carries something."
+        "requirement": "A name in a '⊥' arm needs an error that carries something."
       },
       "since": "0.1",
       "default_enabled": true,
@@ -5175,7 +5196,7 @@
       "number": 4522,
       "name": "LANG_FAILURE_NEEDS_A_RESULT",
       "severity": "error",
-      "message": "'\u22a5' is a result that has no answer, and this is where {found} stands",
+      "message": "'⊥' is a result that has no answer, and this is where {found} stands",
       "args": [
         {
           "name": "found",
@@ -5187,7 +5208,7 @@
       "spec": {
         "document": "spec/spec.md",
         "section": "The Language / Expressions / Results",
-        "requirement": "'\u22a5' stands where a result is wanted."
+        "requirement": "'⊥' stands where a result is wanted."
       },
       "since": "0.1",
       "default_enabled": true,
@@ -5209,7 +5230,7 @@
       "spec": {
         "document": "spec/spec.md",
         "section": "The Language / Expressions / Results",
-        "requirement": "'\u22a5' carries a value only where the error does."
+        "requirement": "'⊥' carries a value only where the error does."
       },
       "since": "0.1",
       "default_enabled": true,
@@ -5232,11 +5253,11 @@
           "description": "what its error carries"
         }
       ],
-      "cause": "A result whose type says its error carries a value has one in every failure of it: there is no failure of such a type that carries nothing, so a `\u22a5` written without a value would be making a value with a hole in it.  What to write there is whatever the error is to say.",
+      "cause": "A result whose type says its error carries a value has one in every failure of it: there is no failure of such a type that carries nothing, so a `⊥` written without a value would be making a value with a hole in it.  What to write there is whatever the error is to say.",
       "spec": {
         "document": "spec/spec.md",
         "section": "The Language / Expressions / Results",
-        "requirement": "'\u22a5' carries a value where the error does."
+        "requirement": "'⊥' carries a value where the error does."
       },
       "since": "0.1",
       "default_enabled": true,
@@ -5425,7 +5446,7 @@
       "number": 4534,
       "name": "LANG_DEREF_NOT_A_REFERENCE",
       "severity": "error",
-      "message": "'\u2316' reads through a reference, and '{found}' is not one",
+      "message": "'⌖' reads through a reference, and '{found}' is not one",
       "args": [
         {
           "name": "found",
@@ -5437,7 +5458,7 @@
       "spec": {
         "document": "spec/spec.md",
         "section": "The Language / Types / References",
-        "requirement": "'\u2316' is written after a reference."
+        "requirement": "'⌖' is written after a reference."
       },
       "since": "0.1",
       "default_enabled": true,
@@ -5521,7 +5542,7 @@
           "description": "the type written"
         }
       ],
-      "cause": "A unit says what a number counts.  A truth value counts nothing, a code point counts nothing, and an array is several of something whose unit belongs to what it holds -- which is where it is written, `u8 \u00a4meter\u27e64\u27e7` being four lengths.",
+      "cause": "A unit says what a number counts.  A truth value counts nothing, a code point counts nothing, and an array is several of something whose unit belongs to what it holds -- which is where it is written, `u8 ¤meter⟦4⟧` being four lengths.",
       "spec": {
         "document": "spec/spec.md",
         "section": "The Language / Types / Units",
@@ -5535,7 +5556,7 @@
       "number": 4541,
       "name": "LANG_UNIT_INDEX",
       "severity": "error",
-      "message": "an index counts places, so it needs '\u00a4idx', and this is '{found}'",
+      "message": "an index counts places, so it needs '¤idx', and this is '{found}'",
       "args": [
         {
           "name": "found",
@@ -5543,11 +5564,11 @@
           "description": "the type of what was written"
         }
       ],
-      "cause": "Which element of an array is wanted is not a length, a count of seconds or a number of apples, and an index worked out from one of those is nearly always a mistake.  The unit of the question -- which one -- is `\u00a4idx`, and a number with another unit reaches it through `\u2395drop` and `\u2395unit`, which is the program saying it meant to.",
+      "cause": "Which element of an array is wanted is not a length, a count of seconds or a number of apples, and an index worked out from one of those is nearly always a mistake.  The unit of the question -- which one -- is `¤idx`, and a number with another unit reaches it through `⎕drop` and `⎕unit`, which is the program saying it meant to.",
       "spec": {
         "document": "spec/spec.md",
         "section": "The Language / Types / Units",
-        "requirement": "An index has the unit '\u00a4idx'."
+        "requirement": "An index has the unit '¤idx'."
       },
       "since": "0.1",
       "default_enabled": true,
@@ -5579,13 +5600,13 @@
       "number": 4543,
       "name": "LANG_UNIT_DROP_HAS_NONE",
       "severity": "error",
-      "message": "'\u2395drop' takes a unit off, and this value has none",
+      "message": "'⎕drop' takes a unit off, and this value has none",
       "args": [],
       "cause": "What it does is cross from a type with a unit to the one without it, and a value that has no unit is already there.  A call that does nothing is a line a generator emitted by mistake, which is what every rule about a statement with no effect is for.",
       "spec": {
         "document": "spec/spec.md",
         "section": "The Language / Types / Units",
-        "requirement": "'\u2395drop' is written where there is a unit."
+        "requirement": "'⎕drop' is written where there is a unit."
       },
       "since": "0.1",
       "default_enabled": true,
@@ -5595,7 +5616,7 @@
       "number": 4544,
       "name": "LANG_UNIT_PUT_ON_A_UNIT",
       "severity": "error",
-      "message": "'\u2395unit' puts a unit on a number that has none, and this one has '{found}'",
+      "message": "'⎕unit' puts a unit on a number that has none, and this one has '{found}'",
       "args": [
         {
           "name": "found",
@@ -5603,11 +5624,11 @@
           "description": "the unit it already has"
         }
       ],
-      "cause": "Nothing crosses from one unit to another in a single step, because a step that did would be the mistake units exist to catch written in one place instead of none.  A value that has a unit reaches another through `\u2395drop` and then `\u2395unit`, which is two things said out loud.",
+      "cause": "Nothing crosses from one unit to another in a single step, because a step that did would be the mistake units exist to catch written in one place instead of none.  A value that has a unit reaches another through `⎕drop` and then `⎕unit`, which is two things said out loud.",
       "spec": {
         "document": "spec/spec.md",
         "section": "The Language / Types / Units",
-        "requirement": "'\u2395unit' is written where there is no unit."
+        "requirement": "'⎕unit' is written where there is no unit."
       },
       "since": "0.1",
       "default_enabled": true,
@@ -5635,11 +5656,11 @@
           "description": "how many were written"
         }
       ],
-      "cause": "`\u2395drop` takes the value whose unit is to come off; `\u2395unit` and `\u2395narrow` take that value and, between the lifting marks, the unit or the type -- which are lifted because both are something the compiler reads and neither is a value the program works out.",
+      "cause": "`⎕drop` takes the value whose unit is to come off; `⎕unit` and `⎕narrow` take that value and, between the lifting marks, the unit or the type -- which are lifted because both are something the compiler reads and neither is a value the program works out.",
       "spec": {
         "document": "spec/spec.md",
         "section": "The Language / Types / Units",
-        "requirement": "'\u2395drop' takes one argument and '\u2395unit' two."
+        "requirement": "'⎕drop' takes one argument and '⎕unit' two."
       },
       "since": "0.1",
       "default_enabled": true,
@@ -5649,7 +5670,7 @@
       "number": 4546,
       "name": "LANG_UNIT_NOT_LIFTED",
       "severity": "error",
-      "message": "the unit '\u2395unit' puts on is written between '\u231c' and '\u231d'",
+      "message": "the unit '⎕unit' puts on is written between '⌜' and '⌝'",
       "args": [],
       "cause": "A unit is not a value: there is nothing at all for one to be at the time the program runs, since a unit is the part of a type the code knows nothing about.  So it is lifted out of the program the same way a type is where the compiler is asked about one.",
       "spec": {
@@ -5665,7 +5686,7 @@
       "number": 4547,
       "name": "LANG_NARROW_NOT_A_TYPE",
       "severity": "error",
-      "message": "the type '\u2395narrow' makes a value of is written between '\u231c' and '\u231d'",
+      "message": "the type '⎕narrow' makes a value of is written between '⌜' and '⌝'",
       "args": [],
       "cause": "A type is not a value, so it is lifted out of the program the way it is everywhere the compiler is asked about one.  Without the marks the name would be read as a value's, a type's name and a value's name being both identifiers, and which was meant would depend on what the name turned out to be.",
       "spec": {
@@ -5681,7 +5702,7 @@
       "number": 4548,
       "name": "LANG_NARROW_NOT_AN_INTEGER",
       "severity": "error",
-      "message": "'\u2395narrow' makes a whole number out of a whole number, and '{found}' is not one",
+      "message": "'⎕narrow' makes a whole number out of a whole number, and '{found}' is not one",
       "args": [
         {
           "name": "found",
@@ -5693,7 +5714,7 @@
       "spec": {
         "document": "spec/spec.md",
         "section": "The Language / Expressions / Narrowing",
-        "requirement": "'\u2395narrow' is written of a whole number and to one."
+        "requirement": "'⎕narrow' is written of a whole number and to one."
       },
       "since": "0.1",
       "default_enabled": true,
@@ -5853,7 +5874,7 @@
           "description": "the parameter"
         }
       ],
-      "cause": "The type a parameter is written with says how to read the argument's type: `T\u2019\u27e6\u27e7` against `u8\u27e64\u27e7` says `T\u2019` is `u8`.  Where the two are not the same shape there is nothing to read, and what the type parameter is stays unknown.",
+      "cause": "The type a parameter is written with says how to read the argument's type: `T’⟦⟧` against `u8⟦4⟧` says `T’` is `u8`.  Where the two are not the same shape there is nothing to read, and what the type parameter is stays unknown.",
       "spec": {
         "document": "spec/spec.md",
         "section": "The Language / File Structure / Generic Functions",
@@ -5999,7 +6020,7 @@
       "severity": "error",
       "message": "a function answering with a reference says how long it lives: 'static' or a lifetime name",
       "args": [],
-      "cause": "A reference is only worth having while what it names is still there, and a caller cannot see into the function to work that out.  So a function that hands one back says which of the two it is: as long as the program, which `static` in the type says, or as long as whatever else in the signature carries the same lifetime name, which `\u29d6x` says.  Without either there is nothing a caller could safely do with it.",
+      "cause": "A reference is only worth having while what it names is still there, and a caller cannot see into the function to work that out.  So a function that hands one back says which of the two it is: as long as the program, which `static` in the type says, or as long as whatever else in the signature carries the same lifetime name, which `⧖x` says.  Without either there is nothing a caller could safely do with it.",
       "spec": {
         "document": "spec/spec.md",
         "section": "The Language / Types / References",
@@ -6248,7 +6269,7 @@
           "description": "the name that was asked for"
         }
       ],
-      "cause": "The compiler holds the number each system call has on each architecture, because it is the compiler that knows which architecture it is building for.  What is in that table is what the runtime and the standard library ask for, each number checked against the kernel\u0027s own; a call nothing has asked for yet is not there, and adding one is a line per architecture rather than anything a program can do.",
+      "cause": "The compiler holds the number each system call has on each architecture, because it is the compiler that knows which architecture it is building for.  What is in that table is what the runtime and the standard library ask for, each number checked against the kernel's own; a call nothing has asked for yet is not there, and adding one is a line per architecture rather than anything a program can do.",
       "spec": {
         "document": "spec/spec.md",
         "section": "The Language / Compiler-Provided Names"
@@ -6368,7 +6389,7 @@
           "description": "the record"
         }
       ],
-      "cause": "A record\u0027s fields have names and its value uses them, so that a value reads as what it is rather than as a list whose order has to be checked against the definition.  A tuple is the shape for several values that go by position.",
+      "cause": "A record's fields have names and its value uses them, so that a value reads as what it is rather than as a list whose order has to be checked against the definition.  A tuple is the shape for several values that go by position.",
       "spec": {
         "document": "spec/spec.md",
         "section": "The Language / Types / Product Types"
@@ -6501,7 +6522,7 @@
       "number": 4585,
       "name": "LANG_AT_NOT_A_REFERENCE",
       "severity": "error",
-      "message": "'\u2395at' answers a reference, and '{found}' is not one",
+      "message": "'⎕at' answers a reference, and '{found}' is not one",
       "args": [
         {
           "name": "found",
@@ -6509,7 +6530,7 @@
           "description": "the type that was lifted"
         }
       ],
-      "cause": "The lifted type is what the answer is, so that the type written on the definition and the type written between the brackets are the same words.  What is at an address is one value, reached through a reference; several of them are what '\u2395span' answers.",
+      "cause": "The lifted type is what the answer is, so that the type written on the definition and the type written between the brackets are the same words.  What is at an address is one value, reached through a reference; several of them are what '⎕span' answers.",
       "spec": {
         "document": "spec/spec.md",
         "section": "The Language / Compiler-Provided Names"
@@ -6522,7 +6543,7 @@
       "number": 4586,
       "name": "LANG_SPAN_NOT_AN_ARRAY",
       "severity": "error",
-      "message": "'\u2395span' answers an array whose length is not in its type, and '{found}' is not one",
+      "message": "'⎕span' answers an array whose length is not in its type, and '{found}' is not one",
       "args": [
         {
           "name": "found",
@@ -6530,7 +6551,7 @@
           "description": "the type that was lifted"
         }
       ],
-      "cause": "How many there are is given as an argument, so it cannot also be in the type: an array type that says its length says something the count would then have to agree with, and two statements of one thing can disagree.  One value at an address is what '\u2395at' answers.",
+      "cause": "How many there are is given as an argument, so it cannot also be in the type: an array type that says its length says something the count would then have to agree with, and two statements of one thing can disagree.  One value at an address is what '⎕at' answers.",
       "spec": {
         "document": "spec/spec.md",
         "section": "The Language / Compiler-Provided Names"
@@ -6543,7 +6564,7 @@
       "number": 4587,
       "name": "LANG_SPAN_NOT_A_COUNT",
       "severity": "error",
-      "message": "'\u2395span' is given how many there are, and this is '{found}'",
+      "message": "'⎕span' is given how many there are, and this is '{found}'",
       "args": [
         {
           "name": "found",
@@ -6579,7 +6600,7 @@
       "number": 4589,
       "name": "LANG_WIDEN_NOT_A_TYPE",
       "severity": "error",
-      "message": "the type '\u2395widen' makes a value of is written between '\u231c' and '\u231d'",
+      "message": "the type '⎕widen' makes a value of is written between '⌜' and '⌝'",
       "args": [],
       "cause": "What a value is to become is a type and not an expression, and a type's name and a variable's name are both identifiers, so the brackets are what says which was meant.  Without them the meaning of the call would depend on what the names turned out to be.",
       "spec": {
@@ -6594,7 +6615,7 @@
       "number": 4590,
       "name": "LANG_WIDEN_NOT_AN_INTEGER",
       "severity": "error",
-      "message": "'\u2395widen' makes a whole number out of a whole number, and '{found}' is not one",
+      "message": "'⎕widen' makes a whole number out of a whole number, and '{found}' is not one",
       "args": [
         {
           "name": "found",
@@ -6628,7 +6649,7 @@
           "description": "the type it was to become"
         }
       ],
-      "cause": "'\u2395widen' answers the value itself and not a result, which it may do only because it cannot fail: every value of the type written has to be a value of the type wanted.  A narrower type into a wider one of the same signedness is such a case, and so is an unsigned type into a signed one with room to spare.  Anything else -- fewer bits, or a negative number where the type has none -- is a narrowing, and '\u2395narrow' is what answers a result saying whether it fitted.",
+      "cause": "'⎕widen' answers the value itself and not a result, which it may do only because it cannot fail: every value of the type written has to be a value of the type wanted.  A narrower type into a wider one of the same signedness is such a case, and so is an unsigned type into a signed one with room to spare.  Anything else -- fewer bits, or a negative number where the type has none -- is a narrowing, and '⎕narrow' is what answers a result saying whether it fitted.",
       "spec": {
         "document": "spec/spec.md",
         "section": "The Language / Expressions / Narrowing"
@@ -6641,7 +6662,7 @@
       "number": 4592,
       "name": "LANG_ADDRESS_OF_NOT_A_REFERENCE",
       "severity": "error",
-      "message": "'\u2395address' is given a place, and this is '{found}'",
+      "message": "'⎕address' is given a place, and this is '{found}'",
       "args": [
         {
           "name": "found",
@@ -6746,7 +6767,7 @@
       "number": 4597,
       "name": "LANG_BYTES_NOT_TEXT",
       "severity": "error",
-      "message": "'\u2395bytes' answers the bytes of text, and this is '{found}'",
+      "message": "'⎕bytes' answers the bytes of text, and this is '{found}'",
       "args": [
         {
           "name": "found",

@@ -47,7 +47,7 @@ from ..source.manager import (SourceDecodeError, SourceManager, SourceReadError)
 from ..target.registry import (canonical_triples, known_triples,
                                lookup as lookup_target)
 from .cli import parse_command_line
-from .cli import TEST
+from .cli import LSP, TEST
 from .options import (DiagFormat, EmitKind, ExitCode, Options, load_option_table,
                       render_help)
 
@@ -100,6 +100,16 @@ class Driver:
         if self.options.emit is EmitKind.IR:
             return self._write_text(render_module(module))
         return self._generate(module)
+
+    def front_end(self) -> Module | None:
+        """Read, parse and check, and stop there.
+
+        Every diagnostic but the back end's is made by these stages, and they
+        are the fast ones: what asks for this rather than for `run` is something
+        that wants to know what is wrong with a program rather than to have it
+        compiled -- the language server, which does this on every keystroke.
+        """
+        return self._analyze(self._read_and_parse())
 
     # -- stages ----------------------------------------------------------------
 
@@ -525,6 +535,14 @@ def main(argv: Sequence[str], stdout: TextIO | None = None,
 
     driver = Driver(options=options, diags=diags, sources=sources, stderr=err,
                     reports=reports)
+    if options.command == LSP:
+        # Nothing of the command line is compiled: what the server compiles is
+        # what an editor sends it, and it goes on until the editor says to stop.
+        # Imported here rather than above because the server is built on this
+        # module -- it drives the same driver -- and because a build has no use
+        # for it.
+        from ..lsp import serve
+        return serve()
     try:
         if options.command == TEST:
             # Nothing else is built: what was asked for is the tests, and the

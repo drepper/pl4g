@@ -9,6 +9,9 @@ the same grammar the compiler does and neither can fall behind the other.
 |---|---|
 | `ftdetect/pl4g.lua` | what a `.pl4g` file is |
 | `ftplugin/pl4g.lua` | how one is edited, and the grammar turned on |
+| `lsp/pl4g.lua` | where the language server is and what it is for |
+| `plugin/pl4g.lua` | turning that server on |
+| `lua/pl4g/health.lua` | `:checkhealth pl4g` |
 | `parser/pl4g.so` | → `tree-sitter-pl4g/pl4g.so`, which `bin/pl4g-grammar` builds |
 | `queries/pl4g/highlights.scm` | → the grammar's own, what to colour |
 | `queries/pl4g/folds.scm` | → the grammar's own, what folds |
@@ -118,6 +121,18 @@ What it does
 - **The comment markers**: `※` for a remark and `※※` for one that belongs to what
   follows it.  So `gcc` and a comment continued onto the next line both write the
   glyph, and neither needs typing.
+- **Diagnostics from the compiler, as you type.**  `bin/pypl4g lsp` is a language
+  server, and the answers are the compiler's own: the same numbers, the same
+  words, the same places.  Typing gets the front end and saving gets the whole
+  compiler, so a program the code generator refuses says so when there is a file
+  to refuse.  `:LspInfo` says whether it attached and `:LspLog` holds what it
+  said; there is nothing to install, the server being the compiler beside this
+  directory.
+
+- **An outline of the file**, which is `:lua vim.lsp.buf.document_symbol()` or
+  whatever your configuration binds it to -- every definition, in the order the
+  file makes them, with a record's fields and an enumeration's values beneath it.
+
 - **A name as one word.**  `⎕sc@mmap` and `x'` are single names, which is what a
   word-wise motion and a search for the word under the cursor now treat them as.
 

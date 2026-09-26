@@ -41,7 +41,8 @@ EnumT = TypeVar("EnumT", bound=Enum)
 #: still works and means the same thing.
 BUILD: Final[str] = "build"
 TEST: Final[str] = "test"
-SUBCOMMANDS: Final[tuple[str, ...]] = (BUILD, TEST)
+LSP: Final[str] = "lsp"
+SUBCOMMANDS: Final[tuple[str, ...]] = (BUILD, TEST, LSP)
 
 #: What `--emit=KIND` writes where no name was given: the first source with its
 #: suffix replaced.  An executable takes none, which is what every compiler on a
@@ -320,7 +321,17 @@ class CommandLine:
         A name for the output is not something it has to say: the sources say
         what the program is called, and making the one who knows write it down
         twice would be asking for nothing.
+
+        **The server is asked for nothing else.**  What it compiles is what an
+        editor sends it, so a source file named beside it is one it would never
+        look at; that is refused (1017) rather than ignored, since a command line
+        naming one was written by somebody who expected it to matter.
         """
+        if self._options.command == LSP:
+            for path in self._options.inputs:
+                self._diags.emit(D.IMPL_CLI_LSP_TAKES_NO_SOURCE,
+                                 path=path.as_posix())
+            return
         if not self._options.inputs:
             self._diags.emit(D.IMPL_CLI_NO_INPUT)
             return

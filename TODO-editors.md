@@ -14,9 +14,17 @@ is what it and the compiler both read.  What is missing from either belongs here
     an arm of a `match` is not one of those: its body is a block and the arm itself -- the pattern and the body together -- is
     what a reader wants to put away.
 
-[ ] read the compiler's diagnostics in the editor.  `:make` wants `makeprg` and an `errorformat`, and the compiler's output is
-    already the shape `errorformat` reads: path, line, column, severity, message.  The number in brackets at the end is what needs
-    saying in the format.  Beyond that is a language server, which is a larger thing and is not planned.
+[x] read the compiler's diagnostics in the editor.  Done on 2026-09-26, and not through `errorformat`: `pypl4g lsp` is a language
+    server and the compiler is what answers it, so the diagnostics arrive as you type with the numbers and the words and the places
+    the compiler gives them.  `:make` with an `errorformat` would still be worth having for a build of many files at once.
+
+[ ] the rest of what a language server can be asked.  It answers diagnostics, an outline, what a name is and where it was defined.
+    What it does not answer yet: every use of a name (`references`), renaming one, completing one, and formatting a file -- the last
+    being a thing the language has no statement about yet, since nothing says what the one true layout of a program is.
+
+[ ] say what a name is without checking the whole file again.  Every keystroke recompiles from the beginning, which is a few
+    milliseconds and is why it is allowed to be that simple.  A file that is ten times larger than anything here would want the
+    analysis cached per definition, which is the point at which this stops being the compiler run twice.
 
 [ ] a configuration for an editor that is not Neovim.  Helix reads the same queries with a `languages.toml` entry, Emacs has
     `treesit` and wants the capture names mapped to its own faces, and Zed wants an extension.  None of them needs anything of the

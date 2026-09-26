@@ -14,6 +14,11 @@
       "name": "test",
       "since": "0.1",
       "help": "run the tests of the sources: the `always` ones and the `suite` ones"
+    },
+    {
+      "name": "lsp",
+      "since": "0.1",
+      "help": "speak the Language Server Protocol on stdin and stdout, compiling what an editor sends"
     }
   ],
   "exit_codes": {

@@ -2919,6 +2919,66 @@ node the grammar has not got -- there is simply no highlighting.  A compiler
 that said it could not colour something would say it about every line of every
 diagnostic, and none of it is about the program.
 
+The compiler as a language server
+---------------------------------
+
+`pypl4g lsp` speaks the Language Server Protocol on its standard input and
+output, and **what answers every question is the compiler itself**: the same
+lexer, the same parser, the same checker, and where the file has been saved the
+same code generation, over the text the editor is holding rather than over a file
+on disk.  A server that reimplemented any of it would be a second statement of
+what the language is -- the project has one of those already in the tree-sitter
+grammar, kept honest by a test -- and the one a reader would notice drifting is
+the one in the editor.
+
+**A command word and not an option**, beside `build` and `test`: what the
+compiler is being asked to do is the thing a command word says, and a server is
+not a build with a flag on it.  It takes no source file, and one named beside it
+is refused (1017) rather than ignored, since a command line that names one was
+written by somebody who expected it to matter.
+
+**How far it compiles depends on what happened.**  Typing gets the front end,
+which is where all but a handful of diagnostics are and which costs a few
+milliseconds; saving gets the whole compiler, so that a program the back end
+refuses (8501, 9901) says so at the moment there is a file to refuse.  Both are
+the same `Driver` asked for different amounts of work -- `front_end()` and
+`run()` -- and the second writes its output into a temporary directory that is
+thrown away, because what is wanted is the diagnostics and not the image.
+
+**The editor's text, not the file's.**  `BufferSources` is a `SourceManager` that
+hands out what the editor is holding for a path it has heard of and reads the disk
+for anything else.  Every file the compiler opens goes through it, so a module
+imported from a buffer with unsaved changes is read as the buffer has it.  That is
+the whole of what makes this work on text that has never been saved, and it is
+eleven lines.
+
+**Three ways of counting, and the editor picks.**  The compiler counts characters
+and numbers lines from one; the protocol numbers lines from nought and counts
+along a line in whatever unit the two ends agreed, which is sixteen-bit units
+unless they agree otherwise.  This language is written in glyphs of three bytes
+and can hold a character outside the basic plane, so the two ends disagree about
+every column of every interesting line until something converts.  So the server
+offers `utf-32`, `utf-8` and `utf-16` in that order of preference -- the first
+being exactly what the compiler already has -- and converts through the text of
+the line.  A test puts the same error on a line holding a pound sign, a euro sign
+and a Linear B syllable, and requires character 38, byte 44 and unit 39.
+
+**One message at a time, and no threads.**  A request is answered before the next
+is read, which is affordable because the compiler is fast and an editor only sends
+an analysis request once it has stopped hearing keystrokes.  Nothing can answer out
+of order, so a cancellation is something to ignore rather than to race.
+
+**Only the protocol goes to the standard output.**  What the compiler would have
+printed about its stages goes to the standard error, which is the log an editor
+keeps -- and which is where a reader looks when the server itself is what is
+wrong.
+
+**A test drives it the way an editor does**, over pipes, from the handshake to the
+last notification: that is the only way to check a server, what it is being what
+it says on those two streams.  And one test runs Neovim with nothing but this
+project's package on its runtime path and requires the compiler's diagnostic to
+arrive in the buffer at the place the compiler put it.
+
 An editor that reads the same grammar
 -------------------------------------
 
