@@ -2950,6 +2950,16 @@ package that decided would be deciding for every file.  The second wants a rule
 that knows a line ending in `:` opens a block, which is what an indentation query
 would be; `TODO-editors.md` has the entry.
 
+**A plugin manager may own the runtime path, and then only it can be told.**
+`lazy.nvim` -- which kickstart.nvim and most configurations use -- sets `packpath`
+to the Neovim runtime and rebuilds `runtimepath` from its own list, both by
+default and both to save a few milliseconds of startup.  So a package installed
+under `pack/*/start/` is never loaded and a path added with `--cmd` is thrown away
+again, in both cases with nothing said: the file opens, no filetype is set, no
+colour appears, and `:checkhealth pl4g` answers that there is no such check.  The
+README leads with the spec such a manager reads, and says which single line
+(`:echo &packpath`) tells a reader that this is what is happening.
+
 **`:checkhealth pl4g` says why a file is not coloured.**  Five things have to
 hold -- the suffix is recognized, the package is on the runtime path, the parser
 was built, the queries compile, the buffer has the highlighter -- and each of them

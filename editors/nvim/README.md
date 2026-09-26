@@ -29,16 +29,35 @@ bin/pl4g-grammar          # tree-sitter generate, then tree-sitter build
 Without it everything here still works except the colour, and opening a file
 says so once rather than leaving a reader wondering.
 
-Three ways to use it
---------------------
+How to use it
+-------------
 
-**Try it on one file**, changing nothing:
+**If your configuration uses `lazy.nvim`** -- kickstart.nvim and most others do
+-- then name this directory to it and nothing else will work:
 
-```sh
-nvim --cmd 'set runtimepath+=/path/to/pl4g/editors/nvim' program.pl4g
+```lua
+{ dir = "/path/to/pl4g/editors/nvim", lazy = false }
 ```
 
-**Install it as a package**, which needs no plugin manager:
+`lazy.nvim` sets `packpath` to the Neovim runtime and rebuilds `runtimepath` from
+its own list of plugins, both to save a few milliseconds of startup
+(`performance.reset_packpath` and `performance.rtp.reset`, on by default).  So a
+package under `pack/*/start/` is never loaded and a path added with `--cmd` is
+thrown away again, both without a word said.  Whether that is happening is one
+line:
+
+```vim
+:echo &packpath
+```
+
+Just the runtime, with no `~/.config/nvim` in it, means the manager owns these
+paths and only a spec it reads will do.  `lazy = false` and not `ft = "pl4g"`,
+which is what a plugin for one language usually says: a lazy-loaded package is on
+the runtime path only once something has decided the file is of this type, and
+what decides that is in the package.  It is four files and three links, so there
+is nothing to defer.
+
+**Where nothing owns those paths, a package needs no manager at all:**
 
 ```sh
 mkdir -p ~/.config/nvim/pack/pl4g/start
@@ -48,17 +67,27 @@ ln -s /path/to/pl4g/editors/nvim ~/.config/nvim/pack/pl4g/start/pl4g
 A link rather than a copy, so that pulling the project brings the grammar and
 the queries with it.
 
-**Or name the directory to a plugin manager**, which is the same thing said in
-another language -- with `lazy.nvim`:
+**To try it on one file**, with your own configuration left out of it:
 
-```lua
-{ dir = "/path/to/pl4g/editors/nvim", lazy = false }
+```sh
+nvim --clean --cmd 'set runtimepath+=/path/to/pl4g/editors/nvim' program.pl4g
 ```
 
-`lazy = false` and not `ft = "pl4g"`, which is what a plugin for one language
-usually says: a lazy-loaded package is on the runtime path only once something
-has already decided the file is of this type, and what decides that is in the
-package.  It is four files and three links, so there is nothing to defer.
+`--clean` is what makes this worth running: it answers "is the package all right"
+rather than "is the package all right together with everything else".  Without it
+the same command tells a `lazy.nvim` user nothing, for the reason above.
+
+**And in a session that is already running**, whatever the configuration:
+
+```vim
+:set runtimepath+=/path/to/pl4g/editors/nvim
+:runtime! ftdetect/*.lua
+:edit
+```
+
+The middle line is the one that is easy to leave out: adding to the runtime path
+does not go back and source what is in it, so without it nothing knows what a
+`.pl4g` file is yet.
 
 `nvim-treesitter` is not wanted and is not in the way: what it installs is
 parsers and queries, and both are here already.
@@ -102,7 +131,7 @@ things that is not there:
 
 | What it says | What to do |
 |---|---|
-| `No healthcheck found for "pl4g" plugin` | the package is not on the runtime path, so not even the check is there -- see the three ways above, and the one line that says whether Neovim can see it |
+| `No healthcheck found for "pl4g" plugin` | the package is not on the runtime path, so not even the check is there.  With `lazy.nvim` this is the usual answer: `:echo &packpath`, and see above |
 | nothing says what a `.pl4g` file is | the package is on the path but its `ftdetect` never ran: `filetype on` |
 | no `parser/pl4g.so` on the runtime path | run `bin/pl4g-grammar`; the link points at what it builds |
 | the parser does not load | Neovim 0.11 or later reads the committed parser; an older one does not |
