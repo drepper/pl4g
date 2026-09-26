@@ -2950,6 +2950,16 @@ package that decided would be deciding for every file.  The second wants a rule
 that knows a line ending in `:` opens a block, which is what an indentation query
 would be; `TODO-editors.md` has the entry.
 
+**`:checkhealth pl4g` says why a file is not coloured.**  Five things have to
+hold -- the suffix is recognized, the package is on the runtime path, the parser
+was built, the queries compile, the buffer has the highlighter -- and each of them
+fails looking exactly like the others, so the package carries a health check that
+says which.  The fifth answer is the one nothing else would give: everything
+works and the colour scheme paints almost nothing.  Neovim's own default scheme
+gives `Type`, `Number` and `Operator` the ordinary foreground and makes a keyword
+bold, so a file coloured perfectly well looks plain -- which is what "no
+highlighting" turned out to mean the first time it was reported.
+
 **A test opens a program in the editor.**  `tests/compiler/test_editors.py`
 checks that the links resolve, that every query compiles, that every token of
 every program in the suite is something the queries colour, that every name they

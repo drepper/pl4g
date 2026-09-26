@@ -78,6 +78,33 @@ What it does
 - **A name as one word.**  `⎕sc@mmap` and `x'` are single names, which is what a
   word-wise motion and a search for the word under the cursor now treat them as.
 
+When nothing is coloured
+------------------------
+
+Run **`:checkhealth pl4g`** in a window with the file open.  Five things have to
+hold and each of them fails looking exactly like the others from the outside, so
+the check says which one it was:
+
+| What it says | What to do |
+|---|---|
+| nothing says what a `.pl4g` file is | the package is not on the runtime path: `:echo &runtimepath` and see the three ways above |
+| no `parser/pl4g.so` on the runtime path | run `bin/pl4g-grammar`; the link points at what it builds |
+| the parser does not load | Neovim 0.11 or later reads the committed parser; an older one does not |
+| the query does not compile | the parser and the queries are out of step: `bin/pl4g-grammar` again |
+| no open buffer is coloured | `filetype plugin on`, without which no ftplugin runs |
+| the colour scheme paints most groups as ordinary text | nothing is wrong: see below |
+
+**The last is the usual answer.**  Neovim's own default colour scheme gives
+`Type`, `Number`, `Operator` and the brackets the ordinary foreground and makes a
+keyword bold and nothing more, so a file coloured perfectly well looks almost
+plain: a comment is grey, a string green, a function name blue, and everything
+else is the colour of the page.  Try `:colorscheme habamax`, which ships with
+Neovim, and the same file arrives in six colours.
+
+What each piece of a line was captured as is `:Inspect` with the cursor on it,
+and the tree the grammar made is `:InspectTree`.  Between them and the health
+check there is nothing about this package that has to be guessed at.
+
 What it does not do
 -------------------
 

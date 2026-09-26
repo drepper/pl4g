@@ -67,7 +67,8 @@ def test_the_package_points_at_the_grammar() -> None:
         found = (link.parent / link.readlink()).resolve()
         assert found == target.resolve(), "".join((
             str(link), " points at ", str(found), " and not at ", str(target)))
-    for name in ("ftdetect/pl4g.lua", "ftplugin/pl4g.lua", "README.md"):
+    for name in ("ftdetect/pl4g.lua", "ftplugin/pl4g.lua",
+                 "lua/pl4g/health.lua", "README.md"):
         assert (PACKAGE / name).is_file(), name
 
 
@@ -292,3 +293,42 @@ def test_neovim_colours_a_program_as_the_queries_say(tmp_path: Path) -> None:
         assert found[-1] == capture, "".join((
             repr(token), " on line ", str(line), " came out as ", repr(found),
             " and the last of them is not ", capture))
+
+
+@pytest.mark.skipif(not shutil.which(NEOVIM), reason="neovim is not installed")
+def test_the_health_check_finds_nothing_wrong(tmp_path: Path) -> None:
+    """`:checkhealth pl4g` is what a reader runs when nothing is coloured.
+
+    Five things have to hold and each of them fails looking like the others, so
+    the check says which.  Here it is run where all five do hold: every line of
+    it has to be an answer of the good kind, and the two that matter most -- the
+    grammar loads, the queries compile -- have to be there rather than merely not
+    complained about.
+
+    The colour scheme is not one of the five.  `--clean` leaves Neovim's own,
+    which paints most of these groups as ordinary text, and the check says so as
+    a warning: a configuration that works and looks as though it does not is
+    exactly what it is there to tell a reader about.
+    """
+    if not (GRAMMAR / "pl4g.so").is_file():
+        pytest.skip("the grammar is not built")
+    source = tmp_path / "probe.pl4g"
+    source.write_text(_PROGRAM, encoding="utf-8")
+    report = tmp_path / "health.txt"
+    proc = subprocess.run(
+        [NEOVIM, "--headless", "--clean",
+         "--cmd", "".join(("set runtimepath+=", str(PACKAGE))),
+         str(source), "-c", "checkhealth pl4g",
+         "-c", "".join(("write! ", str(report))), "-c", "qa!"],
+        capture_output=True, text=True, timeout=120,
+        env={"PATH": "/usr/bin:/bin", "HOME": str(tmp_path)})
+    assert proc.returncode == 0, describe(proc)
+    assert report.is_file(), describe(proc)
+    text = report.read_text(encoding="utf-8")
+    assert "ERROR" not in text, text
+    for said in ("a `.pl4g` file is of type `pl4g`",
+                 "the grammar loads",
+                 "the highlights query compiles",
+                 "the folds query compiles",
+                 "coloured by the grammar"):
+        assert said in text, "".join((said, " is not in:\n", text))
