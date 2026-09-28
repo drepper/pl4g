@@ -512,17 +512,6 @@ To Do List for the pypl4g compiler
     says so.  Found beside the crash above; nothing the language offers today needs it.
 
 
-[ ] stop paying for the environment in a program that does not read it.  The image already costs nothing -- the builder and the
-    table runtime for `⸨str: str⸩` are dropped by `dropunreached` -- but the *compile* costs 4.4 ms of 27, measured on
-    `std-init` with and without the function in `std`: it is checked, lowered, and its table runtime generated, and only then
-    thrown away.  Two ways out.  The narrow one is to skip lowering the `@[environment]` function where
-    `Module.reads_environment` is false, which is unsound as the passes stand -- the flag is settled while each module is
-    lowered, and `std` may be lowered before the module that reads it -- unless the entry is deferred to the end of the
-    whole-program check, which means keeping the module's checker alive to lower it with.  The wide one is to stop writing the
-    builder in `std` and generate it as IR, the way `sema/tables.py` generates the table itself: then it is emitted only where it
-    is called, the decision is made after everything is checked and is sound by construction, and the `@[environment]` attribute
-    and the scan of the syntax both go away.
-
 [ ] a unit conversion breaks what reads it.  With `unit ¤size → ¤idx` in scope, `let many: u64 ¤idx = #raw` compiles, and both
     of these are wrong afterwards: `foreach i := first…many…2` runs one turn where the same loop with `many = 4` written out runs
     two, and `⎕drop(many)` reaches the code generator and fails there (9901, "empty block").  Two symptoms of one thing -- the

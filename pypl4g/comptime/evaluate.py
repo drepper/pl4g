@@ -31,6 +31,7 @@ from dataclasses import dataclass, field
 from typing import Callable, Final, Mapping, Sequence
 
 from ..front import ast
+from ..front.token import ENVIRON_NAME
 from ..source.location import INVALID_SPAN, Span
 
 #: How many steps one evaluation may take before it is called an endless one.
@@ -151,8 +152,8 @@ class Evaluator:
     """
 
     def __init__(self, units: Sequence[ast.SourceUnit],
-                 builtins: Mapping[str, Mapping[str, Builtin]] | None = None
-                 ) -> None:
+                 builtins: Mapping[str, Mapping[str, Builtin]] | None = None,
+                 environ: Mapping[str, str] | None = None) -> None:
         #: Every function the program defines, by the name it was defined under.
         self._functions: dict[str, ast.FuncDef] = {}
         #: The top-level variables, and what they came to once anything asked.
@@ -165,6 +166,11 @@ class Evaluator:
         #: finds what `std` was bound to.
         self._modules: dict[str, str] = {}
         self._builtins = dict(builtins or {})
+        #: What `⎕environ` stands for while the compiler is working something
+        #: out, which is the compiler's own environment.  A program reads the
+        #: process's under that name and the compiler is the process here, so
+        #: the one name answers the one question in both places.
+        self._environ: Mapping[str, str] = dict(environ or {})
         self._scopes: list[dict[str, Cell]] = []
         self._steps = 0
         self._depth = 0
@@ -432,6 +438,13 @@ class Evaluator:
         settled = self._settled.get(name)
         if settled is not None:
             return settled
+        if name == ENVIRON_NAME:
+            # Made on first ask and kept, so that everything reading it reads
+            # the one dictionary -- which is what the name means at run time
+            # too.
+            cell = Cell(self._environ)
+            self._settled[name] = cell
+            return cell
         defined = self._globals.get(name)
         if defined is not None:
             # Worked out on first ask, and once: a variable at the top level is

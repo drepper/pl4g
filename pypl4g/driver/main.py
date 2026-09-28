@@ -131,19 +131,21 @@ class Driver:
             # built from each other, so this cannot happen.
             self.diags.internal("the build function is not in the syntax tree")
             return ExitCode.INTERNAL
+        # What the compiler was run with, read under two names that answer with
+        # the one dictionary: `⎕environ`, which is what a program reads its own
+        # environment under, and `std.Build.env`, which is the field of the
+        # object the build function is handed.  A copy, so that nothing a build
+        # does could change what the compiler itself sees.
+        settled = dict(environ)
         plan = Plan(output_dir="", target=self.options.triple,
                     opt_level=self.options.opt_level,
                     mclevel=self.options.mclevel or "",
                     stack_size=self.options.stack_size,
                     guard_size=self.options.guard_size,
-                    # What the compiler was run with, which is what a build
-                    # function reads under the name a program reads its own
-                    # under.  A copy, so that nothing the build does could
-                    # change what the compiler itself sees.
-                    env=dict(environ))
+                    env=settled)
         record = plan.record()
         evaluator = Evaluator(units, {STD_MODULE: build_builtins(
-            plan, self.options.defines, self.diags)})
+            plan, self.options.defines, self.diags)}, environ=settled)
         try:
             evaluator.call(found, [Reference(Cell(record), mutable=True)])
         except CannotEvaluate as exc:

@@ -40,28 +40,13 @@ from ...ir.function import Function, SpecialKind, Linkage
 from typing import Final
 
 from ...ir.module import GlobalVar, Module
-from ...ir.types import ProductType, PtrType
 from ...source.location import Span
 
 
-#: The field of the record a program is started with that holds the
-#: environment.  Named here as well as in the entry point because the two ask
-#: one question -- does this program read it -- and a root kept for a program
-#: that does not would be a table built for nobody.
-ENVIRONMENT: Final[str] = "env"
-
-
-def _reads_the_environment(module: Module) -> bool:
-    """Whether the record the program is started with holds the environment."""
-    startup = module.startup
-    if startup is None or not startup.ty.params:
-        return False
-    held = startup.ty.params[0]
-    if not isinstance(held, PtrType) \
-            or not isinstance(held.pointee, ProductType):
-        return False
-    return module.reads_environment \
-        and any(name == ENVIRONMENT for name, _ in held.pointee.fields)
+#: What the function that fills the environment is called.  Named here rather
+#: than imported from the semantic analysis, which this pass runs after and
+#: does not depend on.
+ENVIRON_MAKE: Final[str] = "__pl4g_environ_make"
 
 
 class DropUnreached:
@@ -121,11 +106,12 @@ class DropUnreached:
         roots: list[Function] = []
         if module.startup is not None:
             roots.append(module.startup)
-        if module.environment is not None and _reads_the_environment(module):
-            # Nothing the program writes calls it: the entry point does, and
-            # only where the record the program is started with has somewhere
-            # for what it answers with to go.
-            roots.append(module.environment)
+        if module.environ is not None:
+            # Nothing the program writes calls the builder: the entry point
+            # does, and only where the program named the environment at all.
+            found = module.functions.get(ENVIRON_MAKE)
+            if found is not None:
+                roots.append(found)
         roots.extend(module.ctors)
         roots.extend(module.dtors)
         # A test the binary runs is a root and one it does not is not: a suite

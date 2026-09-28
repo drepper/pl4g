@@ -2664,33 +2664,6 @@
       "option": "always-fails"
     },
     {
-      "number": 4400,
-      "name": "LANG_FUNCDEF_SPECIAL_BAD_ENVIRONMENT_SIGNATURE",
-      "severity": "error",
-      "message": "a function marked '@[environment]' must be written 'fn NAME(NAME: str⟦⟧) → ⸨str: str⸩', but '{name}' {problem}",
-      "args": [
-        {
-          "name": "name",
-          "type": "string",
-          "description": "the function"
-        },
-        {
-          "name": "problem",
-          "type": "string",
-          "description": "how the signature differs"
-        }
-      ],
-      "cause": "The entry point calls this one itself, handing it the strings the runtime read off the stack the kernel set the process up on, and puts what it answers with in the record the program is started with.  So its signature is not the program's to choose: what it is given is that run of strings -- each name followed by what it stands for -- and what it must give back is the dictionary the environment is read through.",
-      "spec": {
-        "document": "spec/spec.md",
-        "section": "The Language / The standard module / The environment",
-        "requirement": "A function marked `@[environment]` takes the run of strings the runtime read and answers a `⸨str: str⸩`."
-      },
-      "since": "0.1",
-      "default_enabled": true,
-      "option": null
-    },
-    {
       "number": 4401,
       "name": "LANG_FUNCDEF_SPECIAL_NO_STARTUP",
       "severity": "error",
@@ -6865,7 +6838,7 @@
     },
     {
       "number": 4599,
-      "name": "LANG_FIELD_NOT_WRITABLE",
+      "name": "LANG_PLACE_NOT_WRITABLE",
       "severity": "error",
       "message": "'{name}' holds '{found}', which is read-only, so it is not a place to put another collection",
       "args": [
@@ -6880,11 +6853,11 @@
           "description": "the type of the field"
         }
       ],
-      "cause": "A field whose type is a collection without 'mut' says that what stands there is not the program's to change.  Putting a different collection there would change it in every part of the program that reads the record, which is the thing the type rules out; that the table itself is untouched makes no difference to what the readers see.",
+      "cause": "A field or a variable whose type is a collection without 'mut' says that what stands there is not the program's to change.  Putting a different collection there would change it for everything that reads that field or that name, which is the thing the type rules out; that the table itself is untouched makes no difference to what the readers see.  `⎕environ` is such a name, which is what makes the environment one thing every part of a program agrees about.",
       "spec": {
         "document": "spec/spec.md",
         "section": "The Language / Types / Sets and dictionaries",
-        "requirement": "A field whose type is a read-only collection is not assignable."
+        "requirement": "A field or variable whose type is a read-only collection is not assignable."
       },
       "since": "0.1",
       "default_enabled": true,

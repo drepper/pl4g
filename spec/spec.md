@@ -219,7 +219,7 @@ type Writer     ※ a device that can be written
 type ReadWriter ※ both, which is what a socket and a file opened either way are
 
 type Io   = input : Reader ; output : Writer ; errors : Writer
-type Init = io : Io ; args : str⟦⟧ ; env : ⸨str: str⸩
+type Init = io : Io ; args : str⟦⟧
 
 type Pending ※ a write that has been started
 enum Error   ※ what the kernel said, where it refused, by name
@@ -241,27 +241,10 @@ as it is everywhere, and the rest are what followed.  Each is a `str` -- bytes a
 before the program starts rather than by everything that reads one; the kernel's own shape is a nul at the end, which nothing in
 this language has a use for.
 
-**`env` is the environment**, a dictionary from a name to what it stands for.  What the kernel leaves after the arguments is
-another run of `NAME=VALUE` strings; each is split at the first `=` where its bytes already are, so a name and a value point into
-the string the kernel handed over and nothing is copied.  A variable with no `=` in it is a name standing for nothing, and one
-written `NAME=` is a name standing for text of no length -- which is a value, and is not the same answer as having none.
-
-```
-let home: str = init⌖.env⸨"HOME"⸩ ?? "/"
-```
-
-**Nothing may be put in it** (4598, 4599).  Its type is `⸨str: str⸩` and not `mut ⸨str: str⸩`, so an entry assignment is
-refused and the field is not a place to put a different dictionary: every part of a program reads the one environment.  There is nothing to start a process with
-yet, so an environment a program could change would be a change nobody could observe -- which is where C's `setenv`, Go's
-`os.Setenv` and Python's writable `os.environ` differ, and Rust's `set_var`, which is `unsafe` for a reason that has nothing to do
-with this one.
-
-**A program that never names it carries none of it** -- no table, no hashing of names and nothing asked of the system.  What
-decides is whether the program spells the field: every way of reaching a field of a record it was handed spells the name.
-
-**The same environment is there while a build runs**: `std.Build.env` is what the compiler was run with, read the same way and
-read-only for the same reason.  So a build file asking where to write and a program asking where its data is ask one question one
-way.
+**The environment is not in this record**: it is `⎕environ`, a name the compiler provides, because it is a table and not a
+run of words -- only the entry point can reach the strings and only the compiler knows how a table is laid out.  What a program is
+started with is a record so that whatever else it inherits can be added to it without any signature changing; a dictionary is not
+one of those things.
 
 **A descriptor is a type and not a number.**  What says a thing may be written is the type of the name standing for it, so there is
 no way to hand a `Reader` to `write` and no way to write to a number a program made up.  The three a process inherits arrive in
@@ -3415,15 +3398,45 @@ that exist and may **not define one** (4219).  That is what lets the compiler ad
 program written before it existed -- the problem every language has that puts its own names in the same namespace as a program's.
 APL marks its system names with the same glyph for the same reason, and `⎕CT` is the one this language's tolerance is modelled on.
 
-There is one such name so far.
+There are three so far.
 
 | Name | Type | Holds |
 |---|---|---|
 | `⎕tolerance` | `mut f64` | the tolerance the approximate comparisons measure against; 10⁻¹³ until a program sets it |
+| `⎕heap` | `arena` | the arena everything that allocates and says no other one comes out of |
+| `⎕environ` | `⸨str: str⸩` | the environment the process was started with, read-only |
 
-It is a variable and not a number built into the compiler because the right tolerance depends on how far the values being compared
-have travelled, which is the program's business and not the language's.  A program that never names it carries nothing for it: it
-is dropped along with everything else nothing reaches.
+`⎕tolerance` is a variable and not a number built into the compiler because the right tolerance depends on how far the values being
+compared have travelled, which is the program's business and not the language's.
+
+**`⎕environ` is the environment**, a name standing for what it stands for:
+
+```
+let home: str = ⎕environ⸨"HOME"⸩ ?? "/"
+```
+
+What the kernel leaves after the arguments is a run of `NAME=VALUE` strings; each is split at the first `=` where its bytes
+already are, so a name and a value point into the string the kernel handed over and nothing is copied.  A variable with no `=` in
+it is a name standing for nothing, and one written `NAME=` is a name standing for text of no length -- which is a value, and is
+not the same answer as having none.
+
+It is a name the compiler provides rather than a field of what a program is started with, because it is a table and not a run of
+words: only the entry point can reach the strings and only the compiler knows how a table is laid out, so what builds it is
+generated and called before anything of the program runs -- before the constructors, so that one of those may read it too.
+
+**Nothing may be put in it** (4598, 4599).  Its type is `⸨str: str⸩` and not `mut ⸨str: str⸩`, so an entry assignment is
+refused, and the name is not a place to put a different dictionary: every part of a program reads the one environment.  **What it
+says is what the process started with** and goes on saying it -- the table is built once and nothing writes it afterwards, so a
+change to the process's own environment, whenever the language grows a way to make one, would leave this dictionary as it is.
+There is nothing to start a process with yet, which is where C's `setenv`, Go's `os.Setenv` and Python's writable `os.environ`
+differ, and Rust's `set_var`, which is `unsafe` for a reason that has nothing to do with this one.
+
+**While the compiler is working something out it is the compiler's own environment**, which is what a build function reads: a
+build is run by the compiler, so the process it asks about is the one whose command line the reader typed.  `std.Build.env` is
+that same dictionary under the name the field has.
+
+**A program that never names one carries nothing for any of them.**  Each is made on first ask, so what is not asked for is not
+there: no tolerance in the data, no arena, and for the environment no table, no builder and nothing asked of the system.
 
 Compare: APL's `⎕CT`, which is a *relative* tolerance -- two values are alike when they differ by less than `⎕CT` times the larger
 of them.  That is the better rule for values of widely differing size and costs a multiplication and a magnitude more than this
@@ -4418,7 +4431,6 @@ The attributes that mark them are:
 | `@[test(build)]` | a test that runs when a build finishes |
 | `@[test(suite)]` | a test that runs when a testsuite run is requested |
 | `@[build]` | the function the compiler runs to find out what to build.  At most one per program |
-| `@[environment]` | makes the dictionary the environment is read through, which the entry point calls.  The `std` module has the one there is |
 
 The three kinds of test are one attribute with a parameter rather than three attributes, because they are three answers to one
 question.  These attributes exclude one another: a function is one of these things or none of them.
@@ -4462,17 +4474,18 @@ takes a name and the run of sources to build it from; the sources are found besi
 a project from anywhere.  `std.option` and `std.option_flag` ask what the command line said about a name, which is written
 `-Dname=value` or `-Dname`, so that a build file can be told something from outside without being edited.
 
-**A build reads the environment the compiler was run with.**  `std.Build.env` is a `⸨str: str⸩`, the same type under the same
-name a running program reads its own under, and read the same way:
+**A build reads the environment the compiler was run with.**  `⎕environ` answers it -- a build is run by the compiler, so the
+process it asks about is the one whose command line the reader typed -- and `std.Build.env` is that same dictionary under the name
+the field has:
 
 ```
-b⌖.output_dir ← b⌖.env⸨"PL4G_OUT"⸩ ?? "out"
+b⌖.output_dir ← ⎕environ⸨"PL4G_OUT"⸩ ?? "out"
+b⌖.output_dir ← b⌖.env⸨"PL4G_OUT"⸩ ?? "out"      ※ the same question, asked of the object
 ```
 
-It is read-only for the reason the program's is: the type says so (4598), and a build that could change it would be changing
-something nobody can observe.  It differs from `std.option` in where the answer comes from and in nothing else -- an option is
-what this command line said and a variable is what the surroundings say -- so a build file that wants either asks both and says
-which it prefers.
+It is read-only for the reason the program's is: the type says so (4598).  It differs from `std.option` in where the answer comes
+from and in nothing else -- an option is what this command line said and a variable is what the surroundings say -- so a build
+file that wants either asks both and says which it prefers.
 
 The functions the compiler provides are marked `@[builtin]` where the `std` module declares them: they have no body and no symbol,
 and what they do is change a description the compiler is holding.  Calling one from a program is calling something that is not

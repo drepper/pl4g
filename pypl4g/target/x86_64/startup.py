@@ -65,13 +65,14 @@ def emit_start(asm: Assembler, module: Module, cconv: CallConvDesc,
     # is the only moment it is: everything below pushes something.  It is kept
     # in a register a call leaves alone until the runtime is asked to read it.
     if started.arguments_at(module, layout) is not None \
-            or started.environment_at(module, layout) is not None:
+            or module.environ is not None:
         asm.loadreg(HELD_STACK, asm.reg(RSP))
     # The outermost stack frame is marked by a null frame pointer, so that a
     # debugger unwinding the stack knows where to stop.
     asm.op(ops.XOR, EBP, asm.reg(EBP), asm.reg(EBP))
     if refused is not None:
         _check_level(asm, level, refused)
+    _read_environment(asm, module, cconv)
     for ctor in module.ctors:
         asm.call(symbol_name(ctor))
     _run_tests(asm, module, cconv, failures or {})
@@ -87,7 +88,6 @@ def emit_start(asm: Assembler, module: Module, cconv: CallConvDesc,
     else:
         _make_stack(asm, module)
         _read_arguments(asm, module, layout)
-        _read_environment(asm, module, cconv, layout)
         if started.wanted_by(module) is not None:
             # Where the record the program was started with is, which is the
             # whole of what is handed over.
@@ -213,26 +213,28 @@ def _read_arguments(asm: Assembler, module: Module,
     asm.call(started.READS_ARGUMENTS)
 
 
-def _read_environment(asm: Assembler, module: Module, cconv: CallConvDesc,
-                      layout: DataLayout) -> None:
-    """Have `std` make the environment, and put it in the record.
+def _read_environment(asm: Assembler, module: Module,
+                      cconv: CallConvDesc) -> None:
+    """Build the environment, where the program named it.
 
     Two halves, because neither side can do both: the runtime knows where the
-    strings are and nothing of how a table is laid out, and the language knows
+    strings are and nothing of how a table is laid out, and the compiler knows
     how to build one and has no way to reach the stack the process started on.
     So the runtime is asked for the strings, with the address the kernel set the
-    process up at, and they are handed to a function of `std` that builds the
-    dictionary out of them; what comes back is the one word that goes where the
-    record says.
+    process up at, and they are handed to the function `sema/environ.py`
+    generated; what comes back is the one word that goes in the variable
+    `⎕environ` stands for.
+
+    Before the constructors, so that one may read the environment: what it
+    needs is the stack address, which is in hand from the first instruction.
 
     Two conventions, because there are two callees: the runtime is C and the
-    function of `std` is the program's own.
+    builder is the program's own.
     """
-    at = started.environment_at(module, layout)
-    if at is None:
+    if module.environ is None:
         return
-    builder = module.environment
-    assert builder is not None, "the record has the field and nothing fills it"
+    builder = module.functions.get(started.ENVIRON_MAKE)
+    assert builder is not None, "the variable is there and nothing fills it"
     theirs = lookup_cconv(SYSTEM_CCONV)
     asm.loadreg(theirs.int_arg_regs[0], asm.reg(HELD_STACK))
     asm.call(started.READS_ENVIRONMENT)
@@ -252,8 +254,8 @@ def _read_environment(asm: Assembler, module: Module, cconv: CallConvDesc,
     # The second argument register rather than the first: on one of these
     # targets the first is also the one an answer comes back in.
     where = cconv.int_arg_regs[1]
-    asm.address(where, started.SYMBOL)
-    asm.store(asm.mem(base=where, disp=at, size_bits=64),
+    asm.address(where, started.ENVIRON_SYMBOL)
+    asm.store(asm.mem(base=where, disp=0, size_bits=64),
               asm.reg(cconv.int_ret_regs[0]))
 
 

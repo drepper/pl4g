@@ -232,8 +232,9 @@ To Do List for the PL4g language
     through `@[external]` and handed the ring as an `@[abi]` record.  qemu-user has no `io_uring`, so where one cannot be made the
     calls go straight to the kernel and every test still runs on all three targets.
 
-[x] the environment.  `std.Init.env` is a `⸨str: str⸩` built before the startup function runs, and `std.Build.env` is the
-    compiler's own under the same name; both are read-only by their type.  Done 2026-09-28.
+[x] the environment.  `⎕environ` is a `⸨str: str⸩` built before anything of the program runs, and is the compiler's own
+    environment while the compiler is working something out -- which is what `std.Build.env` holds.  Read-only by its type.
+    Done 2026-09-28.
 
 [ ] the auxiliary vector, which is what the kernel leaves on the stack after the environment.  The record is shaped so that it
     can be added without any signature changing, and nothing wants it yet: what is in it is page size, hardware capabilities and

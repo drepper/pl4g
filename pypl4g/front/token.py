@@ -244,6 +244,11 @@ CHR_NAME: Final[str] = "".join((BUILTIN_GLYPH, "chr"))
 TOLERANCE_NAME: Final[str] = "".join((BUILTIN_GLYPH, "tolerance"))
 TOLERANCE_DEFAULT: Final[float] = 1e-13
 
+#: The environment, which a program reads under this name and never writes.  It
+#: is the compiler's to provide for the reason the heap is: what it stands for
+#: is made before the program runs, out of what only the entry point can reach.
+ENVIRON_NAME: Final[str] = "".join((BUILTIN_GLYPH, "environ"))
+
 #: The logical operators, which work on truth values and on nothing else.  Each
 #: is a glyph, and none has an ASCII substitute: the candidates would be `&&`,
 #: `||` and `!`, and spelling two of them with the characters the *bitwise*

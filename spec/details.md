@@ -3025,54 +3025,63 @@ into the arm it should have jumped over -- a miscompile with nothing wrong in th
 instruction that was emitted.  The loop variable is called `at` now, and the
 comment beside it says why.
 
-The environment, in two halves
-------------------------------
+The environment, built by the compiler
+--------------------------------------
 
-Neither side of the compiler can build the environment alone, which is why it is
-built by both.  The strings are on the stack the kernel set the process up on,
-which only the entry point can reach and only before anything else runs; what
-they have to become is a hash table, which only the language knows how to build
--- the runtime is C and knows nothing of an entry's layout, and generating the
-table from the runtime would be generating it twice.
+`⎕environ` is a name the compiler provides, standing for a variable of the image
+that holds one table.  Neither half of the compiler can fill that variable
+alone, which is why it is filled by both.  The strings are on the stack the
+kernel set the process up on, reachable only by the entry point and only before
+anything else runs; what they have to become is a hash table, whose layout only
+the compiler knows -- the runtime is C and knows nothing of an entry, and
+teaching it would be writing the table twice.
 
-So the entry point does three things, in `_read_environment` in each target's
-`startup.py`: it hands the saved stack address to `pl4g_env`, which answers with
-a run of counted strings -- each name followed by what it stands for, split at
-the first `=` where the bytes already are, so nothing is copied and a name and a
-value point into the string the kernel handed over.  It moves that run, which is
-two words, into the registers the language's convention passes one argument in.
-And it calls the function of `std` marked `@[environment]`, which walks the run
-two at a time and builds the dictionary, and stores the one word that comes back
-at the offset of `Init.env`.  Two calling conventions in three instructions,
-because there are two callees: the runtime is C and the builder is the program's
-own.
+So `pl4g_env` in the runtime walks the stack, splits each `NAME=VALUE` where its
+bytes already are -- nothing is copied, and a name and a value point into the
+kernel's own string -- and answers a flat run of counted strings, each name
+followed by what it stands for.  `sema/environ.py` generates
+`__pl4g_environ_make`, the way `sema/tables.py` generates the table runtime: a
+loop that walks that run two at a time and puts each pair in through the same
+`put` a program's own dictionary uses, so a name looked up here and a name
+looked up there are one key by one rule.  And `_read_environment` in each
+target's `startup.py` calls the one, moves the two words it answered with into
+the registers the language's convention passes one argument in, calls the other,
+and stores the one word that comes back in `__pl4g_environ`.  Two calling
+conventions in a handful of instructions, because there are two callees.
 
-**Flat rather than a run of pairs**, because a walk over a run of pairs would
-have to take a pair apart into a key and a value, and the backend cannot yet
-bind a loop variable to a value of several words.  A name kept from one turn to
-the next needs nothing the language does not have.
+**Before the constructors**, so that a constructor may read the environment.
+What it needs is the stack address, which is in hand from the entry point's
+first instruction; what it does not need is the program's own stack, which is
+made later.
 
-**A program that never names it carries none of it.**  `Module.reads_environment`
-is set while a function is lowered, by a scan of its syntax for a member called
-`env`, and three things ask it: the entry point, which skips all of the above;
-the pass that drops what nothing reaches, which then drops the builder; and
-through it the table runtime for `⸨str: str⸩`, which nothing else names.  The
-scan is over the syntax rather than over what it was lowered to because every way
-of reaching a field of a record a program was handed *spells the name* -- reading
-it, writing through it, taking its address, walking it -- so what does not spell
-it cannot reach it.  A program that builds a record of its own is answering the
-question for itself, and spells the name doing it.
+**Flat rather than a run of pairs**, because a walk over pairs would have to take
+a pair apart into a key and a value, and the backend cannot yet bind a loop
+variable to a value of several words.
 
-That is 1.5 KB of image, measured: the same program with and without a line that
-reads `init⌖.env` is 11,616 and 10,128 bytes.
+**A program that never names it carries none of it**, and nothing has to look for
+that: the variable is made on first ask, exactly as `⎕heap` is, so
+`Module.environ` being there *is* the question answered.  The entry point asks
+it before emitting anything, the pass that drops what nothing reaches keeps the
+builder only for a program that has one, and the table runtime for
+`⸨str: str⸩` follows the builder.  That is 2 KB of image and, for a program
+importing `std`, four milliseconds of compiling -- which is what an earlier
+arrangement cost every such program, the builder being written in `std` and
+generated, lowered and thrown away again whether or not anything read it.
 
-**At build time it is a Python dictionary.**  `Plan.env` holds what the compiler
-was run with and `Plan.record()` puts a copy of it in the object the build
-function is handed; `settle()` never reads it back, there being nothing to read
-back from a field the type says nothing may be put in.  The evaluator answers a
-lookup with what the key stands for or with `MISSING`, which `??` reads and
-everything else refuses -- so a build file that uses a variable that was not set,
-without saying what to do instead, is told where it did.
+**Not writable, in a writable section.**  The variable is `mut` in the image
+because the entry point fills it, and not writable by the program because its
+type is a collection without `mut`: an entry assignment is refused, and so is
+putting a different dictionary in the name, which is the rule a field of a
+record already had.  So what the table says is what the process started with,
+whatever happens to the process's own environment afterwards.
+
+**At build time it is a Python dictionary.**  The driver takes one snapshot of
+its own environment and hands it to two places: the evaluator, where `⎕environ`
+stands for it, and `Plan.env`, which puts it in the object the build function is
+handed as `std.Build.env`.  One dictionary, two names for it.  A lookup answers
+what the key stands for or `MISSING`, which `??` reads and everything else
+refuses -- so a build file that uses a variable nobody set, without saying what
+to do instead, is told where it did.
 
 The compiler as a language server
 ---------------------------------

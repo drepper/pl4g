@@ -29,9 +29,10 @@ type Io = input : Reader ; output : Writer ; errors : Writer
 ※※ What a program is started with: the devices it inherited and the words it
 ※※ was named with.
 ※
-※ A record rather than the two of them outright, so that the environment and
-※ whatever else a program inherits have somewhere to go without changing the one
-※ signature every program writes.
+※ A record rather than the two of them outright, so that whatever else a program
+※ inherits has somewhere to go without changing the one signature every program
+※ writes.  The environment is not one of those: it is a table and not a run of
+※ words, so it is `⎕environ` and the compiler builds it.
 ※
 ※ `args` is what the kernel put on the stack, counted: the first is the name the
 ※ program was run under, as it is everywhere, and the rest are what followed it.
@@ -39,38 +40,7 @@ type Io = input : Reader ; output : Writer ; errors : Writer
 ※ nul at the end, and the length is counted once before the program starts
 ※ rather than by everything that reads one.
 @[export]
-type Init = io : Io ; args : str⟦⟧ ; env : ⸨str: str⸩
-
-※ -- the environment -----------------------------------------------------------
-
-※※ Make the dictionary the environment is read through.
-※※
-※※ \details Nothing a program writes calls this: the entry point does, before the
-※※ startup function, having asked the runtime to read the environment off the
-※※ stack the kernel set the process up on -- which is the only place it can be
-※※ found and the only moment it can be reached.  What this answers with goes in
-※※ `Init.env`, whose type says nothing may be put in it afterwards: every part of
-※※ a program reads the one environment, and the strings in it are the kernel's
-※※ and are never copied.
-※※
-※※ \param raw what the runtime read off the stack: a run of strings, each name
-※※ followed by what it stands for, flat because there is nothing to write here
-※※ that would take a pair apart into a key and a value
-※※ \return the environment, a name standing for what it was given
-@[environment]
-fn environment(raw: str⟦⟧) → ⸨str: str⸩:
-    let made: mut ⸨str: str⸩ = ⸨⸩
-    ※ Two at a time: a name, then what it stands for.
-    let name: mut str = ""
-    let waiting: mut bool = false
-    foreach one := raw:
-        if waiting:
-            made⸨name⸩ ← one
-            waiting ← false
-        else:
-            name ← one
-            waiting ← true
-    made
+type Init = io : Io ; args : str⟦⟧
 
 ※※ What the kernel said, where it refused.
 ※

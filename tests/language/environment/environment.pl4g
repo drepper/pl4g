@@ -3,30 +3,34 @@
 ※ pl4g-test: setenv PL4G_TEST_EMPTY=
 ※ pl4g-test: setenv PL4G_TEST_EQUALS=one=two
 
-※ The environment a program was started with, as a dictionary.
+※ The environment a program was started with, under the name the compiler
+※ provides for it.
 ※
 ※ **Two halves, because neither side can do both.**  The strings are on the
 ※ stack the kernel set the process up on, which only the entry point can reach,
-※ and what they are turned into is a table, which only the language knows how to
-※ build.  So the entry point asks the runtime for the strings -- each name
-※ followed by what it stands for, split at the first `=` where the bytes already
-※ are -- and hands them to a function of `std` that builds the dictionary.
+※ and what they are turned into is a table, which only the compiler knows how to
+※ build.  So the runtime is asked for the strings -- each name followed by what
+※ it stands for, split at the first `=` where the bytes already are -- and they
+※ are handed to a function the compiler generates, which walks them two at a
+※ time and puts each pair in a table.  The answer goes in the variable the name
+※ stands for, before the constructors run.
 ※
-※ **Nothing may be put in it.**  The type is `⸨str: str⸩` and not `mut ⸨str: str⸩`,
-※ so an entry assignment is refused where it is written and the field is not a
-※ place to put a different dictionary.  Every part of a program reads the one
-※ environment, and the strings in it are the kernel's own and are never copied.
+※ **It says what the program started with.**  The table is built once, before
+※ anything of the program runs, and nothing writes it afterwards: the type is
+※ `⸨str: str⸩` and not `mut ⸨str: str⸩`, so an entry assignment is refused and the
+※ name is not a place to put a different dictionary.  A change to the process's
+※ own environment, whenever the language grows a way to make one, would leave
+※ this dictionary saying what it says.
 ※
 ※ **A program that never names it carries none of it** -- no table, no hashing
 ※ of names, and nothing asked of the system -- which is the bargain the
-※ arguments already strike.
+※ arguments already strike, and here it needs no looking: the variable is made
+※ on first ask, so a program that does not ask has none.
 ※
 ※ Compare: **C**, whose `environ` is a run of `NAME=VALUE` strings every program
 ※ walks for itself and whose `getenv` is a linear search; **Go**, **Rust** and
 ※ **Python**, where it is a map built by the runtime as it is here; **Zig**,
 ※ where `std.process.getEnvMap` builds one and hands it back to be freed.
-
-let std := ⎕import("std")
 
 ※ Read through a function taking the read-only type, which is what everything
 ※ holding it holds.
@@ -34,22 +38,26 @@ fn told(env: ⸨str: str⸩, name: str) → str:
     env⸨name⸩ ?? "nothing"
 
 @[startup, impure]
-fn main(init: &mut std.Init) → u6:
-    if told(init⌖.env, "PL4G_TEST_NAME") ≠ "a value with spaces":
+fn main() → u6:
+    if told(⎕environ, "PL4G_TEST_NAME") ≠ "a value with spaces":
         1u6
     ※ a value that is empty is a value, and is not the same as no answer
-    elif told(init⌖.env, "PL4G_TEST_EMPTY") ≠ "":
+    elif told(⎕environ, "PL4G_TEST_EMPTY") ≠ "":
         2u6
     ※ split at the *first* `=`, so what follows the second is part of the value
-    elif told(init⌖.env, "PL4G_TEST_EQUALS") ≠ "one=two":
+    elif told(⎕environ, "PL4G_TEST_EQUALS") ≠ "one=two":
         3u6
-    elif told(init⌖.env, "PL4G_NOTHING_SAYS_THIS") ≠ "nothing":
+    elif told(⎕environ, "PL4G_NOTHING_SAYS_THIS") ≠ "nothing":
         4u6
     ※ the three the test set are in it, and whatever else the run carried
-    elif #init⌖.env < 3:
+    elif #⎕environ < 3:
         5u6
     ※ every run has this one, whatever else it has
-    elif told(init⌖.env, "PATH") = "nothing":
+    elif told(⎕environ, "PATH") = "nothing":
         6u6
+    ※ and it is one dictionary however often it is named: the variable holds
+    ※ the table, and naming it again is a load and not another table
+    elif (⎕environ⸨"PL4G_TEST_NAME"⸩ ?? "") ≠ (⎕environ⸨"PL4G_TEST_NAME"⸩ ?? "x"):
+        7u6
     else:
         0u6

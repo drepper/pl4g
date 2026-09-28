@@ -41,18 +41,22 @@ SECTION: Final[str] = ".data"
 #: which fields it has to reach, not where they are.
 DEVICES: Final[str] = "io"
 ARGUMENTS: Final[str] = "args"
-#: And the field holding the environment, which is a dictionary and so is not
-#: the runtime's to make: what fills it is a function of `std` that the entry
-#: point calls, the runtime handing over the strings and the language building
-#: the table out of them.
-ENVIRONMENT: Final[str] = "env"
 
 #: What the runtime is called that reads the arguments off the stack, and what
-#: the one that reads the environment off it is called.  The second answers
-#: with the strings rather than writing them anywhere: what is made of them is
-#: a table, which only the language can build.
+#: the one that reads the environment off it is called.  The second answers with
+#: the strings rather than writing them anywhere: what is made of them is a
+#: table, which only the compiler can build -- `sema/environ.py` generates the
+#: function that does, and the entry point hands the strings to it.
 READS_ARGUMENTS: Final[str] = "pl4g_args"
 READS_ENVIRONMENT: Final[str] = "pl4g_env"
+
+#: What the variable holding the environment is called in the image, and what
+#: the generated function that fills it is called.  Named here, where the entry
+#: point looks, rather than in the semantic analysis that generates them: the
+#: two ends of one arrangement, and this is the end that has no other way to
+#: ask.
+ENVIRON_SYMBOL: Final[str] = "__pl4g_environ"
+ENVIRON_MAKE: Final[str] = "__pl4g_environ_make"
 
 
 def wanted_by(module: Module) -> ProductType | None:
@@ -96,27 +100,6 @@ def arguments_at(module: Module, layout: DataLayout) -> int | None:
     return where_in(found, ARGUMENTS, layout)[0]
 
 
-def environment_at(module: Module, layout: DataLayout) -> int | None:
-    """How far into the record the environment goes.
-
-    Nothing where the program takes no such record, where the record it takes
-    has no such field, or where nothing in the program can make the table: the
-    three are one question -- is this a program whose entry point has an
-    environment to hand over -- and one answer.
-    """
-    found = wanted_by(module)
-    if found is None or module.environment is None \
-            or not module.reads_environment \
-            or not has_field(found, ENVIRONMENT):
-        return None
-    return where_in(found, ENVIRONMENT, layout)[0]
-
-
-def has_field(found: ProductType, name: str) -> bool:
-    """Whether the record has a field of this name."""
-    return any(called == name for called, _ in found.fields)
-
-
 def entry_wants_runtime(module: Module) -> bool:
     """Whether the entry point itself calls into the packaged runtime.
 
@@ -125,12 +108,16 @@ def entry_wants_runtime(module: Module) -> bool:
     in instructions it writes rather than in anything the program wrote.  So it
     is asked here: nothing walking the program's own calls would see it.
 
+    It does so for the environment too, which is read off the same stack by the
+    same kind of call; a program that names `⎕environ` has the variable and is
+    therefore one of these.
+
     The stack a program makes for itself is not one of these.  It was, while the
     making of it was compiled from C; it is now a few dozen instructions the
     entry point selects like any others, so a program that wants nothing else
     from the packaged runtime carries none of it.
     """
-    return wanted_by(module) is not None
+    return wanted_by(module) is not None or module.environ is not None
 
 
 def emit(asm: Assembler, module: Module, layout: DataLayout) -> None:

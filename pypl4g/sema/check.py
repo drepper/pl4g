@@ -25,6 +25,7 @@ from ..front.token import (ACQUIRE_NAME, RELEASE_NAME, AT_NAME, SPAN_NAME,
                           ENUMERATE_NAME, TYPEOF_NAME,
                           EMPTY_ARENA_NAME, ORD_NAME,
                           WRAP_NAME,
+                          ENVIRON_NAME,
                           HEAP_NAME, SYSCALL_NAME, SYSCALL_NUMBER_PREFIX,
                           TOLERANCE_DEFAULT,
                           TOLERANCE_NAME, WILDCARD_NAME)
@@ -56,7 +57,7 @@ from ..ir.types import (ARENA, ArrayType, BOOL, BoolType, BUILTIN_TYPES,
                         NARROWING, NO_UNIT, Unit, VecType, VOID,
                         without_units,
                         CHAR, MAX_CODE_POINT, U8, made_of_parts, parts_of)
-from . import strings, tables
+from . import environ, strings, tables
 from .modules import (SUFFIX, ImportCycle, LoadedModule, ModuleNotFound,
                       ModuleRegistry, base_name, system_modules)
 from ..ir.value import (BlockParam, BoolConst, CharConst, Const, EnumConst,
@@ -635,35 +636,6 @@ def _promises_as_much(expected: Type | None, found: Type) -> bool:
 def _read_only_table(ty: Type) -> bool:
     """Whether *ty* is a collection nothing may put anything in."""
     return isinstance(ty, (SetType, DictType)) and not ty.mutable
-
-
-#: The field of the record a program is started with that holds the
-#: environment, spelled here as `started.ENVIRONMENT` spells it: what asks the
-#: question is the semantic analysis and what acts on the answer is the entry
-#: point, and neither is the other's to import.
-ENVIRONMENT_FIELD: Final[str] = "env"
-
-
-def _reads_the_environment(node: object) -> bool:
-    """Whether anything below *node* names the environment of a record.
-
-    Asked of the syntax rather than of what it was lowered to, because every
-    way a program can reach that field -- reading it, writing through it,
-    taking its address, walking it -- spells the name, and nothing that does
-    not spell it can reach the field of a record it was handed.  A program that
-    builds a record of its own and puts something there is answering the
-    question for itself, and spells the name doing it.
-    """
-    if isinstance(node, ast.Node):
-        if getattr(node, "name", None) == ENVIRONMENT_FIELD \
-                and isinstance(node, (ast.Member, ast.MemberAssign,
-                                      ast.Named)):
-            return True
-        return any(_reads_the_environment(getattr(node, one.name))
-                   for one in fields_of(node))
-    if isinstance(node, (list, tuple)):
-        return any(_reads_the_environment(one) for one in node)
-    return False
 
 
 def _reaches_a_place(ty: Type) -> bool:
@@ -1530,7 +1502,25 @@ class Checker:
         if found is None and name == HEAP_NAME:
             found = _heap(self._module)
             self._top[name] = found
+        if found is None and name == ENVIRON_NAME:
+            found = self._environ()
+            self._top[name] = found
         return found
+
+    def _environ(self) -> GlobalVar:
+        """The variable the environment waits in, and what fills it.
+
+        Made on first ask, as the heap is and for the reason the heap is: a
+        program that never names it has no table, no builder, and nothing asked
+        of the system.  Asking for it is what tells the entry point to build one,
+        so there is nothing to look for in what the program wrote.
+        """
+        heap = self._provided(HEAP_NAME)
+        assert isinstance(heap, GlobalVar)
+        made = environ.variable(self._module)
+        environ.make_function(self._module, heap)
+        self._module.environ = made
+        return made
 
     def _key(self, name: str) -> str:
         """What a definition of this file is filed under.
@@ -2674,13 +2664,6 @@ class Checker:
                     return
                 self._check_build_signature(func, node)
                 self._module.build = func
-            case SpecialKind.ENVIRONMENT:
-                self._check_environment_signature(func, node)
-                # The later of two is the one that is called, and nothing
-                # reports the earlier: one module provides this and a program
-                # that has two has two copies of `std`, which is refused where
-                # the second is read rather than here.
-                self._module.environment = func
             case SpecialKind.CONSTRUCTOR:
                 self._check_ctor_signature(func, node, "constructor")
                 self._module.ctors.append(func)
@@ -2732,27 +2715,6 @@ class Checker:
             self._diags.emit(D.LANG_FUNCDEF_SPECIAL_BAD_SIGNATURE, node.name_span,
                              name=func.name, type=STARTUP_RETURN_TYPE_NAME,
                              problem=problem)
-
-    def _check_environment_signature(self, func: Function,
-                                     node: ast.FuncDef) -> None:
-        """Check the signature of the function that makes the environment.
-
-        The entry point calls it, with the address the kernel set the process up
-        at and nothing else, and puts what it answers with in the record the
-        program is started with.  So neither half is the program's to choose.
-        """
-        if func.ty.ret is ERROR or ERROR in func.ty.params:
-            return
-        wanted = self._module.types.dict_type(STR, STR)
-        strings = self._module.types.array_type(STR, (None,))
-        problem: str | None = None
-        if len(func.ty.params) != 1 or func.ty.params[0] is not strings:
-            problem = "it takes something else"
-        elif func.ty.ret is not wanted:
-            problem = "".join(("it answers with '", func.ty.ret.render(), "'"))
-        if problem is not None:
-            self._diags.emit(D.LANG_FUNCDEF_SPECIAL_BAD_ENVIRONMENT_SIGNATURE,
-                             node.name_span, name=func.name, problem=problem)
 
     def _check_ctor_signature(self, func: Function, node: ast.FuncDef, kind: str) -> None:
         """Check that a constructor or destructor takes nothing and returns void."""
@@ -2935,12 +2897,6 @@ class Checker:
                     # Writing into what it was handed is the whole of what a
                     # build function does, so it says so by being one: there is
                     # nothing it could be that also had to be written `impure`.
-                    impure = True
-                case "environment":
-                    special = SpecialKind.ENVIRONMENT
-                    # It asks the system for what the process was started with
-                    # and takes room out of an arena to hold it, so it says so
-                    # by being one, the way a build function does.
                     impure = True
                 case "builtin":
                     builtin = True
@@ -3509,9 +3465,6 @@ class Checker:
         node, func = entry.node, entry.func
         if node.body is None:
             return
-        if not self._module.reads_environment \
-                and _reads_the_environment(node):
-            self._module.reads_environment = True
         previous = self._discard_function
         self._discard_function = False
         # Which function this is, for the one rule that is about where a call is
@@ -4657,7 +4610,7 @@ class Checker:
             # A field holding a collection the type says nothing may be put in
             # is not a place to put a different collection either: what stands
             # there is what everything reading the record reads.
-            self._diags.emit(D.LANG_FIELD_NOT_WRITABLE, stmt.name_span,
+            self._diags.emit(D.LANG_PLACE_NOT_WRITABLE, stmt.name_span,
                              name=stmt.name, found=ty.fields[at][1].render())
             return
         if not self._made_here(where):
@@ -4749,6 +4702,17 @@ class Checker:
                 if isinstance(found, GlobalVar) and not found.mutable:
                     self._diags.emit(D.LANG_VARDEF_NOT_MUTABLE, where,
                                      name=expr.name)
+                    return False
+                if isinstance(found, GlobalVar) \
+                        and _read_only_table(found.value_type):
+                    # A name at the top level standing for a table nothing may
+                    # put anything in is not a place to put a different table:
+                    # what stands there is what every part of the program reads.
+                    # `⎕environ` is such a name, which is what makes the
+                    # environment one thing they all agree about.
+                    self._diags.emit(D.LANG_PLACE_NOT_WRITABLE, where,
+                                     name=expr.name,
+                                     found=found.value_type.render())
                     return False
                 return True
             case _:
@@ -8211,6 +8175,16 @@ class Checker:
                              name=node.name)
             return None
         if not self._check_mutable(node, target.mutable, target.span):
+            return None
+        if _read_only_table(target.value_type):
+            # A name at the top level standing for a table nothing may put
+            # anything in is not a place to put a different table either: what
+            # stands there is what every part of the program reads.  `⎕environ`
+            # is such a name, which is what makes the environment one thing
+            # they all agree about.
+            self._diags.emit(D.LANG_PLACE_NOT_WRITABLE, node.name_span,
+                             name=node.name,
+                             found=target.value_type.render())
             return None
         self._an_effect(D.LANG_PURE_CHANGES_A_VARIABLE, node.span, name=node.name)
         value = self._checked_value(builder, node, target.value_type)

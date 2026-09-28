@@ -237,9 +237,14 @@ def _declared(module: Module, name: str, params: tuple[Type, ...],
         linkage=Linkage.VISIBLE))
 
 
-def _generated(module: Module, name: str, params: tuple[Type, ...],
-               result: Type) -> tuple[Function, bool]:
-    """A function of this module's own, and whether it has yet to be built."""
+def generated(module: Module, name: str, params: tuple[Type, ...],
+              result: Type) -> tuple[Function, bool]:
+    """A function of this module's own, and whether it has yet to be built.
+
+    Public because the environment's builder is one of these without being a
+    table operation: what makes it the same kind of thing is the convention and
+    the linkage, and those are settled here.
+    """
     found = module.functions.get(name)
     if isinstance(found, Function):
         return found, False
@@ -442,7 +447,7 @@ def _build_new(module: Module) -> Function:
     """
     table_ptr = table_type(module)
     arena_ptr = module.types.ptr_type(ARENA, mutable=True)
-    func, fresh = _generated(module, NEW_SYMBOL, (arena_ptr, U64), table_ptr)
+    func, fresh = generated(module, NEW_SYMBOL, (arena_ptr, U64), table_ptr)
     if not fresh:
         return func
     alloc = _declared(module, ALLOC_SYMBOL, (arena_ptr, U64),
@@ -480,7 +485,7 @@ def _build_slot(module: Module, shape: Shape) -> Function:
     """
     table_ptr = table_type(module)
     held = key_ir_type(shape)
-    func, fresh = _generated(module, named(SLOT_SYMBOL, shape),
+    func, fresh = generated(module, named(SLOT_SYMBOL, shape),
                              (table_ptr, held), table_ptr)
     if not fresh:
         return func
@@ -538,7 +543,7 @@ def _build_put(module: Module, shape: Shape) -> Function:
     """
     table_ptr = table_type(module)
     held = key_ir_type(shape)
-    func, fresh = _generated(module, named(PUT_SYMBOL, shape),
+    func, fresh = generated(module, named(PUT_SYMBOL, shape),
                              (table_ptr, held), table_ptr)
     if not fresh:
         return func
@@ -682,7 +687,7 @@ def _build_select(module: Module, shape: Shape) -> Function:
     the same defect to be.
     """
     table_ptr = table_type(module)
-    func, fresh = _generated(module, named(SELECT_SYMBOL, shape),
+    func, fresh = generated(module, named(SELECT_SYMBOL, shape),
                              (table_ptr, table_ptr, table_ptr, U64), VOID)
     if not fresh:
         return func
@@ -803,7 +808,7 @@ def _build_next(module: Module) -> Function:
     nothing and pays nothing, and the specification says so.
     """
     table_ptr = table_type(module)
-    func, fresh = _generated(module, NEXT_SYMBOL, (table_ptr, U64), U64)
+    func, fresh = generated(module, NEXT_SYMBOL, (table_ptr, U64), U64)
     if not fresh:
         return func
     entry = func.add_block()

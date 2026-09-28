@@ -1,5 +1,5 @@
 ※ pl4g-test: compile=error diag=4598
-※ pl4g-test: expect-diag 4599 LANG_FIELD_NOT_WRITABLE
+※ pl4g-test: expect-diag 4599 LANG_PLACE_NOT_WRITABLE
 
 ※ The environment is read-only, and that is a property of its type.
 ※
@@ -7,28 +7,24 @@
 ※ put in it, the way `&T` and `&mut T` say it of a place.  A collection is a
 ※ handle -- the one who made it and the one who was handed it reach one table --
 ※ so what may be done to that table belongs to the type rather than to any one
-※ name for it.  `std.Init.env` is written without the `mut`, so:
+※ name for it.  `⎕environ` is written without the `mut`, so:
 ※
 ※ - an entry assignment is refused (4598), and
-※ - the field is not a place to put a different dictionary either (4599), since
+※ - the name is not a place to put a different dictionary either (4599), since
 ※   what stands there is what every part of the program reads.
 ※
-※ What this does not do is stop a program from building a whole record of its
-※ own and reading that: a program handing itself a different `Init` is reading
-※ its own record and not the environment, and the strings the kernel handed over
-※ are never changed by anything.
+※ So the dictionary says what the process started with and goes on saying it.
+※ Nothing in the language changes the process's own environment either; there is
+※ no way to start a process, so an environment a program could change would be a
+※ change nobody could observe.
 ※
 ※ Compare: **Rust**, where `std::env::set_var` exists and is unsafe; **Go**, with
 ※ `os.Setenv`, which changes the process; **C**, with `putenv` and `setenv`;
 ※ **Python**, where `os.environ` is a writable mapping that writes through.  Each
-※ of those changes what the process passes on to what it starts.  This language
-※ has nothing to start a process with yet, so a written environment would be a
-※ change nobody could observe.
-
-let std := ⎕import("std")
+※ of those changes what the process passes on to what it starts.
 
 @[startup, impure]
-fn main(init: &mut std.Init) → u6:
-    init⌖.env⸨"PL4G_TEST"⸩ ← "no"
-    init⌖.env ← ⸨"PL4G_TEST": "no"⸩
+fn main() → u6:
+    ⎕environ⸨"PL4G_TEST"⸩ ← "no"
+    ⎕environ ← ⸨"PL4G_TEST": "no"⸩
     0u6

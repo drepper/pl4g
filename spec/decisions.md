@@ -6570,6 +6570,66 @@ and Rust's `unsafe fn set_var` all exist to affect what a process starts; when
 this language can start one, what it starts it with will be an argument to that
 call and not a global the whole program shares.
 
+## 2026-09-28T23:45+02:00 — language, compiler
+
+**The environment is a name the compiler provides, not a field of a record**
+
+At the user's direction: "remove the environment function attribute and instead
+add a builtin `⎕environ` to access the environment variables.  the dictionary for the
+environment variables is unaffected of possible changes to the process'
+environment".  Asked what should become of `std.Build.env`, the user kept it and
+said to use `⎕environ` to implement it.
+
+**What it replaces.**  The arrangement of earlier the same day had `std.Init`
+carry an `env` field, filled by the entry point from a function of `std` marked
+`@[environment]`.  Three things were wrong with it.  The attribute existed for
+one function in one module, which is a language feature spent on an
+implementation detail.  The builder was ordinary `std` code, so every program
+importing `std` checked it, lowered it and generated the table runtime for
+`⸨str: str⸩` before the pass that drops what nothing reaches threw all of it
+away -- four milliseconds of the twenty-seven a small program took.  And
+deciding whether to build it meant scanning the syntax for a member called
+`env`, which was sound only by an argument about spelling.
+
+**What it is now.**  `⎕environ` is a compiler-provided name, like `⎕heap` and
+`⎕tolerance`, made on first ask -- so a program that never names it has no
+variable, and the variable being there *is* the decision, with nothing to scan
+for.  The builder is generated as IR the way the table runtime is, which is what
+makes it cost nothing to a program that does not ask.  The entry point calls the
+runtime for the strings and the builder for the table, before the constructors
+so that one of them may read it.
+
+**A name and not a field, for a reason worth writing down.**  A record is the
+right shape for what the kernel hands over as words -- the descriptors, the
+arguments -- because the entry point can fill it and anything added to it costs
+no signature.  A dictionary is not that: it has to be *built*, by code that knows
+a layout the runtime does not, so the thing that fills it is the compiler rather
+than the entry point's few instructions.  Once the compiler is what builds it, a
+name it provides is where it belongs.
+
+**What it says is what the process started with.**  The table is built once and
+nothing writes it afterwards -- the type is `⸨str: str⸩` and not `mut ⸨str: str⸩`
+(4598), and the name is not a place to put another dictionary (4599, which was
+about a field and now covers a variable too).  So a change to the process's own
+environment, whenever the language grows a way to make one, leaves this
+dictionary saying what it said.  That is what the user asked for in so many
+words, and it is the opposite of C, where `environ` *is* the process's and
+`setenv` may move it under a program that kept a pointer into it.
+
+**At build time the same name answers the compiler's own environment**, and
+`std.Build.env` is that same dictionary under the name the field has: the driver
+takes one snapshot and hands it to both.  So a build file may ask either way and
+cannot get two answers.
+
+Compare: **Zig**, whose `std.process.getEnvMap` builds a map and hands it back to
+be freed, and which refuses the environment at comptime -- where this answers the
+compiler's, which is what a build function wants; **Go** and **Rust**, where it is
+a function call into the runtime, so that reading one variable walks or locks;
+**Python**, where `os.environ` is a writable mapping that writes through to the
+process; **C**, where `environ` is a run of strings every program walks for
+itself.  What none of them has is the environment costing nothing at all to a
+program that does not name it.
+
 Open questions
 --------------
 
