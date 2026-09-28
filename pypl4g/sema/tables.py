@@ -20,28 +20,39 @@ arithmetic that wants a register allocator: exactly the things the compiler
 already does for a program.  They are generated once per module, and a program
 that has no collection has none of them.
 
-**Every key and every value is one word.**  What may be a key is an integer, a
-truth value or an enumeration, and all of them fit; what may be a value is the
-same, which is a restriction the to-do list records rather than a decision.
-That is what lets one table serve every instantiation -- there is no code per
-key type at all, and the hash is one multiplication.
+**An entry is shaped by what the table holds.**  A key that fits a word is one
+word, whatever its type says; a key that does not -- text is the one there is --
+is as many words as it takes, and so is the value.  `Shape` answers all of it:
+where the value of an entry begins, how long an entry is, and which of the
+generated functions to call.  The three that depend on any of that are generated
+once per shape and named for it, so a program using two kinds of table carries
+two probes and one of everything else.
 
-**The hash is Fibonacci hashing**: the key multiplied by the closest odd number
-to two to the sixty-fourth over the golden ratio, with the high bits folded down
-into the low ones.  The multiplication wraps, which no program of the language
-may write and which this is: a hash is defined on the bits, and there is nothing
-about an overflow here to report to anyone.
+**The hash is whatever the key is.**  A key that is a word is hashed by Fibonacci
+hashing: multiplied by the closest odd number to two to the sixty-fourth over the
+golden ratio, with the high bits folded down into the low ones.  A key that is
+text is hashed over its bytes with FNV-1a, which is what makes two strings that
+say the same thing one key wherever their bytes are -- and is compared by the same
+walk the language's own `=` uses, so a key found in a table and a comparison
+written in a program cannot disagree.  Both multiplications wrap, which no
+program of the language may write and which these are: a hash is defined on the
+bits, and there is nothing about an overflow here to report to anyone.
 """
 
 from __future__ import annotations
 
 from typing import Final
 
+from dataclasses import dataclass
+
 from ..ir.builder import IRBuilder
 from ..ir.function import SYSTEM_CCONV, FuncAttrs, Function, Linkage
 from ..ir.inst import BinOp, CastKind, CmpPred
+from ..ir.layout import DataLayout, size_of
 from ..ir.module import Module
-from ..ir.types import ARENA, MEM, PtrType, Type, U8, U64, VOID
+from ..ir.layout import parts_of
+from ..ir.types import (ARENA, I64, MEM, PtrType, STR, Type, U8, U64,
+                         VOID)
 from ..ir.value import Value
 
 #: What the allocator is called, and what it takes.  Declared here rather than
@@ -67,14 +78,67 @@ ENTRIES_FIELD: Final[int] = 4 * WORD
 #: How much room a block takes, on the grain the allocator hands out.
 BLOCK_SIZE: Final[int] = 6 * WORD
 
-#: The fields of one entry.  A set's entries are two words and a dictionary's
-#: are three; which it is, is the stride the table was made with.
+#: The fields of one entry.  The state is always the first word; where the key
+#: is is always the second; where the *value* is depends on how wide the key is,
+#: and how wide an entry is depends on both.  A `Shape` answers all three.
 STATE_AT: Final[int] = 0
 KEY_AT: Final[int] = WORD
-VALUE_AT: Final[int] = 2 * WORD
 
-SET_STRIDE: Final[int] = 2 * WORD
-DICT_STRIDE: Final[int] = 3 * WORD
+
+@dataclass(frozen=True, slots=True)
+class Shape:
+    """What one table holds, which is what its entries are shaped by.
+
+    A set has a key and no value.  Everything that depends on how wide either of
+    them is -- where the value sits in an entry, how long an entry is, and which
+    of the generated functions to call -- is asked of this, so that nothing
+    computes it twice and nothing assumes a word.
+    """
+
+    key: Type
+    value: Type | None = None
+
+    @property
+    def key_words(self) -> int:
+        """How many words the key takes, which is at least one."""
+        return _words(self.key)
+
+    @property
+    def value_at(self) -> int:
+        """Where the value of an entry begins."""
+        return KEY_AT + self.key_words * WORD
+
+    @property
+    def stride(self) -> int:
+        """How long one entry is: the state, the key, and the value if any."""
+        return self.value_at + (0 if self.value is None
+                                else _words(self.value) * WORD)
+
+    @property
+    def tag(self) -> str:
+        """What the functions generated for this shape are called after.
+
+        The types as the language writes them, which is what makes a dump of the
+        image readable: `__pl4g_table_slot.str` is the one for a table keyed by
+        strings and there is no wondering which instantiation it belongs to.
+        """
+        return self.key.render() if self.value is None \
+            else ":".join((self.key.render(), self.value.render()))
+
+
+def _words(ty: Type) -> int:
+    """How many words a value of *ty* takes in an entry.
+
+    Rounded up, because an entry is words: a key and a value each begin on a
+    word so that reading one is a load and not a shift.
+    """
+    return max(1, (size_of(ty, _LAYOUT) + WORD - 1) // WORD)
+
+
+#: What a word is here.  A table is words whatever the target's alignment rules
+#: are, and every target this compiler has is sixty-four bit; the layout is
+#: therefore the same everywhere and is asked for once.
+_LAYOUT: Final[DataLayout] = DataLayout(pointer_size=WORD)
 
 #: What the first word of an entry says about it.  There are two states and not
 #: three: nothing takes an entry out of a table yet, so no entry is ever given
@@ -104,6 +168,53 @@ GOLDEN: Final[int] = 0x9E3779B97F4A7C15
 NEW_SYMBOL: Final[str] = "__pl4g_table_new"
 SLOT_SYMBOL: Final[str] = "__pl4g_table_slot"
 PUT_SYMBOL: Final[str] = "__pl4g_table_put"
+
+
+def key_ir_type(shape: Shape) -> Type:
+    """What a key of this shape is passed and stored as.
+
+    A key that fits a word is a word, whatever the type says: a truth value and
+    a value of an enumeration are both whole numbers, and holding them all as
+    one thing is what let one table serve every instantiation.  A key that does
+    not fit a word is held as what it is, and the functions for that shape are
+    generated for it.
+    """
+    return U64 if _words(shape.key) == 1 else shape.key
+
+
+def _load_key(builder: IRBuilder, shape: Shape, place: Value) -> Value:
+    """The key of the entry at *place*."""
+    where = _field(builder, place, KEY_AT)
+    held = key_ir_type(shape)
+    if held is U64:
+        return builder.load(where)
+    return builder.load(_as(builder, where, held))
+
+
+def _store_key(builder: IRBuilder, shape: Shape, place: Value,
+               key: Value) -> None:
+    """Put a key into the entry at *place*."""
+    where = _field(builder, place, KEY_AT)
+    held = key_ir_type(shape)
+    if held is U64:
+        builder.store(where, key)
+        return
+    builder.store(_as(builder, where, held), key)
+
+
+def _load_value(builder: IRBuilder, shape: Shape, place: Value) -> Value:
+    """The value of the entry at *place*."""
+    assert shape.value is not None
+    return builder.load(_as(builder, _field(builder, place, shape.value_at),
+                            shape.value))
+
+
+def _store_value(builder: IRBuilder, shape: Shape, place: Value,
+                 value: Value) -> None:
+    """Put a value into the entry at *place*."""
+    assert shape.value is not None
+    builder.store(_as(builder, _field(builder, place, shape.value_at),
+                      shape.value), value)
 
 
 def _declared(module: Module, name: str, params: tuple[Type, ...],
@@ -162,13 +273,37 @@ def table_type(module: Module) -> PtrType:
     return module.types.ptr_type(U64, mutable=True)
 
 
-def ensure_runtime(module: Module) -> None:
-    """Build the three a collection needs, once for the whole module."""
+def ensure_allocator(module: Module) -> None:
+    """Declare the allocator, for something that wants room and not a table."""
+    _declared(module, ALLOC_SYMBOL,
+              (module.types.ptr_type(ARENA, mutable=True), U64),
+              module.types.ptr_type(U8, mutable=True))
+
+
+def ensure_operators(module: Module, shape: Shape) -> Function:
+    """Build what the four operators a set answers are made out of."""
+    ensure_runtime(module, shape)
+    return _build_select(module, shape)
+
+
+def ensure_runtime(module: Module, shape: Shape) -> None:
+    """Build what a collection of this shape needs.
+
+    Two of them are the same for every table -- making one, and walking one --
+    since what they do is decided by the stride the table carries.  The others
+    are generated for the shape: where the value of an entry sits and how a key
+    is hashed and compared are settled by the types, and a table keyed by text
+    has a different answer to all three than one keyed by a word.
+    """
     _build_new(module)
-    _build_slot(module)
-    _build_put(module)
-    _build_select(module)
     _build_next(module)
+    _build_slot(module, shape)
+    _build_put(module, shape)
+
+
+def named(symbol: str, shape: Shape) -> str:
+    """What the function of *shape* is called."""
+    return ".".join((symbol, shape.tag))
 
 
 # -- the pieces every one of them uses -------------------------------------------
@@ -191,7 +326,7 @@ def _write(builder: IRBuilder, table: Value, offset: int, value: Value) -> None:
 
 
 def _hashed(builder: IRBuilder, key: Value, mask: Value) -> Value:
-    """Where a probe for *key* starts.
+    """Where a probe for a key that is one word starts.
 
     Fibonacci hashing puts what the key says into the high bits of the product,
     and the fold brings them down where the mask can read them.  Without the
@@ -203,6 +338,57 @@ def _hashed(builder: IRBuilder, key: Value, mask: Value) -> Value:
     folded = builder.binary(BinOp.LSHR, mixed, builder.int_const(U64, 32))
     return builder.binary(BinOp.AND,
                           builder.binary(BinOp.XOR, mixed, folded), mask)
+
+
+def _hash_of(builder: IRBuilder, shape: Shape, key: Value,
+             mask: Value) -> Value:
+    """Where a probe for *key* starts, whatever kind of key it is.
+
+    A key that is a word is hashed by the multiplication above.  A key that is
+    text is hashed over its bytes -- two strings that say the same thing are one
+    key, and what they have in common is the bytes and not where they are -- and
+    the answer is then folded the same way, so that everything below this knows
+    one kind of hash.
+    """
+    from .strings import hash_function
+
+    if key_ir_type(shape) is U64:
+        return _hashed(builder, key, mask)
+    return builder.binary(BinOp.AND,
+                          builder.call(hash_function(builder.module),
+                                       _taken_apart(builder, key), U64),
+                          mask)
+
+
+def _same_key(builder: IRBuilder, shape: Shape, held: Value,
+              key: Value) -> Value:
+    """Whether the key in an entry is the key being looked for.
+
+    For a word that is what `=` is.  For text it is what `=` is for text: the
+    same bytes, whoever holds them -- which is the walk the language's own
+    comparison does, asked here through the same generated function so that a
+    key found in a table and a comparison written in a program cannot disagree.
+    """
+    from .strings import compare_function
+
+    if key_ir_type(shape) is U64:
+        return builder.compare(CmpPred.EQ, held, key)
+    return builder.compare(
+        CmpPred.EQ,
+        builder.call(compare_function(builder.module),
+                     (*_taken_apart(builder, held), *_taken_apart(builder, key)),
+                     I64),
+        builder.int_const(I64, 0))
+
+
+def _taken_apart(builder: IRBuilder, text: Value) -> tuple[Value, Value]:
+    """A string as the two things it is: where its bytes are, and how many.
+
+    Which is what the generated functions over strings take, since a value of
+    several parts crosses a call as its parts.
+    """
+    return (builder.extract(text, 0, parts_of(STR)[0]),
+            builder.extract(text, 1, U64))
 
 
 def _as(builder: IRBuilder, address: Value, pointee: Type) -> Value:
@@ -283,7 +469,7 @@ def _build_new(module: Module) -> Function:
 
 # -- finding where a key is, or where it would go --------------------------------
 
-def _build_slot(module: Module) -> Function:
+def _build_slot(module: Module, shape: Shape) -> Function:
     """``__pl4g_table_slot(table, key)``: the entry the key is in, or would go in.
 
     One walk serves both questions, which is what makes a lookup and an
@@ -293,7 +479,9 @@ def _build_slot(module: Module) -> Function:
     place is the end of the probe and not a hole in the middle of one.
     """
     table_ptr = table_type(module)
-    func, fresh = _generated(module, SLOT_SYMBOL, (table_ptr, U64), table_ptr)
+    held = key_ir_type(shape)
+    func, fresh = _generated(module, named(SLOT_SYMBOL, shape),
+                             (table_ptr, held), table_ptr)
     if not fresh:
         return func
     entry = func.add_block()
@@ -305,11 +493,11 @@ def _build_slot(module: Module) -> Function:
     builder = IRBuilder(module, func)
     builder.position_at(entry)
     table = entry.add_param(table_ptr, "table")
-    key = entry.add_param(U64, "key")
+    key = entry.add_param(held, "key")
     mask = _read(builder, table, MASK_FIELD)
     stride = _read(builder, table, STRIDE_FIELD)
     entries = _read_address(builder, table, ENTRIES_FIELD, U64)
-    builder.br(loop, (_hashed(builder, key, mask),))
+    builder.br(loop, (_hash_of(builder, shape, key, mask),))
 
     builder.position_at(loop)
     index = loop.add_param(U64, "at")
@@ -322,8 +510,8 @@ def _build_slot(module: Module) -> Function:
     builder.ret(place)
 
     builder.position_at(occupied)
-    held = builder.load(_field(builder, place, KEY_AT))
-    builder.condbr(builder.compare(CmpPred.EQ, held, key), same, onward)
+    builder.condbr(_same_key(builder, shape, _load_key(builder, shape, place),
+                             key), same, onward)
 
     builder.position_at(same)
     builder.ret(place)
@@ -335,7 +523,7 @@ def _build_slot(module: Module) -> Function:
 
 # -- putting a key in ------------------------------------------------------------
 
-def _build_put(module: Module) -> Function:
+def _build_put(module: Module, shape: Shape) -> Function:
     """``__pl4g_table_put(table, key)``: the entry for the key, made if it is new.
 
     The table is grown *before* the probe rather than after it, so that the
@@ -349,10 +537,12 @@ def _build_put(module: Module) -> Function:
     memory holds from here, and costs no instruction to hand over.
     """
     table_ptr = table_type(module)
-    func, fresh = _generated(module, PUT_SYMBOL, (table_ptr, U64), table_ptr)
+    held = key_ir_type(shape)
+    func, fresh = _generated(module, named(PUT_SYMBOL, shape),
+                             (table_ptr, held), table_ptr)
     if not fresh:
         return func
-    slot_of = _build_slot(module)
+    slot_of = _build_slot(module, shape)
     arena_ptr = module.types.ptr_type(ARENA, mutable=True)
     alloc = _declared(module, ALLOC_SYMBOL, (arena_ptr, U64),
                       module.types.ptr_type(U8, mutable=True))
@@ -361,7 +551,6 @@ def _build_put(module: Module) -> Function:
     rehash = func.add_block("rehash")
     one = func.add_block("one")
     move = func.add_block("move")
-    copy = func.add_block("copy")
     stepped = func.add_block("stepped")
     grown = func.add_block("grown")
     ready = func.add_block("ready")
@@ -370,7 +559,7 @@ def _build_put(module: Module) -> Function:
     builder = IRBuilder(module, func)
     builder.position_at(entry)
     table = entry.add_param(table_ptr, "table")
-    key = entry.add_param(U64, "key")
+    key = entry.add_param(held, "key")
     # One more than it holds, which is what it would hold if this key is new.
     wanted = builder.binary(BinOp.WRAP_ADD, _read(builder, table, COUNT_FIELD),
                             builder.int_const(U64, 1))
@@ -419,23 +608,16 @@ def _build_put(module: Module) -> Function:
 
     builder.position_at(move)
     builder.set_memory(move.add_param(MEM, "mem"))
-    moved_key = builder.load(_field(builder, old_place, KEY_AT))
+    moved_key = _load_key(builder, shape, old_place)
     into = builder.call(slot_of, (table, moved_key), table_ptr)
     _write(builder, into, STATE_AT, builder.int_const(U64, LIVE))
-    _write(builder, into, KEY_AT, moved_key)
+    _store_key(builder, shape, into, moved_key)
     _write(builder, table, COUNT_FIELD,
            builder.binary(BinOp.WRAP_ADD, _read(builder, table, COUNT_FIELD),
                           builder.int_const(U64, 1)))
-    builder.condbr(builder.compare(CmpPred.EQ, stride,
-                                   builder.int_const(U64, DICT_STRIDE)),
-                   copy, stepped,
-                   true_args=(builder.memory(),),
-                   false_args=(builder.memory(),))
-
-    builder.position_at(copy)
-    builder.set_memory(copy.add_param(MEM, "mem"))
-    _write(builder, into, VALUE_AT,
-           builder.load(_field(builder, old_place, VALUE_AT)))
+    if shape.value is not None:
+        _store_value(builder, shape, into,
+                     _load_value(builder, shape, old_place))
     builder.br(stepped, (builder.memory(),))
 
     builder.position_at(stepped)
@@ -465,7 +647,7 @@ def _build_put(module: Module) -> Function:
     builder.position_at(added)
     builder.set_memory(added.add_param(MEM, "mem"))
     _write(builder, place, STATE_AT, builder.int_const(U64, LIVE))
-    _write(builder, place, KEY_AT, key)
+    _store_key(builder, shape, place, key)
     _write(builder, table, COUNT_FIELD,
            builder.binary(BinOp.WRAP_ADD, _read(builder, table, COUNT_FIELD),
                           builder.int_const(U64, 1)))
@@ -485,7 +667,7 @@ WANT_EITHER: Final[int] = 2
 SELECT_SYMBOL: Final[str] = "__pl4g_table_select"
 
 
-def _build_select(module: Module) -> Function:
+def _build_select(module: Module, shape: Shape) -> Function:
     """``__pl4g_table_select(out, walked, other, want)``.
 
     Every live key of *walked* is looked up in *other*, and put into *out* where
@@ -500,12 +682,12 @@ def _build_select(module: Module) -> Function:
     the same defect to be.
     """
     table_ptr = table_type(module)
-    func, fresh = _generated(module, SELECT_SYMBOL,
+    func, fresh = _generated(module, named(SELECT_SYMBOL, shape),
                              (table_ptr, table_ptr, table_ptr, U64), VOID)
     if not fresh:
         return func
-    slot_of = _build_slot(module)
-    put = _build_put(module)
+    slot_of = _build_slot(module, shape)
+    put = _build_put(module, shape)
     entry = func.add_block()
     walk = func.add_block("walk")
     look = func.add_block("look")
@@ -514,7 +696,6 @@ def _build_select(module: Module) -> Function:
     when_present = func.add_block("present")
     when_absent = func.add_block("absent")
     take = func.add_block("take")
-    copy = func.add_block("copy")
     onward = func.add_block("onward")
     done = func.add_block("done")
     builder = IRBuilder(module, func)
@@ -546,7 +727,7 @@ def _build_select(module: Module) -> Function:
 
     builder.position_at(live)
     builder.set_memory(live.add_param(MEM, "mem"))
-    key = builder.load(_field(builder, place, KEY_AT))
+    key = _load_key(builder, shape, place)
     found = builder.compare(
         CmpPred.EQ,
         builder.load(builder.call(slot_of, (other, key), table_ptr)),
@@ -584,17 +765,9 @@ def _build_select(module: Module) -> Function:
 
     builder.position_at(take)
     builder.set_memory(take.add_param(MEM, "mem"))
-    into = builder.call(put, (out, key), table_ptr)
-    builder.condbr(builder.compare(CmpPred.EQ, stride,
-                                   builder.int_const(U64, DICT_STRIDE)),
-                   copy, onward,
-                   true_args=(builder.memory(),),
-                   false_args=(builder.memory(),))
-
-    builder.position_at(copy)
-    builder.set_memory(copy.add_param(MEM, "mem"))
-    _write(builder, into, VALUE_AT,
-           builder.load(_field(builder, place, VALUE_AT)))
+    # The four operators are a set's, and a set has no value to carry over: what
+    # this used to ask of the stride at run time the shape now says outright.
+    builder.call(put, (out, key), table_ptr)
     builder.br(onward, (builder.memory(),))
 
     builder.position_at(onward)

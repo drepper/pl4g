@@ -46,6 +46,15 @@ NEXT_SYMBOL: Final[str] = "__pl4g_str_next"
 JOIN_SYMBOL: Final[str] = "__pl4g_str_join"
 LENGTH_SYMBOL: Final[str] = "__pl4g_str_length"
 COMPARE_SYMBOL: Final[str] = "__pl4g_str_compare"
+HASH_SYMBOL: Final[str] = "__pl4g_str_hash"
+
+#: What FNV-1a begins with and multiplies by.  The numbers are the published
+#: ones for sixty-four bits; what recommends this hash here is that it is a
+#: multiplication and an exclusive-or per byte with no table to carry, and that
+#: what it is defined over is bytes -- which is what makes two strings that say
+#: the same thing one key however they were built.
+FNV_BASIS: Final[int] = 0xCBF29CE484222325
+FNV_PRIME: Final[int] = 0x100000001B3
 
 #: What the leading byte of a sequence says.  The first number is the value the
 #: byte must be below for the row to apply, the second how many bits of the code
@@ -200,6 +209,52 @@ def _signed_byte_at(builder: IRBuilder, bytes_: Value, at: Value) -> Value:
     of two of them is the answer the comparison wants."""
     place = builder.binary(BinOp.ADD, bytes_, at)
     return builder.cast(CastKind.ZEXT, builder.load(place), I64)
+
+
+def hash_function(module: Module) -> Function:
+    """The one that hashes a string's bytes, built on first ask."""
+    func, fresh = _generated(
+        module, HASH_SYMBOL, (bytes_type(module), U64), U64, impure=False)
+    if fresh:
+        _build_hash(module, func)
+    return func
+
+
+def _build_hash(module: Module, func: Function) -> None:
+    """Build the one that hashes a string.
+
+    FNV-1a over the bytes: the answer begins at the basis and, for each byte, is
+    exclusive-ored with it and multiplied by the prime.  Both wrap, which no
+    program of this language may write and which this is -- a hash is defined on
+    the bits, and there is nothing about an overflow here to report to anyone.
+
+    Over the bytes and not over the characters, because what makes two strings
+    one key is that they say the same thing byte for byte, which is what the
+    comparison beside this asks as well.  A walk that decoded them would answer
+    the same and cost more.
+    """
+    entry = func.add_block()
+    builder = IRBuilder(module, func)
+    builder.position_at(entry)
+    bytes_ = entry.add_param(bytes_type(module), "bytes")
+    length = entry.add_param(U64, "length")
+    header = builder.new_block("hashing")
+    body = builder.new_block("hash")
+    done = builder.new_block("hashed")
+    builder.br(header, (builder.int_const(U64, 0),
+                        builder.int_const(U64, FNV_BASIS)))
+    builder.position_at(header)
+    at = header.add_param(U64, "at")
+    so_far = header.add_param(U64, "so_far")
+    builder.condbr(builder.compare(CmpPred.ULT, at, length), body, done)
+    builder.position_at(body)
+    mixed = builder.binary(BinOp.XOR, so_far, _byte_at(builder, bytes_, at))
+    builder.br(header, (builder.binary(BinOp.WRAP_ADD, at,
+                                       builder.int_const(U64, 1)),
+                        builder.binary(BinOp.WRAP_MUL, mixed,
+                                       builder.int_const(U64, FNV_PRIME))))
+    builder.position_at(done)
+    builder.ret(so_far)
 
 
 def _build_length(module: Module, func: Function) -> None:

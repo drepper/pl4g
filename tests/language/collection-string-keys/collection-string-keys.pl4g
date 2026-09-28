@@ -1,0 +1,83 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ A key may be text, and so may what a key stands for.
+※
+※ **Why text is a key.**  Both questions a key has to answer have an answer over
+※ its bytes: two strings that say the same thing are one key wherever their bytes
+※ are, which is what `=` already answers, and the hash is taken over the same
+※ bytes.  Everything that arrives from outside a program -- the environment, a
+※ header, a name in a file -- arrives as text, so a language whose dictionaries
+※ could not be keyed by it would have every one of those walked in a loop.
+※
+※ **What it costs.**  A key that is one word is hashed by one multiplication and
+※ compared by one instruction; a key that is text is hashed by a walk over its
+※ bytes and compared by another.  An entry is wider too: a table keyed by text
+※ holds two words per key rather than one.  That is the price, and nothing about
+※ the table changes for the keys that are words -- the three it generates are
+※ generated for the shape, so a program using both pays for each where it uses it.
+※
+※ **And what a key stands for may be anything.**  An entry is a run of words and
+※ the value is copied as what it is, so a value of several words -- a string, a
+※ tuple, a record -- goes in an entry as readily as a number does.
+※
+※ Compare: **Python**, **Ruby**, **JavaScript**, where a string is the usual key
+※ and the hash is over the bytes as it is here; **Go** and **Rust**, the same with
+※ the hash chosen for resistance to a program that picks its keys to collide --
+※ which this does not do yet and which the to-do list records; **C**, where a
+※ table keyed by strings is written by hand every time.
+
+fn named(d: ⸨str: str⸩, k: str) → str:
+    d⸨k⸩ ?? "none"
+
+@[startup, impure]
+fn main() → u6:
+    ※ text as the key and text as what it stands for
+    let d: mut ⸨str: str⸩ = ⸨"one": "first", "two": "second"⸩
+    d⸨"three"⸩ ← "third"
+    ※ the same key written twice is one key: the bytes are what a key is
+    d⸨"on" ⧺ "e"⸩ ← "again"
+    if named(d, "two") ≠ "second":
+        1u6
+    elif named(d, "three") ≠ "third":
+        2u6
+    elif named(d, "one") ≠ "again":
+        3u6
+    elif named(d, "four") ≠ "none":
+        4u6
+    elif #d ≠ 3:
+        5u6
+    else:
+        keys_alone()
+
+※ A set of text, which is the same table with nothing under the key.
+@[impure]
+fn keys_alone() → u6:
+    ※ enough of them that the table grows while it is built and every key is
+    ※ hashed again into the bigger one
+    let s: ⸨str⸩ = ⸨"a", "bb", "ccc", "d", "ee", "fff", "gggg", "hhhhh",
+                    "iiiiii", "jjjjjjj"⸩
+    if ¬s⸨"bb"⸩:
+        6u6
+    elif ¬s⸨"jjjjjjj"⸩:
+        7u6
+    elif s⸨"zz"⸩:
+        8u6
+    elif #s ≠ 10:
+        9u6
+    else:
+        counted()
+
+※ Text as the key with a number under it, which is what counting anything is.
+@[impure]
+fn counted() → u6:
+    let seen: mut ⸨str: u64⸩ = ⸨⸩
+    foreach word := ⟦"a", "b", "a", "c", "a", "b"⟧:
+        seen⸨word⸩ ← (seen⸨word⸩ ?? 0u64) + 1u64
+    if (seen⸨"a"⸩ ?? 0u64) ≠ 3u64:
+        10u6
+    elif (seen⸨"b"⸩ ?? 0u64) ≠ 2u64:
+        11u6
+    elif (seen⸨"c"⸩ ?? 0u64) ≠ 1u64:
+        12u6
+    else:
+        0u6

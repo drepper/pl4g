@@ -35,7 +35,7 @@ from ..narrow import normalize
 from ...ir.value import Value
 from ...ir.layout import (DataLayout, align_of, part_offsets_of, size_of,
                           tag_offset_of)
-from ...ir.types import made_of_parts, parts_of
+from ...ir.types import (BOOL, ResultType, made_of_parts, parts_of)
 from ..callconv import TooManyArguments, argument_places, result_places
 from ..saturate import (DIVISION, EXTREMA, NAMES, SATURATING, TRAPPING,
                         Unsupported,
@@ -919,8 +919,13 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
             return found
 
         def flag_of(self, value: object, span: Span | None) -> VirtReg:
-            """The register holding whether a result has an answer."""
-            return self.part_of(value, 1, span)
+            """The register holding whether a result has an answer.
+
+            After the answer's own registers, of which there may be several: a
+            result whose answer is a string is three registers and not two, and
+            the truth value is the third of them.
+            """
+            return self.part_of(value, _answer_registers(value), span)
 
         def part_of(self, value: object, index: int,
                     span: Span | None) -> VirtReg:
@@ -1440,51 +1445,69 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                     held[id(inst)] = operands.part_of(inst.operands[0],
                                                       inst.index, span)
                 case WrapInst():
-                    # One value made of two or of three, which here is that
-                    # many registers with nothing between them: the answer goes
-                    # where an answer goes, the truth value beside it, and what
-                    # the error carries after that.
-                    answer = inst.ty.ok if isinstance(inst.ty, ResultType) \
-                        else inst.ty
-                    destination = _new_value(
-                        answer, registers,
-                        hint=(_result_register(answer, cconv, registers)
-                              if inst is returned else None))
-                    failed = _new_value(
-                        BOOL, registers,
-                        hint=(_result_register(BOOL, cconv, registers, 1)
-                              if inst is returned else None))
-                    held[id(inst)] = destination
-                    extra[id(inst)] = [failed]
-                    asm.loadreg(destination,
-                                operands.undefined(inst.operands[0], answer,
-                                                   inst.span),
-                                inst.span)
-                    asm.loadreg(failed, operands.value(inst.operands[1], inst.span),
+                    # One value made of several, which here is that many
+                    # registers with nothing between them: the answer's own
+                    # registers, the truth value after them, and what the error
+                    # carries after that.  An answer is usually one register and
+                    # may be more -- a string is two -- which is why the places
+                    # of the other two are counted from it rather than written.
+                    assert isinstance(inst.ty, ResultType)
+                    answer = inst.ty.ok
+                    answer_parts = parts_of(answer)
+                    slots = _result_registers(inst.ty)
+                    simple = len(answer_parts) == 1
+                    taken = [
+                        _new_value(part, registers,
+                                   hint=(_result_register(part, cconv, registers,
+                                                          index)
+                                         if inst is returned and simple else None))
+                        for index, part in enumerate(slots)]
+                    held[id(inst)] = taken[0]
+                    extra[id(inst)] = taken[1:]
+                    # `at` and not `index`: the loop this is inside of is
+                    # walking the function's blocks, and a name reused here
+                    # would tell its terminator it was somewhere else.
+                    for at, part in enumerate(answer_parts):
+                        asm.loadreg(taken[at],
+                                    _part_source(operands, inst.operands[0],
+                                                 at, part, len(answer_parts),
+                                                 inst.span),
+                                    inst.span)
+                    asm.loadreg(taken[len(answer_parts)],
+                                operands.value(inst.operands[1], inst.span),
                                 inst.span)
                     if len(inst.operands) > 2:
-                        assert isinstance(inst.ty, ResultType)
                         assert inst.ty.err is not None
-                        carried = _new_value(
-                            inst.ty.err, registers,
-                            hint=(_result_register(inst.ty.err, cconv,
-                                                   registers, 2)
-                                  if inst is returned else None))
-                        extra[id(inst)].append(carried)
-                        asm.loadreg(carried,
-                                    operands.undefined(inst.operands[2],
-                                                       inst.ty.err, inst.span),
-                                    inst.span)
+                        carried = parts_of(inst.ty.err)
+                        for at, part in enumerate(carried):
+                            asm.loadreg(
+                                taken[len(answer_parts) + 1 + at],
+                                _part_source(operands, inst.operands[2], at,
+                                             part, len(carried), inst.span),
+                                inst.span)
                 case UnwrapInst():
-                    # Nothing to emit: the answer half is already in a register
-                    # of its own, and this says to go on using it.
+                    # Nothing to emit: the answer is already in registers of its
+                    # own, and this says to go on using them.
+                    how_many = _answer_registers(inst.operands[0])
                     held[id(inst)] = operands.register_of(inst.operands[0], span)
+                    if how_many > 1:
+                        extra[id(inst)] = [
+                            operands.part_of(inst.operands[0], index, span)
+                            for index in range(1, how_many)]
                 case FailedInst():
                     held[id(inst)] = operands.flag_of(inst.operands[0], span)
                 case ErrorInst():
                     # Nothing to emit either: what the error carries is already
-                    # in a register of its own, the third of the three.
-                    held[id(inst)] = operands.part_of(inst.operands[0], 2, span)
+                    # in registers of its own, after the answer's and the truth
+                    # value's.
+                    first = _answer_registers(inst.operands[0]) + 1
+                    held[id(inst)] = operands.part_of(inst.operands[0], first,
+                                                      span)
+                    if made_of_parts(inst.ty):
+                        extra[id(inst)] = [
+                            operands.part_of(inst.operands[0], first + index,
+                                             span)
+                            for index in range(1, len(parts_of(inst.ty)))]
                 case UnaryInst() if inst.op in _ROUNDINGS:
                     # No instruction here rounds a floating-point number where
                     # it stands, so it goes out to a whole number and back --
@@ -1835,6 +1858,46 @@ def _destroyed_by(callee: Function | None, cconv: CallConvDesc,
         # value has to assume: nothing here knows which function it is.
         units = cconv.caller_saved
     return [registers.widest(unit) for unit in units]
+
+
+def _part_source(operands: object, value: object, index: int, ty: Type,
+                 how_many: int, span: Span) -> MCOperand:
+    """Where one part of a value being put into a result comes from.
+
+    A value of one part may be anything an operand may be -- a constant, or the
+    undefined one an error wraps -- so it is asked for the way everything else
+    asks.  A value of several is a value the function computed, and what is
+    wanted is the register its part is in; the undefined one is nought in each
+    of them, which is what an error's unread answer has always been.
+    """
+    from ...ir.value import UndefConst
+
+    if how_many == 1:
+        return operands.undefined(value, ty, span)
+    if isinstance(value, UndefConst):
+        return MCImm(0, max(32, _width_of(ty)), signed=False)
+    return MCReg(operands.part_of(value, index, span))
+
+
+def _answer_registers(value: object) -> int:
+    """How many registers the answer of a result takes.
+
+    One for every answer that is one value, and its own several for one that is
+    several -- a result whose answer is a string is the string's two registers
+    and then the truth value.  What reads a result asks this rather than
+    counting from one, so that a wider answer moves the truth value along with
+    it instead of landing on top of it.
+    """
+    ty = getattr(value, "ty", None)
+    if not isinstance(ty, ResultType):
+        return 1
+    return len(parts_of(ty.ok))
+
+
+def _result_registers(ty: ResultType) -> tuple[Type, ...]:
+    """Every register a result takes: its answer's, the truth value, the error's."""
+    return (*parts_of(ty.ok), BOOL,
+            *(parts_of(ty.err) if ty.err is not None else ()))
 
 
 def _new_value(ty: Type, registers: RegisterInfo,

@@ -6458,6 +6458,48 @@ different tomorrow.  What this has that none of them has is that the build is
 written in the language, checked by the compiler that checks the program, and run
 by the compiler that compiles it.
 
+## 2026-09-28T18:00+02:00 — language
+
+**A dictionary may be keyed by text, and hold anything**
+
+At the user's direction, and as the half of "the environment is a dictionary"
+that is about the language rather than about the environment.  It reverses what
+the to-do list recorded -- "the key's restriction is separate and stays: one word
+is what lets one table serve every instantiation" -- and the user chose it
+knowing that, because everything that reaches a program from outside arrives as
+text.
+
+**What the restriction bought is what dropping it costs.**  One table served
+every instantiation because every key was one word: one hash, one comparison, one
+stride.  Now an entry is shaped by what the table holds, and the three functions
+that depend on that shape are generated per shape.  A program that keys one
+dictionary by a number and another by text carries two probes.  That is the whole
+of the price, and it is paid by the programs that use the feature.
+
+**The hash over text is FNV-1a** -- a multiplication and an exclusive-or per byte,
+no table to carry -- and the comparison is the walk `=` already uses, asked
+through the same generated function so that the two cannot disagree.  It is not
+keyed against a program that picks its keys to collide; every language that takes
+input from outside seeds its hash per run, and the to-do list now says so.
+
+**A value of any size follows from the same change**, since an entry that is
+shaped by its key can as easily be shaped by its value.  What is still refused is
+a collection inside a collection: that is a place in an arena, and an entry
+holding one would keep it alive by accident rather than by anything saying so.
+
+**And a result may hold a value of several parts.**  A dictionary keyed by text
+whose values are text answers `str?`, which the backends could not make: a result
+was the answer and a truth value, two registers, wherever the answer was one
+value.  It is now as many registers as the answer takes and then the truth value.
+`parts_of` is unchanged -- it says what a result is, not how many registers an
+answer needs -- which kept the change to the three instruction selectors.
+
+Compare: **Python**, **Ruby** and **JavaScript**, where a string is the ordinary
+key; **Go** and **Rust**, the same with a seeded hash; **C**, where a table keyed
+by strings is written by hand every time; **Zig**, where the hash and the equality
+are passed to the table as functions, which is the other way to pay for this and
+puts the choice in the program rather than in the compiler.
+
 Open questions
 --------------
 

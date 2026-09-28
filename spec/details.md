@@ -2990,6 +2990,41 @@ node the grammar has not got -- there is simply no highlighting.  A compiler
 that said it could not colour something would say it about every line of every
 diagnostic, and none of it is about the program.
 
+A table shaped by what it holds
+-------------------------------
+
+`sema/tables.py` generates the hash table a set and a dictionary are, and what it
+generates now depends on **what the table holds**.  `Shape` is that question
+asked once: the key's type and the value's, and from them where the value of an
+entry begins, how long an entry is, and what the generated functions are called.
+Making one and walking one are the same for every table -- both read the stride
+the table carries -- and the probe, the insertion and the set operators are
+generated per shape and named for it, so a dump shows `__pl4g_table_slot.str` and
+there is no wondering which instantiation it belongs to.
+
+**A key that is text is hashed over its bytes** with FNV-1a, in a function
+generated beside the one that compares two strings -- and the comparison is that
+same function, so a key found in a table and a `=` written in a program cannot
+disagree.  A key that fits a word keeps the multiplication it had.  Which of the
+two a shape wants is `key_ir_type`, and it is the only place that asks.
+
+**A result may now hold a value of several parts.**  `d⸨k⸩` answers `V?`, so a
+dictionary whose values are strings makes one -- and a result was two registers
+in the backends, the answer and the truth value, wherever the answer was one
+value.  It is now the answer's own registers, the truth value after them, and the
+error's after that; `_answer_registers` is what counts the first of those, and
+everything that reads a result asks it rather than counting from one.  `parts_of`
+is unchanged: it says what a result *is* (an answer, a truth value, an error), and
+how many registers the answer takes is a question about registers.
+
+That change cost an afternoon to a one-line mistake worth recording: the new arm
+walked the answer's parts with a loop variable called `index`, which is the name
+the enclosing loop uses for *which block is being lowered*.  The branch at the
+end of that block was then told the wrong following block, so it fell through
+into the arm it should have jumped over -- a miscompile with nothing wrong in the
+instruction that was emitted.  The loop variable is called `at` now, and the
+comment beside it says why.
+
 The compiler as a language server
 ---------------------------------
 

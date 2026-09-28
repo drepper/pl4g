@@ -3295,7 +3295,7 @@
           "description": "the type written as the key"
         }
       ],
-      "cause": "A key is hashed to find where it might be and then compared to see whether it is there, so a type that can be one is a type `=` is defined on and answers exactly: the integers, truth values and enumerations.  Floating point is left out on purpose -- two values that stand for one number may be two values, a not-a-number is equal to nothing including itself, and the two zeroes are equal and hash differently.  A product, a sum and a result have no equality at all yet.",
+      "cause": "A key is hashed to find where it might be and then compared to see whether it is there, so a type that can be one is a type `=` is defined on and answers exactly: the integers, truth values, characters, enumerations and text.  Text is hashed over its bytes and compared over them, which is what makes two strings that say the same thing one key.  Floating point is left out on purpose -- two values that stand for one number may be two values, a not-a-number is equal to nothing including itself, and the two zeroes are equal and hash differently, so every one of the three properties a key wants fails.",
       "spec": {
         "document": "spec/spec.md",
         "section": "The Language / Types / Sets and dictionaries",
@@ -3629,7 +3629,7 @@
       "number": 4445,
       "name": "LANG_COLLECTION_VALUE_TOO_LARGE",
       "severity": "error",
-      "message": "a dictionary holds a value that fits in a word, not '{found}'",
+      "message": "'{found}' cannot be what a key stands for",
       "args": [
         {
           "name": "found",
@@ -3637,7 +3637,7 @@
           "description": "the type written as the value"
         }
       ],
-      "cause": "An entry of a table is words, and what goes in one has to fit in one.  That is the same restriction a key has, for a duller reason: a key has it so that one table serves every instantiation, and a value has it because nothing yet copies a value of any size into a place.",
+      "cause": "An entry of a table holds the value as what it is, so a value of any size may go under a key.  What may not is another collection, which is a place in an arena: an entry holding one would keep it alive by accident rather than by anything saying so, and nothing in the language says how long it should live.",
       "spec": {
         "document": "spec/spec.md",
         "section": "The Language / Types / Sets and dictionaries",

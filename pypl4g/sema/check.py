@@ -818,14 +818,34 @@ def _can_be_a_key(ty: Type) -> bool:
 
     A key is hashed and then compared, so a type that can be one is a type `=`
     is defined on and answers exactly: the integers, truth values and
-    enumerations.  Floating point is left out on purpose -- two values that
-    stand for one number may be two values, a not-a-number is equal to nothing
-    including itself, and the two zeroes are equal and hash differently, so
-    every one of the three properties a key wants fails.
-    """
-    from ..ir.types import BoolType
+    enumerations, a character, and text.  Floating point is left out on purpose
+    -- two values that stand for one number may be two values, a not-a-number is
+    equal to nothing including itself, and the two zeroes are equal and hash
+    differently, so every one of the three properties a key wants fails.
 
-    return isinstance(ty, (IntType, BoolType, EnumType))
+    Text is a key because both questions have an answer over its bytes: two
+    strings that say the same thing are one key wherever their bytes are, which
+    is what `=` already answers and what the hash is taken over.  It costs a
+    wider entry and a walk per lookup where a number costs a multiplication, and
+    that is the price of the one key everything outside a program arrives as.
+    """
+    from ..ir.types import BoolType, CharType, StrType
+
+    return isinstance(ty, (IntType, BoolType, EnumType, CharType, StrType))
+
+
+def _can_be_a_value(ty: Type) -> bool:
+    """Whether a value of *ty* may be what a dictionary's key stands for.
+
+    Anything that is a run of words: an entry is words and the value is copied
+    as what it is, so what it may be is settled by whether the compiler can load
+    and store one of them.  What is left out is what has no size of its own --
+    nothing, and a type that went wrong -- and a collection, which is a place in
+    an arena and would make an entry hold something that outlives it by
+    accident rather than by saying so.
+    """
+    return not isinstance(ty, (SetType, DictType)) and ty is not VOID \
+        and ty is not ERROR
 
 
 def _every_value_fits(found: IntType, into: IntType) -> bool:
@@ -5961,10 +5981,7 @@ class Checker:
         if not self._accepts(expected, ty):
             self._report_mismatch(expr.span, ty, expected)
             return UndefConst(ERROR)
-        if isinstance(ty, DictType) and not _can_be_a_key(ty.value):
-            # The same restriction the key has, and for a duller reason: an
-            # entry is words, and what goes in one has to fit in one.  The
-            # to-do list says what a value of any type would need.
+        if isinstance(ty, DictType) and not _can_be_a_value(ty.value):
             self._diags.emit(D.LANG_COLLECTION_VALUE_TOO_LARGE, expr.span,
                              found=ty.value.render())
             return UndefConst(ERROR)
@@ -6007,13 +6024,26 @@ class Checker:
         working them out again here would be running them twice.
         """
         table = self._new_table(builder, ty, expr.span, arena)
+        shape = self._table_shape(ty)
         held = iter(ready.values)
         for at, key in enumerate(ready.keys):
-            place = self._put_key(builder, table, key, expr.span)
+            place = self._put_key(builder, shape, table, key, expr.span)
             if isinstance(ty, DictType):
-                builder.store(self._value_place(builder, place, ty.value),
+                builder.store(self._value_place(builder, shape, place, ty.value),
                               next(held), expr.span)
         return table
+
+    def _table_shape(self, ty: SetType | DictType) -> tables.Shape:
+        """What the entries of a table of this type are shaped by.
+
+        Asked here rather than worked out at each of the places that needs it:
+        where the value of an entry is and which generated function to call are
+        two answers to one question, and one wrong answer to it is a table read
+        differently by two pieces of the same program.
+        """
+        if isinstance(ty, SetType):
+            return tables.Shape(key=ty.element)
+        return tables.Shape(key=ty.key, value=ty.value)
 
     def _new_table(self, builder: IRBuilder, ty: SetType | DictType,
                    span: Span, arena: GlobalVar | None = None,
@@ -6025,53 +6055,56 @@ class Checker:
         provides.  Which of the three it was is settled here so that everything
         that makes a table asks the same question once.
         """
-        tables.ensure_runtime(self._module)
+        shape = self._table_shape(ty)
+        tables.ensure_runtime(self._module, shape)
         if comes_from is not None:
             place = tables.arena_of(builder, comes_from)
         else:
             found = arena if arena is not None else self._provided(HEAP_NAME)
             assert isinstance(found, GlobalVar)
             place = builder.address(found, span)
-        stride = tables.SET_STRIDE if isinstance(ty, SetType) else tables.DICT_STRIDE
         made = builder.call(self._module.functions[tables.NEW_SYMBOL],
-                            (place, builder.int_const(U64, stride)),
+                            (place, builder.int_const(U64, shape.stride)),
                             tables.table_type(self._module), span)
         return builder.cast(CastKind.BITCAST, made, ty, span)
 
-    def _as_word(self, builder: IRBuilder, key: Value, span: Span) -> Value:
-        """A key as the word a table holds it as.
+    def _as_held(self, builder: IRBuilder, shape: tables.Shape, key: Value,
+                 span: Span) -> Value:
+        """A key as the table holds it.
 
-        Every key is a whole number as far as a register is concerned -- a truth
-        value and a value of an enumeration are both one -- and a table holds
-        one word, so what a key is stored and compared as is that word.  The
-        widening says which, so that two keys that are the same number are the
-        same word however narrow their type is.
+        A key that fits a word is a word, whatever its type says -- a truth value
+        and a value of an enumeration are both whole numbers -- so it is widened
+        and two keys that are the same number are the same key however narrow
+        the type they were written in.  A key that does not fit a word is held as
+        what it is and needs no widening.
         """
+        if tables.key_ir_type(shape) is not U64:
+            return key
         ty = self._value_type_of(key)
         if ty is U64:
             return key
         return builder.cast(CastKind.ZEXT, key, U64, span)
 
-    def _put_key(self, builder: IRBuilder, table: Value, key: Value,
-                 span: Span) -> Value:
+    def _put_key(self, builder: IRBuilder, shape: tables.Shape, table: Value,
+                 key: Value, span: Span) -> Value:
         """The entry for *key*, made if the table did not have it."""
-        tables.ensure_runtime(self._module)
+        tables.ensure_runtime(self._module, shape)
         return builder.call(
-            self._module.functions[tables.PUT_SYMBOL],
+            self._module.functions[tables.named(tables.PUT_SYMBOL, shape)],
             (builder.cast(CastKind.BITCAST, table,
                           tables.table_type(self._module), span),
-             self._as_word(builder, key, span)),
+             self._as_held(builder, shape, key, span)),
             tables.table_type(self._module), span)
 
-    def _find_key(self, builder: IRBuilder, table: Value, key: Value,
-                  span: Span) -> Value:
+    def _find_key(self, builder: IRBuilder, shape: tables.Shape, table: Value,
+                  key: Value, span: Span) -> Value:
         """The entry the key is in, or the one it would go in."""
-        tables.ensure_runtime(self._module)
+        tables.ensure_runtime(self._module, shape)
         return builder.call(
-            self._module.functions[tables.SLOT_SYMBOL],
+            self._module.functions[tables.named(tables.SLOT_SYMBOL, shape)],
             (builder.cast(CastKind.BITCAST, table,
                           tables.table_type(self._module), span),
-             self._as_word(builder, key, span)),
+             self._as_held(builder, shape, key, span)),
             tables.table_type(self._module), span)
 
     def _is_live(self, builder: IRBuilder, place: Value, span: Span) -> Value:
@@ -6079,10 +6112,11 @@ class Checker:
         return builder.compare(CmpPred.EQ, builder.load(place, span),
                                builder.int_const(U64, tables.LIVE), span)
 
-    def _value_place(self, builder: IRBuilder, place: Value, ty: Type) -> Value:
+    def _value_place(self, builder: IRBuilder, shape: tables.Shape,
+                     place: Value, ty: Type) -> Value:
         """Where in an entry the value belonging to its key is."""
         word = builder.binary(BinOp.ADD, place,
-                              builder.int_const(U64, tables.VALUE_AT))
+                              builder.int_const(U64, shape.value_at))
         return builder.cast(CastKind.BITCAST, word,
                             self._module.types.ptr_type(ty, mutable=True))
 
@@ -6237,7 +6271,8 @@ class Checker:
         if not self._accepts(expected, answer):
             self._report_mismatch(expr.span, answer, expected)
             return UndefConst(ERROR)
-        place = self._find_key(builder, base, key, expr.span)
+        shape = self._table_shape(ty)
+        place = self._find_key(builder, shape, base, key, expr.span)
         if isinstance(ty, SetType):
             return self._is_live(builder, place, expr.span)
         # The value is read whether the entry holds a key or not: an entry of
@@ -6250,7 +6285,8 @@ class Checker:
         missing = builder.compare(CmpPred.NE, builder.load(place, expr.span),
                                   builder.int_const(U64, tables.LIVE), expr.span)
         return builder.wrap(
-            builder.load(self._value_place(builder, place, ty.value), expr.span),
+            builder.load(self._value_place(builder, shape, place, ty.value),
+                         expr.span),
             missing, answer, expr.span)
 
     def _lower_entry_assign(self, builder: IRBuilder, stmt: ast.EntryAssign) -> None:
@@ -6268,8 +6304,9 @@ class Checker:
         if self._value_type_of(key) is ERROR or self._value_type_of(value) is ERROR:
             return
         self._an_effect(D.LANG_PURE_WRITES_ELSEWHERE, stmt.span)
-        place = self._put_key(builder, base, key, stmt.span)
-        builder.store(self._value_place(builder, place, ty.value), value,
+        shape = self._table_shape(ty)
+        place = self._put_key(builder, shape, base, key, stmt.span)
+        builder.store(self._value_place(builder, shape, place, ty.value), value,
                       stmt.span)
 
     # -- if --------------------------------------------------------------------
@@ -7332,7 +7369,8 @@ class Checker:
         other already do everywhere a tuple is bound -- so `foreach k, v = d:`
         needs nothing of its own beyond the tuple.
         """
-        tables.ensure_runtime(self._module)
+        shape = self._table_shape(ty)
+        tables.ensure_runtime(self._module, shape)
         table = builder.cast(CastKind.BITCAST, value,
                              tables.table_type(self._module), span)
         finder = self._module.functions[tables.NEXT_SYMBOL]
@@ -7360,7 +7398,7 @@ class Checker:
             if isinstance(ty, SetType):
                 return key
             return b.make_tuple(
-                (key, read(b, place, tables.VALUE_AT, ty.value)), element, span)
+                (key, read(b, place, shape.value_at, ty.value)), element, span)
 
         return _Iteration(
             element=element,
@@ -8755,7 +8793,7 @@ class Checker:
         operand is changed: an operator answers with a value everywhere else in
         the language, and a set is no different for being a place in memory.
         """
-        tables.ensure_runtime(self._module)
+        select = tables.ensure_operators(self._module, self._table_shape(ty))
         table_ptr = tables.table_type(self._module)
         as_table = {
             True: builder.cast(CastKind.BITCAST, left, table_ptr, span),
@@ -8766,7 +8804,6 @@ class Checker:
         # combined with another's would otherwise land wherever the compiler
         # happened to put it.
         out = self._new_table(builder, ty, span, comes_from=as_table[True])
-        select = self._module.functions[tables.SELECT_SYMBOL]
         into = builder.cast(CastKind.BITCAST, out, table_ptr, span)
         for first, want in self._SET_WALKS[op]:
             builder.call(select, (into, as_table[first], as_table[not first],
@@ -10684,7 +10721,7 @@ class Checker:
                                     builder.int_const(U64, stride), span))
         heap = self._provided(HEAP_NAME)
         assert isinstance(heap, GlobalVar)
-        tables.ensure_runtime(self._module)
+        tables.ensure_allocator(self._module)
         return builder.cast(
             CastKind.BITCAST,
             builder.call(self._module.functions[tables.ALLOC_SYMBOL],

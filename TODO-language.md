@@ -72,10 +72,17 @@ To Do List for the PL4g language
     spelling, and there is none: Python writes `del d[k]` and `s.discard(x)`, and this language has no statement that removes
     anything from anything.
 
-[ ] a dictionary whose value is of any type.  Refused today (4445): an entry is words and what goes in one has to fit in one.
-    What it needs is the entry stride to be computed per instantiation from the layout of the value, which the table already
-    carries as a field, and a copy of that many bytes where a word is copied now.  The key's restriction is separate and stays:
-    one word is what lets one table serve every instantiation.
+[x] a dictionary whose value is of any type, and a key that is text.  Done on 2026-09-28 at the user's direction, and the two
+    together: an entry is now shaped by what the table holds -- the key's words, then the value's -- and the three functions that
+    depend on that shape are generated once per shape and named for it.  A key that is text is hashed with FNV-1a over its bytes
+    and compared with the walk `=` already uses.  What the key's restriction bought (one table for every instantiation) is
+    therefore gone, and what it cost is what it bought: a program that keys a dictionary by text and another by a number carries
+    two probes.
+
+[ ] a hash a program cannot pick its keys to collide in.  FNV-1a is what the bytes of a key are hashed with and it is not
+    keyed: a program fed keys chosen to land in one place degrades to a walk.  Every language that takes input from outside
+    seeds its hash per run (Python, Go, Rust); this wants somewhere for the seed to live and a way for a program that wants a
+    table it can reproduce to say so.
 
 [ ] a collection at the top level.  Refused today (9902), because a table is built by running code and a variable at the top level
     is bytes in the image.  The module already has constructors; what this needs is for the front end to emit one.

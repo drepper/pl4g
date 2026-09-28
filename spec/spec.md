@@ -3002,7 +3002,14 @@ meet, here as anywhere else.
 ##### What can be a key
 
 A key is hashed to find where it might be and then compared to see whether it is there, so a type that can be one is a type `=` is
-defined on and answers **exactly**: the integer types, `bool`, and enumerations (4429).
+defined on and answers **exactly**: the integer types, `bool`, `char`, enumerations, and `str` (4429).
+
+**Text is a key**, and is the one key that is not a single word.  Both questions have an answer over its bytes: two strings that
+say the same thing are one key wherever their bytes are, which is what `=` already answers, and the hash is taken over the same
+bytes.  Everything that reaches a program from outside it -- the environment, a name in a file, a header -- arrives as text, so a
+language whose dictionaries could not be keyed by it would have every one of those searched in a loop.  What it costs is stated
+rather than hidden: a key that is a word is hashed by one multiplication and compared by one instruction, and a key that is text is
+hashed by a walk over its bytes and compared by another; an entry of such a table is wider by a word.
 
 Floating point is left out on purpose, and the reason is worth stating: a not-a-number is equal to nothing, including itself, so a
 key put in could never be found again; the two zeroes are equal and have different bits, so hashing them by their bits would put
@@ -3010,7 +3017,10 @@ one where the other is not; and two values arrived at by different routes rarely
 comparisons exist for and which a hash table cannot use.  A product, a sum and a result have no equality at all yet, so none of
 them can be a key either.
 
-The value type of a dictionary may be anything that is not `void` (4430) -- a dictionary whose keys stand for nothing is a set.
+The value type of a dictionary may be anything that is not `void` (4430) -- a dictionary whose keys stand for nothing is a set --
+and it need not fit in a word: an entry holds the value as what it is, so a string, a tuple or a record goes under a key as readily
+as a number does (4445 where it is another collection, which would be a place in an arena outliving the entry by accident rather
+than by saying so).
 
 ##### Reading and writing
 
