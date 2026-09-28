@@ -1,0 +1,20 @@
+# The extension itself, which Zed runs as WebAssembly.
+#
+# It exists to answer one question -- which command starts the language server --
+# because that is the only way Zed lets an extension answer it.  Everything else
+# about this language is in the files beside this one, which are read and need no
+# code at all.
+
+[package]
+name = "zed_pl4g"
+version = "0.1.0"
+edition = "2021"
+publish = false
+license = "MIT"
+
+[lib]
+path = "src/lib.rs"
+crate-type = ["cdylib"]
+
+[dependencies]
+zed_extension_api = "0.7.0"

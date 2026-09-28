@@ -6298,6 +6298,60 @@ what the editor holds and reads the disk for everything else.  So an import from
 buffer with unsaved changes is read as the buffer has it, which is eleven lines
 and no change to the compiler.
 
+## 2026-09-28T12:00+02:00 — tooling
+
+**Zed reads the same grammar and runs the same server**
+
+At the user's direction, and beside the Neovim package rather than instead of it:
+`editors/zed` is a Zed extension holding the two halves an editor needs, and
+neither of them a copy.  The colouring query is a link to
+`tree-sitter-pl4g/queries/highlights.scm`, which is the file Neovim reads and the
+file a diagnostic is coloured with; the language server is `bin/pypl4g lsp`, which
+is the compiler.
+
+**One highlight query for both editors, because both read it the same way.**  Zed
+resolves a capture name against the theme by dropping the last part until
+something matches, so `@keyword.conditional` is coloured as a keyword and
+`@variable.parameter` as a variable; and Zed, like Neovim and like tree-sitter's
+own highlighter, lets the pattern written later win.  So the coarse-first order
+the queries already have is right for it, and a second copy would have been a
+second thing to keep current.  What Zed wants that Neovim does not is asked for in
+Zed's own captures -- an outline written with `@item`, `@name` and `@context` --
+and those files are Zed's alone because nothing else reads them.
+
+**The grammar comes from a commit, which is the one thing that could drift.**
+Zed builds a grammar by cloning a repository at a revision; it will not read a
+working tree, and there is no option that makes it.  So `extension.toml` names a
+revision, `bin/pl4g-zed-rev` writes it, and a test refuses a revision whose
+grammar directory is not the one in the tree -- the same shape as the test that
+keeps the grammar and the compiler agreeing, for the same reason.  The
+alternatives were to point the manifest at a local path, which works on one
+machine and is not shareable, or to let it drift silently, which is what this
+project has a test for.
+
+**The language server needs twelve lines of Rust**, compiled to WebAssembly,
+because a command is the one thing Zed will not read from a file.  What those
+lines do is choose between the compiler the settings name, `bin/pypl4g` of the
+project the file is in, and `pypl4g` on the path; the middle one is the answer
+that matters, since a program in a checkout of the language should be checked by
+the compiler it is written beside.
+
+**Nothing here runs Zed**, which is the difference between this and the Neovim
+package: that one has a test that opens the editor and reads what came out.  What
+a test can check of an extension is that it says what it means to say -- the
+manifest and the language configuration agree with each other and with the
+compiler's own option table, every query compiles against the grammar, the link
+resolves, the revision is the right one -- and the extension was built to
+WebAssembly by hand once to show that the code is the API's.
+
+Compare: **Rust**, **Go** and **Python**, whose Zed support is an extension in a
+repository of its own, written by somebody who is not the compiler's author and
+pinned to a grammar in a third repository -- three places for one language;
+**Zig**, whose editor support is `zls`, a separate program; **Gleam**, whose
+extension is the shape this one copies, in the language's own tree.  What this has
+that none of them has is the queries being the compiler's own file rather than a
+copy of it.
+
 Open questions
 --------------
 

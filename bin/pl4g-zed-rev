@@ -1,0 +1,74 @@
+#!/usr/bin/python3
+"""Point the Zed extension at the commit the grammar is at now.
+
+Zed builds a grammar from a git repository at a revision, so what it reads is a
+commit and never the working tree.  That is a second statement of which grammar
+is current, and this is what keeps it true: it finds the commit that last changed
+`tree-sitter-pl4g`, checks that its grammar is the one in the tree now, and writes
+it into `editors/zed/extension.toml`.
+
+Run it after a grammar change has been committed.  A test refuses a revision whose
+grammar is not this one, so forgetting is a failing test rather than an editor
+quietly reading a grammar the project no longer has.
+"""
+
+from __future__ import annotations
+
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+GRAMMAR = "tree-sitter-pl4g"
+MANIFEST = ROOT / "editors" / "zed" / "extension.toml"
+
+
+def git(*words: str) -> str:
+    """Ask git something, answering with what it said."""
+    done = subprocess.run(["git", *words], cwd=ROOT, capture_output=True,
+                          text=True, check=False)
+    if done.returncode != 0:
+        print(done.stderr.strip(), file=sys.stderr)
+        raise SystemExit(done.returncode)
+    return done.stdout.strip()
+
+
+def main() -> int:
+    """Write the revision, or say why there is none to write."""
+    dirty = git("status", "--porcelain", "--", GRAMMAR)
+    if dirty:
+        print("".join((GRAMMAR, " has changes that are not committed:\n", dirty,
+                       "\ncommit them first: what Zed reads is a commit")),
+              file=sys.stderr)
+        return 1
+    # `rev-list` and not `log`: a configuration that shows signatures writes
+    # them on the standard output, and what is wanted here is the hash alone.
+    rev = git("rev-list", "-1", "HEAD", "--", GRAMMAR)
+    if not rev:
+        print("nothing has ever been committed to " + GRAMMAR, file=sys.stderr)
+        return 1
+    if git("rev-parse", "".join((rev, ":", GRAMMAR))) != \
+            git("rev-parse", "".join(("HEAD:", GRAMMAR))):
+        print("the newest commit to " + GRAMMAR + " is not the grammar of HEAD",
+              file=sys.stderr)
+        return 1
+    text = MANIFEST.read_text(encoding="utf-8")
+    written = re.sub(r'^rev = "[0-9a-f]*"$', "".join(('rev = "', rev, '"')),
+                     text, count=1, flags=re.MULTILINE)
+    if written == text:
+        print("".join((MANIFEST.name, " already points at ", rev[:12])),
+              file=sys.stderr)
+        return 0
+    MANIFEST.write_text(written, encoding="utf-8")
+    print("".join((MANIFEST.name, " now points at ", rev[:12])), file=sys.stderr)
+    # A revision that is not on the remote is one Zed cannot fetch.
+    remote = git("branch", "--remotes", "--contains", rev) or ""
+    if not remote.strip():
+        print("".join(("that commit is not on a remote branch yet; push before ",
+                       "installing the extension")), file=sys.stderr)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -30,9 +30,17 @@ is what it and the compiler both read.  What is missing from either belongs here
     milliseconds and is why it is allowed to be that simple.  A file that is ten times larger than anything here would want the
     analysis cached per definition, which is the point at which this stops being the compiler run twice.
 
-[ ] a configuration for an editor that is not Neovim.  Helix reads the same queries with a `languages.toml` entry, Emacs has
-    `treesit` and wants the capture names mapped to its own faces, and Zed wants an extension.  None of them needs anything of the
-    grammar that is not already there, which is the point of the queries being where they are.
+[x] a configuration for an editor that is not Neovim.  Done for Zed on 2026-09-28: `editors/zed` is an extension reading the same
+    highlight query and running the same server.  Helix and Emacs are still open -- Helix reads these queries with a
+    `languages.toml` entry, Emacs has `treesit` and wants the capture names mapped to its own faces -- and neither needs anything
+    of the grammar that is not already there.
+
+[ ] Zed cannot be tested here.  Everything about the extension is checked except the one thing that matters -- that Zed builds it
+    and starts the server -- because Zed is not something a test can run headless the way Neovim is.  If it ever grows a way to
+    open a file, wait for a server and print what it found, the test beside the Neovim one is worth writing.
+
+[ ] an indentation query for Zed as well, which is the same missing thing as the entry above about Neovim: one query would do for
+    both, `indents.scm` being a name they both read.
 
 [ ] a highlight for a name the program defined against one it only mentioned.  `queries/locals.scm` is what tree-sitter has for
     that, and with it an editor can tell a definition from a use and rename by scope.  Nothing here needs it yet.

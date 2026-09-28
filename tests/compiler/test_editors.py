@@ -1,9 +1,13 @@
-"""The editor configuration, and the one grammar it and the compiler both read.
+"""The editor configurations, and the one grammar they and the compiler read.
 
-`editors/nvim` holds no copy of anything: the parser and the queries in it are
-links to `tree-sitter-pl4g`, so what an editor colours and what a diagnostic
-colours come from one file.  A link is a thing that can be left pointing at a
-name nothing has any more, which is what the first test here is for.
+`editors/nvim` and `editors/zed` hold no copy of anything: the parser and the
+queries in them are links to `tree-sitter-pl4g`, so what an editor colours and
+what a diagnostic colours come from one file.  A link is a thing that can be left
+pointing at a name nothing has any more, which is what the first test here is for.
+
+Zed is the one that cannot read the working tree: it builds a grammar from a git
+repository at a revision, which is a second statement of which grammar is current
+and is checked here like every other second statement in this project.
 
 The rest are about the queries themselves: that every one of them compiles, that
 every token of every program in the suite is something they colour, that every
@@ -13,8 +17,10 @@ that opening a program in it really does arrive at the captures the queries say.
 
 from __future__ import annotations
 
+import json
 import re
 import shutil
+import tomllib
 import subprocess
 from pathlib import Path
 
@@ -25,6 +31,8 @@ from conftest import ROOT, describe
 GRAMMAR = ROOT / "tree-sitter-pl4g"
 QUERIES = GRAMMAR / "queries"
 PACKAGE = ROOT / "editors" / "nvim"
+ZED = ROOT / "editors" / "zed"
+ZED_LANGUAGE = ZED / "languages" / "pl4g"
 
 NEOVIM = "nvim"
 
@@ -61,15 +69,20 @@ def test_the_package_points_at_the_grammar() -> None:
         PACKAGE / "parser" / "pl4g.so": GRAMMAR / "pl4g.so",
         PACKAGE / "queries" / "pl4g" / "highlights.scm": QUERIES / "highlights.scm",
         PACKAGE / "queries" / "pl4g" / "folds.scm": QUERIES / "folds.scm",
+        ZED_LANGUAGE / "highlights.scm": QUERIES / "highlights.scm",
     }
     for link, target in wanted.items():
         assert link.is_symlink(), "".join((str(link), " is not a link"))
         found = (link.parent / link.readlink()).resolve()
         assert found == target.resolve(), "".join((
             str(link), " points at ", str(found), " and not at ", str(target)))
-    for name in ("ftdetect/pl4g.lua", "ftplugin/pl4g.lua",
-                 "lua/pl4g/health.lua", "README.md"):
+    for name in ("ftdetect/pl4g.lua", "ftplugin/pl4g.lua", "lsp/pl4g.lua",
+                 "plugin/pl4g.lua", "lua/pl4g/health.lua", "README.md"):
         assert (PACKAGE / name).is_file(), name
+    for name in ("extension.toml", "Cargo.toml", "src/lib.rs", "README.md",
+                 "languages/pl4g/config.toml", "languages/pl4g/outline.scm",
+                 "languages/pl4g/brackets.scm", "languages/pl4g/overrides.scm"):
+        assert (ZED / name).is_file(), name
 
 
 def _language() -> object:
@@ -107,10 +120,13 @@ def test_every_query_compiles(language: object) -> None:
     reports it once, to whoever happens to open a file.
     """
     from tree_sitter import Query
-    found = sorted(QUERIES.glob("*.scm"))
+    found = sorted(QUERIES.glob("*.scm")) + sorted(ZED_LANGUAGE.glob("*.scm"))
     assert found, "there are no queries"
     for path in found:
-        Query(language, path.read_text(encoding="utf-8"))  # type: ignore[arg-type]
+        try:
+            Query(language, path.read_text(encoding="utf-8"))  # type: ignore[arg-type]
+        except Exception as exc:  # noqa: BLE001 -- what it is, is what to report
+            raise AssertionError("".join((path.name, ": ", str(exc)))) from exc
 
 
 def _sources() -> list[Path]:
@@ -332,3 +348,144 @@ def test_the_health_check_finds_nothing_wrong(tmp_path: Path) -> None:
                  "the folds query compiles",
                  "coloured by the grammar"):
         assert said in text, "".join((said, " is not in:\n", text))
+
+
+def _manifest() -> dict[str, object]:
+    """What the Zed extension says it is."""
+    return tomllib.loads((ZED / "extension.toml").read_text(encoding="utf-8"))
+
+
+def _language_config() -> dict[str, object]:
+    """And what it says a file of this language is."""
+    return tomllib.loads(
+        (ZED_LANGUAGE / "config.toml").read_text(encoding="utf-8"))
+
+
+def test_the_zed_extension_describes_this_language() -> None:
+    """The two files agree with each other and with the compiler.
+
+    The suffix is the compiler's own, out of the table both implementations
+    read; the grammar the language names is the grammar the extension builds; and
+    the server it declares is the one the code beside it starts.
+    """
+    manifest = _manifest()
+    config = _language_config()
+    assert manifest["id"] == "pl4g"
+    assert manifest["schema_version"] == 1
+    grammars = manifest["grammars"]
+    assert isinstance(grammars, dict) and list(grammars) == ["pl4g"], grammars
+    assert config["grammar"] == "pl4g"
+    assert manifest["languages"] == ["languages/pl4g"] \
+        if "languages" in manifest else True
+    servers = manifest["language_servers"]
+    assert isinstance(servers, dict) and list(servers) == ["pl4g"], servers
+    assert servers["pl4g"]["language"] == config["name"]
+    # The suffix a source file has is said once, in the table both compilers
+    # read, and what the editor looks for has to be that.
+    table = json.loads((ROOT / "share" / "options.json").read_text(encoding="utf-8"))
+    assert config["path_suffixes"] == [str(table["source_suffix"]).lstrip(".")]
+    # Indentation is characters and never a tab, which is what 2103 is about.
+    assert config["hard_tabs"] is False
+    assert config["tab_size"] == 4
+
+
+def test_the_zed_extension_writes_the_comment_the_grammar_reads() -> None:
+    """What a commenting command writes has to be what a program writes.
+
+    The grammar says a remark begins with `\N{REFERENCE MARK}`; an editor that
+    wrote anything else would write a line the compiler refuses.
+    """
+    config = _language_config()
+    assert config["line_comments"] == ["\N{REFERENCE MARK} "]
+    grammar = (GRAMMAR / "grammar.js").read_text(encoding="utf-8")
+    assert "'\N{REFERENCE MARK}'" in grammar, "the grammar's marker has moved"
+
+
+def test_the_zed_extension_starts_the_compiler() -> None:
+    """The command it runs is `pypl4g lsp`, which is the command that exists.
+
+    Read out of the code rather than stated twice: what the extension will run is
+    written there, and a word of it changed without the other is what this
+    notices.
+    """
+    code = (ZED / "src" / "lib.rs").read_text(encoding="utf-8")
+    assert '"bin/pypl4g"' in code and '"pypl4g"' in code
+    assert '"lsp"' in code
+    assert (ROOT / "bin" / "pypl4g").is_file()
+    # And the crate it is built against, which decides which Zed can run it.
+    cargo = tomllib.loads((ZED / "Cargo.toml").read_text(encoding="utf-8"))
+    assert cargo["lib"]["crate-type"] == ["cdylib"], "Zed runs it as WebAssembly"
+    assert "zed_extension_api" in cargo["dependencies"]
+
+
+@pytest.mark.skipif(not (ROOT / ".git").exists(), reason="not a git checkout")
+def test_the_grammar_zed_fetches_is_the_grammar_this_tree_has() -> None:
+    """Zed builds a grammar from a commit, so the commit has to be the right one.
+
+    It clones the repository at the revision the manifest names and builds what
+    it finds there, which is a second statement of which grammar is current -- and
+    a second statement of one thing is what this project keeps honest with a test.
+    `bin/pl4g-zed-rev` is what writes it; this is what notices that it was not run.
+
+    The comparison is the *tree* of the grammar directory and not the revision
+    itself, so a revision that lags the tip is perfectly all right as long as the
+    grammar in it is the grammar here.
+    """
+    grammars = _manifest()["grammars"]
+    assert isinstance(grammars, dict)
+    entry = grammars["pl4g"]
+    assert isinstance(entry, dict)
+    assert entry["path"] == GRAMMAR.name, entry
+    assert str(entry["repository"]).startswith("http"), entry
+    rev = str(entry["rev"])
+    assert re.fullmatch(r"[0-9a-f]{40}", rev), "".join(("not a revision: ", rev))
+    here = _tree_of("HEAD")
+    there = _tree_of(rev)
+    if there is None:
+        # Unknown here: a revision that was mistyped, or a clone that was made
+        # shallow and does not go back that far.  The second is a reason to skip
+        # and the first is not, so which it is gets asked.
+        done = subprocess.run(["git", "rev-parse", "--is-shallow-repository"],
+                              cwd=str(ROOT), capture_output=True, text=True,
+                              timeout=60, check=False)
+        if done.stdout.strip() == "true":
+            pytest.skip("".join(("the revision ", rev[:12],
+                                 " is not in this shallow clone")))
+        raise AssertionError("".join((
+            "editors/zed/extension.toml points at ", rev[:12],
+            ", which is not a revision of this repository")))
+    assert there == here, "".join((
+        "editors/zed/extension.toml points at ", rev[:12],
+        ", whose grammar is not this one; run bin/pl4g-zed-rev"))
+
+
+def _tree_of(rev: str) -> str | None:
+    """What the grammar directory is, at *rev*, or nothing where it is unknown."""
+    done = subprocess.run(
+        ["git", "rev-parse", "".join((rev, ":", GRAMMAR.name))],
+        cwd=str(ROOT), capture_output=True, text=True, timeout=60, check=False)
+    return done.stdout.strip() if done.returncode == 0 else None
+
+
+def test_the_grammar_directory_has_nothing_uncommitted() -> None:
+    """Which is what makes the check above mean anything.
+
+    A grammar changed and not committed is one Zed cannot fetch whatever the
+    manifest says, so the revision being right says nothing while that is true.
+    This is a warning in the shape of a test: it fails only where the two are
+    actually out of step, which is where the editor would be wrong.
+    """
+    if not (ROOT / ".git").exists():
+        pytest.skip("not a git checkout")
+    done = subprocess.run(
+        ["git", "status", "--porcelain", "--", GRAMMAR.name],
+        cwd=str(ROOT), capture_output=True, text=True, timeout=60, check=False)
+    if done.returncode != 0:
+        pytest.skip("git would not answer")
+    changed = [line for line in done.stdout.splitlines() if line.strip()]
+    if not changed:
+        return
+    rev = str(_manifest()["grammars"]["pl4g"]["rev"])
+    assert _tree_of(rev) == _tree_of("HEAD"), "".join((
+        "the grammar has uncommitted changes:\n", "\n".join(changed),
+        "\nZed can only fetch a commit, so commit them and run bin/pl4g-zed-rev"))

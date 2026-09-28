@@ -1,0 +1,32 @@
+# What a PL4G file is to Zed, and what editing one is like.
+#
+# Everything here the language settles: the suffix, the comment marker, four
+# characters of indentation and never a tab -- a tab in indentation is an error
+# the compiler reports (2103) -- and the brackets, which are the language's own
+# glyphs as well as the ones every language has.
+
+name = "PL4G"
+grammar = "pl4g"
+path_suffixes = ["pl4g"]
+
+# `※ ` with the space: what a commenting command writes is what a program writes.
+line_comments = ["※ "]
+
+tab_size = 4
+hard_tabs = false
+
+# What a closing bracket may be typed in front of without pushing it along.
+autoclose_before = ",;:)]}⟧〉⸩"
+
+brackets = [
+    { start = "(", end = ")", close = true, newline = false },
+    { start = "{", end = "}", close = true, newline = true },
+    { start = "[", end = "]", close = true, newline = false },
+    # An array, a tuple, a collection and a lifted type: the four the language
+    # writes in glyphs of its own.
+    { start = "⟦", end = "⟧", close = true, newline = false },
+    { start = "〈", end = "〉", close = true, newline = false },
+    { start = "⸨", end = "⸩", close = true, newline = false },
+    { start = "⌜", end = "⌝", close = true, newline = false },
+    { start = "\"", end = "\"", close = true, newline = false, not_in = ["comment", "string"] },
+]

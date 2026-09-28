@@ -2996,8 +2996,8 @@ it says on those two streams.  And one test runs Neovim with nothing but this
 project's package on its runtime path and requires the compiler's diagnostic to
 arrive in the buffer at the place the compiler put it.
 
-An editor that reads the same grammar
--------------------------------------
+Editors that read the same grammar
+----------------------------------
 
 `editors/nvim` is a Neovim package, and it **holds no copy of anything**: the
 parser in it and the queries in it are links to `tree-sitter-pl4g`.  So an editor
@@ -3047,13 +3047,42 @@ gives `Type`, `Number` and `Operator` the ordinary foreground and makes a keywor
 bold, so a file coloured perfectly well looks plain -- which is what "no
 highlighting" turned out to mean the first time it was reported.
 
+**Zed is the same two halves said in Zed's shapes.**  `editors/zed` is an
+extension: `extension.toml` says which grammar to build and which language server
+to start, `languages/pl4g/config.toml` says what a `.pl4g` file is and what
+editing one is like, and `highlights.scm` beside it is a link to the same query
+Neovim reads -- Zed resolves a capture name against the theme by dropping the last
+part until something matches, so `@keyword.conditional` is coloured as a keyword
+and the one file serves both.  The queries Zed has that Neovim has not are the
+ones Zed asks for in its own captures: `outline.scm` (`@item`, `@name`,
+`@context`), `brackets.scm` and `overrides.scm`.
+
+**The one thing the two do not share is where the grammar comes from.**  Neovim
+reads the working tree, through a link to the library `bin/pl4g-grammar` builds.
+Zed builds the grammar itself, from a **git repository at a revision** -- so what
+it reads is a commit, and a change to `grammar.js` reaches it only once that
+change is committed, pushed, and the revision in `extension.toml` bumped.
+`bin/pl4g-zed-rev` writes that revision, and a test refuses one whose grammar is
+not the grammar of the working tree: a second statement of which grammar is
+current, kept honest the way this project keeps the others.
+
+**The server is the same server.**  Zed will read a command from an extension and
+from nothing else, so `src/lib.rs` is a dozen lines of Rust compiled to
+WebAssembly whose whole job is to answer with one: the compiler named in the
+settings, or `bin/pypl4g` of the project the file is in, or `pypl4g` on the path.
+The second is the one that matters -- a program in a checkout of the language is
+then checked by the compiler it is written beside.
+
 **A test opens a program in the editor.**  `tests/compiler/test_editors.py`
-checks that the links resolve, that every query compiles, that every token of
-every program in the suite is something the queries colour, that every name they
-capture by is one the editor knows -- and then runs Neovim over a program with
-nothing but this package on its runtime path and asks what each token came out
-as.  That last is the one test that reads the type of the buffer, the parser, the
-queries and the order of the patterns in one go.
+checks that the links resolve, that every query of both editors compiles, that
+every token of every program in the suite is something the queries colour, that
+every name they capture by is one an editor knows, that Zed's manifest and its
+language configuration agree with each other and with the compiler's own option
+table -- and then runs Neovim over a program with nothing but this package on its
+runtime path and asks what each token came out as.  That last is the one test that
+reads the type of the buffer, the parser, the queries and the order of the
+patterns in one go.  Nothing here runs Zed: what a test can check of an extension
+is that it says what it means to say, and Zed builds the rest itself.
 
 Expectations
 ------------

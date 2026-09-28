@@ -38,7 +38,9 @@ it in one process where a debugger or a test's own output wants that.
 A change to the syntax of the language changes `tree-sitter-pl4g/grammar.js` in the same commit, and `bin/pl4g-grammar` is run so
 that the committed parser and the shared library beside it both match.  A test requires the grammar and the compiler to agree on
 every program in the test suite, so a syntax added to one and not the other fails the suite; two more check that the parser is the
-one the grammar produces and rebuild the library whenever anything it is made from is newer.
+one the grammar produces and rebuild the library whenever anything it is made from is newer.  Zed builds that grammar from a commit
+rather than from the tree, so `bin/pl4g-zed-rev` is run after the grammar change has been committed, and a further test refuses a
+revision whose grammar is not the one the tree has.
 
 The I/O runtime is C, in `runtime/`, compiled ahead of time for every architecture and packaged with the compiler as extracted
 code and relocations.  Run `bin/pl4g-runtime` when the C changes; a test recompiles and compares, so a stale package fails the

@@ -1,0 +1,4 @@
+# What a build leaves behind.  `Cargo.lock` is not here: the extension is a thing
+# that gets built rather than a library, so which versions it was built from is
+# part of what it is.
+target/

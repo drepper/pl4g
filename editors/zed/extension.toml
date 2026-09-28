@@ -1,0 +1,28 @@
+# The PL4G extension for Zed: the grammar this project keeps, and the compiler
+# as the language server.
+#
+# Both halves are the same ones the Neovim package uses -- the queries are links
+# to `tree-sitter-pl4g/queries`, and the server is `bin/pypl4g lsp` -- so what
+# one editor colours and answers is what the other does.
+
+id = "pl4g"
+name = "PL4G"
+description = "PL4G: the tree-sitter grammar, and the compiler as a language server."
+version = "0.1.0"
+schema_version = 1
+authors = ["Ulrich Drepper <github@akkadia.org>"]
+repository = "https://github.com/drepper/pl4g"
+
+# Zed builds a grammar from a git repository at a revision, so what it reads is a
+# commit and not the working tree.  `bin/pl4g-zed-rev` writes the line below, and
+# a test refuses a revision whose grammar is not the one this tree has.
+[grammars.pl4g]
+repository = "https://github.com/drepper/pl4g"
+rev = "387687be876aae77af00ccd9c54c969dcf095c9e"
+path = "tree-sitter-pl4g"
+
+# The server, whose command the extension works out: `bin/pypl4g` of the project
+# the file is in, whatever it was cloned to.
+[language_servers.pl4g]
+name = "pl4g"
+language = "PL4G"
