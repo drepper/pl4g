@@ -74,6 +74,11 @@ MASK_FIELD: Final[int] = WORD
 COUNT_FIELD: Final[int] = 2 * WORD
 STRIDE_FIELD: Final[int] = 3 * WORD
 ENTRIES_FIELD: Final[int] = 4 * WORD
+#: How many entries are not free to probe past: the ones holding a key and the
+#: ones given up.  `count` says how many keys there are, which is what `#`
+#: answers; this says how long a probe can get, which is what decides when the
+#: table is rebuilt.  The two differ only where something has been taken out.
+USED_FIELD: Final[int] = 5 * WORD
 
 #: How much room a block takes, on the grain the allocator hands out.
 BLOCK_SIZE: Final[int] = 6 * WORD
@@ -140,12 +145,15 @@ def _words(ty: Type) -> int:
 #: therefore the same everywhere and is asked for once.
 _LAYOUT: Final[DataLayout] = DataLayout(pointer_size=WORD)
 
-#: What the first word of an entry says about it.  There are two states and not
-#: three: nothing takes an entry out of a table yet, so no entry is ever given
-#: up, and a probe therefore stops at the first empty one.  The to-do list says
-#: what taking one out would need.
+#: What the first word of an entry says about it.  Three states, because a key
+#: may be taken out: an entry that held one and does not any more is *given up*
+#: rather than emptied, since emptying it would end a probe that has to walk
+#: past it to find what was put there after it.  A probe therefore stops at an
+#: empty entry and walks past a given-up one, and an insertion reuses the first
+#: given-up entry it walked past.
 EMPTY: Final[int] = 0
 LIVE: Final[int] = 1
+GONE: Final[int] = 2
 
 #: How many entries a table has to begin with.  A power of two, because the
 #: index is the hash masked; eight is enough that a collection written down with
@@ -466,6 +474,7 @@ def _build_new(module: Module) -> Function:
     _write_address(builder, block, ARENA_FIELD, arena)
     _write(builder, block, MASK_FIELD, builder.int_const(U64, FIRST_CAPACITY - 1))
     _write(builder, block, COUNT_FIELD, builder.int_const(U64, 0))
+    _write(builder, block, USED_FIELD, builder.int_const(U64, 0))
     _write(builder, block, STRIDE_FIELD, stride)
     _write_address(builder, block, ENTRIES_FIELD, entries)
     builder.ret(block)
@@ -478,10 +487,17 @@ def _build_slot(module: Module, shape: Shape) -> Function:
     """``__pl4g_table_slot(table, key)``: the entry the key is in, or would go in.
 
     One walk serves both questions, which is what makes a lookup and an
-    insertion the same cost: the probe stops at the key or at the first empty
-    place, and which of the two it stopped at is what the caller reads off the
-    entry's own first word.  Nothing is ever taken out of a table, so an empty
-    place is the end of the probe and not a hole in the middle of one.
+    insertion the same cost: the probe stops at the key or at the first place
+    something may go, and which of the two it stopped at is what the caller
+    reads off the entry's own first word.
+
+    **An entry that was given up is walked past and remembered.**  Emptying an
+    entry when a key is taken out would end a probe that has to walk past it to
+    find what was put there after it; so it is marked given up, the probe goes
+    on, and the first such entry is where an insertion puts the key when the
+    probe reaches an empty one.  The key of a given-up entry is still compared:
+    a key put back where it was found is put back in the very entry it left,
+    which is what keeps one key in one place.
     """
     table_ptr = table_type(module)
     held = key_ir_type(shape)
@@ -491,9 +507,14 @@ def _build_slot(module: Module, shape: Shape) -> Function:
         return func
     entry = func.add_block()
     loop = func.add_block("probe")
+    free = func.add_block("free")
     here = func.add_block("here")
+    reused = func.add_block("reused")
     occupied = func.add_block("occupied")
     same = func.add_block("same")
+    other = func.add_block("other")
+    given_up = func.add_block("given_up")
+    first = func.add_block("first")
     onward = func.add_block("onward")
     builder = IRBuilder(module, func)
     builder.position_at(entry)
@@ -502,27 +523,53 @@ def _build_slot(module: Module, shape: Shape) -> Function:
     mask = _read(builder, table, MASK_FIELD)
     stride = _read(builder, table, STRIDE_FIELD)
     entries = _read_address(builder, table, ENTRIES_FIELD, U64)
-    builder.br(loop, (_hash_of(builder, shape, key, mask),))
+    # One past the last index, which is what "nothing given up yet" is said
+    # with: an index no entry has, so no comparison against it can be wrong.
+    none = builder.binary(BinOp.WRAP_ADD, mask, builder.int_const(U64, 1))
+    builder.br(loop, (_hash_of(builder, shape, key, mask), none))
 
     builder.position_at(loop)
     index = loop.add_param(U64, "at")
+    kept = loop.add_param(U64, "kept")
     place = _entry(builder, entries, index, stride)
-    empty = builder.compare(CmpPred.EQ, builder.load(place),
-                            builder.int_const(U64, EMPTY))
-    builder.condbr(empty, here, occupied)
+    state = builder.load(place)
+    builder.condbr(builder.compare(CmpPred.EQ, state,
+                                   builder.int_const(U64, EMPTY)),
+                   free, occupied)
+
+    # Nothing more along this path, so the key is not in the table: where it
+    # would go is the first entry given up, or this one where there was none.
+    builder.position_at(free)
+    builder.condbr(builder.compare(CmpPred.EQ, kept, none), here, reused)
 
     builder.position_at(here)
     builder.ret(place)
 
+    builder.position_at(reused)
+    builder.ret(_entry(builder, entries, kept, stride))
+
     builder.position_at(occupied)
     builder.condbr(_same_key(builder, shape, _load_key(builder, shape, place),
-                             key), same, onward)
+                             key), same, other)
 
     builder.position_at(same)
     builder.ret(place)
 
+    builder.position_at(other)
+    builder.condbr(builder.compare(CmpPred.EQ, state,
+                                   builder.int_const(U64, GONE)),
+                   given_up, onward)
+
+    builder.position_at(given_up)
+    builder.condbr(builder.compare(CmpPred.EQ, kept, none), first, onward)
+
+    # The two ways on: keeping what was already being kept, or keeping this
+    # entry because it is the first given-up one the probe has walked past.
     builder.position_at(onward)
-    builder.br(loop, (_stepped(builder, index, mask),))
+    builder.br(loop, (_stepped(builder, index, mask), kept))
+
+    builder.position_at(first)
+    builder.br(loop, (_stepped(builder, index, mask), index))
     return func
 
 
@@ -536,6 +583,12 @@ def _build_put(module: Module, shape: Shape) -> Function:
     caller is about to be handed a pointer past.  Growing when the key turns out
     to be there already merely grows a little early, which costs a doubling that
     would have happened anyway.
+
+    **What crowds a table is what a probe must walk past**, which is the keys it
+    holds *and* the entries given up, so that is what the load is measured on.
+    Where the keys alone are not many, the table is rebuilt at the size it has
+    rather than doubled: what filled it was the entries given up, and rebuilding
+    is what clears them.
 
     Nothing but the memory token travels on a conditional branch here, and a
     memory token is nowhere: it says which path's ordering of the operations on
@@ -553,6 +606,9 @@ def _build_put(module: Module, shape: Shape) -> Function:
                       module.types.ptr_type(U8, mutable=True))
     entry = func.add_block()
     grow = func.add_block("grow")
+    bigger = func.add_block("bigger")
+    afresh = func.add_block("afresh")
+    sized = func.add_block("sized")
     rehash = func.add_block("rehash")
     one = func.add_block("one")
     move = func.add_block("move")
@@ -561,12 +617,15 @@ def _build_put(module: Module, shape: Shape) -> Function:
     ready = func.add_block("ready")
     there = func.add_block("there")
     added = func.add_block("added")
+    fresh = func.add_block("fresh")
+    taken = func.add_block("taken")
     builder = IRBuilder(module, func)
     builder.position_at(entry)
     table = entry.add_param(table_ptr, "table")
     key = entry.add_param(held, "key")
-    # One more than it holds, which is what it would hold if this key is new.
-    wanted = builder.binary(BinOp.WRAP_ADD, _read(builder, table, COUNT_FIELD),
+    # One more entry than the probe has to walk past now, which is what it
+    # would have to walk past if this key is new.
+    wanted = builder.binary(BinOp.WRAP_ADD, _read(builder, table, USED_FIELD),
                             builder.int_const(U64, 1))
     capacity = builder.binary(BinOp.WRAP_ADD, _read(builder, table, MASK_FIELD),
                               builder.int_const(U64, 1))
@@ -578,20 +637,44 @@ def _build_put(module: Module, shape: Shape) -> Function:
                        builder.int_const(U64, LOAD_NUMERATOR)))
     builder.condbr(crowded, grow, ready, false_args=(builder.memory(),))
 
-    # -- twice as much room, and everything moved into it ------------------------
+    # -- room for it, and everything moved into that -----------------------------
     builder.position_at(grow)
     stride = _read(builder, table, STRIDE_FIELD)
     old_mask = _read(builder, table, MASK_FIELD)
     old_entries = _read_address(builder, table, ENTRIES_FIELD, U64)
-    doubled = builder.binary(BinOp.WRAP_MUL, capacity, builder.int_const(U64, 2))
+    # Twice the room where the keys themselves are what filled it, and the same
+    # room where what filled it was entries given up: rebuilding clears those,
+    # and a table that lost as many keys as it gained would otherwise double for
+    # ever.
+    keys = builder.binary(BinOp.WRAP_ADD, _read(builder, table, COUNT_FIELD),
+                          builder.int_const(U64, 1))
+    builder.condbr(
+        builder.compare(
+            CmpPred.UGT,
+            builder.binary(BinOp.WRAP_MUL, keys,
+                           builder.int_const(U64, LOAD_DENOMINATOR)),
+            builder.binary(BinOp.WRAP_MUL, capacity,
+                           builder.int_const(U64, LOAD_NUMERATOR))),
+        bigger, afresh)
+
+    builder.position_at(bigger)
+    builder.br(sized, (builder.binary(BinOp.WRAP_MUL, capacity,
+                                      builder.int_const(U64, 2)),))
+
+    builder.position_at(afresh)
+    builder.br(sized, (capacity,))
+
+    builder.position_at(sized)
+    room = sized.add_param(U64, "room")
     roomier = builder.call(
         alloc, (_read_address(builder, table, ARENA_FIELD, ARENA),
-                builder.binary(BinOp.WRAP_MUL, doubled, stride)),
+                builder.binary(BinOp.WRAP_MUL, room, stride)),
         module.types.ptr_type(U8, mutable=True))
     _write_address(builder, table, ENTRIES_FIELD, roomier)
     _write(builder, table, MASK_FIELD,
-           builder.binary(BinOp.WRAP_SUB, doubled, builder.int_const(U64, 1)))
+           builder.binary(BinOp.WRAP_SUB, room, builder.int_const(U64, 1)))
     _write(builder, table, COUNT_FIELD, builder.int_const(U64, 0))
+    _write(builder, table, USED_FIELD, builder.int_const(U64, 0))
     builder.br(rehash, (builder.int_const(U64, 0), builder.memory()))
 
     # Every entry of the old array, put where the new array's own probe says.
@@ -619,6 +702,9 @@ def _build_put(module: Module, shape: Shape) -> Function:
     _store_key(builder, shape, into, moved_key)
     _write(builder, table, COUNT_FIELD,
            builder.binary(BinOp.WRAP_ADD, _read(builder, table, COUNT_FIELD),
+                          builder.int_const(U64, 1)))
+    _write(builder, table, USED_FIELD,
+           builder.binary(BinOp.WRAP_ADD, _read(builder, table, USED_FIELD),
                           builder.int_const(U64, 1)))
     if shape.value is not None:
         _store_value(builder, shape, into,
@@ -651,11 +737,28 @@ def _build_put(module: Module, shape: Shape) -> Function:
 
     builder.position_at(added)
     builder.set_memory(added.add_param(MEM, "mem"))
+    # An entry that was given up is one the probe already had to walk past, so
+    # taking it back is one more key and not one more of those.
+    was = builder.load(place)
     _write(builder, place, STATE_AT, builder.int_const(U64, LIVE))
     _store_key(builder, shape, place, key)
     _write(builder, table, COUNT_FIELD,
            builder.binary(BinOp.WRAP_ADD, _read(builder, table, COUNT_FIELD),
                           builder.int_const(U64, 1)))
+    builder.condbr(builder.compare(CmpPred.EQ, was,
+                                   builder.int_const(U64, GONE)),
+                   taken, fresh, true_args=(builder.memory(),),
+                   false_args=(builder.memory(),))
+
+    builder.position_at(fresh)
+    builder.set_memory(fresh.add_param(MEM, "mem"))
+    _write(builder, table, USED_FIELD,
+           builder.binary(BinOp.WRAP_ADD, _read(builder, table, USED_FIELD),
+                          builder.int_const(U64, 1)))
+    builder.br(taken, (builder.memory(),))
+
+    builder.position_at(taken)
+    builder.set_memory(taken.add_param(MEM, "mem"))
     builder.ret(place)
     return func
 
@@ -783,6 +886,70 @@ def _build_select(module: Module, shape: Shape) -> Function:
 
     builder.position_at(done)
     done.add_param(MEM, "mem")
+    builder.ret()
+    return func
+
+
+# -- taking one out --------------------------------------------------------------
+
+GIVE_UP_SYMBOL: Final[str] = "__pl4g_table_give_up"
+
+
+def ensure_take(module: Module, shape: Shape) -> Function:
+    """Build what taking a key out of a table is made of."""
+    ensure_runtime(module, shape)
+    return _build_give_up(module)
+
+
+def _build_give_up(module: Module) -> Function:
+    """``__pl4g_table_give_up(table, place)``: the entry holds no key any more.
+
+    Given up rather than emptied, so that a probe walking past it to what was
+    put there after it still walks past it; `__pl4g_table_slot` is what reads
+    the difference, and what it remembers of it is where the next key put in
+    that path goes.
+
+    **The entry is not cleared.**  Its key and its value are still there when
+    this answers, which is what lets the one who took it out read what was
+    under it: nothing writes over either until something is put in that entry
+    again.
+
+    **Nothing happens where the entry holds no key.**  Taking out a key that is
+    not there is not an error and not a count going wrong: the probe answered
+    with the entry the key *would* be in, and that entry is left as it was.
+
+    One for every table rather than one per shape, since neither the key nor the
+    value is touched: what it reads and writes is the entry's first word and the
+    count, and both are the same in every table.
+    """
+    table_ptr = table_type(module)
+    func, fresh = generated(module, GIVE_UP_SYMBOL, (table_ptr, table_ptr), VOID)
+    if not fresh:
+        return func
+    entry = func.add_block()
+    held = func.add_block("held")
+    done = func.add_block("done")
+    builder = IRBuilder(module, func)
+    builder.position_at(entry)
+    table = entry.add_param(table_ptr, "table")
+    place = entry.add_param(table_ptr, "place")
+    builder.condbr(builder.compare(CmpPred.EQ, builder.load(place),
+                                   builder.int_const(U64, LIVE)),
+                   held, done, true_args=(builder.memory(),),
+                   false_args=(builder.memory(),))
+
+    builder.position_at(held)
+    builder.set_memory(held.add_param(MEM, "mem"))
+    _write(builder, place, STATE_AT, builder.int_const(U64, GONE))
+    # One key fewer; what a probe must walk past is unchanged, which is the
+    # whole point of giving the entry up rather than emptying it.
+    _write(builder, table, COUNT_FIELD,
+           builder.binary(BinOp.WRAP_SUB, _read(builder, table, COUNT_FIELD),
+                          builder.int_const(U64, 1)))
+    builder.br(done, (builder.memory(),))
+
+    builder.position_at(done)
+    builder.set_memory(done.add_param(MEM, "mem"))
     builder.ret()
     return func
 

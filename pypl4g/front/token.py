@@ -72,6 +72,11 @@ TUPLE_CLOSE_GLYPH: Final[str] = "\N{RIGHT ANGLE BRACKET}"
 SET_OPEN_GLYPH: Final[str] = "\N{LEFT DOUBLE PARENTHESIS}"
 SET_CLOSE_GLYPH: Final[str] = "\N{RIGHT DOUBLE PARENTHESIS}"
 
+#: What takes a key out of one, written before the lookup it undoes: `\N{DAGGER}d\N{LEFT DOUBLE PARENTHESIS}k\N{RIGHT DOUBLE PARENTHESIS}`.
+#: A dagger, which is what a mark against a name has meant for "no longer with
+#: us" in print for centuries, and which nothing else in the language uses.
+TAKE_GLYPH: Final[str] = "\N{DAGGER}"
+
 #: What hands a tuple over to a call as several arguments rather than as one.
 #: An asterism, which is three asterisks arranged as one mark: what it says is
 #: that several things stand where one is written, and Python spells the same
@@ -460,6 +465,7 @@ class TokKind(StrEnum):
     TUPLE_OPEN = "'\N{LEFT ANGLE BRACKET}'"
     TUPLE_CLOSE = "'\N{RIGHT ANGLE BRACKET}'"
 
+    TAKE = "'\N{DAGGER}'"
     SET_OPEN = "'\N{LEFT DOUBLE PARENTHESIS}'"
     SET_CLOSE = "'\N{RIGHT DOUBLE PARENTHESIS}'"
 

@@ -1008,6 +1008,7 @@ that diagnostics of one family stay numerically adjacent as they grow while unre
 | 4200-4399 | types |
 | 4400-4599 | special functions |
 | 4600-4699 | documentation comments |
+| 4700-4799 | collections, and what is taken out of them |
 | 5000-5299 | control flow and returns |
 | 6000-6999 | purity, effects, aliasing and parallelization |
 | 7000-7499 | compile-time evaluation and reflection |
@@ -3024,6 +3025,56 @@ end of that block was then told the wrong following block, so it fell through
 into the arm it should have jumped over -- a miscompile with nothing wrong in the
 instruction that was emitted.  The loop variable is called `at` now, and the
 comment beside it says why.
+
+Three states, and what a table is rebuilt for
+--------------------------------------------
+
+An entry's first word says which of three it is: empty, holding a key, or given
+up.  The third is what taking a key out costs.  A probe walks a path until it
+reaches an empty entry, so emptying the entry a key left would end a probe that
+has to walk past it to reach what was put there after it; every key that
+collided with the one taken out would be lost.  So the entry is marked given up:
+`__pl4g_table_slot` walks past it, remembers the first one it walked past, and
+answers *that* entry when the probe reaches an empty one -- which is how an
+insertion takes back the room a removal left.
+
+The key of a given-up entry is still compared, which matters for one case: a key
+put back after being taken out is put back in the very entry it left, so a key
+is never in two places along one path.
+
+**The table carries two counts.**  `count` is how many keys it holds, which is
+what `#` answers; `used` is how many entries a probe may have to walk past,
+which is those and the ones given up.  The load is measured on `used`, since
+that is what lengthens a probe; how big the new array is, is decided by `count`,
+since that is what will be in it.  So a table crowded by entries given up is
+rebuilt at the size it has, and only a table crowded by keys is doubled -- which
+is what keeps a table that loses as many keys as it gains from doubling for
+ever.  Both counts are written afresh by the rehash, which is where the entries
+given up disappear.
+
+`__pl4g_table_give_up` is what marks one, and it is generated once for every
+table rather than once per shape: what it reads and writes is the entry's first
+word and the count, and those are the same in every table whatever it holds.  It
+does nothing where the entry holds no key, so taking out a key that is not there
+is not a count going wrong.  The entry is not cleared -- its key and its value
+are still there when it answers, which is what lets `†d⸨k⸩` read what was under
+the key with one probe rather than two.
+
+Collections at the top level
+----------------------------
+
+A collection is a table in an arena, made by running code; a variable at the top
+level is bytes in the image.  What bridges them is a constructor, which the
+module already had a place for: `_build_the_tables` in the checker generates one
+per file that has any -- `__pl4g_globals`, numbered where two files do -- whose
+body is lowered the way any other body is, so a top-level definition may say
+everything one inside a function may say.
+
+It goes at the *front* of `module.ctors`, so the tables are there before any
+constructor the program wrote runs.  The variable itself is writable in the
+image whatever the program may do with it, since the constructor writes it;
+what the *program* may do is the type's business, and a collection without `mut`
+is refused an assignment there by the rule a field already had.
 
 The environment, built by the compiler
 --------------------------------------

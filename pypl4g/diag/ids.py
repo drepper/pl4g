@@ -348,6 +348,9 @@ LANG_DOC_PARAM_TWICE: Final[DiagID] = 4602
 LANG_DOC_RETURN_OF_NOTHING: Final[DiagID] = 4603
 LANG_DOC_NOT_A_FUNCTION: Final[DiagID] = 4604
 
+# 4700-4799: collections, and what is taken out of them
+LANG_TAKE_NOT_AN_ENTRY: Final[DiagID] = 4700
+
 # 5000-5299: control flow and returns
 LANG_STMT_UNREACHABLE: Final[DiagID] = 5001
 LANG_FUNCDEF_RETURN_REDUNDANT: Final[DiagID] = 5002

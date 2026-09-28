@@ -1,0 +1,22 @@
+※ pl4g-test: compile=error diag=4598
+
+※ Taking a key out is writing, so it needs `mut` in the type.
+※
+※ A collection type written `mut ⸨K: V⸩` says what may be done to the table, and
+※ taking a key out of it is one of those things: it is the same table everything
+※ holding a handle to it reads, so one holding the read-only type cannot empty it
+※ under the others.  `†` is refused there for the reason `d⸨k⸩ ← v` is (4598), and
+※ reading `d⸨k⸩` is not: reading is what the read-only type is for.
+※
+※ Compare: **Rust**, where `remove` takes `&mut self` and the borrow checker says
+※ the same thing; **C++**, where `erase` is not `const`; **Go**, which cannot say
+※ it of a map at all.
+
+@[startup, impure]
+fn main() → u6:
+    let d: ⸨str: u64⸩ = ⸨"a": 1u64⸩
+    ※ reading is allowed
+    let held: u64 = d⸨"a"⸩ ?? 0u64
+    ※ and taking out is not
+    †d⸨"a"⸩
+    if held = 1u64: 0u6 else: 1u6

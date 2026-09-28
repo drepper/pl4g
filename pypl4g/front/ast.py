@@ -547,6 +547,22 @@ class Index(Expr):
 
 
 @dataclass(frozen=True, slots=True)
+class Take(Expr):
+    """`\N{DAGGER}c\N{LEFT DOUBLE PARENTHESIS}k\N{RIGHT DOUBLE PARENTHESIS}`: take a key out of a collection, and answer what was there.
+
+    Written before the lookup it undoes, and answering exactly what that lookup
+    answers: what the key stood for, where the collection is a dictionary, and
+    whether it was there at all, where it is a set.  So taking a key out and
+    reading it are one question asked once, and a program that wants only the
+    one may ignore the other -- nothing is reported for a value this leaves
+    unread, which is what makes it a statement as well as an expression.
+    """
+
+    base: Expr
+    key: Expr
+
+
+@dataclass(frozen=True, slots=True)
 class Unary(Expr):
     """An operator applied to one operand."""
 

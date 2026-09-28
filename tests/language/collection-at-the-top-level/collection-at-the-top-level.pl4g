@@ -1,0 +1,59 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ A collection may be a variable at the top level.
+※
+※ **What bridges the two is a constructor.**  A collection is a table in an
+※ arena, made by running code; a variable at the top level is bytes in the
+※ image.  So the compiler generates one constructor per file that has any, which
+※ gives each of those variables its table before anything else runs, and what
+※ the image carries is a word of nought until it has.
+※
+※ **Before the program''s own constructors**, so that one of those may read a
+※ table: they are what the program wrote, and these are what its variables are.
+※ Within a file they are built in the order they are written, so one written in
+※ terms of another reads what that one was given.
+※
+※ **A name is a handle and not a copy**, here as anywhere: two names for one
+※ table are two names for one table, and what is put in through either is read
+※ through both.
+※
+※ Compare: **Go**, where a package-level map needs `func init()` or a composite
+※ literal the runtime builds at start-up -- which is this, written by hand;
+※ **C++**, whose static `std::map` is built by a constructor before `main` and
+※ whose initialization order across translation units is famously undefined;
+※ **Rust**, where a `HashMap` cannot be a `static` at all without `OnceLock` or
+※ a crate; **Python**, where a module-level dictionary is built when the module
+※ is imported, which is the same bargain with the same cost.
+
+let counts: mut ⸨str: u64⸩ = ⸨"a": 1u64, "b": 2u64⸩
+let also: mut ⸨str: u64⸩ = counts
+let small: ⸨u8⸩ = ⸨1u8, 2u8, 3u8⸩
+
+※ What a constructor the program wrote reads is a table that is already there.
+let seen: mut u64 = 0u64
+
+@[constructor, impure]
+fn early():
+    seen ← counts⸨"b"⸩ ?? 0u64
+
+@[startup, impure]
+fn main() → u6:
+    if seen ≠ 2u64:
+        1u6
+    elif (counts⸨"a"⸩ ?? 0u64) ≠ 1u64:
+        2u6
+    elif ¬small⸨2u8⸩ ∨ small⸨9u8⸩:
+        3u6
+    elif #small ≠ 3:
+        4u6
+    else:
+        ※ one table under two names
+        also⸨"c"⸩ ← 3u64
+        if (counts⸨"c"⸩ ?? 0u64) ≠ 3u64:
+            5u6
+        elif #counts ≠ 3:
+            6u6
+        else:
+            ※ and what is taken out through one is gone from the other
+            †counts⸨"a"⸩
+            if #also ≠ 2: 7u6 else: 0u6

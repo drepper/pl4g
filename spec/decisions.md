@@ -6630,6 +6630,60 @@ process; **C**, where `environ` is a run of strings every program walks for
 itself.  What none of them has is the environment costing nothing at all to a
 program that does not name it.
 
+## 2026-09-29T01:00+02:00 — language, compiler
+
+**A key may be taken out, an entry may be given up, and a table may be a
+variable at the top level**
+
+At the user's direction, three things at once: "implement more support for
+dictionaries.  support †d⸨key⸩ to delete a key.  implement, per the
+TODO-language item, a third state for the hash table slots.  implement support
+for global dictionary variables".  Asked what `†d⸨k⸩` should come to, the user
+chose *what was there*.
+
+**It answers what the lookup it is written before would answer**: the value for
+a dictionary, `V?`, and whether the key was there for a set.  So taking a key
+out and reading it are one question asked once and walked once -- the entry is
+found by one probe, read, and then given up -- and a program that only wants the
+key gone writes the line and reads nothing, which is a thing no diagnostic
+reports.  Python needs two spellings, `d.pop(k)` and `del d[k]`, and Go's
+`delete(m, k)` answers nothing at all, so a program that wants to know whether
+the key was there looks it up first and walks the table twice.  **Rust**'s
+`HashMap::remove -> Option<V>` is what this is.
+
+The glyph was the user's.  It gets no ASCII substitute, by the rule every glyph
+here is judged on: every spelling anyone would reach for is a single character,
+and a keyword would be a word taken out of a program's reach for a line it
+writes rarely.
+
+**An entry that a key left is given up, not emptied.**  A probe walks a path
+until it reaches an empty entry, so emptying one would end a probe that has to
+walk past it -- and every key that collided with the one taken out would be lost.
+This is the classic answer (Knuth's, and what Python, Java and Go's older maps
+all do); the alternative is backward-shift deletion, which Robin Hood hashing
+makes workable and which this table's plain linear probe does not.
+
+**Two counts, because two questions.**  What lengthens a probe is the keys *and*
+the entries given up, so that is what the load is measured on; what will be in a
+new array is the keys alone, so that is what its size is decided by.  A table
+crowded by entries given up is therefore rebuilt at the size it has, and only
+one crowded by keys is doubled -- without which a table that loses as many keys
+as it gains would double for ever.  Python's dict makes the same distinction
+with `ma_used` and `ma_fill`.
+
+**A collection at the top level is a constructor the compiler writes.**  The
+to-do list had recorded what it needed -- "the module already has constructors;
+what this needs is for the front end to emit one" -- and that is what it is: one
+generated constructor per file that has any, in front of the program's own, with
+its body lowered the way any other body is.  So a top-level definition may say
+everything one inside a function may say, and a constructor the program wrote
+may read a table.  Compare **Go**, where a package-level map needs `func init()`
+or a literal the runtime builds at start-up; **C++**, whose static `std::map` is
+built before `main` and whose order across translation units is famously
+undefined -- here the order is written down: the compiler's first, in the order
+the definitions are written; **Rust**, where a `HashMap` cannot be a `static` at
+all without `OnceLock`.
+
 Open questions
 --------------
 

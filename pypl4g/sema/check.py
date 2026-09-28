@@ -633,6 +633,11 @@ def _promises_as_much(expected: Type | None, found: Type) -> bool:
             and (found.mutable or not expected.mutable))
 
 
+def _is_a_table(ty: Type) -> bool:
+    """Whether a value of *ty* is a collection, and so is built and not written."""
+    return isinstance(ty, (SetType, DictType))
+
+
 def _read_only_table(ty: Type) -> bool:
     """Whether *ty* is a collection nothing may put anything in."""
     return isinstance(ty, (SetType, DictType)) and not ty.mutable
@@ -1146,6 +1151,10 @@ TOLERANCE_SYMBOL: Final[str] = "__pl4g_tolerance"
 #: And the one the arena the compiler provides carries.
 HEAP_SYMBOL: Final[str] = "__pl4g_heap"
 
+#: What the generated constructor that builds a file's top-level tables is
+#: called.  One per file that has any, numbered where two files do.
+GLOBALS_SYMBOL: Final[str] = "__pl4g_globals"
+
 #: What the bytes of a string written down are filed under, numbered from zero
 #: as they are met.  A program cannot name one: what it wrote is the string, and
 #: where the bytes went is the compiler's business.
@@ -1301,6 +1310,10 @@ class Checker:
         #: else, and this is how the check knows where it is.
         self._in_build_function: Function | None = None
         self._defined: dict[str, tuple[Span, str]] = {}
+        #: The variables at the top level whose value is a table rather than
+        #: bytes: what they are given is built by running code, so they are
+        #: collected here and one constructor is generated for all of them.
+        self._built_globals: list[tuple[GlobalVar, ast.VarDef]] = []
         #: What this file's top-level names stand for.  It is the file's own,
         #: not the compilation's: two files may each define a `counter`, and
         #: neither can see the other's unless it imports it.
@@ -1482,9 +1495,65 @@ class Checker:
                         self._diags.internal("unknown kind of top-level definition")
         for entry in collected:
             self._lower_function(entry)
+        self._build_the_tables()
         if whole_program:
             self._check_program()
         return self._module
+
+    def _build_the_tables(self) -> None:
+        """Generate the constructor that gives the top-level tables their own.
+
+        A collection is a table in an arena, made by running code; a variable at
+        the top level is bytes in the image.  What bridges the two is a
+        constructor, which the module already has a place for -- so what a
+        program writes as `let d: mut ⸨str: u8⸩ = ⸨"a": 1u8⸩` is a word of
+        nought in the image and a few instructions before anything runs.
+
+        **One function for every such variable of a file**, in the order they
+        are written, so that one written in terms of another reads what that one
+        was given.  And *before* the program's own constructors, which is what
+        lets one of those read a table: they are what the program wrote, and
+        this is what its variables *are*.
+
+        The body is lowered the way any other is, so everything a definition
+        inside a function may say it may say here: a literal, an arena named
+        with `in`, a call, an operator over two of them.
+        """
+        if not self._built_globals:
+            return
+        made = self._module.add_function(Function(
+            self._unused_name(GLOBALS_SYMBOL),
+            self._module.types.func_type((), VOID),
+            FuncAttrs(special=SpecialKind.CONSTRUCTOR, priority=0, impure=True),
+            linkage=Linkage.INTERNAL))
+        made.add_block()
+        builder = IRBuilder(self._module, made)
+        self._borrows = []
+        self._places = {}
+        outer_answer, self._answering = self._answering, VOID
+        outer_impure, self._impure = self._impure, True
+        self._push_scope()
+        for var, node in self._built_globals:
+            value = self._lower_into(builder, node.value, var.value_type,
+                                     node.span)
+            if self._value_type_of(value) is not ERROR:
+                builder.store(var, value, node.span)
+        self._pop_scope()
+        self._answering = outer_answer
+        self._impure = outer_impure
+        builder.ret()
+        # In front of the program's own, and in front of another file's: what a
+        # constructor may read is every table, whichever file it was written in.
+        self._module.ctors.insert(0, made)
+
+    def _unused_name(self, wanted: str) -> str:
+        """*wanted*, or *wanted* and a number where a file already took it."""
+        if wanted not in self._module.functions:
+            return wanted
+        at = 1
+        while ".".join((wanted, str(at))) in self._module.functions:
+            at += 1
+        return ".".join((wanted, str(at)))
 
     # -- variables -------------------------------------------------------------
 
@@ -1582,7 +1651,11 @@ class Checker:
                 # there is no value a variable of the other sort could be given.
                 self._diags.emit(D.LANG_REF_AT_TOP_LEVEL, node.span)
                 ty = ERROR
-            initializer = self._constant_value(node, ty) if ty is not None else None
+            # A collection is a table, which is built by running code: there
+            # is no constant to put in the image, and what the variable holds
+            # until the constructor below has run is nought.
+            initializer = (None if ty is None or _is_a_table(ty)
+                           else self._constant_value(node, ty))
         finally:
             self._end_expecting(expectation)
         if expectation is not None and expectation.saw_error:
@@ -1599,7 +1672,12 @@ class Checker:
             ty = ERROR
         var = self._module.add_global(GlobalVar(
             name=node.name, value_type=ty,
-            ptr_type=self._module.types.ptr_type(ty, mutable=node.mutable),
+            # A table's handle is written by the constructor whatever the
+            # program may do with it, so the place it waits in is one that may
+            # be written.  What the *program* may do is the type's business, and
+            # a collection without `mut` is refused an assignment there.
+            ptr_type=self._module.types.ptr_type(
+                ty, mutable=node.mutable or _is_a_table(ty)),
             initializer=initializer, linkage=linkage, span=node.span,
             name_span=node.name_span,
             exported=self._is_export(attrs),
@@ -1614,6 +1692,8 @@ class Checker:
         self._top_level.append(_Global(var=var, span=node.name_span,
                                        expectation=expectation,
                                        expected_pairs=list(pairs)))
+        if _is_a_table(ty):
+            self._built_globals.append((var, node))
 
     # -- modules ---------------------------------------------------------------
 
@@ -6344,6 +6424,64 @@ class Checker:
                          expr.span),
             missing, answer, expr.span)
 
+    def _lower_take(self, builder: IRBuilder, expr: ast.Take,
+                    expected: Type | None) -> Value:
+        """Check `†c⸨k⸩`, which takes a key out and answers what was there.
+
+        The same answer the lookup it is written before gives: what the key
+        stood for, or whether it was there at all.  So it is read the same way,
+        and a program that only wants the key gone need read nothing.
+
+        The entry is found once and used twice -- read, then given up -- which
+        is why this is not the lookup and the taking-out written one after the
+        other: two probes would be two walks for one question.
+        """
+        base = self._lower_expr(builder, expr.base, None)
+        ty = self._value_type_of(base)
+        if ty is ERROR:
+            return UndefConst(ERROR)
+        if not isinstance(ty, (SetType, DictType)):
+            self._diags.emit(D.LANG_INDEX_NOT_A_COLLECTION, expr.base.span,
+                             found=ty.render())
+            return UndefConst(ERROR)
+        if not ty.mutable:
+            self._diags.emit(D.LANG_COLLECTION_NOT_WRITABLE, expr.base.span,
+                             found=ty.render())
+            return UndefConst(ERROR)
+        key_ty = ty.element if isinstance(ty, SetType) else ty.key
+        key = self._lower_expr(builder, expr.key, key_ty)
+        if self._value_type_of(key) is ERROR:
+            return UndefConst(ERROR)
+        answer: Type = (BOOL if isinstance(ty, SetType)
+                        else self._module.types.result_type(ty.value))
+        if not self._accepts(expected, answer):
+            self._report_mismatch(expr.span, answer, expected)
+            return UndefConst(ERROR)
+        self._an_effect(D.LANG_PURE_WRITES_ELSEWHERE, expr.span)
+        shape = self._table_shape(ty)
+        tables.ensure_take(self._module, shape)
+        place = self._find_key(builder, shape, base, key, expr.span)
+        held = builder.load(place, expr.span)
+        # What was there is read before the entry is given up, because giving it
+        # up is what makes the entry free for the next key put in that path.
+        found = (None if isinstance(ty, SetType)
+                 else builder.load(
+                     self._value_place(builder, shape, place, ty.value),
+                     expr.span))
+        builder.call(self._module.functions[tables.GIVE_UP_SYMBOL],
+                     (builder.cast(CastKind.BITCAST, base,
+                                   tables.table_type(self._module), expr.span),
+                      place), VOID, expr.span)
+        if found is None:
+            return builder.compare(CmpPred.EQ, held,
+                                   builder.int_const(U64, tables.LIVE),
+                                   expr.span)
+        return builder.wrap(
+            found,
+            builder.compare(CmpPred.NE, held,
+                            builder.int_const(U64, tables.LIVE), expr.span),
+            answer, expr.span)
+
     def _lower_entry_assign(self, builder: IRBuilder, stmt: ast.EntryAssign) -> None:
         """Check `d⸨k⸩ ← v`, which puts a value under a key."""
         base = self._lower_expr(builder, stmt.base, None)
@@ -7908,9 +8046,15 @@ class Checker:
         does whatever the callee does whether or not anyone wants its result.
         What is asked of one is a different question, and `_answer_is_taken`
         asks it.
+
+        Taking a key out of a collection is the other: `†d⸨k⸩` takes the key
+        out whether or not anyone wants what was under it, so a program that
+        only wants it gone writes the line and reads nothing.
         """
         if isinstance(expr, ast.Call):
             self._answer_is_taken(expr)
+            return
+        if isinstance(expr, ast.Take):
             return
         found = self._diags.emit(D.LANG_STMT_VALUE_DISCARDED, expr.span)
         if isinstance(expr, ast.Binary) and expr.op is ast.BinaryOp.EQUAL:
@@ -8363,6 +8507,8 @@ class Checker:
                 return UndefConst(ERROR)
             case ast.SetLit() | ast.DictLit():
                 return self._lower_collection(builder, expr, expected)
+            case ast.Take():
+                return self._lower_take(builder, expr, expected)
             case ast.Index():
                 return self._lower_index(builder, expr, expected)
             case ast.If():

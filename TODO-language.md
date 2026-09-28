@@ -66,11 +66,10 @@ To Do List for the PL4g language
     A collection names the arena it comes out of, with `in`, and `⎕heap` is what one that says nothing comes out of.  A collection
     is shared and not copied when it is assigned: it is a handle, and copying it is what a `copy` written out would be for.
 
-[ ] take a key out of a collection.  There are two states an entry has and not three, because nothing takes one out: a probe
-    therefore stops at the first empty entry.  Taking one out needs a third state -- given up -- that a probe walks past and an
-    insertion may use, and a count of those so that a table full of them is rebuilt rather than grown.  What it also needs is a
-    spelling, and there is none: Python writes `del d[k]` and `s.discard(x)`, and this language has no statement that removes
-    anything from anything.
+[x] take a key out of a collection.  Done on 2026-09-29 at the user's direction: `†d⸨k⸩` takes the key out and answers what the
+    lookup it is written before would have answered.  An entry a key left is *given up* rather than emptied -- a probe walks past
+    it and an insertion takes the first one it walked past -- and the table carries a second count, of what a probe must walk
+    past, so that one crowded by entries given up is rebuilt at the size it has and only one crowded by keys is doubled.
 
 [x] a dictionary whose value is of any type, and a key that is text.  Done on 2026-09-28 at the user's direction, and the two
     together: an entry is now shaped by what the table holds -- the key's words, then the value's -- and the three functions that
@@ -84,8 +83,8 @@ To Do List for the PL4g language
     seeds its hash per run (Python, Go, Rust); this wants somewhere for the seed to live and a way for a program that wants a
     table it can reproduce to say so.
 
-[ ] a collection at the top level.  Refused today (9902), because a table is built by running code and a variable at the top level
-    is bytes in the image.  The module already has constructors; what this needs is for the front end to emit one.
+[x] a collection at the top level.  Done on 2026-09-29: the front end generates one constructor per file that has any, in front
+    of the program's own, and the variable holds a word of nought until it has run.
 
 [x] there is no repetition.  Answered by the user: both a general `while` and an iteration over something, which is `foreach`.
     `while COND:` is done -- a statement, not an expression, with the same block rules as `if` and a condition that has to be a
@@ -245,8 +244,8 @@ To Do List for the PL4g language
     selectors do not build.  Reading by key, writing and counting work whatever the table holds; only the walk is waiting, and
     the environment is the first thing anybody would want to walk.
 
-[ ] take a key out of a collection.  What is put in stays in, which is enough for everything written so far and is not enough for
-    a table something keeps up to date.  It is the entry that makes a probe need a third state -- empty, taken, and once taken.
+[ ] give the room back.  A table that has lost most of its keys keeps the array it grew into: nothing shrinks one, and the
+    arena it came out of hands nothing back either.  What would decide it is the same two counts the growth already reads.
 
 [ ] a read that does not wait.  `std.write` answers a handle and `std.read` does not: what a read is for is the bytes, and a
     program that has not waited does not have them.  A program that wants several reads in flight -- from several descriptors --

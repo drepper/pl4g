@@ -1640,6 +1640,18 @@ class Parser:
             operand = self._parse_unary()
             return ast.AddressOf(span=token.span.to(operand.span),
                                  operand=operand, mutable=mutable)
+        if self._check(TokKind.TAKE):
+            # It undoes a lookup, so what it is written before is one: the
+            # operand is parsed the way any other is and then read as the
+            # lookup it has to be.
+            token = self._advance()
+            operand = self._parse_unary()
+            if not isinstance(operand, ast.Index):
+                self._diags.emit(D.LANG_TAKE_NOT_AN_ENTRY,
+                                 token.span.to(operand.span))
+                return operand
+            return ast.Take(span=token.span.to(operand.span),
+                            base=operand.base, key=operand.key)
         operator = _UNARY_OPERATORS.get(self._current.kind)
         if operator is None:
             return self._parse_primary()

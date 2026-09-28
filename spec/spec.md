@@ -1663,6 +1663,10 @@ array of arrays is written `a⟦i⟧⟦j⟧`, whose substituted form would end i
 copies of the character a member access is written with, and telling `a...b` from `a . ..b` would be a question of how far the
 lexer can look ahead rather than of what the characters are.  One character is one token, which is what a range is.
 
+`†` has none, and the first rule is what decides it: every ASCII spelling anyone would reach for -- `!`, `-`, `~` -- is one
+character, and a word such as `del` would be a keyword taken out of a program's reach for a line it writes rarely.  The glyph is
+what a mark against a name has meant in print for centuries, and a generator has it.
+
 `§` has none, for the second rule's sake: the candidates are `::` and `@@`, and neither says "a name for this place" to anyone
 who has not been told.  A label is written by a generator, which has the glyph.
 
@@ -3039,6 +3043,22 @@ caller.  Python raises `KeyError`; this language has no exceptions and has a typ
 `d⸨k⸩ ← v` puts a value in a dictionary under a key.  A set has nothing to assign to (4434): a key goes into one by joining it
 with a set holding that key.
 
+**`†d⸨k⸩` takes a key out, and answers what was there.**  It undoes a lookup, so it is written before one (4700) and answers
+exactly what that lookup answers: the value where there was one, and whether there was one at all where the collection is a set.
+
+```
+let gone: u8 = †d⸨"one"⸩ ?? 0u8      ※ what was under the key, and the key is gone
+†d⸨"two"⸩                          ※ or written as a statement, with nothing read
+if †s⸨k⸩:                          ※ a set says whether it held the key
+```
+
+Nothing is reported for a value it leaves unread, which is what lets the one spelling be both the question and the line that only
+removes -- where Python needs `d.pop(k)` for the one and `del d[k]` for the other.  It is one walk: the entry is found once, read,
+and given up.  Taking out a key that is not there is nothing happening, and answers what a lookup of it would answer.
+
+**It is writing, so it needs `mut`** (4598), which reading does not: a name holding the read-only type cannot empty a table under
+everything else holding one.
+
 **Putting anything in one needs `mut` in the type** (4598).  A collection type written `mut ⸨K: V⸩` says entries may be put in it
 and one written `⸨K: V⸩` says they may not, which is the distinction `&mut T` and `&T` draw about a place and is drawn here for
 the same reason: a collection is a handle, so the one who made it and the one who was handed it reach the one table, and what may
@@ -3088,6 +3108,23 @@ A collection written with no `in` comes out of `⎕heap`, the arena the compiler
 A collection made out of two others comes out of the same arena the first of them did, which is what keeps an answer where its
 operands are.
 
+##### One at the top level
+
+A variable at the top level may hold a collection:
+
+```
+let counts: mut ⸨str: u64⸩ = ⸨"a": 1u64, "b": 2u64⸩
+```
+
+What the image carries is a word of nought, and what fills it is a constructor the compiler generates: a collection is a table in
+an arena, made by running code, and a variable at the top level is bytes in the image.  One such constructor is generated per file
+that has any, giving each of those variables its table **before the program's own constructors**, so that one of those may read a
+table; within a file they are built in the order they are written, so one written in terms of another reads what that one was
+given.
+
+Everything a definition inside a function may say may be said here: a literal, an arena named with `in`, a call, an operator over
+two collections.  And a name is a handle, here as anywhere, so two names for one table are two names for one table.
+
 ##### What one costs
 
 The compiler decides this and the language says only what follows.  A value of a set or a dictionary type is where its table is
@@ -3098,7 +3135,11 @@ collection be passed to a function and answered with like anything else.
 What a key stands for may be a value of any size: an entry is a run of words, and a value of several goes in one as readily as a
 value of one does.  What it may not be is something with no size to copy (4445).
 
-Nothing takes a key out of a collection yet, so what is put in stays in.
+**An entry has three states**, which is what taking a key out costs.  A probe walks a path until it finds an empty entry, so an
+entry a key was taken out of is marked *given up* rather than emptied: a probe walks past it, and an insertion takes the first one
+it walked past.  What decides when a table is rebuilt is what a probe has to walk past -- the keys it holds and the entries given
+up -- and what decides how big the new one is, is the keys alone.  So a table that loses as many keys as it gains is rebuilt at
+the size it has, rather than doubling for ever.
 
 Compare: Python, whose semantics these are and whose `{}` and `set()` this replaces with one pair of brackets and a rule about the
 first entry; Go, whose maps are built in and which has no set; Rust, where both are library types and neither has syntax.  A

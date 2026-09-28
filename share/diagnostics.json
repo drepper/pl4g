@@ -93,6 +93,11 @@
       }
     },
     {
+      "first": 4700,
+      "last": 4799,
+      "topic": "collections, and what is taken out of them"
+    },
+    {
       "first": 5000,
       "last": 5299,
       "topic": "control flow and returns",
@@ -7013,6 +7018,22 @@
       "since": "0.1",
       "default_enabled": true,
       "option": "doc-param"
+    },
+    {
+      "number": 4700,
+      "name": "LANG_TAKE_NOT_AN_ENTRY",
+      "severity": "error",
+      "message": "'†' takes a key out of a collection, so what follows it is a lookup: '†d⸨k⸩'",
+      "args": [],
+      "cause": "Taking a key out undoes a lookup, so it is written before one: the collection, and the key in double parentheses.  Nothing else is a thing to take out -- an element of an array is one of a fixed run of places and a field of a record is part of what the record is, and neither can stop being there.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Sets and dictionaries",
+        "requirement": "`†` is written before a lookup in a set or a dictionary."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
     },
     {
       "number": 5001,

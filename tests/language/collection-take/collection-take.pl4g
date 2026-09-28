@@ -1,0 +1,122 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ `†d⸨k⸩` takes a key out of a collection and answers what was there.
+※
+※ **It undoes a lookup, so it is written before one** -- the collection and the
+※ key, the way reading one is written -- and it answers exactly what that lookup
+※ answers: what the key stood for, where the collection is a dictionary, and
+※ whether it was there at all, where it is a set.  So taking a key out and
+※ reading it are one question asked once, walked once: the entry is found by one
+※ probe and then read and given up.  Python needs two spellings for this,
+※ `d.pop(k)` for the answer and `del d[k]` for the line that only removes;
+※ writing the one and ignoring what it answers is the other.
+※
+※ **What an entry becomes is *given up* and not empty.**  A probe walks along a
+※ path until it finds an empty entry, so emptying one would end a probe that has
+※ to walk past it to reach what was put there after it -- and every key that
+※ collided with the one taken out would be lost.  A given-up entry is therefore
+※ a third state: a probe walks past it, an insertion takes the first one it
+※ walked past, and a rebuild is what finally clears them.
+※
+※ **A table crowded by entries given up is rebuilt and not grown.**  What a
+※ probe has to walk past is what decides when the table is rebuilt, and that is
+※ the keys *and* the entries given up; how big the new one is, is decided by the
+※ keys alone.  So a table that loses as many keys as it gains stays the size it
+※ is, instead of doubling for ever.
+※
+※ **Taking out a key that is not there is nothing happening**: the probe answers
+※ the entry the key would go in, that entry holds no key, and nothing is changed
+※ or counted.  What comes back says so, the way a lookup of a key that is not
+※ there does.
+※
+※ Compare: **Python**, whose `del d[k]` raises where the key is not there and
+※ whose `d.pop(k, default)` does not; **Go**, whose `delete(m, k)` answers
+※ nothing and says nothing about whether the key was there; **Rust**, whose
+※ `HashMap::remove` answers `Option<V>`, which is this; **C++**, whose `erase`
+※ answers how many were removed.  Answering what was there is Rust''s choice and
+※ is the one that needs no second spelling.
+
+@[startup, impure]
+fn main() → u6:
+    let d: mut ⸨str: u64⸩ = ⸨"a": 1u64, "b": 2u64, "c": 3u64⸩
+    ※ what was under the key comes back, and the key is gone
+    if (†d⸨"b"⸩ ?? 0u64) ≠ 2u64:
+        1u6
+    elif #d ≠ 2:
+        2u6
+    elif (d⸨"b"⸩ ?? 9u64) ≠ 9u64:
+        3u6
+    ※ what collided with it -- or did not -- is still there
+    elif (d⸨"a"⸩ ?? 0u64) ≠ 1u64:
+        4u6
+    elif (d⸨"c"⸩ ?? 0u64) ≠ 3u64:
+        5u6
+    ※ taking out a key that is not there answers nothing and changes nothing
+    elif (†d⸨"zz"⸩ ?? 7u64) ≠ 7u64:
+        6u6
+    elif #d ≠ 2:
+        7u6
+    ※ and a key may be put back where it was taken from
+    else:
+        d⸨"b"⸩ ← 20u64
+        if (d⸨"b"⸩ ?? 0u64) ≠ 20u64:
+            8u6
+        elif #d ≠ 3:
+            9u6
+        else:
+            sets()
+
+※ A set answers whether it held the key, which is what reading one answers.
+@[impure]
+fn sets() → u6:
+    let s: mut ⸨u8⸩ = ⸨1u8, 2u8, 3u8⸩
+    if ¬†s⸨2u8⸩:
+        10u6
+    ※ the second time it is not there any more
+    elif †s⸨2u8⸩:
+        11u6
+    elif #s ≠ 2:
+        12u6
+    elif ¬s⸨1u8⸩ ∨ ¬s⸨3u8⸩:
+        13u6
+    else:
+        many()
+
+※ Enough of them, taken out and put back, that the table is rebuilt.
+@[impure]
+fn many() → u6:
+    let d: mut ⸨u64: u64⸩ = ⸨⸩
+    foreach i := 0u64…40u64:
+        d⸨i⸩ ← i + 100u64
+    ※ every other one out again, which leaves twenty keys and twenty given up
+    foreach i := 0u64…40u64…2:
+        †d⸨i⸩
+    if #d ≠ 20:
+        14u6
+    else:
+        ※ the odd ones are still found, which means the probe walked past the
+        ※ entries given up rather than stopping at them
+        let wrong: mut u64 = 0u64
+        foreach i := 1u64…40u64…2:
+            if (d⸨i⸩ ?? 0u64) ≠ i + 100u64:
+                wrong ← wrong + 1u64
+        if wrong ≠ 0u64:
+            15u6
+        else:
+            refilled(d)
+
+※ Putting them back takes the entries given up rather than crowding the table.
+@[impure]
+fn refilled(d: mut ⸨u64: u64⸩) → u6:
+    foreach i := 0u64…40u64…2:
+        d⸨i⸩ ← i + 500u64
+    if #d ≠ 40:
+        16u6
+    elif (d⸨0u64⸩ ?? 0u64) ≠ 500u64:
+        17u6
+    elif (d⸨38u64⸩ ?? 0u64) ≠ 538u64:
+        18u6
+    elif (d⸨39u64⸩ ?? 0u64) ≠ 139u64:
+        19u6
+    else:
+        0u6

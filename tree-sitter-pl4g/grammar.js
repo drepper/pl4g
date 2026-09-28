@@ -660,6 +660,7 @@ module.exports = grammar({
       $.set_literal,
       $.dictionary_literal,
       $.index_expression,
+      $.take_expression,
       $.or_else_expression,
       $.try_expression,
       $.raised_expression,
@@ -889,6 +890,11 @@ module.exports = grammar({
       field('collection', $._non_comparison),
       '\u2e28', field('key', $._expression), '\u2e29',
     )),
+
+    // `\u2020` before a lookup takes the key out and answers what the lookup
+    // would have: it undoes one, so it is written before one and before
+    // nothing else.
+    take_expression: $ => prec(13, seq('\u2020', $.index_expression)),
 
     call_expression: $ => prec(14, seq(
       field('function', $._non_comparison),
