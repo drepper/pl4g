@@ -224,7 +224,9 @@ GROUPS: tuple[Group, ...] = (
            "collection-string-keys": "text as a key, and text as what it stands for",
            "environment": "the environment, which is a table the compiler builds",
            "collection-take": "keys taken out, and the entries they leave given up",
-           "collection-at-the-top-level": "tables a generated constructor builds"}),
+           "collection-at-the-top-level": "tables a generated constructor builds",
+           "list-take": "elements taken out of a list, which moves what follows",
+           "list-cursor": "a walk over a list that takes elements out as it goes"}),
 )
 
 #: How many times each sample is compiled.  The best is kept.

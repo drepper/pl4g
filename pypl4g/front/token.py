@@ -72,6 +72,13 @@ TUPLE_CLOSE_GLYPH: Final[str] = "\N{RIGHT ANGLE BRACKET}"
 SET_OPEN_GLYPH: Final[str] = "\N{LEFT DOUBLE PARENTHESIS}"
 SET_CLOSE_GLYPH: Final[str] = "\N{RIGHT DOUBLE PARENTHESIS}"
 
+#: How a walk over a list is moved along and back: `\N{UPWARDS WHITE ARROW}it` is the cursor at the next
+#: element and `\N{DOWNWARDS WHITE ARROW}it` the one at the element before.  Hollow arrows, because what
+#: they move is where a walk is and not what it holds -- the solid ones are
+#: assignment and the ordinary shifts.
+NEXT_GLYPH: Final[str] = "\N{UPWARDS WHITE ARROW}"
+PREV_GLYPH: Final[str] = "\N{DOWNWARDS WHITE ARROW}"
+
 #: What takes a key out of one, written before the lookup it undoes: `\N{DAGGER}d\N{LEFT DOUBLE PARENTHESIS}k\N{RIGHT DOUBLE PARENTHESIS}`.
 #: A dagger, which is what a mark against a name has meant for "no longer with
 #: us" in print for centuries, and which nothing else in the language uses.
@@ -254,6 +261,11 @@ TOLERANCE_DEFAULT: Final[float] = 1e-13
 #: is made before the program runs, out of what only the entry point can reach.
 ENVIRON_NAME: Final[str] = "".join((BUILTIN_GLYPH, "environ"))
 
+#: What makes a cursor over a list: `\N{APL FUNCTIONAL SYMBOL QUAD}iter(l)` is where a walk over `l` begins.  It
+#: is given the *place* the list is in and not the list, because a walk may take
+#: an element out and what is left has to go back where the list was.
+ITER_NAME: Final[str] = "".join((BUILTIN_GLYPH, "iter"))
+
 #: The logical operators, which work on truth values and on nothing else.  Each
 #: is a glyph, and none has an ASCII substitute: the candidates would be `&&`,
 #: `||` and `!`, and spelling two of them with the characters the *bitwise*
@@ -428,6 +440,7 @@ class TokKind(StrEnum):
     KW_ELIF = "'elif'"
     KW_ELSE = "'else'"
     KW_WHILE = "'while'"
+    KW_UNLESS = "'unless'"
     KW_FOREACH = "'foreach'"
     KW_COMPTIME = "'comptime'"
     KW_IN = "'in'"
@@ -466,6 +479,8 @@ class TokKind(StrEnum):
     TUPLE_CLOSE = "'\N{RIGHT ANGLE BRACKET}'"
 
     TAKE = "'\N{DAGGER}'"
+    NEXT = "'\N{UPWARDS WHITE ARROW}'"
+    PREV = "'\N{DOWNWARDS WHITE ARROW}'"
     SET_OPEN = "'\N{LEFT DOUBLE PARENTHESIS}'"
     SET_CLOSE = "'\N{RIGHT DOUBLE PARENTHESIS}'"
 
@@ -560,6 +575,7 @@ KEYWORDS: Final[dict[str, TokKind]] = {
     "elif": TokKind.KW_ELIF,
     "else": TokKind.KW_ELSE,
     "while": TokKind.KW_WHILE,
+    "unless": TokKind.KW_UNLESS,
     "foreach": TokKind.KW_FOREACH,
     "comptime": TokKind.KW_COMPTIME,
     "break": TokKind.KW_BREAK,

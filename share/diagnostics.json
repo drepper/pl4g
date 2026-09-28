@@ -7036,6 +7036,109 @@
       "option": null
     },
     {
+      "number": 4701,
+      "name": "LANG_TAKE_NOT_A_PLACE",
+      "severity": "error",
+      "message": "'†' on a list takes one element out of the list itself, so what follows it is a name and not a value",
+      "args": [],
+      "cause": "A list is where its elements are and how many there are, so a list with one element fewer is a different pair of words: taking one out has to put what is left where the list was.  That means a place -- a variable, a field, an element -- and a list that was worked out has none.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Lists",
+        "requirement": "`†l⟦i⟧` is written on a place holding a list."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4702,
+      "name": "LANG_TAKE_NOT_A_CURSOR",
+      "severity": "error",
+      "message": "'†' is written before a lookup, an element of a list, or a cursor, and this is '{found}'",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type of what was written after it"
+        }
+      ],
+      "cause": "Three things may be taken out and each says which it is by what is written after the dagger: a key of a set or a dictionary in double parentheses, an element of a list in brackets, or the element a cursor is at.  Anything else has nothing to take out of it.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Lists",
+        "requirement": "`†` is written before a lookup, an element of a list, or a cursor."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4703,
+      "name": "LANG_CURSOR_NOT_A_LIST",
+      "severity": "error",
+      "message": "'⎕iter' walks a list, and this is '{found}'",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type it was given"
+        }
+      ],
+      "cause": "A cursor is where a walk over a list has got to.  An array is walked by an index, a collection by `foreach`, and neither needs a cursor to take something out through, there being nothing to take out of an array and a key to name for a collection.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Lists",
+        "requirement": "`⎕iter` is given a place holding a list."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4704,
+      "name": "LANG_CURSOR_STEP_NOT_A_CURSOR",
+      "severity": "error",
+      "message": "'{operator}' moves a cursor along a list, and this is '{found}'",
+      "args": [
+        {
+          "name": "operator",
+          "type": "string",
+          "description": "the operator written"
+        },
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type it was written before"
+        }
+      ],
+      "cause": "The two arrows move a walk to the next element and to the one before it, and what they are written before is a cursor.  Nothing else has a next element to move to: an index into an array is a number and is moved by adding one.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Lists",
+        "requirement": "`⇧` and `⇩` are written before a cursor."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4705,
+      "name": "LANG_UNLESS_BINDS_A_VALUE",
+      "severity": "error",
+      "message": "'unless' runs until its condition holds, so there is nothing for it to bind",
+      "args": [],
+      "cause": "`while x := ...` walks something and binds what each turn gives, and it ends where there is no next value.  Read the other way round it would end where there *is* one, which is a walk that stops before it starts: the word is for a condition and not for a binding.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Statements / while",
+        "requirement": "`unless` takes a condition and not a binding."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 5001,
       "name": "LANG_STMT_UNREACHABLE",
       "severity": "warning",

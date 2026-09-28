@@ -16,6 +16,7 @@ from .types import (ArrayType, BoolType, CharType, DictType, EnumType,
                     FloatType,
                     IntType, MemType,
                     FuncType, ProductType, PtrType, SetType, TupleType,
+                    CursorType,
                     ListType, ResultType, StrType, SumType, Type, VecType,
                     VoidType, parts_of)
 
@@ -114,9 +115,10 @@ def size_of(ty: Type, layout: DataLayout) -> int:
             # Where the elements are and one count per dimension, which is what
             # an array whose type does not say its shape has to carry with it.
             return (1 + ty.rank) * layout.pointer_size
-        case ListType() | StrType():
+        case ListType() | StrType() | CursorType():
             # Where the elements are and how many there are, which is the same
-            # shape and for the same reason.
+            # shape and for the same reason.  A cursor is two words as well:
+            # where the list lives, and how far along it the walk is.
             return 2 * layout.pointer_size
         case SetType() | DictType():
             # A handle, which is where the table is and nothing else: how many
@@ -192,7 +194,7 @@ def align_of(ty: Type, layout: DataLayout) -> int:
             if layout.system or size_of(ty, layout) < WIDE_ENOUGH:
                 return plain
             return max(plain, WIDE_ENOUGH)
-        case ArrayType() | ListType() | StrType():
+        case ArrayType() | ListType() | StrType() | CursorType():
             return layout.pointer_size
         case SetType() | DictType():
             return layout.pointer_size

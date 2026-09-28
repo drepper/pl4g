@@ -335,6 +335,11 @@ class UnaryOp(StrEnum):
     LENGTH = "#"
     #: The shape of an array: how many along each of its dimensions.
     SHAPE = "\N{APL FUNCTIONAL SYMBOL RHO}"
+    #: Where a walk over a list goes next, and where it came from.  A cursor is
+    #: what these are written before, and a walk that stepped off either end of
+    #: the list stops the program rather than pointing anywhere.
+    NEXT = "\N{UPWARDS WHITE ARROW}"
+    PREV = "\N{DOWNWARDS WHITE ARROW}"
     #: The largest and the smallest of what something holds.
     MAX = "\N{LEFT CEILING}"
     MIN = "\N{LEFT FLOOR}"
@@ -560,6 +565,33 @@ class Take(Expr):
 
     base: Expr
     key: Expr
+
+
+@dataclass(frozen=True, slots=True)
+class TakeAt(Expr):
+    """`\N{DAGGER}l\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}i\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}`: take one element out of a list, and answer what it was.
+
+    What follows it is where the list is, so the shorter list goes back there:
+    a list is where its elements are and how many there are, and one element
+    fewer is a different pair of words.  An index past the end stops the
+    program, which is what an index past the end of an array does.
+    """
+
+    base: Expr
+    index: Expr
+
+
+@dataclass(frozen=True, slots=True)
+class TakeThrough(Expr):
+    """`\N{DAGGER}it`: take out the element a cursor is at, and answer the cursor at the
+    next one.
+
+    Which is the same cursor: what followed has moved down into the place the
+    element left, so the walk goes on from where it was.  A cursor past the last
+    element is what a walk that is over looks like, and this may answer one.
+    """
+
+    operand: Expr
 
 
 @dataclass(frozen=True, slots=True)
@@ -905,6 +937,11 @@ class While(Expr):
     label: Label | None = None
     #: What runs where the condition stopped holding rather than a `break`.
     alternative: Block | None = None
+    #: Whether it was written `unless`, which runs the body *until* the
+    #: condition holds.  The same loop with the condition read the other way
+    #: round: what it is for is the conditions that are already the negative of
+    #: what a reader means, of which a cursor being at the end is one.
+    until: bool = False
 
 
 @dataclass(frozen=True, slots=True)

@@ -164,6 +164,8 @@ _UNARY_OPERATORS: Final[dict[TokKind, ast.UnaryOp]] = {
     TokKind.CEILING: ast.UnaryOp.CEILING,
     TokKind.NEAREST: ast.UnaryOp.NEAREST,
     TokKind.ROUNDED: ast.UnaryOp.ROUNDED,
+    TokKind.NEXT: ast.UnaryOp.NEXT,
+    TokKind.PREV: ast.UnaryOp.PREV,
 }
 
 
@@ -180,6 +182,7 @@ _STARTS_AN_EXPRESSION: Final[frozenset[TokKind]] = frozenset((
     TokKind.SHAPE, TokKind.MAX, TokKind.MIN, TokKind.FLOOR, TokKind.CEILING,
     TokKind.NEAREST, TokKind.ROUNDED, TokKind.DIVIDES, TokKind.NOT_DIVIDES,
     TokKind.AMPERSAND, TokKind.LAMBDA,
+    TokKind.TAKE, TokKind.NEXT, TokKind.PREV,
 ))
 
 
@@ -1259,7 +1262,7 @@ class Parser:
             walked = self._parse_iteration(start, "foreach", self._parse_label(),
                                            comptime=True)
             return ast.ExprStmt(span=walked.span, value=walked)
-        if self._check(TokKind.KW_WHILE):
+        if self._check(TokKind.KW_WHILE) or self._check(TokKind.KW_UNLESS):
             looped = self._parse_while()
             return ast.ExprStmt(span=looped.span, value=looped)
         if self._check(TokKind.KW_FOREACH):
@@ -1295,22 +1298,32 @@ class Parser:
                               more=tuple(more))
 
     def _parse_while(self) -> ast.While:
-        """Parse ``while COND BODY``.
+        """Parse ``while COND BODY``, and ``unless COND BODY``.
 
         The condition stands on its own, with no parentheses around it, for the
         reason `if`'s does: what ends it is the body, which begins with a colon
         or a brace, and neither can be part of an expression.
+
+        `unless` is the same loop with the condition read the other way round --
+        the body runs *until* it holds -- and is one word rather than a `¬`
+        because the conditions it is for are already the negative of what a
+        reader means: a cursor asked whether a walk is over is the one there is.
         """
-        start = self._expect(TokKind.KW_WHILE).span
+        until = self._check(TokKind.KW_UNLESS)
+        start = self._advance().span
         label = self._parse_label()
         if self._binds_a_value():
+            # `unless x := ...` would be a walk that stops where it began, so
+            # there is nothing for the word to mean there.
+            if until:
+                self._diags.emit(D.LANG_UNLESS_BINDS_A_VALUE, start)
             return self._parse_iteration(start, "while", label)
         condition = self._parse_expression()
         body = self._parse_body()
         otherwise = self._parse_otherwise()
         return ast.While(span=start.to((otherwise or body).span),
                          condition=condition, body=body, label=label,
-                         alternative=otherwise)
+                         alternative=otherwise, until=until)
 
     def _parse_otherwise(self) -> ast.Block | None:
         """Parse a loop's `else` arm, which is where the loop ran out.
@@ -1641,17 +1654,22 @@ class Parser:
             return ast.AddressOf(span=token.span.to(operand.span),
                                  operand=operand, mutable=mutable)
         if self._check(TokKind.TAKE):
-            # It undoes a lookup, so what it is written before is one: the
-            # operand is parsed the way any other is and then read as the
-            # lookup it has to be.
+            # Three things may be taken out, and what says which is what is
+            # written after it: a key of a collection, an element of a list, or
+            # the element a cursor is at.  The operand is parsed the way any
+            # other is and then read as whichever of the three it is.
             token = self._advance()
             operand = self._parse_unary()
-            if not isinstance(operand, ast.Index):
-                self._diags.emit(D.LANG_TAKE_NOT_AN_ENTRY,
-                                 token.span.to(operand.span))
-                return operand
-            return ast.Take(span=token.span.to(operand.span),
-                            base=operand.base, key=operand.key)
+            span = token.span.to(operand.span)
+            if isinstance(operand, ast.Index):
+                return ast.Take(span=span, base=operand.base, key=operand.key)
+            if isinstance(operand, ast.Element):
+                if len(operand.indices) != 1:
+                    self._diags.emit(D.LANG_TAKE_NOT_AN_ENTRY, span)
+                    return operand
+                return ast.TakeAt(span=span, base=operand.base,
+                                  index=operand.indices[0])
+            return ast.TakeThrough(span=span, operand=operand)
         operator = _UNARY_OPERATORS.get(self._current.kind)
         if operator is None:
             return self._parse_primary()
@@ -1974,7 +1992,7 @@ class Parser:
                 return self._parse_if()
             case TokKind.KW_COMPTIME:
                 return self._parse_comptime()
-            case TokKind.KW_WHILE:
+            case TokKind.KW_WHILE | TokKind.KW_UNLESS:
                 return self._parse_while()
             case TokKind.KW_FOREACH:
                 start = self._advance().span

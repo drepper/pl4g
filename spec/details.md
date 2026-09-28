@@ -3026,6 +3026,40 @@ into the arm it should have jumped over -- a miscompile with nothing wrong in th
 instruction that was emitted.  The loop variable is called `at` now, and the
 comment beside it says why.
 
+A cursor is where the list is, and how far along
+-----------------------------------------------
+
+Two words: a pointer to the *place* the list is in, and an index.  The place and
+not the elements, because a walk may take one out -- and a list is where its
+elements are and how many there are, so a shorter list is a different pair of
+words that has to go back where the holder will read it.  Every operator on a
+cursor therefore begins by loading the list afresh, which is also what makes
+`⎕iter` cheap: it is the address and a nought.
+
+That the index and not a pointer is what moves is what makes `†it` answer the
+cursor it was given: the elements after the one taken out move down, so the same
+index is the next element, and where the last element went it is the count --
+which is what a walk that is over is.
+
+`⎕iter(l)` and `†l⟦i⟧` both need the place, so both go through `_place_written`,
+the machinery `&` uses -- and a list-typed name is therefore given storage of
+its own where either is written of it, which `_addressed_in` now collects
+alongside the names `&` is written before.  `_can_be_referred_to` still refuses a
+reference *to* a list, that being a second way of writing what a list already
+is; what these take is the compiler's own pointer and never the program's.
+
+**Moving the elements down is one generated function.**  `sema/lists.py` emits
+`__pl4g_list_erase(at, stride, count, which)`, a byte-at-a-time loop from the
+front -- which is safe for the overlap, the bytes moving *down* -- and one for
+every list of every element type, since what it is told is how long an element
+is.  The count is the caller's to write, the caller being what holds the list.
+
+**A cursor in a condition** is asked whether the walk is over, which
+`_asked` turns into `index ≥ count` wherever a condition is lowered.  That
+is the polarity `unless` wants, and `unless` is `ast.While` with `until` set: one
+flag, one negation where the condition is lowered, and every other thing a loop
+has -- labels, `break`, `continue`, an `else` arm -- unchanged.
+
 Three states, and what a table is rebuilt for
 --------------------------------------------
 

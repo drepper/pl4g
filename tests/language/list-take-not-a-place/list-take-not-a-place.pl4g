@@ -1,0 +1,25 @@
+※ pl4g-test: compile=error diag=4701
+
+※ Taking an element out of a list needs somewhere to put what is left.
+※
+※ A list is where its elements are and how many there are, so a list with one
+※ element fewer is a different pair of words.  Taking one out has to put those
+※ words where whoever holds the list will read them -- a name, a field, an
+※ element -- and a list that was just worked out has nowhere to be: the join
+※ below makes one and nothing holds it.
+※
+※ The same rule `⎕iter` follows, and for the same reason: a walk may take
+※ something out, so it holds the place and not the list.
+※
+※ Compare: **C++**, where `erase` is a member of the container and a temporary
+※ container is a thing you may call it on -- to no effect anyone can see;
+※ **Rust**, where `Vec::remove` on a temporary is refused by the borrow checker
+※ for this reason.
+
+@[startup, impure]
+fn main() → u6:
+    let a: [u8] = [1u8, 2u8]
+    let b: [u8] = [3u8]
+    ※ the join is a value and not a place
+    †(a ⧺ b)⟦0⟧
+    0u6

@@ -1,0 +1,78 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ `†l⟦i⟧` takes one element out of a list, and answers what it was.
+※
+※ **What follows it is where the list is.**  A list is where its elements are
+※ and how many there are, so a list with one element fewer is a different pair
+※ of words: taking one out moves what followed it down into its place and puts
+※ the shorter list back where the list was.  That means a name, a field or an
+※ element -- something the compiler can write to -- and not a list that was
+※ worked out.
+※
+※ **Another name for that list keeps what it had.**  A list is a value and not a
+※ handle, so a name given one before the removal still says how many there were
+※ then, and its elements after the one taken out are the ones that moved.  That
+※ is the bargain Go strikes with its slices; here it is written down rather than
+※ discovered.
+※
+※ **An index past the end stops the program**, which is what an index past the
+※ end of an array does: one rule for indexing, whatever is indexed.  A length is
+※ not in a list's type, so the check is one comparison at run time rather than a
+※ refusal while compiling.
+※
+※ Compare: **C++**, whose `v.erase(v.begin() + i)` is this and answers the
+※ iterator after it; **Python**, whose `del l[i]` answers nothing and whose
+※ `l.pop(i)` answers the element -- this is `pop`; **Go**, which has no removal
+※ at all and where `append(l[:i], l[i+1:]...)` is what a program writes; **Rust**,
+※ whose `Vec::remove` answers the element and panics past the end, which is this.
+
+@[startup, impure]
+fn main() → u6:
+    let l: mut [u8] = [1u8, 2u8, 3u8, 4u8, 5u8]
+    ※ what was there comes back
+    if †l⟦1⟧ ≠ 2u8:
+        1u6
+    elif #l ≠ 4:
+        2u6
+    else:
+        ※ and what followed it moved down
+        let sum: mut u8 = 0u8
+        foreach x := l:
+            sum ← sum + x
+        if sum ≠ 13u8:
+            3u6
+        else:
+            ends()
+
+※ The first and the last, which are the two the move has nothing to do.
+@[impure]
+fn ends() → u6:
+    let l: mut [u8] = [1u8, 2u8, 3u8]
+    if †l⟦2⟧ ≠ 3u8:
+        4u6
+    elif †l⟦0⟧ ≠ 1u8:
+        5u6
+    elif #l ≠ 1:
+        6u6
+    elif †l⟦0⟧ ≠ 2u8:
+        7u6
+    elif #l ≠ 0:
+        8u6
+    else:
+        wider()
+
+※ Elements of more than one word move the same way, a byte at a time.
+@[impure]
+fn wider() → u6:
+    let l: mut [〈u32, u32〉] = [〈1u32, 10u32〉, 〈2u32, 20u32〉, 〈3u32, 30u32〉]
+    let a, b := †l⟦0⟧
+    ※ the second is now the first, whole
+    let c, d := †l⟦0⟧
+    if a ≠ 1u32 ∨ b ≠ 10u32:
+        9u6
+    elif c ≠ 2u32 ∨ d ≠ 20u32:
+        10u6
+    elif #l ≠ 1:
+        11u6
+    else:
+        0u6

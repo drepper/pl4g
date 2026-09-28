@@ -2167,8 +2167,17 @@
       "type": "SEQ",
       "members": [
         {
-          "type": "STRING",
-          "value": "while"
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "STRING",
+              "value": "while"
+            },
+            {
+              "type": "STRING",
+              "value": "unless"
+            }
+          ]
         },
         {
           "type": "CHOICE",
@@ -3049,6 +3058,10 @@
         {
           "type": "SYMBOL",
           "name": "take_expression"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "step_expression"
         },
         {
           "type": "SYMBOL",
@@ -4486,8 +4499,51 @@
             "value": "†"
           },
           {
+            "type": "CHOICE",
+            "members": [
+              {
+                "type": "SYMBOL",
+                "name": "index_expression"
+              },
+              {
+                "type": "SYMBOL",
+                "name": "element_expression"
+              },
+              {
+                "type": "SYMBOL",
+                "name": "_non_comparison"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "step_expression": {
+      "type": "PREC",
+      "value": 13,
+      "content": {
+        "type": "SEQ",
+        "members": [
+          {
+            "type": "FIELD",
+            "name": "operator",
+            "content": {
+              "type": "CHOICE",
+              "members": [
+                {
+                  "type": "STRING",
+                  "value": "⇧"
+                },
+                {
+                  "type": "STRING",
+                  "value": "⇩"
+                }
+              ]
+            }
+          },
+          {
             "type": "SYMBOL",
-            "name": "index_expression"
+            "name": "_non_comparison"
           }
         ]
       }

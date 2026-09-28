@@ -1663,6 +1663,10 @@ array of arrays is written `a⟦i⟧⟦j⟧`, whose substituted form would end i
 copies of the character a member access is written with, and telling `a...b` from `a . ..b` would be a question of how far the
 lexer can look ahead rather than of what the characters are.  One character is one token, which is what a range is.
 
+`⇧` and `⇩` have none: `^` and `v` are one character each, and `++`, which is what C would reach for, says "one more" of a
+number rather than "one along" of a walk -- and is two copies of the character addition has.  The arrows are hollow where
+assignment's is solid, which is the distinction between moving a walk and moving a value.
+
 `†` has none, and the first rule is what decides it: every ASCII spelling anyone would reach for -- `!`, `-`, `~` -- is one
 character, and a word such as `del` would be a keyword taken out of a program's reach for a line it writes rarely.  The glyph is
 what a mark against a name has meant in print for centuries, and a generator has it.
@@ -2947,7 +2951,57 @@ a ⧺ [4u8]                            ※ [u8] holding four
 
 Both sides of a join hold the same type, which today is every list's rule and will later be the case worth not boxing.
 
-There is no index yet, and the to-do list records it rather than this deciding what `l⟦i⟧` would mean where the list is empty.
+**`†l⟦i⟧` takes one element out**, and answers what it was:
+
+```
+let l: mut [u8] = [1u8, 2u8, 3u8]
+let gone: u8 = †l⟦1⟧                ※ 2, and the list is [1, 3]
+†l⟦0⟧                              ※ or as a statement, with nothing read
+```
+
+What followed the element moves down into its place and the list is one shorter.
+**What follows the `†` is where the list is** (4701) and not a list that was worked out: a list is where its elements are and
+how many there are, so one element fewer is a different pair of words, and they have to go back where the list was.  The place has
+to allow it, so the name needs `mut` (4004) -- and **another name holding that list keeps what it had**, a list being a value and
+not a handle.  That is the bargain Go strikes with its slices, written down here rather than discovered.
+
+**An index past the end stops the program** (as an array's does), which is a comparison at run time: a list's length is not in its
+type, so there is nothing for the compiler to refuse.
+
+There is no plain `l⟦i⟧` read yet (4449); what reads one element is a cursor, below.
+
+##### Walking one with a cursor
+
+A **cursor** is where a walk over a list has got to.  `⎕iter(l)` is one at the first element:
+
+```
+let it: mut = ⎕iter(l)          ※ the type has no spelling of its own; the name takes it
+unless it:                    ※ until the walk is over
+    if ∣it⌖:                     ※ what it is at, asked whether it is even
+        it ← †it               ※ that one goes, and the walk goes on
+    else:
+        it ← ⇧it               ※ on to the next
+```
+
+- **`⎕iter(l)`** is given the *place* the list is in and not the list (4701, 4703), because a walk may take an element out and
+  what is left has to go back where the one holding the list will read it.  So what may be walked is what may be written.
+- **`it⌖`** is the element the walk is at, read through the mark that asks what is at a place -- which is what a cursor says.
+  Reading through a walk that is over stops the program.
+- **`⇧it`** is the cursor at the next element and **`⇩it`** the one at the element before (4704).  A walk that steps off either
+  end stops the program: there is nowhere for such a cursor to point, and answering a result instead would put a `??` on every
+  step of every walk.
+- **`†it`** takes out what the walk is at and answers the cursor at what followed -- which is the same cursor, since what came
+  after has moved down into the place the element left.  Where what went was the last element, the answer is a walk that is over.
+- **A cursor where a truth value is wanted asks whether the walk is over**, which is the one question anything walking a list asks
+  of it.  It is that way round because `unless` is what reads it, and a loop that runs *until* the walk is over needs no `¬`.
+
+A cursor is two words -- where the list is and how far along -- and has no spelling as a type yet, so it lives in a name whose
+type is read off its value.  Passing one to a function waits on that spelling, and the to-do list records it.
+
+Compare: **C++**, whose `it = v.erase(it)` is this idiom exactly, and whose iterators the removal invalidates -- here there is
+nothing to invalidate, a cursor being where the list is rather than where an element is; **Rust**, whose `Vec::retain` is this loop
+written as a call and whose iterators cannot remove at all; **Python**, where removing while walking is the mistake every tutorial
+warns about; **Go**, which has neither.
 
 Compare: **Python**, whose lists are heterogeneous and boxed always, which is the shape this is aiming at and the cost it means
 to avoid where it can; **Lisp**, where a list is the type and a cons cell the cost; **Rust**'s `Vec<T>` and **Go**'s slices,
@@ -3323,8 +3377,24 @@ nothing reads.
 
 **The body is a scope**, so a name defined in it is defined afresh on every turn and is gone after the loop.
 
+**`unless` is the same loop with its condition read the other way round**: the body runs *until* the condition holds.
+
+```
+let it: mut = ⎕iter(l)
+unless it:                            ※ until the walk is over
+    it ← ⇧it
+```
+
+Everything else about it is `while`'s: the condition, the body, a label, a `break`, a `continue`, an `else` arm.  It is one word
+rather than a `¬` because the conditions it is for are already the negative of what a reader means -- a cursor asked whether a
+walk is over is the one there is -- and `while ¬done` reads as a double negative where `unless done` reads as a sentence.  It
+takes a condition and not a binding (4705): `while x := ...` ends where there is no next value, and read the other way round that
+would be a walk that stops before it starts.
+
 Compare: C, C++, Go, Rust, Zig and Odin all have `while` (Go spells it `for`, Rust also has `loop`), and all but C and C++ insist
-the condition is a truth value.
+the condition is a truth value.  **Perl** and **Ruby** have `until`, which is this, and `unless`, which is the same word for the
+one-armed `if`; **Haskell** has `until` as a function.  The word here is `unless` for both readings of the same negation, there
+being no `if`-without-an-else to want it.
 
 #### Leaving a loop and repeating it
 

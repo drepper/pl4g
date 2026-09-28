@@ -67,7 +67,7 @@
 "let" @keyword
 "return" @keyword.return
 ["if" "elif" "else" "match"] @keyword.conditional
-["while" "foreach" "break" "continue"] @keyword.repeat
+["while" "unless" "foreach" "break" "continue"] @keyword.repeat
 ["type" "enum" "unit"] @keyword.type
 "comptime" @keyword.modifier
 ; `static` is the whole of what one node is, and `mut` of another.
@@ -96,7 +96,7 @@
 ["«" "»" "↺" "↻"] @operator
 ["#" "⍴" "⧺" "++" "⌈" "⌊"] @operator
 ["↓" "↑" "↕" "⇕" "ⁿ"] @operator
-["←" "⌖" "…" "?" "??" "†"] @operator
+["←" "⌖" "…" "?" "??" "†" "⇧" "⇩"] @operator
 ; Whether one number divides another, which is asked of two and also written in
 ; front of one.
 ["∣" "∤"] @operator

@@ -350,6 +350,11 @@ LANG_DOC_NOT_A_FUNCTION: Final[DiagID] = 4604
 
 # 4700-4799: collections, and what is taken out of them
 LANG_TAKE_NOT_AN_ENTRY: Final[DiagID] = 4700
+LANG_TAKE_NOT_A_PLACE: Final[DiagID] = 4701
+LANG_TAKE_NOT_A_CURSOR: Final[DiagID] = 4702
+LANG_CURSOR_NOT_A_LIST: Final[DiagID] = 4703
+LANG_CURSOR_STEP_NOT_A_CURSOR: Final[DiagID] = 4704
+LANG_UNLESS_BINDS_A_VALUE: Final[DiagID] = 4705
 
 # 5000-5299: control flow and returns
 LANG_STMT_UNREACHABLE: Final[DiagID] = 5001

@@ -663,6 +663,32 @@ class ListType(Type):
 
 
 @dataclass(frozen=True, slots=True)
+class CursorType(Type):
+    """Where a walk over a list has got to.
+
+    Two words: where the list *lives* and how far along it the walk is.  The
+    place and not the list, because a walk may take an element out, and what a
+    list is is where its elements are and how many there are -- so a shorter
+    list is a different pair of words, and the one who is walking has to be able
+    to put it where the one who is holding the list will read it.
+
+    How far along is counted in elements and not in bytes: a cursor past the
+    last element is one whose index is the count, which is what a walk that is
+    over looks like and what nothing may read through.
+    """
+
+    element: Type
+
+    def render(self) -> str:
+        """The name of this type in the textual form of the IR."""
+        return "".join(("cursor<", self.element.render(), ">"))
+
+    def mangled(self) -> str:
+        """The normalized name of this type, for use inside a symbol name."""
+        return "".join(("cursor<", self.element.mangled(), ">"))
+
+
+@dataclass(frozen=True, slots=True)
 class SetType(Type):
     """A set: the keys it holds, and nothing said about them beyond membership."""
 
@@ -876,6 +902,7 @@ class TypeContext:
         self._arrays: dict[tuple[Type, tuple[int | None, ...]], ArrayType] = {}
         self._vectors: dict[tuple[Type, int], VecType] = {}
         self._lists: dict[Type, ListType] = {}
+        self._cursors: dict[Type, CursorType] = {}
         self._sets: dict[tuple[Type, bool], SetType] = {}
         self._dicts: dict[tuple[Type, Type, bool], DictType] = {}
         self._pointers: dict[tuple[Type, bool, bool], PtrType] = {}
@@ -930,6 +957,14 @@ class TypeContext:
         if found is None:
             found = ListType(element)
             self._lists[element] = found
+        return found
+
+    def cursor_type(self, element: Type) -> CursorType:
+        """Return the cursor type over a list of *element*."""
+        found = self._cursors.get(element)
+        if found is None:
+            found = CursorType(element)
+            self._cursors[element] = found
         return found
 
     def set_type(self, element: Type, mutable: bool = False) -> SetType:
@@ -1070,6 +1105,10 @@ def parts_of(ty: Type) -> tuple[Type, ...]:
         # string and an array of unstated length both have and for the same
         # reason: how many is not in the type.
         return (_pointer_to(ty.element), U64)
+    if isinstance(ty, CursorType):
+        # Where the list is -- the place, not the elements -- and how far along
+        # the walk is.
+        return (_pointer_to(ListType(ty.element)), U64)
     if isinstance(ty, FuncType):
         # A function written where a value is wanted is two addresses: where
         # its code is, and where what it brought in with it is.  One type

@@ -448,11 +448,22 @@ To Do List for the PL4g language
     makes the agreeing case the one worth not boxing; what is missing is the boxed value -- a value held with enough beside it
     to say what it is -- and the rule for which of the two a list is.
 
-[ ] index a list.  What `l[i]` means where `i` is past the end has three answers -- stop the program, answer a result, or refuse
-    to compile -- and the array's (check and stop) is not obviously the list's, a list's length not being in its type.
+[ ] read one element of a list.  `l⟦i⟧` is still refused (4449); what reads one is a cursor.  The question the entry used to
+    hold -- what an index past the end means -- was answered on 2026-09-29 for `†l⟦i⟧`: it stops the program, as an array's
+    does.  So what is left is whether a read is worth having beside the cursor, and it is the same check either way.
 
-[ ] decide whether a list may be changed in place: an element assigned, one appended.  Everything a list has today makes a new
-    one, which is why nothing about ownership has had to be decided; appending is where it would.
+[ ] a spelling for a cursor's type.  `let it: mut = ⎕iter(l)` works because the name takes its type from the value; a parameter,
+    a field or a function's answer cannot say `cursor over [u8]` at all, so a walk cannot be handed to anything.  What it waits
+    on is the same question a range as a value waits on: a type the compiler provides needs a name a program can write.
+
+[x] decide whether a list may be changed in place.  Answered on 2026-09-29 for taking one element out: `†l⟦i⟧` and `†it` shift
+    what follows down and write the shorter list back where the list was, so a list stays a *value* and another name for it keeps
+    what it had.  What that leaves open is putting one *in* -- an element assigned, one appended -- which wants the room to grow
+    and is the entry below.
+
+[ ] put an element in a list: one assigned, one appended, one inserted.  Taking one out needs no room and no allocator; putting
+    one in needs both, and a rule for what happens to a name holding the list when the elements move.  The place-and-count that
+    `†` already writes back is what such a rule would be written in terms of.
 
 [ ] compare two strings.  `"a" = "a"` is refused today, which is honest and not enough: what two strings being equal means is
     that their bytes are equal, UTF-8 being a one-to-one encoding of a sequence of code points -- so it is a length test and a

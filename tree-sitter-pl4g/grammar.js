@@ -464,8 +464,12 @@ module.exports = grammar({
     // condition stands on its own for the reason an `if`'s does, and it is a
     // statement outright: a loop has a way through that runs the body no times
     // at all, and there is nothing for that way to produce.
+    // `unless` is the same loop with its condition read the other way round:
+    // the body runs until the condition holds.  One word rather than a `\u00ac`,
+    // because the conditions it is for are already the negative of what a
+    // reader means -- a cursor asked whether a walk is over is the one there is.
     while_statement: $ => seq(
-      'while', optional(field('label', $.label)),
+      choice('while', 'unless'), optional(field('label', $.label)),
       field('condition', $._expression), field('body', $._block),
       optional(field('alternative', $.loop_else)),
     ),
@@ -661,6 +665,7 @@ module.exports = grammar({
       $.dictionary_literal,
       $.index_expression,
       $.take_expression,
+      $.step_expression,
       $.or_else_expression,
       $.try_expression,
       $.raised_expression,
@@ -894,7 +899,14 @@ module.exports = grammar({
     // `\u2020` before a lookup takes the key out and answers what the lookup
     // would have: it undoes one, so it is written before one and before
     // nothing else.
-    take_expression: $ => prec(13, seq('\u2020', $.index_expression)),
+    take_expression: $ => prec(13, seq(
+      '\u2020', choice($.index_expression, $.element_expression,
+                       $._non_comparison))),
+
+    // `\u21e7` and `\u21e9` move a walk over a list along and back.  They bind where
+    // every operator written before its operand binds.
+    step_expression: $ => prec(13, seq(
+      field('operator', choice('\u21e7', '\u21e9')), $._non_comparison)),
 
     call_expression: $ => prec(14, seq(
       field('function', $._non_comparison),

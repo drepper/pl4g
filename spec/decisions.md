@@ -6684,6 +6684,65 @@ undefined -- here the order is written down: the compiler's first, in the order
 the definitions are written; **Rust**, where a `HashMap` cannot be a `static` at
 all without `OnceLock`.
 
+## 2026-09-29T03:00+02:00 — language, compiler
+
+**An element may be taken out of a list, and a cursor is what walks one**
+
+At the user's direction: "implement † for lists.  remove entries for specific
+entries using indeces.  also allow † to iterators over lists.  the operator then
+returns an iterator to the next element".  Three sub-decisions were put to the
+user, who took the recommended answer to each and renamed the third's pieces.
+
+**A list stays a value; the name is where the change lands.**  The alternative
+was making a list a handle to a block, the way a set and a dictionary are, so
+that every name for one saw a removal.  The user chose the value: `†l⟦i⟧` shifts
+the elements down and writes the shorter list back into the place `l` names, and
+another name keeps the count it had.  That is Go's slice bargain, and the reason
+to take it here is that a list is two words and passed as two words: making it a
+handle would change how every list is passed, joined and walked, to buy a sharing
+nothing yet asks for.  It is written down in the specification rather than left
+to be discovered, which is the part Go does not do.
+
+**It answers the element, and an index past the end stops the program.**  One
+rule for indexing whatever is indexed, which is the array's.  The other answer
+considered was `T?`, making a bad index a miss rather than a stop; a list's
+length not being in its type is an argument for it, and against it is that every
+read would then carry a `??` for a mistake that is a mistake.  Rust's
+`Vec::remove` panics and answers the element, which is this.
+
+**A cursor, not an iterator protocol.**  There are no iterator values in the
+language: `foreach` lowers a range's `next` where it stands, and the compiler is
+the only implementor of the protocol the specification describes.  Rather than
+open that up, what was added is one thing the compiler provides for one purpose:
+`⎕iter(l)` is where a walk over that list begins, `it⌖` is what it is at, `⇧it` and
+`⇩it` move it, and `†it` takes out what it is at and answers the cursor at what
+followed.  The user named these: `⎕iter` rather than `⎕first`, and the two hollow
+arrows rather than `⎕next` and `⎕prev`.
+
+**A cursor is where the list is and how far along**, which is why `†it` can answer
+the cursor it was given: the elements move down, so the same index is the next
+element.  C++'s `it = v.erase(it)` is the same line with the same meaning, and
+the difference is that a C++ iterator points at an element and is invalidated by
+the removal, where this one points at a *place and a position* and is not.
+
+**Stepping off either end stops the program**, which the user asked for outright.
+A cursor is not a result and making it one would put a `??` on every step of
+every walk; a walk that has run out is the cursor whose index is the count, which
+is a thing to ask about and not a thing to point through.
+
+**A cursor in a condition asks whether the walk is over**, and `unless` is the
+loop that runs until its condition holds.  Both are the user's: the second exists
+so that the first needs no `¬`.  It is `while` with the condition read the other
+way round -- one flag on the same node, one negation where the condition is
+lowered -- so labels, `break`, `continue` and the `else` arm are the same
+machinery.  **Perl** and **Ruby** have `until` for the loop and `unless` for the
+one-armed `if`; this language has no `if`-without-an-else to want the second
+meaning, so the word is free for the first.
+
+What is *not* decided here: a plain `l⟦i⟧` read, which is still refused (4449) --
+what reads one element is a cursor -- and a spelling for a cursor's type, without
+which one cannot be passed to a function.  Both are in the to-do list.
+
 Open questions
 --------------
 

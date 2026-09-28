@@ -25,7 +25,7 @@ from ..front.token import (ACQUIRE_NAME, RELEASE_NAME, AT_NAME, SPAN_NAME,
                           ENUMERATE_NAME, TYPEOF_NAME,
                           EMPTY_ARENA_NAME, ORD_NAME,
                           WRAP_NAME,
-                          ENVIRON_NAME,
+                          ENVIRON_NAME, ITER_NAME,
                           HEAP_NAME, SYSCALL_NAME, SYSCALL_NUMBER_PREFIX,
                           TOLERANCE_DEFAULT,
                           TOLERANCE_NAME, WILDCARD_NAME)
@@ -47,6 +47,7 @@ from ..ir.function import (DEFAULT_CCONV, SYSTEM_CCONV, BasicBlock, FuncAttrs,
                            Linkage, SpecialKind)
 from ..ir.module import GlobalVar, Module
 from ..ir.types import (ARENA, ArrayType, BOOL, BoolType, BUILTIN_TYPES,
+                        CursorType,
                         DictType,
                         ERROR, EnumType,
                         I64, U32, U64,
@@ -57,7 +58,7 @@ from ..ir.types import (ARENA, ArrayType, BOOL, BoolType, BUILTIN_TYPES,
                         NARROWING, NO_UNIT, Unit, VecType, VOID,
                         without_units,
                         CHAR, MAX_CODE_POINT, U8, made_of_parts, parts_of)
-from . import environ, strings, tables
+from . import environ, lists, strings, tables
 from .modules import (SUFFIX, ImportCycle, LoadedModule, ModuleNotFound,
                       ModuleRegistry, base_name, system_modules)
 from ..ir.value import (BlockParam, BoolConst, CharConst, Const, EnumConst,
@@ -326,6 +327,16 @@ def _addressed_in(node: object, into: set[str]) -> None:
     """
     if isinstance(node, ast.AddressOf) and isinstance(node.operand, ast.NameRef):
         into.add(node.operand.name)
+    if isinstance(node, ast.TakeAt) and isinstance(node.base, ast.NameRef):
+        # Taking an element out of a list writes the shorter list back where
+        # the list was, so the name has to *be* somewhere -- the same thing `&`
+        # needs, got the same way.
+        into.add(node.base.name)
+    if isinstance(node, ast.Call) and isinstance(node.callee, ast.NameRef) \
+            and node.callee.name == ITER_NAME and len(node.args) == 1 \
+            and isinstance(node.args[0], ast.NameRef):
+        # And a walk over one holds where the list is for as long as it lasts.
+        into.add(node.args[0].name)
     if isinstance(node, ast.Capture) and node.by_reference:
         # A lambda that brings a variable in rather than what it held needs the
         # variable to be somewhere, which is the same thing `&` needs anywhere
@@ -631,6 +642,16 @@ def _promises_as_much(expected: Type | None, found: Type) -> bool:
         return False
     return ((found.lasting or not expected.lasting)
             and (found.mutable or not expected.mutable))
+
+
+def _names_a_place(expr: ast.Expr) -> bool:
+    """Whether *expr* is the kind of thing that names a place at all.
+
+    Asked before the place is worked out, so that something taking a list apart
+    reports what it is about rather than letting the machinery a reference uses
+    report about references.
+    """
+    return isinstance(expr, (ast.NameRef, ast.Element, ast.Member, ast.Deref))
 
 
 def _is_a_table(ty: Type) -> bool:
@@ -2355,7 +2376,7 @@ class Checker:
         # which is what a record being a value rather than a place means.
         placed = (builder is not None
                   and (name in self._addressed or isinstance(held, ProductType))
-                  and _can_be_referred_to(held))
+                  and (_can_be_referred_to(held) or isinstance(held, ListType)))
         if placed:
             assert builder is not None
             # A variable the program wrote as an ordinary name and the compiler
@@ -5649,11 +5670,22 @@ class Checker:
 
     def _lower_deref(self, builder: IRBuilder, expr: ast.Deref,
                      expected: Type | None) -> Value:
-        """Lower `r\N{POSITION INDICATOR}`: what is at the place a reference names."""
+        """Lower `r\N{POSITION INDICATOR}`: what is at the place a reference names.
+
+        A cursor is read through the same way, and for the same reason: it says
+        where something is, and this is the mark that asks for what is there.
+        Where it is is one element of a list, which the walk is at.
+        """
         value = self._lower_expr(builder, expr.operand, None)
         ty = self._value_type_of(value)
         if ty is ERROR:
             return UndefConst(ERROR)
+        if isinstance(ty, CursorType):
+            answer = self._through_a_cursor(builder, value, ty, expr.span)
+            if not self._accepts(expected, self._value_type_of(answer)):
+                self._report_mismatch(expr.span, self._value_type_of(answer),
+                                      expected)
+            return answer
         if not isinstance(ty, PtrType):
             self._diags.emit(D.LANG_DEREF_NOT_A_REFERENCE, expr.span,
                              found=ty.render())
@@ -6482,6 +6514,253 @@ class Checker:
                             builder.int_const(U64, tables.LIVE), expr.span),
             answer, expr.span)
 
+    # -- lists, and the cursors that walk them ---------------------------------
+
+    def _list_place(self, builder: IRBuilder, expr: ast.Expr, span: Span
+                    ) -> tuple[Value, ListType] | None:
+        """The place a list is in, for something that is about to shorten it.
+
+        A list is where its elements are and how many there are, so a list with
+        one element fewer is a different pair of words: taking one out has to
+        put what is left back where the list was.  That is a place -- a name, a
+        field, an element -- and a list that was worked out has none.
+        """
+        if not _names_a_place(expr):
+            self._diags.emit(D.LANG_TAKE_NOT_A_PLACE, span)
+            return None
+        found = self._place_written(builder, expr)
+        if found is None:
+            return None
+        address, held, may_change, what, _ = found
+        if held is ERROR:
+            return None
+        if not isinstance(held, ListType):
+            self._diags.emit(D.LANG_TAKE_NOT_A_CURSOR, span,
+                             found=held.render())
+            return None
+        if not may_change:
+            self._diags.emit(D.LANG_VARDEF_NOT_MUTABLE, span, name=what)
+            return None
+        return (builder.cast(CastKind.BITCAST, address,
+                             self._module.types.ptr_type(held, mutable=True),
+                             span), held)
+
+    def _list_at(self, builder: IRBuilder, place: Value, ty: ListType,
+                 span: Span) -> tuple[Value, Value, Value]:
+        """The list in a place, taken apart: where, how many, and the list."""
+        held = builder.load(place, span)
+        return (builder.extract(held, 0, parts_of(ty)[0], span),
+                builder.extract(held, 1, U64, span), held)
+
+    def _erased(self, builder: IRBuilder, place: Value, ty: ListType,
+                elements: Value, count: Value, at: Value, span: Span) -> None:
+        """Move what follows one element down, and write the shorter list back."""
+        stride = stride_of(ty.element, _LAYOUT)
+        builder.call(lists.erase_function(self._module),
+                     (builder.cast(CastKind.BITCAST, elements,
+                                   self._module.types.ptr_type(U8, mutable=True),
+                                   span),
+                      builder.int_const(U64, stride), count, at),
+                     VOID, span)
+        builder.store(place, builder.make_tuple(
+            (elements, builder.binary(BinOp.WRAP_SUB, count,
+                                      builder.int_const(U64, 1), span)),
+            ty, span), span)
+
+    def _element_of(self, builder: IRBuilder, elements: Value, ty: ListType,
+                    at: Value, span: Span) -> Value:
+        """The element *at* places along, read where the elements are."""
+        stride = stride_of(ty.element, _LAYOUT)
+        return builder.load(builder.binary(
+            BinOp.ADD, elements,
+            builder.binary(BinOp.WRAP_MUL, at, builder.int_const(U64, stride),
+                           span), span), span)
+
+    def _lower_take_at(self, builder: IRBuilder, expr: ast.TakeAt,
+                       expected: Type | None) -> Value:
+        """Check `†l⟦i⟧`, which takes one element out and answers what it was.
+
+        What follows the element moves down into its place and the list is one
+        shorter; an index past the end stops the program, which is what an index
+        past the end of an array does -- one rule for indexing, whatever is
+        indexed.
+        """
+        found = self._list_place(builder, expr.base, expr.base.span)
+        if found is None:
+            return UndefConst(ERROR)
+        place, ty = found
+        at = self._index_into(builder, expr.index, expr.span)
+        if at is None:
+            return UndefConst(ERROR)
+        if not self._accepts(expected, ty.element):
+            self._report_mismatch(expr.span, ty.element, expected)
+            return UndefConst(ERROR)
+        self._an_effect(D.LANG_PURE_WRITES_ELSEWHERE, expr.span)
+        elements, count, _ = self._list_at(builder, place, ty, expr.span)
+        builder.check(builder.compare(CmpPred.ULT, at, count, expr.span),
+                      "an index outside its list", expr.span)
+        gone = self._element_of(builder, elements, ty, at, expr.span)
+        self._erased(builder, place, ty, elements, count, at, expr.span)
+        return gone
+
+    def _index_into(self, builder: IRBuilder, written: ast.Expr,
+                    span: Span) -> Value | None:
+        """An index written for a list, read as the count it is.
+
+        The same rule an array's index follows: which element is wanted is not
+        a length and not a count of apples, so anything that is not a literal
+        says what it counts.
+        """
+        index = self._on_its_own(builder, written)
+        found = self._value_type_of(index)
+        if found is ERROR:
+            return None
+        if not isinstance(found, IntType):
+            self._diags.emit(D.LANG_ARRAY_INDEX_NOT_A_NUMBER, written.span,
+                             found=found.render())
+            return None
+        if not isinstance(written, ast.IntLit) \
+                and not self._stands_for(found.unit, IDX_UNIT):
+            self._diags.emit(D.LANG_UNIT_INDEX, written.span,
+                             found=found.render())
+            return None
+        return self._as_count(builder, index, found, span)
+
+    def _cursor_parts(self, builder: IRBuilder, value: Value, ty: CursorType,
+                      span: Span) -> tuple[Value, Value, ListType]:
+        """A cursor taken apart: the place the list is in, and how far along."""
+        held = self._module.types.list_type(ty.element)
+        return (builder.extract(value, 0,
+                                self._module.types.ptr_type(held, mutable=True),
+                                span),
+                builder.extract(value, 1, U64, span), held)
+
+    def _lower_iter(self, builder: IRBuilder, expr: ast.Call,
+                    expected: Type | None) -> Value:
+        """Lower `⎕iter(l)`: where a walk over the list in *l* begins.
+
+        It is given the place and not the list, because a walk may take an
+        element out: what is left has to go back where the one holding the list
+        will read it.  So what may be walked is what may be written.
+        """
+        if len(expr.args) != 1:
+            self._diags.emit(D.LANG_CALL_WRONG_ARGUMENT_COUNT, expr.span,
+                             name=ITER_NAME, expected=1, found=len(expr.args))
+            return UndefConst(ERROR)
+        if not _names_a_place(expr.args[0]):
+            self._diags.emit(D.LANG_TAKE_NOT_A_PLACE, expr.args[0].span)
+            return UndefConst(ERROR)
+        found = self._place_written(builder, expr.args[0])
+        if found is None:
+            return UndefConst(ERROR)
+        address, held, may_change, what, _ = found
+        if held is ERROR:
+            return UndefConst(ERROR)
+        if not isinstance(held, ListType):
+            self._diags.emit(D.LANG_CURSOR_NOT_A_LIST, expr.args[0].span,
+                             found=held.render())
+            return UndefConst(ERROR)
+        if not may_change:
+            self._diags.emit(D.LANG_VARDEF_NOT_MUTABLE, expr.args[0].span,
+                             name=what)
+            return UndefConst(ERROR)
+        ty = self._module.types.cursor_type(held.element)
+        if not self._accepts(expected, ty):
+            self._report_mismatch(expr.span, ty, expected)
+            return UndefConst(ERROR)
+        return builder.make_tuple(
+            (builder.cast(CastKind.BITCAST, address,
+                          self._module.types.ptr_type(held, mutable=True),
+                          expr.span),
+             builder.int_const(U64, 0)), ty, expr.span)
+
+    def _lower_step(self, builder: IRBuilder, expr: ast.Unary, value: Value,
+                    ty: CursorType, expected: Type | None) -> Value:
+        """Lower `⇧it` and `⇩it`: the cursor at the next element, and at the
+        one before.
+
+        A walk that stepped off either end of its list stops the program.  There
+        is nowhere for such a cursor to point and no answer to give instead: a
+        cursor is not a result, and making it one would put a `??` on every step
+        of every walk.
+        """
+        if not self._accepts(expected, ty):
+            self._report_mismatch(expr.span, ty, expected)
+            return UndefConst(ERROR)
+        place, at, held = self._cursor_parts(builder, value, ty, expr.span)
+        onward = expr.op is ast.UnaryOp.NEXT
+        if onward:
+            _, count, _ = self._list_at(builder, place, held, expr.span)
+            builder.check(builder.compare(CmpPred.ULT, at, count, expr.span),
+                          "a walk moved past the end of its list", expr.span)
+        else:
+            builder.check(
+                builder.compare(CmpPred.NE, at, builder.int_const(U64, 0),
+                                expr.span),
+                "a walk moved before the start of its list", expr.span)
+        return builder.make_tuple(
+            (place, builder.binary(BinOp.WRAP_ADD if onward else BinOp.WRAP_SUB,
+                                   at, builder.int_const(U64, 1), expr.span)),
+            ty, expr.span)
+
+    def _lower_take_through(self, builder: IRBuilder, expr: ast.TakeThrough,
+                            expected: Type | None) -> Value:
+        """Check `†it`: the element the cursor is at goes, and the cursor is
+        answered with.
+
+        Which is the same cursor: what followed has moved down into the place
+        the element left, so the walk goes on from where it was -- and where
+        what went was the last element, the cursor is now one past the end,
+        which is what a walk that is over looks like.
+        """
+        value = self._lower_expr(builder, expr.operand, None)
+        ty = self._value_type_of(value)
+        if ty is ERROR:
+            return UndefConst(ERROR)
+        if not isinstance(ty, CursorType):
+            self._diags.emit(D.LANG_TAKE_NOT_A_CURSOR, expr.operand.span,
+                             found=ty.render())
+            return UndefConst(ERROR)
+        if not self._accepts(expected, ty):
+            self._report_mismatch(expr.span, ty, expected)
+            return UndefConst(ERROR)
+        self._an_effect(D.LANG_PURE_WRITES_ELSEWHERE, expr.span)
+        place, at, held = self._cursor_parts(builder, value, ty, expr.span)
+        elements, count, _ = self._list_at(builder, place, held, expr.span)
+        builder.check(builder.compare(CmpPred.ULT, at, count, expr.span),
+                      "taking an element out through a walk that is over",
+                      expr.span)
+        self._erased(builder, place, held, elements, count, at, expr.span)
+        return value
+
+    def _through_a_cursor(self, builder: IRBuilder, value: Value,
+                          ty: CursorType, span: Span) -> Value:
+        """`it⌖`: the element a cursor is at.
+
+        A cursor past the last element has none, and reading through one stops
+        the program the way reading past the end of an array does.
+        """
+        place, at, held = self._cursor_parts(builder, value, ty, span)
+        elements, count, _ = self._list_at(builder, place, held, span)
+        builder.check(builder.compare(CmpPred.ULT, at, count, span),
+                      "reading through a walk that is over", span)
+        return self._element_of(builder, elements, held, at, span)
+
+    def _asked(self, builder: IRBuilder, value: Value, span: Span) -> Value:
+        """What a condition comes to, where what was written is a cursor.
+
+        A cursor standing where a truth value is wanted asks the one question
+        anything walking a list asks of it: is the walk over.  That is what
+        `unless` is for -- `unless it:` runs the body until the walk is -- and
+        it is why the answer is that way round rather than the other.
+        """
+        ty = self._value_type_of(value)
+        if not isinstance(ty, CursorType):
+            return value
+        place, at, held = self._cursor_parts(builder, value, ty, span)
+        _, count, _ = self._list_at(builder, place, held, span)
+        return builder.compare(CmpPred.UGE, at, count, span)
+
     def _lower_entry_assign(self, builder: IRBuilder, stmt: ast.EntryAssign) -> None:
         """Check `d⸨k⸩ ← v`, which puts a value under a key."""
         base = self._lower_expr(builder, stmt.base, None)
@@ -6698,7 +6977,8 @@ class Checker:
             # Lowered with nothing expected of it, so that a condition of the
             # wrong type is reported once, as a condition, rather than by
             # whatever wording the place it stands in would have used.
-            condition = self._lower_expr(builder, arm.condition, None)
+            condition = self._asked(builder, self._lower_expr(
+                builder, arm.condition, None), arm.condition.span)
             found = self._value_type_of(condition)
             if found is not BOOL and found is not ERROR:
                 self._diags.emit(D.LANG_IF_CONDITION_NOT_BOOLEAN,
@@ -6792,13 +7072,18 @@ class Checker:
         builder.set_memory(token)
         # Lowered with nothing expected of it, so that a condition of the wrong
         # type is reported once, as a condition.
-        condition = self._lower_expr(builder, stmt.condition, None)
+        condition = self._asked(builder, self._lower_expr(
+            builder, stmt.condition, None), stmt.condition.span)
         found = self._value_type_of(condition)
         if found is not BOOL:
             if found is not ERROR:
                 self._diags.emit(D.LANG_LOOP_CONDITION_NOT_BOOLEAN,
                                  stmt.condition.span, found=found.render())
             condition = UndefConst(BOOL)
+        elif stmt.until:
+            # `unless` is this loop with its condition read the other way
+            # round: the body runs until it holds.
+            condition = self._negate(builder, condition, stmt.span)
         builder.condbr(condition, body, leave if leave is not None else after,
                        span=stmt.span)
         ran_out = builder.memory()
@@ -8047,14 +8332,14 @@ class Checker:
         What is asked of one is a different question, and `_answer_is_taken`
         asks it.
 
-        Taking a key out of a collection is the other: `†d⸨k⸩` takes the key
-        out whether or not anyone wants what was under it, so a program that
+        Taking something out is the other: `†d⸨k⸩`, `†l⟦i⟧` and `†it` all take
+        it out whether or not anyone wants what was there, so a program that
         only wants it gone writes the line and reads nothing.
         """
         if isinstance(expr, ast.Call):
             self._answer_is_taken(expr)
             return
-        if isinstance(expr, ast.Take):
+        if isinstance(expr, (ast.Take, ast.TakeAt, ast.TakeThrough)):
             return
         found = self._diags.emit(D.LANG_STMT_VALUE_DISCARDED, expr.span)
         if isinstance(expr, ast.Binary) and expr.op is ast.BinaryOp.EQUAL:
@@ -8509,6 +8794,10 @@ class Checker:
                 return self._lower_collection(builder, expr, expected)
             case ast.Take():
                 return self._lower_take(builder, expr, expected)
+            case ast.TakeAt():
+                return self._lower_take_at(builder, expr, expected)
+            case ast.TakeThrough():
+                return self._lower_take_through(builder, expr, expected)
             case ast.Index():
                 return self._lower_index(builder, expr, expected)
             case ast.If():
@@ -10203,6 +10492,17 @@ class Checker:
             return self._lower_extremum(builder, expr, expected)
         if expr.op in _ROUNDINGS:
             return self._lower_rounding(builder, expr, expected)
+        if expr.op in (ast.UnaryOp.NEXT, ast.UnaryOp.PREV):
+            moved = self._lower_expr(builder, expr.operand, None)
+            found = self._value_type_of(moved)
+            if found is ERROR:
+                return UndefConst(ERROR)
+            if not isinstance(found, CursorType):
+                self._diags.emit(D.LANG_CURSOR_STEP_NOT_A_CURSOR,
+                                 expr.operand.span, operator=expr.op.value,
+                                 found=found.render())
+                return UndefConst(ERROR)
+            return self._lower_step(builder, expr, moved, found, expected)
         if expr.op in _DIVIDES_UNARY:
             # The same operator with two on the left, which is what the
             # question "is it even" is.
@@ -11052,6 +11352,9 @@ class Checker:
         if isinstance(expr.callee, ast.NameRef) \
                 and expr.callee.name == ADDRESS_NAME:
             return self._lower_address_of(builder, expr, expected)
+        if isinstance(expr.callee, ast.NameRef) \
+                and expr.callee.name == ITER_NAME:
+            return self._lower_iter(builder, expr, expected)
         if isinstance(expr.callee, ast.NameRef) \
                 and expr.callee.name == BYTES_NAME:
             return self._lower_bytes(builder, expr, expected)

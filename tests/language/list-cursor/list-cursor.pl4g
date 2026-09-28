@@ -1,0 +1,93 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ A cursor walks a list, and may take out what it is at.
+※
+※ `⎕iter(l)` is where a walk over the list in `l` begins.  It is given the place
+※ and not the list, because a walk may take an element out: what is left has to
+※ go back where the one holding the list will read it.  So what may be walked is
+※ what may be written.
+※
+※ **`it⌖` is the element the walk is at**, read through the mark that asks what
+※ is at a place, since that is what a cursor says.  **`⇧it` and `⇩it`** are the
+※ cursor at the next element and at the one before; a walk that steps off either
+※ end stops the program, there being nowhere for such a cursor to point and no
+※ answer to give instead.
+※
+※ **`†it` takes out what the walk is at and answers the cursor at what
+※ followed** -- which is the same cursor: what came after has moved down into
+※ the place the element left, so the walk goes on from where it was.  Where what
+※ went was the last element, the cursor is now one past the end, which is what a
+※ walk that is over looks like.
+※
+※ **A cursor standing where a truth value is wanted asks whether the walk is
+※ over**, which is the one question anything walking a list asks of it.  That is
+※ what `unless` is for: `unless it:` runs the body until the walk is over, and
+※ the removal loop needs no `¬` and no second name.
+※
+※ Compare: **C++**, whose `it = v.erase(it)` is this idiom exactly, and whose
+※ iterators are invalidated by the removal unless the answer is taken -- here
+※ there is nothing to invalidate, a cursor being where the list is and how far
+※ along; **Rust**, whose `Vec::retain` is the loop written as a call and whose
+※ iterators cannot remove at all; **Python**, where removing while walking is
+※ the mistake every tutorial warns about; **Go**, which has neither.
+
+@[startup, impure]
+fn main() → u6:
+    let l: mut [u8] = [1u8, 2u8, 3u8, 4u8, 5u8, 6u8]
+    let it: mut = ⎕iter(l)
+    ※ every even element goes, and the walk goes on from where it was
+    unless it:
+        if ∣it⌖:
+            it ← †it
+        else:
+            it ← ⇧it
+    let sum: mut u8 = 0u8
+    let many: mut u8 = 0u8
+    foreach x := l:
+        sum ← sum + x
+        many ← many + 1u8
+    if many ≠ 3u8:
+        1u6
+    elif sum ≠ 9u8:
+        2u6
+    else:
+        moved()
+
+※ Forwards and back, and what the walk is at either way.
+@[impure]
+fn moved() → u6:
+    let l: mut [u16] = [10u16, 20u16, 30u16]
+    let it: mut = ⎕iter(l)
+    let first: u16 = it⌖
+    it ← ⇧it
+    let second: u16 = it⌖
+    it ← ⇧it
+    let third: u16 = it⌖
+    it ← ⇩it
+    let back: u16 = it⌖
+    if first ≠ 10u16 ∨ second ≠ 20u16 ∨ third ≠ 30u16:
+        3u6
+    elif back ≠ 20u16:
+        4u6
+    ※ the walk is not over: it is at the second of three
+    elif it:
+        5u6
+    else:
+        ended()
+
+※ A walk that is over, which is what taking out the last element leaves.
+@[impure]
+fn ended() → u6:
+    let l: mut [u8] = [7u8]
+    let it: mut = ⎕iter(l)
+    let after: mut = †it
+    if after:
+        if #l ≠ 0:
+            6u6
+        else:
+            ※ and a list with nothing in it has a walk that is over at once
+            let empty: mut [u8] = []
+            let none: mut = ⎕iter(empty)
+            if none: 0u6 else: 7u6
+    else:
+        8u6
