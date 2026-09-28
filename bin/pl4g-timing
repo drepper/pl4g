@@ -221,7 +221,8 @@ GROUPS: tuple[Group, ...] = (
            "collection-operators": "all four set operators, over two sets",
            "collection-grows": "forty entries, which is four doublings",
            "collection-arena": "two arenas, and a set out of each",
-           "collection-string-keys": "text as a key, and text as what it stands for"}),
+           "collection-string-keys": "text as a key, and text as what it stands for",
+           "environment": "the environment, which is a table the compiler builds"}),
 )
 
 #: How many times each sample is compiled.  The best is kept.
