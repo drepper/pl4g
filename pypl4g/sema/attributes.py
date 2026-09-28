@@ -117,6 +117,9 @@ REGISTRY: Final[Mapping[str, AttrSpec]] = {
                  doc="a test of the given kind; `suite` where none is named"),
         AttrSpec("build", AttrTarget.FUNCTION, group="special",
                  doc="the function the compiler runs to find out what to build"),
+        AttrSpec("environment", AttrTarget.FUNCTION, group="special",
+                 doc="makes the dictionary the environment is read through, "
+                     "which the entry point calls before the startup function"),
         AttrSpec("builtin", AttrTarget.FUNCTION,
                  doc="the compiler provides this function while it works out a "
                      "build; there is none of it in a program"),

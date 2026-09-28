@@ -2664,6 +2664,33 @@
       "option": "always-fails"
     },
     {
+      "number": 4400,
+      "name": "LANG_FUNCDEF_SPECIAL_BAD_ENVIRONMENT_SIGNATURE",
+      "severity": "error",
+      "message": "a function marked '@[environment]' must be written 'fn NAME(NAME: str⟦⟧) → ⸨str: str⸩', but '{name}' {problem}",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the function"
+        },
+        {
+          "name": "problem",
+          "type": "string",
+          "description": "how the signature differs"
+        }
+      ],
+      "cause": "The entry point calls this one itself, handing it the strings the runtime read off the stack the kernel set the process up on, and puts what it answers with in the record the program is started with.  So its signature is not the program's to choose: what it is given is that run of strings -- each name followed by what it stands for -- and what it must give back is the dictionary the environment is read through.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / The standard module / The environment",
+        "requirement": "A function marked `@[environment]` takes the run of strings the runtime read and answers a `⸨str: str⸩`."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 4401,
       "name": "LANG_FUNCDEF_SPECIAL_NO_STARTUP",
       "severity": "error",
@@ -6809,6 +6836,55 @@
       "spec": {
         "document": "spec/spec.md",
         "section": "The Language / Types / Strings"
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4598,
+      "name": "LANG_COLLECTION_NOT_WRITABLE",
+      "severity": "error",
+      "message": "'{found}' is read-only: nothing may be put in a collection whose type does not say 'mut'",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type of the collection written into"
+        }
+      ],
+      "cause": "A collection is a handle: the one who made it and the one who was handed it reach one table, so what may be done to that table is part of the type rather than of any one name for it -- which is how a reference already works.  A type written 'mut ⸨K: V⸩' says entries may be put in; one written without it says they may not, and a program holding the second cannot change what a program holding the first is reading.  That is what makes the environment something every part of a program sees the same.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Sets and dictionaries",
+        "requirement": "An entry may be put in a collection only through a type that says `mut`."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4599,
+      "name": "LANG_FIELD_NOT_WRITABLE",
+      "severity": "error",
+      "message": "'{name}' holds '{found}', which is read-only, so it is not a place to put another collection",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the field written to"
+        },
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type of the field"
+        }
+      ],
+      "cause": "A field whose type is a collection without 'mut' says that what stands there is not the program's to change.  Putting a different collection there would change it in every part of the program that reads the record, which is the thing the type rules out; that the table itself is untouched makes no difference to what the readers see.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Sets and dictionaries",
+        "requirement": "A field whose type is a read-only collection is not assignable."
       },
       "since": "0.1",
       "default_enabled": true,

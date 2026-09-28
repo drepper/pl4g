@@ -2807,11 +2807,15 @@
       }
     },
     "children": {
-      "multiple": false,
+      "multiple": true,
       "required": false,
       "types": [
         {
           "type": "attribute_list",
+          "named": true
+        },
+        {
+          "type": "mutable",
           "named": true
         }
       ]
@@ -6787,6 +6791,16 @@
           }
         ]
       }
+    },
+    "children": {
+      "multiple": false,
+      "required": false,
+      "types": [
+        {
+          "type": "mutable",
+          "named": true
+        }
+      ]
     }
   },
   {

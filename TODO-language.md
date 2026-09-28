@@ -232,9 +232,20 @@ To Do List for the PL4g language
     through `@[external]` and handed the ring as an `@[abi]` record.  qemu-user has no `io_uring`, so where one cannot be made the
     calls go straight to the kernel and every test still runs on all three targets.
 
-[ ] the environment, and whatever else a program is started with.  `std.Init` holds the devices and the words the program was
-    named with; what the kernel also leaves on the stack is the environment and the auxiliary vector, and the record is shaped so
-    that they can be added without any signature changing.
+[x] the environment.  `std.Init.env` is a `⸨str: str⸩` built before the startup function runs, and `std.Build.env` is the
+    compiler's own under the same name; both are read-only by their type.  Done 2026-09-28.
+
+[ ] the auxiliary vector, which is what the kernel leaves on the stack after the environment.  The record is shaped so that it
+    can be added without any signature changing, and nothing wants it yet: what is in it is page size, hardware capabilities and
+    where the vdso is, and the language reaches none of the three.
+
+[ ] walk a collection whose keys or values take more than one word.  `foreach k, v := d` over a `⸨u8: u8⸩` works and over a
+    `⸨str: str⸩` is refused by the backend (8501): the loop variable is bound to a value of several parts, which the instruction
+    selectors do not build.  Reading by key, writing and counting work whatever the table holds; only the walk is waiting, and
+    the environment is the first thing anybody would want to walk.
+
+[ ] take a key out of a collection.  What is put in stays in, which is enough for everything written so far and is not enough for
+    a table something keeps up to date.  It is the entry that makes a probe need a third state -- empty, taken, and once taken.
 
 [ ] a read that does not wait.  `std.write` answers a handle and `std.read` does not: what a read is for is the bytes, and a
     program that has not waited does not have them.  A program that wants several reads in flight -- from several descriptors --

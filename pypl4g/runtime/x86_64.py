@@ -20,7 +20,19 @@ BLOB = Blob(
                   "0031ff49c7c0ffffffff4531c90f054885c0784831c9eb1131ff4801"
                   "c248897a0848ffc14c39f9742c498b74ce084889ca48c1e204488934"
                   "104885f674da48c7c7ffffffff0f1f00807c3e0100488d7f0175f5eb"
-                  "c54889034c897b085b415e415fc3660f1f4400005541574156415541"
+                  "c54889034c897b085b415e415fc3660f1f4400004885ff0f84340100"
+                  "004157415653488b07488d1cc74883c31049c7c7feffffff48c7c6e0"
+                  "ffffff41be010000000f1f004883c62049ffce4a837cbb08004d8d7f"
+                  "0275ed4d85f60f84e7000000b809000000ba0300000041ba22000000"
+                  "31ff49c7c0ffffffff4531c90f054885c00f88c000000049f7de31c9"
+                  "4c89faeb350f1f004989f849f7d84989c949c1e1054a8934084e8944"
+                  "08084829fe4a897408104531c04e8944081848ffc14939ce0f848500"
+                  "0000488b34cbbf0100000049c7c0feffffff4531d266662e0f1f8400"
+                  "000000004d89d148ffcf42807c0602004d8d40014d8d52ff75ea4885"
+                  "ff74954531d2669042803c163d741949ffc249ffc175f1e97cffffff"
+                  "6666662e0f1f8400000000004989c949c1e1054a8934084e89540808"
+                  "4c01d648ffc64a897408104d29d0e96effffff31d231c05b415e415f"
+                  "c331d231c0c366666666662e0f1f8400000000005541574156415541"
                   "54534883ec104c8944249048894c248889542484897424804989ff48"
                   "8b074885c00f84f70100004883f801410f95c44d8d7758498daf9800"
                   "0000b30149c7c5ffffffff4d8b164d85d20f840f0300004d8b4f604d"
@@ -109,15 +121,16 @@ BLOB = Blob(
     ),
     symbols={
         "pl4g_args": (0, 0),
-        "pl4g_io_drain": (0, 1696),
+        "pl4g_env": (0, 160),
+        "pl4g_io_drain": (0, 2032),
         "pl4g_io_shape": (1, 0),
-        "pl4g_io_submit": (0, 160),
-        "pl4g_io_wait": (0, 1344),
+        "pl4g_io_submit": (0, 496),
+        "pl4g_io_wait": (0, 1680),
     },
     patches=(
-        Patch(piece=0, offset=1131, kind="pcrel32_at_field",
+        Patch(piece=0, offset=1467, kind="pcrel32_at_field",
               target=2, addend=-4),
-        Patch(piece=0, offset=1174, kind="pcrel32_at_field",
+        Patch(piece=0, offset=1510, kind="pcrel32_at_field",
               target=2, addend=-4),
     ),
 )

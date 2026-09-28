@@ -605,9 +605,19 @@ def _promises_as_much(expected: Type | None, found: Type) -> bool:
     is no use where the program's is wanted, and a place nothing may write is
     no use where writing is -- and the bits are the same either way, so what
     carries a value across is a bitcast and the generated code is unchanged.
+
+    A collection is asked the second of those questions for the reason a
+    reference is asked it: it is a handle, and a table nothing may put anything
+    in stands wherever one that may be written stands.
     """
     if found is expected:
         return False
+    if isinstance(expected, SetType) and isinstance(found, SetType):
+        return found.mutable and not expected.mutable \
+            and found.element is expected.element
+    if isinstance(expected, DictType) and isinstance(found, DictType):
+        return found.mutable and not expected.mutable \
+            and found.key is expected.key and found.value is expected.value
     if isinstance(expected, FuncType) and isinstance(found, FuncType):
         # A function that walks what it is given does everything one that does
         # not does, and the walk is the caller's business: a name that does not
@@ -620,6 +630,40 @@ def _promises_as_much(expected: Type | None, found: Type) -> bool:
         return False
     return ((found.lasting or not expected.lasting)
             and (found.mutable or not expected.mutable))
+
+
+def _read_only_table(ty: Type) -> bool:
+    """Whether *ty* is a collection nothing may put anything in."""
+    return isinstance(ty, (SetType, DictType)) and not ty.mutable
+
+
+#: The field of the record a program is started with that holds the
+#: environment, spelled here as `started.ENVIRONMENT` spells it: what asks the
+#: question is the semantic analysis and what acts on the answer is the entry
+#: point, and neither is the other's to import.
+ENVIRONMENT_FIELD: Final[str] = "env"
+
+
+def _reads_the_environment(node: object) -> bool:
+    """Whether anything below *node* names the environment of a record.
+
+    Asked of the syntax rather than of what it was lowered to, because every
+    way a program can reach that field -- reading it, writing through it,
+    taking its address, walking it -- spells the name, and nothing that does
+    not spell it can reach the field of a record it was handed.  A program that
+    builds a record of its own and puts something there is answering the
+    question for itself, and spells the name doing it.
+    """
+    if isinstance(node, ast.Node):
+        if getattr(node, "name", None) == ENVIRONMENT_FIELD \
+                and isinstance(node, (ast.Member, ast.MemberAssign,
+                                      ast.Named)):
+            return True
+        return any(_reads_the_environment(getattr(node, one.name))
+                   for one in fields_of(node))
+    if isinstance(node, (list, tuple)):
+        return any(_reads_the_environment(one) for one in node)
+    return False
 
 
 def _reaches_a_place(ty: Type) -> bool:
@@ -2630,6 +2674,13 @@ class Checker:
                     return
                 self._check_build_signature(func, node)
                 self._module.build = func
+            case SpecialKind.ENVIRONMENT:
+                self._check_environment_signature(func, node)
+                # The later of two is the one that is called, and nothing
+                # reports the earlier: one module provides this and a program
+                # that has two has two copies of `std`, which is refused where
+                # the second is read rather than here.
+                self._module.environment = func
             case SpecialKind.CONSTRUCTOR:
                 self._check_ctor_signature(func, node, "constructor")
                 self._module.ctors.append(func)
@@ -2681,6 +2732,27 @@ class Checker:
             self._diags.emit(D.LANG_FUNCDEF_SPECIAL_BAD_SIGNATURE, node.name_span,
                              name=func.name, type=STARTUP_RETURN_TYPE_NAME,
                              problem=problem)
+
+    def _check_environment_signature(self, func: Function,
+                                     node: ast.FuncDef) -> None:
+        """Check the signature of the function that makes the environment.
+
+        The entry point calls it, with the address the kernel set the process up
+        at and nothing else, and puts what it answers with in the record the
+        program is started with.  So neither half is the program's to choose.
+        """
+        if func.ty.ret is ERROR or ERROR in func.ty.params:
+            return
+        wanted = self._module.types.dict_type(STR, STR)
+        strings = self._module.types.array_type(STR, (None,))
+        problem: str | None = None
+        if len(func.ty.params) != 1 or func.ty.params[0] is not strings:
+            problem = "it takes something else"
+        elif func.ty.ret is not wanted:
+            problem = "".join(("it answers with '", func.ty.ret.render(), "'"))
+        if problem is not None:
+            self._diags.emit(D.LANG_FUNCDEF_SPECIAL_BAD_ENVIRONMENT_SIGNATURE,
+                             node.name_span, name=func.name, problem=problem)
 
     def _check_ctor_signature(self, func: Function, node: ast.FuncDef, kind: str) -> None:
         """Check that a constructor or destructor takes nothing and returns void."""
@@ -2863,6 +2935,12 @@ class Checker:
                     # Writing into what it was handed is the whole of what a
                     # build function does, so it says so by being one: there is
                     # nothing it could be that also had to be written `impure`.
+                    impure = True
+                case "environment":
+                    special = SpecialKind.ENVIRONMENT
+                    # It asks the system for what the process was started with
+                    # and takes room out of an arena to hold it, so it says so
+                    # by being one, the way a build function does.
                     impure = True
                 case "builtin":
                     builtin = True
@@ -3346,15 +3424,15 @@ class Checker:
                              found=element.render())
             element = ERROR
         if ref.value is None:
-            return (self._module.types.set_type(element) if element is not ERROR
-                    else ERROR)
+            return (self._module.types.set_type(element, ref.mutable)
+                    if element is not ERROR else ERROR)
         value = self._resolve_type(ref.value)
         if element is ERROR or value is ERROR:
             return ERROR
         if value is VOID:
             self._diags.emit(D.LANG_COLLECTION_VALUE_IS_NOTHING, ref.value.span)
             return ERROR
-        return self._module.types.dict_type(element, value)
+        return self._module.types.dict_type(element, value, ref.mutable)
 
     def _named_type(self, ref: ast.TypeRef) -> Type:
         """Resolve a type name, reporting an unknown one.
@@ -3431,6 +3509,9 @@ class Checker:
         node, func = entry.node, entry.func
         if node.body is None:
             return
+        if not self._module.reads_environment \
+                and _reads_the_environment(node):
+            self._module.reads_environment = True
         previous = self._discard_function
         self._discard_function = False
         # Which function this is, for the one rule that is about where a call is
@@ -4571,6 +4652,13 @@ class Checker:
                              type=ty.render(), name=stmt.name)
             return
         if not self._record_may_change(stmt.base, stmt.name_span):
+            return
+        if _read_only_table(ty.fields[at][1]):
+            # A field holding a collection the type says nothing may be put in
+            # is not a place to put a different collection either: what stands
+            # there is what everything reading the record reads.
+            self._diags.emit(D.LANG_FIELD_NOT_WRITABLE, stmt.name_span,
+                             name=stmt.name, found=ty.fields[at][1].render())
             return
         if not self._made_here(where):
             # The record may be the caller's -- a reference says nothing about
@@ -5969,15 +6057,18 @@ class Checker:
                 self._diags.emit(D.LANG_COLLECTION_KEY_NOT_HASHABLE,
                                  written[0][0].span, found=keys.render())
                 return UndefConst(ERROR)
+            # What is written down is fresh and belongs to whoever is given
+            # it, so it is the writable type; a name or a parameter that says
+            # otherwise takes it as the weaker one, which costs nothing.
             if isinstance(expr, ast.SetLit):
-                ty = self._module.types.set_type(keys)
+                ty = self._module.types.set_type(keys, True)
             else:
                 held = self._same_type(
                     ready.values, [v.span for _, v in written if v is not None],
                     ready.wanted_value)
                 if held is ERROR:
                     return UndefConst(ERROR)
-                ty = self._module.types.dict_type(keys, held)
+                ty = self._module.types.dict_type(keys, held, True)
         if not self._accepts(expected, ty):
             self._report_mismatch(expr.span, ty, expected)
             return UndefConst(ERROR)
@@ -6297,6 +6388,10 @@ class Checker:
             return
         if not isinstance(ty, DictType):
             self._diags.emit(D.LANG_ENTRY_ASSIGN_NOT_A_DICT, stmt.base.span,
+                             found=ty.render())
+            return
+        if not ty.mutable:
+            self._diags.emit(D.LANG_COLLECTION_NOT_WRITABLE, stmt.base.span,
                              found=ty.render())
             return
         key = self._lower_expr(builder, stmt.key, ty.key)
@@ -7251,7 +7346,7 @@ class Checker:
                 return self._module.types.array_type(
                     element, (len(iterable.elements), *inner))
             case ast.SetLit():
-                return self._module.types.set_type(declared)
+                return self._module.types.set_type(declared, True)
             case _:
                 return None
 

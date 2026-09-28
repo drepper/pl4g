@@ -55,7 +55,8 @@ def emit_start(asm: Assembler, module: Module, cconv: CallConvDesc,
     # What the kernel set the process up with is at the stack pointer, and this
     # is the only moment it is: everything below puts something there.  It waits
     # in a register a call leaves alone until the runtime is asked to read it.
-    if started.arguments_at(module, layout) is not None:
+    if started.arguments_at(module, layout) is not None \
+            or started.environment_at(module, layout) is not None:
         asm.loadreg(HELD_STACK, asm.reg(SP))
     # The outermost stack frame is marked by a null frame pointer and a null
     # return address, so that a debugger unwinding the stack knows where to stop.
@@ -71,6 +72,7 @@ def emit_start(asm: Assembler, module: Module, cconv: CallConvDesc,
     else:
         _make_stack(asm, module)
         _read_arguments(asm, module, layout)
+        _read_environment(asm, module, cconv, layout)
         if started.wanted_by(module) is not None:
             # Where the record the program was started with is, which is the
             # whole of what is handed over.
@@ -254,6 +256,50 @@ def _read_arguments(asm: Assembler, module: Module,
         asm.op(ops.PLUS, theirs.int_arg_regs[1],
                asm.reg(theirs.int_arg_regs[1]), asm.imm(at, 12, signed=False))
     asm.call(started.READS_ARGUMENTS)
+
+
+def _read_environment(asm: Assembler, module: Module, cconv: CallConvDesc,
+                      layout: DataLayout) -> None:
+    """Have `std` make the environment, and put it in the record.
+
+    Two halves, because neither side can do both: the runtime knows where the
+    strings are and nothing of how a table is laid out, and the language knows
+    how to build one and has no way to reach the stack the process started on.
+    So the runtime is asked for the strings, with the address the kernel set the
+    process up at, and they are handed to a function of `std` that builds the
+    dictionary out of them; what comes back is the one word that goes where the
+    record says.
+
+    Two conventions, because there are two callees: the runtime is C and the
+    function of `std` is the program's own.
+    """
+    at = started.environment_at(module, layout)
+    if at is None:
+        return
+    builder = module.environment
+    assert builder is not None, "the record has the field and nothing fills it"
+    theirs = lookup_cconv(SYSTEM_CCONV)
+    asm.loadreg(theirs.int_arg_regs[0], asm.reg(HELD_STACK))
+    asm.call(started.READS_ENVIRONMENT)
+    # What the runtime answers with is a run of strings, which is two words, and
+    # they go straight on as the one argument the function of `std` takes.  The
+    # second is moved first where the first of them would land in the register
+    # the second came back in; nothing here can need a third register.
+    handed = (cconv.int_arg_regs[0], cconv.int_arg_regs[1])
+    came = (theirs.int_ret_regs[0], theirs.int_ret_regs[1])
+    assert not (handed[0] == came[1] and handed[1] == came[0]), \
+        "the two would have to be exchanged"
+    order = (1, 0) if handed[0] == came[1] else (0, 1)
+    for which in order:
+        if handed[which] != came[which]:
+            asm.loadreg(handed[which], asm.reg(came[which]))
+    asm.call(symbol_name(builder))
+    # The second argument register rather than the first: on one of these
+    # targets the first is also the one an answer comes back in.
+    where = cconv.int_arg_regs[1]
+    asm.address(where, started.SYMBOL)
+    asm.store(asm.mem(base=where, disp=at, size_bits=64),
+              asm.reg(cconv.int_ret_regs[0]))
 
 
 def _run_tests(asm: Assembler, module: Module, cconv: CallConvDesc,

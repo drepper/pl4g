@@ -122,6 +122,11 @@ class CollectionTypeRef(Node):
     element: TypeExpr
     #: What a key stands for, where the type is a dictionary.
     value: TypeExpr | None = None
+    #: Whether entries may be put in through a value of this type, which is
+    #: what `mut` before it says.  It is part of the type, as a reference's
+    #: `mut` is and for the reason a reference's is: a collection is a handle,
+    #: so what may be done to the table is what everything holding one knows.
+    mutable: bool = False
 
 
 @dataclass(frozen=True, slots=True)

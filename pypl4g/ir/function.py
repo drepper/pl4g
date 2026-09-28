@@ -43,6 +43,12 @@ class SpecialKind(StrEnum):
     #: image: what it leaves behind is a description, and the description is what
     #: gets compiled.
     BUILD = "build"
+    #: The function `std` provides that makes the dictionary the environment
+    #: is read through.  The entry point calls it and puts what it answers
+    #: with in the record the program is started with: nothing the program
+    #: writes calls it, and the table it makes cannot be made by the runtime,
+    #: which knows nothing of how a table is laid out.
+    ENVIRONMENT = "environment"
     CONSTRUCTOR = "constructor"
     DESTRUCTOR = "destructor"
     TEST_ALWAYS = "test_always"

@@ -89,6 +89,15 @@ class Module:
     #: program has one.  A module with one describes a build and is not a
     #: program: nothing of it is compiled, and what it leaves behind is.
     build: Function | None = None
+    #: Whether anything in the program reads the environment, which is what
+    #: decides whether the entry point builds it.  A program that never names
+    #: that field carries neither the table it would be held in nor the code
+    #: that would fill it -- the same bargain the arguments already strike.
+    reads_environment: bool = False
+    #: The function that makes the dictionary the environment is read through,
+    #: where the program is one that reads it.  It is `std`'s, and what calls
+    #: it is the entry point.
+    environment: Function | None = None
     ctors: list[Function] = field(default_factory=list)
     dtors: list[Function] = field(default_factory=list)
     tests: list[Function] = field(default_factory=list)

@@ -219,7 +219,7 @@ type Writer     ※ a device that can be written
 type ReadWriter ※ both, which is what a socket and a file opened either way are
 
 type Io   = input : Reader ; output : Writer ; errors : Writer
-type Init = io : Io ; args : str⟦⟧
+type Init = io : Io ; args : str⟦⟧ ; env : ⸨str: str⸩
 
 type Pending ※ a write that has been started
 enum Error   ※ what the kernel said, where it refused, by name
@@ -240,6 +240,28 @@ gives them.  `ReadWriter` is declared for what will answer one and nothing answe
 as it is everywhere, and the rest are what followed.  Each is a `str` -- bytes and a length -- and the length is counted once
 before the program starts rather than by everything that reads one; the kernel's own shape is a nul at the end, which nothing in
 this language has a use for.
+
+**`env` is the environment**, a dictionary from a name to what it stands for.  What the kernel leaves after the arguments is
+another run of `NAME=VALUE` strings; each is split at the first `=` where its bytes already are, so a name and a value point into
+the string the kernel handed over and nothing is copied.  A variable with no `=` in it is a name standing for nothing, and one
+written `NAME=` is a name standing for text of no length -- which is a value, and is not the same answer as having none.
+
+```
+let home: str = init⌖.env⸨"HOME"⸩ ?? "/"
+```
+
+**Nothing may be put in it** (4598, 4599).  Its type is `⸨str: str⸩` and not `mut ⸨str: str⸩`, so an entry assignment is
+refused and the field is not a place to put a different dictionary: every part of a program reads the one environment.  There is nothing to start a process with
+yet, so an environment a program could change would be a change nobody could observe -- which is where C's `setenv`, Go's
+`os.Setenv` and Python's writable `os.environ` differ, and Rust's `set_var`, which is `unsafe` for a reason that has nothing to do
+with this one.
+
+**A program that never names it carries none of it** -- no table, no hashing of names and nothing asked of the system.  What
+decides is whether the program spells the field: every way of reaching a field of a record it was handed spells the name.
+
+**The same environment is there while a build runs**: `std.Build.env` is what the compiler was run with, read the same way and
+read-only for the same reason.  So a build file asking where to write and a program asking where its data is ask one question one
+way.
 
 **A descriptor is a type and not a number.**  What says a thing may be written is the type of the name standing for it, so there is
 no way to hand a `Reader` to `write` and no way to write to a number a program made up.  The three a process inherits arrive in
@@ -3034,6 +3056,27 @@ caller.  Python raises `KeyError`; this language has no exceptions and has a typ
 `d⸨k⸩ ← v` puts a value in a dictionary under a key.  A set has nothing to assign to (4434): a key goes into one by joining it
 with a set holding that key.
 
+**Putting anything in one needs `mut` in the type** (4598).  A collection type written `mut ⸨K: V⸩` says entries may be put in it
+and one written `⸨K: V⸩` says they may not, which is the distinction `&mut T` and `&T` draw about a place and is drawn here for
+the same reason: a collection is a handle, so the one who made it and the one who was handed it reach the one table, and what may
+be done to that table is part of the type rather than of any one name for it.
+
+```
+let d: mut ⸨str: u8⸩ = ⸨"a": 1u8⸩   ※ entries may be put in it
+d⸨"b"⸩ ← 2u8
+let seen: ⸨str: u8⸩ = d              ※ the same table, read-only from here
+fn holds(t: ⸨str: u8⸩, k: str) → bool    ※ and a parameter that promises not to write
+```
+
+`mut` stands where a type stands: before a variable's, before a parameter's, before a field's and before what a function answers
+with.  On a variable or a parameter it is the one it has always been -- the name may be bound to something else -- and a
+collection is where that one word says the second thing as well, there being two ways a handle can change.  A collection written
+down is fresh and is the writable type, so a literal may be given to either.
+
+**It goes one way only.**  A table that may be written stands wherever one that may only be read is wanted, as `&mut T` stands
+where `&T` is wanted; the bits are the same handle and nothing is generated for the crossing.  A field whose type is a read-only
+collection is not a place to put a different collection either (4599): what stands there is what every part of the program reads.
+
 **Four operators join two sets**, with the meanings and the spellings Python gives them:
 
 | Written | Holds |
@@ -3069,8 +3112,8 @@ and nothing else, which is one word: how much it holds and how much room it has 
 so that two names for one collection see one answer.  The table is elsewhere and is no part of the value, which is what lets a
 collection be passed to a function and answered with like anything else.
 
-A dictionary's value has to fit in a word (4445), which is the same restriction its key has for a duller reason: an entry is
-words, and what goes in one has to fit in one.
+What a key stands for may be a value of any size: an entry is a run of words, and a value of several goes in one as readily as a
+value of one does.  What it may not be is something with no size to copy (4445).
 
 Nothing takes a key out of a collection yet, so what is put in stays in.
 
@@ -3079,10 +3122,9 @@ first entry; Go, whose maps are built in and which has no set; Rust, where both 
 language emitted by a generator wants the shape written down rather than constructed by a call, which is why these have syntax
 here.
 
-**Nothing builds one yet.**  Everything above is written, typed and checked; a program that uses a collection is told the compiler
-lacks the feature (9902).  What is missing is not the collection: it is a heap for the table to be in, which the compiler must
-emit itself and whose shape is an open question, and a loop for a lookup to walk, which the language does not have.  Both are in
-the to-do lists.
+**What is not built yet** is a walk over a collection whose keys or whose values take more than one word: `foreach k, v := d` over
+a `⸨str: str⸩` is refused by the backend (8501) where the same walk over a `⸨u8: u8⸩` is not.  Reading one by key, writing one and
+counting one work whatever it holds; only the walk is waiting, and it is in the to-do lists.
 
 ### Statements
 
@@ -4376,6 +4418,7 @@ The attributes that mark them are:
 | `@[test(build)]` | a test that runs when a build finishes |
 | `@[test(suite)]` | a test that runs when a testsuite run is requested |
 | `@[build]` | the function the compiler runs to find out what to build.  At most one per program |
+| `@[environment]` | makes the dictionary the environment is read through, which the entry point calls.  The `std` module has the one there is |
 
 The three kinds of test are one attribute with a parameter rather than three attributes, because they are three answers to one
 question.  These attributes exclude one another: a function is one of these things or none of them.
@@ -4418,6 +4461,18 @@ command line said, so a build file says only what it means to decide.  What to b
 takes a name and the run of sources to build it from; the sources are found beside the build file, so a build file is a way into
 a project from anywhere.  `std.option` and `std.option_flag` ask what the command line said about a name, which is written
 `-Dname=value` or `-Dname`, so that a build file can be told something from outside without being edited.
+
+**A build reads the environment the compiler was run with.**  `std.Build.env` is a `⸨str: str⸩`, the same type under the same
+name a running program reads its own under, and read the same way:
+
+```
+b⌖.output_dir ← b⌖.env⸨"PL4G_OUT"⸩ ?? "out"
+```
+
+It is read-only for the reason the program's is: the type says so (4598), and a build that could change it would be changing
+something nobody can observe.  It differs from `std.option` in where the answer comes from and in nothing else -- an option is
+what this command line said and a variable is what the surroundings say -- so a build file that wants either asks both and says
+which it prefers.
 
 The functions the compiler provides are marked `@[builtin]` where the `std` module declares them: they have no body and no symbol,
 and what they do is change a description the compiler is holding.  Calling one from a program is calling something that is not

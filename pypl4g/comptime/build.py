@@ -34,6 +34,7 @@ OPT_LEVEL: Final[str] = "opt_level"
 MCLEVEL: Final[str] = "mclevel"
 STACK_SIZE: Final[str] = "stack_size"
 GUARD_SIZE: Final[str] = "guard_size"
+ENV: Final[str] = "env"
 
 #: What `-Dname` on its own means, and what counts as saying so.
 SAID_SO: Final[frozenset[str]] = frozenset(("true", "yes", "on", "1"))
@@ -58,6 +59,9 @@ class Plan:
     mclevel: str = ""
     stack_size: int = 0
     guard_size: int = 0
+    #: What the compiler was run with, which a build function reads and cannot
+    #: change: the type says so, and nothing here reads it back.
+    env: Mapping[str, str] = field(default_factory=dict)
     artifacts: list[Artifact] = field(default_factory=list)
 
     def record(self) -> Record:
@@ -65,7 +69,8 @@ class Plan:
         return Record(TYPE_NAME, {
             OUTPUT_DIR: self.output_dir, TARGET: self.target,
             OPT_LEVEL: self.opt_level, MCLEVEL: self.mclevel,
-            STACK_SIZE: self.stack_size, GUARD_SIZE: self.guard_size})
+            STACK_SIZE: self.stack_size, GUARD_SIZE: self.guard_size,
+            ENV: dict(self.env)})
 
     def settle(self, record: Record) -> None:
         """Read back what the build function wrote into the object.
@@ -73,6 +78,10 @@ class Plan:
         Only the fields this knows about: a field the module gained and this did
         not is one nothing reads, which is a thing to notice here rather than
         somewhere a build quietly does the wrong thing.
+
+        The environment is not among them.  It is read-only by its type, so
+        there is nothing to read back: what the function was given is what it
+        still has.
         """
         self.output_dir = _as_text(record, OUTPUT_DIR, self.output_dir)
         self.target = _as_text(record, TARGET, self.target)

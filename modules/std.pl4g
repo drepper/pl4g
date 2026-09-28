@@ -39,7 +39,38 @@ type Io = input : Reader ; output : Writer ; errors : Writer
 ※ nul at the end, and the length is counted once before the program starts
 ※ rather than by everything that reads one.
 @[export]
-type Init = io : Io ; args : str⟦⟧
+type Init = io : Io ; args : str⟦⟧ ; env : ⸨str: str⸩
+
+※ -- the environment -----------------------------------------------------------
+
+※※ Make the dictionary the environment is read through.
+※※
+※※ \details Nothing a program writes calls this: the entry point does, before the
+※※ startup function, having asked the runtime to read the environment off the
+※※ stack the kernel set the process up on -- which is the only place it can be
+※※ found and the only moment it can be reached.  What this answers with goes in
+※※ `Init.env`, whose type says nothing may be put in it afterwards: every part of
+※※ a program reads the one environment, and the strings in it are the kernel's
+※※ and are never copied.
+※※
+※※ \param raw what the runtime read off the stack: a run of strings, each name
+※※ followed by what it stands for, flat because there is nothing to write here
+※※ that would take a pair apart into a key and a value
+※※ \return the environment, a name standing for what it was given
+@[environment]
+fn environment(raw: str⟦⟧) → ⸨str: str⸩:
+    let made: mut ⸨str: str⸩ = ⸨⸩
+    ※ Two at a time: a name, then what it stands for.
+    let name: mut str = ""
+    let waiting: mut bool = false
+    foreach one := raw:
+        if waiting:
+            made⸨name⸩ ← one
+            waiting ← false
+        else:
+            name ← one
+            waiting ← true
+    made
 
 ※※ What the kernel said, where it refused.
 ※
@@ -228,7 +259,11 @@ type Build =
     ※ How much room a program's own stack has, and how much unreachable space
     ※ sits below it.
     stack_size : u64 ;
-    guard_size : u64
+    guard_size : u64 ;
+    ※ What the compiler was run with, read the way a program reads its own.
+    ※ Nothing may be put in it: a build reads the environment and does not
+    ※ make one.
+    env : ⸨str: str⸩
 
 ※※ Add a program to what this build builds.
 ※※

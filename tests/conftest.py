@@ -110,6 +110,10 @@ class Expectations:
     #: Extra options to pass to the compiler, for the test to ask for a warning
     #: that is off by default, for instance.
     extra_args: list[str] = field(default_factory=list)
+    #: What to set in the environment of the binary when it is run, for the
+    #: one test whose subject is the environment.  A test that says nothing
+    #: runs with what the suite was run with.
+    environment: dict[str, str] = field(default_factory=dict)
     xfail: str | None = None
     #: Whether the file is a module another test imports rather than a test of
     #: its own.  One has no startup function, so compiling it alone would fail
@@ -130,6 +134,12 @@ def parse_directives(text: str) -> Expectations:
             continue
         if body.startswith("args "):
             result.extra_args.extend(body[len("args "):].split())
+            continue
+        if body.startswith("setenv "):
+            # Split at the first '=' and no further: a value may hold spaces
+            # and an '=' of its own, and both are worth a test.
+            name, _, value = body[len("setenv "):].partition("=")
+            result.environment[name.strip()] = value
             continue
         if body.startswith("expect-diag"):
             parts = body.split()
@@ -296,7 +306,9 @@ class PL4GItem(pytest.Item):
 
     def _check_run(self, command: Sequence[str], how: str) -> None:
         """Run the generated binary and check the status it exits with."""
-        proc = subprocess.run(list(command), capture_output=True, timeout=60)
+        proc = subprocess.run(list(command), capture_output=True, timeout=60,
+                              env={**os.environ, **self.expectations.environment}
+                              if self.expectations.environment else None)
         assert proc.returncode == self.expectations.exit_status, "".join((
             "running ", how, ": ", describe(proc)))
 

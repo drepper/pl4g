@@ -147,8 +147,12 @@ module.exports = grammar({
       repeat1(seq('|', repeat($._newline), $.type_part)),
     ),
 
+    // `mut` before the type of a field says of a collection what it says of a
+    // variable's: entries may be put in it.  A field is never bound to
+    // something else, so that is all it can say here.
     type_part: $ => seq(
-      field('name', $.identifier), ':', field('type', $.type),
+      field('name', $.identifier), ':', optional($.mutable),
+      field('type', $.type),
     ),
 
     // The arrow and what follows it say what the function answers with.
@@ -163,7 +167,8 @@ module.exports = grammar({
       'fn',
       field('name', $.identifier),
       field('parameters', $.parameter_list),
-      optional(seq($._return_arrow, field('return_type', $.type))),
+      optional(seq($._return_arrow, optional($.mutable),
+                   field('return_type', $.type))),
       optional(field('body', $._block)),
     ),
 

@@ -6500,6 +6500,76 @@ by strings is written by hand every time; **Zig**, where the hash and the equali
 are passed to the table as functions, which is the other way to pay for this and
 puts the choice in the program rather than in the compiler.
 
+## 2026-09-28T20:30+02:00 — language, compiler
+
+**The environment is a dictionary, and it is read-only by its type**
+
+At the user's direction: "support for reading environment variables in std.Build
+by implementing a dictionary.  in a similar way, std.Init has the same content
+available with the same name.  the content of the environment is strictly
+read-only".  The user chose "a real `⸨str: str⸩`" over the two cheaper answers --
+a call `std.getenv(name)` walking the strings, and a run of `〈str, str〉` pairs --
+and chose "a property of the type" over the alternatives for how read-only is
+enforced.
+
+**A collection type carries `mut`, and that is what read-only means.**  The other
+two answers were a property of the *binding* (`let e: ⸨str: str⸩` is read-only,
+`let e: mut ⸨str: str⸩` is not) and a rule about the *field* (this field of this
+record of this module may not be written).  Neither works: a field reached
+through `&mut Init` is reachable from a mutable binding whatever the binding
+says, and a rule about one field is a rule the language cannot state.  A
+collection is a handle -- the decision of 2026-05-31 says so: "a collection is
+shared, not copied, on assignment" -- so what may be done to the table it names
+belongs to the type, exactly as it does for `&T` and `&mut T`.  `_promises_as_much`
+already asked that question for references and now asks it for collections; the
+crossing is a bitcast and generates nothing.
+
+`mut` stands before the type wherever a type stands -- a variable's, a
+parameter's, a field's, what a function answers with -- and on a variable or a
+parameter it is the word already there, saying the one thing it said and, for a
+handle, the second thing too.  So no existing program changed: everything that
+writes a collection already wrote `mut` where its type is written.  What is not
+expressible yet is a *nested* writable collection (`⸨str: mut ⸨str: u8⸩⸩`), which
+needs `mut` inside a type rather than before one, and which nothing wants yet.
+
+Compare: **Rust**, where `&mut HashMap` and `&HashMap` put it on the borrow and
+the collection itself has no such property; **C++**, `const std::map&`, the same
+answer through a reference; **D**, where `const` and `immutable` are part of the
+type as they are here, and are transitive, which this is not; **Go**, which
+cannot say it of a map at all; **Zig**, where a `*const` pointer to one says it.
+What decided it here is that a collection is one word and is passed by value, so
+there is no reference for the promise to live on: it has to be in the type of the
+thing itself.
+
+**The environment itself is built by both halves of the compiler.**  The strings
+are on the stack the kernel set the process up on -- reachable only by the entry
+point, only before anything runs -- and what they must become is a hash table,
+which only the language knows how to build.  So the runtime splits each
+`NAME=VALUE` where its bytes already are and answers a flat run of strings, and a
+function of `std` marked `@[environment]` builds the dictionary out of it; the
+entry point calls the one, hands the answer to the other, and stores what comes
+back in `Init.env`.  The alternative -- a constructor in `std` -- cannot work:
+the record the entry point fills is the compiler's own object and nothing written
+in the language can name it.
+
+**A program that never names it carries none of it**, which is the bargain the
+arguments already strike and is worth 1.5 KB of image.  What decides is a scan of
+the syntax for a member called `env`, sound because every way of reaching a field
+of a record a program was handed spells the name.
+
+**At build time it is the compiler's own environment**, under the same name and
+of the same type.  A lookup that finds nothing answers `MISSING`, which `??`
+reads and everything else refuses, so a build file that uses a variable nobody
+set without saying what to do instead is told where.  It differs from
+`std.option` in where the answer comes from and in nothing else.
+
+**What is not there.**  Nothing changes the environment, and nothing can: there
+is no way to start a process, so a written environment would be a change nobody
+could observe.  C's `setenv`, Go's `os.Setenv`, Python's writable `os.environ`
+and Rust's `unsafe fn set_var` all exist to affect what a process starts; when
+this language can start one, what it starts it with will be an argument to that
+call and not a global the whole program shares.
+
 Open questions
 --------------
 

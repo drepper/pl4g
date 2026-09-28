@@ -667,14 +667,21 @@ class SetType(Type):
     """A set: the keys it holds, and nothing said about them beyond membership."""
 
     element: Type
+    #: Whether what it holds may be changed through a value of this type.  It
+    #: is part of the type for the reason a reference's `mut` is: a collection
+    #: is a handle, so the one who made it and the one who was handed it reach
+    #: the same table, and what may be done to it is what the type says.
+    mutable: bool = False
 
     def render(self) -> str:
         """The name of this type in the textual form of the IR."""
-        return "".join(("\N{LEFT DOUBLE PARENTHESIS}", self.element.render(), "\N{RIGHT DOUBLE PARENTHESIS}"))
+        return "".join(("mut " if self.mutable else "",
+                        "\N{LEFT DOUBLE PARENTHESIS}", self.element.render(), "\N{RIGHT DOUBLE PARENTHESIS}"))
 
     def mangled(self) -> str:
         """The normalized name of this type, for use inside a symbol name."""
-        return "".join(("set<", self.element.mangled(), ">"))
+        return "".join(("set<", "mut " if self.mutable else "",
+                        self.element.mangled(), ">"))
 
 
 @dataclass(frozen=True, slots=True)
@@ -683,15 +690,20 @@ class DictType(Type):
 
     key: Type
     value: Type
+    #: Whether an entry may be put in through a value of this type.  See
+    #: `SetType.mutable`, which says the same thing about a set.
+    mutable: bool = False
 
     def render(self) -> str:
         """The name of this type in the textual form of the IR."""
-        return "".join(("\N{LEFT DOUBLE PARENTHESIS}", self.key.render(), ": ",
+        return "".join(("mut " if self.mutable else "",
+                        "\N{LEFT DOUBLE PARENTHESIS}", self.key.render(), ": ",
                         self.value.render(), "\N{RIGHT DOUBLE PARENTHESIS}"))
 
     def mangled(self) -> str:
         """The normalized name of this type, for use inside a symbol name."""
-        return "".join(("dict<", self.key.mangled(), ",", self.value.mangled(), ">"))
+        return "".join(("dict<", "mut " if self.mutable else "",
+                        self.key.mangled(), ",", self.value.mangled(), ">"))
 
 
 @dataclass(frozen=True, slots=True)
@@ -864,8 +876,8 @@ class TypeContext:
         self._arrays: dict[tuple[Type, tuple[int | None, ...]], ArrayType] = {}
         self._vectors: dict[tuple[Type, int], VecType] = {}
         self._lists: dict[Type, ListType] = {}
-        self._sets: dict[Type, SetType] = {}
-        self._dicts: dict[tuple[Type, Type], DictType] = {}
+        self._sets: dict[tuple[Type, bool], SetType] = {}
+        self._dicts: dict[tuple[Type, Type, bool], DictType] = {}
         self._pointers: dict[tuple[Type, bool, bool], PtrType] = {}
         self._functions: dict[tuple[tuple[Type, ...], Type], FuncType] = {}
         self._integers: dict[tuple[int, bool], IntType] = {
@@ -920,20 +932,21 @@ class TypeContext:
             self._lists[element] = found
         return found
 
-    def set_type(self, element: Type) -> SetType:
-        """Return the set type over *element*."""
-        found = self._sets.get(element)
+    def set_type(self, element: Type, mutable: bool = False) -> SetType:
+        """Return the set type over *element*, writable where *mutable*."""
+        found = self._sets.get((element, mutable))
         if found is None:
-            found = SetType(element)
-            self._sets[element] = found
+            found = SetType(element, mutable)
+            self._sets[(element, mutable)] = found
         return found
 
-    def dict_type(self, key: Type, value: Type) -> DictType:
+    def dict_type(self, key: Type, value: Type,
+                  mutable: bool = False) -> DictType:
         """Return the dictionary type from *key* to *value*."""
-        found = self._dicts.get((key, value))
+        found = self._dicts.get((key, value, mutable))
         if found is None:
-            found = DictType(key, value)
-            self._dicts[(key, value)] = found
+            found = DictType(key, value, mutable)
+            self._dicts[(key, value, mutable)] = found
         return found
 
     def result_type(self, ok: Type, err: Type | None = None) -> ResultType:

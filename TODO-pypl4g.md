@@ -512,6 +512,16 @@ To Do List for the pypl4g compiler
     says so.  Found beside the crash above; nothing the language offers today needs it.
 
 
+[ ] a unit conversion breaks what reads it.  With `unit ¤size → ¤idx` in scope, `let many: u64 ¤idx = #raw` compiles, and both
+    of these are wrong afterwards: `foreach i := first…many…2` runs one turn where the same loop with `many = 4` written out runs
+    two, and `⎕drop(many)` reaches the code generator and fails there (9901, "empty block").  Two symptoms of one thing -- the
+    value a `¤size → ¤idx` conversion produces -- and both predate the environment work, which is where they were found.  A
+    program that hits them is told an internal error or is silently miscompiled, which is the worse of the two.
+
+[ ] an error inside a loop over a converted range is reported as an internal error.  Reduced from the same program: the
+    diagnostic that should be reported (4441, a step that is not written down) is replaced by 9901, so the reader is told the
+    compiler broke rather than what to fix.  Error recovery leaves the arm's block without a terminator.
+
 Optimizations
 -------------
 

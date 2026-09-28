@@ -3025,6 +3025,55 @@ into the arm it should have jumped over -- a miscompile with nothing wrong in th
 instruction that was emitted.  The loop variable is called `at` now, and the
 comment beside it says why.
 
+The environment, in two halves
+------------------------------
+
+Neither side of the compiler can build the environment alone, which is why it is
+built by both.  The strings are on the stack the kernel set the process up on,
+which only the entry point can reach and only before anything else runs; what
+they have to become is a hash table, which only the language knows how to build
+-- the runtime is C and knows nothing of an entry's layout, and generating the
+table from the runtime would be generating it twice.
+
+So the entry point does three things, in `_read_environment` in each target's
+`startup.py`: it hands the saved stack address to `pl4g_env`, which answers with
+a run of counted strings -- each name followed by what it stands for, split at
+the first `=` where the bytes already are, so nothing is copied and a name and a
+value point into the string the kernel handed over.  It moves that run, which is
+two words, into the registers the language's convention passes one argument in.
+And it calls the function of `std` marked `@[environment]`, which walks the run
+two at a time and builds the dictionary, and stores the one word that comes back
+at the offset of `Init.env`.  Two calling conventions in three instructions,
+because there are two callees: the runtime is C and the builder is the program's
+own.
+
+**Flat rather than a run of pairs**, because a walk over a run of pairs would
+have to take a pair apart into a key and a value, and the backend cannot yet
+bind a loop variable to a value of several words.  A name kept from one turn to
+the next needs nothing the language does not have.
+
+**A program that never names it carries none of it.**  `Module.reads_environment`
+is set while a function is lowered, by a scan of its syntax for a member called
+`env`, and three things ask it: the entry point, which skips all of the above;
+the pass that drops what nothing reaches, which then drops the builder; and
+through it the table runtime for `⸨str: str⸩`, which nothing else names.  The
+scan is over the syntax rather than over what it was lowered to because every way
+of reaching a field of a record a program was handed *spells the name* -- reading
+it, writing through it, taking its address, walking it -- so what does not spell
+it cannot reach it.  A program that builds a record of its own is answering the
+question for itself, and spells the name doing it.
+
+That is 1.5 KB of image, measured: the same program with and without a line that
+reads `init⌖.env` is 11,616 and 10,128 bytes.
+
+**At build time it is a Python dictionary.**  `Plan.env` holds what the compiler
+was run with and `Plan.record()` puts a copy of it in the object the build
+function is handed; `settle()` never reads it back, there being nothing to read
+back from a field the type says nothing may be put in.  The evaluator answers a
+lookup with what the key stands for or with `MISSING`, which `??` reads and
+everything else refuses -- so a build file that uses a variable that was not set,
+without saying what to do instead, is told where it did.
+
 The compiler as a language server
 ---------------------------------
 

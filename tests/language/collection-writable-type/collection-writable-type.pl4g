@@ -1,0 +1,54 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ `mut` before a collection type says entries may be put in it.
+※
+※ It stands wherever a type stands: before a variable's, before a parameter's,
+※ before a field's, and before what a function answers with.  A collection is a
+※ handle, so this is the same question a reference's `mut` answers and it is
+※ answered in the same place -- in the type, where everything holding one can
+※ read it.
+※
+※ **One way only.**  A table that may be written stands wherever one that may
+※ only be read is wanted, and not the other way about: the bits are the same
+※ handle, and what changes is what the one holding it may do.  So a dictionary
+※ built here and handed to something that promises not to write it is handed
+※ over as it is, with nothing copied and nothing generated.
+※
+※ Compare: **Rust**, where `&mut HashMap` and `&HashMap` say it of the borrow;
+※ **C++**, where `const std::map&` says it of the reference; **D**, where
+※ `immutable` and `const` are part of the type as here; **Go**, which has no way
+※ to say it of a map at all.
+
+※ A record holding one of each.
+type Holder = table : mut ⸨str: u64⸩ ; frozen : ⸨str: u64⸩
+
+※ Written through a reference, which reaches the one table the record holds.
+@[impure]
+fn fill(h: &mut Holder):
+    h⌖.table⸨"a"⸩ ← 1u64
+
+※ Answered with, which is where a table built in a call comes from.
+@[impure]
+fn grown() → mut ⸨str: u64⸩:
+    let made: mut ⸨str: u64⸩ = ⸨⸩
+    made⸨"x"⸩ ← 7u64
+    made
+
+※ And read through a parameter that promises not to write it.
+fn told(d: ⸨str: u64⸩, key: str) → u64:
+    d⸨key⸩ ?? 0u64
+
+@[startup, impure]
+fn main() → u6:
+    let h: mut Holder = Holder(.table ← grown(), .frozen ← ⸨"b": 2u64⸩)
+    fill(&mut h)
+    if told(h.table, "a") ≠ 1u64:
+        1u6
+    elif told(h.table, "x") ≠ 7u64:
+        2u6
+    elif told(h.frozen, "b") ≠ 2u64:
+        3u6
+    elif told(h.frozen, "a") ≠ 0u64:
+        4u6
+    else:
+        0u6

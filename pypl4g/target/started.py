@@ -41,9 +41,18 @@ SECTION: Final[str] = ".data"
 #: which fields it has to reach, not where they are.
 DEVICES: Final[str] = "io"
 ARGUMENTS: Final[str] = "args"
+#: And the field holding the environment, which is a dictionary and so is not
+#: the runtime's to make: what fills it is a function of `std` that the entry
+#: point calls, the runtime handing over the strings and the language building
+#: the table out of them.
+ENVIRONMENT: Final[str] = "env"
 
-#: What the runtime is called that reads the arguments off the stack.
+#: What the runtime is called that reads the arguments off the stack, and what
+#: the one that reads the environment off it is called.  The second answers
+#: with the strings rather than writing them anywhere: what is made of them is
+#: a table, which only the language can build.
 READS_ARGUMENTS: Final[str] = "pl4g_args"
+READS_ENVIRONMENT: Final[str] = "pl4g_env"
 
 
 def wanted_by(module: Module) -> ProductType | None:
@@ -85,6 +94,27 @@ def arguments_at(module: Module, layout: DataLayout) -> int | None:
     if found is None:
         return None
     return where_in(found, ARGUMENTS, layout)[0]
+
+
+def environment_at(module: Module, layout: DataLayout) -> int | None:
+    """How far into the record the environment goes.
+
+    Nothing where the program takes no such record, where the record it takes
+    has no such field, or where nothing in the program can make the table: the
+    three are one question -- is this a program whose entry point has an
+    environment to hand over -- and one answer.
+    """
+    found = wanted_by(module)
+    if found is None or module.environment is None \
+            or not module.reads_environment \
+            or not has_field(found, ENVIRONMENT):
+        return None
+    return where_in(found, ENVIRONMENT, layout)[0]
+
+
+def has_field(found: ProductType, name: str) -> bool:
+    """Whether the record has a field of this name."""
+    return any(called == name for called, _ in found.fields)
 
 
 def entry_wants_runtime(module: Module) -> bool:

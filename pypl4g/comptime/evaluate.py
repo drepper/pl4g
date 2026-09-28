@@ -76,6 +76,24 @@ class Record:
     fields: dict[str, object] = field(default_factory=dict)
 
 
+class _Nothing:
+    """What a lookup that found nothing answers with.
+
+    A collection answers with a result -- what is there, or the fact that
+    nothing is -- and `??` is what reads one.  There is one of these and it is
+    compared by identity, so that a dictionary holding nothing under a key is
+    told apart from one holding something that happens to be false.
+    """
+
+    def __repr__(self) -> str:
+        """What a message about it says, which is what the language calls it."""
+        return "\N{UP TACK}"
+
+
+#: The one of them.
+MISSING: Final[_Nothing] = _Nothing()
+
+
 @dataclass(slots=True)
 class Reference:
     """What `&x` and `&mut x` answer with: the cell, not the value in it."""
@@ -434,6 +452,11 @@ class Evaluator:
             return self._truth(expr.left) and self._truth(expr.right)
         if op in (ast.BinaryOp.SHORT_OR, ast.BinaryOp.LOGIC_OR):
             return self._truth(expr.left) or self._truth(expr.right)
+        if op is ast.BinaryOp.OR_ELSE:
+            # The one that reads a result: what is on the right is worked out
+            # only where the left found nothing.
+            found = self._value(expr.left, missing=True)
+            return self._value(expr.right) if found is MISSING else found
         left = self._value(expr.left)
         right = self._value(expr.right)
         try:
@@ -450,7 +473,8 @@ class Evaluator:
         match expr.op:
             case ast.UnaryOp.LOGIC_NOT if isinstance(found, bool):
                 return not found
-            case ast.UnaryOp.LENGTH if isinstance(found, (list, str)):
+            case ast.UnaryOp.LENGTH if isinstance(found, (list, str, dict,
+                                                          set, frozenset)):
                 return len(found)
             case ast.UnaryOp.BIT_NOT if isinstance(found, int) \
                     and not isinstance(found, bool):
@@ -502,8 +526,22 @@ class Evaluator:
         return held[self._as_index(expr.indices[0], len(held))]
 
     def _index(self, expr: ast.Index) -> object:
-        """One entry of a collection, which nothing works out yet."""
-        raise CannotEvaluate(expr.span, "reading an entry of a collection")
+        """One entry of a collection: what the key stands for, or nothing.
+
+        A dictionary answers with what it holds under the key and a set with
+        whether the key is in it, which is what each of them answers at run
+        time.  Nothing found is `MISSING`, which `??` reads and everything else
+        refuses -- so a value that was not there cannot be used as one.
+        """
+        held = self._value(expr.base)
+        key = self._value(expr.key)
+        if isinstance(held, dict):
+            if not isinstance(key, (str, int, bool)):
+                raise CannotEvaluate(expr.span, "a key of this kind")
+            return held.get(key, MISSING)
+        if isinstance(held, (set, frozenset)):
+            return key in held
+        raise CannotEvaluate(expr.span, "reading an entry of this")
 
     def _address_of(self, expr: ast.AddressOf) -> object:
         """`&x` and `&mut x`, which answer with where the value lives."""
@@ -522,10 +560,20 @@ class Evaluator:
 
     # -- odds and ends ---------------------------------------------------------
 
-    def _value(self, expr: ast.Expr) -> object:
-        """What an expression comes to, with a reference followed."""
+    def _value(self, expr: ast.Expr, *, missing: bool = False) -> object:
+        """What an expression comes to, with a reference followed.
+
+        A lookup that found nothing is refused unless the caller is `??`, which
+        is the one thing that reads it: everywhere else, using what was not
+        there is the mistake and saying so where it is written is the report.
+        """
         found = self._expr(expr)
-        return found.cell.value if isinstance(found, Reference) else found
+        if isinstance(found, Reference):
+            found = found.cell.value
+        if found is MISSING and not missing:
+            raise CannotEvaluate(expr.span, "a value that is not there, which "
+                                            "\N{DOUBLE QUESTION MARK} reads and nothing else does")
+        return found
 
     def _record_of(self, expr: ast.Expr) -> Record:
         """The record an expression names, however it names it."""

@@ -188,6 +188,19 @@ def _begins_an_expression(kind: TokKind) -> bool:
     return kind in _STARTS_AN_EXPRESSION
 
 
+def _writable(found: ast.TypeExpr, mutable: bool) -> ast.TypeExpr:
+    """*found*, marked writable where `mut` was written before it.
+
+    `mut` before a type says two things, which are one thing said of the two
+    places a name can change: the name may be bound to something else, and --
+    where what it stands for is a handle rather than a value -- what it reaches
+    may be written.  A collection is a handle, so the second half lands on the
+    type; for everything else this is where the mark stops.
+    """
+    return replace(found, mutable=True) \
+        if mutable and isinstance(found, ast.CollectionTypeRef) else found
+
+
 class _Bail(Exception):
     """Unwinds to the top-level recovery point after an unrecoverable error."""
 
@@ -330,7 +343,7 @@ class Parser:
         mutable = self._accept(TokKind.KW_MUT) is not None
         declared: ast.TypeExpr | None = None
         if self._begins_a_type():
-            declared = self._parse_type_ref()
+            declared = _writable(self._parse_type_ref(), mutable)
         if self._accept(TokKind.EQUALS) is None:
             self._diags.emit(D.LANG_VARDEF_MISSING_INITIALIZER, name_token.span,
                              name=name_token.text)
@@ -500,7 +513,10 @@ class Parser:
         # being two ways of saying one thing.
         ret_type: ast.TypeExpr | None = None
         if self._accept(TokKind.ARROW) is not None:
-            ret_type = self._parse_type_ref()
+            # `mut` before what a function answers with says the same of it:
+            # what comes back is a collection whose entries may be written.
+            writable = self._accept(TokKind.KW_MUT) is not None
+            ret_type = _writable(self._parse_type_ref(), writable)
         # A function with no body is the declaration of one defined somewhere
         # else.  What says there is none is that the *line ends* here: a body
         # begins with a colon or a brace, and anything else after the header is
@@ -742,7 +758,7 @@ class Parser:
         name = self._expect(TokKind.IDENT)
         self._expect(TokKind.COLON)
         mutable = self._accept(TokKind.KW_MUT) is not None
-        written = self._parse_type_ref()
+        written = _writable(self._parse_type_ref(), mutable)
         return ast.Param(span=name.span.to(written.span), name=name.text,
                          type=written, mutable=mutable)
 
@@ -1053,7 +1069,12 @@ class Parser:
         """Parse one ``NAME ':' TYPE`` of a type definition."""
         name_token = self._expect(TokKind.IDENT)
         self._expect(TokKind.COLON, D.LANG_TYPEDEF_EXPECTED_COLON)
-        written = self._parse_type_ref()
+        # `mut` stands before the type here as it does in a definition, and a
+        # field is the one place it says nothing about a name: a field is never
+        # bound to something else, so what it says here is what it says of a
+        # collection -- that entries may be put in it.
+        mutable = self._accept(TokKind.KW_MUT) is not None
+        written = _writable(self._parse_type_ref(), mutable)
         return ast.Field(span=name_token.span.to(written.span),
                          name=name_token.text, name_span=name_token.span,
                          type=written)
@@ -1071,7 +1092,7 @@ class Parser:
             # and says the same thing there: the name may be bound to something
             # else later on.
             mutable = self._accept(TokKind.KW_MUT) is not None
-            written = self._parse_type_ref()
+            written = _writable(self._parse_type_ref(), mutable)
             # `\N{LEFTWARDS ARROW} VALUE` says what a caller that says nothing about this
             # parameter gets.  The glyph is the one an assignment is written
             # with, which is what this is: the name is bound to that value.

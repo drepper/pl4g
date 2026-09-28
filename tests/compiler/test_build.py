@@ -30,9 +30,10 @@ def _project(where: Path, build: str, **programs: int) -> None:
             PROGRAM.format(status=status), encoding="utf-8")
 
 
-def _build(where: Path, *arguments: str) -> subprocess.CompletedProcess[str]:
+def _build(where: Path, *arguments: str,
+           env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
     """Run the compiler in *where*, the way somebody in that directory would."""
-    return run_compiler(list(arguments), cwd=where)
+    return run_compiler(list(arguments), cwd=where, env=env)
 
 
 def test_a_build_file_names_what_to_build(tmp_path: Path) -> None:
@@ -259,3 +260,72 @@ fn build(b: &mut std.Build):
     assert proc.returncode == 0, describe(proc)
     assert sorted(p.name for p in tmp_path.iterdir()) == \
         ["build.pl4g", "one", "one.pl4g"]
+
+
+def test_a_build_reads_the_environment(tmp_path: Path) -> None:
+    """`std.Build.env` is what the compiler was run with, as a dictionary.
+
+    The same name a running program reads its own under, holding the same kind
+    of thing, so that a build file asking where to write and a program asking
+    where its data is ask the one question the one way.
+    """
+    _project(tmp_path, """\
+let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
+
+@[build]
+fn build(b: &mut std.Build):
+    b\N{POSITION INDICATOR}.output_dir \N{LEFTWARDS ARROW} b\N{POSITION INDICATOR}.env\N{LEFT DOUBLE PARENTHESIS}"PL4G_TEST_OUT"\N{RIGHT DOUBLE PARENTHESIS} ?? "elsewhere"
+    std.add_executable(b, "one", \N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}"one.pl4g"\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET})
+""", one=5)
+    proc = _build(tmp_path, env={"PL4G_TEST_OUT": "here"})
+    assert proc.returncode == 0, describe(proc)
+    assert (tmp_path / "here" / "one").is_file(), describe(proc)
+
+
+def test_a_build_reads_a_name_nothing_set(tmp_path: Path) -> None:
+    """What is not there is what `??` answers with, and using it is refused.
+
+    A lookup that found nothing is a value nothing but `??` may read, so a
+    build file that forgets to say what to do without it is told where.
+    """
+    _project(tmp_path, """\
+let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
+
+@[build]
+fn build(b: &mut std.Build):
+    b\N{POSITION INDICATOR}.output_dir \N{LEFTWARDS ARROW} b\N{POSITION INDICATOR}.env\N{LEFT DOUBLE PARENTHESIS}"PL4G_NOTHING_SETS_THIS"\N{RIGHT DOUBLE PARENTHESIS} ?? "fallback"
+    std.add_executable(b, "one", \N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}"one.pl4g"\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET})
+""", one=6)
+    proc = _build(tmp_path)
+    assert proc.returncode == 0, describe(proc)
+    assert (tmp_path / "fallback" / "one").is_file(), describe(proc)
+
+
+def test_a_build_counts_what_it_was_given(tmp_path: Path) -> None:
+    """`#` answers how many there are, as it does of anything else."""
+    _project(tmp_path, """\
+let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
+
+@[build]
+fn build(b: &mut std.Build):
+    if #b\N{POSITION INDICATOR}.env > 0:
+        std.add_executable(b, "one", \N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}"one.pl4g"\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET})
+""", one=7)
+    proc = _build(tmp_path)
+    assert proc.returncode == 0, describe(proc)
+    assert (tmp_path / "one").is_file(), describe(proc)
+
+
+def test_a_build_cannot_write_the_environment(tmp_path: Path) -> None:
+    """It is read-only by its type, at build time as at run time."""
+    _project(tmp_path, """\
+let std := \N{APL FUNCTIONAL SYMBOL QUAD}import("std")
+
+@[build]
+fn build(b: &mut std.Build):
+    b\N{POSITION INDICATOR}.env\N{LEFT DOUBLE PARENTHESIS}"PL4G_TEST_OUT"\N{RIGHT DOUBLE PARENTHESIS} \N{LEFTWARDS ARROW} "no"
+    std.add_executable(b, "one", \N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}"one.pl4g"\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET})
+""", one=8)
+    proc = _build(tmp_path)
+    assert proc.returncode != 0
+    assert "[PL4G-4598]" in proc.stderr, describe(proc)

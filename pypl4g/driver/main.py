@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import sys
+from os import environ
 from dataclasses import dataclass, field
 from pathlib import Path
 from time import perf_counter
@@ -134,7 +135,12 @@ class Driver:
                     opt_level=self.options.opt_level,
                     mclevel=self.options.mclevel or "",
                     stack_size=self.options.stack_size,
-                    guard_size=self.options.guard_size)
+                    guard_size=self.options.guard_size,
+                    # What the compiler was run with, which is what a build
+                    # function reads under the name a program reads its own
+                    # under.  A copy, so that nothing the build does could
+                    # change what the compiler itself sees.
+                    env=dict(environ))
         record = plan.record()
         evaluator = Evaluator(units, {STD_MODULE: build_builtins(
             plan, self.options.defines, self.diags)})

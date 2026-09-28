@@ -411,6 +411,58 @@ void pl4g_args(const u64 *stack, struct run *out)
   out->len = count;
 }
 
+/* -- the environment ------------------------------------------------------- */
+
+/* Read the environment off the same stack, as a run of names and values, each
+ * name followed by what it stands for.
+ *
+ * What the kernel leaves after the arguments is another run of pointers ended
+ * by a null, each of them `NAME=VALUE`.  The splitting is done here because
+ * this is where the bytes already are: a string in this language is where its
+ * bytes are and how many there are, so a name and a value are two such strings
+ * pointing into the one the kernel handed over, and nothing is copied.
+ *
+ * A variable with no `=` in it -- which a program started by hand may be given
+ * and the shell never produces -- is a name standing for nothing.
+ *
+ * Flat rather than a run of pairs: the language has a dictionary to put these
+ * in and no syntax for taking a pair apart into one, so what comes back is
+ * walked two at a time by the few lines of `std` that build the table. */
+struct run pl4g_env(const u64 *stack)
+{
+  struct run out = { 0, 0 };
+  if (stack == 0)
+    return out;
+  /* The count, that many arguments, a null, and then these. */
+  const unsigned char *const *envp =
+    (const unsigned char *const *) &stack[stack[0] + 2];
+  u64 count = 0;
+  while (envp[count] != 0)
+    count += 1;
+  if (count == 0)
+    return out;
+  i64 room = sys(NR_MMAP, 0, 2 * count * sizeof (struct counted),
+                 PROT_READ_WRITE, MAP_PRIVATE_ANONYMOUS, -1, 0);
+  /* As above: a refusal is a small negative number and an address is not. */
+  if (room < 0)
+    return out;
+  struct counted *made = (struct counted *) room;
+  for (u64 at = 0; at < count; ++at) {
+    const unsigned char *one = envp[at];
+    u64 len = how_long(one);
+    u64 split = 0;
+    while (split < len && one[split] != '=')
+      split += 1;
+    made[2 * at].at = one;
+    made[2 * at].len = split;
+    made[2 * at + 1].at = one + (split < len ? split + 1 : len);
+    made[2 * at + 1].len = split < len ? len - split - 1 : 0;
+  }
+  out.at = made;
+  out.len = 2 * count;
+  return out;
+}
+
 /* -- what the language calls ----------------------------------------------- */
 
 /* Start a request, answering the slot it is in.
