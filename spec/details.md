@@ -1007,6 +1007,7 @@ that diagnostics of one family stay numerically adjacent as they grow while unre
 | 4000-4199 | names and modules |
 | 4200-4399 | types |
 | 4400-4599 | special functions |
+| 4600-4699 | documentation comments |
 | 5000-5299 | control flow and returns |
 | 6000-6999 | purity, effects, aliasing and parallelization |
 | 7000-7499 | compile-time evaluation and reflection |
@@ -2972,6 +2973,27 @@ of order, so a cancellation is something to ignore rather than to race.
 printed about its stages goes to the standard error, which is the log an editor
 keeps -- and which is where a reader looks when the server itself is what is
 wrong.
+
+**A documentation comment is read into its parts.**  `front/doccomment.py` takes
+one apart: the prose it opens with is the summary, and a line beginning with `\`
+or `@` and a word is a command that runs until the next one.  It is in the front
+end rather than in the server because two things read the answer -- the checker,
+which asks whether a `\param` names a parameter, and the server, which shows what
+it says.  Nothing in it knows what is being documented: whether a name is a
+parameter is a question about a definition, and it is asked where definitions are.
+
+The parser keeps **the span of every line** of a comment beside its text, taken
+after the marker and after the spaces following it -- so a column in the comment's
+text is a column in the file, and a diagnostic about what a comment *says* points
+at the words it says it in.  That is one field on each definition node
+(`doc_lines`) and it is what makes the carets in 4600 to 4604 land on the command
+rather than on the definition's name.
+
+The IR's `Function` gained a `doc` for the same reason it has spans: nothing the
+compiler does reads it, and what asks for it is something telling a reader about
+this function.  It is what makes hover work for a function of *another* module --
+the server has that module's IR and not its syntax tree, so without this there
+would be nothing to show.
 
 **What a name is, and where it was defined**, are answered from a side table the
 checker fills in when it is handed one.  `sema/notes.py` is that table: for every

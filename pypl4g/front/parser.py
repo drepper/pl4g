@@ -287,25 +287,27 @@ class Parser:
 
     def _parse_item(self) -> ast.Definition | None:
         """Parse one top-level definition together with what precedes it."""
-        doc = self._parse_doc_comments()
+        doc, doc_lines = self._parse_doc_comments()
         attrs = self._parse_attributes()
         self._skip_newlines()
         if self._check(TokKind.KW_FN):
-            return self._parse_function(attrs, doc)
+            return self._parse_function(attrs, doc, doc_lines)
         if self._check(TokKind.KW_LET):
-            return self._parse_variable(attrs, doc)
+            return self._parse_variable(attrs, doc, doc_lines)
         if self._check(TokKind.KW_TYPE):
-            return self._parse_type_definition(attrs, doc)
+            return self._parse_type_definition(attrs, doc, doc_lines)
         if self._check(TokKind.KW_ENUM):
-            return self._parse_enum_definition(attrs, doc)
+            return self._parse_enum_definition(attrs, doc, doc_lines)
         if self._check(TokKind.KW_UNIT):
-            return self._parse_unit_definition(doc)
+            return self._parse_unit_definition(doc, doc_lines)
         self._diags.emit(D.LANG_FILESTRUCT_UNEXPECTED_TOPLEVEL, self._current.span,
                          construct=self._current.describe())
         raise _Bail()
 
     def _parse_variable(self, attrs: tuple[ast.Attribute, ...] = (),
-                        doc: str | None = None) -> ast.VarDef | ast.ModuleImport:
+                        doc: str | None = None,
+                        doc_lines: tuple[Span, ...] = ()
+                        ) -> ast.VarDef | ast.ModuleImport:
         """Parse ``let NAME ':' ['mut'] [TYPE] '=' VALUE``.
 
         The colon is always there; what varies is what follows it.  Written with
@@ -338,7 +340,8 @@ class Parser:
             # matched by what it says.  It is read here and not by the checker
             # because what it makes is not a value: a module is a file that was
             # read, and there is nothing for an expression to come to.
-            return self._parse_import(start, name_token, mutable, declared, doc)
+            return self._parse_import(start, name_token, mutable, declared, doc,
+                                      doc_lines)
         value = self._parse_expression()
         return ast.VarDef(span=start.to(value.span), name=name_token.text,
                           name_span=name_token.span, type=declared, value=value,
@@ -347,7 +350,8 @@ class Parser:
 
     def _parse_import(self, start: Span, name_token: Token, mutable: bool,
                       declared: ast.TypeExpr | None,
-                      doc: str | None) -> ast.ModuleImport:
+                      doc: str | None,
+                      doc_lines: tuple[Span, ...] = ()) -> ast.ModuleImport:
         """Parse the rest of ``let NAME ':=' \N{APL FUNCTIONAL SYMBOL QUAD}import(STRING)``.
 
         A module is not a value, so nothing about it may be qualified: there is
@@ -363,15 +367,28 @@ class Parser:
         assert source.str_value is not None
         return ast.ModuleImport(span=start.to(end.span), name=name_token.text,
                                 name_span=name_token.span, source=source.str_value,
-                                source_span=source.span, doc=doc)
+                                source_span=source.span, doc=doc, doc_lines=doc_lines)
 
-    def _parse_doc_comments(self) -> str | None:
-        """Collect the documentation comments preceding a definition."""
+    def _parse_doc_comments(self) -> tuple[str | None, tuple[Span, ...]]:
+        """Collect the documentation comments preceding a definition.
+
+        The text and where it is: one line of the answer is one line of the
+        comment, and the span beside it covers that line without its marker and
+        without the spaces after it -- so a column in the text is a column in the
+        file, which is what lets a diagnostic about what a comment *says* point
+        at the words it says it in.
+        """
         lines: list[str] = []
+        places: list[Span] = []
         while self._check(TokKind.DOC_COMMENT):
-            lines.append(self._advance().text.removeprefix(COMMENT_GLYPH * 2).strip())
+            token = self._advance()
+            body = token.text.removeprefix(COMMENT_GLYPH * 2)
+            begins = token.span.start + (len(token.text) - len(body.lstrip()))
+            text = body.strip()
+            lines.append(text)
+            places.append(Span(begins, begins + len(text)))
             self._skip_newlines()
-        return "\n".join(lines) if lines else None
+        return ("\n".join(lines) if lines else None, tuple(places))
 
     # -- attributes ------------------------------------------------------------
 
@@ -469,7 +486,8 @@ class Parser:
     # -- functions -------------------------------------------------------------
 
     def _parse_function(self, attrs: tuple[ast.Attribute, ...],
-                        doc: str | None) -> ast.FuncDef:
+                        doc: str | None,
+                        doc_lines: tuple[Span, ...] = ()) -> ast.FuncDef:
         """Parse a function definition."""
         start = self._expect(TokKind.KW_FN).span
         name_token = self._expect(TokKind.IDENT)
@@ -493,11 +511,11 @@ class Parser:
             return ast.FuncDef(span=start.to(end), name=name_token.text,
                                name_span=name_token.span, params=params,
                                ret_type=ret_type, body=None, attrs=attrs,
-                               doc=doc)
+                               doc=doc, doc_lines=doc_lines)
         body = self._parse_body()
         return ast.FuncDef(span=start.to(body.span), name=name_token.text,
                            name_span=name_token.span, params=params,
-                           ret_type=ret_type, body=body, attrs=attrs, doc=doc)
+                           ret_type=ret_type, body=body, attrs=attrs, doc=doc, doc_lines=doc_lines)
 
     def _parse_type_ref(self) -> ast.TypeExpr:
         """Parse a type, which may be a collection written the way a value is.
@@ -603,7 +621,8 @@ class Parser:
         return ast.UnitFactor(span=token.span.to(end), name=name, quoted=quoted,
                               exponent=sign * exponent)
 
-    def _parse_unit_definition(self, doc: str | None = None) -> ast.UnitDef:
+    def _parse_unit_definition(self, doc: str | None = None,
+                               doc_lines: tuple[Span, ...] = ()) -> ast.UnitDef:
         """Parse `unit NAME`, `unit NAME = VALUE` or `unit \N{CURRENCY SIGN}FROM \N{RIGHTWARDS ARROW} \N{CURRENCY SIGN}TO`.
 
         A unit the language does not provide is introduced before it is used,
@@ -618,7 +637,7 @@ class Parser:
             where = self._parse_unit_ref()
             return ast.UnitDef(span=start.to(where.span), name="",
                                name_span=what.span, stands=(what, where),
-                               doc=doc)
+                               doc=doc, doc_lines=doc_lines)
         if self._check(TokKind.STRING):
             token = self._advance()
             quoted = True
@@ -627,14 +646,14 @@ class Parser:
             quoted = False
         if self._accept(TokKind.EQUALS) is None:
             return ast.UnitDef(span=start.to(token.span), name=token.text,
-                               name_span=token.span, quoted=quoted, doc=doc)
+                               name_span=token.span, quoted=quoted, doc=doc, doc_lines=doc_lines)
         over, under, factors = self._parse_unit_measure()
         end = factors[-1].span if factors else token.span
         return ast.UnitDef(span=start.to(end), name=token.text,
                            name_span=token.span, quoted=quoted,
                            measured=ast.UnitRef(span=token.span.to(end),
                                                 factors=tuple(factors)),
-                           scale=(over, under), doc=doc)
+                           scale=(over, under), doc=doc, doc_lines=doc_lines)
 
     def _parse_unit_measure(self) -> tuple[int, int, list[ast.UnitFactor]]:
         """Parse what one unit is in terms of others: numbers and names mixed.
@@ -876,7 +895,8 @@ class Parser:
     }
 
     def _parse_type_definition(self, attrs: tuple[ast.Attribute, ...] = (),
-                               doc: str | None = None) -> ast.TypeDef:
+                               doc: str | None = None,
+                               doc_lines: tuple[Span, ...] = ()) -> ast.TypeDef:
         """Parse ``type NAME '=' NAME ':' TYPE (SEP NAME ':' TYPE)*``.
 
         The separator is what says which kind of type it is: `;` for a product,
@@ -941,7 +961,7 @@ class Parser:
         return ast.TypeDef(span=start.to(end), name=name_token.text,
                            name_span=name_token.span,
                            kind=kind if kind is not None else ast.TypeKind.PRODUCT,
-                           fields=tuple(fields), attrs=attrs, doc=doc)
+                           fields=tuple(fields), attrs=attrs, doc=doc, doc_lines=doc_lines)
 
     def _ends_the_parts(self, braced: bool, indented: bool) -> bool:
         """Whether what comes next closes a type definition rather than opening
@@ -953,7 +973,8 @@ class Parser:
         return self._check(TokKind.NEWLINE) or self._check(TokKind.EOF)
 
     def _parse_enum_definition(self, attrs: tuple[ast.Attribute, ...] = (),
-                               doc: str | None = None) -> ast.EnumDef:
+                               doc: str | None = None,
+                               doc_lines: tuple[Span, ...] = ()) -> ast.EnumDef:
         """Parse ``enum NAME [':' TYPE]`` and the names of its values.
 
         The type says how much room a value takes and nothing else.  It is
@@ -999,7 +1020,7 @@ class Parser:
             self._accept(TokKind.DEDENT)
         return ast.EnumDef(span=start.to(end), name=name_token.text,
                            name_span=name_token.span, members=tuple(members),
-                           holder=holder, attrs=attrs, doc=doc)
+                           holder=holder, attrs=attrs, doc=doc, doc_lines=doc_lines)
 
     def _parse_enum_member(self) -> ast.EnumMember:
         """Parse ``NAME`` or ``NAME '=' (NUMBER | NAME)``.

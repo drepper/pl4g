@@ -15,6 +15,7 @@ from typing import Callable, Final, Sequence
 from ..diag import ids as D
 from ..diag.engine import DiagEngine, Expectation
 from ..front import ast
+from ..front.doccomment import Part as DocPart, parse as parse_doc
 from ..front.token import (ACQUIRE_NAME, RELEASE_NAME, AT_NAME, SPAN_NAME,
                            ADDRESS_NAME, BYTES_NAME,
                            WIDEN_NAME,
@@ -246,6 +247,23 @@ class _Global:
     span: Span
     expectation: Expectation | None = None
     expected_pairs: list[_Expected] = field(default_factory=list)
+
+
+def _doc_span(lines: Sequence[Span], part: DocPart) -> Span:
+    """Where a command of a documentation comment is, in the file.
+
+    One line of the comment's text is one line of the file, and the span kept
+    beside it begins where the text does -- so a column in the one is a column in
+    the other.  A part whose line is not there at all is placed at the comment's
+    beginning rather than nowhere: that cannot happen while the two are built
+    together, and answering with nothing would put the diagnostic at the top of
+    the file.
+    """
+    if not lines:
+        return INVALID_SPAN
+    line = lines[part.line] if 0 <= part.line < len(lines) else lines[0]
+    start = line.start + part.column
+    return Span(start, min(start + len(part.word) + 1, max(line.end, start + 1)))
 
 
 def found_name(prefix: str, base: str) -> str:
@@ -1462,6 +1480,7 @@ class Checker:
         later mention of the name would otherwise report it again as undefined,
         which says nothing the first message did not.
         """
+        self._check_doc(node)
         if node.name == WILDCARD_NAME:
             self._diags.emit(D.LANG_WILDCARD_IS_NOT_DEFINED, node.span)
             return
@@ -1644,7 +1663,7 @@ class Checker:
                        where[0] if where is not None else INVALID_SPAN)
             if isinstance(found, Function):
                 self._note(expr.name_span, FUNCTION, expr.name,
-                           found.ty.render(), found.name_span)
+                           found.ty.render(), found.name_span, found.doc or None)
         if found is None:
             self._diags.emit(D.LANG_IMPORT_NOT_EXPORTED, expr.name_span,
                              name=expr.name, module=base.name)
@@ -2278,8 +2297,56 @@ class Checker:
 
     # -- collection ------------------------------------------------------------
 
+    def _check_doc(self, node: ast.Definition) -> None:
+        """Check what a documentation comment claims about what it documents.
+
+        A comment is prose and the compiler has nothing to say about prose.  What
+        it does have something to say about is the part of one written the way
+        Doxygen writes it: a `\\param` names a parameter, and whether the thing
+        has a parameter of that name is a question with an answer.  A comment
+        that gets it wrong tells a reader about something that is not there,
+        which is worse than saying nothing -- so these are warnings and they are
+        on, like every other warning about a program that says one thing and
+        means another.
+        """
+        text = getattr(node, "doc", None)
+        if not text:
+            return
+        found = parse_doc(text)
+        if not found.parts:
+            return
+        lines = getattr(node, "doc_lines", ())
+        is_function = isinstance(node, ast.FuncDef)
+        takes = {param.name for param in node.params} if is_function else set()
+        answers = is_function and node.ret_type is not None
+        documented: set[str] = set()
+        for part in found.parts:
+            where = _doc_span(lines, part)
+            written = part.written
+            if not part.known:
+                self._diags.emit(D.LANG_DOC_UNKNOWN_COMMAND, where,
+                                 command=written)
+                continue
+            if part.command in ("param", "return") and not is_function:
+                self._diags.emit(D.LANG_DOC_NOT_A_FUNCTION, where,
+                                 command=written, owner=node.name)
+                continue
+            if part.command == "param":
+                if part.subject in documented:
+                    self._diags.emit(D.LANG_DOC_PARAM_TWICE, where,
+                                     name=part.subject)
+                elif part.subject not in takes:
+                    self._diags.emit(D.LANG_DOC_PARAM_UNKNOWN, where,
+                                     command=written, name=part.subject,
+                                     owner=node.name)
+                documented.add(part.subject)
+            elif part.command == "return" and not answers:
+                self._diags.emit(D.LANG_DOC_RETURN_OF_NOTHING, where,
+                                 command=written, owner=node.name)
+
     def _collect_function(self, node: ast.FuncDef, path: str) -> _Collected | None:
         """Register one function definition without looking at its body."""
+        self._check_doc(node)
         if not self._declare(node.name, node.name_span, path):
             return None
         attrs = self._bind_attributes(node.attrs, AttrTarget.FUNCTION)
@@ -2326,7 +2393,7 @@ class Checker:
                             cconv=(func_attrs.abi if func_attrs.abi is not None
                                    else DEFAULT_CCONV),
                             span=node.span, name_span=node.name_span,
-                            source_path=path)
+                            source_path=path, doc=node.doc or "")
             if func_attrs.listable and not params:
                 self._diags.emit(D.LANG_LISTABLE_TAKES_NOTHING, node.name_span,
                                  name=node.name)
@@ -2787,6 +2854,7 @@ class Checker:
         language stands for one thing, and which kind of thing it is is not
         something a reader should have to work out from where it is written.
         """
+        self._check_doc(node)
         if not self._declare(node.name, node.name_span, path):
             return
         attrs = self._bind_attributes(node.attrs, AttrTarget.TYPE)
@@ -12005,7 +12073,8 @@ class Checker:
                 if isinstance(found, Function):
                     if self._notes is not None:
                         self._note(expr.span, FUNCTION, expr.name,
-                                   found.ty.render(), found.name_span)
+                                   found.ty.render(), found.name_span,
+                                   found.doc or None)
                     return found
                 if found is None and self._find_local(expr.name) is None:
                     self._diags.emit(D.LANG_FILESTRUCT_UNDEFINED_NAME, expr.span,
@@ -12064,7 +12133,7 @@ class Checker:
             self._note(base.span, MODULE, base.name, held.path.as_posix(),
                        where[0] if where is not None else INVALID_SPAN)
             self._note(expr.name_span, FUNCTION, expr.name,
-                       found.ty.render(), found.name_span)
+                       found.ty.render(), found.name_span, found.doc or None)
         return found
 
     def _lower_name(self, builder: IRBuilder, ref: ast.NameRef,

@@ -1,0 +1,52 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=7 diag=none
+
+※ A documentation comment is prose, and the parts of one written the way Doxygen
+※ writes them are about particular parts of what is documented.
+※
+※ **The commands are Doxygen's own, with either sigil.**  `\param`, `\return`,
+※ `\brief` and the rest, written after a `\` or an `@` -- which is Doxygen's own
+※ rule and means a comment moved here from C keeps working.  `@` is the
+※ attribute sigil everywhere else in this language, and there is no ambiguity:
+※ an attribute is never inside a comment.
+※
+※ **What the compiler does with them is check them.**  A `\param` names a
+※ parameter, so whether the function has one of that name is a question with an
+※ answer, and a comment that gets it wrong tells a reader about something that is
+※ not there.  The four ways of being wrong are warnings, on unless turned off;
+※ `doc-comment-wrong` is the program that raises them.
+※
+※ **What an editor does with them is show them.**  The summary first, then what
+※ it takes as a list, then what it answers with -- which is what a hover over the
+※ name shows, out of this comment and nothing else.
+※
+※ Compare: **Doxygen** itself, and **Javadoc**, whose `@param` this is with the
+※ other sigil; **Rust**, whose `///` is Markdown with no commands at all and
+※ whose parameters are therefore documented in prose; **Go**, the same; **D**,
+※ whose Ddoc has named sections rather than commands.  What this takes from
+※ Doxygen is the spelling a reader already knows, and what it leaves is
+※ everything that is markup.
+
+※※ Add two numbers, saturating rather than wrapping.
+※※
+※※ \details The sum of two numbers that will not fit in one is the largest
+※※ number that does fit, which is what saturating means.
+※※ \param left the number on the left
+※※ \param right the number on the right
+※※ \return the sum, or the largest u8 where it does not fit
+@[visible]
+fn total(left: u8, right: u8) → u8:
+    left ⊞ right
+
+※※ \brief What a program answers with, where the whole comment is one line.
+※※ @param a the first
+※※ @param b the second
+@[visible, impure]
+fn remember(a: u8, b: u8):
+    kept ← total(a, b)
+
+let kept: mut u8 = 0u8
+
+@[startup, impure]
+fn main() → u6:
+    remember(3u8, 4u8)
+    ⎕narrow(kept, ⌜u6⌝) ?? 1u6

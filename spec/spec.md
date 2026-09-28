@@ -1601,6 +1601,33 @@ a comment is.
 The block comments of C and D were not adopted.  A generator emits line by line and never needs to wrap a region, and a
 non-nesting block comment silently breaks when the region it wraps already contains one.
 
+##### What a documentation comment may say
+
+A documentation comment is prose, and **a line of one that begins with `\` or `@` followed by a word is a command**: it says
+something about a particular part of the definition rather than about the whole of it.  The commands are Doxygen's, with the
+spelling and the alternatives Doxygen has -- `\param`, `\brief`, `\return`, `\returns`, `\raises`, `\note`, `\warning`,
+`\see`, `\pre`, `\post`, `\since`, `\deprecated` and a few more -- and either sigil may be used for any of them, which is
+Doxygen's own rule.  `@` begins an attribute list everywhere else in the language and there is no ambiguity, an attribute never
+being inside a comment.  What follows a command belongs to it until the next one begins, so a command may run over several lines.
+`\param` names the parameter it is about, and Doxygen's `[in]`, `[out]` and `[in,out]` may be written after it and are ignored:
+which way a parameter is passed is said in its type here.
+
+**The compiler checks what a command claims.**  A `\param` that names nothing the function takes (4601), one that names the same
+parameter twice (4602), a `\return` on a function that answers with nothing (4603), either of those on a definition that is not a
+function (4604), and a word that is not a command at all (4600) are warnings, on unless turned off.  They are warnings because what
+is wrong is the comment and a comment cannot make a program mean something else; they are on because a comment that describes a
+parameter the function has not got misleads exactly the reader who trusted it.  What the compiler does *not* check is whether every
+parameter has a `\param`: a comment that says less than it could is not wrong.
+
+**Nothing else in a comment is interpreted.**  There is no markup, no `\code`, no grouping, no way to refer to another definition
+and have it become a link.  A language server shows the summary, the parameters as a list, and each remark under its own heading.
+
+Compare: **Doxygen** and **Javadoc**, whose commands these are, and whose markup is not taken; **Rust** and **Go**, whose
+documentation comments are prose with no commands at all, so that what a parameter means is said in a sentence and nothing checks
+it; **D**, whose Ddoc has named sections rather than commands; **Python**, where the convention is a docstring whose sections are a
+matter of which of three styles the project chose.  What is taken here is the spelling a reader already knows and the checking that
+a compiler is in a position to do.
+
 #### Unicode glyphs and their substitutes
 
 Where a construct is written with a Unicode glyph, the glyph is canonical: it is what the compiler itself emits, what the

@@ -633,6 +633,10 @@ class VarDef(Stmt):
     #: Whether the type said the variable may be changed.
     mutable: bool = False
     doc: str | None = None
+    #: Where each line of that comment is, so that something reading the
+    #: comment apart -- a `\param` that names nothing, say -- can point at the
+    #: line it is on.  Written with the text, by the one place that collects it.
+    doc_lines: tuple[Span, ...] = ()
     #: The names after the first, where the definition takes a tuple apart.
     more: tuple[tuple[str, Span], ...] = ()
 
@@ -788,6 +792,10 @@ class UnitDef(Stmt):
     #: The two units of `unit \N{CURRENCY SIGN}FROM \N{RIGHTWARDS ARROW} \N{CURRENCY SIGN}TO`: what may stand, and where.
     stands: tuple[UnitRef, UnitRef] | None = None
     doc: str | None = None
+    #: Where each line of that comment is, so that something reading the
+    #: comment apart -- a `\param` that names nothing, say -- can point at the
+    #: line it is on.  Written with the text, by the one place that collects it.
+    doc_lines: tuple[Span, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -807,6 +815,10 @@ class ModuleImport(Node):
     source: str
     source_span: Span
     doc: str | None = None
+    #: Where each line of that comment is, so that something reading the
+    #: comment apart -- a `\param` that names nothing, say -- can point at the
+    #: line it is on.  Written with the text, by the one place that collects it.
+    doc_lines: tuple[Span, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -1021,6 +1033,10 @@ class FuncDef(Node):
     body: Block | None
     attrs: tuple[Attribute, ...] = ()
     doc: str | None = None
+    #: Where each line of that comment is, so that something reading the
+    #: comment apart -- a `\param` that names nothing, say -- can point at the
+    #: line it is on.  Written with the text, by the one place that collects it.
+    doc_lines: tuple[Span, ...] = ()
 
 
 class TypeKind(StrEnum):
@@ -1054,6 +1070,10 @@ class TypeDef(Node):
     fields: tuple[Field, ...]
     attrs: tuple[Attribute, ...] = ()
     doc: str | None = None
+    #: Where each line of that comment is, so that something reading the
+    #: comment apart -- a `\param` that names nothing, say -- can point at the
+    #: line it is on.  Written with the text, by the one place that collects it.
+    doc_lines: tuple[Span, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -1083,6 +1103,10 @@ class EnumDef(Node):
     holder: TypeExpr | None = None
     attrs: tuple[Attribute, ...] = ()
     doc: str | None = None
+    #: Where each line of that comment is, so that something reading the
+    #: comment apart -- a `\param` that names nothing, say -- can point at the
+    #: line it is on.  Written with the text, by the one place that collects it.
+    doc_lines: tuple[Span, ...] = ()
 
 
 type Definition = FuncDef | VarDef | ModuleImport | TypeDef | EnumDef | UnitDef

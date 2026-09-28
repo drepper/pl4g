@@ -182,8 +182,13 @@ fn flush(of: Pending) → u64 ¤size ? i32:
 fn write_sync(to: &mut Writer, what: u8⟦⟧) → u64 ¤size ? i32:
     flush(write(to, what)?)
 
-※※ Read from `from` into `into`, answering how many bytes came or what the
-※※ kernel said.  Nought means there is no more to come.
+※※ Read from a device into a run of bytes.
+※※
+※※ \param from the device to read from
+※※ \param into where to put what comes, and how much to ask for: as many bytes
+※※ as it holds
+※※ \return how many bytes came, and nought where there is no more to come
+※※ \raises the number the kernel gave
 ※
 ※ There is no form of this that does not wait: what a read is for is the bytes,
 ※ and a program that has not waited does not have them.

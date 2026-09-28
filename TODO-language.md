@@ -29,6 +29,10 @@ To Do List for the PL4g language
     each other take one apart in a definition or an assignment.  In registers a tuple is one register per member, which is the
     result type's arrangement generalized.
 
+[ ] a documentation tool that reads what the comments say.  The parts of a documentation comment are read and checked (4600 to
+    4604) and shown by the language server; nothing writes them out as a manual.  What it would need is already there -- the
+    summary, the parameters, what is answered with -- and what it would have to decide is what a page looks like.
+
 [ ] answer with a tuple that wants more registers than the convention has.  Refused today (8501): a tuple is one register per
     member and these conventions answer in two per kind, so a tuple of three integers cannot be answered with.  What every ABI
     does instead is hand the callee a place to put it, which needs the caller to reserve one -- so it waits on holding a value in

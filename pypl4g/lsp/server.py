@@ -23,6 +23,7 @@ from typing import BinaryIO, Callable, Final, Mapping, Sequence
 
 from ..diag.engine import Diagnostic
 from ..front import ast
+from ..front.doccomment import ORDER as DOC_ORDER, parse as parse_doc
 from ..source.location import Span
 from .. import VERSION
 from . import places
@@ -329,7 +330,11 @@ class Server:
                                   "range": whole, "selectionRange": named}
         doc = getattr(item, "doc", None)
         if isinstance(doc, str) and doc:
-            out["detail"] = doc.strip().splitlines()[0]
+            # What it is for, in one line: the prose a comment opens with, or
+            # what its `\brief` said where it opens with one instead.
+            brief = parse_doc(doc).brief
+            if brief:
+                out["detail"] = brief
         inside = self._inside(found, item)
         if inside:
             out["children"] = inside
@@ -387,7 +392,8 @@ class Server:
 
         A fenced block holding what the thing is, in this language, so that an
         editor with the grammar colours it the way it colours the program; then
-        the documentation comment as prose, where the definition has one.
+        the documentation comment, which is prose where it is prose and a list
+        where it is written the way Doxygen writes one.
         """
         assert found.sources is not None
         # A type whose name is what it is says it once: `type Pair`, not
@@ -395,8 +401,7 @@ class Server:
         said = " ".join((kind, name)) if not detail or detail == name \
             else "".join((kind, " ", name, " : ", detail))
         lines = ["".join(("```pl4g\n", said, "\n```"))]
-        if doc:
-            lines.append(doc.strip())
+        lines.extend(_rendered(doc))
         answer: dict[str, object] = {
             "contents": {"kind": "markdown", "value": "\n\n".join(lines)}}
         where = places.range_of(found.sources, span, self._encoding)
@@ -496,6 +501,59 @@ class Server:
     def _path_of(self, uri: object) -> Path | None:
         """The file a URI names, where it names one this can compile."""
         return places.from_uri(uri) if isinstance(uri, str) else None
+
+
+#: How each kind of part is introduced where an editor shows it.  The commands
+#: that are about one named thing are gathered into a list under one heading;
+#: the rest are a heading each, because each is a remark of its own.
+_HEADINGS: Final[Mapping[str, str]] = {
+    "param": "Takes", "return": "Answers with", "raises": "Refuses with",
+    "pre": "Before", "post": "After", "invariant": "Always",
+    "note": "Note", "warning": "Warning", "example": "Example", "see": "See",
+    "since": "Since", "deprecated": "Deprecated", "todo": "To do",
+    "author": "Author", "file": "File", "details": "",
+}
+
+
+def _rendered(doc: str | None) -> list[str]:
+    """A documentation comment as the parts an editor shows.
+
+    The summary first, because what a thing is for is what a reader wants first;
+    then what it takes, what it answers with and what it refuses with, as a list
+    each; then the remarks.  A command this does not know is shown as it was
+    written rather than dropped -- the compiler has already said it is not one,
+    and a reader looking at the hover should see what the comment says.
+    """
+    if not doc:
+        return []
+    found = parse_doc(doc)
+    out: list[str] = []
+    if found.summary:
+        out.append(found.summary)
+    for command in DOC_ORDER:
+        parts = found.of(command)
+        if not parts:
+            continue
+        heading = _HEADINGS.get(command, "")
+        if command == "param":
+            out.append("\n".join([
+                "**Takes**", *("".join(("- `", one.subject, "` ", one.text))
+                               for one in parts)]))
+        elif heading:
+            said = [one.text for one in parts if one.text]
+            if len(said) == 1 and "\n" not in said[0]:
+                # One short thing to say: said on the heading's own line, which
+                # is a line rather than a paragraph and reads as one.
+                out.append(" ".join(("".join(("**", heading, "**")), said[0])))
+            else:
+                out.append("\n\n".join(["".join(("**", heading, "**")), *said]))
+        else:
+            out.extend(one.text for one in parts if one.text)
+    unknown = [one for one in found.parts if not one.known]
+    if unknown:
+        out.append("\n".join("".join((one.written, " ", one.text))
+                              for one in unknown))
+    return [one for one in out if one.strip()]
 
 
 def serve(reader: BinaryIO | None = None, writer: BinaryIO | None = None) -> int:

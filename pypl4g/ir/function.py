@@ -175,6 +175,11 @@ class Function:
     #: at the keyword, neither of which is what a reader is looking for.
     name_span: Span = INVALID_SPAN
     source_path: str = ""
+    #: What the definition's documentation comment said, where it had one.  Kept
+    #: for the same reason the spans are: nothing the compiler does reads it, and
+    #: what asks for it is something telling a reader about this function --
+    #: which, for a function another file imported, has nothing else to ask.
+    doc: str = ""
     #: The module the function belongs to, which prefixes its symbol name.
     module: str = ""
     #: Whether a file importing this module may name it.  Not the same question

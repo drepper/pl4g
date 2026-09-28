@@ -589,3 +589,94 @@ def test_nothing_is_said_about_a_place_that_is_not_a_name(session: Session,
     assert session.request("textDocument/definition", {
         "textDocument": {"uri": uri_of(source)}, "position": empty}) is None
     assert session.close() == 0
+
+
+#: A program whose comment is written the way Doxygen writes one.
+DOCUMENTED = """\
+\N{REFERENCE MARK}\N{REFERENCE MARK} Add two numbers, saturating rather than wrapping.
+\N{REFERENCE MARK}\N{REFERENCE MARK}
+\N{REFERENCE MARK}\N{REFERENCE MARK} \\param left the number on the left
+\N{REFERENCE MARK}\N{REFERENCE MARK} @param right the number on the right
+\N{REFERENCE MARK}\N{REFERENCE MARK} \\return the sum, or the largest u8 where it does not fit
+\N{REFERENCE MARK}\N{REFERENCE MARK} \\note saturating is what the operator says
+@[visible]
+fn total(left: u8, right: u8) \N{RIGHTWARDS ARROW} u8:
+    left \N{SQUARED PLUS} right
+
+@[startup]
+fn main() \N{RIGHTWARDS ARROW} u6:
+    \N{APL FUNCTIONAL SYMBOL QUAD}narrow(total(1u8, 2u8), \N{TOP LEFT CORNER}u6\N{TOP RIGHT CORNER}) ?? 0u6
+"""
+
+
+def test_hover_shows_a_doxygen_comment_as_its_parts(session: Session,
+                                                    tmp_path: Path) -> None:
+    """The summary, then what it takes, then what it answers with.
+
+    Which is the order a reader wants them in and is not the order they have to
+    be written in; and the list of parameters is a list, because that is what it
+    is.  Both sigils arrive at the same place, `@param` being `\\param`.
+    """
+    source = tmp_path / "documented.pl4g"
+    source.write_text(DOCUMENTED, encoding="utf-8")
+    session.start(["utf-32"])
+    session.open(source)
+    uri, found = session.diagnostics()
+    assert found == [], found
+    # The call on the last line, which is a use and so is answered out of what
+    # the checker resolved rather than out of the tree.
+    line = DOCUMENTED.splitlines()[12]
+    answered = session.request("textDocument/hover", {
+        "textDocument": {"uri": uri_of(source)},
+        "position": {"line": 12, "character": line.index("total")}})
+    said = str(answered["contents"]["value"])
+    assert "function total : fn(u8, u8)" in said
+    assert "Add two numbers, saturating rather than wrapping." in said
+    assert "**Takes**\n- `left` the number on the left" in said
+    assert "- `right` the number on the right" in said
+    assert "**Answers with** the sum, or the largest u8 where it does not fit" in said
+    assert "**Note** saturating is what the operator says" in said
+    # The commands themselves are not shown: what is shown is what they said.
+    assert "\\param" not in said and "@param" not in said
+    assert session.close() == 0
+
+
+def test_the_outline_shows_what_a_definition_is_for(session: Session,
+                                                    tmp_path: Path) -> None:
+    """One line beside the name, which is the summary and never a command."""
+    source = tmp_path / "documented.pl4g"
+    source.write_text(DOCUMENTED, encoding="utf-8")
+    session.start(["utf-32"])
+    session.open(source)
+    session.diagnostics()
+    found = session.request("textDocument/documentSymbol",
+                            {"textDocument": {"uri": uri_of(source)}})
+    by_name = {one["name"]: one for one in found}
+    assert by_name["total"]["detail"] == \
+        "Add two numbers, saturating rather than wrapping."
+    assert "detail" not in by_name["main"], "nothing to say is nothing shown"
+    assert session.close() == 0
+
+
+def test_a_comment_that_names_nothing_is_a_diagnostic_like_any_other(
+        session: Session, tmp_path: Path) -> None:
+    """The server invents nothing: the warning is the compiler's own.
+
+    4601 is "'\\param x' names nothing that 'f' takes", and where it is, is the
+    line of the comment that says it -- which is what the parser kept the place
+    of each line for.
+    """
+    text = DOCUMENTED.replace("\\param left the number", "\\param lft the number")
+    source = tmp_path / "wrong.pl4g"
+    source.write_text(text, encoding="utf-8")
+    session.start(["utf-32"])
+    session.open(source)
+    _, found = session.diagnostics()
+    assert [one["code"] for one in found] == [4601], found
+    one = found[0]
+    assert one["severity"] == 2, "a warning"
+    assert one["range"]["start"]["line"] == 2, one
+    # The caret covers the command and nothing else.
+    assert one["range"]["start"]["character"] == 3
+    assert one["range"]["end"]["character"] == 9
+    assert session.close() == 0

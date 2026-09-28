@@ -2,3 +2,8 @@
 # that gets built rather than a library, so which versions it was built from is
 # part of what it is.
 target/
+
+# What Zed leaves when it installs this as a development extension: it builds
+# the WebAssembly in place and clones the grammar beside it.
+extension.wasm
+grammars/

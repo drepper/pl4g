@@ -84,6 +84,15 @@
       }
     },
     {
+      "first": 4600,
+      "last": 4699,
+      "topic": "documentation comments",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Documentation comments"
+      }
+    },
+    {
       "first": 5000,
       "last": 5299,
       "topic": "control flow and returns",
@@ -6809,6 +6818,131 @@
       "since": "0.1",
       "default_enabled": true,
       "option": null
+    },
+    {
+      "number": 4600,
+      "name": "LANG_DOC_UNKNOWN_COMMAND",
+      "severity": "warning",
+      "message": "'{command}' is not a documentation command",
+      "args": [
+        {
+          "name": "command",
+          "type": "string",
+          "description": "the word that was written after the sigil"
+        }
+      ],
+      "cause": "A documentation comment may say what a definition is for in prose and say particular things about it with the commands Doxygen uses -- `\\brief`, `\\param`, `\\return` and a few more, with `\\` or `@` in front.  A word that is not one of them is either a mistake or prose that begins with a sigil; what it is not is something a reader of the comment will act on, so it is reported rather than shown as though it meant something.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Documentation comments"
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": "doc-command"
+    },
+    {
+      "number": 4601,
+      "name": "LANG_DOC_PARAM_UNKNOWN",
+      "severity": "warning",
+      "message": "'{command} {name}' names nothing that '{owner}' takes",
+      "args": [
+        {
+          "name": "command",
+          "type": "string",
+          "description": "the command as it was written"
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the name it gave"
+        },
+        {
+          "name": "owner",
+          "type": "string",
+          "description": "the definition the comment belongs to"
+        }
+      ],
+      "cause": "The comment documents a parameter the function does not have, which is what is left when a parameter is renamed or removed and the comment is not.  Whoever reads it is told about something that is not there.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Documentation comments"
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": "doc-param"
+    },
+    {
+      "number": 4602,
+      "name": "LANG_DOC_PARAM_TWICE",
+      "severity": "warning",
+      "message": "'{name}' is documented twice",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the parameter"
+        }
+      ],
+      "cause": "Two `\\param` commands name one parameter, so one of them is about something else -- a parameter that was renamed, or a line copied and not finished.  A reader is shown both and has no way to tell which was meant.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Documentation comments"
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": "doc-param"
+    },
+    {
+      "number": 4603,
+      "name": "LANG_DOC_RETURN_OF_NOTHING",
+      "severity": "warning",
+      "message": "'{command}' on '{owner}', which answers with nothing",
+      "args": [
+        {
+          "name": "command",
+          "type": "string",
+          "description": "the command as it was written"
+        },
+        {
+          "name": "owner",
+          "type": "string",
+          "description": "the function"
+        }
+      ],
+      "cause": "The comment says what the function answers with and the function answers with nothing: it has no arrow, which is how a function says so.  Either the arrow was meant to be there or the line was.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Documentation comments"
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": "doc-return"
+    },
+    {
+      "number": 4604,
+      "name": "LANG_DOC_NOT_A_FUNCTION",
+      "severity": "warning",
+      "message": "'{command}' on '{owner}', which is not a function",
+      "args": [
+        {
+          "name": "command",
+          "type": "string",
+          "description": "the command as it was written"
+        },
+        {
+          "name": "owner",
+          "type": "string",
+          "description": "the definition the comment belongs to"
+        }
+      ],
+      "cause": "Parameters and what is answered with are things a function has; a type, a variable or a unit has neither, so a comment on one that speaks of them was written for something else or was left behind when the definition changed.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Documentation comments"
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": "doc-param"
     },
     {
       "number": 5001,

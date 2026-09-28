@@ -22,6 +22,10 @@ is what it and the compiler both read.  What is missing from either belongs here
     It is the entry in TODO-pypl4g.md about the renderer, and this is where it became something a reader sees rather than something
     only a diagnostic said.
 
+[ ] use the `\param` text where a signature is shown.  The server answers no `signatureHelp` yet, and when it does, what each
+    parameter is for is already read out of the comment and is exactly what that request is for.  Hover over a parameter *inside*
+    the body could show it too, which wants the enclosing function found from the tree.
+
 [ ] the rest of what a language server can be asked.  It answers diagnostics, an outline, what a name is and where it was defined.
     What it does not answer yet: every use of a name (`references`), renaming one, completing one, and formatting a file -- the last
     being a thing the language has no statement about yet, since nothing says what the one true layout of a program is.

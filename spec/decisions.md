@@ -6352,6 +6352,53 @@ extension is the shape this one copies, in the language's own tree.  What this h
 that none of them has is the queries being the compiler's own file rather than a
 copy of it.
 
+## 2026-09-28T14:00+02:00 — language
+
+**A documentation comment may be written the way Doxygen writes one**
+
+At the user's direction, with both of the questions put to them answered there:
+the commands are spelled with either sigil, `\param` and `@param` being one
+thing, and **the compiler checks what they claim, on by default**.
+
+**Doxygen's spelling and not a new one.**  The commands are the ones a reader
+already knows and already types, with the alternatives Doxygen accepts for each
+(`\returns` is `\return`, `\throws` is `\raises`).  A glyph of the language's
+own was considered and rejected for the one reason that matters here: a comment
+moved from C should keep working, and a generator emitting these comments is
+almost certainly emitting them from something that already speaks Doxygen.  `@`
+begins an attribute list everywhere else in this language and there is no
+ambiguity, an attribute never being inside a comment.
+
+**What is taken is the commands; what is left is the markup.**  No `\code`, no
+grouping, no links, no HTML.  A documentation comment is prose with a few
+statements about named parts, and everything Doxygen has beyond that exists to
+typeset a manual, which is not what is being built.
+
+**The compiler warns, and the warnings are on.**  A `\param` that names nothing
+the function takes, one that names a parameter twice, a `\return` on a function
+that answers with nothing, either on something that is not a function, and a word
+that is not a command: 4600 to 4604.  Warnings and not errors, because what is
+wrong is the comment and a comment cannot make a program mean something else; on
+rather than asked for, because such a comment misleads exactly the reader who
+trusted it.  What is *not* checked is whether every parameter has a `\param` --
+clang has that behind `-Wdocumentation` and it is noise -- because a comment that
+says less than it could is not wrong.
+
+**The carets land on the command.**  That cost one field: the parser now keeps the
+span of each line of a comment beside its text, so a column in the comment is a
+column in the file.  Pointing at the definition's name instead would have been
+free and would have been worse -- a warning about a comment that points somewhere
+else is a warning a reader has to work out.
+
+Compare: **Doxygen** and **Javadoc**, whose commands these are and which check
+nothing, being tools run after the fact rather than compilers; **clang**, whose
+`-Wdocumentation` is these checks and is off by default; **Rust** and **Go**,
+whose documentation comments have no commands at all, so that nothing can be
+wrong and nothing can be checked; **D**, whose Ddoc has named sections which
+`dmd` does not check either.  What this has that none of them has is the checks
+being the compiler's own and on: a comment is part of what a definition says, and
+the compiler already objects to every other part of it that says something untrue.
+
 Open questions
 --------------
 

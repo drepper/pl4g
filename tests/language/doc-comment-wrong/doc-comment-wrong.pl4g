@@ -1,0 +1,41 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=1
+※ pl4g-test: expect-diag 4600 LANG_DOC_UNKNOWN_COMMAND
+※ pl4g-test: expect-diag 4601 LANG_DOC_PARAM_UNKNOWN
+※ pl4g-test: expect-diag 4602 LANG_DOC_PARAM_TWICE
+※ pl4g-test: expect-diag 4603 LANG_DOC_RETURN_OF_NOTHING
+※ pl4g-test: expect-diag 4604 LANG_DOC_NOT_A_FUNCTION
+
+※ Every way a documentation comment can say something that is not so.
+※
+※ They are warnings and not errors: what is wrong is the comment, and a comment
+※ cannot make a program mean something else.  They are on rather than asked for,
+※ because a comment that names a parameter the function has not got is always a
+※ mistake -- the parameter was renamed, or the line was copied and not finished --
+※ and the reader it misleads is the one who trusted it.
+※
+※ Each is `-Wno-` able by the name in the catalog: `doc-command`, `doc-param`
+※ and `doc-return`.
+
+※※ \param missing there is no parameter of this name
+※※ \param n the one there is
+※※ \param n and again, which is the same one twice
+※※ \wrong what is this
+@[visible]
+fn one(n: u8) → u8:
+    n
+
+※※ \return this one answers with nothing
+@[visible, impure]
+fn two():
+    seen ← 1u8
+
+※※ \param a a type takes nothing
+type Pair = a : u8 ; b : u8
+
+let seen: mut u8 = 0u8
+
+@[startup, impure]
+fn main() → u6:
+    two()
+    let both: Pair = Pair(.a ← one(seen), .b ← 0u8)
+    ⎕narrow(both.a, ⌜u6⌝) ?? 0u6
