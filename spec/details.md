@@ -2812,6 +2812,76 @@ failed.  Running them all and reporting each needs a way to write a message and
 carry on, which the runtime has not got: it has one helper, and that helper
 exits.
 
+Running a function at compile time
+----------------------------------
+
+`pypl4g/comptime/` is an interpreter for the language, over the **syntax tree**
+and after the checker has been over it.  What asks for one is the build function,
+which the compiler runs rather than compiles; what it answers is the values,
+since the checker has already answered everything about the types.
+
+**Why the tree and not the representation.**  The representation is nearer the
+compiler's own idea of the program and would have been the other choice: its
+instructions are few and their meaning is settled, so an interpreter for it would
+implement the representation rather than the language a second time.  What
+settles it the other way is memory.  A string joined to another is one Python
+string joined to another over the tree; over the representation it is an arena, a
+call into the allocator -- which is emitted as assembly per target and has no
+representation at all -- and a model of the heap to put the answer in.  The whole
+point of a compile-time evaluation is that none of that happens, so the tree is
+where it is done.
+
+**What it does.**  Numbers, truth values, characters, strings, arrays and lists,
+records, references, `let` and assignment, `if`, `while`, `foreach`, `break`,
+`continue`, calls to functions of the same program, and calls to what the
+compiler provides.  Control flow is read as an *expression*, because that is what
+it is in this language: a loop answers with what a `break` carried, so `_expr`
+handles `If`, `While` and `ForEach` and the statement level is the few things
+that really are statements.
+
+**What it does not do, it names.**  A match, a lambda, a set, a dictionary, a
+`?`, a lifted type: each answers with the words for it (7000) rather than with a
+wrong value.  The list is one table, so adding one of them is an entry there and
+the code for it.
+
+**Numbers are worked out without a width.**  The checker has settled the types
+and the ranges of the literals already; what the evaluator computes with is whole
+numbers, so an intermediate that would not have fitted does not stop it.  Where a
+value is finally used -- put into a field of the build object -- what it has to
+fit is checked there.  `TODO-pypl4g.md` has the entry for doing better.
+
+**It has a ceiling rather than a floor.**  A hundred thousand steps and a hundred
+and twenty-eight frames: past either, the evaluation is given up on and reported
+(7001).  A compiler that hung on a loop with no end would say nothing at all,
+which is the one outcome worse than refusing.
+
+The build function
+------------------
+
+**A file holding one describes a build rather than being a program.**  The
+checker records it on the module the way it records the startup function, refuses
+a second one (7002) and checks its shape (7004); a module with one needs no
+startup function, since nothing of it is ever started.  The driver, having
+checked the file, runs the function instead of generating code, and then compiles
+what it asked for -- one `Driver` per artifact, sharing this one's diagnostics and
+source manager so that a run says what went wrong wherever it was.
+
+**What the function is handed** is a `Record` the evaluator holds, whose fields
+are the ones `std.Build` declares.  The defaults are what the command line said,
+so a build file says only what it means to decide; the fields are read back when
+it returns.  What cannot be a field is the run of things to build -- the language
+has no growing list of records yet -- so that is `std.add_executable`, one of the
+three functions the compiler provides while a build is worked out.  They are
+declared in `modules/std.pl4g` with `@[builtin]`, which means no body and no
+symbol: a program that called one would be calling something that is not there,
+and the checker says so (7006).
+
+**Which compilation is a build** is settled twice, in the two places the two ways
+in are: the command line puts `build.pl4g` in the inputs where nothing else was
+named (1018), and the driver looks for the build function in whatever was named.
+`Options.from_build` is what keeps the second from running again for each
+artifact.
+
 The Command Line
 ----------------
 

@@ -1,0 +1,18 @@
+let std := ⎕import("std")
+
+※※ What this example builds, and where.
+※※
+※※ \details The compiler runs this function instead of compiling this file, and
+※※ then builds what it asked for.  Which target to build for is asked of the
+※※ command line -- `-Dtarget=aarch64-linux-none` -- so that the Makefile beside
+※※ this can ask for each of them in turn without this file listing any of them.
+※※
+※※ \param b what the build is described in
+@[build]
+fn build(b: &mut std.Build):
+    let triple: str = std.option(b, "target", "x86_64-linux-none")
+    let name: str = "built-by-pl4g"
+    b⌖.target ← triple
+    b⌖.output_dir ← "build/" ⧺ triple
+    b⌖.opt_level ← 1u8
+    std.add_executable(b, name, ⟦name ⧺ ".pl4g"⟧)

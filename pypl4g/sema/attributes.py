@@ -115,6 +115,11 @@ REGISTRY: Final[Mapping[str, AttrSpec]] = {
                          default="suite", required=False),),
                  group="special",
                  doc="a test of the given kind; `suite` where none is named"),
+        AttrSpec("build", AttrTarget.FUNCTION, group="special",
+                 doc="the function the compiler runs to find out what to build"),
+        AttrSpec("builtin", AttrTarget.FUNCTION,
+                 doc="the compiler provides this function while it works out a "
+                     "build; there is none of it in a program"),
         AttrSpec("inline", AttrTarget.FUNCTION,
                  (_param("mode", "name", choices=("always", "never"),
                          default="always", required=False),),

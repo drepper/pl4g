@@ -8,7 +8,7 @@
     {
       "name": "build",
       "since": "0.1",
-      "help": "compile the sources; what a command line naming no command means"
+      "help": "compile the sources; with none named, run the build function in 'build.pl4g'.  What a command line naming no command means"
     },
     {
       "name": "test",
@@ -150,6 +150,14 @@
       "metavar": "COMMAND",
       "since": "0.1",
       "help": "run a test binary through COMMAND, for a target this machine does not run"
+    },
+    {
+      "short": "-D",
+      "long": null,
+      "arg": "required",
+      "metavar": "NAME[=VALUE]",
+      "since": "0.1",
+      "help": "tell the build function something: `std.option` answers with VALUE, or with 'true' where only NAME was written"
     },
     {
       "short": null,

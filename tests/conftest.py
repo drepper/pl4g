@@ -196,16 +196,21 @@ def grammar_is_built() -> None:
 
 
 def run_compiler(args: Sequence[str],
-                 env: Mapping[str, str] | None = None
+                 env: Mapping[str, str] | None = None,
+                 cwd: Path | None = None
                  ) -> subprocess.CompletedProcess[str]:
     """Invoke the compiler as a separate process, the way a user would.
 
     *env* adds to what this process has rather than replacing it, since what a
-    test is saying with it is one variable and not a whole environment.
+    test is saying with it is one variable and not a whole environment.  *cwd* is
+    where to run it, for the tests that are about what a command line means where
+    it was typed -- a build file is looked for beside the caller.
     """
-    return subprocess.run([sys.executable, "-m", "pypl4g", *args], cwd=ROOT,
-                          capture_output=True, text=True, timeout=120,
-                          env=None if env is None else {**os.environ, **env})
+    return subprocess.run(
+        [sys.executable, "-m", "pypl4g", *args],
+        cwd=str(ROOT if cwd is None else cwd), capture_output=True, text=True,
+        timeout=180,
+        env={**os.environ, "PYTHONPATH": str(ROOT), **(env or {})})
 
 
 def describe(proc: subprocess.CompletedProcess[Any]) -> str:

@@ -1,0 +1,7 @@
+※ A program built by a build function rather than by a command line.
+※
+※ There is nothing about this program that says so: what says so is the
+※ `build.pl4g` beside it, which the compiler runs to find out what to build.
+@[startup]
+fn main() → u6:
+    0u6

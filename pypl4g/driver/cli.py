@@ -42,6 +42,11 @@ EnumT = TypeVar("EnumT", bound=Enum)
 BUILD: Final[str] = "build"
 TEST: Final[str] = "test"
 LSP: Final[str] = "lsp"
+
+#: What a build is described in, where a command line names no source.  The name
+#: is a convention and nothing more: a file holding a build function is one
+#: whatever it is called, and this is what is looked for when nothing is named.
+BUILD_FILE: Final[str] = "build.pl4g"
 SUBCOMMANDS: Final[tuple[str, ...]] = (BUILD, TEST, LSP)
 
 #: What `--emit=KIND` writes where no name was given: the first source with its
@@ -180,6 +185,7 @@ class CommandLine:
         parser.add_argument("--diag-format", dest="diag_format")
         parser.add_argument("--module-path", dest="module_path",
                             action="append", default=[])
+        parser.add_argument("-D", dest="defines", action="append", default=[])
         parser.add_argument("--stack-size", dest="stack_size")
         parser.add_argument("--guard-size", dest="guard_size")
         parser.add_argument("--report-log", dest="report_log")
@@ -251,6 +257,12 @@ class CommandLine:
                                                options.diag_format)
         for given in found.module_path:
             options.module_path.extend(parse_search_path(given))
+        for given in found.defines:
+            # `-Dname=value`, and `-Dname` on its own for a name whose value is
+            # that it was said at all.  The last one written wins, which is what
+            # every option here does.
+            name, sep, value = given.partition("=")
+            options.defines[name] = value if sep else "true"
         if found.stack_size is not None:
             options.stack_size = self._size("--stack-size", found.stack_size,
                                             options.stack_size)
@@ -333,8 +345,18 @@ class CommandLine:
                                  path=path.as_posix())
             return
         if not self._options.inputs:
-            self._diags.emit(D.IMPL_CLI_NO_INPUT)
-            return
+            # A command line naming no source means the build is described by a
+            # build file, which is looked for where the compiler was run.  Named
+            # sources are the other way in: one of them holding a build function
+            # is a build file whatever it is called.
+            if self._options.command != BUILD:
+                self._diags.emit(D.IMPL_CLI_NO_INPUT)
+                return
+            found = Path(BUILD_FILE)
+            if not found.is_file():
+                self._diags.emit(D.IMPL_CLI_NO_BUILD_FILE, name=BUILD_FILE)
+                return
+            self._options.inputs.append(found)
         if self._options.output is None:
             first = self._options.inputs[0]
             self._options.output = first.with_name(

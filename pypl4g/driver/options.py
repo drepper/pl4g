@@ -89,6 +89,15 @@ class Options:
     #: file first and to where the compiler was run second.
     module_path: list[Path] = field(default_factory=list)
     incremental: bool = False
+    #: What `-Dname=value` said, which is how a build file is told something
+    #: from outside.  Read by `std.option` while the build function runs and by
+    #: nothing else.
+    defines: dict[str, str] = field(default_factory=dict)
+    #: Whether this compilation is one a build function asked for.  Such a
+    #: compilation compiles what it was given and never looks for a build
+    #: function of its own, which is what keeps a build file that names itself
+    #: from running for ever.
+    from_build: bool = False
     show_help: bool = False
     show_help_json: bool = False
     show_targets: bool = False

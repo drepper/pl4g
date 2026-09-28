@@ -496,6 +496,27 @@
       "option": null
     },
     {
+      "number": 1018,
+      "name": "IMPL_CLI_NO_BUILD_FILE",
+      "severity": "error",
+      "message": "no source was named and there is no '{name}' here",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the file that was looked for"
+        }
+      ],
+      "cause": "A command line naming no source means the build is described by a build file, which is looked for where the compiler was run.  There is none, so there is nothing to compile and nothing that says what to compile.",
+      "spec": {
+        "document": "spec/details.md",
+        "section": "Implementation"
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 1101,
       "name": "IMPL_INPUT_UNREADABLE",
       "severity": "fatal",
@@ -7054,6 +7075,162 @@
         "document": "spec/spec.md",
         "section": "The Language / Expressions / Comparisons",
         "requirement": "An assignment is written `NAME ← VALUE`."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 7000,
+      "name": "LANG_COMPTIME_CANNOT",
+      "severity": "error",
+      "message": "the compiler cannot work out {construct} before the program runs",
+      "args": [
+        {
+          "name": "construct",
+          "type": "string",
+          "description": "what it ran into"
+        }
+      ],
+      "cause": "A function the compiler runs rather than compiles -- the build function is the first -- may only contain what the compiler can work out for itself: numbers, truth values, characters, strings, runs of them, records, references, the ordinary control flow, and calls to functions written in the same program.  What it ran into here is none of those, either because it cannot be worked out before the program runs or because this evaluator does not do it yet.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / The build function"
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 7001,
+      "name": "LANG_COMPTIME_ENDLESS",
+      "severity": "error",
+      "message": "the compiler gave up working this out: {detail}",
+      "args": [
+        {
+          "name": "detail",
+          "type": "string",
+          "description": "what it had done when it gave up"
+        }
+      ],
+      "cause": "A function the compiler runs has to finish, and this one did not within the number of steps a compiler is willing to take.  A loop whose condition never stops holding and a recursion with no end both arrive here; so does a computation that is simply enormous, which is a thing to do at run time.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / The build function"
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 7002,
+      "name": "LANG_BUILD_MULTIPLE",
+      "severity": "error",
+      "message": "more than one function is marked as the build function",
+      "args": [],
+      "cause": "A compilation is described by one build function: what it leaves behind is the whole description, so two of them would be two descriptions with nothing to say which is meant.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / The build function"
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 7003,
+      "name": "LANG_BUILD_PREVIOUS",
+      "severity": "note",
+      "message": "the build function '{name}' was marked here",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the other one"
+        }
+      ],
+      "cause": "Points at the first of the two, so that whoever reads the error can see both.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / The build function"
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 7004,
+      "name": "LANG_BUILD_BAD_SIGNATURE",
+      "severity": "error",
+      "message": "the build function must be written 'fn {name}(b: &mut std.Build)'",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the function"
+        }
+      ],
+      "cause": "The compiler runs it and hands it the object that says what to build, so it takes exactly one parameter, a mutable reference to that object, and answers with nothing: what it has to say, it says by writing into what it was handed.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / The build function"
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 7005,
+      "name": "LANG_BUILD_NOTHING",
+      "severity": "warning",
+      "message": "the build function added nothing to build",
+      "args": [],
+      "cause": "Nothing was added to the build object, so the compilation has nothing to compile.  Either an `add_executable` was meant to be there, or the condition that guards one is never true.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / The build function"
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": "empty-build"
+    },
+    {
+      "number": 7006,
+      "name": "LANG_BUILTIN_AT_RUNTIME",
+      "severity": "error",
+      "message": "'{name}' is only there while the compiler works out a build",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the function"
+        }
+      ],
+      "cause": "The function is provided by the compiler rather than written in the language, and what it does is change a description the compiler is holding.  There is nothing of it in a program, so a program that called it would be calling something that is not there.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / The build function"
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 7007,
+      "name": "LANG_BUILD_NO_SOURCES",
+      "severity": "error",
+      "message": "the executable '{name}' was given no source to build it from",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the executable"
+        }
+      ],
+      "cause": "An executable is built from at least one source file, and the run of them handed to `add_executable` was empty.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / The build function"
       },
       "since": "0.1",
       "default_enabled": true,

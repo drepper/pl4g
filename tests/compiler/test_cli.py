@@ -116,10 +116,12 @@ def _subparser_of(parser: argparse.ArgumentParser, name: str
 
 @pytest.mark.parametrize(("argv", "number"), [
     # 1001 is retired: the output no longer has to be named, the sources saying
-    # what the program is called.  An empty command line names no source, which
-    # is the thing that is actually missing.
-    ([], 1002),
-    (["-o", "out"], 1002),
+    # what the program is called.  An empty command line names no source, and
+    # what is missing is then the build file it would have been described by --
+    # 1018, and 1002 where a command line asks for something other than a build.
+    ([], 1018),
+    (["-o", "out"], 1018),
+    (["test"], 1002),
     (["-o", "out", "x.txt"], 1003),
     (["-o", "out", "--nonsense", "x.pl4g"], 1004),
     (["-o", "a", "-o", "b", "x.pl4g"], 1005),

@@ -482,6 +482,15 @@ To Do List for the pypl4g compiler
     which for the eighteen `std.Error` names is thirty-five instructions and about three milliseconds of compiling.  Sorting the
     values and testing ranges would be fewer of both, and is the compiler's to improve without any program changing.
 
+[ ] work out a compile-time value in the width it has.  The evaluator computes in whole numbers: the checker has settled the
+    types and the ranges of the literals, so an intermediate that would not have fitted in the type it is written in does not stop
+    it, and a value that is finally used somewhere is checked where it is used.  Doing better wants the type of every expression,
+    which sema knows and does not write down -- the same table the language server reads would answer it.
+
+[ ] what the compile-time evaluator cannot do yet: a match, a lambda, a set, a dictionary, a `?`, a lifted type, taking a value
+    apart into several names.  Each is named where it is refused (7000), so the list is `_DESCRIBED` in `comptime/evaluate.py` and
+    adding one is that entry and the code for it.
+
 [ ] refuse, or probe, a frame larger than the guard below the stack.  The guard is 64 KiB by default and a single frame wider
     than that steps clean over it: the fault is then past the guard, the handler does not recognize the address, and the program
     dies of the signal rather than reporting that its stack ran out.  Nothing in the language can ask for such a frame yet, there

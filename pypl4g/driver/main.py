@@ -47,6 +47,10 @@ from ..sema.notes import Notes
 from ..source.manager import (SourceDecodeError, SourceManager, SourceReadError)
 from ..target.registry import (canonical_triples, known_triples,
                                lookup as lookup_target)
+from ..comptime.build import (Plan, builtins as build_builtins, named,
+                              sources_of)
+from ..sema.check import STD_MODULE_NAME as STD_MODULE
+from ..comptime.evaluate import CannotEvaluate, Cell, Evaluator, Reference
 from .cli import parse_command_line
 from .cli import LSP, TEST
 from .options import (DiagFormat, EmitKind, ExitCode, Options, load_option_table,
@@ -102,9 +106,92 @@ class Driver:
         if module is None or self.diags.failed:
             return ExitCode.ERRORS
         self.module = module
+        if module.build is not None and not self.options.from_build:
+            # What was named describes a build rather than being one: the
+            # compiler runs the function and then does what it asked for.
+            return self._run_build(units)
         if self.options.emit is EmitKind.IR:
             return self._write_text(render_module(module))
         return self._generate(module)
+
+    def _run_build(self, units: Sequence[ast.SourceUnit]) -> int:
+        """Run the build function and build what it asked for.
+
+        Nothing of the file that describes the build is compiled: what it is for
+        is what it leaves in the object it was handed, and that is a list of
+        things to build with the settings to build them under.  Each of them is
+        then an ordinary compilation, run the way a command line naming it would
+        have run it.
+        """
+        start = perf_counter()
+        found = _build_function(units)
+        if found is None:
+            # The module says there is one and the tree does not: the two are
+            # built from each other, so this cannot happen.
+            self.diags.internal("the build function is not in the syntax tree")
+            return ExitCode.INTERNAL
+        plan = Plan(output_dir="", target=self.options.triple,
+                    opt_level=self.options.opt_level,
+                    mclevel=self.options.mclevel or "",
+                    stack_size=self.options.stack_size,
+                    guard_size=self.options.guard_size)
+        record = plan.record()
+        evaluator = Evaluator(units, {STD_MODULE: build_builtins(
+            plan, self.options.defines, self.diags)})
+        try:
+            evaluator.call(found, [Reference(Cell(record), mutable=True)])
+        except CannotEvaluate as exc:
+            if exc.ran_out:
+                self.diags.emit(D.LANG_COMPTIME_ENDLESS, exc.span,
+                                detail=exc.detail)
+            else:
+                self.diags.emit(D.LANG_COMPTIME_CANNOT, exc.span,
+                                construct=exc.detail)
+            return ExitCode.ERRORS
+        plan.settle(record)
+        self._timed("the build function", start)
+        if self.diags.failed:
+            return ExitCode.ERRORS
+        if not plan.artifacts:
+            self.diags.emit(D.LANG_BUILD_NOTHING)
+            return ExitCode.SUCCESS
+        return self._build_artifacts(plan)
+
+    def _build_artifacts(self, plan: Plan) -> int:
+        """Compile each thing the build asked for, in the order it asked.
+
+        One driver each, sharing this one's diagnostics and its source manager:
+        what a reader sees is one run reporting what went wrong wherever it was,
+        and a file named by two artifacts is read twice because each compilation
+        is a compilation of its own.
+        """
+        beside = self.options.inputs[0].resolve().parent
+        status = ExitCode.SUCCESS
+        for artifact in plan.artifacts:
+            output = named(artifact, plan)
+            options = replace(
+                self.options, inputs=sources_of(artifact, beside), output=output,
+                triple=plan.target, opt_level=plan.opt_level,
+                mclevel=plan.mclevel or None, stack_size=plan.stack_size,
+                guard_size=plan.guard_size, from_build=True)
+            if output.parent != Path():
+                try:
+                    output.parent.mkdir(parents=True, exist_ok=True)
+                except OSError as exc:
+                    self.diags.emit(D.IMPL_OUTPUT_UNWRITABLE,
+                                    path=output.as_posix(),
+                                    reason=exc.strerror or str(exc))
+                    return ExitCode.ERRORS
+            if self.options.verbose:
+                print("".join(("pypl4g: building ", artifact.name)),
+                      file=self.stderr)
+            made = Driver(options=options, diags=self.diags, sources=self.sources,
+                          stderr=self.stderr, reports=self.reports)
+            answered = made.run()
+            self.timings.extend(made.timings)
+            if answered != ExitCode.SUCCESS:
+                status = answered
+        return status
 
     def front_end(self) -> Module | None:
         """Read, parse and check, and stop there.
@@ -395,6 +482,21 @@ SUITE_RUN: Final[tuple[SpecialKind, ...]] = (SpecialKind.TEST_ALWAYS,
 
 #: What a finished build runs.
 AFTER_A_BUILD: Final[tuple[SpecialKind, ...]] = (SpecialKind.TEST_BUILD,)
+
+
+def _build_function(units: Sequence[ast.SourceUnit]) -> ast.FuncDef | None:
+    """The function marked `@[build]`, where the program has one.
+
+    Out of the syntax tree, because that is what the compiler runs: the module
+    holds the checked form of it, which is what says there is one and what says
+    there is only one.
+    """
+    for unit in units:
+        for item in unit.items:
+            if isinstance(item, ast.FuncDef) \
+                    and any(attr.name == "build" for attr in item.attrs):
+                return item
+    return None
 
 
 def _planned(module: Module, wanted: Sequence[SpecialKind]) -> list[Function]:

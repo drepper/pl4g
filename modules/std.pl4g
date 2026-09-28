@@ -200,3 +200,66 @@ fn read(from: &mut Reader, into: u8⟦⟧) → u64 ¤size ? i32:
         ⊥ 11i32
     else:
         flush(Pending(.slot ← slot))
+
+※ -- describing a build --------------------------------------------------------
+
+※※ What a build function is handed, and what it writes into to say what to build.
+※※
+※※ \details A function marked `@[build]` is run by the compiler rather than
+※※ compiled into anything, and what it leaves in this object is what gets built.
+※※ The fields are the settings a command line would otherwise carry; the run of
+※※ things to build is added to with `add_executable`, there being no way to write
+※※ a growing list of them in the language yet.
+※※
+※※ \note A field left alone keeps what the command line said, so a build file
+※※ says only what it means to decide.
+@[export]
+type Build =
+    ※ Where what is built is written.  A relative name is relative to where the
+    ※ compiler was run, as every other name on a command line is.
+    output_dir : str ;
+    ※ What to build for, written the way `--target` writes it.
+    target : str ;
+    ※ How hard to work on the code, which is what `-O` says.
+    opt_level : u8 ;
+    ※ Which of the target's microarchitecture levels may be used, or nothing
+    ※ where the target's default is wanted.
+    mclevel : str ;
+    ※ How much room a program's own stack has, and how much unreachable space
+    ※ sits below it.
+    stack_size : u64 ;
+    guard_size : u64
+
+※※ Add a program to what this build builds.
+※※
+※※ \param b what the build is described in
+※※ \param name what the program is called, which is also what the file is called
+※※ \param sources the files it is built from, of which there must be at least one
+@[export, builtin]
+fn add_executable(b: &mut Build, name: str, sources: str⟦⟧)
+
+※※ What the command line said about a name, or what the build file chose.
+※※
+※※ \details `-Dname=value` on the command line is how a build is told something
+※※ from outside; this is how the build function reads it.  A name the command
+※※ line said nothing about answers with the fallback, so a build file always has
+※※ an answer and never has to ask whether there was one.
+※※
+※※ \param b what the build is described in
+※※ \param name what to look for, which is what `-D` writes before the `=`
+※※ \param fallback what to answer with where the command line said nothing
+※※ \return what was said, or the fallback
+@[export, builtin]
+fn option(b: &mut Build, name: str, fallback: str) → str
+
+※※ The same question, asked of something that is either so or not.
+※※
+※※ \details `-Dname` on its own means it is so; `-Dname=` takes `true`, `yes`,
+※※ `on` and `1` for so and anything else for not.
+※※
+※※ \param b what the build is described in
+※※ \param name what to look for
+※※ \param fallback what to answer with where the command line said nothing
+※※ \return whether it is so
+@[export, builtin]
+fn option_flag(b: &mut Build, name: str, fallback: bool) → bool

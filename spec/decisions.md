@@ -6399,6 +6399,65 @@ wrong and nothing can be checked; **D**, whose Ddoc has named sections which
 being the compiler's own and on: a comment is part of what a definition says, and
 the compiler already objects to every other part of it that says something untrue.
 
+## 2026-09-28T16:00+02:00 — language
+
+**A program says how it is built, in the language it is written in**
+
+At the user's direction, modelled on Zig's build infrastructure, with the three
+questions put to them answered there: **both** ways in (a named source holding a
+build function is a build file; `build.pl4g` is looked for only where nothing is
+named), **a general compile-time evaluator** rather than straight-line constant
+code, and a build object that can **ask the command line** as well as carry the
+settings -- with more settings to follow.
+
+**Run by the compiler, not compiled and run.**  Zig compiles `build.zig` into a
+program, links it against a build runner and runs it, which is what lets a Zig
+build file open files and start processes.  This is worked out by the compiler
+itself, so it cannot do either, and what it can do is decided by what the
+evaluator can work out rather than by what a program could do.  The reason is the
+one the user gave: the function must consist entirely of compile-time constant
+code.  It also means a build file is checked by the compiler that will compile
+the program, in the same run, with the same diagnostics.
+
+**Over the syntax tree.**  The other choice was the intermediate representation,
+which would have implemented the representation rather than the language twice --
+and would then have had to model a heap, since a string joined to another is an
+arena and a call into an allocator there and one Python string joined to another
+here.  The whole point of working something out at compile time is that none of
+that happens.
+
+**A ceiling rather than a floor.**  A hundred thousand steps and a hundred and
+twenty-eight frames, and then it is given up on (7001).  A compiler that hung on a
+loop with no end would say nothing at all, which is worse than refusing.  Zig has
+the same rule and calls it `@setEvalBranchQuota`; a way to ask for more is an
+entry in the to-do list rather than a number a build file can raise today.
+
+**The object is an ordinary record, and what cannot be one is a function the
+compiler provides.**  The settings are fields of `std.Build`, which means the
+checker checks what a build file writes into them and a reader can look them up
+where every other type is looked up.  What could not be a field is the run of
+things to build: the language has no growing list of records yet, so
+`add_executable` is `@[builtin]` -- no body, no symbol, and refused where a
+program calls it (7006).  When the language can express that list, these become
+ordinary functions and nothing else changes.
+
+**A field left alone keeps what the command line said**, so a build file says
+only what it decides.  That is what makes `-Dtarget=aarch64-linux-none` and a
+build file work together, which is what the example uses to build for every
+target without naming one.
+
+Compare: **Zig**, whose shape this is; **Make**, **CMake** and **Meson**, which
+are separate languages, so that a project is written in two and the second is
+nobody's favourite; **Cargo** and **Go**, whose builds are manifests -- simpler
+until the day something has to be decided; **Bazel** and **Buck**, whose build
+files are a real language that is deliberately not the language being built;
+**Scons** and **Rake**, which are a general-purpose language with a build library,
+and which have the problem this avoids by being compile-time only: a build file
+that can do anything is a build file that can do something slow, or something
+different tomorrow.  What this has that none of them has is that the build is
+written in the language, checked by the compiler that checks the program, and run
+by the compiler that compiles it.
+
 Open questions
 --------------
 

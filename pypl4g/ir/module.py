@@ -85,6 +85,10 @@ class Module:
     #: Caches filled by the semantic analysis and re-checked by the verifier.
     #: The backend reads only these and never scans attributes itself.
     startup: Function | None = None
+    #: The function the compiler runs to find out what to build, where the
+    #: program has one.  A module with one describes a build and is not a
+    #: program: nothing of it is compiled, and what it leaves behind is.
+    build: Function | None = None
     ctors: list[Function] = field(default_factory=list)
     dtors: list[Function] = field(default_factory=list)
     tests: list[Function] = field(default_factory=list)

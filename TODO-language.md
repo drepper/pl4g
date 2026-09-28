@@ -29,6 +29,19 @@ To Do List for the PL4g language
     each other take one apart in a definition or an assignment.  In registers a tuple is one register per member, which is the
     result type's arrangement generalized.
 
+[ ] what else a build may say.  Today a build describes executables, each built from a run of sources with the settings the
+    object carries, and that is all: no library, no test artifact, no artifact that depends on another, no step to run by name
+    (`pypl4g build test`), no per-artifact settings, and no installing anywhere.  Each of them is a field or a function on
+    `std.Build` and an entry in the plan; what they want first is a way to name an artifact that has already been added, which is
+    a value the build function holds rather than a name it repeats.
+
+[ ] a growing run of records in the language, which is what would make `add_executable` an ordinary function rather than one the
+    compiler provides.  It wants the heap and a list type whose elements are records, both of which exist for values that are not
+    records; what is missing is the one that would let a build object hold its own artifacts.
+
+[ ] let a build function raise the ceiling on what the compiler will work out.  A hundred thousand steps is beyond anything a
+    person writes and is not beyond what a generator writes; Zig has `@setEvalBranchQuota` for exactly this.
+
 [ ] a documentation tool that reads what the comments say.  The parts of a documentation comment are read and checked (4600 to
     4604) and shown by the language server; nothing writes them out as a manual.  What it would need is already there -- the
     summary, the parameters, what is answered with -- and what it would have to decide is what a page looks like.

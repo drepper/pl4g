@@ -89,6 +89,8 @@ STARTUP_RETURN_TYPE_NAME = "u6"
 #: record a program defines for itself and calls `Init` is not it.
 STD_MODULE_NAME = "std"
 STARTUP_ARGUMENT_TYPE_NAME = "Init"
+#: And what it calls the record a build is described in.
+BUILD_TYPE_NAME = "Build"
 
 
 @dataclass(slots=True)
@@ -865,6 +867,25 @@ def _is_startup_argument(ty: Type) -> bool:
                for where in system_modules())
 
 
+def _is_build_object(ty: Type) -> bool:
+    """Whether *ty* is a mutable reference to the record a build is described in.
+
+    Settled by where the record was written down, exactly as the startup
+    function's parameter is: one a program defines for itself and calls `Build`
+    is a record it defined for itself, and what the compiler hands a build
+    function is the one type it knows.  Mutable, because writing into it is the
+    whole of what a build function does.
+    """
+    if not isinstance(ty, PtrType) or not ty.mutable:
+        return False
+    held = ty.pointee
+    if not isinstance(held, ProductType) \
+            or held.name != BUILD_TYPE_NAME or held.origin is None:
+        return False
+    return any(Path(held.origin) == (where / STD_MODULE_NAME).with_suffix(SUFFIX)
+               for where in system_modules())
+
+
 def _is_exported(what: object) -> bool:
     """Whether a top-level definition is one an importing file may name."""
     return bool(getattr(what, "exported", False))
@@ -1239,6 +1260,10 @@ class Checker:
         #: wants to be asked about one later -- the language server, and nothing
         #: else.  Nothing where nobody asked, which is every build.
         self._notes = notes
+        #: The build function, while its body is being checked.  What a
+        #: compiler-provided function may be called from is that and nothing
+        #: else, and this is how the check knows where it is.
+        self._in_build_function: Function | None = None
         self._defined: dict[str, tuple[Span, str]] = {}
         #: What this file's top-level names stand for.  It is the file's own,
         #: not the compilation's: two files may each define a `counter`, and
@@ -2423,7 +2448,7 @@ class Checker:
         defines, there being no linker and nothing else to reach.
         """
         if attrs.external is None:
-            if node.body is None:
+            if node.body is None and not attrs.builtin:
                 self._diags.emit(D.LANG_FUNCDEF_NO_BODY, node.name_span,
                                  name=node.name)
             return
@@ -2575,6 +2600,16 @@ class Checker:
                     return
                 self._check_startup_signature(func, node)
                 self._module.startup = func
+            case SpecialKind.BUILD:
+                if self._module.build is not None:
+                    previous = self._module.build
+                    self._diags.emit(D.LANG_BUILD_MULTIPLE, node.name_span).note(
+                        D.LANG_BUILD_PREVIOUS,
+                        self._name_spans.get(previous.name, previous.span),
+                        name=previous.name)
+                    return
+                self._check_build_signature(func, node)
+                self._module.build = func
             case SpecialKind.CONSTRUCTOR:
                 self._check_ctor_signature(func, node, "constructor")
                 self._module.ctors.append(func)
@@ -2586,6 +2621,21 @@ class Checker:
                 self._module.tests.append(func)
             case _:
                 pass
+
+    def _check_build_signature(self, func: Function, node: ast.FuncDef) -> None:
+        """Check the build function's signature.
+
+        One parameter, a mutable reference to the record the `std` module calls
+        `Build`, and nothing answered with: the compiler runs it and hands it the
+        object that says what to build, and what it has to say it says by writing
+        into that object.  The type is asked for by name, the way the startup
+        function's parameter is, so that what a build may say can grow without
+        every build function that exists by then having to change.
+        """
+        if func.ty.ret is not VOID or len(func.ty.params) != 1 \
+                or not _is_build_object(func.ty.params[0]):
+            self._diags.emit(D.LANG_BUILD_BAD_SIGNATURE, node.name_span,
+                             name=node.name)
 
     def _check_startup_signature(self, func: Function, node: ast.FuncDef) -> None:
         """Check the startup function's signature.
@@ -2781,12 +2831,21 @@ class Checker:
         can_ignore = False
         impure = False
         listable = False
+        builtin = False
         linkage = self._linkage_of(bound)
         extra: dict[str, int | str | bool] = {}
         for attr in bound:
             match attr.name:
                 case "startup":
                     special = SpecialKind.STARTUP
+                case "build":
+                    special = SpecialKind.BUILD
+                    # Writing into what it was handed is the whole of what a
+                    # build function does, so it says so by being one: there is
+                    # nothing it could be that also had to be written `impure`.
+                    impure = True
+                case "builtin":
+                    builtin = True
                 case "constructor":
                     special = SpecialKind.CONSTRUCTOR
                     priority = attr.as_int("priority")
@@ -2840,7 +2899,7 @@ class Checker:
                     pass
         return FuncAttrs(special=special, priority=priority, inline=inline, abi=abi,
                          external=external, can_ignore=can_ignore, impure=impure,
-                         listable=listable, extra=extra), linkage
+                         listable=listable, builtin=builtin, extra=extra), linkage
 
     # -- types -----------------------------------------------------------------
 
@@ -3354,6 +3413,11 @@ class Checker:
             return
         previous = self._discard_function
         self._discard_function = False
+        # Which function this is, for the one rule that is about where a call is
+        # written rather than about what it calls.
+        was_building = self._in_build_function
+        self._in_build_function = func \
+            if func.attrs.special is SpecialKind.BUILD else None
         if entry.expectation is not None:
             self._diags.resume(entry.expectation)
         try:
@@ -3366,6 +3430,7 @@ class Checker:
             if self._discard_function:
                 self._discard(func)
             self._discard_function = previous
+            self._in_build_function = was_building
 
     def _discard(self, func: Function) -> None:
         """Take a function out of the module, and out of every cache of it."""
@@ -12065,6 +12130,17 @@ class Checker:
                                   spread.span))
         return taken
 
+    def _only_at_build(self, func: Function, span: Span) -> None:
+        """Refuse a call to a compiler-provided function from code that runs.
+
+        Such a function has no body and no symbol: what it does is change a
+        description the compiler is holding while it works out a build.  Inside
+        the build function that is the point of it; anywhere else it is a call
+        to something that is not there.
+        """
+        if func.attrs.builtin and self._in_build_function is None:
+            self._diags.emit(D.LANG_BUILTIN_AT_RUNTIME, span, name=func.name)
+
     def _callee(self, expr: ast.Expr) -> Function | None:
         """The function a call names, or nothing where it does not name one."""
         match expr:
@@ -12075,6 +12151,7 @@ class Checker:
                         self._note(expr.span, FUNCTION, expr.name,
                                    found.ty.render(), found.name_span,
                                    found.doc or None)
+                    self._only_at_build(found, expr.span)
                     return found
                 if found is None and self._find_local(expr.name) is None:
                     self._diags.emit(D.LANG_FILESTRUCT_UNDEFINED_NAME, expr.span,
@@ -12134,6 +12211,7 @@ class Checker:
                        where[0] if where is not None else INVALID_SPAN)
             self._note(expr.name_span, FUNCTION, expr.name,
                        found.ty.render(), found.name_span, found.doc or None)
+        self._only_at_build(found, expr.span)
         return found
 
     def _lower_name(self, builder: IRBuilder, ref: ast.NameRef,
@@ -12462,7 +12540,9 @@ class Checker:
 
     def _check_program(self) -> None:
         """Check the properties the whole program must have."""
-        if self._module.startup is None:
+        if self._module.startup is None and self._module.build is None:
+            # A file with a build function in it describes a build rather than
+            # being a program, so nothing of it is ever started.
             self._diags.emit(D.LANG_FUNCDEF_SPECIAL_NO_STARTUP)
         self._report_unread_variables()
 

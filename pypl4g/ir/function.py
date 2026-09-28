@@ -37,6 +37,12 @@ class SpecialKind(StrEnum):
     """
 
     STARTUP = "startup"
+    #: The function the compiler runs rather than compiles, to find out what to
+    #: build.  It is special in the way the others are -- one per program, a
+    #: signature the compiler settles -- and unlike them it never reaches the
+    #: image: what it leaves behind is a description, and the description is what
+    #: gets compiled.
+    BUILD = "build"
     CONSTRUCTOR = "constructor"
     DESTRUCTOR = "destructor"
     TEST_ALWAYS = "test_always"
@@ -73,6 +79,11 @@ class FuncAttrs:
     #: thing it calls is called need not agree: one is a name in a language and
     #: the other a name in an image.
     external: str | None = None
+    #: Whether the compiler provides this function itself while it works out a
+    #: build.  Such a function has no body and no symbol: what it does is change
+    #: something the compiler is holding, so a program that called one would be
+    #: calling something that is not there.
+    builtin: bool = False
     #: Whether a caller may let what the function answers with go nowhere.  It
     #: may not by default: a function that answers is a function whose answer is
     #: the point of calling it, and the ones that may be called for what they do

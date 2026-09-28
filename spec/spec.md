@@ -4365,9 +4365,62 @@ The attributes that mark them are:
 | `@[test(always)]` | a test that runs after a build and when the program is first started |
 | `@[test(build)]` | a test that runs when a build finishes |
 | `@[test(suite)]` | a test that runs when a testsuite run is requested |
+| `@[build]` | the function the compiler runs to find out what to build.  At most one per program |
 
 The three kinds of test are one attribute with a parameter rather than three attributes, because they are three answers to one
 question.  These attributes exclude one another: a function is one of these things or none of them.
+
+##### The build function
+
+**A program may say how it is built, in the language it is written in.**  A function marked `@[build]` is **run by the compiler**
+rather than compiled into anything, and what it leaves behind is what gets built:
+
+```
+let std := ⎕import("std")
+
+@[build]
+fn build(b: &mut std.Build):
+    b⌖.output_dir ← "out"
+    foreach name := ⟦"hello", "tool"⟧:
+        std.add_executable(b, name, ⟦name ⧺ ".pl4g"⟧)
+```
+
+**At most one function per program is marked this way.**  What it leaves behind is the whole description of the build, so two of
+them would be two descriptions with nothing to say which was meant (7002).  It takes exactly one parameter -- a mutable reference
+to `std.Build` -- and answers with nothing (7004): the compiler hands it the object and what it has to say it says by writing into
+it.  A file holding one describes a build rather than being a program, so it needs no startup function and nothing of it is
+compiled.
+
+**Where the build function is, is where the build is described.**  A source named on the command line that holds one is a build
+file whatever it is called; a command line naming no source at all looks for `build.pl4g` where the compiler was run (1018).  A
+command line that names sources holding no build function compiles them the way it always did, which is what every command line
+that worked before this still means.
+
+**Everything in it must be something the compiler can work out** before the program runs (7000): numbers, truth values,
+characters, strings, runs of them, records, references, the ordinary control flow, and calls to functions written in the same
+program.  There is no floor under how long it may take to do that, so there is a ceiling instead: an evaluation that has not
+finished after a hundred thousand steps is given up on (7001), which is what a loop with no end and a recursion with no end both
+come to.
+
+**What it may say** is what a command line would otherwise have said.  The fields of `std.Build` are the settings -- where what is
+built goes, what to build it for, how hard to work on it, how much stack a program gets -- and a field left alone keeps what the
+command line said, so a build file says only what it means to decide.  What to build is added with `std.add_executable`, which
+takes a name and the run of sources to build it from; the sources are found beside the build file, so a build file is a way into
+a project from anywhere.  `std.option` and `std.option_flag` ask what the command line said about a name, which is written
+`-Dname=value` or `-Dname`, so that a build file can be told something from outside without being edited.
+
+The functions the compiler provides are marked `@[builtin]` where the `std` module declares them: they have no body and no symbol,
+and what they do is change a description the compiler is holding.  Calling one from a program is calling something that is not
+there, and is refused (7006).
+
+Compare: **Zig**, whose `build.zig` is this and is what this is modelled on -- a function handed a `*std.Build`, run before
+anything is compiled, that says what the compilation is; the difference is that Zig compiles that file into a program and runs it,
+where this is worked out by the compiler itself and therefore cannot open a file or start a process.  **Make**, **CMake** and
+**Meson**, which are separate languages with their own rules, so that a project is written in two languages and the second one is
+nobody's favourite.  **Cargo** and **Go**, where the build is a manifest rather than a program, which is simpler until the day it
+has to decide something.  **Bazel** and **Buck**, whose build files are a real language (Starlark) that is deliberately not the
+language being built.  What this has that none of them has is that the build is written in the language, checked by the compiler
+that checks the program, and run by the compiler that compiles it.
 
 The startup function takes what the program was started with, or nothing, and returns `u8`:
 
