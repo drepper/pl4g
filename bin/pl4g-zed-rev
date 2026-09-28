@@ -53,7 +53,13 @@ def main() -> int:
         print("the newest commit to " + GRAMMAR + " is not the grammar of HEAD",
               file=sys.stderr)
         return 1
+    # And the repository it is fetched from, which has to be one git can read.
+    origin = git("remote", "get-url", "origin")
     text = MANIFEST.read_text(encoding="utf-8")
+    if origin and origin not in text and "file://" not in text:
+        print("".join((MANIFEST.name, " fetches the grammar from somewhere this ",
+                       "checkout did not come from; origin is ", origin)),
+              file=sys.stderr)
     written = re.sub(r'^rev = "[0-9a-f]*"$', "".join(('rev = "', rev, '"')),
                      text, count=1, flags=re.MULTILINE)
     if written == text:

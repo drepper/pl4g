@@ -436,7 +436,7 @@ def test_the_grammar_zed_fetches_is_the_grammar_this_tree_has() -> None:
     entry = grammars["pl4g"]
     assert isinstance(entry, dict)
     assert entry["path"] == GRAMMAR.name, entry
-    assert str(entry["repository"]).startswith("http"), entry
+    _reachable(str(entry["repository"]))
     rev = str(entry["rev"])
     assert re.fullmatch(r"[0-9a-f]{40}", rev), "".join(("not a revision: ", rev))
     here = _tree_of("HEAD")
@@ -457,6 +457,29 @@ def test_the_grammar_zed_fetches_is_the_grammar_this_tree_has() -> None:
     assert there == here, "".join((
         "editors/zed/extension.toml points at ", rev[:12],
         ", whose grammar is not this one; run bin/pl4g-zed-rev"))
+
+
+def _reachable(repository: str) -> None:
+    """Check that the repository named is one this checkout could be cloned from.
+
+    Zed fetches the grammar from it, so a URL nobody can read is an extension
+    that installs and colours nothing -- which is what happened the first time
+    this was written: the manifest named the project over `https`, the project is
+    private, and the fetch asked for a password nobody was there to type.  What
+    is checked is therefore not that the URL is well formed but that it is the
+    one this checkout uses, or a path to this checkout.
+    """
+    if repository.startswith("file://"):
+        assert Path(repository[len("file://"):]).is_dir(), repository
+        return
+    done = subprocess.run(["git", "remote", "get-url", "origin"], cwd=str(ROOT),
+                          capture_output=True, text=True, timeout=60, check=False)
+    if done.returncode != 0 or not done.stdout.strip():
+        pytest.skip("this checkout has no origin to compare against")
+    assert repository == done.stdout.strip(), "".join((
+        "the extension fetches the grammar from ", repository,
+        " and this checkout came from ", done.stdout.strip(),
+        "; Zed can only clone what git can read"))
 
 
 def _tree_of(rev: str) -> str | None:

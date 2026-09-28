@@ -17,7 +17,7 @@ repository = "https://github.com/drepper/pl4g"
 # commit and not the working tree.  `bin/pl4g-zed-rev` writes the line below, and
 # a test refuses a revision whose grammar is not the one this tree has.
 [grammars.pl4g]
-repository = "https://github.com/drepper/pl4g"
+repository = "git@github.com:drepper/pl4g.git"
 rev = "387687be876aae77af00ccd9c54c969dcf095c9e"
 path = "tree-sitter-pl4g"
 

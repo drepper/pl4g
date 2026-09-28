@@ -45,6 +45,20 @@ that is a failing test rather than an editor quietly reading a grammar the proje
 no longer has.  The Neovim package has no such step -- it reads the working tree --
 and that difference is the one thing the two configurations do not share.
 
+**The repository has to be one your git can read.**  This project's is private, so
+`extension.toml` names it the way a checkout of it does -- `git@github.com:...`,
+which git answers with your key.  Where that is not how you reach it, point the
+line at your own checkout instead:
+
+```toml
+repository = "file:///path/to/pl4g"
+```
+
+A local path is always complete and always current, which is what makes it the
+answer when the remote is unreachable; it is not committed because it is true of
+one machine.  What tells you this went wrong is `grammars/pl4g` beside this file
+holding an empty repository, and Zed colouring nothing.
+
 The language server
 -------------------
 
