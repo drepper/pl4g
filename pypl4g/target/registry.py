@@ -21,11 +21,20 @@ _FACTORIES: Final[dict[str, Callable[[], Target]]] = {}
 #: The subset of those triples that name a target rather than abbreviate one.
 _CANONICAL: Final[list[str]] = []
 
+#: And what each of them calls the conventions it knows.  It is registered
+#: beside the factory rather than found from the triple, because a triple and
+#: the name of its backend need not agree -- `arm64` is `aarch64` -- and because
+#: what asks is the front end, which has no other use for a backend.
+_CONVENTIONS: Final[dict[str, Callable[[], frozenset[str]]]] = {}
+
 
 def register(triple: str, factory: Callable[[], Target], *,
-             canonical: bool = True) -> None:
+             canonical: bool = True,
+             conventions: Callable[[], frozenset[str]] | None = None) -> None:
     """Register a backend factory for *triple*."""
     _FACTORIES[triple] = factory
+    if conventions is not None:
+        _CONVENTIONS[triple] = conventions
     if canonical and triple not in _CANONICAL:
         _CANONICAL.append(triple)
 
@@ -37,6 +46,13 @@ def _x86_64_factory() -> Target:
     return X86_64Target()
 
 
+def _x86_64_conventions() -> frozenset[str]:
+    """What x86-64 calls the conventions it knows."""
+    from .x86_64.abi import CONVENTIONS
+
+    return frozenset(CONVENTIONS)
+
+
 def _aarch64_factory() -> Target:
     """Build the AArch64 backend."""
     from .aarch64.target import AArch64Target
@@ -44,9 +60,16 @@ def _aarch64_factory() -> Target:
     return AArch64Target()
 
 
-register("x86_64-linux-none", _x86_64_factory)
-register("x86_64-linux", _x86_64_factory, canonical=False)
-register("x86_64", _x86_64_factory, canonical=False)
+def _aarch64_conventions() -> frozenset[str]:
+    """And what AArch64 calls them."""
+    from .aarch64.abi import CONVENTIONS
+
+    return frozenset(CONVENTIONS)
+
+
+register("x86_64-linux-none", _x86_64_factory, conventions=_x86_64_conventions)
+register("x86_64-linux", _x86_64_factory, canonical=False, conventions=_x86_64_conventions)
+register("x86_64", _x86_64_factory, canonical=False, conventions=_x86_64_conventions)
 
 def _riscv64_factory() -> Target:
     """Build the RISC-V 64-bit backend."""
@@ -55,14 +78,21 @@ def _riscv64_factory() -> Target:
     return RISCV64Target()
 
 
-register("aarch64-linux-none", _aarch64_factory)
-register("aarch64-linux", _aarch64_factory, canonical=False)
-register("aarch64", _aarch64_factory, canonical=False)
-register("arm64", _aarch64_factory, canonical=False)
+def _riscv64_conventions() -> frozenset[str]:
+    """And RISC-V."""
+    from .riscv64.abi import CONVENTIONS
 
-register("riscv64-linux-none", _riscv64_factory)
-register("riscv64-linux", _riscv64_factory, canonical=False)
-register("riscv64", _riscv64_factory, canonical=False)
+    return frozenset(CONVENTIONS)
+
+
+register("aarch64-linux-none", _aarch64_factory, conventions=_aarch64_conventions)
+register("aarch64-linux", _aarch64_factory, canonical=False, conventions=_aarch64_conventions)
+register("aarch64", _aarch64_factory, canonical=False, conventions=_aarch64_conventions)
+register("arm64", _aarch64_factory, canonical=False, conventions=_aarch64_conventions)
+
+register("riscv64-linux-none", _riscv64_factory, conventions=_riscv64_conventions)
+register("riscv64-linux", _riscv64_factory, canonical=False, conventions=_riscv64_conventions)
+register("riscv64", _riscv64_factory, canonical=False, conventions=_riscv64_conventions)
 
 DEFAULT_TRIPLE: Final[str] = "x86_64-linux-none"
 
@@ -84,6 +114,18 @@ def known_triples() -> list[str]:
 def architecture_of(triple: str) -> str:
     """The architecture named by *triple*, which is its first component."""
     return triple.split("-", 1)[0]
+
+
+def conventions_of(triple: str) -> frozenset[str] | None:
+    """Every calling convention the backend for *triple* knows.
+
+    Nothing where no backend answers to the triple.  Only the architecture's
+    table of conventions is imported and not its code generator: what asks is
+    the front end, and a language server that checked a file should not pay for
+    a backend it will never run.
+    """
+    found = _CONVENTIONS.get(triple)
+    return None if found is None else found()
 
 
 def lookup(triple: str) -> Target | None:

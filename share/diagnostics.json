@@ -1753,6 +1753,60 @@
       "option": null
     },
     {
+      "number": 3210,
+      "name": "LANG_ATTR_UNKNOWN_ABI",
+      "severity": "error",
+      "message": "'{name}' is not a calling convention {target} knows, which are {known}",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the convention the attribute named"
+        },
+        {
+          "name": "target",
+          "type": "string",
+          "description": "the target being compiled for"
+        },
+        {
+          "name": "known",
+          "type": "string",
+          "description": "what that target calls the conventions it has"
+        }
+      ],
+      "cause": "`@[abi(\"name\")]` says a function is called the way something outside this compilation calls it, so the name has to be one the backend knows how to call.  A name it does not know would otherwise mean the language's own convention -- and, because the attribute is there, a symbol whose name is not mangled either: two surprises at once, and both of them silent.  Which names a target has is the target's to say: every one knows `pl4g` and `cdecl`, and each has its own name for the system's.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Functions / Attributes",
+        "requirement": "The convention `@[abi]` names is one the target knows."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 3211,
+      "name": "LANG_ATTR_ABI_ON_A_TYPE_NAMES_ONE",
+      "severity": "error",
+      "message": "'@[abi]' on a type says how it is laid out and names no convention, so '{name}' says nothing",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the convention the attribute named"
+        }
+      ],
+      "cause": "`@[abi]` on a record says its fields are never reordered and that only a reference to one crosses a call -- which is one thing, and the same whoever compiled the other side.  A convention is about how a *function* is called, so a name written on a record is a name with nothing to say; it was read and thrown away before this was reported, which is exactly the kind of silence a diagnostic is for.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Functions / Attributes",
+        "requirement": "`@[abi]` on a type is written without a convention."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 3029,
       "name": "LANG_SYNTAX_RANGE_TOO_MANY_ENDS",
       "severity": "error",

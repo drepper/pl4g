@@ -1,0 +1,16 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 3210 LANG_ATTR_UNKNOWN_ABI
+
+※ A convention is a name the target has to know, since where the arguments go
+※ is the target's to say.  One nothing knows quietly meant the language's own
+※ convention under a name nothing would mangle, which is two surprises at once:
+※ a program that links only by luck, and one whose calls follow rules the other
+※ side never agreed to.
+
+@[abi("stdcall")]
+fn elsewhere(n: u64) → u64:
+    n + 1u64
+
+@[startup, impure]
+fn main() → u6:
+    0u6

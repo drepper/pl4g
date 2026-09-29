@@ -6842,6 +6842,53 @@ reason and whose cost model is an enormous thing this deliberately is not;
 the growth budget here is a small version of; **Zig**, whose `inline fn` is the
 program saying so and nothing else, which is one of the three rules here.
 
+## 2026-09-29T15:30+02:00 — compiler
+
+**A calling convention has to be one the target knows**
+
+Decided on the user's direction, from a to-do entry.  `@[abi("name")]` took any
+string, and an unrecognised one fell through to the language's own convention
+under a name nothing would mangle -- so a program asking for `sysv64` on AArch64
+got neither the convention it named nor a symbol anything would find, with
+nothing said anywhere.  Two surprises at once, and the entry's own words for why
+it had waited: the check wants the front end to be able to ask the target what it
+knows, which nothing there could do.
+
+**What is asked, and of whom.**  `pl4g` and `cdecl` are answered without asking
+anybody: the first is the language's own and the second is "whatever this system
+calls C", and both are names every target answers to.  Anything else is put to
+the target the module is being compiled for, through a registry entry that
+imports that target's table of conventions and nothing else of it.  The front end
+building a code generator to find out whether a string is a name would be the
+wrong shape as well as slow, and the standard library -- which writes `@[abi]`
+with no name at all -- pays nothing.
+
+**The refusal says what the target does know**, because a name that is wrong is
+usually a name that is right somewhere else, and the reader's next question is
+what to write instead.
+
+**A name on a record is refused too**, which was the second silence and the one
+found while writing the first.  `@[abi]` on a type asks for a layout, which is
+one thing and the same whoever compiled the other side; a convention is about how
+a function is *called*.  The name was read and thrown away, and a compiler that
+reads something and throws it away should say so.
+
+Turned down: taking the name as a promise to be kept by whoever compiles for a
+target that knows it, so that a program could carry declarations for several
+architectures at once.  That is a real thing -- it is what a header full of
+`#ifdef` is -- but the language has conditional compilation of its own to decide
+on first, and until it does, a name the target cannot honour is a name it cannot
+honour.
+
+Compare: **Rust**, whose `extern "stdcall"` is refused per target in exactly this
+way and whose list of ABI strings is per architecture; **Zig**, whose
+`callconv(.Stdcall)` is an enumeration, so an unknown one is not expressible at
+all -- the strongest form of this and one a language with no user-namable
+conventions can afford; **C**, where `__attribute__((stdcall))` on an
+architecture that has no such thing is a warning and is ignored, which is the
+behaviour this replaces; **Go**, which offers no way to name a convention,
+there being one.
+
 Open questions
 --------------
 

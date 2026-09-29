@@ -14,6 +14,7 @@ import subprocess
 import pytest
 
 from conftest import compiler_targets, describe, run_compiler, runner_for
+from pypl4g.target.registry import conventions_of
 
 ARROW = "\N{RIGHTWARDS ARROW}"
 
@@ -181,3 +182,85 @@ def _handed_back(triple: str) -> set[str]:
 def test_and_the_answer_is_right(triple: str, tmp_path) -> None:  # noqa: ANN001
     """Which is what says the five really did survive."""
     assert run_it(tmp_path, triple, ACROSS_A_CALL) == 63
+
+
+# -- a name the target has to know ----------------------------------------------
+
+def refused(tmp_path, triple: str, source: str) -> str:  # noqa: ANN001
+    """Compile *source* for *triple*, expect a refusal, and answer what it said."""
+    path = tmp_path / "t.pl4g"
+    path.write_text(source, encoding="utf-8")
+    proc = run_compiler(["-o", str(tmp_path / "out"),
+                         "".join(("--target=", triple)), str(path)])
+    assert proc.returncode != 0, describe(proc)
+    return "".join((proc.stdout, proc.stderr))
+
+
+def declaring(abi: str) -> str:
+    """A program whose one declaration follows the named convention."""
+    return "".join(("@[abi(\"", abi, """\")]
+fn elsewhere(n: u64) """, ARROW, """ u64:
+    n + 1u64
+
+@[startup, impure]
+fn main() """, ARROW, """ u6:
+    0u6
+"""))
+
+
+@pytest.mark.parametrize("triple", compiler_targets())
+def test_every_target_knows_the_two_that_are_not_a_targets_to_know(
+        triple: str, tmp_path) -> None:  # noqa: ANN001
+    """`pl4g` is the language's own and `cdecl` is "whatever the system calls C".
+
+    Neither is a name a target has to be asked about, which is what lets the
+    standard library write one without the front end importing a target.
+    """
+    for name in ("pl4g", "cdecl"):
+        compile_it(tmp_path, triple, declaring(name))
+
+
+@pytest.mark.parametrize("triple", compiler_targets())
+def test_a_name_this_target_does_not_know_is_refused(
+        triple: str, tmp_path) -> None:  # noqa: ANN001
+    """Rather than quietly meaning the language's own under an unmangled name."""
+    said = refused(tmp_path, triple, declaring("stdcall"))
+    assert "PL4G-3210" in said and "stdcall" in said
+
+
+@pytest.mark.parametrize("triple", compiler_targets())
+def test_and_what_it_does_know_is_what_it_offered(
+        triple: str, tmp_path) -> None:  # noqa: ANN001
+    """Each of the names the target's own table holds compiles, and the refusal
+    of one it does not hold names every one of them, so a reader is told what to
+    write instead."""
+    known = conventions_of(triple)
+    assert known
+    for name in known:
+        compile_it(tmp_path, triple, declaring(name))
+    said = refused(tmp_path, triple, declaring("stdcall"))
+    assert all("".join(("'", name, "'")) in said for name in known)
+
+
+def test_a_convention_of_another_target_is_still_a_name_this_one_refuses(
+        tmp_path) -> None:  # noqa: ANN001
+    """Which is the case the check is really for: the name is a real convention,
+    and the target compiled for is one it says nothing to."""
+    for triple, elsewhere in (("x86_64-linux-none", "aapcs64"),
+                              ("aarch64-linux-none", "sysv64"),
+                              ("riscv64-linux-none", "sysv64")):
+        said = refused(tmp_path, triple, declaring(elsewhere))
+        assert "PL4G-3210" in said and triple in said
+
+
+def test_a_type_is_laid_out_and_not_called(tmp_path) -> None:  # noqa: ANN001
+    """So a convention written on one is a name with nothing to say."""
+    said = refused(tmp_path, compiler_targets()[0], """\
+@[abi("cdecl")]
+type Ring = state : u64 ; fd : u64
+
+@[startup, impure]
+fn main() """ + ARROW + """ u6:
+    0u6
+""")
+    assert "PL4G-3211" in said

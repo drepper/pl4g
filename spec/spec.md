@@ -3928,7 +3928,12 @@ I/O would go with it.
 **only a reference to one crosses a call** (4596).  Something compiled by something else passes a record by rules of its own --
 rules this compiler does not follow and does not have to, a reference being passed the same way by every convention there is.
 `@[abi]` on a *function* is the same request about the same thing, and says which convention by name; written with no name it says
-the system's, which is what `@[cdecl]` says.
+the system's, which is what `@[cdecl]` says.  **The name has to be one the target knows** (3210): `pl4g` and `cdecl` are names
+every target answers to -- the one being the language's own and the other "whatever this system calls C" -- and anything else is
+asked of the target being compiled for, which says what it knows and is told in the diagnostic.  A name one architecture knows is
+in general a name another does not, so `sysv64` written for AArch64 is refused rather than quietly meaning the language's own
+convention under a name nothing would mangle.  **A name on a record says nothing** (3211) and is refused as well: how a record is
+laid out is one thing and the same whoever compiled the other side, whereas a convention is about how a function is *called*.
 
 Compare: **C**, whose `extern` declaration this is, with a linker behind it rather than a compiler that carries the code;
 **Rust**, whose `extern "C"` and `#[repr(C)]` are this pair almost exactly; **Zig**, whose `extern fn` and `extern struct`

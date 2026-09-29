@@ -140,10 +140,6 @@ To Do List for the pypl4g compiler
     virtual register still gets one hull, which is right for a value with one definition and wrong for one the spill rewrite
     redefines; the hull is conservative, so this is a missed register rather than a defect.
 
-[ ] report a calling convention no backend knows.  `@[abi("name")]` takes any string and an unrecognised one quietly means the
-    language's own convention with an unmangled name, which is two surprises at once.  The check wants the front end to be able to
-    ask the target what it knows, which nothing there can do yet.
-
 [ ] weigh a loop when choosing what to spill.  The victim is the range that reaches furthest, which in a loop is systematically
     the value the loop carries -- the worst possible choice, since its reload runs every turn.  The standard answer is a weight by
     loop depth, and the block flow the liveness already builds is what it needs.

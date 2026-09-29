@@ -37,7 +37,7 @@ from ..ir.inst import (AddressInst, BinaryInst, BinOp, CallInst, CastInst,
                        CastKind, CmpPred,
                        ExtractInst, FrameInst, Instruction, LoadInst, RetInst,
                        Ordering, Terminator, TupleInst, UnOp)
-from ..target.registry import architecture_of
+from ..target.registry import architecture_of, conventions_of
 from ..target.syscalls import KNOWN as SYSCALL_NAMES, number_of
 from ..runtime import names as runtime_names
 from . import tables
@@ -1181,6 +1181,12 @@ _CHUNKS: Final[tuple[tuple[Type, int], ...]] = ((U64, 8), (U32, 4), (U16, 2),
 TOLERANCE_SYMBOL: Final[str] = "__pl4g_tolerance"
 
 #: And the one the arena the compiler provides carries.
+#: The conventions every target knows, which are the two the *language* names
+#: rather than the ones an architecture does: its own, and whatever this system
+#: calls things.  A program writing either asks no target anything.
+EVERY_TARGET_KNOWS: Final[frozenset[str]] = frozenset((DEFAULT_CCONV,
+                                                       SYSTEM_CCONV))
+
 HEAP_SYMBOL: Final[str] = "__pl4g_heap"
 
 #: What the generated constructor that builds a file's top-level tables is
@@ -2987,6 +2993,31 @@ class Checker:
         """Whether a file importing this module may name the definition."""
         return any(attr.name == "export" for attr in bound)
 
+    def _known_convention(self, name: str, attr: BoundAttr) -> None:
+        """Report a calling convention the target does not know.
+
+        A name it does not know would otherwise mean the language's own
+        convention -- and, the attribute being there, a symbol whose name is not
+        mangled either: two surprises at once, and both of them silent.
+
+        What a target knows is asked of the target, and only where the name is
+        not one every one of them knows: a program writing `@[cdecl]` or naming
+        the language's own convention asks nothing of anyone, and one naming an
+        architecture's own pays the reading of that architecture's table of
+        conventions and nothing else.
+        """
+        if name in EVERY_TARGET_KNOWS:
+            return
+        known = conventions_of(self._module.triple)
+        if known is None or name in known:
+            # Nothing where no backend answers to the triple: that is the
+            # driver's to report, and a name checked against nothing would be a
+            # name refused for the wrong reason.
+            return
+        self._diags.emit(D.LANG_ATTR_UNKNOWN_ABI, attr.node.span, name=name,
+                         target=self._module.triple,
+                         known=_and_then(sorted(known)))
+
     def _function_attrs(self, bound: Sequence[BoundAttr]) -> tuple[FuncAttrs, Linkage]:
         """Turn checked attributes into the form the IR carries."""
         special: SpecialKind | None = None
@@ -3042,6 +3073,7 @@ class Checker:
                     # `@[cdecl]` does, and on a type it says how one is laid
                     # out and is no business of the convention.
                     abi = attr.as_str("name") or SYSTEM_CCONV
+                    self._known_convention(abi, attr)
                     extra["variadic"] = attr.as_bool("variadic")
                 case "external":
                     # Defined somewhere else, under a name of its own, and
@@ -3083,6 +3115,16 @@ class Checker:
         if not self._declare(node.name, node.name_span, path):
             return
         attrs = self._bind_attributes(node.attrs, AttrTarget.TYPE)
+        for one in attrs:
+            # What `@[abi]` says of a record is that it is laid out the way one
+            # compiled by something else is, which is one thing and the same
+            # whoever compiled the other side.  A convention is about how a
+            # function is *called*, so a name here is a name with nothing to
+            # say -- and it was read and thrown away, which is the silence this
+            # is for.
+            if one.name == "abi" and one.as_str("name"):
+                self._diags.emit(D.LANG_ATTR_ABI_ON_A_TYPE_NAMES_ONE,
+                                 one.node.span, name=one.as_str("name"))
         defined = _NamedType(name=node.name, node=node, origin=path,
                              exported=self._is_export(attrs),
                              abi=any(one.name == "abi" for one in attrs))

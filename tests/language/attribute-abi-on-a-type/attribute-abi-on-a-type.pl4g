@@ -1,0 +1,13 @@
+※ pl4g-test: compile=fail
+※ pl4g-test: expect-diag 3211 LANG_ATTR_ABI_ON_A_TYPE_NAMES_ONE
+
+※ `@[abi]` on a record says how it is laid out, which is one thing and the same
+※ whoever compiled the other side.  A convention is about how a function is
+※ called, so a name here was read and thrown away.
+
+@[abi("cdecl")]
+type Ring = state : u64 ; fd : u64
+
+@[startup, impure]
+fn main() → u6:
+    0u6
