@@ -1,0 +1,30 @@
+※ pl4g-test: compile=ok opt=0,1
+※ pl4g-test: run=native,qemu exit=7
+※ pl4g-test: diag=none
+
+※ A function answering with more values than the convention carries in
+※ registers is rewritten to write its answer into a place the caller provides.
+※ That makes it write memory that outlives the call, which is not the same
+※ thing as making it impure: what it writes is the place it was handed and
+※ nothing else.  So a caller that reads none of that place may still drop the
+※ call, and the room it made goes with it.
+※
+※ Here the arm that reads the answer is the one the condition never takes, and
+※ the condition is settled once `pick` stands where it was called.  What the
+※ program answers with is the other arm, and it answers with it whether or not
+※ the call was made -- which is what says dropping it was allowed.
+
+@[inline(never)]
+fn three() → 〈u8, u8, u8〉:
+    〈1u8, 2u8, 3u8〉
+
+fn pick(c: bool) → u8:
+    let t: 〈u8, u8, u8〉 = three()
+    if c:
+        t⟦0⟧
+    else:
+        7u8
+
+@[startup]
+fn main() → u6:
+    ⎕narrow(pick(false), ⌜u6⌝) ?? 1u6

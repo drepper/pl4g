@@ -152,9 +152,12 @@ class _FunctionReader:
         priority: int | None = None
         abi: str | None = None
         impure = False
+        in_storage = False
         for word in words[1:]:
             if word == "impure":
                 impure = True
+            elif word == "answer-in-storage":
+                in_storage = True
             elif word in (l.value for l in Linkage):
                 linkage = Linkage(word)
             elif word.startswith("cconv("):
@@ -166,7 +169,7 @@ class _FunctionReader:
             elif word.startswith("abi("):
                 abi = word[len("abi("):-1]
         attrs = FuncAttrs(special=special, priority=priority, inline=InlineHint.DEFAULT,
-                          abi=abi, impure=impure)
+                          abi=abi, impure=impure, answer_in_storage=in_storage)
         func = Function(name=name, ty=self._module.types.func_type(params, ret),
                         attrs=attrs, linkage=linkage, cconv=cconv)
         return func

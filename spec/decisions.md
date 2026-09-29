@@ -7243,6 +7243,54 @@ to interpret the much that a debugger wants.
 While here: the specification still said a fault dies by a signal, which stopped
 being true when the reserved status range was decided.
 
+## 2026-09-30T05:30+02:00 — compiler
+
+**A pure function answering through the caller's storage keeps its purity**
+
+Decided on the user's direction, from a to-do entry.  A function answering with
+more values than the convention carries in registers is rewritten to write its
+answer into a place the caller provides, and it was marked impure from then on --
+because a call to it answers with nothing, and a pure call that answers nothing
+is used by nothing and swept away with the answer still unwritten.  That fixed a
+wrong-code bug and cost the other half: the call was then made whether or not
+anybody read what it wrote, and a pure function whose answer nobody wants is
+exactly what a caller is entitled to drop.
+
+**The attribute now says which of the two it is.**  `answer_in_storage` means
+"writes the place it was handed, and otherwise pure".  A call to such a function
+has an effect by default, which is the safe answer where nobody has asked a
+better question; what asks the better question is the sweep, and it is a question
+about the *place* rather than about the callee.  Where the place is room the
+caller made and the call is the only thing left that names it, what the call
+changes is something nothing can read.
+
+**The sweep needed no rule that recognises the whole shape**, which is what makes
+this small: the loads that read the answer die in the ordinary way when nothing
+reads what they build, then the address arithmetic that fed them, and the frame's
+last user is then the call.  Running to a fixpoint, which the sweep already did,
+is what turns four ordinary steps into the one thing wanted.
+
+Turned down: **putting the call in the memory chain**, so that the loads take a
+token the call produced and the whole thing falls out of the ordinary rules with
+no new attribute at all.  That is the better representation and it is a larger
+decision than this entry: calls are not in the memory chain at present, not one
+of them, and putting them there is a change to what the chain *is* rather than a
+fix to one pass.  It is worth doing and it is not worth doing here.
+
+What it comes to on the shape the entry names: the room, the call and the
+function itself, and a hundred and thirty-six bytes of image on the smallest
+program that shows it.
+
+Compare: **LLVM**, where this is `writeonly` and `argmemonly` on the parameter
+and the function and the dead-store eliminator does the rest -- the same
+distinction between "changes memory" and "changes memory anyone can see";
+**Rust**, whose `sret` return slot is handled in the same breath as the rest of
+the ABI and whose optimiser sees through it because the slot is an `alloca` like
+any other; **C**, where a structure returned by value is the same rewrite and
+where the compiler knows the slot is its own because it made it; **Go**, which
+answers in registers where it can and on the stack where it cannot, and whose
+escape analysis is what tells it the slot does not outlive the call.
+
 Open questions
 --------------
 

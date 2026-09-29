@@ -152,6 +152,14 @@ def render_function(func: Function, out: list[str]) -> None:
         # left it out would read back as a module where everything is pure,
         # which is the one mistake about this that writes wrong code.
         head.append(" impure")
+    if func.attrs.answer_in_storage:
+        # And this is here for the same reason and says the other half of it:
+        # a call to such a function changes memory that outlives it, so a form
+        # that left it out would read back as a module where the call may be
+        # moved and repeated, which it may not.  What it does *not* say is
+        # impure, and the difference is what lets a caller reading none of the
+        # place it handed over drop the call.
+        head.append(" answer-in-storage")
     if func.is_declaration:
         out.append("".join(head))
         return

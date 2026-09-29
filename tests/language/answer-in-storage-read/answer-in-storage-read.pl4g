@@ -1,0 +1,22 @@
+※ pl4g-test: compile=ok opt=0,1
+※ pl4g-test: run=native,qemu exit=1
+※ pl4g-test: diag=none
+
+※ And the other half: where the answer is read, the call is made and what it
+※ wrote is what the program goes on with.  The same program as the one beside
+※ this, with the condition the other way round.
+
+@[inline(never)]
+fn three() → 〈u8, u8, u8〉:
+    〈1u8, 2u8, 3u8〉
+
+fn pick(c: bool) → u8:
+    let t: 〈u8, u8, u8〉 = three()
+    if c:
+        t⟦0⟧
+    else:
+        7u8
+
+@[startup]
+fn main() → u6:
+    ⎕narrow(pick(true), ⌜u6⌝) ?? 1u6

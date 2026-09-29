@@ -12,13 +12,22 @@ one points at stops being dead without this pass having to learn about it.
 What survives with no user is what says it has an effect -- a write, a call, a
 terminator.  Each instruction answers that for itself, so a shape added later
 cannot be overlooked here.
+
+**One effect is not the instruction's own to answer for.**  A function whose
+answer is more values than the convention carries in registers is rewritten to
+write it into a place the caller provides, and a call to one therefore changes
+memory that outlives it.  That is not impurity: what it writes is the place it
+was handed and nothing else.  So where the place is room this function made and
+nothing else reads it, the call changes nothing anyone can see and goes -- and
+the room goes with it, having then no user at all.  Which is a question about
+the place and not about the callee, so it is asked here rather than by the call.
 """
 
 from __future__ import annotations
 
 from ...ir.reports import ReportKind, ReportLog
 from ...ir.function import Function
-from ...ir.inst import CallInst, Terminator
+from ...ir.inst import CallInst, FrameInst, Instruction, Terminator
 from ...ir.module import Module
 
 
@@ -54,9 +63,11 @@ class DeadCodeElimination:
         which nothing in the program names.
         """
         used = self._used(func)
+        readers = self._readers(func)
         removed = False
         for block in func.blocks:
-            kept = [i for i in block.insts if i.has_effects or id(i) in used]
+            kept = [i for i in block.insts
+                    if self._matters(i, readers) or id(i) in used]
             if len(kept) == len(block.insts):
                 continue
             surviving = {id(i) for i in kept}
@@ -75,6 +86,43 @@ class DeadCodeElimination:
             block.insts = kept
             removed = True
         return removed
+
+    def _matters(self, inst: Instruction,
+                 readers: dict[int, list[Instruction]]) -> bool:
+        """Whether *inst* has to be there even though nothing reads it.
+
+        Every instruction answers that for itself but one: a call to a function
+        that writes its answer into a place the caller provides.  What it
+        changes is that place, so where the place is room this function made and
+        the call is the only thing left that names it, what the call changes is
+        something nothing can read -- and a call that changes nothing anyone can
+        see and answers nothing anyone wants is a call the program need not
+        make.
+        """
+        if not isinstance(inst, CallInst) or not _writes_only_its_place(inst):
+            return inst.has_effects
+        place = inst.operands[-1] if inst.operands else None
+        if not isinstance(place, FrameInst):
+            # Room this function did not make, which something else may read.
+            return True
+        return [one for one in readers.get(id(place), ()) if one is not inst] != []
+
+    def _readers(self, func: Function) -> dict[int, list[Instruction]]:
+        """For each value, the instructions of *func* that name it.
+
+        The users and not merely whether there are any, because one question
+        here is whether a value is named by anything *but* one call.
+        """
+        found: dict[int, list[Instruction]] = {}
+        for block in func.blocks:
+            for inst in block.insts:
+                named = list(inst.operands)
+                if isinstance(inst, Terminator):
+                    for target in inst.successors():
+                        named.extend(target.args)
+                for value in named:
+                    found.setdefault(id(value), []).append(inst)
+        return found
 
     def _not_called(self, func: Function, inst: CallInst,
                     reports: ReportLog) -> None:
@@ -111,3 +159,15 @@ class DeadCodeElimination:
                         for arg in target.args:
                             used.add(id(arg))
         return used
+
+
+def _writes_only_its_place(inst: CallInst) -> bool:
+    """Whether the only memory a call changes is the place it was handed.
+
+    Which is what the pass that rewrites an answer too large for registers
+    leaves behind, and only that: a function the program itself marked as
+    changing something that outlives the call changes whatever it likes.
+    """
+    attrs = getattr(inst.callee, "attrs", None)
+    return (getattr(attrs, "answer_in_storage", False)
+            and not getattr(attrs, "impure", True))

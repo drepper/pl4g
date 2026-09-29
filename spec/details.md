@@ -820,13 +820,23 @@ compiler noticed about the program but something the program said, and `_ ← f(
 was asked to build.  The rest of what is dead still waits for `-O1`, a local nothing reads being the compiler noticing.
 
 It runs before `largeanswers` because that is what asks the question about the program as written.  **A function rewritten to
-answer through the caller's storage is impure from then on**: it writes through a pointer it was handed, whether or not the
-program was allowed to write anything.  Without that its calls answer with nothing, are used by nothing, and are swept away with
-the answer still unwritten -- which is a wrong-code bug the suite did not catch, the test for that shape having run only at `-O0`.
-It now runs at both.
+answer through the caller's storage writes memory that outlives the call, and is not thereby impure**: what it writes is the
+place it was handed and nothing else.  It said `impure` for a while, because saying nothing left its calls answering with
+nothing, used by nothing, and swept away with the answer still unwritten -- a wrong-code bug the suite did not catch, the test for
+that shape having run only at `-O0`.  Saying `impure` fixed that and cost the other half: a call to such a function was made
+whether or not anybody read what it wrote, and a pure function whose answer nobody wants is exactly what a caller is entitled to
+drop.
 
-**The textual form prints `impure`**, and the reader takes it.  A form that left it out would read back as a module where
-everything is pure, which is the one mistake about this that writes wrong code rather than slow code.
+So the attribute says which of the two it is.  `answer_in_storage` means "writes the place it was handed, and otherwise pure", and
+a call to such a function has an effect by default -- the safe answer where nobody has asked a better question.  **The sweep asks
+the better question**, and it is a question about the place rather than about the callee: where the place is room the caller made
+and the call is the only thing left that names it, what the call changes is something nothing can read, so the call goes and the
+room goes with it.  The loads that read the answer die first in the ordinary way, then the address arithmetic that fed them, and
+the frame's last user is then the call -- which is why the sweep running to a fixpoint is what makes this work rather than a rule
+that has to recognise the whole shape at once.
+
+**The textual form prints both**, and the reader takes both.  A form that left `answer-in-storage` out would read back as a module
+where such a call may be moved and repeated, which is the one mistake about this that writes wrong code rather than slow code.
 
 **A call that is not made is the largest thing the sweep does**, which is why it is recorded even though the value it produced had
 no name: what the program asked for was a function to run, and it does not run.  The entry names the callee and says why -- nothing
@@ -1776,6 +1786,12 @@ What a function may change
 through `_an_effect`, which reports where the function being lowered did not say it may.  One list rather than a rule each place
 remembers: a variable at the top level written, memory the function did not make written, a collection made, and a call to a
 function that may do any of those.
+
+There is a second attribute beside it and the two are not the same question.  `answer_in_storage` says the function writes the
+place its caller handed it, which is what the pass that moves a large answer out of the registers leaves behind.  That memory does
+outlive the call, so a caller may not move the call or make it twice -- and it is all the function writes, so a caller that reads
+none of that place may drop it.  Impurity is what a program says about a function; this is what a pass did to one, and saying so
+separately is what keeps a program's own promise from being silently taken away from it.
 
 **What counts as "memory it did not make" is asked of the value, not of the syntax.**  `_made_here` walks a place back through
 the casts and the arithmetic that named it: a `frame` is storage this call made and will lose, and anything worked out from one

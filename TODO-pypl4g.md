@@ -279,11 +279,6 @@ To Do List for the pypl4g compiler
     is wanted, as in `⟦1u8, 2u8⟧⟦0⟧`, they say their own type and what they came to is carried to `_fill` rather than worked out
     twice, which is what keeps a call written as an element from being made twice.  The array decays as it always did.
 
-[ ] let a pure function answering through the caller's storage keep its purity.  `largeanswers` marks such a function impure,
-    because after the rewrite it writes through a pointer it was handed; so a call to one is never dropped even where nothing
-    reads the answer.  Dropping it would mean dropping the `frame` that was made for it too, which is a thing the sweep could
-    learn: a frame nothing else reads, handed to one call and read by loads that go with it.
-
 [ ] generate for the microarchitecture level.  `--mclevel` is read, checked and enforced at startup, and nothing the code
     generator emits is above v1 -- so the level is a promise about what it may do rather than a description of what it does.
     `POPCNT` and `LZCNT` from v2 and v3 are the two the compiler would use first, both standing in for a loop today.

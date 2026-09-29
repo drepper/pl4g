@@ -586,10 +586,15 @@ def test_an_answer_of_three_parts_goes_through_the_callers_storage(  # noqa: ANN
     assert proc.returncode == 0, describe(proc)
     text = output.read_text(encoding="utf-8")
     assert "fn @three(ptr<mut \N{LEFT ANGLE BRACKET}u8, u8, u8\N{RIGHT ANGLE BRACKET}>) \N{RIGHTWARDS ARROW} void" in text, text
-    # It writes through the pointer now, so a call to it is one that has an
-    # effect -- without which the call is swept away with the answer unwritten,
-    # which is what the textual form saying so is for.
-    assert "\N{RIGHTWARDS ARROW} void internal cconv(pl4g) impure" in text, text
+    # It writes through the pointer now, which the textual form says: a call to
+    # it changes memory that outlives it, so a form that left it out would read
+    # back as a module where the call may be moved and repeated.  What it does
+    # not say is impure -- what the function writes is the place it was handed
+    # and nothing else, and a caller that reads none of that place may still
+    # drop the call.
+    assert "\N{RIGHTWARDS ARROW} void internal cconv(pl4g) answer-in-storage" \
+        in text, text
+    assert " impure" not in text.split("fn @main")[0], text
     assert "frame.ptr<mut \N{LEFT ANGLE BRACKET}u8, u8, u8\N{RIGHT ANGLE BRACKET}>" in text, text
     assert "ret.\N{LEFT ANGLE BRACKET}" not in text, text
 
@@ -608,3 +613,70 @@ def test_an_answer_of_two_parts_stays_in_registers(compile_source,  # noqa: ANN0
     text = output.read_text(encoding="utf-8")
     assert "fn @two() \N{RIGHTWARDS ARROW} \N{LEFT ANGLE BRACKET}u8, u8\N{RIGHT ANGLE BRACKET}" in text, text
     assert "frame.ptr" not in text, text
+
+
+#: A call whose answer goes through the caller's storage and whose answer the
+#: folder then makes nobody's.  `three` is held away from the inliner, so what
+#: is left is a call; `pick` is not, so the condition it branches on is settled
+#: once it stands in `main` and the arm that reads the answer goes with it.
+UNREAD = """\
+@[inline(never)]
+fn three() \N{RIGHTWARDS ARROW} \N{LEFT ANGLE BRACKET}u8, u8, u8\N{RIGHT ANGLE BRACKET}:
+    \N{LEFT ANGLE BRACKET}1u8, 2u8, 3u8\N{RIGHT ANGLE BRACKET}
+
+fn pick(c: bool) \N{RIGHTWARDS ARROW} u8:
+    let t: \N{LEFT ANGLE BRACKET}u8, u8, u8\N{RIGHT ANGLE BRACKET} = three()
+    if c:
+        t\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}0\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}
+    else:
+        7u8
+
+@[startup]
+fn main() \N{RIGHTWARDS ARROW} u6:
+    \N{APL FUNCTIONAL SYMBOL QUAD}narrow(pick({0}), \N{TOP LEFT CORNER}u6\N{TOP RIGHT CORNER}) ?? 1u6
+"""
+
+
+def test_a_call_answering_through_storage_goes_where_nothing_reads_it(
+        compile_source) -> None:  # noqa: ANN001
+    """The room, the call and the function itself.
+
+    What the function writes is the place it was handed and nothing else, so a
+    caller that reads none of that place is a caller for whom the call changes
+    nothing anyone can see -- and the room goes with the call, having then no
+    user at all.
+    """
+    proc, output = compile_source(UNREAD.format("false"), "--emit=ir", "-O1")
+    assert proc.returncode == 0, describe(proc)
+    text = output.read_text(encoding="utf-8")
+    assert "frame." not in text, text
+    assert "call " not in text, text
+    assert "fn @three" not in text, text
+
+
+def test_and_stays_where_something_does(compile_source) -> None:  # noqa: ANN001
+    """The other half of it, which is what makes the first half more than a
+    pass that removes calls."""
+    proc, output = compile_source(UNREAD.format("true"), "--emit=ir", "-O1")
+    assert proc.returncode == 0, describe(proc)
+    text = output.read_text(encoding="utf-8")
+    assert "frame." in text, text
+    assert "call " in text, text
+    assert "fn @three" in text, text
+
+
+def test_a_function_the_program_called_impure_keeps_its_call(
+        compile_source) -> None:  # noqa: ANN001
+    """The rewrite says what the function does with the place it was handed; it
+    says nothing about what the program already said the function does."""
+    source = UNREAD.format("false").replace(
+        "@[inline(never)]\nfn three", "@[inline(never), impure]\nfn three")
+    # A pure function may not call one that changes what outlives it, so the
+    # two that call this one say so as well.
+    source = source.replace("fn pick(", "@[impure]\nfn pick(")
+    source = source.replace("@[startup]", "@[startup, impure]")
+    proc, output = compile_source(source, "--emit=ir", "-O1")
+    assert proc.returncode == 0, describe(proc)
+    text = output.read_text(encoding="utf-8")
+    assert "call " in text, text
+    assert "fn @three" in text, text

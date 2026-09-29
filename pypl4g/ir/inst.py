@@ -418,6 +418,11 @@ class CallInst(Instruction):
         -- says nothing, and what it does not say has to be assumed.
         """
         attrs = getattr(self.callee, "attrs", None)
+        if getattr(attrs, "answer_in_storage", False):
+            # It writes the place it was handed, and whether that matters is a
+            # question about the place rather than about the function: the sweep
+            # asks it, and what is said here is the answer where nobody has.
+            return True
         return bool(getattr(attrs, "impure", True))
 
     def __init__(self, callee: object, args: Sequence[Value], result_ty: Type,

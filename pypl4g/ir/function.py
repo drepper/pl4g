@@ -94,6 +94,15 @@ class FuncAttrs:
     #: may move, repeat or drop, and that is worth having by default rather than
     #: on request.
     impure: bool = False
+    #: Whether the function's answer is written into a place the caller hands
+    #: it rather than answered in registers, which is what a function answering
+    #: with more values than the style carries does after the pass that rewrites
+    #: it.  Such a function writes memory that outlives the call and is not
+    #: thereby impure: what it writes is the place it was handed and nothing
+    #: else, so a caller that reads none of that place may still drop the call.
+    #: Saying which of the two it is, rather than calling it impure, is what
+    #: lets the sweep tell them apart.
+    answer_in_storage: bool = False
     #: Whether an array handed where one element is wanted is walked, the
     #: function being called for each and the answers making an array of the
     #: same shape.  A property of the function, since what it means to hand it
