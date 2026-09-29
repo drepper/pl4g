@@ -103,6 +103,7 @@ GROUPS: tuple[Group, ...] = (
            "logic-operators": "all six logical operators, none of them folded",
            "logic-short-circuit": "three short circuits, which is six blocks",
            "saturating-precedence": "a sum and a product that saturate",
+           "saturating-widest-multiplication": "six products of whole registers",
            "arithmetic-operators": "a sum and a product that check and can fault",
            "arithmetic-at-each-width": "a sum and a difference at each of the four widths",
            "wrap-arithmetic": "fifteen operators that may go past the end of their type",
