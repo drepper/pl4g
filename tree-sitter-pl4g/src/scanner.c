@@ -29,6 +29,10 @@ enum TokenType {
   INDENT,
   DEDENT,
   INLINE_OPEN,
+  // Never produced.  tree-sitter marks every external token valid while it
+  // recovers from an error, so this one being wanted is how the scanner knows
+  // that is where it is.
+  ERROR_SENTINEL,
 };
 
 // Deep enough for any program a person or a generator writes; the serialized
@@ -108,16 +112,48 @@ static bool at_comment(TSLexer *lexer) { return lexer->lookahead == 0x203B; }
 // where the parser would take the end of a statement, which is what makes one
 // character enough: at such a place the only things that may follow on the line
 // are a semicolon continuing the block, the brace of a block it stands in, a
-// comment taking the rest of the line, and the `else` or `elif` of the same
-// chain -- and of those only the last begins with a letter.
+// comment taking the rest of the line, the `else` or `elif` of the same chain
+// -- of those only the last begins with a letter -- and, where the block stands
+// inside brackets, the bracket that closes them or the comma that separates one
+// value from the next.
+//
+// Those last are what the compiler's own parser does at such a place: it reads
+// the statements of the block until what comes next cannot continue one, and a
+// closing bracket cannot.  Without them `f(if c: 1u8 else: 2u8)` ended at the
+// `)` with the block still open, and the `else` of a block that had not closed
+// belonged to nothing.
 static bool closes_one_line(TSLexer *lexer, bool saw_newline) {
-  return saw_newline || lexer->eof(lexer) || at_comment(lexer) ||
-         lexer->lookahead == '}' || lexer->lookahead == 'e';
+  if (saw_newline || lexer->eof(lexer) || at_comment(lexer)) {
+    return true;
+  }
+  switch (lexer->lookahead) {
+    case '}':
+    case ')':
+    case ']':
+    case ',':
+    case 0x27E7:  // the closing bracket of an array
+    case 0x2E29:  // of a set or a dictionary
+    case 0x3009:  // and of a tuple
+    case 'e':     // the `else` or `elif` of the same chain
+      return true;
+    default:
+      return false;
+  }
 }
 
 bool tree_sitter_pl4g_external_scanner_scan(void *payload, TSLexer *lexer,
                                             const bool *valid_symbols) {
   Scanner *scanner = (Scanner *)payload;
+
+  // Nothing at all while the parse is recovering.  Every one of these tokens
+  // stands for something about the layout -- a statement ended, a block opened
+  // or closed -- and a parse that has lost its place has lost the state those
+  // are decided from.  Answering anyway multiplies the stacks the recovery is
+  // already exploring, each of them asking again at the same place, which is
+  // memory spent on a file that is not a program.
+  if (valid_symbols[ERROR_SENTINEL]) {
+    return false;
+  }
 
   // Every one of these tokens is a marker with no text of its own, so the
   // whitespace before it is skipped rather than consumed: skipping leaves the
@@ -163,7 +199,7 @@ bool tree_sitter_pl4g_external_scanner_scan(void *payload, TSLexer *lexer,
       lexer->result_symbol = NEWLINE;
       return true;
     }
-    if (valid_symbols[DEDENT]) {
+    if (valid_symbols[DEDENT] && scanner->depth > 1) {
       scanner->closing = false;
       scanner->depth--;
       lexer->result_symbol = DEDENT;

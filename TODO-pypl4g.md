@@ -89,11 +89,11 @@ To Do List for the pypl4g compiler
     broken by holding one register in a fresh virtual one.  The hazard is asked of the registers and not of the values, which is
     what makes a branch reading a parameter's register through an `extract` come out right.
 
-[ ] let a bracketed value span more than one line in the grammar.  The compiler accepts it -- the lexer gives out no line ending
-    inside brackets -- and the grammar does not, so `⸨1u8,` on one line and `2u8⸩` on the next parses here and shows as an
-    error in an editor.  It is older than the arrays that turned it up: a set or a dictionary written that way has always had it.
-    What it wants is the external scanner to swallow a line ending where none of the three tokens it produces is wanted, which is
-    where the compiler's own lexer settles the same question.
+[x] let a bracketed value span more than one line in the grammar.  Mostly done the day after this was written, by making an end
+    of line an extra; what was left was a *block* written on one line inside brackets -- `f(if c: 1u8 else: 2u8)` -- where the
+    scanner did not know that a closing bracket or a comma ends such a block.  Done on 2026-09-29, with an `_error_sentinel` so
+    that the scanner says nothing while the parse is recovering: manufacturing tokens of no width there multiplied the stacks
+    the recovery was exploring and cost gigabytes on a file with a stray `()` in it.
 
 [ ] hold a value of a product or a sum type.  Still refused (8501), and arrays have now shown what the answer looks like: a place,
     an address to reach it by, and room in the frame where the value is a function's own.  What is left that an array did not need

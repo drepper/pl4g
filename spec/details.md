@@ -3295,6 +3295,34 @@ it says on those two streams.  And one test runs Neovim with nothing but this
 project's package on its runtime path and requires the compiler's diagnostic to
 arrive in the buffer at the place the compiler put it.
 
+What the external scanner answers, and when it says nothing
+-----------------------------------------------------------
+
+The grammar's scanner produces four tokens -- an end of line, an indent, a
+dedent, and the mark that opens a block written on one line -- and tree-sitter
+asks it only where the parse could take one of them.  That is what the line
+break inside brackets rests on: there the parser could take none, so the scanner
+is not asked and the `\n` among the extras swallows the break, which is the rule
+the compiler's lexer states by counting brackets.
+
+**A block written on one line closes at a closing bracket.**  The scanner is
+asked where a statement could end, which is what makes one character enough to
+tell what follows: a semicolon continues the block, a brace closes a block it
+stands in, a comment takes the rest of the line, `e` begins the `else` of the
+same chain -- and a closing bracket or a comma ends the block, which is what the
+compiler's parser does with them.  Without those two, `f(if c: 1u8 else: 2u8)`
+left the block open at the `)` and the `else` belonged to nothing.
+
+**And it says nothing at all while the parse is recovering.**  tree-sitter marks
+every external token valid there, so the scanner can read nothing from what is
+wanted; `_error_sentinel`, an external token no rule ever writes, is how it knows
+where it is.  Answering anyway is what made a file with a mistake in it cost
+gigabytes: each manufactured end of line and dedent is a token of no width, every
+stack the recovery is exploring asks again at the same place, and the stacks
+multiply.  The whole test corpus parsed in 7.3 seconds with the scanner answering
+during recovery and in 1.2 with it silent, and one file with a stray `()` in an
+attribute exhausted two gigabytes and died.
+
 Editors that read the same grammar
 ----------------------------------
 

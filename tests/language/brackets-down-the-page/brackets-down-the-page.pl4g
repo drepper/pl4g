@@ -1,0 +1,86 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ A value in brackets may be written down the page.
+※
+※ **No end of line while a bracket is open.**  The lexer counts them, and gives
+※ out no end of statement while any is open, so a call, a parameter list, an
+※ array, a tuple, a set or a dictionary may be written over as many lines as it
+※ takes.  What ends a statement is a line break the reader can see is one, and a
+※ break inside brackets is not that: the bracket says the value goes on.
+※
+※ **A block written on one line ends at a closing bracket.**  `f(if c: 1u8 else:
+※ 2u8)` is a block opened by the colon and closed by the `)`, which is what the
+※ parser does with it: it reads the statements of the block until what comes next
+※ cannot continue one, and a closing bracket cannot.  A comma ends one the same
+※ way, where the block is one value of several.
+※
+※ This is the file the tree-sitter grammar is held to as well: the test that
+※ compares the two reads every program here, so a shape the compiler takes and
+※ the grammar refuses is a failing test rather than a squiggle in an editor.
+※
+※ Compare: **Python**, whose brackets suppress its own newlines by the same rule
+※ and where a backslash is what continues a line outside them; **C** and
+※ **JavaScript**, which have no layout to suppress; **Haskell**, whose layout
+※ rule also stops inside brackets.
+
+fn wide(a: u8,
+        b: u8,
+        c: u8) → u8:
+    a + b + c
+
+fn pick(a: u8, b: u8) → u8:
+    a + b
+
+@[startup,
+  impure]
+fn main() → u6:
+    ※ a call down the page
+    let sum: u8 = wide(1u8,
+                       2u8,
+                       3u8)
+    ※ an array, with the elements where they read best
+    let v: u8⟦4⟧ = ⟦1u8, 2u8,
+                    3u8, 4u8⟧
+    ※ a set whose closing bracket is on a line of its own, and at a column no
+    ※ block would allow
+    let s: ⸨u8⸩ = ⸨1u8,
+2u8
+⸩
+    ※ and a dictionary written the way one is read
+    let d: mut ⸨str: u8⸩ = ⸨
+        "a": 1u8,
+        "b": 2u8⸩
+    if sum ≠ 6u8:
+        1u6
+    elif v⟦3⟧ ≠ 4u8:
+        2u6
+    elif ¬s⸨2u8⸩:
+        3u6
+    elif (d⸨"b"⸩ ?? 0u8) ≠ 2u8:
+        4u6
+    else:
+        blocks()
+
+※ A block written on one line, inside brackets.
+@[impure]
+fn blocks() → u6:
+    ※ closed by the bracket that closes the call
+    let one: u8 = pick(if 1u8 = 1u8: 1u8 else: 2u8,
+                       ※ and by the comma that follows the first
+                       if 1u8 = 2u8: 4u8 else: 8u8)
+    ※ and by the bracket of a value written down
+    let two: u8⟦2⟧ = ⟦if 1u8 = 1u8: 1u8 else: 2u8, 3u8⟧
+    ※ a lambda whose body is written on the line, inside a call
+    let three: u8 = calling(λx: u8 → u8: x + 1u8)
+    if one ≠ 9u8:
+        5u6
+    elif two⟦0⟧ ≠ 1u8:
+        6u6
+    elif three ≠ 2u8:
+        7u6
+    else:
+        0u6
+
+@[impure]
+fn calling(f: fn(u8) → u8) → u8:
+    f(1u8)

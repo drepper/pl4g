@@ -4230,8 +4230,15 @@ if n = 1u8: 1u8 elif n = 2u8: 2u8 else: 3u8
 ```
 
 **What closes it** is the end of the line, or anything on that line that cannot continue it: the `else` or `elif` of the same
-chain, the brace of a block it stands in, or a comment taking the rest of the line.  A semicolon *can* continue it, so two
+chain, the brace of a block it stands in, a comment taking the rest of the line, and -- where the block stands inside brackets --
+the bracket that closes them or the comma that separates one value from the next.  A semicolon *can* continue it, so two
 statements may stand there the way two may stand on any line.
+
+```
+f(if a: 1u8 else: 2u8)                 ※ the `)` closes the block the `else` opened
+f(if a: 1u8 else: 2u8, 3u8)            ※ and so does the comma before the next argument
+⟦if a: 1u8 else: 2u8, 3u8⟧            ※ in an array, a tuple, a set or a dictionary alike
+```
 
 **A block written this way may not open another** (3044).  The inner one would end where the outer one does, so an `else` after
 the two would belong to either and a reader would have to know a rule to say which.  C, Java and their family settle that by

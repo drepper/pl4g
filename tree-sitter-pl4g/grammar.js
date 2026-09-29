@@ -23,6 +23,12 @@ module.exports = grammar({
     // scanner produces one or the other: which of the two a block is, is a
     // question about the text after the colon, and the parser cannot ask it.
     $._inline_open,
+    // Never written in any rule, and never produced: it is how the scanner is
+    // told that the parse is recovering from an error.  tree-sitter marks every
+    // external token valid there, so a token nothing ever wants being wanted is
+    // the one sign of it -- and what the scanner answers rests on a layout state
+    // that a parse in recovery has already lost.
+    $._error_sentinel,
   ],
 
   // A comment may stand anywhere, so it is an extra; both kinds are single

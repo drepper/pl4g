@@ -5186,6 +5186,10 @@
     {
       "type": "SYMBOL",
       "name": "_inline_open"
+    },
+    {
+      "type": "SYMBOL",
+      "name": "_error_sentinel"
     }
   ],
   "inline": [],
