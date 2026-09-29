@@ -290,7 +290,9 @@ def part_offsets_of(ty: Type, layout: DataLayout) -> tuple[int, ...]:
         starts = (member_offsets_of(ty, layout) if isinstance(ty, TupleType)
                   else offsets_of(ty, layout))
         for one, start in zip(held, starts):
-            if isinstance(one, ProductType):
+            if len(parts_of(one)) > 1:
+                # A member that is itself several values is that many parts, and
+                # each of them is where its own type puts it inside the member.
                 found.extend(start + inner
                              for inner in part_offsets_of(one, layout))
                 continue

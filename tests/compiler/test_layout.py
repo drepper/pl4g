@@ -121,3 +121,69 @@ def test_a_memory_token_has_no_layout() -> None:
     """It is not a value and is never in memory."""
     with pytest.raises(NoLayoutError):
         size_of(MemType(), LAYOUT)
+
+
+# -- a member that is itself several values ------------------------------------
+
+def test_a_tuple_is_its_leaves_and_not_its_members() -> None:
+    """A member that is several values is that many parts.
+
+    What a part *is* is one value in one register, so a member counted as one
+    would be a member given one register and needing three -- which is how this
+    went wrong for as long as it was wrong.
+    """
+    from pypl4g.ir.types import NARROWING, TupleType, parts_of
+
+    held = TupleType((ResultType(U8, NARROWING), U8))
+    assert parts_of(held) == (U8, BOOL, NARROWING, U8)
+
+
+def test_and_a_record_is_too() -> None:
+    """The two are one thing to everything below the front end, so a field that
+    is a result spreads out where a member that is one does."""
+    from pypl4g.ir.types import NARROWING, parts_of
+
+    held = ProductType(
+        (("first", ResultType(U8, NARROWING)), ("second", U8)), name="Holder")
+    assert parts_of(held) == (U8, BOOL, NARROWING, U8)
+
+
+def test_which_leaves_belong_to_which_member() -> None:
+    """What reads a member out asks this: where its parts begin among the
+    whole's, and how many of them to take."""
+    from pypl4g.ir.types import NARROWING, TupleType, parts_within
+
+    held = TupleType((U8, ResultType(U8, NARROWING), U8))
+    assert parts_within(held) == ((0, 1), (1, 3), (4, 1))
+
+
+def test_a_type_with_no_members_is_asked_nothing() -> None:
+    """A whole number has no members to ask about, and answering with itself
+    would be answering a question nobody asked."""
+    from pypl4g.ir.types import parts_within
+
+    assert parts_within(U8) == ()
+
+
+@pytest.mark.parametrize("held", [
+    ResultType(U8, VOID),
+    ProductType((("a", U8), ("b", U64)), name="R"),
+], ids=["result", "record"])
+def test_every_part_has_an_offset(held) -> None:  # noqa: ANN001
+    """The two are read together -- one says what the parts are and the other
+    where each of them is -- so a shape that made them disagree would be read
+    as a part written where another one is."""
+    from pypl4g.ir.layout import part_offsets_of
+    from pypl4g.ir.types import parts_of
+
+    assert len(part_offsets_of(held, LAYOUT)) == len(parts_of(held))
+
+
+def test_including_where_a_member_is_itself_several() -> None:
+    """Which is the case the two most easily disagree about."""
+    from pypl4g.ir.layout import part_offsets_of
+    from pypl4g.ir.types import NARROWING, TupleType, parts_of
+
+    held = TupleType((ResultType(U8, NARROWING), U8))
+    assert len(part_offsets_of(held, LAYOUT)) == len(parts_of(held))
+    assert len(sorted(set(part_offsets_of(held, LAYOUT)))) == 4

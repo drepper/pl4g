@@ -58,6 +58,7 @@ from ..ir.types import (ARENA, ArrayType, BOOL, BoolType, BUILTIN_TYPES,
                         ResultType,
                         ListType, SetType, STR, SumType, TupleType, Type,
                         NARROWING, NO_UNIT, Unit, VecType, VOID,
+                        parts_within,
                         without_units,
                         CHAR, MAX_CODE_POINT, U8, made_of_parts, parts_of,
                         held_in_memory as _held_in_memory)
@@ -3929,7 +3930,13 @@ class Checker:
         if not self._accepts(expected, ty):
             self._report_mismatch(expr.span, ty, expected)
             return UndefConst(ERROR)
-        return builder.make_tuple(values, ty, expr.span)
+        # A tuple travels as its leaves and not as its members, the same way a
+        # record does: a member that is itself several values is that many
+        # values here, since what travels is values.
+        leaves: list[Value] = []
+        for value, member in zip(values, types):
+            leaves.extend(builder.leaves(value, member, expr.span))
+        return builder.make_tuple(tuple(leaves), ty, expr.span)
 
     def _taken_apart(self, value: Value, names: Sequence[tuple[str, Span]],
                      span: Span) -> list[Type] | None:
@@ -4648,7 +4655,15 @@ class Checker:
         member = ty.members[at]
         if not self._accepts(expected, member):
             self._report_mismatch(expr.span, member, expected)
-        return builder.extract(base, at, member, expr.span)
+        # Where that member's own parts begin among the tuple's, and how many
+        # of them there are: a member is one value to the program and may be
+        # several to the machine.
+        first, count = parts_within(ty)[at]
+        pieces = parts_of(ty)
+        return builder.whole(
+            [builder.extract(base, first + which, pieces[first + which],
+                             expr.span) for which in range(count)],
+            member, expr.span)
 
     def _constant_number(self, expr: ast.Expr) -> int | None:
         """The whole number an expression stands for while compiling, or nothing.

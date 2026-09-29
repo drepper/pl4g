@@ -1154,6 +1154,31 @@ def made_of_parts(ty: Type) -> bool:
     return parts_of(ty) != (ty,)
 
 
+def parts_within(ty: Type) -> tuple[tuple[int, int], ...]:
+    """Where each member of *ty* begins among its parts, and how many it has.
+
+    A member of a tuple or a record is one value to a program and may be several
+    to a machine, and `parts_of` answers the machine.  This is the other half of
+    that: what reads a member out of one asks where its parts begin and how many
+    to take.
+
+    A type with no members answers with nothing, there being no question.
+    """
+    if isinstance(ty, TupleType):
+        held: tuple[Type, ...] = ty.members
+    elif isinstance(ty, ProductType):
+        held = tuple(one for _, one in ty.fields)
+    else:
+        return ()
+    found: list[tuple[int, int]] = []
+    at = 0
+    for one in held:
+        count = len(parts_of(one))
+        found.append((at, count))
+        at += count
+    return tuple(found)
+
+
 def parts_of(ty: Type) -> tuple[Type, ...]:
     """What a value of *ty* is, where it is more than one value travelling as one.
 
@@ -1166,6 +1191,14 @@ def parts_of(ty: Type) -> tuple[Type, ...]:
 
     An array whose type *does* say how many is not among them: it is its
     elements and nothing else, which is a place in memory and never a register.
+
+    **It answers the leaves and not the members.**  A member that is itself
+    several values -- a result inside a tuple, a string inside a record -- is
+    that many parts here, because what a part *is* is one value in one register.
+    A member counted as one part would be a member given one register and needing
+    two, which is a program refused with a message about an encoding of `mov`.
+    `parts_within` is what says which of the leaves belong to which member, for
+    the places that read a member out.
     """
     if isinstance(ty, ResultType):
         # The answer, whether there is one, and -- where the error carries a
@@ -1174,7 +1207,12 @@ def parts_of(ty: Type) -> tuple[Type, ...]:
         # for it by that place and a part added after it changes nothing.
         return (ty.ok, BOOL) if ty.err is None else (ty.ok, BOOL, ty.err)
     if isinstance(ty, TupleType):
-        return ty.members
+        # Its members, and a member that is itself several values spread out
+        # where it stands.  What travels is values, so a part that was itself
+        # several of them would be a part nothing could put in a register --
+        # which is the same rule a record follows below, and for the same
+        # reason.  Which of them belongs to which member is `parts_within`.
+        return tuple(one for member in ty.members for one in parts_of(member))
     if isinstance(ty, ProductType):
         # Its fields, in the order the definition wrote them, and a field that
         # is itself a record spread out where it stands.  A record and a tuple
@@ -1182,11 +1220,7 @@ def parts_of(ty: Type) -> tuple[Type, ...]:
         # travelling together -- and what travels is values, so a part that was
         # itself several of them would be a part nothing could put in a
         # register.  Where each of them went is the checker's to remember.
-        found: list[Type] = []
-        for _, held in ty.fields:
-            found.extend(parts_of(held) if isinstance(held, ProductType)
-                         else (held,))
-        return tuple(found)
+        return tuple(one for _, held in ty.fields for one in parts_of(held))
     if isinstance(ty, ArrayType) and not ty.fixed:
         return (_pointer_to(ty.element), *(U64 for _ in ty.shape))
     if isinstance(ty, ListType):

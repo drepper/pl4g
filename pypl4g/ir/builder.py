@@ -23,7 +23,8 @@ from .inst import (SyscallInst,
                    TupleInst, UnaryInst, UnOp,
                    UnreachableInst, UnwrapInst, WrapInst)
 from .module import Module
-from .types import FloatType, BOOL, IntType, PtrType, Type, U8, VecType
+from .types import (FloatType, BOOL, IntType, PtrType, ResultType, Type,
+                    U8, VecType, parts_of)
 from .value import Value
 
 
@@ -109,6 +110,44 @@ class IRBuilder:
                 span: Span = INVALID_SPAN) -> Value:
         """Append the taking of one value out of a tuple."""
         return self._append(ExtractInst(value, index, ty, span))
+
+    def leaves(self, value: Value, ty: Type,
+               span: Span = INVALID_SPAN) -> list[Value]:
+        """Every part *value* travels in, one for each register it takes.
+
+        A value of several values is taken apart here and not left whole,
+        because what travels between one place and another is values: a member
+        that is itself several of them would be a member nothing could put in a
+        register.  A result is taken apart by the three instructions that read
+        one, which are of three types and say so; everything else is read by the
+        part it is.
+        """
+        pieces = parts_of(ty)
+        if pieces == (ty,):
+            return [value]
+        if isinstance(ty, ResultType):
+            found = self.leaves(self.unwrap(value, ty.ok, span), ty.ok, span)
+            found.append(self.failed(value, span))
+            if ty.err is not None:
+                found.extend(self.leaves(self.error(value, ty.err, span),
+                                         ty.err, span))
+            return found
+        return [self.extract(value, at, part, span)
+                for at, part in enumerate(pieces)]
+
+    def whole(self, parts: Sequence[Value], ty: Type,
+              span: Span = INVALID_SPAN) -> Value:
+        """The one value of *ty* that *parts* are, put back together."""
+        pieces = parts_of(ty)
+        if pieces == (ty,):
+            return parts[0]
+        if isinstance(ty, ResultType):
+            taken = len(parts_of(ty.ok))
+            return self.wrap(
+                self.whole(parts[:taken], ty.ok, span), parts[taken], ty, span,
+                None if ty.err is None
+                else self.whole(parts[taken + 1:], ty.err, span))
+        return self.make_tuple(tuple(parts), ty, span)
 
     def unwrap(self, value: Value, ok_ty: Type, span: Span = INVALID_SPAN) -> Value:
         """Append the reading of a result's answer."""

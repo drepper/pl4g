@@ -1,0 +1,39 @@
+※ pl4g-test: compile=ok opt=0,1
+※ pl4g-test: run=native,qemu exit=0
+※ pl4g-test: diag=none
+
+※ A member of a tuple or a record may itself be several values -- a result is
+※ three of them, an answer and whether there is one and what the error carries
+※ -- and what travels between one place and another is values.  So a tuple is
+※ its *leaves* and not its members: a member counted as one value would be one
+※ given one register and needing three.
+※
+※ It had never worked.  What it did was refuse the program with a message about
+※ an encoding of `mov`, which is a compiler saying it cannot do something in the
+※ words of the machine rather than in the words of the program.
+
+let a: u8 = 100u8
+let b: u8 = 7u8
+
+type Holder = first : u8 ? ⎕narrowing ; second : u8
+
+fn made(x: u8, y: u8) → 〈u8 ? ⎕narrowing, u8〉:
+    〈⎕narrow(x + y, ⌜u8⌝), y〉
+
+@[startup]
+fn main() → u6:
+    let pair: 〈u8 ? ⎕narrowing, u8〉 = 〈⎕narrow(a + b, ⌜u8⌝), b〉
+    let rec: Holder = Holder(.first ← ⎕narrow(a + b, ⌜u8⌝), .second ← b)
+    let answered: 〈u8 ? ⎕narrowing, u8〉 = made(a, b)
+    let wrong: mut u6 = 0u6
+    if rec.first ?? 0u8 ≠ 107u8:
+        wrong ← 3u6
+    if rec.second ≠ 7u8:
+        wrong ← 4u6
+    if answered⟦0⟧ ?? 0u8 ≠ 107u8:
+        wrong ← 5u6
+    if answered⟦1⟧ ≠ 7u8:
+        wrong ← 6u6
+    if pair⟦0⟧ ?? 0u8 ≠ 107u8:
+        wrong ← 7u6
+    wrong

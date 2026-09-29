@@ -3929,3 +3929,43 @@ in the profile this compiler targets, so there is nothing a system could have
 turned off; RISC-V's extensions are optional and its check is at compile time
 instead -- the ISA string says what may be emitted, and what is not promised is
 refused rather than emitted and hoped for.
+
+A member that is itself several values
+--------------------------------------
+
+`parts_of` answers what a value *is* where it is more than one value travelling
+as one, and everything that has to put a value somewhere asks it: the register
+allocation, the calling convention, the pass that moves a large answer into the
+caller's storage.  It gave a tuple its members and stopped, which was right
+until a member was itself several values.
+
+**A result inside a tuple is three parts and not one.**  `〈u8?, u8〉` is an
+answer, whether there is one, what the error carries, and the second member --
+four values in four registers.  Counted as two, the first member was given one
+register and needed three, and the program was refused with a message about an
+encoding of `mov`.  It had never worked.
+
+**So `parts_of` answers the leaves.**  A record already did, a field that is
+itself a record having been spread out where it stands since records existed;
+this is the same rule said of every shape rather than of one.  `parts_within` is
+the other half: for each member of a tuple or a record, where its parts begin
+among the whole's and how many there are, which is what reads a member out.
+
+**The front end follows.**  A tuple literal hands over its members' leaves, the
+way a record literal already handed over its fields' leaves, and reading a
+member out takes that member's leaves and puts them back together.  Two builder
+methods do both -- `leaves` and `whole` -- and they know the one thing that is
+not uniform: a result is taken apart by `unwrap`, `failed` and `error` and put
+together by `wrap`, its parts being of three types rather than indexed by
+number, where everything else uses `extract` and `make_tuple`.
+
+**The verifier needed nothing.**  It checks a tuple's operands against
+`parts_of` and an extraction's index against it, and both are what the front end
+now gives it: the change was the front end catching up with what the
+representation already said.
+
+What this buys is a shape that was refused becoming a shape that works, on all
+three targets and through the caller's storage: `〈u8?, u8〉` is four parts, which
+is more than the convention carries in registers, so a function answering one
+goes through the pass that moves a large answer -- and that pass reads
+`parts_of` like everything else, so it needed nothing either.

@@ -291,12 +291,6 @@ To Do List for the pypl4g compiler
     hands the program, which the entry point already walks past on its way to the environment.  AArch64 needs none of this: its
     vector unit is not optional in the profile this compiler targets.
 
-[ ] count registers per part recursively.  `parts_of` gives a tuple its members and stops, so a member that is itself several
-    values -- a result among them, `〈u8?, u8〉` -- is given one register where it needs two, and the program is refused with a
-    message about an encoding of `mov`.  It has never worked; what it wants is for everything that counts parts to flatten, which
-    is `parts_of` answering the leaves rather than the members, and for the places that read a tuple apart to follow.  The
-    `largeanswers` pass leaves such an answer alone rather than moving where it goes wrong.
-
 [ ] put a call in the memory chain.  A call has `has_effects` and so is kept, and nothing orders memory operations around it: a
     load written after a call takes the token that was in force before it.  Nothing reorders memory operations today, so nothing
     is wrong yet; the loads the `largeanswers` pass writes after a call are the first code that depends on it, and a scheduler

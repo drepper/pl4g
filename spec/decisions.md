@@ -7430,6 +7430,45 @@ every uncaught exception and cannot be told from a program that meant to.  The
 argument for one number is that the message says more, and it is right about
 people and wrong about programs.
 
+## 2026-09-30T11:30+02:00 — compiler
+
+**A tuple is its leaves and not its members**
+
+Decided on the user's direction, from a to-do entry.  `parts_of` gave a tuple its
+members and stopped, so a member that was itself several values -- a result among
+them -- was given one register where it needed three, and the program was refused
+with a message about an encoding of `mov`.  It had never worked.
+
+**The rule was already written down for records.**  A field that is itself a
+record has been spread out where it stands since records existed, on the argument
+that what travels between one place and another is *values*, and a part that was
+itself several of them would be a part nothing could put in a register.  The
+change is that rule said of every shape rather than of one, which is why it is
+four lines in `parts_of` and one new function beside it.
+
+**`parts_within` is the other half.**  A member is one value to a program and
+may be several to a machine; `parts_of` answers the machine and this answers the
+question the program's side asks -- where a member's parts begin among the
+whole's, and how many.
+
+**The front end catches up rather than the representation changing.**  A tuple
+literal hands over its members' leaves, the way a record literal already handed
+over its fields', and reading a member out takes its leaves and puts them back
+together.  The verifier needed nothing: it was already checking against
+`parts_of`, and what had been wrong was what the front end gave it.
+
+Turned down: keeping the representation member-shaped and having each backend
+flatten.  That would have put the same knowledge in three places and left a
+record and a tuple meaning different things in one instruction -- `TupleInst`
+taking fields from one and members from the other -- which is the shape that made
+this wrong in the first place.
+
+Compare: **LLVM**, where a struct is flattened by the ABI lowering and the
+frontend hands over the leaves, which is this; **Rust** and **Swift**, whose ABI
+layers each have a notion of "scalar pairs" and flatten past it; **Go**, which
+does the same for its multiple return values.  Nobody keeps the nesting past the
+point where registers are handed out, because a register holds one value.
+
 Open questions
 --------------
 
