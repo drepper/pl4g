@@ -3056,6 +3056,67 @@ read off its value, and a vector, which is what an operator walked over an array
 works on.  A message about either says what it *is* -- `cursor over [u8]` --
 rather than a spelling nobody could have written.
 
+Callees first, and what that buys
+---------------------------------
+
+`ir/callgraph.py` answers one question -- who calls whom -- and two things rest
+on the order it gives.
+
+**The backend generates a callee before its caller.**  What a call destroys is
+asked of the *finished* callee: a register not among what it wrote still holds
+what it held, so nothing has to be saved around the call.  A caller generated
+first had to assume the convention's whole caller-saved set instead, which is a
+save and a reload at every call to every function defined later in the file.
+The order is a depth-first walk left in the order it finished, which is the
+topological order where there is one; round a cycle there is none, and the
+functions of it come out in the order the walk met them, each assuming the
+convention's set for the callees it has not seen.
+
+That ordering turned up a bug of the kind it was meant to make impossible.  The
+register allocator rebuilds an instruction whose registers it changed, and the
+rebuild carried neither `clobbers` nor `reads` -- so **every** finished function
+looked as though its calls destroyed nothing, and `clobbered_units` answered
+with what the function itself wrote.  Nothing noticed while callers were mostly
+generated before their callees; with the order reversed, a caller of a function
+that calls through a value kept a value in a register the call overwrote.  Both
+rebuilds carry them now, and a test in `test_regalloc.py` holds them there.
+
+Putting a callee where it was called
+------------------------------------
+
+The inliner walks the same order, callees first, so a callee it reaches is one
+whose size and whose calls are final -- which is most of what an inliner needs
+and all of what a cheap one needs.  Nothing is looked at twice and nothing round
+a cycle is looked at at all.
+
+**What it inlines**: what the program said to (`@[inline]`), whatever the size;
+what the whole program calls once and nothing outside can reach, since the copy
+is then the only one there is; and what is small -- twelve instructions, a
+handful more than a call is made of.  A caller may grow by two hundred
+instructions in total, so that a function calling many small ones does not
+become one enormous one.  What it never inlines: a function that can reach
+itself, one that follows another convention -- the call *is* the convention --
+one the entry point or the testing machinery calls by name, and one the program
+marked `@[inline(never)]`.
+
+**What it leaves behind** is a function nothing calls any more, and the pass that
+drops what nothing reaches removes it.  That is what makes inlining a
+function called once free: the call goes, the body stands where it was, and the
+original goes with the next pass.  The log says both, so "where did my function
+go" has an answer.
+
+**How a body is put in place**: the block holding the call is cut in two, what
+follows the call becomes a block of its own taking the answer as a parameter, and
+the first half branches into a copy of the callee with the arguments as the
+copy's parameters; every `ret` in the copy becomes a branch to the second half.
+Two things about the copy are worth writing down.  The callee's `mem.start` is
+the token in force at the call, a chain begun again in the middle of a function
+saying nothing about what came before it.  And the copy is made in two passes --
+every instruction first, then what each one names -- because a block may pass a
+value defined in a block that stands *after* it in the list: the list is a layout
+and not an order of definitions.  The blocks go into the caller's list where the
+call was, since that list is the order the backend walks.
+
 A sum is where its bytes are
 ----------------------------
 

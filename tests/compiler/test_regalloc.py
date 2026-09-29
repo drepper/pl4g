@@ -96,6 +96,30 @@ def test_what_an_instruction_touches_besides_its_operands_counts() -> None:
     assert any(isinstance(d, PhysReg) and d.name == "eflags" for d in defs)
 
 
+def test_what_a_call_destroys_survives_the_allocation() -> None:
+    """The one thing on an instruction that is not in its row.
+
+    Which registers a call destroys is the callee's to say and is carried on the
+    instruction; the allocator rebuilds an instruction whose registers it
+    changed, and one rebuilt without them is a call that looks as though it
+    destroyed nothing.  What reads that afterwards is the *caller* of this
+    function, which saves only what its callees actually wrote -- so losing them
+    is a value kept in a register a call overwrites.
+    """
+    held = virtual()
+    call = inst("call", MCReg(virtual(64)))
+    call.clobbers = (reg("eax"), reg("ecx"))
+    call.reads = (reg("edi"),)
+    other = virtual()
+    built = function(inst("mov", MCReg(held), MCImm(1, 32)),
+                     inst("mov", MCReg(other), MCImm(2, 32)), call,
+                     inst("add", MCReg(held), MCReg(other)))
+    out = assigned(built)
+    after = next(one for one in out if InstFlags.CALL in one.desc.flags)
+    assert [r.name for r in after.clobbers] == ["eax", "ecx"]
+    assert [r.name for r in after.reads] == ["edi"]
+
+
 # -- what it decides ------------------------------------------------------------
 
 def test_two_values_wanted_at_once_get_different_registers() -> None:

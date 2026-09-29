@@ -17,6 +17,7 @@ from ...mc.fixup import FixupApplier, MCFixup
 from ...mc.inst import MCInst
 from ...mc.reg import RegisterInfo
 from ...mc.regalloc import RegisterPressureError
+from ...ir.callgraph import in_call_order
 from ...mc.machine import clobbered_units
 from ...mc.reg import RegUnit
 from ...mc.streamer import MCStreamer
@@ -188,12 +189,13 @@ class RISCV64Target:
         asm.section(".text", executable=True,
                     alignment=IMAGE_DEFAULTS.text_alignment)
         # What each function turned out to destroy, so that a call to one saves
-        # only what it has to.  A function is asked after it is built, so a
-        # callee built before its caller is one the caller knows about and one
-        # built after is not -- which is why the to-do list wants the functions
-        # sorted by the call graph.
+        # only what it has to.  A function is asked after it is built, so the
+        # functions are built callees first: a caller built after its callee
+        # saves the registers that callee actually wrote, where one built before
+        # it has to assume the convention's whole caller-saved set.  Round a
+        # cycle there is no such order and the assumption is what is left.
         clobbers: dict[str, frozenset[RegUnit]] = {}
-        for func in module.functions.values():
+        for func in in_call_order(module):
             if func.is_declaration:
                 continue
             if not self.isa.floats and _touches_floats(func):

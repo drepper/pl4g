@@ -62,6 +62,10 @@ class ReportKind(StrEnum):
     #: once and said nothing about which types; which ones it was built for is
     #: what the calls turned out to ask for.
     INSTANTIATE = "instantiate"
+    #: A callee put where a caller called it.  What the log says is which
+    #: function went where, and why it was worth it: a reader asking "where did
+    #: my function go" is asking this and the drop below it.
+    INLINE = "inline"
     #: How long the answer of one call lives.  The function promised only its
     #: parameter's lifetime, and which one that came to is worked out at the
     #: call; the program says it in neither place.

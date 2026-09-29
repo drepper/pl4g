@@ -565,11 +565,18 @@ class LinearScan:
         return out
 
     def _substituted(self, inst: MCInst, replacement: dict[int, VirtReg]) -> MCInst:
-        """One instruction, with the spilled registers standing in for their own."""
+        """One instruction, with the spilled registers standing in for their own.
+
+        What it destroys and what it reads beyond its row travel with it.  A
+        call carries both -- they are the callee's to say -- and an instruction
+        rebuilt without them is a call that looks as though it destroyed
+        nothing, which is what a caller would then believe.
+        """
         operands = tuple(self._substitute_operand(o, replacement)
                          for o in inst.operands)
         return MCInst(desc=inst.desc, operands=operands, span=inst.span,
-                      prefixes=inst.prefixes)
+                      prefixes=inst.prefixes, clobbers=inst.clobbers,
+                      reads=inst.reads)
 
     def _substitute_operand(self, operand: MCOperand,
                             replacement: dict[int, VirtReg]) -> MCOperand:
@@ -601,12 +608,18 @@ class LinearScan:
             block.insts = [self._rewrite_inst(i, assignment) for i in block.insts]
 
     def _rewrite_inst(self, inst: MCInst, assignment: Assignment) -> MCInst:
-        """One instruction, with its registers assigned."""
+        """One instruction, with its registers assigned.
+
+        As above, what it destroys and what it reads travel with it: this is the
+        rewrite every instruction goes through, so an instruction that lost them
+        here would have lost them for good.
+        """
         operands = tuple(self._rewrite_operand(o, assignment) for o in inst.operands)
         if operands == inst.operands:
             return inst
         return MCInst(desc=inst.desc, operands=operands, span=inst.span,
-                      prefixes=inst.prefixes)
+                      prefixes=inst.prefixes, clobbers=inst.clobbers,
+                      reads=inst.reads)
 
     def _rewrite_operand(self, operand: MCOperand, assignment: Assignment) -> MCOperand:
         """One operand, with its registers assigned."""

@@ -75,9 +75,13 @@ def pipeline_for(level: int) -> Sequence[str]:
     # caller's storage and is not droppable at all.
     if level <= 0:
         return ("dropignored", "largeanswers", "dropunreached")
+    # Inlining goes after the two that are not optimizations and before the
+    # rest: what it leaves behind is a call gone and a body in its place, which
+    # is what folding, simplifying and sweeping are for -- and a function
+    # nothing calls any more, which the last pass drops.
     # Dead code is swept before that, since both of the others leave some.
-    return ("dropignored", "largeanswers", "constfold", "simplifycfg", "dce",
-            "dropunreached")
+    return ("dropignored", "largeanswers", "inline", "constfold", "simplifycfg",
+            "dce", "dropunreached")
 
 
 def build_manager(level: int) -> PassManager:
@@ -86,6 +90,7 @@ def build_manager(level: int) -> PassManager:
     from .passes.dce import DeadCodeElimination
     from .passes.dropignored import DropIgnoredCalls
     from .passes.dropunreached import DropUnreached
+    from .passes.inline import Inlining
     from .passes.largeanswers import LargeAnswers
     from .passes.simplifycfg import SimplifyCFG
 
@@ -94,6 +99,7 @@ def build_manager(level: int) -> PassManager:
         "dce": DeadCodeElimination(),
         "dropignored": DropIgnoredCalls(),
         "dropunreached": DropUnreached(),
+        "inline": Inlining(),
         "largeanswers": LargeAnswers(),
         "simplifycfg": SimplifyCFG(),
     }

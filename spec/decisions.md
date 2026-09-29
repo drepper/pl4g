@@ -6794,6 +6794,54 @@ Compare: **Rust**, whose `enum` this is, and whose values are written
 program's business; **Zig**, whose `union(enum)` writes the tag as an enumeration
 of its own, which is this with the tag given a name.
 
+## 2026-09-29T15:00+02:00 — compiler
+
+**Callees first, and a callee put where it was called**
+
+At the user's direction, two entries of TODO-pypl4g.md at once and a third thing
+with them: "generate the functions in the order the call graph gives.  use this
+to determine inlining usefullness and then dropping the original function if it
+is unused".
+
+**The order is one answer asked twice.**  The backend wants a callee generated
+first, because what a call destroys is asked of the finished callee; the inliner
+wants the same order, because a callee already dealt with is one whose size and
+whose calls are final.  So `ir/callgraph.py` answers it once and both ask.  Round
+a cycle there is no such order, and the answer is to stop asking: the functions
+come out in the order the walk met them, the backend assumes the convention's
+whole caller-saved set for a callee it has not seen, and the inliner leaves every
+function of the ring alone.
+
+**The inlining rule is three lines and no heuristic worth the name.**  What the
+program asked for; what the whole program calls once, which costs nothing at all
+because the original then goes; and what is small.  A cost model over the
+*generated* code was the alternative -- the entry imagined one, since a callee
+generated first is one whose registers and size are known -- and it is turned
+down for now because inlining at that level means splicing allocated code into a
+caller that has not been allocated, which is a much larger thing than the rule
+buys.  Inlining is therefore an IR pass like the others, and what the order buys
+it is that a callee's *IR* is final.
+
+**Dropping the original is not the inliner's to do.**  A function nothing calls
+any more is a function nothing reaches, and there is already a pass that drops
+those -- so the inliner runs before it and says nothing about removal.  That the
+two compose is what makes "called once" a rule worth having.
+
+**A bug the ordering exposed**, and the reason this is worth saying out loud: the
+register allocator rebuilt instructions without their `clobbers` and `reads`, so
+every finished function looked as though its calls destroyed nothing.  It was
+harmless only because callers were mostly generated before their callees, which
+made the answer unused; the moment the order was right, a caller believed it and
+kept a value in a register a call overwrote.  Compare that with what the entry
+said the ordering was *for*: the exact answer.  An exact answer is worth having
+only if it is exact, and the thing that made it inexact had been there all along.
+
+Compare: **LLVM**, whose inliner is a bottom-up walk of the call graph for this
+reason and whose cost model is an enormous thing this deliberately is not;
+**GCC**, which does the same with a budget per translation unit, which is what
+the growth budget here is a small version of; **Zig**, whose `inline fn` is the
+program saying so and nothing else, which is one of the three rules here.
+
 Open questions
 --------------
 

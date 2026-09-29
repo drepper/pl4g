@@ -150,10 +150,31 @@ def test_a_pure_call_nothing_reads_is_not_made(compile_source) -> None:  # noqa:
 
 
 def test_an_impure_call_nothing_reads_is_still_made(compile_source) -> None:  # noqa: ANN001
-    """What it may change is what keeps it, whoever wants its answer."""
+    """What it may change is what keeps it, whoever wants its answer.
+
+    What is looked for is the *write*, not the call: a callee small enough is
+    put where it was called, and then there is no call to find -- but the store
+    it was made for is there, which is the whole of what this is about.  A call
+    that had been dropped would take the store with it.
+    """
     proc, output = compile_source(
         "let seen: mut u6 = 0u6\n\n"
         "@[impure]\nfn notes(n: u6) \N{RIGHTWARDS ARROW} u6:\n"
+        "    seen \N{LEFTWARDS ARROW} n\n    n\n\n"
+        "@[startup, impure]\nfn main() \N{RIGHTWARDS ARROW} u6:\n"
+        "    _ \N{LEFTWARDS ARROW} notes(3u6)\n    seen\n",
+        "--emit=ir", "-O1")
+    assert proc.returncode == 0, describe(proc)
+    text = output.read_text(encoding="utf-8")
+    assert "store.u6" in text and "@seen" in text, text
+
+
+def test_an_impure_call_the_inliner_leaves_alone_is_still_made(
+        compile_source) -> None:  # noqa: ANN001
+    """And where it is not inlined, the call itself is what stays."""
+    proc, output = compile_source(
+        "let seen: mut u6 = 0u6\n\n"
+        "@[impure, inline(never)]\nfn notes(n: u6) \N{RIGHTWARDS ARROW} u6:\n"
         "    seen \N{LEFTWARDS ARROW} n\n    n\n\n"
         "@[startup, impure]\nfn main() \N{RIGHTWARDS ARROW} u6:\n"
         "    _ \N{LEFTWARDS ARROW} notes(3u6)\n    seen\n",

@@ -110,16 +110,24 @@ To Do List for the pypl4g compiler
     a collection there needed: the bytes are known while compiling -- a part and a tag -- so this one is a constant to lay out
     rather than a constructor to generate.
 
-[ ] generate the functions in the order the call graph gives.  What a call destroys is asked of the callee once it has been
-    generated, so a callee generated before its caller is one the caller knows about and one generated after is not -- and the
-    order today is the order the module holds them, which is the order they were written in.  Sorting by the call graph, callees
-    first, makes the answer always the exact one.  What it needs: the graph, which is a walk over every `CallInst`; a topological
-    order of it; and an answer for a cycle, where the usual one is to give every function of the cycle its convention's whole
-    caller-saved set and settle for that.
+[x] generate the functions in the order the call graph gives.  Done on 2026-09-29: `ir/callgraph.py` answers the graph and the
+    order, a depth-first walk left in the order it finished, and the three backends generate in it.  Round a cycle there is no
+    order and the convention's whole caller-saved set is what a call assumes.  It turned up a bug of the kind it was meant to
+    make impossible: the register allocator rebuilt instructions without their `clobbers`, so every function looked as though its
+    calls destroyed nothing -- harmless only while the answer went unused.
 
-[ ] use the same ordering to decide what to inline.  A callee generated before its caller is one whose size, and whether it calls
-    anything, and which registers it wants, are all known where the decision would be made -- which is most of what an inliner
-    needs and all of what a cheap one needs.  The two entries are one piece of work: the ordering is what both want.
+[x] use the same ordering to decide what to inline.  Done on 2026-09-29, as an IR pass walking callees first: what the program
+    asked for, what the whole program calls once, and what is small.  What is left behind is dropped by the pass that drops what
+    nothing reaches, which is what makes the second rule free.
+
+[ ] thread the memory chain through an inlined body.  A call is not in the chain -- it neither takes a token nor answers with one
+    -- so the caller's loads after an inlined body still read the token that stood before it.  Nothing reorders memory today, so
+    it is bookkeeping rather than a defect; the day something does, the body's last token has to reach what follows it, which
+    means the block after the call taking one and every `ret` handing one over.
+
+[ ] weigh what a copy costs where it is *generated* rather than where it is written.  The inliner measures a callee in IR
+    instructions, which is what it can see; how many bytes it comes to, which registers it wants and whether it calls anything are
+    the backend's answers, and a cost model over those is what an inliner that inlines the doubtful cases would want.
 
 [ ] a bespoke convention per function rather than one for all of them.  Today `pl4g` is one convention, shaped so that the common
     small function costs nothing; the specification allows a different one per function, which would mean parameters placed where
