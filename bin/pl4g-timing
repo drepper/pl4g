@@ -191,6 +191,7 @@ GROUPS: tuple[Group, ...] = (
            "syscall": "two requests to the kernel, one of them with every argument",
            "record-values": "a record made, read, handed to a call and answered with",
            "record-in-a-record": "a record holding records, and a reference into one",
+           "answer-in-storage-not-read": "an answer through storage that nothing reads",
            "record-through-a-call": "a record holding records handed to a call and answered with",
            "record-of-one-field": "a record of one field made, passed, answered with and referred into",
            "match-on-a-sum": "a value of a sum made, matched and taken apart",
