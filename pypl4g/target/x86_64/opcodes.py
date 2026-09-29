@@ -12,7 +12,7 @@ from typing import Final
 
 from ...mc.desc import InstFlags, OperandKind, OperandRole, OperandSpec
 from .desc import EncKind, ModRMUse, OpMap, OpSize, VexInfo, X86InstDesc
-from .regs import (CALLER_SAVED, EFLAGS, GPR, R11, RAX, RBX, RCX, RDX,
+from .regs import (EFLAGS, GPR, R11, RAX, RBX, RCX, RDX,
                    VEC)
 
 
@@ -1006,16 +1006,12 @@ X86_INSTRS: Final[tuple[X86InstDesc, ...]] = (
     X86InstDesc("jnp", (_rel(32),), opcode=0x8B, map=OpMap.M0F,
                 rel_op=0, rel_bits=32, implicit_uses=(EFLAGS,),
                 flags=InstFlags.TERMINATOR, est_size=6),
-    # A call destroys every register the convention calls caller-saved, so the
-    # allocator has to be told -- otherwise a value held across one is silently
-    # lost.  Naming them here puts a convention's business in the instruction
-    # table, which is not where it belongs; it costs nothing today, every
-    # convention this target has calling the same registers caller-saved, and
-    # the entry in the to-do list says what to do when one does not.
+    # What a call destroys is the *callee's* to say: two functions of one
+    # compilation may follow different conventions, and a function that destroys
+    # little is one a caller has to save little around -- neither of which the
+    # table can know.  So the call carries it, per call, and what is named here
+    # is only what the instruction itself writes.
     # call rel32                         E8 cd
-    # What a call destroys is the *callee's* to say and is carried on the
-    # instruction rather than stated here; the link register, which the
-    # instruction itself writes, is not.
     X86InstDesc("call", (_rel(32),), opcode=0xE8, rel_op=0, rel_bits=32,
                 flags=InstFlags.CALL, est_size=5),
     # call r/m64                         FF /2

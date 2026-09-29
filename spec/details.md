@@ -1891,6 +1891,12 @@ its arguments went into, because a register holding an argument would look dead 
 could be given it; and, for a return, the register the answer went into, for the same reason.  The rows say only what the
 instruction itself does -- writing the link register, on the two architectures that have one.
 
+The instruction tables named the caller-saved set on their call rows for a while, because the allocator had to be told something and
+the table was the only place that could tell it.  Nothing of a convention is in them now.  What answers instead is `destroyed_by` in
+`target/callconv.py`, one function for all three targets rather than a copy each: the units a finished callee actually wrote, where
+that has been worked out, and the convention's whole caller-saved set where it has not.  A test says of each target that no call row
+names a register the allocator hands out, which is the invariant in the form a table can be checked against.
+
 **A physical register's live range is several stretches and not one.**  A virtual register gets a hull over the points where it is
 live, which is right for a value: one value, one stretch.  A physical register is written wherever a convention says it is -- an
 argument in, an answer out -- and between one such write and the read that takes the value away it holds nothing.  A hull would say

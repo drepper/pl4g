@@ -7055,6 +7055,44 @@ edges in a pass of its own before register allocation; **GCC**, where the same
 question is asked of the edge insertion machinery and answered by
 `split_edge`, called on demand wherever an insertion has nowhere to go.
 
+## 2026-09-29T22:30+02:00 — compiler
+
+**The instruction table says nothing about what a call destroys**
+
+Decided on the user's direction, from a to-do entry.  The tables named the
+caller-saved set on their call rows because the register allocator had to be told
+something and the table was the only place that could tell it, which put a
+convention's business where the instruction's belongs: two functions of one
+compilation may follow different conventions, so what a call destroys is not a
+property of the instruction that makes it.
+
+Most of the answer had already arrived with the exact clobber analysis, which
+put what a call destroys *on the call*; what was left was the leavings.  The
+three tables still imported a `CALLER_SAVED` tuple none of them used, the three
+`regs.py` still defined one -- a second spelling of what the convention already
+said, in one case word for word -- and the comment above each call row still
+explained the arrangement that had gone.  All of it is out.
+
+**One `destroyed_by` rather than three.**  The function that answers "what does
+this call destroy" was a copy per backend, identical to the character, and it is
+now `target/callconv.py`'s -- which is where it belongs, the answer being the
+convention's.
+
+**The invariant is now a test rather than a comment**: for each target, no row
+of the instruction table that makes a call names a register the allocator hands
+out.  What a row may still name is what the instruction itself writes -- the
+link register on the two architectures that have one -- and neither of those is
+a register the allocator gives to a value.  A comment saying "do not put a
+convention here" is advice; a test saying it is a rule, and it fails the moment
+somebody adds one back.
+
+Compare: **LLVM**, where a call's regmask comes from the target's
+`getCallPreservedMask` for the convention and never from the instruction
+definition, which is this; **GCC**, whose `CALL_USED_REGISTERS` is a target macro
+the call insn does not repeat; **Cranelift**, where the clobber set hangs off the
+`CallInfo` for the signature's ABI; **Go**'s assembler, where a call's clobber
+set is the ABI's and the instruction table says only what the instruction encodes.
+
 Open questions
 --------------
 

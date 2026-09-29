@@ -155,10 +155,6 @@ To Do List for the pypl4g compiler
     comparison that feeds it, since that is the shape all three architectures have, and the condition is inverted where that lets
     the branch fall through instead of jumping.  Every ordering is compiled and run on all three targets.
 
-[ ] let the instruction table stop naming the registers a call destroys.  They are a convention's business and the table cannot
-    reach a convention, so each backend names them beside its registers and the call row uses them.  It costs nothing today,
-    every convention each target has naming the same set; the day one does not, the call will have to carry them per instance.
-
 [x] teach the register allocator about register classes.  Done: the allocator takes an allocation order per class rather than
     one order, a virtual register says which class it belongs to, and `_choose` hands out from the order for that register's
     class.  The calling convention names the floating-point argument, result and allocation registers beside the integer ones and

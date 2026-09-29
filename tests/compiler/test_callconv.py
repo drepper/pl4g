@@ -264,3 +264,94 @@ fn main() """ + ARROW + """ u6:
     0u6
 """)
     assert "PL4G-3211" in said
+
+
+# -- where what a call destroys comes from --------------------------------------
+
+def _call_rows(triple: str):  # noqa: ANN202
+    """Every row of the target's instruction table that makes a call."""
+    import importlib
+
+    from pypl4g.mc.desc import InstFlags
+
+    which = triple.split("-")[0]
+    opcodes = importlib.import_module("".join(("pypl4g.target.", which, ".opcodes")))
+    table = next(value for name, value in vars(opcodes).items()
+                 if name.endswith("_INSTRS"))
+    return [row for row in table if InstFlags.CALL in row.flags]
+
+
+def _convention(triple: str):  # noqa: ANN202
+    """The target's own convention, and the registers it names."""
+    import importlib
+
+    which = triple.split("-")[0]
+    return importlib.import_module("".join(("pypl4g.target.", which, ".abi"))).CC_PL4G
+
+
+@pytest.mark.parametrize("triple", compiler_targets())
+def test_the_table_names_no_register_a_call_destroys(triple: str) -> None:
+    """Which registers a call destroys is the convention's to say, so a table
+    that named them would be saying something it cannot know: two functions of
+    one compilation may follow different conventions.
+
+    What a call row may still name is what the *instruction* writes -- the link
+    register, on the two architectures that have one -- and that is never a
+    register the allocator hands out, which is what this asserts.
+    """
+    rows = _call_rows(triple)
+    assert rows, "".join((triple, ": no call in the instruction table"))
+    handed_out = set(_convention(triple).allocation_order)
+    for row in rows:
+        named = {reg.unit for reg in row.implicit_defs}
+        assert not named & handed_out, \
+            "".join((triple, ": ", row.mnemonic, " names ",
+                     ", ".join(r.name for r in row.implicit_defs)))
+
+
+@pytest.mark.parametrize("triple", compiler_targets())
+def test_what_a_call_destroys_is_asked_of_the_convention(triple: str) -> None:
+    """A call to something this compilation has not worked out destroys what the
+    convention allows -- read off the convention that was handed in, not off a
+    table."""
+    import importlib
+
+    from dataclasses import replace
+
+    from pypl4g.target.callconv import destroyed_by
+
+    which = triple.split("-")[0]
+    regs = importlib.import_module("".join(("pypl4g.target.", which, ".regs")))
+    cconv = _convention(triple)
+    answered = {reg.unit for reg in destroyed_by(None, cconv, regs.INFO, None)}
+    assert answered == set(cconv.caller_saved)
+    # And a convention naming less is answered with less, which is what says
+    # this is the convention's answer and not the instruction's.
+    fewer = frozenset(list(cconv.caller_saved)[:2])
+    answered = {reg.unit for reg in
+                destroyed_by(None, replace(cconv, caller_saved=fewer),
+                             regs.INFO, None)}
+    assert answered == set(fewer)
+
+
+@pytest.mark.parametrize("triple", compiler_targets())
+def test_a_callee_that_has_been_generated_is_asked_instead(triple: str) -> None:
+    """The convention says what a function is *allowed* to destroy; one that has
+    been generated says what it did, which is less."""
+    import importlib
+
+    from pypl4g.ir.function import FuncAttrs, Function
+    from pypl4g.ir.mangle import symbol_name
+    from pypl4g.ir.module import Module
+    from pypl4g.ir.types import U8
+    from pypl4g.target.callconv import destroyed_by
+
+    which = triple.split("-")[0]
+    regs = importlib.import_module("".join(("pypl4g.target.", which, ".regs")))
+    cconv = _convention(triple)
+    module = Module("t", triple=triple)
+    callee = Function("quiet", module.types.func_type((), U8), FuncAttrs())
+    one = next(iter(cconv.caller_saved))
+    answered = destroyed_by(callee, cconv, regs.INFO,
+                            {symbol_name(callee): frozenset((one,))})
+    assert [reg.unit for reg in answered] == [one]

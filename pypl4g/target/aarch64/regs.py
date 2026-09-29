@@ -92,11 +92,3 @@ CALLEE_SAVED_NAMES: Final[tuple[str, ...]] = (
     "x19", "x20", "x21", "x22", "x23", "x24", "x25", "x26", "x27", "x28", "x29")
 CALLER_SAVED_NAMES: Final[tuple[str, ...]] = tuple(
     "".join(("x", str(n))) for n in range(19))
-
-
-#: The registers a call destroys.  See the note beside the same name in the
-#: x86-64 backend: the instruction table cannot reach a convention, and every
-#: convention this target has names the same set.
-CALLER_SAVED: Final[tuple[PhysReg, ...]] = tuple(
-    reg("".join(("x", str(number))))
-    for number in (*range(0, 16), 16, 17, 18))

@@ -34,7 +34,8 @@ from ...ir.layout import (DataLayout, align_of, part_offsets_of, size_of,
                           tag_offset_of)
 from ...ir.types import (BOOL, ResultType, VecType, made_of_parts,
                          parts_of)
-from ..callconv import TooManyArguments, argument_places, result_places
+from ..callconv import (TooManyArguments, argument_places, destroyed_by,
+                        result_places)
 from ..saturate import (DIVISION, EXTREMA, NAMES, SATURATING, TRAPPING,
                         Unsupported,
                         SHIFTS, WRAPPING, lower_division_result,
@@ -1964,7 +1965,7 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                     asm.call(MCReg(called) if through is not None
                              else symbol_name(callee),
                              inst.span,
-                             _destroyed_by(callee if through is None else None,
+                             destroyed_by(callee if through is None else None,
                                            theirs, registers, known_clobbers),
                              reads=[move.into for move in handed
                                     if through is None or move.into is not called])
@@ -2122,29 +2123,6 @@ def _result_register(ty: Type, cconv: CallConvDesc,
 #: names is a view of it at the width of the value, so the whole is what the
 #: value's own register is.
 _FLOAT_REGISTER_BITS: Final[int] = 128
-
-
-def _destroyed_by(callee: Function | None, cconv: CallConvDesc,
-                  registers: RegisterInfo,
-                  known: Mapping[str, frozenset[RegUnit]] | None
-                  ) -> list[PhysReg]:
-    """Which registers a call to *callee* destroys.
-
-    What the callee turned out to destroy where that has been worked out, and
-    everything its convention allows it to destroy where it has not -- a
-    declaration of a function defined elsewhere, or one this compilation has
-    not reached yet.  The difference is a save and a reload at every call, which
-    is why it is worth asking rather than assuming.
-    """
-    from ...ir.mangle import symbol_name
-
-    units = (None if known is None or callee is None
-             else known.get(symbol_name(callee)))
-    if units is None:
-        # Everything the convention allows, which is what a call through a
-        # value has to assume: nothing here knows which function it is.
-        units = cconv.caller_saved
-    return [registers.widest(unit) for unit in units]
 
 
 def _part_source(operands: object, value: object, index: int, ty: Type,

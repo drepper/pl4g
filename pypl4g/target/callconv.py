@@ -10,10 +10,13 @@ for one function has somewhere to put the result.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Sequence
+from typing import Mapping, Sequence, TYPE_CHECKING
 
 from ..ir.types import FloatType, Type, parts_of
-from ..mc.reg import PhysReg, RegUnit
+from ..mc.reg import PhysReg, RegisterInfo, RegUnit
+
+if TYPE_CHECKING:
+    from ..ir.function import Function
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,6 +56,34 @@ class CallConvDesc:
         if self.float_allocation_order:
             found[floats] = self.float_allocation_order
         return found
+
+
+def destroyed_by(callee: Function | None, cconv: CallConvDesc,
+                 registers: RegisterInfo,
+                 known: Mapping[str, frozenset[RegUnit]] | None
+                 ) -> list[PhysReg]:
+    """Which registers a call to *callee* destroys.
+
+    What the callee turned out to destroy where that has been worked out, and
+    everything its convention allows it to destroy where it has not -- a
+    declaration of a function defined elsewhere, or one this compilation has
+    not reached yet.  The difference is a save and a reload at every call, which
+    is why it is worth asking rather than assuming.
+
+    It is asked here, of the convention, rather than stated in an instruction
+    table beside the call: two functions of one compilation may follow different
+    conventions, so what a call destroys is not a property of the instruction
+    that makes it.  The answer travels on the call.
+    """
+    from ..ir.mangle import symbol_name
+
+    units = (None if known is None or callee is None
+             else known.get(symbol_name(callee)))
+    if units is None:
+        # Everything the convention allows, which is what a call through a
+        # value has to assume: nothing here knows which function it is.
+        units = cconv.caller_saved
+    return [registers.widest(unit) for unit in units]
 
 
 class TooManyArguments(Exception):

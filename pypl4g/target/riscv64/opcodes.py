@@ -18,7 +18,7 @@ from typing import Final
 from ...mc.desc import InstFlags, OperandKind, OperandRole, OperandSpec
 from .desc import INSTRUCTION_SIZE, Field, FieldKind, RVInstDesc
 from .fixups import BRANCH, JAL, PCREL_HI20, PCREL_LO12_I, PCREL_PAIR_DISTANCE
-from .regs import CALLER_SAVED, FPR, GPR, RA
+from .regs import FPR, GPR, RA
 
 #: The word the architecture leaves undefined, which is what padding is filled
 #: with so that falling into it traps.
@@ -467,17 +467,13 @@ RISCV_INSTRS: Final[tuple[RVInstDesc, ...]] = (
                flags=InstFlags.TERMINATOR, est_size=INSTRUCTION_SIZE,
                roles=_READS_BOTH_AND_TARGET),
     # jal ra, label      (the return address register is part of the template)
-    # A call destroys every register the convention calls caller-saved, so the
-    # allocator has to be told -- otherwise a value held across one is silently
-    # lost.  Naming them here puts a convention's business in the instruction
-    # table, which is not where it belongs; it costs nothing today, every
-    # convention this target has calling the same registers caller-saved, and
-    # the entry in the to-do list says what to do when one does not.
+    # What a call destroys is the *callee's* to say: two functions of one
+    # compilation may follow different conventions, and a function that destroys
+    # little is one a caller has to save little around -- neither of which the
+    # table can know.  So the call carries it, per call, and what is named here
+    # is only what the instruction itself writes.
     RVInstDesc("jal", (_sym(),), template=0x000000EF,
                fields=(Field(FieldKind.RELOCATION, 0, 12, 20, reloc=JAL),),
-    # What a call destroys is the *callee's* to say and is carried on the
-    # instruction rather than stated here; the link register, which the
-    # instruction itself writes, is not.
                implicit_defs=(RA,), flags=InstFlags.CALL,
                est_size=INSTRUCTION_SIZE),
     # jalr ra, rs, 0

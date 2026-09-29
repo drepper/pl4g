@@ -11,7 +11,7 @@ from typing import Final
 from ...mc.desc import InstFlags, OperandKind, OperandRole, OperandSpec
 from .desc import A64InstDesc, Field, FieldKind, INSTRUCTION_SIZE
 from .fixups import ADD_LO12, ADR_PAGE21, BRANCH19, BRANCH26
-from .regs import CALLER_SAVED, GPR, NZCV, VEC, X30
+from .regs import GPR, NZCV, VEC, X30
 
 #: The word the architecture reserves as permanently undefined.  It is what
 #: padding is filled with, so that falling into padding traps.
@@ -969,18 +969,14 @@ AARCH64_INSTRS: Final[tuple[A64InstDesc, ...]] = (
                 implicit_defs=(NZCV,), est_size=INSTRUCTION_SIZE,
                 roles=_READS_BOTH),
     # bl label
-    # A call destroys every register the convention calls caller-saved, so the
-    # allocator has to be told -- otherwise a value held across one is silently
-    # lost.  Naming them here puts a convention's business in the instruction
-    # table, which is not where it belongs; it costs nothing today, every
-    # convention this target has calling the same registers caller-saved, and
-    # the entry in the to-do list says what to do when one does not.
+    # What a call destroys is the *callee's* to say: two functions of one
+    # compilation may follow different conventions, and a function that destroys
+    # little is one a caller has to save little around -- neither of which the
+    # table can know.  So the call carries it, per call, and what is named here
+    # is only what the instruction itself writes.
     A64InstDesc("bl", (_sym(),), template=0x94000000,
                 fields=(Field(FieldKind.RELOCATION, 0, 0, 26, shift=2, signed=True,
                               reloc=BRANCH26),),
-    # What a call destroys is the *callee's* to say and is carried on the
-    # instruction rather than stated here; the link register, which the
-    # instruction itself writes, is not.
                 implicit_defs=(X30,), flags=InstFlags.CALL,
                 est_size=INSTRUCTION_SIZE),
     # blr Xn
