@@ -87,7 +87,8 @@ GROUPS: tuple[Group, ...] = (
           "These move when the register allocator does, and they are the only "
           "ones that reach the frame.",
           {"many-values-at-once": "four values live at once",
-           "spill-to-the-frame": "thirty-two at once, which no target can hold"}),
+           "spill-to-the-frame": "thirty-two at once, which no target can hold",
+           "spill-around-a-loop": "thirty at once across a loop, which is weighed"}),
     Group("What is left out",
           "Definitions the compiler drops and definitions it keeps.  These move "
           "when the reachability pass or the report log does.",
