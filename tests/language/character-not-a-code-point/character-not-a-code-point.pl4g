@@ -1,4 +1,4 @@
-※ pl4g-test: compile=ok run=native,qemu exit=64 diag=none
+※ pl4g-test: compile=ok run=native,qemu exit=83 diag=none
 
 ※ Every code point is a number and not every number is a code point, so the
 ※ two conversions are not each other's mirror image: `⎕ord` cannot fail and

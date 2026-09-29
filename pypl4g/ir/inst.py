@@ -593,12 +593,16 @@ class AssertInst(Instruction):
     part of the read it belongs to.
     """
 
-    __slots__ = ("what",)
+    __slots__ = ("what", "status")
 
-    def __init__(self, condition: Value, what: str,
+    def __init__(self, condition: Value, what: str, status: int,
                  span: Span = INVALID_SPAN) -> None:
         super().__init__(VOID, (condition,), span)
         self.what = what
+        #: Which kind of stop this is, as the number the program exits with.
+        #: The message says it better, and a message is for a person: the
+        #: number is what a caller reads.
+        self.status = status
 
     @property
     def has_effects(self) -> bool:

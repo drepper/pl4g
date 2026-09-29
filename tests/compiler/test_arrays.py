@@ -132,7 +132,7 @@ def test_an_index_outside_the_array_stops_the_program(
         "    let a: u6", OPEN, "4", CLOSE, " = ", OPEN, "1u6, 2u6, 4u6, 8u6", CLOSE, "\n",
         "    let at: u6 \u00a4idx = 9\n",
         "    a", OPEN, "at", CLOSE, "\n"))
-    assert run_it(tmp_path, triple, source) == statuses.GENERAL, \
+    assert run_it(tmp_path, triple, source) == statuses.OUT_OF_RANGE, \
         "it should stop with the status the runtime reserves"
 
 
@@ -168,5 +168,5 @@ def test_every_dimension_is_checked_against_its_own(triple: str,
         OPEN, OPEN, "1u6,2u6,4u6", CLOSE, ",", OPEN, "8u6,16u6,32u6", CLOSE, CLOSE, "\n",
         "    let c: u6 \u00a4idx = 5\n",
         "    m", OPEN, "0,c", CLOSE, "\n"))
-    assert run_it(tmp_path, triple, source) == statuses.GENERAL, \
+    assert run_it(tmp_path, triple, source) == statuses.OUT_OF_RANGE, \
         "it should stop with the status the runtime reserves"

@@ -1,4 +1,4 @@
-※ pl4g-test: compile=ok run=native,qemu exit=64 diag=none
+※ pl4g-test: compile=ok run=native,qemu exit=80 diag=none
 
 ※ And the widest signed type, where what says the product went past is that the
 ※ upper half of it is not what the lower one's sign says it should be.  Two

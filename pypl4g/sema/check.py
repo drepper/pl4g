@@ -13,6 +13,7 @@ from fractions import Fraction
 from typing import Callable, Final, Sequence
 
 from ..diag import ids as D
+from ..target import statuses
 from ..diag.engine import DiagEngine, Expectation
 from ..front import ast
 from ..front.doccomment import Part as DocPart, parse as parse_doc
@@ -4314,7 +4315,8 @@ class Checker:
             return builder.int_const(U64, written.value)
         wide = self._as_count(builder, index, found, span)
         builder.check(builder.compare(CmpPred.ULT, wide, length, span),
-                      "an index outside its array", span)
+                      "an index outside its array",
+                      statuses.OUT_OF_RANGE, span)
         return wide
 
     def _as_count(self, builder: IRBuilder, value: Value, found: IntType,
@@ -4719,9 +4721,11 @@ class Checker:
             return UndefConst(ERROR)
         end = self._as_count(builder, last, reaching, span)
         builder.check(builder.compare(CmpPred.ULE, end, lengths[0], span),
-                      "a slice reaching past the end of its array", span)
+                      "a slice reaching past the end of its array",
+                      statuses.OUT_OF_RANGE, span)
         builder.check(builder.compare(CmpPred.ULE, first, end, span),
-                      "a slice that ends before it begins", span)
+                      "a slice that ends before it begins",
+                      statuses.OUT_OF_RANGE, span)
         answer = self._module.types.array_type(ty.element, (None,))
         made = builder.make_tuple(
             (self._element_place(builder, start, ty.element, first, span),
@@ -6685,7 +6689,8 @@ class Checker:
         self._an_effect(D.LANG_PURE_WRITES_ELSEWHERE, expr.span)
         elements, count, _ = self._list_at(builder, place, ty, expr.span)
         builder.check(builder.compare(CmpPred.ULT, at, count, expr.span),
-                      "an index outside its list", expr.span)
+                      "an index outside its list",
+                      statuses.OUT_OF_RANGE, expr.span)
         gone = self._element_of(builder, elements, ty, at, expr.span)
         self._erased(builder, place, ty, elements, count, at, expr.span)
         return gone
@@ -6779,12 +6784,14 @@ class Checker:
         if onward:
             _, count, _ = self._list_at(builder, place, held, expr.span)
             builder.check(builder.compare(CmpPred.ULT, at, count, expr.span),
-                          "a walk moved past the end of its list", expr.span)
+                          "a walk moved past the end of its list",
+                          statuses.WALK_ENDED, expr.span)
         else:
             builder.check(
                 builder.compare(CmpPred.NE, at, builder.int_const(U64, 0),
                                 expr.span),
-                "a walk moved before the start of its list", expr.span)
+                "a walk moved before the start of its list",
+                statuses.WALK_ENDED, expr.span)
         return builder.make_tuple(
             (place, builder.binary(BinOp.WRAP_ADD if onward else BinOp.WRAP_SUB,
                                    at, builder.int_const(U64, 1), expr.span)),
@@ -6816,7 +6823,7 @@ class Checker:
         elements, count, _ = self._list_at(builder, place, held, expr.span)
         builder.check(builder.compare(CmpPred.ULT, at, count, expr.span),
                       "taking an element out through a walk that is over",
-                      expr.span)
+                      statuses.WALK_ENDED, expr.span)
         self._erased(builder, place, held, elements, count, at, expr.span)
         return value
 
@@ -6830,7 +6837,8 @@ class Checker:
         place, at, held = self._cursor_parts(builder, value, ty, span)
         elements, count, _ = self._list_at(builder, place, held, span)
         builder.check(builder.compare(CmpPred.ULT, at, count, span),
-                      "reading through a walk that is over", span)
+                      "reading through a walk that is over",
+                      statuses.WALK_ENDED, span)
         return self._element_of(builder, elements, held, at, span)
 
     def _asked(self, builder: IRBuilder, value: Value, span: Span) -> Value:
@@ -10994,7 +11002,8 @@ class Checker:
             builder.compare(CmpPred.NE, count, builder.int_const(U64, 0),
                             expr.span),
             "".join(("the ", "largest" if expr.op is ast.UnaryOp.MAX
-                     else "smallest", " of nothing")), expr.span)
+                     else "smallest", " of nothing")),
+            statuses.OUT_OF_RANGE, expr.span)
         op = self._extremum_op(expr, element)
         header = builder.new_block("finding")
         body = builder.new_block("comparing")
@@ -11355,7 +11364,8 @@ class Checker:
             builder.check(
                 builder.compare(CmpPred.ULE, given,
                                 builder.int_const(U32, MAX_CODE_POINT), expr.span),
-                "a number that is not a code point", expr.span)
+                "a number that is not a code point",
+                statuses.NOT_A_CODE_POINT, expr.span)
         return builder.cast(CastKind.BITCAST, given, answer, expr.span)
 
     def _lower_list(self, builder: IRBuilder, expr: ast.ListLit,

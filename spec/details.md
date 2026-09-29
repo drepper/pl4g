@@ -1087,10 +1087,25 @@ thing to remember.
 **A fault exits rather than traps**, which is a change from what this compiler first did.  The argument for the trap was that a
 signal hands a debugger the stack as it stood; the argument against is that a signal is not a status, a shell reports it as 128
 plus the number, and it therefore collides with whatever the program might have chosen to exit with.  What settles it is the
-reservation: 64 through 127 being nobody else's is what makes a status able to say "the runtime stopped this" without also
+reservation: 79 through 127 being nobody else's is what makes a status able to say "the runtime stopped this" without also
 claiming the program meant it.
 
 **The message is still written first**, so nothing is lost either way; what the trap gave up was never the message.
+
+**The range begins at 79 and not at 64**, which is where `<sysexits.h>` ends.  It began at 64 and the argument was that the
+convention is advisory where this is the compiler's own -- but "advisory" cuts the other way: a great deal of software reads those
+numbers, and a runtime that stopped a program with 64 was telling all of it that the command line was wrong.  `EX__MAX` is 78 and
+the runtime starts after it.
+
+**Each kind of stop has a number**, and the status travels to the helper rather than being a constant inside it.  `__pl4g_abort`
+takes it as a third argument, which means it has to survive the write that reports the message -- the write's own third argument
+arrives in the same register -- so the first thing the helper does is put it somewhere the write will not touch and the walk of
+the stack keeps nothing in.  The alternative was a helper per status, which is the same code as many times as there are kinds.
+
+Where a kind comes from differs by where the check is.  A fault the *backend* emits knows its kind from the operation: the three
+selectors build one `_Fault` per kind and hand it the number.  A check the *front end* emits carries it in the instruction --
+`AssertInst` says what went wrong and which number that is, because an index outside its array and a walk that has ended are two
+different things and only the front end knows which it built.
 
 The stack a program runs on
 ---------------------------

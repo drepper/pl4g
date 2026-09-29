@@ -796,7 +796,8 @@ no number to turn into text, no allocation, nothing that could itself fail.  Tha
 this is the code that runs when something has already gone wrong.  It goes to standard error through a raw system call, that being
 the only place a program depending on nothing from the system can write to.
 
-The program then **exits with a status out of the range the runtime reserves**, 64 through 127.  A signal is not a status: a shell
+The program then **exits with a status out of the range the runtime reserves**, 79 through 127, and with the number that kind of
+fault has: 80 where an answer will not fit, 82 where an index was outside what it names, and so on down the table below.  A signal is not a status: a shell
 reports one as 128 plus the number, which collides with whatever the program might have chosen to exit with, and a caller has to
 know to look for it.  A program that dies of a signal really did die of one, and that is worth being able to believe.
 
@@ -4727,51 +4728,61 @@ type says what a status can actually be.
 reports one as 128 plus the number, which collides with whatever a program might have chosen to exit with, and a caller has to
 know to look for it.  A program that dies of a signal really did die of one, and that is worth being able to believe.
 
-**64 through 127 are reserved** for stops the runtime reports.  That leaves the ranges either side to their owners:
+**79 through 127 are reserved** for stops the runtime reports.  That leaves the ranges around it to their owners:
 
 | Range | Whose |
 |---|---|
 | 0–63 | the program's own, the startup function's result, which is a `u6` |
-| 64–127 | the runtime's, for a stop it reports |
+| 64–78 | `sysexits.h`, which is nobody's to take |
+| 79–127 | the runtime's, for a stop it reports |
 | 128–255 | a signal the program really died of, as the shell reports it |
 
-**64 is the general one**: a stop the runtime has no more particular number for yet.  Everything a *fault* reports leaves through
-it -- an answer that will not fit, a division by zero, an index outside its array, a shift too far, an allocation that failed --
-because what went wrong is in the message, which names the operation, the function and the line, and a number could only say less.
+**The middle range is left alone.**  `sysexits.h` has named 64 through 78 since 4.0BSD -- `EX_USAGE`, `EX_DATAERR`, `EX_NOINPUT`
+and the rest -- and a great deal of software written since reads them.  A runtime that stopped a program with 64 would be saying
+"the command line was wrong" to everything that knows the convention, which is the opposite of what it means.  So the runtime
+begins at `EX__MAX` plus one and the two never meet.
 
-**65 is the processor not being the one the program was built for**, which has a number of its own because it is the one stop that
-happens before the program has run at all, and because what to do about it -- build for an older microarchitecture level, or find
-a newer machine -- is a different thing to do.
+**Each kind of stop has a number of its own.**  The message says which operation, in which function, at which line, and says it
+better than a number could -- but a message is for a person and a status is for a program.  A caller that wants to retry one
+failure and give up on another is reading the status, and an answer that will not fit, an index outside its array and an
+allocation that could not be met are three different things.
 
-**66 is a test the binary runs that did not pass.**  Every test is run and every failure named before the binary stops: a run that
-ended at the first would make a reader fix one thing and run again to be told the next.  The status says that something was wrong
-and the messages say what, which is the division a test runner makes everywhere -- Rust's and Go's both report every test and exit
-with one number.  It has a number of its own because a program that fails a test never started, so nothing it would have answered
-means anything.
+| Status | What stopped the program |
+|---|---|
+| 79 | a stop with no more particular number — nothing uses it, and it is there for the kind not yet thought of |
+| 80 | an answer that will not fit its type: a sum, a difference, a product, a shift, a rotation |
+| 81 | an operation whose answer is not a number, which is a floating-point one that came to an infinity or to not-a-number |
+| 82 | an index or a slice outside what it names, and the largest or smallest of nothing |
+| 83 | a number turned into a code point that is not one |
+| 84 | a walk over a list used after it ended, or moved off either end |
+| 85 | the system would give no more memory |
+| 86 | the program ran off the bottom of its stack |
+| 87 | the processor is not the one the program was built for, or the system has turned off registers it uses |
+| 88 | a test the binary runs did not pass |
 
-**67 is the program running off the bottom of its stack.**  It has a number of its own because what to do about it -- build with
-a larger stack, or find the recursion that does not end -- is a different thing to do, and because it is the one stop a program
-could not report for itself: there is no room left to report it in, which is why the handler that does report it runs on a stack
-of its own.
+**86 is the one stop a program could not report for itself**: there is no room left to report it in, which is why the handler
+that does report it runs on a stack of its own.  **87 is the one that happens before the program has run at all.**  **88 comes
+after every test has been run and every failure named**, a run that ended at the first failure being one that makes a reader fix
+one thing and run again to be told the next.
 
-**The startup function answers a `u6`**, which is that first range and nothing else.  The type is what says the rule rather than
+**The startup function answers a `u6`**, which is the first range and nothing else.  The type is what says the rule rather than
 a paragraph a reader has to have read: a program that tries to exit with 200 is refused where it writes it, and one that works
 its status out arrives at a number that is already in range.  It also means the status has to be *worked out* in `u6` -- there is
 no conversion between integer widths yet -- so a program that computes something wider says so and answers with something else.
+And it means a program **cannot** return a status in either reserved range, so a caller reading one knows it did not come from
+the program.
 
 **The reservation is what makes a status enough to say it with.**  Without it, a runtime stop and a program that chose to fail
-would be the same number, which is the objection that used to argue for the signal; with it, a caller can tell the three cases
-apart without knowing anything about the program.
+would be the same number, which is the objection that used to argue for the signal; with it, a caller can tell the cases apart
+without knowing anything about the program.
 
-A program is not stopped from returning a status in the reserved range: the startup function answers with a `u8` and every value
-of one is a status.  What the reservation says is what a program that does so is giving up, which is the ability of its caller to
-believe it.
-
-Compare: `sysexits.h`, whose 64 through 78 are the convention this borrows its range and its starting number from -- and which is
-advisory where this is the compiler's own, so the runtime can actually keep it; the shell's 128 plus the signal number, which is
-the reason the top range is spoken for and not something this chose; Python, which exits 1 for an uncaught exception and so
-cannot be told from a program that meant to; and Go, which exits 2 and panics through a signal-like path that prints a stack
-trace.  What none of them has is a range reserved on both sides, which is what lets all three cases be told apart rather than two.
+Compare: `sysexits.h`, whose range this begins after rather than inside -- it is advisory where this is the compiler's own, and
+the way to keep a convention one cannot enforce is to stay out of its way; the shell's 128 plus the signal number, which is the
+reason the top range is spoken for and not something this chose; Python, which exits 1 for an uncaught exception and so cannot be
+told from a program that meant to; Go, which exits 2 for a panic and 1 for a failing test and has nothing to say about the rest;
+and Rust, which exits 101 for a panic and has been unable to change it since.  What none of them has is a range reserved on both
+sides with a number per kind inside it, which is what lets a caller act on what happened rather than only notice that something
+did.
 
 A constructor and a destructor take no parameters and return `void`, because the sequence that calls them has nothing to pass and
 nowhere to put a result.

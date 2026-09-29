@@ -1,4 +1,4 @@
-※ pl4g-test: compile=ok run=native,qemu exit=64 diag=none
+※ pl4g-test: compile=ok run=native,qemu exit=80 diag=none
 
 ※ And the widest unsigned type, where what says the sum went past is that it
 ※ came out below what it was given.

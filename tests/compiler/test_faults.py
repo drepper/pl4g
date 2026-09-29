@@ -20,11 +20,12 @@ from conftest import (architecture_of, compiler_targets, describe, run_compiler,
 ARROW = "\N{RIGHTWARDS ARROW}"
 TIMES = "\N{MULTIPLICATION SIGN}"
 
-#: What a program the runtime stopped exits with: the general one of the range
-#: reserved for a stop it reports.  A status and not a signal, so that a caller
-#: can tell it apart both from a program that chose to fail and from one that
-#: really did die of a signal.
-STOPPED = statuses.GENERAL
+#: What a program stopped for an answer that will not fit exits with.  A status
+#: and not a signal, so that a caller can tell it apart both from a program that
+#: chose to fail and from one that really did die of a signal -- and its own
+#: number rather than a general one, so that a caller can tell *which* of the
+#: things the runtime stops a program for happened.
+STOPPED = statuses.OVERFLOW
 
 OVERFLOWS = "".join((
     "let fifty: u6 = 50u6\nlet forty: u6 = 40u6\n\n",
@@ -125,3 +126,65 @@ def test_one_wording_is_kept_once(triple: str, tmp_path) -> None:  # noqa: ANN00
 
 
 del architecture_of
+
+
+# -- one number per kind of stop ------------------------------------------------
+
+#: A program per kind, each written so that nothing settles it while compiling.
+#: What is checked is the status, the message being checked where the message is
+#: the subject.
+KINDS = {
+    statuses.OVERFLOW: """\
+let fifty: u6 = 50u6
+let forty: u6 = 40u6
+
+@[startup]
+fn main() → u6:
+    fifty + forty
+""",
+    statuses.NOT_A_CODE_POINT: """\
+let past: u32 = 1114112u32
+
+@[startup]
+fn main() → u6:
+    ⎕narrow(⎕ord(⎕chr(past)), ⌜u6⌝) ?? 1u6
+""",
+    statuses.OUT_OF_RANGE: """\
+@[startup]
+fn main() → u6:
+    let row: u6⟦3⟧ = ⟦1u6, 2u6, 3u6⟧
+    let at: u6 ¤idx = 7
+    row⟦at⟧
+""",
+}
+
+
+@pytest.mark.parametrize("triple", compiler_targets())
+@pytest.mark.parametrize("status", sorted(KINDS),
+                         ids=[str(s) for s in sorted(KINDS)])
+def test_each_kind_of_stop_has_its_own_number(triple: str, status: int,
+                                              tmp_path) -> None:  # noqa: ANN001
+    """A message is for a person and a status is for a program: a caller that
+    wants to act on what happened is reading the number."""
+    assert compile_and_run(tmp_path, triple, KINDS[status]).returncode == status
+
+
+def test_none_of_them_is_a_number_sysexits_took() -> None:
+    """`<sysexits.h>` has named 64 through 78 since 4.0BSD and a great deal of
+    software reads them.  A runtime that stopped a program with one of those
+    would be saying something it does not mean to everything that knows the
+    convention."""
+    every = [statuses.GENERAL, statuses.OVERFLOW, statuses.NO_ANSWER,
+             statuses.OUT_OF_RANGE, statuses.NOT_A_CODE_POINT,
+             statuses.WALK_ENDED, statuses.OUT_OF_MEMORY,
+             statuses.STACK_OVERFLOW, statuses.WRONG_PROCESSOR,
+             statuses.TESTS_FAILED]
+    assert min(every) > statuses.SYSEXITS_LAST
+    assert max(every) <= statuses.LAST
+    assert len(set(every)) == len(every), "two kinds share a number"
+
+
+def test_and_none_of_them_is_one_a_program_can_answer_with() -> None:
+    """The startup function answers a `u6`, so the two ranges cannot meet: a
+    caller reading a reserved status knows the program did not choose it."""
+    assert statuses.FIRST > 63

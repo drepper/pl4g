@@ -1,4 +1,4 @@
-※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=66 diag=none
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=88 diag=none
 
 ※ Every test a binary runs is run, and every failure named, before it stops.
 ※

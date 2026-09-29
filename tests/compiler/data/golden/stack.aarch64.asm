@@ -32,7 +32,7 @@ __pl4g_stack_fault:
     02 03 80 d2              movz x2, 24
     08 08 80 d2              movz x8, 64
     01 00 00 d4              svc 0
-    60 08 80 d2              movz x0, 67
+    c0 0a 80 d2              movz x0, 86
     c8 0b 80 d2              movz x8, 94
     01 00 00 d4              svc 0
     01 00 00 00              udf 1

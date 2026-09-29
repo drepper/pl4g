@@ -1,4 +1,4 @@
-※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=64 diag=none
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=80 diag=none
 
 ※ A fault says where it happened, and what the stack says is how it was reached.
 ※ Every function on it named one line at a time, outwards, with the innermost

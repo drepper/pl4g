@@ -7384,6 +7384,52 @@ answer for the library to branch on.  Everyone who uses these registers asks
 both questions; a program that asks one has a bug that appears only on the
 machines where it matters.
 
+## 2026-09-30T10:00+02:00 — compiler
+
+**A number per kind of stop, and out of `<sysexits.h>`'s way**
+
+Decided on the user's direction, from a to-do entry, and with the user pointing
+at `<sysexits.h>` for the range.  Two things, and the second was not in the
+entry.
+
+**The reserved range begins at 79 and not at 64.**  It began at 64 and the
+specification said so, with the argument that the convention is advisory where
+this is the compiler's own.  That cuts the other way.  `<sysexits.h>` has named
+64 through 78 since 4.0BSD and a great deal of software reads them; a runtime
+that stopped a program with 64 was telling all of it that the command line was
+wrong, which is the opposite of what it meant.  Advisory is the reason to stay
+out of the way and not the reason to take it: a convention one cannot enforce is
+kept by not colliding with it.  `EX__MAX` is 78, and the runtime starts after it.
+
+**Each kind of stop has a number.**  Everything left through the general one
+before, and the entry's own argument against changing that was that the message
+already names the operation, the function and the line, so a number would say
+less.  It would -- to a person.  A status is read by a program, and a caller that
+wants to retry one failure and give up on another has nothing else to read: an
+answer that will not fit, an index outside its array, an allocation that could
+not be met and a walk that has ended are four different things.
+
+**The status travels to the helper.**  `__pl4g_abort` takes it as a third
+argument rather than there being a helper per kind, which would be the same code
+as many times as there are kinds.  What that costs is one move: the third
+argument arrives in the register the write's own third argument goes in, so the
+first thing the helper does is put it somewhere the write will not touch and the
+walk of the stack keeps nothing in.
+
+**Where the kind comes from differs by where the check is.**  A fault the backend
+emits knows its kind from the operation.  A check the front end emits carries it
+in the instruction -- `AssertInst` says both what went wrong and which number
+that is -- because only the front end knows whether it built an index check or a
+walk check.
+
+Compare: **`<sysexits.h>`** itself, which is a table of kinds and is what this
+now sits beside rather than on top of; **Go**, which exits 2 for a panic and 1
+for a failing test and says nothing about the rest; **Rust**, which exits 101 for
+a panic and has been unable to change it since; **Python**, which exits 1 for
+every uncaught exception and cannot be told from a program that meant to.  The
+argument for one number is that the message says more, and it is right about
+people and wrong about programs.
+
 Open questions
 --------------
 

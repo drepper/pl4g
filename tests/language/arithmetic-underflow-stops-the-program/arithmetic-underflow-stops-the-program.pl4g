@@ -1,4 +1,4 @@
-※ pl4g-test: compile=ok run=native,qemu exit=64 diag=none
+※ pl4g-test: compile=ok run=native,qemu exit=80 diag=none
 
 ※ Nothing below zero for an unsigned type either.  This is what '⊟' is for
 ※ where going below zero is meant.

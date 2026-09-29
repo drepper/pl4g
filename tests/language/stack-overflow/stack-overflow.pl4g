@@ -1,4 +1,4 @@
-※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=67 diag=none
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=86 diag=none
 
 ※ A program that runs out of stack ends with a status that says so.
 ※

@@ -1,4 +1,4 @@
-※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=64 diag=none
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=80 diag=none
 
 ※ One element of sixteen goes past, and the program stops.  The element chosen
 ※ is not the first: what a machine that adds the whole run at once has to do is

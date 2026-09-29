@@ -1,4 +1,4 @@
-※ pl4g-test: compile=ok run=native,qemu exit=64 diag=none
+※ pl4g-test: compile=ok run=native,qemu exit=82 diag=none
 
 ※ The largest of nothing is not a value of any type, so a list with nothing in
 ※ it stops the program rather than answering with the end of the type -- which

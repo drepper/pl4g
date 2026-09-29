@@ -1,4 +1,4 @@
-※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=67 diag=none
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=86 diag=none
 ※ pl4g-test: args --stack-size=128k --guard-size=8k
 
 ※ The same program on a stack of the size it was built with.

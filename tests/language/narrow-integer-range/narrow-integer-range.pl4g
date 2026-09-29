@@ -1,4 +1,4 @@
-※ pl4g-test: compile=ok run=native,qemu exit=64 diag=none
+※ pl4g-test: compile=ok run=native,qemu exit=80 diag=none
 
 ※ An answer that will not fit stops the program, and what it has to fit is the
 ※ type and not the byte holding it.  Five plus six is eleven, which a byte

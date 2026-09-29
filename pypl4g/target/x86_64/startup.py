@@ -403,6 +403,12 @@ def emit_abort(asm: Assembler, cconv: CallConvDesc,
     """
     first, second, third = cconv.int_arg_regs[:3]
     asm.begin_function(ABORT_SYMBOL, exported=False)
+    # Which kind of stop this is, put somewhere the write below will not touch
+    # and the walk of the stack does not keep anything in.  It arrives in the
+    # register the write's own third argument goes in, so it has to move before
+    # anything else does.
+    held = reg("r15")
+    asm.loadreg(held, asm.reg(third))
     # The three arguments of the system call are the two this was given, moved
     # up one place, with the descriptor put in front of them.
     asm.loadreg(third, asm.reg(second))
@@ -418,7 +424,7 @@ def emit_abort(asm: Assembler, cconv: CallConvDesc,
         asm.loadreg(second, asm.reg(RSP))
         asm.op(ops.PLUS, second, asm.reg(second), asm.imm(8, 32, signed=False))
         asm.call(backtrace.SYMBOL)
-    asm.loadreg(EDI, asm.imm(statuses.GENERAL, 32, signed=False))
+    asm.loadreg(cconv.int_arg_regs[0], asm.reg(held))
     asm.loadreg(EAX, asm.imm(NR_EXIT_GROUP, 32, signed=False))
     asm.op(x86ops.SYSCALL)
     # exit_group does not return; trapping makes that explicit rather than

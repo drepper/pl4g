@@ -25,6 +25,7 @@ from ..branches import (CONDITIONS, Move, UnsupportedBranch,
                         folded_into_branch, sequenced,
                         labels_of,
                         lower_branch, lower_comparison)
+from .. import statuses
 from ..faults import Messages, describe
 from ..ordering import cannot_order
 from ..pool import Constants
@@ -1263,8 +1264,12 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
     class _Fault:
         """What is emitted where an answer will not fit its type."""
 
-        def __init__(self, what: str, span: Span) -> None:
+        def __init__(self, what: str, span: Span,
+                     status: int = statuses.OVERFLOW) -> None:
             self.text = describe(what, func.name, span, sources)
+            #: Which kind of stop this is.  The message says it better and says
+            #: it to a person; the number is what a caller reads.
+            self.status = status
 
         def out_of_range(self, asm: Assembler, span: Span) -> None:
             """Report the fault and stop; this does not come back."""
@@ -1275,10 +1280,11 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
             # The runtime is written as instructions rather than lowered, so it
             # follows one settled convention whatever the function reporting the
             # fault follows.
-            first, second = lookup_cconv(SYSTEM_CCONV).int_arg_regs[:2]
+            first, second, third = lookup_cconv(SYSTEM_CCONV).int_arg_regs[:3]
             asm.address(first, symbol, span)
             asm.loadreg(second, asm.imm(len(self.text.encode("utf-8")), 32,
                                         signed=False), span)
+            asm.loadreg(third, asm.imm(self.status, 32, signed=False), span)
             asm.call(ABORT_SYMBOL, span)
 
     # Every block parameter gets its register before any block is walked: a
@@ -1359,7 +1365,7 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                     asm.branch(Condition.NE,
                                operands.in_register(inst.operands[0], inst.span),
                                ZERO_IMMEDIATE, holds, inst.span)
-                    _Fault(inst.what, inst.span).out_of_range(asm, span)
+                    _Fault(inst.what, inst.span, inst.status).out_of_range(asm, span)
                     asm.block(holds)
                 case MemStartInst():
                     # Memory is not held in a register; the token exists to
@@ -1636,7 +1642,8 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                     asm.branch_if_finite(destination, answer.bits, carry_on,
                                          inst.span)
                     _Fault("".join((NAMES[inst.op], " with no number for an answer")),
-                           inst.span).out_of_range(asm, inst.span)
+                           inst.span,
+                           statuses.NO_ANSWER).out_of_range(asm, inst.span)
                     asm.block(carry_on)
                 case BinaryInst() if isinstance(inst.ty, PtrType):
                     # Arithmetic on an address does not go through the

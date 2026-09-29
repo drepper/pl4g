@@ -97,8 +97,10 @@ def test_it_stops_where_the_program_was_started(triple: str, tmp_path) -> None: 
 @pytest.mark.parametrize("triple", compiler_targets())
 def test_the_program_still_stops_the_way_it_did(triple: str, tmp_path) -> None:  # noqa: ANN001
     """Walking is something said on the way out and not a change to the way
-    out: the status is the general one the runtime reserves, as before."""
-    assert ran(DEEP, triple, tmp_path).returncode == 64
+    out: the status is the one the kind of fault has, as before."""
+    from pypl4g.target import statuses
+
+    assert ran(DEEP, triple, tmp_path).returncode == statuses.OVERFLOW
 
 
 @pytest.mark.parametrize("triple", compiler_targets())

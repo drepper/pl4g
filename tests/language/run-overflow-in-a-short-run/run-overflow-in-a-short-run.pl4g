@@ -1,4 +1,4 @@
-※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=64 diag=none
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=80 diag=none
 
 ※ A run of eight bytes, whose last element is the one that goes past.  Eight
 ※ bytes is half a register on every machine here, so the answer about that

@@ -1,4 +1,4 @@
-※ pl4g-test: compile=ok run=native,qemu exit=64 diag=none
+※ pl4g-test: compile=ok run=native,qemu exit=80 diag=none
 
 ※ A sum of the widest signed type that will not fit stops the program too.
 ※ There is nowhere wider to compute it in, so what says it went past is the

@@ -37,6 +37,7 @@ from typing import Callable, Final, Sequence
 
 from ..ir.mangle import symbol_name
 from ..ir.module import Module
+from . import statuses
 from ..mc import ops
 from ..mc.asmbuilder import Assembler
 from ..mc.operand import MCImm, MCReg
@@ -272,6 +273,8 @@ def _emit_grow(asm: Assembler, abi: SyscallABI, regs: AllocatorRegs,
     asm.address(abi.arguments[0], message_symbol)
     asm.loadreg(abi.arguments[1],
                 asm.imm(len(OUT_OF_MEMORY.encode("utf-8")), 32, signed=False))
+    asm.loadreg(abi.arguments[2],
+                asm.imm(statuses.OUT_OF_MEMORY, 32, signed=False))
     asm.tail_jump(abort_symbol)
     asm.block(got_it)
     asm.take_back(regs.arena, _KEPT_ARENA)

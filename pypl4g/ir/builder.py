@@ -196,10 +196,11 @@ class IRBuilder:
         return self._append(
             FrameInst(held, self._module.types.ptr_type(held, mutable=True), span))
 
-    def check(self, condition: Value, what: str,
+    def check(self, condition: Value, what: str, status: int,
               span: Span = INVALID_SPAN) -> Value:
-        """Append a check that stops the program where it does not hold."""
-        return self._append(AssertInst(condition, what, span))
+        """Append a check that stops the program where it does not hold, with
+        *status* saying which kind of stop it is."""
+        return self._append(AssertInst(condition, what, status, span))
 
     def address(self, var: Value, span: Span = INVALID_SPAN) -> Value:
         """Append the taking of a variable's address into a register."""

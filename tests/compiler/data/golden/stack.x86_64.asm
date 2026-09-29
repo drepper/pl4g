@@ -30,7 +30,7 @@ __pl4g_stack_fault:
     48 c7 c2 18 00 00 00     mov rdx, 24
     b8 01 00 00 00           mov eax, 1
     0f 05                    syscall
-    48 c7 c7 43 00 00 00     mov rdi, 67
+    48 c7 c7 56 00 00 00     mov rdi, 86
     b8 e7 00 00 00           mov eax, 231
     0f 05                    syscall
     0f 0b                    ud2

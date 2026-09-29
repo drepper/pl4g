@@ -1,4 +1,4 @@
-※ pl4g-test: compile=ok run=native,qemu exit=64 diag=none
+※ pl4g-test: compile=ok run=native,qemu exit=81 diag=none
 
 ※ An answer that is an infinity is an answer the operation did not have, so
 ※ the program stops, the way it does when a sum will not fit its type.  That

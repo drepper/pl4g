@@ -1,4 +1,4 @@
-※ pl4g-test: compile=ok run=native,qemu exit=64 diag=none
+※ pl4g-test: compile=ok run=native,qemu exit=80 diag=none
 
 ※ An answer that will not fit stops the program and says so.  It dies by a
 ※ status out of the range the runtime reserves for a stop it reports -- 64
