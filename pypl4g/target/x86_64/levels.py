@@ -82,6 +82,48 @@ _ADDED: Final[dict[str, tuple[Requirement, ...]]] = {
     ),
 }
 
+#: What each level needs the *operating system* to have turned on, as the bits
+#: of `XCR0` that say so, and what those bits are called.
+#:
+#: `OSXSAVE` in `CPUID` says the processor lets the system enable the wide
+#: registers.  Whether the system has actually enabled them is a further
+#: question and a different one: a kernel may be built or booted with them off,
+#: and a program that asked only the processor would pass its own check and then
+#: fault on the first instruction that used one.  `XGETBV` is how the
+#: architecture answers it, and it is the only way there is.
+_STATE: Final[dict[str, tuple[int, tuple[str, ...]]]] = {
+    "v1": (0, ()),
+    "v2": (0, ()),
+    # The lower half of a vector register and the upper half of a wide one,
+    # which together are what AVX needs saved across a context switch.
+    "v3": (_bits(1, 2), ("SSE", "AVX")),
+    # And the mask registers, the upper half again, and the sixteen further
+    # registers AVX-512 adds.
+    "v4": (_bits(5, 6, 7), ("opmask", "ZMM_Hi256", "Hi16_ZMM")),
+}
+
+
+def state(level: str) -> int:
+    """The `XCR0` bits a program of this level needs the system to have set."""
+    found = 0
+    for name in NAMES:
+        found |= _STATE[name][0]
+        if name == level:
+            break
+    return found
+
+
+def state_names(level: str) -> tuple[str, ...]:
+    """What those bits are called, for the message a program that cannot run
+    reports."""
+    found: tuple[str, ...] = ()
+    for name in NAMES:
+        found = found + _STATE[name][1]
+        if name == level:
+            break
+    return found
+
+
 #: The levels, oldest first, which is the order one contains another in.
 NAMES: Final[tuple[str, ...]] = ("v1", "v2", "v3", "v4")
 
@@ -131,3 +173,15 @@ def described(level: str) -> str:
     """What a program of this level tells a processor that cannot run it."""
     return "".join(("pl4g: this program was built for x86-64-", level,
                     " and this processor does not have it\n"))
+
+
+def disabled(level: str) -> str:
+    """And what it tells a system that has the processor and has turned off the
+    registers the program uses.
+
+    A different sentence because it is a different thing to do about it: the
+    processor cannot be argued with and a system can, the registers being off
+    because the kernel was built or booted that way.
+    """
+    return "".join(("pl4g: this program was built for x86-64-", level,
+                    " and this system has not enabled the registers it uses\n"))

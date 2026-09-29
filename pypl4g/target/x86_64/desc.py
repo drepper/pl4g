@@ -83,6 +83,12 @@ class X86InstDesc(InstDesc):
     opcode: int = 0
     map: OpMap = OpMap.PRIMARY
     enc: EncKind = EncKind.LEGACY
+    #: A ModRM byte written out in full, for an instruction that has one and
+    #: names no operand in it.  There are a handful of these -- an opcode the
+    #: architecture ran out of room for, with the rest of it in the byte that
+    #: usually says where the operands are -- and what they need is the byte,
+    #: not a rule about how to build one.
+    modrm_byte: int | None = None
     opsize: OpSize = OpSize.DEFAULT
     #: A prefix byte that selects the instruction rather than the operand size.
     mandatory_prefix: int | None = None

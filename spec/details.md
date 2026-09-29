@@ -3876,3 +3876,41 @@ third.
 program of the language suite that runs was compiled at the third level and run,
 and all two hundred and forty-six of them answered what they answer at the
 first.
+
+
+Asking the system as well as the processor
+------------------------------------------
+
+`CPUID` answers about the processor, and the processor is half the question.
+From the third microarchitecture level up, what a program uses includes registers
+whose upper halves a context switch has to save -- and whether the operating
+system saves them is not the processor's to say.  `OSXSAVE` says only that the
+processor *lets* the system enable them; a kernel built or booted with them off
+leaves a program passing its own check and then faulting on the first
+instruction that used one, which is the exact failure the check exists to turn
+into a sentence.
+
+So `XGETBV` is asked beside it: register nought of the extended control
+registers, masked down to the bits the level wants.  The third level wants the
+lower half of a vector register and the upper half of a wide one -- the two AVX
+needs saved -- and the fourth wants the mask registers, the upper half again and
+the sixteen further registers AVX-512 adds.  `levels.state` is where those bits
+are written down, beside the `CPUID` questions and in the same shape.
+
+**The sentence is its own**, because what to do about it is its own: a processor
+cannot be argued with and a system can.  "this processor does not have it" and
+"this system has not enabled the registers it uses" are two messages and one
+status, the status being about what happened rather than about whose fault it
+was.
+
+**What it cost the instruction table** was a byte.  `xgetbv` is `0F 01 D0`,
+where the last byte is a ModRM byte that names no operand -- an opcode the
+architecture ran out of room for.  The descriptor gained `modrm_byte` for
+writing such a byte down, which is what those instructions need: the byte, and
+not a rule for building one.
+
+The other two architectures ask nothing.  AArch64's vector unit is not optional
+in the profile this compiler targets, so there is nothing a system could have
+turned off; RISC-V's extensions are optional and its check is at compile time
+instead -- the ISA string says what may be emitted, and what is not promised is
+refused rather than emitted and hoped for.

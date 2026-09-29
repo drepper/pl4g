@@ -7340,6 +7340,50 @@ architecture, checking at run time in the few places it matters; **Zig**, whose
 `-mcpu` is the same idea as `--mclevel` and which, like this, falls back to a
 sequence where a feature is absent.
 
+## 2026-09-30T08:30+02:00 — compiler
+
+**The processor is half the question, and the system is the other half**
+
+Decided on the user's direction: make a program check at its own entry point
+that the processor *and* the operating system can run it.  The processor half
+was there; the system half is what this adds, and it is the to-do entry that had
+been waiting for something to depend on it.
+
+**Something now does.**  The entry said nothing was generated that used the wide
+registers, so nothing depended on the question.  That stopped being true when a
+run of elements began using 256-bit registers at the third level: a program built
+for it on a kernel with those registers turned off would pass its own check and
+fault on the first instruction that touched one.
+
+**`XGETBV` is the only way to ask.**  `OSXSAVE` in `CPUID` says the processor
+lets the system enable them, which is not the same as the system having done it;
+`XCR0` is where the answer is and the instruction that reads it is the interface
+the architecture provides.  Reading it costs three instructions at the entry
+point of a program built for the third level or above, and nothing at all below.
+
+**Two sentences and one status.**  A processor that cannot run the program and a
+system that has turned off what it uses are told apart, because what to do about
+them differs -- build for an older level, or look at how the kernel was built --
+and are given the same status, which is about what happened rather than whose
+fault it was.
+
+The other two architectures ask nothing, and that is a finding rather than an
+omission: AArch64's vector unit is not optional in the profile this compiler
+targets, and RISC-V's extensions are optional but are checked when the program
+is *built* -- the ISA string says what may be emitted and what is not promised is
+refused.  What RISC-V has no answer for is a processor that does not have what
+the ISA string promised, there being no instruction to ask; the aux vector the
+kernel hands the program is where that answer is, and it is a to-do entry now
+rather than a guess.
+
+Compare: **glibc**, which reads `XCR0` in exactly this way before choosing an
+AVX implementation of a string function; **LLVM** and **GCC**, which emit the
+same pair of questions in the code `-march=native` programs use to dispatch;
+**Go**, whose runtime reads `XCR0` at startup for the same reason and stores the
+answer for the library to branch on.  Everyone who uses these registers asks
+both questions; a program that asks one has a bug that appears only on the
+machines where it matters.
+
 Open questions
 --------------
 

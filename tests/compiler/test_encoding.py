@@ -90,6 +90,8 @@ SAMPLES = [
     ("ret", "ret"),
     ("syscall", "syscall"),
     ("cpuid", "cpuid"),
+    # What the operating system has enabled, which `cpuid` does not answer.
+    ("xgetbv", "xgetbv"),
     ("add al,bl", "add", MCReg(reg("al")), MCReg(reg("bl"))),
     ("add ax,bx", "add", MCReg(reg("ax")), MCReg(reg("bx"))),
     ("sub al,bl", "sub", MCReg(reg("al")), MCReg(reg("bl"))),

@@ -1086,6 +1086,15 @@ X86_INSTRS: Final[tuple[X86InstDesc, ...]] = (
     X86InstDesc("cpuid", (), opcode=0xA2, map=OpMap.M0F,
                 implicit_uses=(RAX, RCX),
                 implicit_defs=(RAX, RBX, RCX, RDX), est_size=2),
+    # xgetbv                             0F 01 D0
+    # What the *operating system* has enabled, which `CPUID` does not answer:
+    # it says the processor lets the system turn the wide registers on, and this
+    # says whether it did.  The register to read is named in ECX and the answer
+    # comes back in EDX:EAX; nought is the one this asks for, which holds the
+    # bits for every kind of state a context switch saves.
+    X86InstDesc("xgetbv", (), opcode=0x01, map=OpMap.M0F, modrm_byte=0xD0,
+                implicit_uses=(RCX,),
+                implicit_defs=(RAX, RDX), est_size=3),
     # ud2                                0F 0B
     X86InstDesc("ud2", (), opcode=0x0B, map=OpMap.M0F,
                 flags=InstFlags.TERMINATOR | InstFlags.BARRIER, est_size=2),

@@ -111,6 +111,7 @@ _CMOV: Final[dict[Condition, str]] = {
 _NULLARY: Final[dict[str, str]] = {
     x86ops.SYSCALL.name: "syscall",
     x86ops.CPUID.name: "cpuid",
+    x86ops.XGETBV.name: "xgetbv",
     ops.TRAP.name: "ud2",
 }
 

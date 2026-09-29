@@ -284,10 +284,12 @@ To Do List for the pypl4g compiler
     trip between the two register files that may cost more than it saves.  Worth measuring before it is written.  Leading zeroes
     already use `CLZ`, which is an ordinary instruction there.
 
-[ ] ask `XGETBV` as well as `CPUID` for the levels that want vector state.  `OSXSAVE` says the processor lets the operating
-    system enable the wide registers; that the operating system has actually enabled them is a further question, and the answer
-    is in `XCR0`.  Nothing is generated that uses them, so nothing depends on it yet; a v3 or v4 program on a kernel that had
-    turned AVX off would pass the check and fault.
+[ ] check on RISC-V that the processor has what the ISA string promised.  What may be emitted is settled when the program is
+    built and what is not promised is refused, so a program is never built with an instruction its own `--mclevel` did not allow
+    -- but a program built for `rv64gc` and started on a machine without `M` dies of an illegal instruction with nothing said.
+    There is no instruction to ask with, the architecture having none; the answer is in `AT_HWCAP` of the aux vector the kernel
+    hands the program, which the entry point already walks past on its way to the environment.  AArch64 needs none of this: its
+    vector unit is not optional in the profile this compiler targets.
 
 [ ] give the kinds of fault numbers of their own, out of the reserved range.  Everything leaves through 64 today, which is the
     general one; an answer that will not fit, a division by zero, an index outside its array and an allocation that failed are

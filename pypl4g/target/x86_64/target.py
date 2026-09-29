@@ -260,8 +260,13 @@ class X86_64Target:
             emit_handler(asm, SYSCALLS, STACK_ABI)
         refused = messages.symbol(levels.described(self._mclevel)) \
             if levels.requirements(self._mclevel) else None
+        # And what a system that has the processor and has turned off the
+        # registers this program uses is told, which is a different sentence
+        # because it is a different thing to do about it.
+        turned_off = messages.symbol(levels.disabled(self._mclevel)) \
+            if levels.state(self._mclevel) else None
         emit_start(asm, module, lookup_cconv(module.startup.cconv),
-                   self._mclevel, refused, failures, layout)
+                   self._mclevel, refused, turned_off, failures, layout)
         runtime.emit(asm, BY_NAME)
         messages.emit(asm)
         constants.emit(asm)

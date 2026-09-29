@@ -305,7 +305,11 @@ def encode(inst: MCInst) -> tuple[bytes, list[MCFixup]]:
     out.append(opcode)
 
     # -- phase 4: ModRM, SIB and the displacement ------------------------------
-    if desc.modrm is not ModRMUse.NONE:
+    if desc.modrm_byte is not None:
+        # The whole byte, written down: it is part of the opcode rather than a
+        # place where operands go.
+        out.append(desc.modrm_byte)
+    elif desc.modrm is not ModRMUse.NONE:
         if desc.rm_op is None:
             raise EncodingError("a row with a ModRM byte names no rm operand", span)
         if desc.modrm is ModRMUse.EXT_RM:

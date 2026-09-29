@@ -16,6 +16,12 @@ The asking is done with `CPUID`, which is the instruction the architecture
 provides for the question: it is answered the same way on every operating system
 and it cannot be out of date about the processor the program is actually running
 on, which a file the kernel writes can be.
+
+And with `XGETBV` beside it from the third level up, because the processor is
+only half of the question.  `OSXSAVE` says the processor *lets* the operating
+system enable the wide registers; whether it has is in `XCR0`, and a kernel
+built or booted with them off would let a program pass its own check and then
+fault on the first instruction that used one.
 """
 
 from __future__ import annotations
@@ -79,6 +85,50 @@ def test_a_level_asks_once_per_leaf(tmp_path: Path, level: str,
     asks no more questions than v3 while requiring more of the answers.
     """
     assert _asm(tmp_path, level).count("cpuid") == leaves
+
+
+@pytest.mark.parametrize("level", ("v1", "v2"))
+def test_a_level_with_no_wide_registers_asks_the_system_nothing(
+        tmp_path: Path, level: str) -> None:
+    """There is nothing for a system to have turned off below the third level:
+    what those levels add is instructions, not registers a context switch has to
+    save."""
+    assert "xgetbv" not in _asm(tmp_path, level)
+
+
+@pytest.mark.parametrize("level", ("v3", "v4"))
+def test_a_level_with_them_asks_the_system_too(tmp_path: Path,
+                                               level: str) -> None:
+    """`CPUID` says the processor lets the system enable the wide registers;
+    whether it did is a further question and `XGETBV` is the only way to ask it.
+
+    A program that asked only the processor would pass its own check and then
+    fault on the first instruction that used one -- which is the failure this
+    check exists to turn into a sentence.
+    """
+    assert "xgetbv" in _asm(tmp_path, level)
+    source = tmp_path / "t.pl4g"
+    source.write_text(SOURCE, encoding="utf-8")
+    image = tmp_path / "out"
+    proc = run_compiler(["-o", str(image), "".join(("--target=", X86)),
+                         "".join(("--mclevel=", level)), str(source)])
+    assert proc.returncode == 0, describe(proc)
+    # The sentence a system that has turned them off is told, which is not the
+    # sentence a processor that cannot run the program at all is told.
+    assert b"has not enabled the registers it uses" in image.read_bytes()
+    assert b"this processor does not have it" in image.read_bytes()
+
+
+def test_what_the_system_is_asked_for_grows_with_the_level(
+        tmp_path: Path) -> None:
+    """The third level wants the halves of a vector register saved and the
+    fourth wants the mask registers and the sixteen further ones as well."""
+    from pypl4g.target.x86_64 import levels
+
+    assert levels.state("v2") == 0
+    assert levels.state("v3") == 0x6
+    assert levels.state("v4") == 0xE6
+    assert levels.state_names("v4")[:2] == ("SSE", "AVX")
 
 
 def test_a_level_asks_for_more_than_the_one_below(tmp_path: Path) -> None:

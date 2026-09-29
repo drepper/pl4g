@@ -42,6 +42,7 @@ ENTRY_SYMBOL: Final[str] = "_start"
 def emit_start(asm: Assembler, module: Module, cconv: CallConvDesc,
                level: str = levels.DEFAULT,
                refused: str | None = None,
+               turned_off: str | None = None,
                failures: Mapping[int, Failure] | None = None,
                layout: DataLayout | None = None) -> None:
     """Emit the entry point for *module*.
@@ -71,7 +72,7 @@ def emit_start(asm: Assembler, module: Module, cconv: CallConvDesc,
     # debugger unwinding the stack knows where to stop.
     asm.op(ops.XOR, EBP, asm.reg(EBP), asm.reg(EBP))
     if refused is not None:
-        _check_level(asm, level, refused)
+        _check_level(asm, level, refused, turned_off)
     _read_environment(asm, module, cconv)
     for ctor in module.ctors:
         asm.call(symbol_name(ctor))
@@ -300,7 +301,8 @@ def _run_tests(asm: Assembler, module: Module, cconv: CallConvDesc,
     asm.block(fit)
 
 
-def _check_level(asm: Assembler, level: str, refused: str) -> None:
+def _check_level(asm: Assembler, level: str, refused: str,
+                 turned_off: str | None = None) -> None:
     """Ask the processor whether it has what this program was built to use.
 
     One `CPUID` per leaf, its answer masked down to the bits the level wants and
@@ -316,6 +318,7 @@ def _check_level(asm: Assembler, level: str, refused: str) -> None:
     wanted = levels.requirements(level)
     if not wanted:
         return
+    state = levels.state(level)
     fails = asm.reserve_label("mclevel.no")
     runs = asm.reserve_label("mclevel.yes")
     for highest in sorted({0x80000000 if one.leaf >= 0x80000000 else 0
@@ -335,6 +338,21 @@ def _check_level(asm: Assembler, level: str, refused: str) -> None:
                asm.imm(one.bits, 32, signed=False))
         asm.branch(Condition.NE, asm.reg(answer),
                    asm.imm(one.bits, 32, signed=False), fails)
+    if state and turned_off is not None:
+        # And what the *system* has turned on, which `CPUID` does not answer.
+        # `OSXSAVE` above says the processor lets it enable the wide registers;
+        # whether it did is this, and nothing else asks it.  A program that
+        # asked only the processor would pass its own check and then fault on
+        # the first instruction that used one.
+        off = asm.reserve_label("mcstate.no")
+        asm.op(ops.XOR, ECX, asm.reg(ECX), asm.reg(ECX))
+        asm.op(x86ops.XGETBV)
+        asm.op(ops.AND, EAX, asm.reg(EAX), asm.imm(state, 32, signed=False))
+        asm.branch(Condition.NE, asm.reg(EAX), asm.imm(state, 32, signed=False),
+                   off)
+        asm.jump(runs)
+        asm.block(off)
+        _refuse(asm, turned_off, levels.disabled(level))
     asm.jump(runs)
     asm.block(fails)
     asm.loadreg(EDI, asm.imm(STANDARD_ERROR_HERE, 32, signed=False))
@@ -348,6 +366,24 @@ def _check_level(asm: Assembler, level: str, refused: str) -> None:
     asm.op(x86ops.SYSCALL)
     asm.op(ops.TRAP)
     asm.block(runs)
+
+
+def _refuse(asm: Assembler, message: str, text: str) -> None:
+    """Say *text*, which the symbol *message* holds, and stop.
+
+    The same three system calls the refusal below makes, and the same status:
+    what differs between a processor that cannot run the program and a system
+    that has turned off what it uses is the sentence, not what is done about it.
+    """
+    asm.loadreg(EDI, asm.imm(STANDARD_ERROR_HERE, 32, signed=False))
+    asm.address(RSI, message)
+    asm.loadreg(EDX, asm.imm(len(text.encode("utf-8")), 32, signed=False))
+    asm.loadreg(EAX, asm.imm(NR_WRITE_HERE, 32, signed=False))
+    asm.op(x86ops.SYSCALL)
+    asm.loadreg(EDI, asm.imm(statuses.WRONG_PROCESSOR, 32, signed=False))
+    asm.loadreg(EAX, asm.imm(NR_EXIT_GROUP, 32, signed=False))
+    asm.op(x86ops.SYSCALL)
+    asm.op(ops.TRAP)
 
 
 def emit_abort(asm: Assembler, cconv: CallConvDesc,
