@@ -12,6 +12,7 @@ main()u6:
     93 82 02 00              addi.lo12 t0, t0, counter   ※ fixup riscv_pcrel_lo12_i → counter
     03 c5 02 00              lbu a0, t0, 0
     67 80 00 00              ret
+.Lpl4g.frames.end:
 _start:
                              ※ align 16
     13 04 00 00              mv s0, zero

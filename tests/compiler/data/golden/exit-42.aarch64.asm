@@ -5,6 +5,7 @@ main()u6:
                              ※ align 16
     40 05 80 52              movz w0, 42
     c0 03 5f d6              ret
+.Lpl4g.frames.end:
     00 00 00 00 00 00 00 00  ※ align 16
 _start:
     fd 03 1f aa              mov x29, xzr

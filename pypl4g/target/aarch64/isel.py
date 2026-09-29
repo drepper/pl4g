@@ -7,6 +7,8 @@ of the kind x86-64 needs.
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from typing import TYPE_CHECKING, Final, Mapping, Sequence
 
 from ...mc import ops
@@ -488,15 +490,21 @@ class A64Selector(InstructionSelector):
         # to be found to hold it.  Naming the wide view of a register whose own
         # width may be narrower is what the width on the operand is for.
         address = MCReg(dst, bits=64)
+        # And the destination is named at the width the load writes rather than
+        # at the register's own, which are not the same thing where a narrow
+        # place is read into a wide register: the instruction that reads four
+        # bytes writes the word view, and naming the whole register would ask
+        # for the instruction that reads eight.
+        held = MCReg(dst, bits=64 if width >= 64 else 32)
         if src.disp_sym is None:
             base = MCReg(src.base, bits=64) if src.base is not None else address
-            return (self._inst(mnemonic, (MCReg(dst), base,
+            return (self._inst(mnemonic, (held, base,
                                           MCImm(src.disp, 12, signed=False)), span),)
         symbol = MCSymRef(src.disp_sym)
         return (
             self._inst("adrp", (address, symbol), span),
             self._inst("add.lo12", (address, address, symbol), span),
-            self._inst(mnemonic, (MCReg(dst), address,
+            self._inst(mnemonic, (held, address,
                                   MCImm(src.disp, 12, signed=False)), span),
         )
 
@@ -744,8 +752,22 @@ class A64Selector(InstructionSelector):
         """
         if bits >= 64:
             return self.select_move(dst, src, span)
-        if not isinstance(src, MCReg):
+        if isinstance(src, MCImm):
             return self.select_move(dst, src, span)
+        if not isinstance(src, MCReg):
+            # A place in memory, which a load narrows on its own: the load of a
+            # word clears the word above it exactly as a move of one does, and
+            # the signed case has a load of its own.  What it must not be is a
+            # load of the whole register, which would read four bytes that are
+            # not the value and would want an offset on a grain of eight.
+            narrow = replace(src, size_bits=bits)
+            if not signed:
+                return self.select_move(dst, narrow, span)
+            if bits == 32:
+                return (self._inst("ldrsw", (MCReg(dst, bits=64), narrow), span),)
+            held = self.select_move(dst, narrow, span)
+            return (*held, *self.select_widen(dst, MCReg(dst, bits=32), bits,
+                                              True, span))
         if not signed:
             return (self._inst("mov", (MCReg(dst, bits=32),
                                        MCReg(src.reg, bits=32)), span),)
@@ -1004,6 +1026,13 @@ class A64Selector(InstructionSelector):
     def link_slot_size(self) -> int:
         """A whole stack unit, the stack having to stay aligned to sixteen."""
         return 16
+
+    def frame_walk(self, total: int, size: int,
+                   link: int) -> tuple[int | None, int]:
+        """The call left the return address in a register, so it lies wherever
+        the function put it -- and nowhere at all where the function calls
+        nothing, which is a function that can only be the innermost frame."""
+        return (size if link else None, total)
 
     def select_save_link(self, offset: int, span: Span) -> Sequence[MCInst]:
         """Instructions that put the return address into the frame at *offset*."""

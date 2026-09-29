@@ -10,6 +10,7 @@ main()u6:
                              ※ align 16
     0f b6 05 00 00 00 00     movzx eax, [rip + counter]   ※ fixup pcrel32 → counter
     c3                       ret
+.Lpl4g.frames.end:
     cc cc cc cc cc cc cc cc  ※ align 16
 _start:
     31 ed                    xor ebp, ebp

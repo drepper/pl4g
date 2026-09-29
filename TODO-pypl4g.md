@@ -233,18 +233,6 @@ To Do List for the pypl4g compiler
     fault.  This is also the pre-`io_uring` error path the entry in TODO-language.md asks about, and it answers that question: it
     assumes nothing about the descriptor, allocates nothing, and formats nothing.
 
-[ ] walk the stack, so that a fault reports where it was called from and not only where it happened.  Deferred deliberately: the
-    language has no way to call a function, so every stack is one frame deep and an unwinder could not be tested against the thing
-    it exists for.  The analysis, so that it is not done twice:
-    Two ways to walk.  A **frame pointer chain** is what `_start` already prepares for -- it sets the frame pointer and the return
-    address to zero so that a walk knows where to stop -- and needs no table at all, at the cost of a register and two
-    instructions in every function.  **Frame information**, a table from a code address to the frame size and to where the return
-    address was put, costs nothing at run time and is what a debugger and a profiler want anyway; it is more to emit and needs an
-    absolute relocation in data, which nothing generates yet.  The second is the better answer for a language that cares about
-    what it emits, and the first is what to reach for if the second proves slow to write.
-    Names are a third question: `.symtab` is in the image but is not mapped, so a walk that prints names needs a table of its own
-    that is.  The same table can carry both, which is an argument for the second way.
-
 [x] implement module system.  Done: `let name := import("somename")`, found in the importing file's directory, then the
     directories `--module-path` gives, then the installation's; read once however many routes reach it; named by the shortest of
     those routes, with the hash of the path where two files share a base name; a ring refused.  The top-level namespace is a

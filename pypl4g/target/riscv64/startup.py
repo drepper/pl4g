@@ -19,7 +19,7 @@ from ...ir.module import Module
 from ...mc import ops
 from ...mc.ops import Condition
 from ...mc.asmbuilder import Assembler
-from .. import statuses
+from .. import backtrace, statuses
 from ..callconv import CallConvDesc
 from .abi import lookup as lookup_cconv
 from .. import started
@@ -125,7 +125,8 @@ COUNT_REG: Final = reg("s2")
 HELD_STACK: Final = reg("s3")
 
 
-def emit_abort(asm: Assembler, cconv: CallConvDesc) -> None:
+def emit_abort(asm: Assembler, cconv: CallConvDesc,
+               walk: bool = False) -> None:
     """Emit the helper that reports a fault and stops the program.
 
     It takes the message and its length, writes them, and traps.  Everything
@@ -148,6 +149,14 @@ def emit_abort(asm: Assembler, cconv: CallConvDesc) -> None:
     asm.loadreg(first, asm.imm(STANDARD_ERROR, 32, signed=False))
     asm.loadreg(A7, asm.imm(NR_WRITE, 12))
     asm.op(rvops.ENVIRONMENT_CALL)
+    if walk:
+        # The call that reached here left the return address in a register and
+        # touched nothing else, so where the faulting function was and where
+        # its stack stands are both to hand -- and the first has to be taken
+        # out of that register before the call below writes it.
+        asm.loadreg(first, asm.reg(RA))
+        asm.loadreg(second, asm.reg(SP))
+        asm.call(backtrace.SYMBOL)
     asm.loadreg(cconv.int_arg_regs[0], asm.imm(statuses.GENERAL, 12))
     asm.loadreg(A7, asm.imm(NR_EXIT_GROUP, 12))
     asm.op(rvops.ENVIRONMENT_CALL)
@@ -338,3 +347,15 @@ def _run_tests(asm: Assembler, module: Module, cconv: CallConvDesc,
     asm.op(rvops.ENVIRONMENT_CALL)
     asm.op(ops.TRAP)
     asm.block(fit)
+
+
+#: How the walk writes here, and which registers it may keep across doing so.
+#: The kept four are callee-saved, which is what the system call leaves alone;
+#: nothing will miss them, the helper that calls the walk being about to end the
+#: program.
+WALK_ABI: Final[backtrace.WalkABI] = backtrace.WalkABI(
+    write=NR_WRITE, number=A7,
+    arguments=(A0, A1, reg("a2")),
+    enter=lambda asm: asm.op(rvops.ENVIRONMENT_CALL),
+    kept=(S1, reg("s2"), reg("s3"), reg("s4")),
+    scratch=(reg("t0"), reg("t1")))

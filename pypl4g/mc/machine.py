@@ -112,6 +112,13 @@ class MachineFunction:
     #: saved and restored around itself.  Filled in when the frame is made,
     #: which is the pass that decides it.
     preserved: frozenset[RegUnit] = field(default_factory=frozenset)
+    #: Where this function's return address is once its frame stands, measured
+    #: from the stack pointer, and nothing where it is still in the register a
+    #: call left it in.  What a walk of the stack reads to find its caller.
+    return_at: int | None = None
+    #: And how much further up the caller's stack pointer is.  Both are filled
+    #: in when the frame is made, which is what decides them.
+    caller_at: int = 0
 
     def add_block(self, label: str | None = None) -> MachineBasicBlock:
         """Append a new block and return it."""

@@ -12,6 +12,7 @@ main()u6:
     00 00 00 91              add.lo12 x0, x0, counter   ※ fixup aarch64_add_lo12 → counter
     00 00 40 39              ldrb w0, x0, 0
     c0 03 5f d6              ret
+.Lpl4g.frames.end:
 _start:
                              ※ align 16
     fd 03 1f aa              mov x29, xzr

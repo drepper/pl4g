@@ -8,6 +8,8 @@ shortest.
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from typing import TYPE_CHECKING, Final, Mapping, Sequence
 
 from ...mc import ops
@@ -694,14 +696,20 @@ class X86Selector(InstructionSelector):
         """
         if bits >= 64:
             return self.select_move(dst, src, span)
-        if not isinstance(src, MCReg):
+        if isinstance(src, MCImm):
             return self.select_move(dst, src, span)
+        # A place in memory is widened by the same instructions a register is:
+        # every one of them reads either.  What it must not be is an ordinary
+        # move, which would name the whole of the destination beside four bytes
+        # of memory and match no encoding there is.
+        narrow = (MCReg(src.reg, bits=bits) if isinstance(src, MCReg)
+                  else replace(src, size_bits=bits))
         if not signed:
-            return (self._inst("mov", (MCReg(dst, bits=32),
-                                       MCReg(src.reg, bits=32)), span),)
+            if bits == 32:
+                return (self._inst("mov", (MCReg(dst, bits=32), narrow), span),)
+            return (self._inst("movzx", (MCReg(dst, bits=32), narrow), span),)
         mnemonic = "movsxd" if bits == 32 else "movsx"
-        return (self._inst(mnemonic, (MCReg(dst, bits=64),
-                                      MCReg(src.reg, bits=bits)), span),)
+        return (self._inst(mnemonic, (MCReg(dst, bits=64), narrow), span),)
 
     def select_clamp(self, cond: Condition, dst: Reg, lhs: MCOperand, rhs: MCOperand,
                      bound: MCOperand, span: Span) -> Sequence[MCInst]:
@@ -977,6 +985,13 @@ class X86Selector(InstructionSelector):
         """None.  The call instruction here pushes the return address onto the
         stack, where a further call cannot reach it."""
         return 0
+
+    def frame_walk(self, total: int, size: int,
+                   link: int) -> tuple[int | None, int]:
+        """The call pushed the return address, so it lies above the whole frame
+        and the caller's stack pointer is the eight bytes further that took."""
+        del size, link
+        return (total, total + 8)
 
     def select_save_link(self, offset: int, span: Span) -> Sequence[MCInst]:
         """Nothing to do; the call already did it."""

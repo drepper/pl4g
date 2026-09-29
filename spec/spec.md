@@ -779,18 +779,26 @@ Both operands have the same type, as everywhere, and the result has it too.
 continue with 44 and does not continue with 255: it stops, and says so.  Nothing is wrapped and nothing is left undefined.
 
 ```
-t.pl4g:6:5: pl4g: addition that does not fit in 'main'
+t.pl4g:6:5: pl4g: addition that does not fit in 'inner'
+  called from 'middle'
+  called from 'outer'
+  called from 'main'
 ```
 
-The message is built whole when the program is compiled -- the compiler knows which operation it was, in which function, at which
-line -- so what runs at the moment of the fault is a write and a trap: no formatting, no number to turn into text, no allocation,
-nothing that could itself fail.  That matters more here than anywhere else, because this is the code that runs when something has
-already gone wrong.  It goes to standard error through a raw system call, that being the only place a program depending on nothing
-from the system can write to.
+The first line is where the fault was, and **the lines under it are how the program got there**: one per function still standing
+when it happened, outwards, ending where the program was started.  The function the fault was in is not among them, the first line
+having named it.  A function that was put where it was called is not on the stack and so is not named: what this says is where the
+program was, which is not always what the program was written as.
 
-The program then **dies by a signal at the point of the fault**, with its stack still standing, which is what a debugger wants to
-be handed.  It is the same signal on every target.  A status would say less and could not be told from a program that meant to
-exit with it.
+The message is built whole when the program is compiled -- the compiler knows which operation it was, in which function, at which
+line -- and so is every line under it.  What runs at the moment of the fault is a write per line and nothing else: no formatting,
+no number to turn into text, no allocation, nothing that could itself fail.  That matters more here than anywhere else, because
+this is the code that runs when something has already gone wrong.  It goes to standard error through a raw system call, that being
+the only place a program depending on nothing from the system can write to.
+
+The program then **exits with a status out of the range the runtime reserves**, 64 through 127.  A signal is not a status: a shell
+reports one as 128 plus the number, which collides with whatever the program might have chosen to exit with, and a caller has to
+know to look for it.  A program that dies of a signal really did die of one, and that is worth being able to believe.
 
 Where an overflow can be shown at compile time it is a compilation error rather than a fault, since a program that must stop every
 time it runs is a program that need not be run.

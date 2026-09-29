@@ -7187,6 +7187,62 @@ a binary search over hashes and a value switch to a chain below eight cases.
 Every one of them makes the choice in the backend, which is the shape this now
 has.
 
+## 2026-09-30T04:00+02:00 — compiler
+
+**A fault says how the program got there**
+
+Decided on the user's direction, from a to-do entry, and the user chose both
+halves of it from what the entry had already reasoned out.  A fault said where
+it was and nothing about how the program reached it; it now says one line per
+function still standing, outwards, ending where the program was started.
+
+**A frame table and not a chain of frame pointers.**  The entry had put the two
+side by side: a chain costs a register and two instructions in every function
+that calls, in every program, forever, and needs no table; a table costs nothing
+at run time and is what a debugger and a profiler would want next.  The user took
+the table, which is the entry's own recommendation and the right one for a
+language that cares about what it emits.  The argument that settles it is in the
+entry too: a walk that prints names needs a table of names whichever way it
+walks, since `.symtab` is in the image and is not mapped -- so the chain saves
+one table and not two.
+
+**A row says two numbers rather than a frame's shape**: where the return address
+is, and how far up the caller's stack pointer is.  The shape is the thing that
+differs between the three, and a walk asked for the two numbers is the same
+instructions everywhere.  That is what made it worth writing the walk once, the
+way the allocator is written once, instead of three times in three assemblers.
+
+**Only a function that calls gets a row.**  No walk can meet a function that
+calls nothing: every frame standing when a fault is reported has an outstanding
+call, the report itself being one.  Found by measuring rather than by reasoning
+-- the table was a tenth of the largest test image -- and it is safe for the same
+reason it is worth doing: the addresses the walk looks up are all inside
+functions that call.
+
+**The line is built whole at compile time**, indentation and quotes and newline,
+so that a frame costs one write and no formatting.  That is the rule the fault
+message already followed and the reason it followed it: this is the code that
+runs when something has already gone wrong.
+
+**What it costs is bytes**, and the entry did not say what would be acceptable.
+About forty for a program that cannot fault -- which carries none of it -- and
+four hundred to six hundred for the ordinary ones.  That is a real price and it
+is paid by every program that can fault, which is nearly all of them; a switch
+to turn it off would be a decision of its own and nobody has asked for one.
+
+Compare: **C on Linux**, where a backtrace wants `.eh_frame` and a library to
+interpret it, and where a program that is not built for it gets addresses at
+best; **Go**, which carries a table from code address to function name and frame
+size for exactly this and prints a named trace on any panic, which is what this
+is a small version of; **Rust**, which resolves a backtrace out of the image's
+debugging information at the moment of the panic, and is slow and fallible where
+this is neither; **Zig**, which does the same and says so in its documentation.
+The choice this shares with Go is to carry the little that is needed rather than
+to interpret the much that a debugger wants.
+
+While here: the specification still said a fault dies by a signal, which stopped
+being true when the reserved status range was decided.
+
 Open questions
 --------------
 

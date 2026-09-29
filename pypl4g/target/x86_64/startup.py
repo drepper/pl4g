@@ -19,7 +19,7 @@ from ...ir.layout import DataLayout
 from ...ir.module import Module
 from ...mc import ops
 from ...mc.asmbuilder import Assembler
-from .. import statuses
+from .. import backtrace, statuses
 from ..callconv import CallConvDesc
 from .abi import lookup as lookup_cconv
 from .. import started
@@ -350,7 +350,8 @@ def _check_level(asm: Assembler, level: str, refused: str) -> None:
     asm.block(runs)
 
 
-def emit_abort(asm: Assembler, cconv: CallConvDesc) -> None:
+def emit_abort(asm: Assembler, cconv: CallConvDesc,
+               walk: bool = False) -> None:
     """Emit the helper that reports a fault and stops the program.
 
     It takes the message and its length, writes them, and traps.  Everything
@@ -373,6 +374,14 @@ def emit_abort(asm: Assembler, cconv: CallConvDesc) -> None:
     asm.loadreg(first, asm.imm(STANDARD_ERROR, 32, signed=False))
     asm.loadreg(EAX, asm.imm(NR_WRITE, 32, signed=False))
     asm.op(x86ops.SYSCALL)
+    if walk:
+        # Where the faulting function was and where its stack stood.  The call
+        # that reached here pushed the first, so the second is the eight bytes
+        # further up that took.
+        asm.loadreg(first, asm.mem(base=RSP, disp=0, size_bits=64))
+        asm.loadreg(second, asm.reg(RSP))
+        asm.op(ops.PLUS, second, asm.reg(second), asm.imm(8, 32, signed=False))
+        asm.call(backtrace.SYMBOL)
     asm.loadreg(EDI, asm.imm(statuses.GENERAL, 32, signed=False))
     asm.loadreg(EAX, asm.imm(NR_EXIT_GROUP, 32, signed=False))
     asm.op(x86ops.SYSCALL)
@@ -380,6 +389,18 @@ def emit_abort(asm: Assembler, cconv: CallConvDesc) -> None:
     # letting control run off the end of the section.
     asm.op(ops.TRAP)
     asm.end_function()
+
+
+#: How the walk writes here, and which registers it may keep across doing so.
+#: The kept four are callee-saved, which is what the system call leaves alone;
+#: nothing will miss them, the helper that calls the walk being about to end the
+#: program.
+WALK_ABI: Final[backtrace.WalkABI] = backtrace.WalkABI(
+    write=NR_WRITE, number=RAX,
+    arguments=(RDI, RSI, RDX),
+    enter=lambda asm: asm.op(x86ops.SYSCALL),
+    kept=(reg("rbx"), reg("r12"), reg("r13"), reg("r14")),
+    scratch=(reg("rcx"), reg("r11")))
 
 
 def emit_report(asm: Assembler, cconv: CallConvDesc) -> None:

@@ -25,7 +25,9 @@ from ...ir.layout import DataLayout
 from ...ir.types import (ArrayType, FloatType, ListType, PtrType, ResultType,
                          TupleType, Type, VecType)
 from ..allocator import OUT_OF_MEMORY, emit_allocator, wanted_by
+from ..backtrace import emit_backtrace
 from ..faults import Messages
+from ..frames import END_SYMBOL as FRAMES_END, Frames
 from ..tests import failures_of
 from ..pool import Constants
 from ..registry import architecture_of
@@ -44,7 +46,7 @@ from .isel import RVSelector, UnsupportedOperation, lower_function
 from .opcodes import PAD_BYTE, RISCV_INSTRS
 from .regs import FPR, GPR, INFO
 from .startup import (ALLOCATOR_REGS, ABORT_SYMBOL, ENTRY_SYMBOL,
-                      SYSCALLS, STACK_ABI, emit_abort, emit_report,
+                      SYSCALLS, STACK_ABI, WALK_ABI, emit_abort, emit_report,
                       emit_start)
 from ..stack import emit_handler, emit_state
 
@@ -166,6 +168,9 @@ class RISCV64Target:
         del opt_level
         messages = Messages()
         constants = Constants()
+        # Where each function keeps its return address, so that a fault can say
+        # who called and not only where it happened.
+        walked = Frames()
         # The runtime compiled ahead of time, placed only where the program
         # reaches it -- which is where a call names something it defines.
         runtime = Runtime(blob=blob_for(architecture_of(self.triple)))
@@ -210,6 +215,9 @@ class RISCV64Target:
                 lower_function(asm, func, lookup_cconv(func.cconv), self.registers,
                                messages, sources, constants, clobbers)
                 clobbers[symbol_name(func)] = clobbered_units(asm.functions[-1])
+                built = asm.functions[-1]
+                walked.record(symbol_name(func), func.name,
+                              built.return_at, built.caller_at)
             except UnsupportedOperation as exc:
                 diags.emit(D.IMPL_BACKEND_UNSUPPORTED,
                            exc.span if exc.span is not None else func.span,
@@ -227,6 +235,11 @@ class RISCV64Target:
                            exc.span if exc.span is not None else func.span,
                            detail=exc.detail)
                 return
+        # Where the last function ends, which is where the table's sentinel row
+        # begins: an address past it is an address in no function of the
+        # program, and the walk stops rather than reading a row that is not
+        # there.
+        asm.label(FRAMES_END)
         if module.startup is None:
             return
         if wanted_by(module):
@@ -237,11 +250,15 @@ class RISCV64Target:
         # Before the question below: a binary whose only message is a failing
         # test needs the helper as much as one that divides by zero.
         failures = failures_of(module, messages)
+        walked.wanted = messages.wanted
         if messages.wanted:
             # The runtime follows the system's convention whatever the
             # function that faults follows: it is written as instructions,
             # and hand-written code names its registers outright.
-            emit_abort(asm, lookup_cconv(SYSTEM_CCONV))
+            emit_abort(asm, lookup_cconv(SYSTEM_CCONV), walk=True)
+            # And the walk it calls, which is written once for the three of
+            # them: what differs is the record above.
+            emit_backtrace(asm, WALK_ABI, lookup_cconv(SYSTEM_CCONV).int_arg_regs)
         if failures:
             # Only where a test runs: what says a test failed is a write that
             # comes back, which nothing else has any use for.
@@ -255,6 +272,7 @@ class RISCV64Target:
         runtime.emit(asm, BY_NAME)
         messages.emit(asm)
         constants.emit(asm)
+        walked.emit(asm)
         # What the image was built for, said in the file for whatever reads the
         # file.  It has to be said: this architecture's base is small and
         # everything else is an extension, so "a RISC-V binary" says almost

@@ -14,6 +14,7 @@ main()u6:
                              ※ align 16
     31 c0                    xor eax, eax
     c3                       ret
+.Lpl4g.frames.end:
     cc cc cc cc cc cc cc cc cc cc cc cc cc ※ align 16
 __pl4g_stack_fault:
     48 8b 56 10              mov rdx, [rsi + 16]

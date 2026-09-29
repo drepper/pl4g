@@ -1,0 +1,37 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=64 diag=none
+
+※ A fault says where it happened, and what the stack says is how it was reached.
+※ Every function on it named one line at a time, outwards, with the innermost
+※ left out: the message named it already.
+※
+※ What the walk reads is a table the compiler emitted -- a row per function that
+※ calls, saying where its code is, where its return address lies once its frame
+※ stands, how far above its caller's stack pointer is, and the line to print.
+※ Nothing is worked out at the moment of the fault: there is no formatting, no
+※ number to turn into text, and nothing that could itself fail.
+※
+※ The three functions are held apart from the inliner on purpose.  Each is
+※ called once, so each would otherwise be put where it was called, and what a
+※ walk would then find is one frame -- which is the right answer about the
+※ program that runs and the wrong one for what this is about.
+※
+※ What the exit status says is that the program stopped the way a fault stops
+※ it; what it says is checked where it can be read, in the compiler's own tests.
+
+let factor: u64 = 4294967296u64
+
+@[inline(never)]
+fn inner(a: u64) → u64:
+    a × factor
+
+@[inline(never)]
+fn middle(a: u64) → u64:
+    inner(a) + 1u64
+
+@[inline(never)]
+fn outer(a: u64) → u64:
+    middle(a) + 2u64
+
+@[startup, impure]
+fn main() → u6:
+    ⎕narrow(outer(factor), ⌜u6⌝) ?? 1u6

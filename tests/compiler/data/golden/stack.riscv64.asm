@@ -14,6 +14,7 @@ main()u6:
                              ※ align 16
     13 05 00 00              li a0, 0
     67 80 00 00              ret
+.Lpl4g.frames.end:
     00 00 00 00 00 00 00 00  ※ align 16
 __pl4g_stack_fault:
     83 b2 05 01              ld t0, a1, 16

@@ -3744,3 +3744,72 @@ shape, and a `match` inside a function that was inlined is where it arises.
 them, which asks how many ways out a branch has and not which instruction they
 belong to -- so a many-way branch was covered by those words before there was one
 to cover.
+
+Walking the stack
+-----------------
+
+A fault says where it was, which the compiler knew when it emitted the check.
+How the program got there is on the stack, and a stack is only bytes until
+something says which of them are return addresses.  `target/frames.py` is what
+says so: a row per function, giving where its code begins, where its return
+address lies once its frame stands, how far above its caller's stack pointer is,
+and the line to print for it.
+
+**A table rather than a chain of frame pointers.**  The other way to walk is to
+have every function keep a pointer to its caller's frame, which costs a register
+and two instructions in every function that calls, in every program, forever.
+The table costs nothing in any function; what it costs is bytes in the image,
+read only by a program that is already stopping.  It is also what a debugger or
+a profiler would want next, where a chain of pointers is of no use to either.
+
+**Two numbers, not a shape.**  A row says where the return address is and how
+far up the caller's stack pointer is, and not how the frame is laid out -- which
+is the thing that differs.  The architecture whose call instruction pushes a
+return address has it above the whole frame and its caller's pointer eight bytes
+further still; the two that leave it in a register have it wherever the function
+put it and nothing between the frames.  Asked for the two numbers, the walk is
+the same instructions on all three; asked about the shape, it would have to know
+which machine it was walking.  Each backend answers `frame_walk` with the two.
+
+**Only the functions that call get a row.**  A function that calls nothing keeps
+its return address in the register the call left it in, and no walk can ever
+meet one: every frame standing when a fault is reported has an outstanding call,
+the report itself being one.  So a leaf costs nothing, and the search stays
+correct -- a row is found by taking the last one beginning at or before the
+address, and every address the walk looks up is inside a function that calls.
+
+**The rows are in address order**, which is the order the functions are emitted
+in, and the last is a sentinel: it begins where the last function ends and names
+no line.  Reaching it is having looked at every function there is, which is what
+an address in the entry point or in the packaged runtime comes to, and the walk
+stops rather than following whatever is below.  It is emitted even where there
+are no rows at all, since what asks for the table is that the program can stop
+with a message.
+
+**The line is built whole at compile time**, indentation and newline and all, so
+what runs per frame is one write of bytes that were already there.  The walk is
+in `target/backtrace.py`, written once and emitted for every architecture the
+way the allocator is: what differs is which registers a system call uses and
+which instruction enters the kernel, and that much is a record each backend
+fills in.  It may destroy any register it likes -- the helper that calls it is
+about to end the program -- which is what lets it keep its state in registers a
+system call leaves alone rather than on a stack it is in the middle of reading.
+It gives up after sixty-four frames, because a walk that ran away would turn a
+program that reported a fault into one that did not.
+
+**What it costs** is the walk, a row, and a line per function that calls, and
+only in a program that can fault at all: about forty bytes for one that cannot,
+four hundred to six hundred for the ordinary ones in the language suite, and
+1160 for the largest of them before the leaves were left out, 968 after.
+
+Three things had to give a little.  `select_widen` on all three targets took a
+register or a constant and passed a place in memory to the ordinary move, which
+would have read eight bytes where four were wanted -- and on x86-64 matched no
+encoding at all.  Each of them now narrows the place and picks the load that
+widens it, which is what the walk reads a four-byte field with.  On AArch64
+`_select_load` named the destination at the register's own width rather than at
+the width the load writes, so reading four bytes into a whole register asked for
+the instruction that reads eight and an offset on a grain of eight.  And every
+number in a row is kept below the top bit of four bytes, so that the field means
+the same on the machine that copies the sign of a narrow load into the rest of
+the register and on the two that copy nought.

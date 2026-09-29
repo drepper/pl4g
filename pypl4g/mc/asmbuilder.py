@@ -327,6 +327,25 @@ class InstructionSelector(Protocol):
         a further call cannot reach."""
         ...
 
+    def frame_walk(self, total: int, size: int,
+                   link: int) -> tuple[int | None, int]:
+        """Where a return address lies once the frame stands, and how far above
+        this function's stack pointer its caller's is.
+
+        Two numbers rather than the frame's shape, because the shape is what
+        differs: the architecture whose call instruction pushes the return
+        address has it above the whole frame and its caller's pointer eight
+        bytes further still, while the two that leave it in a register have it
+        wherever the function put it and nothing between the frames.  A walk
+        that asked about the shape would have to know which architecture it was
+        walking; asking for the two numbers, it does not.
+
+        The first is nothing where the return address is still in the register
+        a call left it in, which is a function that calls nothing -- and which
+        therefore cannot be anything but the innermost frame.
+        """
+        ...
+
     def select_save_link(self, offset: int, span: Span) -> Sequence[MCInst]:
         """Instructions that put the return address into the frame at *offset*."""
         ...
@@ -639,6 +658,12 @@ class Assembler:
         # one has to put it back, or its caller loses whatever it held.
         kept = self._kept_registers(function) if returns else []
         total = size + link + 8 * len(kept)
+        # Where a walk of the stack would find this function's return address --
+        # and nowhere, for a function that calls nothing, which is a function no
+        # walk can ever meet: every frame standing when a fault is reported has
+        # an outstanding call, the report itself being one.
+        function.return_at, function.caller_at = (
+            self._selector.frame_walk(total, size, link) if calls else (None, 0))
         if total == 0:
             return
         # The prologue goes at the top of the first block and the undo before

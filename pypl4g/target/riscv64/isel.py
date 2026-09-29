@@ -11,6 +11,8 @@ the whole register rather than in a view of it, as on the other two backends.
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from typing import TYPE_CHECKING, Final, Mapping, Sequence
 
 from ...mc import ops
@@ -568,7 +570,15 @@ class RVSelector(InstructionSelector):
         shifts do, the first pushing the value up to the top of the register and
         the second bringing it back down with copies of its top bit behind it.
         """
-        if not signed or bits >= 64 or not isinstance(src, MCReg):
+        if bits >= 64 or isinstance(src, MCImm):
+            return self.select_move(dst, src, span)
+        if not isinstance(src, MCReg):
+            # A place in memory, which the load itself widens: there is a load
+            # per width that copies the sign and one per width that copies
+            # nought, and the ordinary move would pick the first.
+            narrow = replace(src, size_bits=bits, signed=signed)
+            return self.select_move(dst, narrow, span)
+        if not signed:
             return self.select_move(dst, src, span)
         spare = MCImm(64 - bits, 6, signed=False)
         return (self._inst("slli", (MCReg(dst), src, spare), span),
@@ -814,6 +824,13 @@ class RVSelector(InstructionSelector):
     def link_slot_size(self) -> int:
         """A whole stack unit, the stack having to stay aligned to sixteen."""
         return 16
+
+    def frame_walk(self, total: int, size: int,
+                   link: int) -> tuple[int | None, int]:
+        """The call left the return address in a register, so it lies wherever
+        the function put it -- and nowhere at all where the function calls
+        nothing, which is a function that can only be the innermost frame."""
+        return (size if link else None, total)
 
     def select_save_link(self, offset: int, span: Span) -> Sequence[MCInst]:
         """Instructions that put the return address into the frame at *offset*."""
