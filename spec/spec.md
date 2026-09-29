@@ -977,6 +977,33 @@ is what turning eight bits round gives.  It is defined on **unsigned** types onl
 signed number is the one that says which sign it has, so the answer would be a number unrelated to the one that went in.  Where
 the bits are what is wanted, an unsigned type is what says so.  Rust rotates signed integers too, and is the example not followed.
 
+#### Counting bits
+
+Two names the compiler provides ask about the bits of a number rather than about the number.
+
+```
+⎕ones(200u8)      ※ 3 -- how many of its bits are set
+⎕lead(1u8)        ※ 7 -- how many zeroes stand above the highest one that is
+```
+
+**Both count over the type's own width.**  `⎕ones(255u8)` is eight and `⎕ones(255u64)` is eight as well, and
+`⎕lead` of the two is nought and fifty-six: the bits above a value's type are not the value's, and the zeroes above its
+highest set bit are the ones its type has room for.  A signed number is counted as the bits two's complement gives it, so
+`⎕ones(⁻1i8)` is eight.
+
+**`⎕lead` of nought is the width of the type.**  That is the only answer that makes a count of leading zeroes a count of
+leading zeroes, and it is said here because two of the three architectures have an instruction that leaves it undefined -- a
+program would otherwise mean one thing on one machine and another elsewhere.
+
+**Both answer with a `u8`** whatever they were given, the widest count there is being sixty-four.  A count is not of the same kind
+as the thing counted: adding it back to the number it came from would be adding a length to a number, and the type saying so is
+what makes that a thing a reader sees.
+
+Compare: **C**, where these are `popcount` and `clz` built in to two compilers and undefined for zero in both; **Rust**, whose
+`count_ones` and `leading_zeros` are methods of every integer type and define zero the way this does; **Go**, whose `math/bits`
+says the same; **Zig**, whose `@popCount` and `@clz` likewise.  The disagreement in the field is only about zero, and the answer
+every language that chose one picked is the width.
+
 #### Saturating arithmetic
 
 Three operators compute a sum, a difference and a product that **answer with the nearest value the type can hold** rather than

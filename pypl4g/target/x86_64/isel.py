@@ -38,6 +38,7 @@ from ...ir.types import (BOOL, ResultType, VecType, made_of_parts,
                          parts_of)
 from ..callconv import (TooManyArguments, argument_places, destroyed_by,
                         result_places)
+from ..bitcount import COUNTING, lower_count
 from ..saturate import (DIVISION, EXTREMA, NAMES, SATURATING, TRAPPING,
                         Unsupported,
                         SHIFTS, WRAPPING, lower_division_result,
@@ -179,13 +180,20 @@ class X86Selector(InstructionSelector):
     """Turns builder calls into x86-64 instructions."""
 
     def __init__(self, table: InstrTable | None = None,
-                 rounds: bool = True) -> None:
+                 rounds: bool = True, counts_ones: bool = False,
+                 counts_leading: bool = False) -> None:
         self.table = table if table is not None else InstrTable(X86_INSTRS)
         #: Whether the level this is generating for has the rounding
         #: instruction.  It is SSE4.1, which the second level promises and the
         #: first does not, and there is nothing else on this architecture that
         #: rounds without going through an integer.
         self.rounds = rounds
+        #: Whether the level promises the instruction that counts the bits set,
+        #: which the second adds, and the one that counts the zeroes above the
+        #: highest set bit, which the third does.  A program built for a level
+        #: without one gets the sequence that stands in for it.
+        self.counts_ones = counts_ones
+        self.counts_leading = counts_leading
 
     def _inst(self, mnemonic: str, operands: Sequence[MCOperand], span: Span) -> MCInst:
         """Select the shortest encoding of *mnemonic* for *operands*."""
@@ -907,12 +915,49 @@ class X86Selector(InstructionSelector):
         while the shift wants it, and nothing else has to be arranged.
         """
         held: list[MCInst] = []
+        if self.counts_leading:
+            # The third level's form, which takes the count in any register and
+            # writes somewhere else again: one instruction, and no register held
+            # away from every other value while the shift waits for it.  It is
+            # the same level that adds the count of leading zeroes, which is
+            # what that flag is asked about here.
+            counted, before = self._in_register(amount, 64, span)
+            held.extend(before)
+            wide, before = self._in_register(value, 64, span)
+            held.extend(before)
+            held.append(self._inst(self._WIDE_SHIFTS[op.name],
+                                   (MCReg(dst, bits=64), wide, counted), span))
+            return tuple(held)
         held.extend(self.select_move(REGISTERS.view(RCX.unit, bits), amount, span))
         held.append(self._inst("mov", (MCReg(dst, bits=bits), value), span))
         held.append(self._inst(self._SHIFTS[op.name],
                                (MCReg(dst, bits=bits),
                                 MCReg(REGISTERS.view(RCX.unit, 8), bits=8)), span))
         return tuple(held)
+
+    #: What each of the three-operand shifts is called.  They exist only at the
+    #: full width here, which is where the compiler's shifts are done anyway:
+    #: a value narrower than a register is held in a whole one.
+    _WIDE_SHIFTS: Final[dict[str, str]] = {
+        ops.SHIFT_LEFT.name: "shlx", ops.SHIFT_RIGHT.name: "shrx",
+        ops.SHIFT_RIGHT_SIGNED.name: "sarx",
+    }
+
+    def select_count_ones(self, dst: Reg, src: MCOperand,
+                          span: Span) -> Sequence[MCInst]:
+        """The number of bits set in *src*, which the second level promises."""
+        return (self._inst("popcnt", (MCReg(dst, bits=64), src), span),)
+
+    def select_count_leading(self, dst: Reg, src: MCOperand,
+                             span: Span) -> Sequence[MCInst]:
+        """The number of zeroes above the highest set bit, which the third
+        level promises.
+
+        It answers the width for nought, which is what the language says and
+        what the older `bsr` this replaces does not: that one leaves the
+        destination as it found it, which is a different answer on every run.
+        """
+        return (self._inst("lzcnt", (MCReg(dst, bits=64), src), span),)
 
     def select_divide(self, dst: Reg, left: MCOperand, right: MCOperand,
                       signed: bool, remainder: bool, bits: int,
@@ -1641,6 +1686,17 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                     except Unsupported as unsupported:
                         raise UnsupportedOperation(unsupported.what, span) \
                             from unsupported
+                case UnaryInst() if inst.op in COUNTING:
+                    destination = _new_value(
+                        inst.ty, registers,
+                        hint=(_result_register(inst.ty, cconv, registers)
+                              if inst is returned else None))
+                    held[id(inst)] = destination
+                    counted = inst.operands[0].ty
+                    lower_count(asm, inst.op,
+                                operands.value(inst.operands[0], inst.span),
+                                _width_of(counted), _is_signed(counted),
+                                destination, operands, inst.span)
                 case BinaryInst() if inst.op in SATURATING:
                     destination = _new_value(
                         inst.ty, registers,

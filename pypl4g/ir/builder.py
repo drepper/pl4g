@@ -123,9 +123,12 @@ class IRBuilder:
         """Append the taking of what a result's error carries."""
         return self._append(ErrorInst(value, err_ty, span))
 
-    def unary(self, op: UnOp, value: Value, span: Span = INVALID_SPAN) -> Value:
-        """Append a unary operation."""
-        return self._append(UnaryInst(op, value, span))
+    def unary(self, op: UnOp, value: Value, ty: Type | None = None,
+              span: Span = INVALID_SPAN) -> Value:
+        """Append a unary operation, which answers with *ty* where it is not the
+        operand's own type -- a count of bits being a count and not a number of
+        the counted thing's type."""
+        return self._append(UnaryInst(op, value, span, ty))
 
     def compare(self, pred: CmpPred, lhs: Value, rhs: Value,
                 span: Span = INVALID_SPAN) -> Value:

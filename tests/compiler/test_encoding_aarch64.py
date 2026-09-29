@@ -130,6 +130,7 @@ SAMPLES = [
      MCImm(0, 8, False)),
     ("mul w0, w1, w2", "mul", MCReg(reg("w0")), MCReg(reg("w1")), MCReg(reg("w2"))),
     ("mul x0, x1, x2", "mul", MCReg(reg("x0")), MCReg(reg("x1")), MCReg(reg("x2"))),
+    ("clz x0, x1", "clz", MCReg(reg("x0")), MCReg(reg("x1"))),
     ("umulh x0, x1, x2", "umulh", MCReg(reg("x0")), MCReg(reg("x1")), MCReg(reg("x2"))),
     ("smulh x0, x1, x2", "smulh", MCReg(reg("x0")), MCReg(reg("x1")), MCReg(reg("x2"))),
     ("csel x0, x1, x2, eq", "csel.eq", MCReg(reg("x0")), MCReg(reg("x1")),

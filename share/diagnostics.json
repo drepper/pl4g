@@ -7279,6 +7279,33 @@
       "option": null
     },
     {
+      "number": 4803,
+      "name": "LANG_BITS_NOT_AN_INTEGER",
+      "severity": "error",
+      "message": "'{name}' counts the bits of a whole number, and '{found}' is not one",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "which of the two was written"
+        },
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type of what it was given"
+        }
+      ],
+      "cause": "How many bits are set, and how many zeroes stand above the highest set one, are questions about a value's bits at the width of its own type.  A floating-point number has bits and they are not a number written in them; a truth value has one bit and the answer would say nothing; and a value of no width at all has nothing to count.  So both are asked of a whole number and of nothing else.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Counting bits",
+        "requirement": "`⎕ones` and `⎕lead` take a whole number."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 5001,
       "name": "LANG_STMT_UNREACHABLE",
       "severity": "warning",

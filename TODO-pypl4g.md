@@ -279,9 +279,10 @@ To Do List for the pypl4g compiler
     is wanted, as in `⟦1u8, 2u8⟧⟦0⟧`, they say their own type and what they came to is carried to `_fill` rather than worked out
     twice, which is what keeps a call written as an element from being made twice.  The array decays as it always did.
 
-[ ] generate for the microarchitecture level.  `--mclevel` is read, checked and enforced at startup, and nothing the code
-    generator emits is above v1 -- so the level is a promise about what it may do rather than a description of what it does.
-    `POPCNT` and `LZCNT` from v2 and v3 are the two the compiler would use first, both standing in for a loop today.
+[ ] count the bits set on AArch64 with the instruction it has.  `CNT` is in the vector unit, so a count is a move into a register
+    of the other kind, the count, a horizontal add and a move back -- four instructions against the dozen the sequence is, and a
+    trip between the two register files that may cost more than it saves.  Worth measuring before it is written.  Leading zeroes
+    already use `CLZ`, which is an ordinary instruction there.
 
 [ ] ask `XGETBV` as well as `CPUID` for the levels that want vector state.  `OSXSAVE` says the processor lets the operating
     system enable the wide registers; that the operating system has actually enabled them is a further question, and the answer

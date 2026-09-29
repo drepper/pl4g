@@ -294,6 +294,13 @@ SAMPLES = [
     # The one-operand multiplies, which answer with both halves of the product.
     ("mul rbx", "mul", MCReg(reg("rbx"))),
     ("imul rbx", "imul", MCReg(reg("rbx"))),
+    # Counting bits, which the second and third levels add.
+    ("popcnt rax,rbx", "popcnt", MCReg(reg("rax")), MCReg(reg("rbx"))),
+    ("lzcnt rax,rbx", "lzcnt", MCReg(reg("rax")), MCReg(reg("rbx"))),
+    # And the third level's shifts, which take their count in any register.
+    ("shlx rax,rbx,rcx", "shlx", MCReg(reg("rax")), MCReg(reg("rbx")), MCReg(reg("rcx"))),
+    ("shrx rax,rbx,rcx", "shrx", MCReg(reg("rax")), MCReg(reg("rbx")), MCReg(reg("rcx"))),
+    ("sarx rax,rbx,rcx", "sarx", MCReg(reg("rax")), MCReg(reg("rbx")), MCReg(reg("rcx"))),
     ("shl ebx,cl", "shl", MCReg(reg("ebx")), MCReg(reg("cl"))),
     ("shl rbx,cl", "shl", MCReg(reg("rbx")), MCReg(reg("cl"))),
     ("shr ebx,cl", "shr", MCReg(reg("ebx")), MCReg(reg("cl"))),

@@ -7291,6 +7291,55 @@ where the compiler knows the slot is its own because it made it; **Go**, which
 answers in registers where it can and on the stack where it cannot, and whose
 escape analysis is what tells it the slot does not outlive the call.
 
+## 2026-09-30T07:00+02:00 — compiler, language
+
+**The microarchitecture level says what is emitted and not only what may be**
+
+Decided on the user's direction, from a to-do entry, and the user chose the
+largest of three ways to do it.  `--mclevel` was a promise and a check at the
+entry point; what it was not was a description of the scalar code.  The entry
+named `POPCNT` and `LZCNT` as the two the compiler would use first, and said
+both stood in for a loop -- which was true of nothing, the language having no way
+to ask either question.  So the question came first.
+
+**`⎕ones` and `⎕lead` are the language's half.**  How many bits are set, and how
+many zeroes stand above the highest one that is.  Both count over the value's own
+type, both answer with a `u8`, and `⎕lead` of nought is the width -- which is said
+because two of the three architectures have an instruction that leaves it
+undefined, and a program that meant one thing on one machine and another
+elsewhere is the thing a specification exists to prevent.  Every language that
+chose an answer for zero chose the width.
+
+**The level decides which instructions answer them.**  `popcnt` at the second,
+`lzcnt` at the third, and a sequence at the first: the bits folded in pairs, then
+nibbles, then bytes, and a multiplication to sum them.  Twelve instructions and
+no branch against a loop of up to sixty-four turns -- a loop would answer in a
+time that depends on the value, and something a program may do in a tight place
+should not.
+
+**And the third level's shifts.**  A shift by a computed value is three
+instructions and a fixed register held away from everything else; `shlx`, `shrx`
+and `sarx` are one instruction and no constraint.  That was not in the entry and
+is the larger of the two wins for programs that exist today: the entry's two
+instructions serve an operation nothing had yet asked for, and this one serves
+every shift ever written.
+
+**The premise was checked rather than taken.**  The entry said nothing the code
+generator emits is above the first level, which had stopped being true: a run of
+elements uses SSE4.1's word multiply at the second and 256-bit registers at the
+third, and `main` really does differ.  What was missing was scalar code.
+
+Turned down: doing the instructions without the language, which would have added
+two rows nothing selects; and doing the shifts alone, which would have left the
+entry's own two undone.
+
+Compare: **LLVM and GCC**, where `-march` picks a subtarget and every pattern is
+guarded by a feature predicate, which is this with a great deal more machinery;
+**Go**, which has no such flag and compiles for the oldest machine of an
+architecture, checking at run time in the few places it matters; **Zig**, whose
+`-mcpu` is the same idea as `--mclevel` and which, like this, falls back to a
+sequence where a feature is absent.
+
 Open questions
 --------------
 

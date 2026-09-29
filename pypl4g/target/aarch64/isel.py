@@ -37,6 +37,7 @@ from ...ir.types import (BOOL, ResultType, VecType, made_of_parts,
                          parts_of)
 from ..callconv import (TooManyArguments, argument_places, destroyed_by,
                         result_places)
+from ..bitcount import COUNTING, lower_count
 from ..saturate import (DIVISION, EXTREMA, NAMES, SATURATING, TRAPPING,
                         Unsupported,
                         SHIFTS, WRAPPING, lower_division_result,
@@ -992,6 +993,19 @@ class A64Selector(InstructionSelector):
         held.append(self._inst("mul", (MCReg(low, bits=64), first, second), span))
         return tuple(held)
 
+    #: This architecture counts leading zeroes at every level.  It counts bits
+    #: set as well, in the vector unit -- four instructions and a trip through
+    #: a register of the other kind, which is not obviously better than the
+    #: sequence and is a to-do line rather than a guess.
+    counts_leading = True
+
+    def select_count_leading(self, dst: Reg, src: MCOperand,
+                             span: Span) -> Sequence[MCInst]:
+        """The number of zeroes above the highest set bit of *src*."""
+        held, before = self._in_register(src, 64, span)
+        return (*before,
+                self._inst("clz", (MCReg(dst, bits=64), held), span))
+
     def select_divide(self, dst: Reg, left: MCOperand, right: MCOperand,
                       signed: bool, remainder: bool, bits: int,
                       span: Span) -> Sequence[MCInst]:
@@ -1658,6 +1672,17 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                     except Unsupported as unsupported:
                         raise UnsupportedOperation(unsupported.what, span) \
                             from unsupported
+                case UnaryInst() if inst.op in COUNTING:
+                    destination = _new_value(
+                        inst.ty, registers,
+                        hint=(_result_register(inst.ty, cconv, registers)
+                              if inst is returned else None))
+                    held[id(inst)] = destination
+                    counted = inst.operands[0].ty
+                    lower_count(asm, inst.op,
+                                operands.value(inst.operands[0], inst.span),
+                                _width_of(counted), _is_signed(counted),
+                                destination, operands, inst.span)
                 case BinaryInst() if inst.op in SATURATING:
                     destination = _new_value(
                         inst.ty, registers,

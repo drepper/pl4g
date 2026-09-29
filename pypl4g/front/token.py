@@ -251,6 +251,14 @@ UNIT_NAME: Final[str] = "".join((BUILTIN_GLYPH, "unit"))
 ORD_NAME: Final[str] = "".join((BUILTIN_GLYPH, "ord"))
 CHR_NAME: Final[str] = "".join((BUILTIN_GLYPH, "chr"))
 
+#: How many bits of a value are set, and how many zeroes stand above the
+#: highest one that is.  Both are questions about the bits of a value at the
+#: width of its own type, so `⎕lead` of nought is the width and not something
+#: undefined -- which is what the instructions that answer them on two of the
+#: three architectures leave it as, and is why the language says it.
+ONES_NAME: Final[str] = "".join((BUILTIN_GLYPH, "ones"))
+LEAD_NAME: Final[str] = "".join((BUILTIN_GLYPH, "lead"))
+
 #: The tolerance the approximate comparisons read, and what it holds until a
 #: program sets it.  APL's own tolerance defaults to the same number.
 TOLERANCE_NAME: Final[str] = "".join((BUILTIN_GLYPH, "tolerance"))

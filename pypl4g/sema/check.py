@@ -21,7 +21,8 @@ from ..front.token import (ACQUIRE_NAME, RELEASE_NAME, AT_NAME, SPAN_NAME,
                            WIDEN_NAME,
                            BOTTOM_GLYPH, BUILTIN_GLYPH, CHR_NAME, DEREF_GLYPH,
                            LIFETIME_GLYPH,
-                           DROP_NAME, NARROW_NAME, UNIT_NAME,
+                           DROP_NAME, LEAD_NAME, NARROW_NAME, ONES_NAME,
+                           UNIT_NAME,
                           ENUMERATE_NAME, TYPEOF_NAME,
                           EMPTY_ARENA_NAME, ORD_NAME,
                           WRAP_NAME,
@@ -1197,6 +1198,20 @@ GLOBALS_SYMBOL: Final[str] = "__pl4g_globals"
 #: as they are met.  A program cannot name one: what it wrote is the string, and
 #: where the bytes went is the compiler's business.
 TEXT_SYMBOL: Final[str] = "__pl4g_text."
+
+
+def _counted(op: UnOp, value: int, ty: IntType) -> int:
+    """How many bits of *value* are set, or how many zeroes stand above the
+    highest set one, counted over *ty*'s own width.
+
+    Over the bits the value has *there*, which for a negative number is what
+    two's complement gives it -- the same bits the machine would count, since
+    the machine has nothing else to count.
+    """
+    bits = value & ((1 << ty.bits) - 1)
+    if op is UnOp.COUNT_ONES:
+        return bits.bit_count()
+    return ty.bits - bits.bit_length()
 
 
 def _tolerance(module: Module) -> GlobalVar:
@@ -4587,7 +4602,7 @@ class Checker:
                 builder.store(where, builder.binary(
                     BinOp.OR,
                     builder.binary(BinOp.AND, old,
-                                   builder.unary(UnOp.NOT, spread, stmt.span),
+                                   builder.unary(UnOp.NOT, spread, span=stmt.span),
                                    stmt.span),
                     chosen, stmt.span), stmt.span)
 
@@ -9163,7 +9178,7 @@ class Checker:
         first, second = (right, left) if exchanged else (left, right)
         difference = builder.binary(BinOp.SUB, first, second, expr.span)
         if magnitude:
-            difference = builder.unary(UnOp.FABS, difference, expr.span)
+            difference = builder.unary(UnOp.FABS, difference, span=expr.span)
         if without_units(ty) is not F64:
             # A unit is no part of the bits, so what is widened is decided by
             # the width alone -- and the difference between two lengths is
@@ -10658,7 +10673,7 @@ class Checker:
             self._diags.emit(D.LANG_TYPE_OPERAND_NOT_INTEGER, expr.operand.span,
                              operator=expr.op.value, found=ty.written())
             return UndefConst(ERROR)
-        return builder.unary(_UNARY_OPS[expr.op], operand, expr.span)
+        return builder.unary(_UNARY_OPS[expr.op], operand, span=expr.span)
 
     def _lower_rounding(self, builder: IRBuilder, expr: ast.Unary,
                         expected: Type | None) -> Value:
@@ -10703,7 +10718,7 @@ class Checker:
             self._diags.emit(D.LANG_TYPE_OPERAND_NOT_FLOAT, expr.operand.span,
                              operator=expr.op.value, found=ty.written())
             return UndefConst(ERROR)
-        return builder.unary(_ROUNDINGS[expr.op], operand, expr.span)
+        return builder.unary(_ROUNDINGS[expr.op], operand, span=expr.span)
 
     def _lower_length(self, builder: IRBuilder, expr: ast.Unary,
                       expected: Type | None) -> Value:
@@ -11253,6 +11268,50 @@ class Checker:
         # length if the literal took the unit standing beside it.
         return chosen.bare if self._deriving else chosen
 
+    def _lower_bit_count(self, builder: IRBuilder, expr: ast.Call,
+                         expected: Type | None) -> Value:
+        """Lower `⎕ones(N)` and `⎕lead(N)`: how many of a value's bits are set,
+        and how many zeroes stand above the highest one that is.
+
+        **Both count over the value's own type.**  A `u8` whose bits are all set
+        has eight of them, and the answer for a wider type holding the same
+        number is different -- which is the only thing either could sensibly
+        mean, the bits above a value's type not being the value's.
+
+        **`⎕lead` of nought is the width of the type.**  Two of the three
+        architectures have an instruction whose answer for nought is whatever
+        was in the register, and one has none at all; saying what it is here is
+        what makes the three agree, and the answer that makes the count of
+        leading zeroes a count of leading zeroes.
+
+        The answer is a `u8` whatever the type asked about: the widest count
+        there is is sixty-four, and a count is not of the same kind as the thing
+        counted -- adding it to the value it came from would be adding a length
+        to a number.
+        """
+        name = expr.callee.name if isinstance(expr.callee, ast.NameRef) else ""
+        if len(expr.args) != 1:
+            self._diags.emit(D.LANG_CALL_WRONG_ARGUMENT_COUNT, expr.span,
+                             name=name, expected=1, found=len(expr.args))
+            return UndefConst(ERROR)
+        given = self._lower_expr(builder, expr.args[0], None)
+        found = self._value_type_of(given)
+        if found is ERROR:
+            return UndefConst(ERROR)
+        if not isinstance(found, IntType):
+            self._diags.emit(D.LANG_BITS_NOT_AN_INTEGER, expr.args[0].span,
+                             name=name, found=found.written())
+            return UndefConst(ERROR)
+        if not self._accepts(expected, U8):
+            self._report_mismatch(expr.span, U8, expected)
+            return UndefConst(ERROR)
+        op = UnOp.COUNT_ONES if name == ONES_NAME else UnOp.COUNT_LEADING
+        if isinstance(given, IntConst):
+            # A number the program wrote down is counted here, where counting it
+            # is one line, rather than in the instructions of three backends.
+            return builder.int_const(U8, _counted(op, given.value, found))
+        return builder.unary(op, given, U8, expr.span)
+
     def _lower_code_point(self, builder: IRBuilder, expr: ast.Call,
                           expected: Type | None) -> Value:
         """Lower `\N{APL FUNCTIONAL SYMBOL QUAD}ord(C)` and `\N{APL FUNCTIONAL SYMBOL QUAD}chr(N)`: the two conversions between a code
@@ -11457,6 +11516,9 @@ class Checker:
         if isinstance(expr.callee, ast.NameRef) \
                 and expr.callee.name in (ORD_NAME, CHR_NAME):
             return self._lower_code_point(builder, expr, expected)
+        if isinstance(expr.callee, ast.NameRef) \
+                and expr.callee.name in (ONES_NAME, LEAD_NAME):
+            return self._lower_bit_count(builder, expr, expected)
         if isinstance(expr.callee, ast.NameRef) \
                 and expr.callee.name in (DROP_NAME, UNIT_NAME):
             return self._lower_unit_call(builder, expr, expected)

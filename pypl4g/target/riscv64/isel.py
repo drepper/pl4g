@@ -40,6 +40,7 @@ from ...ir.layout import (DataLayout, align_of, part_offsets_of, size_of,
 from ...ir.types import (BOOL, ResultType, made_of_parts, parts_of)
 from ..callconv import (TooManyArguments, argument_places, destroyed_by,
                         result_places)
+from ..bitcount import COUNTING, lower_count
 from ..saturate import (DIVISION, EXTREMA, NAMES, SATURATING, TRAPPING,
                         Unsupported,
                         SHIFTS, WRAPPING, lower_division_result,
@@ -1370,6 +1371,17 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                     except Unsupported as unsupported:
                         raise UnsupportedOperation(unsupported.what, span) \
                             from unsupported
+                case UnaryInst() if inst.op in COUNTING:
+                    destination = _new_value(
+                        inst.ty, registers,
+                        hint=(_result_register(inst.ty, cconv, registers)
+                              if inst is returned else None))
+                    held[id(inst)] = destination
+                    counted = inst.operands[0].ty
+                    lower_count(asm, inst.op,
+                                operands.value(inst.operands[0], inst.span),
+                                _width_of(counted), _is_signed(counted),
+                                destination, operands, inst.span)
                 case BinaryInst() if inst.op in SATURATING:
                     destination = _new_value(
                         inst.ty, registers,

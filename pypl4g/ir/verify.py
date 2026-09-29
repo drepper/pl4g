@@ -19,7 +19,7 @@ from .inst import (AddressInst, SyscallInst, AnyLaneInst, AssertInst, BinaryInst
                    ErrorInst, ExtractInst, FailedInst,
                    Instruction, TupleInst,
                    LoadInst, Ordering, RetInst, StoreInst, Terminator, UnaryInst,
-                   UnwrapInst, WrapInst)
+                   UnOp, UnwrapInst, WrapInst)
 from .module import GlobalVar, Module
 from .types import (ArrayType, BOOL, BoolType, CharType, DictType, EnumType,
                     without_units,
@@ -320,6 +320,18 @@ class Verifier:
                     self._fail(where, "".join((
                         "reading the error of ", inner.render(), " as ",
                         inst.ty.render())))
+            case UnaryInst() if inst.op in (UnOp.COUNT_ONES, UnOp.COUNT_LEADING):
+                # A count of bits is a count and not a number of the counted
+                # thing's type, so these two are the one shape whose answer is
+                # not its operand's: a whole number over a whole number.
+                if not isinstance(inst.operands[0].ty, IntType):
+                    self._fail(where, "".join(("'", inst.opcode,
+                                               "' counting something that is "
+                                               "not a whole number")))
+                elif not isinstance(inst.ty, IntType):
+                    self._fail(where, "".join(("'", inst.opcode,
+                                               "' answering with something "
+                                               "that is not a whole number")))
             case UnaryInst():
                 if inst.ty != inst.operands[0].ty:
                     self._fail(where, "".join(("'", inst.opcode,

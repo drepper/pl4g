@@ -79,6 +79,12 @@ class UnOp(Enum):
 
     NEG = "neg"
     NOT = "not"
+    #: How many bits of a value are set, and how many zeroes stand above the
+    #: highest set one.  Both are counted over the value's own type: a `u8`
+    #: whose bits are all set has eight of them, and the count of nothing above
+    #: the top bit of a `u8` that is nought is eight as well.
+    COUNT_ONES = "ones"
+    COUNT_LEADING = "lead"
     #: The magnitude of a floating-point number, which is the number with its
     #: sign cleared.  There is no integer form: the magnitude of the smallest
     #: signed number is not a number of its type.
@@ -203,8 +209,12 @@ class UnaryInst(Instruction):
 
     __slots__ = ("op",)
 
-    def __init__(self, op: UnOp, value: Value, span: Span = INVALID_SPAN) -> None:
-        super().__init__(value.ty, (value,), span)
+    def __init__(self, op: UnOp, value: Value, span: Span = INVALID_SPAN,
+                 ty: Type | None = None) -> None:
+        # The answer has the operand's type except where the operation is not
+        # about the value but about its bits: a count of them is a count and
+        # not a number of the counted thing's type.
+        super().__init__(value.ty if ty is None else ty, (value,), span)
         self.op = op
 
     @property

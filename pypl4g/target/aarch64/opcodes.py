@@ -674,6 +674,12 @@ AARCH64_INSTRS: Final[tuple[A64InstDesc, ...]] = (
     A64InstDesc("mul", (_r(32), _r(32), _r(32)), template=0x1B007C00,
                 fields=(_reg_field(0, _RD), _reg_field(1, _RN), _reg_field(2, _RM)),
                 est_size=INSTRUCTION_SIZE),
+    # clz Xd, Xn   how many zeroes stand above the highest set bit
+    # This architecture has it at every level, where x86-64 has it only from the
+    # third: counting bits is not a feature here, it is the instruction set.
+    A64InstDesc("clz", (_r(64), _r(64)), template=0xDAC01000,
+                fields=(_reg_field(0, _RD), _reg_field(1, _RN)),
+                est_size=INSTRUCTION_SIZE),
     # mul Xd, Xn, Xm
     A64InstDesc("mul", (_r(64), _r(64), _r(64)), template=0x9B007C00,
                 fields=(_reg_field(0, _RD), _reg_field(1, _RN), _reg_field(2, _RM)),

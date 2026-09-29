@@ -437,6 +437,20 @@ X86_INSTRS: Final[tuple[X86InstDesc, ...]] = (
                 modrm=ModRMUse.EXT_RM, ext=6, rm_op=0,
                 implicit_uses=(RAX, RDX), implicit_defs=(RAX, RDX, EFLAGS),
                 est_size=3, roles=(OperandRole.USE,)),
+    # Counting bits.  `popcnt` is in the second microarchitecture level and
+    # `lzcnt` in the third, so which of them may be emitted is what the level
+    # the program was built for says; a program built for the first gets the
+    # sequence that stands in for them instead.
+    # popcnt r64, r/m64                  F3 REX.W 0F B8 /r
+    X86InstDesc("popcnt", (_r(64), _rm(64)), opcode=0xB8, map=OpMap.M0F,
+                mandatory_prefix=0xF3, opsize=OpSize.REXW,
+                modrm=ModRMUse.REG_RM, reg_op=0, rm_op=1,
+                implicit_defs=(EFLAGS,), est_size=5),
+    # lzcnt r64, r/m64                   F3 REX.W 0F BD /r
+    X86InstDesc("lzcnt", (_r(64), _rm(64)), opcode=0xBD, map=OpMap.M0F,
+                mandatory_prefix=0xF3, opsize=OpSize.REXW,
+                modrm=ModRMUse.REG_RM, reg_op=0, rm_op=1,
+                implicit_defs=(EFLAGS,), est_size=5),
     # The one-operand multiplies are the only way to see the upper half of a
     # product on this architecture.  They read one factor in a fixed register
     # and write both halves of the answer to a fixed pair, which is said here
@@ -453,6 +467,30 @@ X86_INSTRS: Final[tuple[X86InstDesc, ...]] = (
                 modrm=ModRMUse.EXT_RM, ext=5, rm_op=0,
                 implicit_uses=(RAX,), implicit_defs=(RAX, RDX, EFLAGS),
                 est_size=3, roles=(OperandRole.USE,)),
+    # The third microarchitecture level adds a shift that takes its count in any
+    # register and writes somewhere else again: one instruction where the older
+    # form is a move into the fixed register, a move of the value, and the
+    # shift -- and no register held away from everything else while it waits.
+    # The count is in the prefix's own register field, which is what lets these
+    # name three registers in two operand bytes.
+    # shlx r64a, r/m64, r64b             VEX.LZ.66.0F38.W1 F7 /r
+    X86InstDesc("shlx", (_r(64), _rm(64), _r(64)), opcode=0xF7,
+                map=OpMap.M0F38, enc=EncKind.VEX, mandatory_prefix=0x66,
+                opsize=OpSize.REXW, modrm=ModRMUse.REG_RM, reg_op=0, rm_op=1,
+                vex=VexInfo(vvvv_op=2), est_size=5,
+                roles=(OperandRole.DEF, OperandRole.USE, OperandRole.USE)),
+    # shrx r64a, r/m64, r64b             VEX.LZ.F2.0F38.W1 F7 /r
+    X86InstDesc("shrx", (_r(64), _rm(64), _r(64)), opcode=0xF7,
+                map=OpMap.M0F38, enc=EncKind.VEX, mandatory_prefix=0xF2,
+                opsize=OpSize.REXW, modrm=ModRMUse.REG_RM, reg_op=0, rm_op=1,
+                vex=VexInfo(vvvv_op=2), est_size=5,
+                roles=(OperandRole.DEF, OperandRole.USE, OperandRole.USE)),
+    # sarx r64a, r/m64, r64b             VEX.LZ.F3.0F38.W1 F7 /r
+    X86InstDesc("sarx", (_r(64), _rm(64), _r(64)), opcode=0xF7,
+                map=OpMap.M0F38, enc=EncKind.VEX, mandatory_prefix=0xF3,
+                opsize=OpSize.REXW, modrm=ModRMUse.REG_RM, reg_op=0, rm_op=1,
+                vex=VexInfo(vvvv_op=2), est_size=5,
+                roles=(OperandRole.DEF, OperandRole.USE, OperandRole.USE)),
     # The variable-count shifts take their count in the low byte of one fixed
     # register, which is said here as an implicit use: the allocator then keeps
     # every other value out of it while the shift wants it.

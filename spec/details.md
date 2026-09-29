@@ -3829,3 +3829,50 @@ the instruction that reads eight and an offset on a grain of eight.  And every
 number in a row is kept below the top bit of four bytes, so that the field means
 the same on the machine that copies the sign of a narrow load into the rest of
 the register and on the two that copy nought.
+
+Generating for the microarchitecture level
+------------------------------------------
+
+`--mclevel` was a promise about what the compiler might do and a check at the
+entry point that the processor could do it, and nothing the code generator
+emitted was above the oldest level.  That had stopped being true for a run of
+elements -- a word-wide vector multiply is SSE4.1 and wants the second level,
+and a run wider than sixteen bytes wants the third -- and it is now untrue for
+scalar code as well.
+
+**`⎕ones` and `⎕lead` are the two the level decides.**  The second level adds
+`popcnt` and the third adds `lzcnt`, so the same program is one instruction at
+the level that has the instruction and a dozen at the level that does not.  What
+those dozen are is in `target/bitcount.py`, written once for all three targets
+because what differs between them is only whether the machine answers outright:
+the bits folded in pairs, then nibbles, then bytes, and a multiplication to sum
+the bytes into the top one.  Twelve instructions and no branch, against a loop
+of up to sixty-four turns -- and a loop would answer in a time that depends on
+the value, which is the wrong shape for something a program may do in a tight
+place.
+
+**Leading zeroes without an instruction** are the bits smeared downwards and
+then counted: once every bit below the highest set one is set, the zeroes above
+it are the width less the count of ones.  That answers for nought as well, which
+is the width -- the one case the instructions themselves leave undefined and the
+language does not.
+
+**AArch64 has `clz` at every level**, counting leading zeroes not being a feature
+there but the instruction set; it counts bits set as well, in the vector unit,
+which is four instructions and a trip through a register of the other kind and
+is a to-do line rather than a guess.  RISC-V has neither outside an extension
+this compiler does not require, so it counts both itself.
+
+**And the third level's shifts take their count in any register.**  A shift by a
+value the program computed is three instructions at the older levels -- the count
+moved into one fixed register, the value moved into the destination, the shift --
+and that fixed register is held away from every other value for as long as the
+shift wants it.  `shlx`, `shrx` and `sarx` are one instruction and no constraint,
+and they are what is emitted from the third level up.  On the suite's own
+`wrap-arithmetic`, `main` is 152 instructions at the first level and 147 at the
+third.
+
+**The levels are checked against each other rather than argued about**: every
+program of the language suite that runs was compiled at the third level and run,
+and all two hundred and forty-six of them answered what they answer at the
+first.

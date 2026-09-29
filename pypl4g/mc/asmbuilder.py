@@ -903,6 +903,31 @@ class Assembler:
             value, bits, self._symref(target), span))
 
     @property
+    def counts_ones(self) -> bool:
+        """Whether the target has an instruction that counts the bits set.
+
+        Asked rather than assumed, because on one of the three it depends on
+        the microarchitecture level the program was built for.
+        """
+        return bool(getattr(self._selector, "counts_ones", False))
+
+    @property
+    def counts_leading(self) -> bool:
+        """And whether it has one that counts the zeroes above the highest set
+        bit, which is a different level's promise on that same target."""
+        return bool(getattr(self._selector, "counts_leading", False))
+
+    def count_ones(self, dst: Reg, src: MCOperand,
+                   span: Span = INVALID_SPAN) -> None:
+        """Put the number of bits set in *src* into *dst*."""
+        self._emit(self._selector.select_count_ones(dst, src, span))
+
+    def count_leading(self, dst: Reg, src: MCOperand,
+                      span: Span = INVALID_SPAN) -> None:
+        """Put the number of zeroes above the highest set bit into *dst*."""
+        self._emit(self._selector.select_count_leading(dst, src, span))
+
+    @property
     def flagged_widths(self) -> frozenset[int]:
         """The widths whose arithmetic says for itself whether it went past."""
         return getattr(self._selector, "flagged_widths", frozenset())

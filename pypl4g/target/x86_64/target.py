@@ -105,7 +105,9 @@ class X86_64Target:
         del streamer
         # Whether the level has SSE4.1, which is what rounds a floating-point
         # number without going through an integer.
-        return X86Selector(self.table, rounds=self._mclevel != "v1")
+        return X86Selector(self.table, rounds=self._mclevel != "v1",
+                           counts_ones=self._mclevel != "v1",
+                           counts_leading=self._mclevel in levels.WIDE)
 
     def image_defaults(self) -> ImageDefaults:
         """The layout constants the image writer needs."""

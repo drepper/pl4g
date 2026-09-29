@@ -1,0 +1,57 @@
+※ pl4g-test: compile=ok opt=0,1
+※ pl4g-test: run=native,qemu exit=0
+※ pl4g-test: diag=none
+
+※ `⎕ones` says how many of a value's bits are set and `⎕lead` how many zeroes
+※ stand above the highest one that is.  Both count over the value's own type: a
+※ `u8` whose bits are all set has eight of them, and the same number in a `u64`
+※ has eight with fifty-six zeroes above it.
+※
+※ `⎕lead` of nothing is the width of the type.  Two of the three architectures
+※ have an instruction whose answer there is whatever was in the register, and
+※ one has no instruction at all -- so the language says what it is, and the
+※ three agree.
+※
+※ On x86-64 which instruction answers is what the microarchitecture level says:
+※ the second level counts the bits set and the third counts the leading zeroes.
+※ A program built for the first gets a sequence that counts them without a
+※ branch, and the answers are the same.
+
+let all: u64 = 18446744073709551615u64
+let none: u64 = 0u64
+let one: u64 = 1u64
+let nibbles: u64 = 1229782938247303441u64
+let byte: u8 = 200u8
+let small: i8 = ⁻1i8
+let low: u8 = 1u8
+
+@[startup]
+fn main() → u6:
+    let wrong: mut u6 = 0u6
+    if ⎕ones(all) ≠ 64u8:
+        wrong ← 1u6
+    if ⎕lead(all) ≠ 0u8:
+        wrong ← 2u6
+    if ⎕ones(none) ≠ 0u8:
+        wrong ← 3u6
+    if ⎕lead(none) ≠ 64u8:
+        wrong ← 4u6
+    if ⎕ones(one) ≠ 1u8:
+        wrong ← 5u6
+    if ⎕lead(one) ≠ 63u8:
+        wrong ← 6u6
+    if ⎕ones(nibbles) ≠ 16u8:
+        wrong ← 7u6
+    if ⎕lead(nibbles) ≠ 3u8:
+        wrong ← 8u6
+    if ⎕ones(byte) ≠ 3u8:
+        wrong ← 9u6
+    if ⎕lead(byte) ≠ 0u8:
+        wrong ← 10u6
+    if ⎕ones(small) ≠ 8u8:
+        wrong ← 11u6
+    if ⎕lead(small) ≠ 0u8:
+        wrong ← 12u6
+    if ⎕lead(low) ≠ 7u8:
+        wrong ← 13u6
+    wrong
