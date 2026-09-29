@@ -20,9 +20,10 @@ To Do List for the pypl4g compiler
 [x] a way to write an ordering in the language.  Done on 2026-09-17, at the user's direction: `⎕acquire(REF)` and
     `⎕release(REF, VALUE)`, said at the access rather than by the type of the place.
 
-[ ] render a reference as the program wrote it.  A diagnostic says `ptr<mut Pair>` where the source said `&mut Pair`, `render`
-    being the IR's spelling and the only one there is.  Everything that reports a type is affected, so this is one change in
-    `Type.render` or a second method beside it; it predates the ordering work, which is merely where it was noticed.
+[x] render a reference as the program wrote it.  Done on 2026-09-29: `Type.written` beside `Type.render`, the second method
+    rather than a change to the first, because the IR's form is read back as well as written and `ir/reader.py` parses what the
+    printer produced.  Every message, every note the language server shows and every line of the report log asks for the new
+    one; a reference is `&mut T`, a result `T ? E`, and a type that holds another writes what it holds the same way.
 
 [ ] sequential consistency.  Acquire and release are what driving a ring needs; the ordering neither of them gives -- a write
     followed by a read of another place, seen by everyone in one order -- is the one that costs x86-64 an instruction, and

@@ -20,6 +20,21 @@ class Type:
         """The name of this type in the textual form of the IR."""
         raise NotImplementedError
 
+    def written(self) -> str:
+        """The name of this type as a program writes it.
+
+        What a message about a type says, and what the language server shows.
+        Most types are written the way the IR renders them -- the IR borrowed
+        the language's own notation wherever it could -- and the ones that are
+        not say so here rather than in every place that reports a type.
+
+        It is a second method and not a change to `render` because the IR's
+        textual form is read back as well as written: `ir/reader.py` parses what
+        the printer produced, and a form that said `&mut u8` where the reader
+        expects `ptr<mut u8>` would be a form that no longer round-trips.
+        """
+        return self.render()
+
     def mangled(self) -> str:
         """The normalized name of this type, for use inside a symbol name.
 
@@ -336,6 +351,12 @@ class PtrType(Type):
                         "static " if self.lasting else "",
                         self.pointee.render(), ">"))
 
+    def written(self) -> str:
+        """The name of this type as a program writes it: `&mut static T`."""
+        return "".join(("&", "mut " if self.mutable else "",
+                        "static " if self.lasting else "",
+                        self.pointee.written()))
+
     def mangled(self) -> str:
         """The normalized name of this type, for use inside a symbol name."""
         return "".join(("ptr<", "mut " if self.mutable else "",
@@ -360,6 +381,12 @@ class FuncType(Type):
         inner = ", ".join(p.render() for p in self.params)
         return "".join(("listable " if self.listable else "",
                         "fn(", inner, ") \N{RIGHTWARDS ARROW} ", self.ret.render()))
+
+    def written(self) -> str:
+        """The name of this type as a program writes it."""
+        inner = ", ".join(p.written() for p in self.params)
+        return "".join(("@[listable] " if self.listable else "",
+                        "fn(", inner, ") \N{RIGHTWARDS ARROW} ", self.ret.written()))
 
     def mangled(self) -> str:
         """The normalized name of this type, for use inside a symbol name.
@@ -485,6 +512,11 @@ class ResultType(Type):
         return "".join((self.ok.render(), "?",
                         self.err.render() if self.err is not None else ""))
 
+    def written(self) -> str:
+        """The name of this type as a program writes it: `T ? E`, or `T?`."""
+        return "".join((self.ok.written(), "?")) if self.err is None else \
+            " ? ".join((self.ok.written(), self.err.written()))
+
     def mangled(self) -> str:
         """The normalized name of this type, for use inside a symbol name."""
         return "".join((self.ok.mangled(), "?",
@@ -507,6 +539,12 @@ class TupleType(Type):
         """The name of this type in the textual form of the IR."""
         return "".join(("\N{LEFT ANGLE BRACKET}",
                         ", ".join(m.render() for m in self.members),
+                        "\N{RIGHT ANGLE BRACKET}"))
+
+    def written(self) -> str:
+        """The same, with each member written as a program writes it."""
+        return "".join(("\N{LEFT ANGLE BRACKET}",
+                        ", ".join(m.written() for m in self.members),
                         "\N{RIGHT ANGLE BRACKET}"))
 
     def mangled(self) -> str:
@@ -570,6 +608,12 @@ class ArrayType(Type):
                         "\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}", self._dimensions(),
                         "\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}"))
 
+    def written(self) -> str:
+        """The same, with the element written as a program writes it."""
+        return "".join((self.element.written(),
+                        "\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}", self._dimensions(),
+                        "\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}"))
+
     def mangled(self) -> str:
         """The normalized name of this type, for use inside a symbol name."""
         return "".join(("array<", self.element.mangled(), ",",
@@ -599,6 +643,15 @@ class VecType(Type):
     def render(self) -> str:
         """The name of this type in the textual form of the IR."""
         return "".join((self.element.render(), "\N{MULTIPLICATION SIGN}",
+                        str(self.lanes)))
+
+    def written(self) -> str:
+        """The same, with the element written as a program writes it.
+
+        A program cannot write a vector type either: it is what an operator
+        walked over an array works on, and a message about one says what it is.
+        """
+        return "".join((self.element.written(), "\N{MULTIPLICATION SIGN}",
                         str(self.lanes)))
 
     def mangled(self) -> str:
@@ -657,6 +710,10 @@ class ListType(Type):
         """The name of this type in the textual form of the IR."""
         return "".join(("[", self.element.render(), "]"))
 
+    def written(self) -> str:
+        """The same, with the element written as a program writes it."""
+        return "".join(("[", self.element.written(), "]"))
+
     def mangled(self) -> str:
         """The normalized name of this type, for use inside a symbol name."""
         return "".join(("list<", self.element.mangled(), ">"))
@@ -683,6 +740,15 @@ class CursorType(Type):
         """The name of this type in the textual form of the IR."""
         return "".join(("cursor<", self.element.render(), ">"))
 
+    def written(self) -> str:
+        """What a message calls it.
+
+        A program cannot write this type at all -- a cursor lives in a name
+        whose type is read off its value -- so what a message says is what it
+        is rather than a spelling nobody could have written.
+        """
+        return "".join(("cursor over [", self.element.written(), "]"))
+
     def mangled(self) -> str:
         """The normalized name of this type, for use inside a symbol name."""
         return "".join(("cursor<", self.element.mangled(), ">"))
@@ -703,6 +769,11 @@ class SetType(Type):
         """The name of this type in the textual form of the IR."""
         return "".join(("mut " if self.mutable else "",
                         "\N{LEFT DOUBLE PARENTHESIS}", self.element.render(), "\N{RIGHT DOUBLE PARENTHESIS}"))
+
+    def written(self) -> str:
+        """The same, with what it holds written as a program writes it."""
+        return "".join(("mut " if self.mutable else "",
+                        "\N{LEFT DOUBLE PARENTHESIS}", self.element.written(), "\N{RIGHT DOUBLE PARENTHESIS}"))
 
     def mangled(self) -> str:
         """The normalized name of this type, for use inside a symbol name."""
@@ -725,6 +796,12 @@ class DictType(Type):
         return "".join(("mut " if self.mutable else "",
                         "\N{LEFT DOUBLE PARENTHESIS}", self.key.render(), ": ",
                         self.value.render(), "\N{RIGHT DOUBLE PARENTHESIS}"))
+
+    def written(self) -> str:
+        """The same, with both written as a program writes them."""
+        return "".join(("mut " if self.mutable else "",
+                        "\N{LEFT DOUBLE PARENTHESIS}", self.key.written(), ": ",
+                        self.value.written(), "\N{RIGHT DOUBLE PARENTHESIS}"))
 
     def mangled(self) -> str:
         """The normalized name of this type, for use inside a symbol name."""

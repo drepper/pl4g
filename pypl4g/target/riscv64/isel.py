@@ -1216,7 +1216,7 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                             places = result_places(cconv, ty)
                         except TooManyArguments as many:
                             raise UnsupportedOperation("".join((
-                                "answering with '", ty.render(),
+                                "answering with '", ty.written(),
                                 "', which wants more registers than the "
                                 "convention answers in")), span) from many
                         answering = [_as_argument(place, part, registers)
@@ -1239,7 +1239,7 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                     if not isinstance(ty, (IntType, BoolType, EnumType,
                                            PtrType, SetType, DictType)):
                         raise UnsupportedOperation("".join((
-                            "returning a value of type '", ty.render(), "'")), span)
+                            "returning a value of type '", ty.written(), "'")), span)
                     result = _result_register(ty, cconv, registers)
                     constant = _number_of(value)
                     if constant is not None:
@@ -1736,7 +1736,7 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                             places = result_places(theirs, inst.ty)
                         except TooManyArguments as many:
                             raise UnsupportedOperation("".join((
-                                "a call answering with '", inst.ty.render(),
+                                "a call answering with '", inst.ty.written(),
                                 "', which wants more registers than the "
                                 "convention answers in")), span) from many
                         taken = []
@@ -1921,13 +1921,13 @@ def _new_value(ty: Type, registers: RegisterInfo,
         if len(inner) == 1 and not made_of_parts(inner[0]):
             return _new_value(inner[0], registers, hint=hint)
         raise UnsupportedOperation("".join((
-            "a value of type '", ty.render(), "'")), None)
+            "a value of type '", ty.written(), "'")), None)
     if isinstance(ty, SumType):
         # A sum is one of its variants and a tag, which is not a thing a
         # register holds; what it wants is a place in memory, and nothing in
         # the language makes a value of one yet.
         raise UnsupportedOperation("".join((
-            "a value of type '", ty.render(), "'")), None)
+            "a value of type '", ty.written(), "'")), None)
     if isinstance(ty, FloatType):
         return registers.new_virtual(FPR, _FLOAT_REGISTER_BITS,
                                      hint=hint)

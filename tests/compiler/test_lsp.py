@@ -501,7 +501,9 @@ def test_hover_says_what_a_name_is(session: Session, tmp_path: Path) -> None:
         return str(answered["contents"]["value"])
 
     assert "variable sum : u8" in hover(14, "sum")
-    assert "parameter init : " in hover(12, "init")
+    # Written the way the program wrote it: a reader of the source has never
+    # seen the IR's `ptr<mut Init>` and should not be shown it here.
+    assert "parameter init : &mut Init" in hover(12, "init")
     # Said once: the name of a record is what the type is called, so a hover
     # that wrote it twice would be saying `type Pair : Pair`.
     assert "type Pair\n" in hover(10, "Pair")
@@ -509,6 +511,8 @@ def test_hover_says_what_a_name_is(session: Session, tmp_path: Path) -> None:
     # A function of another module, with the signature the module gave it.
     said = hover(12, "write_sync")
     assert "function write_sync" in said and "u8" in said
+    # A result, with the spaces a signature writes it with.
+    assert "u64 \N{CURRENCY SIGN}size ? i32" in said
     # And the module itself, which says where it came from.
     assert "module std" in hover(12, "std")
     # A documentation comment is shown under what the thing is.

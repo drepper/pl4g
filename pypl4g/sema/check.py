@@ -1687,7 +1687,7 @@ class Checker:
             return
         if isinstance(ty, ArrayType) and not ty.fixed:
             self._diags.emit(D.LANG_ARRAY_NO_LENGTH_AT_TOP, node.span,
-                             found=ty.render())
+                             found=ty.written())
             ty = ERROR
         if ty is None:
             ty = ERROR
@@ -1843,7 +1843,7 @@ class Checker:
                        where[0] if where is not None else INVALID_SPAN)
             if isinstance(found, Function):
                 self._note(expr.name_span, FUNCTION, expr.name,
-                           found.ty.render(), found.name_span, found.doc or None)
+                           found.ty.written(), found.name_span, found.doc or None)
         if found is None:
             self._diags.emit(D.LANG_IMPORT_NOT_EXPORTED, expr.name_span,
                              name=expr.name, module=base.name)
@@ -1899,7 +1899,7 @@ class Checker:
             return UndefConst(ERROR)
         if _field_index(ty, expr.name) is None:
             self._diags.emit(D.LANG_PRODUCT_NO_SUCH_FIELD, expr.name_span,
-                             type=ty.render(), name=expr.name)
+                             type=ty.written(), name=expr.name)
             return UndefConst(ERROR)
         # A record that arrived as a value and not as a place -- what a call
         # answered with -- is put somewhere first, so that one rule reads a
@@ -1916,7 +1916,7 @@ class Checker:
         at = _field_index(ty, expr.name)
         if at is None:
             self._diags.emit(D.LANG_PRODUCT_NO_SUCH_FIELD, expr.name_span,
-                             type=ty.render(), name=expr.name)
+                             type=ty.written(), name=expr.name)
             return UndefConst(ERROR)
         place = self._field_place(builder, where, ty, at, expr.span)
         held = ty.fields[at][1]
@@ -1998,12 +1998,12 @@ class Checker:
             return UndefConst(ERROR)
         if not isinstance(ty, EnumType):
             self._diags.emit(D.LANG_ENUM_UNKNOWN_VALUE, expr.name_span,
-                             name=expr.name, type=ty.render())
+                             name=expr.name, type=ty.written())
             return UndefConst(ERROR)
         index = ty.index_of(expr.name)
         if index is None:
             self._diags.emit(D.LANG_ENUM_UNKNOWN_VALUE, expr.name_span,
-                             name=expr.name, type=ty.render())
+                             name=expr.name, type=ty.written())
             return UndefConst(ERROR)
         return self._module.enum_const(ty, index)
 
@@ -2101,7 +2101,7 @@ class Checker:
                 return self._module.char_const(node.value.value)
             case ast.CharLit():
                 if ty is not CHAR:
-                    return self._wrong_initializer(node, ty, CHAR.render())
+                    return self._wrong_initializer(node, ty, CHAR.written())
                 return self._module.char_const(node.value.value)
             case ast.IntLit():
                 if not isinstance(ty, IntType):
@@ -2110,25 +2110,25 @@ class Checker:
                     # is as much as can honestly be said about it.
                     named = BUILTIN_TYPES.get(node.value.type_name or "")
                     return self._wrong_initializer(
-                        node, ty, named.render() if named is not None else "integer")
+                        node, ty, named.written() if named is not None else "integer")
                 if not self._literal_matches(node, ty):
                     return None
                 if not ty.holds(node.value.value):
                     self._diags.emit(D.LANG_SYNTAX_INTEGER_RANGE, node.value.span,
-                                     literal=str(node.value.value), type=ty.render())
+                                     literal=str(node.value.value), type=ty.written())
                     return None
                 return self._module.int_const(ty, node.value.value)
             case ast.BoolLit():
                 if ty is not BOOL:
-                    return self._wrong_initializer(node, ty, BOOL.render())
+                    return self._wrong_initializer(node, ty, BOOL.written())
                 return self._module.bool_const(BOOL, node.value.value)
             case ast.FloatLit():
                 if not isinstance(ty, FloatType):
-                    return self._wrong_initializer(node, ty, F64.render())
+                    return self._wrong_initializer(node, ty, F64.written())
                 named = (BUILTIN_TYPES.get(node.value.type_name)
                          if node.value.type_name else None)
                 if named is not None and named is not ty:
-                    return self._wrong_initializer(node, ty, named.render())
+                    return self._wrong_initializer(node, ty, named.written())
                 return self._module.float_const(ty, node.value.value)
             case ast.ArrayLit() if isinstance(ty, ArrayType):
                 # Every element has to be one the compiler knows, which is what
@@ -2152,7 +2152,7 @@ class Checker:
                 if found is None:
                     return None
                 if found.ty is not ty:
-                    return self._wrong_initializer(node, ty, found.ty.render())
+                    return self._wrong_initializer(node, ty, found.ty.written())
                 return found
             case _:
                 self._diags.emit(
@@ -2229,7 +2229,7 @@ class Checker:
         say the compiler is unfinished where the program is simply wrong.
         """
         self._diags.emit(D.LANG_TYPE_INITIALIZER_MISMATCH, node.value.span,
-                         name=node.name, expected=ty.render(), found=found)
+                         name=node.name, expected=ty.written(), found=found)
         return None
 
     def _literal_matches(self, node: ast.VarDef, ty: Type) -> bool:
@@ -2240,7 +2240,7 @@ class Checker:
         named = BUILTIN_TYPES.get(literal.type_name)
         if named is not None and named is not ty:
             self._diags.emit(D.LANG_TYPE_INITIALIZER_MISMATCH, literal.span,
-                             name=node.name, expected=ty.render(), found=named.render())
+                             name=node.name, expected=ty.written(), found=named.written())
             return False
         return True
 
@@ -2461,13 +2461,13 @@ class Checker:
                     else found.value.ty
                 self._note(ref.span,
                            PARAMETER if found.is_parameter else VARIABLE,
-                           ref.name, held.render(), found.span)
+                           ref.name, held.written(), found.span)
             return found.value
         found_global = self._provided(ref.name)
         if isinstance(found_global, GlobalVar):
             if self._notes is not None:
                 self._note(ref.span, VARIABLE, ref.name,
-                           found_global.value_type.render(), found_global.span)
+                           found_global.value_type.written(), found_global.span)
             return found_global
         if isinstance(found_global, LoadedModule):
             self._diags.emit(D.LANG_IMPORT_MODULE_AS_VALUE, ref.span, name=ref.name)
@@ -2622,7 +2622,7 @@ class Checker:
         this one therefore does not have to classify.
         """
         if isinstance(ty, ProductType) and ty.abi:
-            self._diags.emit(D.LANG_ABI_TYPE_BY_VALUE, where, type=ty.render())
+            self._diags.emit(D.LANG_ABI_TYPE_BY_VALUE, where, type=ty.written())
 
     def _defaults_of(self, node: ast.FuncDef,
                      types: Sequence[Type]) -> tuple[Const | None, ...]:
@@ -2809,9 +2809,9 @@ class Checker:
         if len(func.ty.params) > 1:
             problem = "takes more than one parameter"
         elif func.ty.params and not _is_startup_argument(func.ty.params[0]):
-            problem = "".join(("takes a '", func.ty.params[0].render(), "'"))
+            problem = "".join(("takes a '", func.ty.params[0].written(), "'"))
         elif func.ty.ret != expected:
-            problem = "".join(("returns '", func.ty.ret.render(), "'"))
+            problem = "".join(("returns '", func.ty.ret.written(), "'"))
         if problem is not None:
             self._diags.emit(D.LANG_FUNCDEF_SPECIAL_BAD_SIGNATURE, node.name_span,
                              name=func.name, type=STARTUP_RETURN_TYPE_NAME,
@@ -2825,7 +2825,7 @@ class Checker:
         if func.ty.params:
             problem = "it takes parameters"
         elif func.ty.ret is not VOID:
-            problem = "".join(("it returns '", func.ty.ret.render(), "'"))
+            problem = "".join(("it returns '", func.ty.ret.written(), "'"))
         if problem is not None:
             self._diags.emit(D.LANG_FUNCDEF_SPECIAL_BAD_CTOR_SIGNATURE, node.name_span,
                              kind=kind, name=func.name, problem=problem)
@@ -2843,7 +2843,7 @@ class Checker:
         if func.ty.params:
             problem = "this one takes parameters"
         elif func.ty.ret is not BOOL:
-            problem = "".join(("this one answers with '", func.ty.ret.render(),
+            problem = "".join(("this one answers with '", func.ty.ret.written(),
                                "'"))
         if problem is not None:
             self._diags.emit(D.LANG_FUNCDEF_SPECIAL_BAD_TEST_SIGNATURE,
@@ -3200,12 +3200,12 @@ class Checker:
             return None
         if not isinstance(named, IntType):
             self._diags.emit(D.LANG_ENUMDEF_HOLDER_NOT_INTEGER, node.holder.span,
-                             type=named.render())
+                             type=named.written())
             return None
         outside = next((n for n in numbers if not named.holds(n)), None)
         if outside is not None:
             self._diags.emit(D.LANG_ENUMDEF_HOLDER_TOO_NARROW, node.holder.span,
-                             type=named.render(), value=str(outside))
+                             type=named.written(), value=str(outside))
             return None
         return named
 
@@ -3243,7 +3243,7 @@ class Checker:
                 twice = next((n for n, seen_ty in parts if seen_ty is ty), None)
                 if twice is not None:
                     self._diags.emit(D.LANG_TYPEDEF_REPEATED_TYPE, field.name_span,
-                                     type=ty.render())
+                                     type=ty.written())
                     spoiled = True
                     continue
             parts.append((field.name, ty))
@@ -3326,7 +3326,7 @@ class Checker:
             return ERROR
         if not isinstance(base, (IntType, FloatType)):
             self._diags.emit(D.LANG_UNIT_NOT_A_NUMBER, ref.span,
-                             found=base.render())
+                             found=base.written())
             return ERROR
         return _carrying(base, unit)
 
@@ -3439,7 +3439,7 @@ class Checker:
             return ERROR
         if not _can_be_referred_to(pointee):
             self._diags.emit(D.LANG_REF_TYPE_NOT_ALLOWED, ref.span,
-                             found=pointee.render())
+                             found=pointee.written())
             return ERROR
         return self._module.types.ptr_type(pointee, ref.mutable, ref.lasting)
 
@@ -3478,7 +3478,7 @@ class Checker:
         element = self._resolve_type(ref.element)
         if element is not ERROR and not _can_be_a_key(element):
             self._diags.emit(D.LANG_COLLECTION_KEY_NOT_HASHABLE, ref.element.span,
-                             found=element.render())
+                             found=element.written())
             element = ERROR
         if ref.value is None:
             return (self._module.types.set_type(element, ref.mutable)
@@ -3516,12 +3516,12 @@ class Checker:
                     named = held.exports.get(ref.name) \
                         if isinstance(held, LoadedModule) else None
             if found is not None and isinstance(named, _NamedType):
-                self._note(ref.span, TYPE, ref.name, found.render(),
+                self._note(ref.span, TYPE, ref.name, found.written(),
                            named.node.name_span, named.node.doc)
         elif found is not None and self._notes is not None:
             # A built-in: there is nowhere to send a reader, the specification
             # being where it is defined, but what it is, is still worth saying.
-            self._note(ref.span, TYPE, ref.name, found.render())
+            self._note(ref.span, TYPE, ref.name, found.written())
         if found is None:
             self._diags.emit(D.LANG_TYPE_UNKNOWN, ref.span, name=ref.name)
             return ERROR
@@ -3533,7 +3533,7 @@ class Checker:
                 return ERROR
             if not isinstance(found, (IntType, FloatType)):
                 self._diags.emit(D.LANG_UNIT_NOT_A_NUMBER, ref.span,
-                                 found=found.render())
+                                 found=found.written())
                 return ERROR
             found = _carrying(found, written)
         if not ref.result:
@@ -3640,7 +3640,7 @@ class Checker:
                 builder.ret()
             else:
                 self._diags.emit(D.LANG_FUNCDEF_RETURN_MISSING, node.name_span,
-                                 name=func.name, type=func.ty.ret.render())
+                                 name=func.name, type=func.ty.ret.written())
                 builder.unreachable()
 
     def _lower_block(self, builder: IRBuilder, block: ast.Block, func: Function,
@@ -3851,11 +3851,11 @@ class Checker:
         if ty is ERROR:
             return None
         if not isinstance(ty, TupleType):
-            self._diags.emit(D.LANG_TUPLE_NOT_A_TUPLE, span, found=ty.render())
+            self._diags.emit(D.LANG_TUPLE_NOT_A_TUPLE, span, found=ty.written())
             return None
         if len(ty.members) != len(names):
             self._diags.emit(D.LANG_TUPLE_WRONG_COUNT, span,
-                             wanted=str(len(names)), found=ty.render(),
+                             wanted=str(len(names)), found=ty.written(),
                              count=str(len(ty.members)))
             return None
         return list(ty.members)
@@ -4091,12 +4091,12 @@ class Checker:
         for one in expr.args:
             if not isinstance(one, ast.Named):
                 self._diags.emit(D.LANG_PRODUCT_FIELD_NOT_NAMED, one.span,
-                                 type=ty.render())
+                                 type=ty.written())
                 spoiled = True
                 continue
             if _field_index(ty, one.name) is None:
                 self._diags.emit(D.LANG_PRODUCT_NO_SUCH_FIELD, one.span,
-                                 type=ty.render(), name=one.name)
+                                 type=ty.written(), name=one.name)
                 spoiled = True
                 continue
             if one.name in given:
@@ -4108,7 +4108,7 @@ class Checker:
         for name, _ in ty.fields:
             if name not in given:
                 self._diags.emit(D.LANG_PRODUCT_FIELD_MISSING, expr.span,
-                                 type=ty.render(), name=name)
+                                 type=ty.written(), name=name)
                 spoiled = True
         return None if spoiled else given
 
@@ -4208,7 +4208,7 @@ class Checker:
             return None
         if not isinstance(found, IntType):
             self._diags.emit(D.LANG_ARRAY_INDEX_NOT_A_NUMBER, written.span,
-                             found=found.render())
+                             found=found.written())
             return None
         if not isinstance(written, ast.IntLit) \
                 and not self._stands_for(found.unit, IDX_UNIT):
@@ -4217,7 +4217,7 @@ class Checker:
             # is never wrong here; anything else says what it counts, and a
             # number counting something else reaches this through `\N{APL FUNCTIONAL SYMBOL QUAD}drop` and
             # `\N{APL FUNCTIONAL SYMBOL QUAD}unit`, which is the program saying it meant to.
-            self._diags.emit(D.LANG_UNIT_INDEX, written.span, found=found.render())
+            self._diags.emit(D.LANG_UNIT_INDEX, written.span, found=found.written())
             return None
         if isinstance(written, ast.IntLit) and along is not None:
             if not 0 <= written.value < along:
@@ -4314,7 +4314,7 @@ class Checker:
             return self._lower_tuple_member(builder, expr, base, ty, expected)
         if not isinstance(ty, ArrayType):
             self._diags.emit(D.LANG_ARRAY_NOT_AN_ARRAY, expr.base.span,
-                             found=ty.render())
+                             found=ty.written())
             return UndefConst(ERROR)
         if any(isinstance(one, ast.Range) for one in expr.indices):
             return self._lower_slice(builder, expr, base, ty, expected)
@@ -4393,12 +4393,12 @@ class Checker:
         assert isinstance(held, ArrayType)
         if not ty.fixed:
             self._diags.emit(D.LANG_MASK_NEEDS_A_STATED_SHAPE, expr.base.span,
-                             found=ty.render())
+                             found=ty.written())
             return UndefConst(ERROR)
         if not held.fixed or held.rank > ty.rank \
                 or held.shape[:held.rank] != ty.shape[:held.rank]:
             self._diags.emit(D.LANG_MASK_WRONG_SHAPE, expr.indices[0].span,
-                             found=held.render(), wanted=ty.render())
+                             found=held.written(), wanted=ty.written())
             return UndefConst(ERROR)
         kept = ty.shape[held.rank:]
         answer = self._module.types.array_type(ty.element, (None, *kept))
@@ -4467,18 +4467,18 @@ class Checker:
         assert isinstance(held, ArrayType)
         if not ty.fixed:
             self._diags.emit(D.LANG_MASK_NEEDS_A_STATED_SHAPE, stmt.base.span,
-                             found=ty.render())
+                             found=ty.written())
             return
         if not held.fixed or held.rank > ty.rank \
                 or held.shape[:held.rank] != ty.shape[:held.rank]:
             self._diags.emit(D.LANG_MASK_WRONG_SHAPE, stmt.indices[0].span,
-                             found=held.render(), wanted=ty.render())
+                             found=held.written(), wanted=ty.written())
             return
         if not isinstance(ty.element, (IntType, BoolType)):
             self._diags.emit(D.IMPL_UNIMPLEMENTED_FEATURE, stmt.span,
                              feature="".join((
                                  "writing through a mask into an array of '",
-                                 ty.element.render(), "'")))
+                                 ty.element.written(), "'")))
             return
         start, lengths = self._shape_of(builder, base, ty, stmt.span)
         if not self._made_here(start):
@@ -4608,7 +4608,7 @@ class Checker:
         span = expr.span
         if ty.rank != 1:
             self._diags.emit(D.LANG_ARRAY_SLICE_OF_A_TABLE, span,
-                             found=ty.render())
+                             found=ty.written())
             return UndefConst(ERROR)
         written = expr.indices[0]
         assert isinstance(written, ast.Range)
@@ -4628,7 +4628,7 @@ class Checker:
             return UndefConst(ERROR)
         if not isinstance(reaching, IntType):
             self._diags.emit(D.LANG_ARRAY_INDEX_NOT_A_NUMBER, written.stop.span,
-                             found=reaching.render())
+                             found=reaching.written())
             return UndefConst(ERROR)
         end = self._as_count(builder, last, reaching, span)
         builder.check(builder.compare(CmpPred.ULE, end, lengths[0], span),
@@ -4659,7 +4659,7 @@ class Checker:
             return
         if not isinstance(ty, ArrayType):
             self._diags.emit(D.LANG_ARRAY_NOT_AN_ARRAY, stmt.base.span,
-                             found=ty.render())
+                             found=ty.written())
             return
         mask = self._mask_written(builder, stmt)
         if mask is not None:
@@ -4703,7 +4703,7 @@ class Checker:
         at = _field_index(ty, stmt.name)
         if at is None:
             self._diags.emit(D.LANG_PRODUCT_NO_SUCH_FIELD, stmt.name_span,
-                             type=ty.render(), name=stmt.name)
+                             type=ty.written(), name=stmt.name)
             return
         if not self._record_may_change(stmt.base, stmt.name_span):
             return
@@ -4712,7 +4712,7 @@ class Checker:
             # is not a place to put a different collection either: what stands
             # there is what everything reading the record reads.
             self._diags.emit(D.LANG_PLACE_NOT_WRITABLE, stmt.name_span,
-                             name=stmt.name, found=ty.fields[at][1].render())
+                             name=stmt.name, found=ty.fields[at][1].written())
             return
         if not self._made_here(where):
             # The record may be the caller's -- a reference says nothing about
@@ -4787,7 +4787,7 @@ class Checker:
                 ty = self._held_by(held)
                 if isinstance(ty, PtrType) and not ty.mutable:
                     self._diags.emit(D.LANG_REF_NOT_WRITABLE, where,
-                                     found=ty.render())
+                                     found=ty.written())
                     return False
                 return True
             case ast.NameRef():
@@ -4813,7 +4813,7 @@ class Checker:
                     # environment one thing they all agree about.
                     self._diags.emit(D.LANG_PLACE_NOT_WRITABLE, where,
                                      name=expr.name,
-                                     found=found.value_type.render())
+                                     found=found.value_type.written())
                     return False
                 return True
             case _:
@@ -4930,12 +4930,12 @@ class Checker:
             self._module.reports.record(
                 ReportKind.INSTANTIATE, node.name,
                 "".join(("compiled for ",
-                         ", ".join(one.render() for one in key),
+                         ", ".join(one.written() for one in key),
                          ", which is what a call gave it")),
                 span)
             mark = self._diags.because(
                 D.LANG_GENERIC_ASKED_HERE, span, name=node.name,
-                types=", ".join(one.render() for one in key))
+                types=", ".join(one.written() for one in key))
             try:
                 self._lower_instance(func, node, span)
             finally:
@@ -4980,7 +4980,7 @@ class Checker:
                 else:
                     self._diags.emit(D.LANG_FUNCDEF_RETURN_MISSING,
                                      node.name_span, name=func.name,
-                                     type=func.ty.ret.render())
+                                     type=func.ty.ret.written())
                     inner.unreachable(node.span)
             self._pop_scope()
         finally:
@@ -5068,8 +5068,8 @@ class Checker:
                 earlier = bound.get(param.name)
                 if earlier is not None and earlier is not found:
                     self._diags.emit(D.LANG_GENERIC_TWO_WAYS, span,
-                                     name=param.name, first=earlier.render(),
-                                     second=found.render())
+                                     name=param.name, first=earlier.written(),
+                                     second=found.written())
                     return False
                 bound[param.name] = found
                 return True
@@ -5416,7 +5416,7 @@ class Checker:
             return held
         if not local.placed:
             self._diags.emit(D.LANG_REF_TYPE_NOT_ALLOWED, one.span,
-                             found=held.render())
+                             found=held.written())
             return ERROR
         return self._module.types.ptr_type(held, local.mutable)
 
@@ -5578,7 +5578,7 @@ class Checker:
                     inner.ret()
                 else:
                     self._diags.emit(D.LANG_FUNCDEF_RETURN_MISSING, expr.span,
-                                     name=name, type=answer.render())
+                                     name=name, type=answer.written())
                     # The mistake is reported and the compilation is over, but
                     # what was built has to be well formed all the same: a
                     # function with no terminator is one the verifier would
@@ -5630,10 +5630,10 @@ class Checker:
             return
         if not isinstance(ty, PtrType):
             self._diags.emit(D.LANG_DEREF_NOT_A_REFERENCE, stmt.target.span,
-                             found=ty.render())
+                             found=ty.written())
             return
         if not ty.mutable:
-            self._diags.emit(D.LANG_REF_NOT_WRITABLE, stmt.span, found=ty.render())
+            self._diags.emit(D.LANG_REF_NOT_WRITABLE, stmt.span, found=ty.written())
             return
         if not self._made_here(target):
             # The place may be the caller's -- there is no telling which from
@@ -5688,7 +5688,7 @@ class Checker:
             return answer
         if not isinstance(ty, PtrType):
             self._diags.emit(D.LANG_DEREF_NOT_A_REFERENCE, expr.span,
-                             found=ty.render())
+                             found=ty.written())
             return UndefConst(ERROR)
         answer = builder.load(value, expr.span)
         if not self._accepts(expected, answer.ty):
@@ -5808,7 +5808,7 @@ class Checker:
         address, held, may_change, what, lasting = found
         if not _can_be_referred_to(held):
             self._diags.emit(D.LANG_REF_TYPE_NOT_ALLOWED, expr.span,
-                             found=held.render())
+                             found=held.written())
             return UndefConst(ERROR)
         if writes and not may_change:
             self._diags.emit(D.LANG_REF_PLACE_NOT_MUTABLE, expr.span, name=what)
@@ -5848,7 +5848,7 @@ class Checker:
                     return None
                 if not isinstance(ty, PtrType):
                     self._diags.emit(D.LANG_DEREF_NOT_A_REFERENCE, expr.span,
-                                     found=ty.render())
+                                     found=ty.written())
                     return None
                 return (value, ty.pointee, ty.mutable, "what it names", ty.lasting)
             case _:
@@ -6031,13 +6031,13 @@ class Checker:
             if self._notes is not None and local.held is not None:
                 self._note(expr.span,
                            PARAMETER if local.is_parameter else VARIABLE,
-                           expr.name, local.held.render(), local.span)
+                           expr.name, local.held.written(), local.span)
             if not local.placed:
                 # Every name a reference is taken of anywhere in the body was
                 # given storage before the body was walked, so a name that has
                 # none is one whose type a place cannot hold.
                 self._diags.emit(D.LANG_REF_TYPE_NOT_ALLOWED, expr.span,
-                                 found=self._held_by(local).render())
+                                 found=self._held_by(local).written())
                 return None
             assert local.held is not None
             # A name inside a call is gone when the call is, whatever it holds.
@@ -6066,7 +6066,7 @@ class Checker:
         at = _field_index(ty, expr.name)
         if at is None:
             self._diags.emit(D.LANG_PRODUCT_NO_SUCH_FIELD, expr.name_span,
-                             type=ty.render(), name=expr.name)
+                             type=ty.written(), name=expr.name)
             return None
         # A field lives as long as the record does, which is what says how long
         # a reference to it may be held.
@@ -6082,7 +6082,7 @@ class Checker:
             return None
         if not isinstance(ty, ArrayType):
             self._diags.emit(D.LANG_ARRAY_NOT_AN_ARRAY, expr.base.span,
-                             found=ty.render())
+                             found=ty.written())
             return None
         if len(expr.indices) != ty.rank:
             # One element, so every index: a run of them is several places and
@@ -6131,7 +6131,7 @@ class Checker:
                 return UndefConst(ERROR)
             if not _can_be_a_key(keys):
                 self._diags.emit(D.LANG_COLLECTION_KEY_NOT_HASHABLE,
-                                 written[0][0].span, found=keys.render())
+                                 written[0][0].span, found=keys.written())
                 return UndefConst(ERROR)
             # What is written down is fresh and belongs to whoever is given
             # it, so it is the writable type; a name or a parameter that says
@@ -6150,7 +6150,7 @@ class Checker:
             return UndefConst(ERROR)
         if isinstance(ty, DictType) and not _can_be_a_value(ty.value):
             self._diags.emit(D.LANG_COLLECTION_VALUE_TOO_LARGE, expr.span,
-                             found=ty.value.render())
+                             found=ty.value.written())
             return UndefConst(ERROR)
         # Making one takes room out of an arena, and an arena outlives the
         # call: the next call gets what this one left of it.
@@ -6366,7 +6366,7 @@ class Checker:
                 found = ty
             elif ty is not found:
                 self._diags.emit(D.LANG_COLLECTION_MIXED_ENTRIES, span,
-                                 found=ty.render(), expected=found.render())
+                                 found=ty.written(), expected=found.written())
                 spoiled = True
         return ERROR if spoiled or found is None else found
 
@@ -6427,7 +6427,7 @@ class Checker:
             return UndefConst(ERROR)
         if not isinstance(ty, (SetType, DictType)):
             self._diags.emit(D.LANG_INDEX_NOT_A_COLLECTION, expr.base.span,
-                             found=ty.render())
+                             found=ty.written())
             return UndefConst(ERROR)
         key_ty = ty.element if isinstance(ty, SetType) else ty.key
         key = self._lower_expr(builder, expr.key, key_ty)
@@ -6474,11 +6474,11 @@ class Checker:
             return UndefConst(ERROR)
         if not isinstance(ty, (SetType, DictType)):
             self._diags.emit(D.LANG_INDEX_NOT_A_COLLECTION, expr.base.span,
-                             found=ty.render())
+                             found=ty.written())
             return UndefConst(ERROR)
         if not ty.mutable:
             self._diags.emit(D.LANG_COLLECTION_NOT_WRITABLE, expr.base.span,
-                             found=ty.render())
+                             found=ty.written())
             return UndefConst(ERROR)
         key_ty = ty.element if isinstance(ty, SetType) else ty.key
         key = self._lower_expr(builder, expr.key, key_ty)
@@ -6536,7 +6536,7 @@ class Checker:
             return None
         if not isinstance(held, ListType):
             self._diags.emit(D.LANG_TAKE_NOT_A_CURSOR, span,
-                             found=held.render())
+                             found=held.written())
             return None
         if not may_change:
             self._diags.emit(D.LANG_VARDEF_NOT_MUTABLE, span, name=what)
@@ -6617,12 +6617,12 @@ class Checker:
             return None
         if not isinstance(found, IntType):
             self._diags.emit(D.LANG_ARRAY_INDEX_NOT_A_NUMBER, written.span,
-                             found=found.render())
+                             found=found.written())
             return None
         if not isinstance(written, ast.IntLit) \
                 and not self._stands_for(found.unit, IDX_UNIT):
             self._diags.emit(D.LANG_UNIT_INDEX, written.span,
-                             found=found.render())
+                             found=found.written())
             return None
         return self._as_count(builder, index, found, span)
 
@@ -6658,7 +6658,7 @@ class Checker:
             return UndefConst(ERROR)
         if not isinstance(held, ListType):
             self._diags.emit(D.LANG_CURSOR_NOT_A_LIST, expr.args[0].span,
-                             found=held.render())
+                             found=held.written())
             return UndefConst(ERROR)
         if not may_change:
             self._diags.emit(D.LANG_VARDEF_NOT_MUTABLE, expr.args[0].span,
@@ -6719,7 +6719,7 @@ class Checker:
             return UndefConst(ERROR)
         if not isinstance(ty, CursorType):
             self._diags.emit(D.LANG_TAKE_NOT_A_CURSOR, expr.operand.span,
-                             found=ty.render())
+                             found=ty.written())
             return UndefConst(ERROR)
         if not self._accepts(expected, ty):
             self._report_mismatch(expr.span, ty, expected)
@@ -6769,11 +6769,11 @@ class Checker:
             return
         if not isinstance(ty, DictType):
             self._diags.emit(D.LANG_ENTRY_ASSIGN_NOT_A_DICT, stmt.base.span,
-                             found=ty.render())
+                             found=ty.written())
             return
         if not ty.mutable:
             self._diags.emit(D.LANG_COLLECTION_NOT_WRITABLE, stmt.base.span,
-                             found=ty.render())
+                             found=ty.written())
             return
         key = self._lower_expr(builder, stmt.key, ty.key)
         value = self._lower_into(builder, stmt.value, ty.value, stmt.span)
@@ -6884,7 +6884,7 @@ class Checker:
             # A type was lifted, so its own type is being asked for, and a type
             # is not a thing this language has a type of.
             self._diags.emit(D.LANG_TYPEOF_OF_A_TYPE, asked.span,
-                             found=lifted.render())
+                             found=lifted.written())
             return None
         written = asked.value if asked.value is not None else \
             (ast.NameRef(span=asked.span, name=asked.written.name)
@@ -6982,7 +6982,7 @@ class Checker:
             found = self._value_type_of(condition)
             if found is not BOOL and found is not ERROR:
                 self._diags.emit(D.LANG_IF_CONDITION_NOT_BOOLEAN,
-                                 arm.condition.span, found=found.render())
+                                 arm.condition.span, found=found.written())
                 spoiled = True
                 condition = UndefConst(BOOL)
             elif found is ERROR:
@@ -7078,7 +7078,7 @@ class Checker:
         if found is not BOOL:
             if found is not ERROR:
                 self._diags.emit(D.LANG_LOOP_CONDITION_NOT_BOOLEAN,
-                                 stmt.condition.span, found=found.render())
+                                 stmt.condition.span, found=found.written())
             condition = UndefConst(BOOL)
         elif stmt.until:
             # `unless` is this loop with its condition read the other way
@@ -7544,11 +7544,11 @@ class Checker:
             return UndefConst(ERROR)
         if not isinstance(ty, TupleType):
             self._diags.emit(D.LANG_COMPTIME_NEEDS_A_TUPLE, stmt.iterable.span,
-                             found=ty.render())
+                             found=ty.written())
             return UndefConst(ERROR)
         if produces or stmt.alternative is not None or stmt.label is not None:
             self._diags.emit(D.LANG_COMPTIME_NEEDS_A_TUPLE, stmt.span,
-                             found=ty.render())
+                             found=ty.written())
             return UndefConst(ERROR)
         declared = self._resolve_type(stmt.type) if stmt.type is not None else None
         for at, member in enumerate(ty.members):
@@ -7627,7 +7627,7 @@ class Checker:
                 return None
             if not isinstance(index, IntType):
                 self._diags.emit(D.LANG_ENUMERATE_COUNTS_IN_INTEGERS,
-                                 from_written.span, found=index.render())
+                                 from_written.span, found=index.written())
                 return None
         if len(parts_of(inner.element)) > 1:
             # A turn that is already several values -- a dictionary's pair --
@@ -7641,7 +7641,7 @@ class Checker:
                 feature="".join((
                     "counting the turns of something whose turn is already "
                     "several values, which would make a tuple holding the "
-                    "tuple '", inner.element.render(), "'")))
+                    "tuple '", inner.element.written(), "'")))
             return None
         element = self._module.types.tuple_type((index, inner.element))
         one = builder.int_const(index, 1)
@@ -7693,7 +7693,7 @@ class Checker:
             return None
         else:
             self._diags.emit(D.LANG_LOOP_NOT_AN_ITERATOR, stmt.iterable.span,
-                             found=ty.render())
+                             found=ty.written())
             return None
         if declared is not None and declared is not found.element:
             self._report_mismatch(stmt.iterable.span, found.element, declared)
@@ -7909,7 +7909,7 @@ class Checker:
             found = self._value_type_of(value)
             if found is not ERROR:
                 self._diags.emit(D.LANG_LOOP_NOT_AN_ITERATOR, written.span,
-                                 found=found.render())
+                                 found=found.written())
             return None
         declared = self._resolve_type(stmt.type) if stmt.type is not None else None
         first = (self._lower_into(builder, written.start, declared,
@@ -7920,7 +7920,7 @@ class Checker:
             return None
         if not isinstance(element, IntType):
             self._diags.emit(D.LANG_RANGE_NOT_AN_INTEGER, written.start.span,
-                             found=element.render())
+                             found=element.written())
             return None
         last = self._lower_expr(builder, written.stop, element)
         other = self._value_type_of(last)
@@ -7928,7 +7928,7 @@ class Checker:
             return None
         if other != element:
             self._diags.emit(D.LANG_RANGE_ENDS_DIFFER, written.span,
-                             first=element.render(), second=other.render())
+                             first=element.written(), second=other.written())
             return None
         distance, rising = self._range_step(written, element)
         if distance is None:
@@ -7960,7 +7960,7 @@ class Checker:
         distance = abs(given)
         if not element.holds(distance):
             self._diags.emit(D.LANG_SYNTAX_INTEGER_RANGE, written.step.span,
-                             literal=str(distance), type=element.render())
+                             literal=str(distance), type=element.written())
             return None, True
         return distance, given > 0
 
@@ -8010,7 +8010,7 @@ class Checker:
             return UndefConst(ERROR)
         if not isinstance(ty, (ResultType, SumType, EnumType)):
             self._diags.emit(D.LANG_MATCH_NOT_A_CHOICE, stmt.subject.span,
-                             found=ty.render())
+                             found=ty.written())
             return UndefConst(ERROR)
         taken = self._matched_arms(stmt, ty)
         if taken is None:
@@ -8032,7 +8032,7 @@ class Checker:
         """What a value of *ty* may be: a name to report it by, what the
         alternative carries, and whether it is a result's error."""
         if isinstance(ty, ResultType):
-            return [(ty.ok.render(), ty.ok, False), (BOTTOM_GLYPH, ty.err, True)]
+            return [(ty.ok.written(), ty.ok, False), (BOTTOM_GLYPH, ty.err, True)]
         if isinstance(ty, EnumType):
             # One alternative per *number*, not per name: two names given one
             # number are one value, and nothing at run time can tell an arm
@@ -8042,7 +8042,7 @@ class Checker:
                 seen.setdefault(number, member)
             return [(member, None, False) for member in seen.values()]
         assert isinstance(ty, SumType)
-        return [(variant.render(), variant, False) for _, variant in ty.variants]
+        return [(variant.written(), variant, False) for _, variant in ty.variants]
 
     def _matched_arms(self, stmt: ast.Match,
                       ty: Type) -> list[tuple[ast.MatchArm, frozenset[int]]] | None:
@@ -8096,7 +8096,7 @@ class Checker:
             # Its values combine, so a value of it may be one no single name
             # stands for: naming every name does not account for every value.
             self._diags.emit(D.LANG_MATCH_FLAG_NEEDS_A_REST, stmt.span,
-                             type=ty.render())
+                             type=ty.written())
             spoiled = True
         return None if spoiled else found
 
@@ -8107,7 +8107,7 @@ class Checker:
         if pattern.type is None:
             if not isinstance(ty, ResultType):
                 self._diags.emit(D.LANG_MATCH_BOTTOM_NEEDS_A_RESULT, pattern.span,
-                                 found=ty.render())
+                                 found=ty.written())
                 return None
             return next(i for i, (_, _, bottom) in enumerate(alternatives) if bottom)
         if isinstance(ty, EnumType):
@@ -8116,12 +8116,12 @@ class Checker:
             written = pattern.type
             if not isinstance(written, ast.TypeRef):
                 self._diags.emit(D.LANG_ENUM_UNKNOWN_VALUE, pattern.span,
-                                 name="that", type=ty.render())
+                                 name="that", type=ty.written())
                 return None
             index = ty.index_of(written.name)
             if index is None or written.module is not None or written.result:
                 self._diags.emit(D.LANG_ENUM_UNKNOWN_VALUE, pattern.span,
-                                 name=written.name, type=ty.render())
+                                 name=written.name, type=ty.written())
                 return None
             # Which alternative, which is which *number*: two names given one
             # number name one alternative between them.
@@ -8134,7 +8134,7 @@ class Checker:
             if not bottom and carried is named:
                 return index
         self._diags.emit(D.LANG_MATCH_UNKNOWN_ALTERNATIVE, pattern.span,
-                         type=named.render(), found=ty.render())
+                         type=named.written(), found=ty.written())
         return None
 
     def _lower_match_on_result(self, builder: IRBuilder, stmt: ast.Match,
@@ -8173,7 +8173,7 @@ class Checker:
                        second.pattern.span, subject, ty.err)
         elif second.pattern.name is not None:
             self._diags.emit(D.LANG_MATCH_BOTTOM_CARRIES_NOTHING,
-                             second.pattern.span, found=ty.render())
+                             second.pattern.span, found=ty.written())
             return UndefConst(ERROR)
         return self._run_arms(
             builder, stmt, func,
@@ -8613,7 +8613,7 @@ class Checker:
             # they all agree about.
             self._diags.emit(D.LANG_PLACE_NOT_WRITABLE, node.name_span,
                              name=node.name,
-                             found=target.value_type.render())
+                             found=target.value_type.written())
             return None
         self._an_effect(D.LANG_PURE_CHANGES_A_VARIABLE, node.span, name=node.name)
         value = self._checked_value(builder, node, target.value_type)
@@ -8708,7 +8708,7 @@ class Checker:
             # something that outlives the call would be safe, and there is no
             # way yet to say that one does.
             self._diags.emit(D.LANG_ARRAY_ANSWERED_WITH, ref.span,
-                             found=found.render())
+                             found=found.written())
             return ERROR
         return found
 
@@ -8718,7 +8718,7 @@ class Checker:
         if stmt.value is None:
             if func.ty.ret is not VOID:
                 self._diags.emit(D.LANG_FUNCDEF_RETURN_MISSING, stmt.span,
-                                 name=func.name, type=func.ty.ret.render())
+                                 name=func.name, type=func.ty.ret.written())
             builder.ret(None, stmt.span)
             return
         if func.ty.ret is VOID:
@@ -8754,7 +8754,7 @@ class Checker:
                     return UndefConst(ERROR)
                 if not ty.holds(expr.value):
                     self._diags.emit(D.LANG_SYNTAX_INTEGER_RANGE, expr.span,
-                                     literal=str(expr.value), type=ty.render())
+                                     literal=str(expr.value), type=ty.written())
                     return builder.int_const(ty, 0)
                 return builder.int_const(ty, expr.value)
             case ast.CharLit():
@@ -8917,8 +8917,8 @@ class Checker:
             return UndefConst(ERROR)
         if found is not ty:
             self._diags.emit(D.LANG_TYPE_OPERAND_MISMATCH, expr.right.span,
-                             operator=expr.op.value, expected=ty.render(),
-                             found=found.render())
+                             operator=expr.op.value, expected=ty.written(),
+                             found=found.written())
             return UndefConst(ERROR)
         if isinstance(ty, FloatType) and expr.op in _EXACT_ON_FLOATS:
             # Two floating-point values computed different ways are rarely the
@@ -8927,7 +8927,7 @@ class Checker:
             # the approximate comparisons are written differently rather than
             # this one quietly becoming approximate.
             self._diags.emit(D.LANG_TYPE_EXACT_FLOAT_COMPARISON, expr.span,
-                             operator=expr.op.value, type=ty.render())
+                             operator=expr.op.value, type=ty.written())
         if ty is STR:
             if not self._accepts(expected, BOOL):
                 self._report_mismatch(expr.span, BOOL, expected)
@@ -9007,7 +9007,7 @@ class Checker:
             if ty is not ERROR and not isinstance(ty, FloatType):
                 self._diags.emit(D.LANG_TYPE_APPROXIMATE_NEEDS_A_FLOAT,
                                  expr.left.span, operator=expr.op.value,
-                                 found=ty.render())
+                                 found=ty.written())
                 ty = ERROR
             right = self._lower_expr(builder, expr.right,
                                      ty if ty is not ERROR else context)
@@ -9026,12 +9026,12 @@ class Checker:
             return UndefConst(ERROR)
         if not isinstance(found, FloatType):
             self._diags.emit(D.LANG_TYPE_APPROXIMATE_NEEDS_A_FLOAT, expr.right.span,
-                             operator=expr.op.value, found=found.render())
+                             operator=expr.op.value, found=found.written())
             return UndefConst(ERROR)
         if found is not ty:
             self._diags.emit(D.LANG_TYPE_OPERAND_MISMATCH, expr.right.span,
-                             operator=expr.op.value, expected=ty.render(),
-                             found=found.render())
+                             operator=expr.op.value, expected=ty.written(),
+                             found=found.written())
             return UndefConst(ERROR)
         exchanged, magnitude, pred = _APPROXIMATE[expr.op]
         first, second = (right, left) if exchanged else (left, right)
@@ -9113,13 +9113,13 @@ class Checker:
             return UndefConst(ERROR)
         if not isinstance(ty, ResultType):
             self._diags.emit(D.LANG_TYPE_NOT_A_RESULT, expr.operand.span,
-                             operator="?", found=ty.render())
+                             operator="?", found=ty.written())
             return UndefConst(ERROR)
         answering = self._answering
         if not isinstance(answering, ResultType) or answering.err != ty.err:
             self._diags.emit(D.LANG_TYPE_TRY_NEEDS_A_RESULT, expr.span,
-                             found=(answering.render() if answering is not None
-                                    else VOID.render()))
+                             found=(answering.written() if answering is not None
+                                    else VOID.written()))
             return UndefConst(ERROR)
         if not self._accepts(expected, ty.ok):
             self._report_mismatch(expr.span, ty.ok, expected)
@@ -9161,7 +9161,7 @@ class Checker:
             return UndefConst(ERROR)
         if not isinstance(ty, ResultType):
             self._diags.emit(D.LANG_TYPE_NOT_A_RESULT, expr.left.span,
-                             operator=expr.op.value, found=ty.render())
+                             operator=expr.op.value, found=ty.written())
             return UndefConst(ERROR)
         if not self._accepts(expected, ty.ok):
             self._report_mismatch(expr.span, ty.ok, expected)
@@ -9259,7 +9259,7 @@ class Checker:
             return None
         if (self._scalar_of(ty) if walked else ty) is not BOOL:
             self._diags.emit(D.LANG_TYPE_OPERAND_NOT_BOOLEAN, expr.span,
-                             operator=op.value, found=ty.render())
+                             operator=op.value, found=ty.written())
             return None
         return value
 
@@ -9354,10 +9354,10 @@ class Checker:
             return ty
         if op in _ORDERINGS:
             self._diags.emit(D.LANG_TYPE_OPERAND_NOT_INTEGER, span,
-                             operator=op.value, found=ty.render())
+                             operator=op.value, found=ty.written())
         else:
             self._diags.emit(D.LANG_TYPE_OPERAND_NOT_COMPARABLE, span,
-                             operator=op.value, found=ty.render())
+                             operator=op.value, found=ty.written())
         return ERROR
 
     def _lower_reshape(self, builder: IRBuilder, expr: ast.Binary,
@@ -9389,7 +9389,7 @@ class Checker:
             if isinstance(found, ArrayType) else (found, None)
         if isinstance(found, ArrayType) and not found.fixed:
             self._diags.emit(D.LANG_CONCAT_NEEDS_A_STATED_SHAPE, expr.right.span,
-                             found=found.render())
+                             found=found.written())
             return UndefConst(ERROR)
         if count is not None and count > total:
             self._diags.emit(D.LANG_SHAPE_TOO_MANY, expr.span, found=count,
@@ -9482,19 +9482,19 @@ class Checker:
             self._diags.emit(
                 D.LANG_FAILURE_NEEDS_A_RESULT, expr.span,
                 found="nothing in particular" if wanted is None
-                else "".join(("'", wanted.render(), "'")))
+                else "".join(("'", wanted.written(), "'")))
             return UndefConst(ERROR)
         if wanted.err is None:
             if expr.value is not None:
                 self._diags.emit(D.LANG_FAILURE_CARRIES_NOTHING,
-                                 expr.value.span, found=wanted.render())
+                                 expr.value.span, found=wanted.written())
                 return UndefConst(ERROR)
             carried: Value | None = None
         else:
             if expr.value is None:
                 self._diags.emit(D.LANG_FAILURE_NEEDS_A_VALUE, expr.span,
-                                 found=wanted.render(),
-                                 carried=wanted.err.render())
+                                 found=wanted.written(),
+                                 carried=wanted.err.written())
                 return UndefConst(ERROR)
             carried = self._lower_into(builder, expr.value, wanted.err,
                                        expr.value.span)
@@ -9538,7 +9538,7 @@ class Checker:
                         and not isinstance(first, IntType):
                     self._diags.emit(D.LANG_DIVIDES_IS_FOR_INTEGERS,
                                      written.span, operator=name,
-                                     found=first.render())
+                                     found=first.written())
                     first = ERROR
             else:
                 first = None
@@ -9553,19 +9553,19 @@ class Checker:
             return UndefConst(ERROR)
         if not isinstance(ty, IntType):
             self._diags.emit(D.LANG_DIVIDES_IS_FOR_INTEGERS, over.span,
-                             operator=name, found=ty.render())
+                             operator=name, found=ty.written())
             return UndefConst(ERROR)
         if left is None:
             if not ty.holds(2):
                 self._diags.emit(D.LANG_DIVIDES_NEEDS_A_TWO, expr.span,
-                                 operator=name, found=ty.render())
+                                 operator=name, found=ty.written())
                 return UndefConst(ERROR)
             left = IntConst(ty, 2)
         elif first is not ty:
             assert first is not None
             self._diags.emit(D.LANG_TYPE_OPERAND_MISMATCH, over.span,
-                             operator=name, expected=first.render(),
-                             found=ty.render())
+                             operator=name, expected=first.written(),
+                             found=ty.written())
             return UndefConst(ERROR)
         walked = self._walk_operands(builder, expr,
                                      (("left", left), ("right", right))
@@ -9782,7 +9782,7 @@ class Checker:
         if ty is not None and ty is not ERROR \
                 and not isinstance(ty, (IntType, FloatType)):
             self._diags.emit(D.LANG_POWER_BASE_NOT_A_NUMBER, written.span,
-                             found=ty.render())
+                             found=ty.written())
             ty = ERROR
         if exponent is None:
             return base, None if ty is ERROR else ty, UndefConst(ERROR), None
@@ -9800,7 +9800,7 @@ class Checker:
         if not isinstance(count, IntType):
             if count is not ERROR:
                 self._diags.emit(D.LANG_POWER_EXPONENT_NOT_A_COUNT,
-                                 exponent.span, found=count.render())
+                                 exponent.span, found=count.written())
             return base, None, times, None
         if ty is ERROR or ty is None:
             return base, None, times, count
@@ -9848,7 +9848,7 @@ class Checker:
         if ty.holds(answer):
             return False
         self._diags.emit(D.LANG_TYPE_ANSWER_DOES_NOT_FIT, expr.span,
-                         value=str(answer), type=ty.render())
+                         value=str(answer), type=ty.written())
         return True
 
     def _unity(self, builder: IRBuilder, ty: Type, span: Span) -> Value:
@@ -10080,14 +10080,14 @@ class Checker:
             if not isinstance(found, ListType):
                 if found is not ERROR:
                     self._diags.emit(D.LANG_CONCAT_NEEDS_AN_ARRAY, side.span,
-                                     found=found.render())
+                                     found=found.written())
                 return UndefConst(ERROR)
             if holds is None:
                 holds = found.element
             elif found.element is not holds:
                 self._diags.emit(D.LANG_CONCAT_ELEMENTS_DIFFER, expr.span,
-                                 left=self._value_type_of(left).render(),
-                                 right=self._value_type_of(right).render())
+                                 left=self._value_type_of(left).written(),
+                                 right=self._value_type_of(right).written())
                 return UndefConst(ERROR)
         assert holds is not None
         answer = self._module.types.list_type(holds)
@@ -10138,7 +10138,7 @@ class Checker:
             found = self._value_type_of(value)
             if found is not STR and found is not ERROR:
                 self._diags.emit(D.LANG_CONCAT_NEEDS_AN_ARRAY, side.span,
-                                 found=found.render())
+                                 found=found.written())
                 return UndefConst(ERROR)
         if self._value_type_of(left) is ERROR \
                 or self._value_type_of(right) is ERROR:
@@ -10182,21 +10182,21 @@ class Checker:
         for ty, side in zip(sides, (expr.left, expr.right)):
             if not isinstance(ty, ArrayType):
                 self._diags.emit(D.LANG_CONCAT_NEEDS_AN_ARRAY, side.span,
-                                 found=ty.render())
+                                 found=ty.written())
                 return None
             if not ty.fixed:
                 self._diags.emit(D.LANG_CONCAT_NEEDS_A_STATED_SHAPE, side.span,
-                                 found=ty.render())
+                                 found=ty.written())
                 return None
         first, second = sides
         assert isinstance(first, ArrayType) and isinstance(second, ArrayType)
         if first.element is not second.element:
             self._diags.emit(D.LANG_CONCAT_ELEMENTS_DIFFER, expr.span,
-                             left=first.render(), right=second.render())
+                             left=first.written(), right=second.written())
             return None
         if first.shape[1:] != second.shape[1:]:
             self._diags.emit(D.LANG_CONCAT_SHAPES_DIFFER, expr.span,
-                             left=first.render(), right=second.render())
+                             left=first.written(), right=second.written())
             return None
         along = (first.shape[0] or 0) + (second.shape[0] or 0)
         return self._module.types.array_type(first.element,
@@ -10264,7 +10264,7 @@ class Checker:
             assert ty is not None
             if ty is not ERROR and not self._operand_type_stands(expr.op, ty):
                 self._diags.emit(D.LANG_TYPE_OPERAND_NOT_INTEGER, expr.left.span,
-                                 operator=expr.op.value, found=ty.render())
+                                 operator=expr.op.value, found=ty.written())
                 ty = ERROR
             right = self._lower_expr(builder, expr.right,
                                      ty if ty is not ERROR else context)
@@ -10291,13 +10291,13 @@ class Checker:
             return UndefConst(ERROR)
         if not self._operand_type_stands(expr.op, found):
             self._diags.emit(D.LANG_TYPE_OPERAND_NOT_INTEGER, expr.right.span,
-                             operator=expr.op.value, found=found.render())
+                             operator=expr.op.value, found=found.written())
             return UndefConst(ERROR)
         if found is not ty and not (expr.op in _DERIVES
                                     and without_units(found) is without_units(ty)):
             self._diags.emit(D.LANG_TYPE_OPERAND_MISMATCH, expr.right.span,
-                             operator=expr.op.value, expected=ty.render(),
-                             found=found.render())
+                             operator=expr.op.value, expected=ty.written(),
+                             found=found.written())
             return UndefConst(ERROR)
         derived: Type | None = None
         if expr.op in _DERIVES and self._value_type_of(left) is ty:
@@ -10341,7 +10341,7 @@ class Checker:
                 # Turning the bits of a signed number round has no meaning as a
                 # number, and this language's types say what a value is.
                 self._diags.emit(D.LANG_TYPE_ROTATE_IS_UNSIGNED, expr.span,
-                                 found=ty.render())
+                                 found=ty.written())
                 return UndefConst(ERROR)
             signed = isinstance(ty, IntType) and ty.signed
             return builder.binary(
@@ -10427,7 +10427,7 @@ class Checker:
                     and left.value == ty.low and right.value == -1:
                 # The one division that overflows, and the one pair that does it.
                 self._diags.emit(D.LANG_TYPE_DIVISION_DOES_NOT_FIT, expr.span,
-                                 value=str(-ty.low), type=ty.render())
+                                 value=str(-ty.low), type=ty.written())
             return False
         working = self._ARITHMETIC.get(expr.op)
         if working is None or not isinstance(ty, IntType):
@@ -10436,7 +10436,7 @@ class Checker:
         if ty.holds(answer):
             return False
         self._diags.emit(D.LANG_TYPE_ANSWER_DOES_NOT_FIT, expr.span,
-                         value=str(answer), type=ty.render())
+                         value=str(answer), type=ty.written())
         return True
 
     #: What each of the four does to two numbers.  Python's own arithmetic on
@@ -10476,7 +10476,7 @@ class Checker:
         self._diags.emit(
             D.LANG_TYPE_ANSWER_DOES_NOT_FIT, expr.span,
             value="not a number" if math.isnan(answer) else "an infinity",
-            type=left.ty.render())
+            type=left.ty.written())
         return True
 
     def _lower_unary(self, builder: IRBuilder, expr: ast.Unary,
@@ -10500,7 +10500,7 @@ class Checker:
             if not isinstance(found, CursorType):
                 self._diags.emit(D.LANG_CURSOR_STEP_NOT_A_CURSOR,
                                  expr.operand.span, operator=expr.op.value,
-                                 found=found.render())
+                                 found=found.written())
                 return UndefConst(ERROR)
             return self._lower_step(builder, expr, moved, found, expected)
         if expr.op in _DIVIDES_UNARY:
@@ -10530,7 +10530,7 @@ class Checker:
         flagged = isinstance(ty, EnumType) and ty.flag
         if not isinstance(ty, IntType) and not flagged:
             self._diags.emit(D.LANG_TYPE_OPERAND_NOT_INTEGER, expr.operand.span,
-                             operator=expr.op.value, found=ty.render())
+                             operator=expr.op.value, found=ty.written())
             return UndefConst(ERROR)
         return builder.unary(_UNARY_OPS[expr.op], operand, expr.span)
 
@@ -10575,7 +10575,7 @@ class Checker:
             return UndefConst(ERROR)
         if not isinstance(ty, FloatType):
             self._diags.emit(D.LANG_TYPE_OPERAND_NOT_FLOAT, expr.operand.span,
-                             operator=expr.op.value, found=ty.render())
+                             operator=expr.op.value, found=ty.written())
             return UndefConst(ERROR)
         return builder.unary(_ROUNDINGS[expr.op], operand, expr.span)
 
@@ -10603,7 +10603,7 @@ class Checker:
         found = self._counted(builder, value, ty, expr.span)
         if found is None:
             self._diags.emit(D.LANG_LENGTH_HAS_NO_COUNT, expr.operand.span,
-                             found=ty.render())
+                             found=ty.written())
             return UndefConst(ERROR)
         if not self._accepts(expected, SIZE_TYPE):
             self._report_mismatch(expr.span, SIZE_TYPE, expected)
@@ -10673,7 +10673,7 @@ class Checker:
         found = self._extremum_of(builder, expr, value, ty)
         if found is None:
             self._diags.emit(D.LANG_EXTREMUM_HAS_NONE, expr.operand.span,
-                             operator=expr.op.value, found=ty.render())
+                             operator=expr.op.value, found=ty.written())
             return UndefConst(ERROR)
         answer = self._value_type_of(found)
         if not self._accepts(expected, answer):
@@ -10715,7 +10715,7 @@ class Checker:
             found = FloatConst(ty, widest if largest else -widest)
         else:
             self._diags.emit(D.LANG_EXTREMUM_HAS_NONE, lifted.span,
-                             operator=expr.op.value, found=ty.render())
+                             operator=expr.op.value, found=ty.written())
             return UndefConst(ERROR)
         if not self._accepts(expected, ty):
             self._report_mismatch(expr.span, ty, expected)
@@ -10937,7 +10937,7 @@ class Checker:
             return UndefConst(ERROR)
         if not isinstance(ty, ArrayType):
             self._diags.emit(D.LANG_SHAPE_HAS_NONE, expr.operand.span,
-                             found=ty.render())
+                             found=ty.written())
             return UndefConst(ERROR)
         along = [builder.int_const(U64, count) if count is not None
                  else builder.extract(value, at + 1, U64, expr.span)
@@ -11206,7 +11206,7 @@ class Checker:
                 holds = found
             elif found is not holds:
                 self._diags.emit(D.LANG_LIST_ELEMENTS_DIFFER, written.span,
-                                 found=found.render(), wanted=holds.render())
+                                 found=found.written(), wanted=holds.written())
                 return UndefConst(ERROR)
             values.append(one)
         if holds is None:
@@ -11539,7 +11539,7 @@ class Checker:
             return UndefConst(ERROR)
         if not isinstance(found, (IntType, FloatType)):
             self._diags.emit(D.LANG_UNIT_NOT_A_NUMBER, expr.args[0].span,
-                             found=found.render())
+                             found=found.written())
             return UndefConst(ERROR)
         if dropping:
             if found.unit.is_none:
@@ -11548,7 +11548,7 @@ class Checker:
             return self._as_united(builder, given, found.bare, expected, expr.span)
         if not found.unit.is_none:
             self._diags.emit(D.LANG_UNIT_PUT_ON_A_UNIT, expr.args[1].span,
-                             found=found.unit.render())
+                             found=found.unit.written())
             return UndefConst(ERROR)
         written = expr.args[1]
         if not isinstance(written, ast.Lifted):
@@ -11655,13 +11655,13 @@ class Checker:
         for one in expr.args:
             if not isinstance(one, ast.Named):
                 self._diags.emit(D.LANG_PRODUCT_FIELD_NOT_NAMED, one.span,
-                                 type=ty.render())
+                                 type=ty.written())
                 spoiled = True
                 continue
             at = _field_index(ty, one.name)
             if at is None:
                 self._diags.emit(D.LANG_PRODUCT_NO_SUCH_FIELD, one.span,
-                                 type=ty.render(), name=one.name)
+                                 type=ty.written(), name=one.name)
                 spoiled = True
                 continue
             if one.name in given:
@@ -11674,7 +11674,7 @@ class Checker:
         for name, _ in ty.fields:
             if name not in given:
                 self._diags.emit(D.LANG_PRODUCT_FIELD_MISSING, expr.span,
-                                 type=ty.render(), name=name)
+                                 type=ty.written(), name=name)
                 spoiled = True
         if spoiled:
             return UndefConst(ERROR)
@@ -11719,7 +11719,7 @@ class Checker:
                 return UndefConst(ERROR)
             if not isinstance(ty, (IntType, PtrType)):
                 self._diags.emit(D.LANG_SYSCALL_BAD_ARGUMENT, one.span,
-                                 position=at + 1, found=ty.render())
+                                 position=at + 1, found=ty.written())
                 return UndefConst(ERROR)
             given.append(self._as_a_word(builder, value, ty, expr.span))
         answer = builder.syscall(given[0], given[1:], I64, expr.span)
@@ -11764,13 +11764,13 @@ class Checker:
             if not isinstance(answer, ArrayType) or answer.fixed \
                     or answer.rank != 1:
                 self._diags.emit(D.LANG_SPAN_NOT_AN_ARRAY, written.span,
-                                 found=answer.render())
+                                 found=answer.written())
                 return UndefConst(ERROR)
             place_ty = self._module.types.ptr_type(answer.element, mutable=True)
         else:
             if not isinstance(answer, PtrType):
                 self._diags.emit(D.LANG_AT_NOT_A_REFERENCE, written.span,
-                                 found=answer.render())
+                                 found=answer.written())
                 return UndefConst(ERROR)
             place_ty = answer
         address = self._as_an_address(builder, expr.args[0], name)
@@ -11788,7 +11788,7 @@ class Checker:
             return UndefConst(ERROR)
         if not isinstance(counting, IntType):
             self._diags.emit(D.LANG_SPAN_NOT_A_COUNT, expr.args[1].span,
-                             found=counting.render())
+                             found=counting.written())
             return UndefConst(ERROR)
         made = builder.make_tuple(
             (place, self._as_count(builder, count, counting, expr.span)),
@@ -11823,7 +11823,7 @@ class Checker:
             return UndefConst(ERROR)
         if found is not STR:
             self._diags.emit(D.LANG_BYTES_NOT_TEXT, expr.args[0].span,
-                             found=found.render())
+                             found=found.written())
             return UndefConst(ERROR)
         answer = self._module.types.array_type(U8, (None,))
         parts = parts_of(STR)
@@ -11859,7 +11859,7 @@ class Checker:
             return UndefConst(ERROR)
         if not isinstance(ty, PtrType):
             self._diags.emit(D.LANG_ADDRESS_OF_NOT_A_REFERENCE,
-                             expr.args[0].span, found=ty.render())
+                             expr.args[0].span, found=ty.written())
             return UndefConst(ERROR)
         found = builder.cast(CastKind.BITCAST, place, U64, expr.span)
         if not self._accepts(expected, U64):
@@ -11889,7 +11889,7 @@ class Checker:
             # an address is held as, which costs nothing at this width.
             return self._as_count(builder, value, ty, written.span)
         self._diags.emit(D.LANG_ADDRESS_NOT_AN_ADDRESS, written.span,
-                         name=name, found=ty.render())
+                         name=name, found=ty.written())
         return None
 
     def _lower_ordered(self, builder: IRBuilder, expr: ast.Call,
@@ -11926,13 +11926,13 @@ class Checker:
             return UndefConst(ERROR)
         if not isinstance(ty, PtrType):
             self._diags.emit(D.LANG_ORDERED_NOT_A_REFERENCE, expr.args[0].span,
-                             name=name, found=ty.render())
+                             name=name, found=ty.written())
             return UndefConst(ERROR)
         if made_of_parts(ty.pointee):
             # One access and not several, which is what the back ends say too:
             # which of the parts the ordering belonged to would have no answer.
             self._diags.emit(D.LANG_ORDERED_SEVERAL_VALUES, expr.args[0].span,
-                             name=name, found=ty.pointee.render())
+                             name=name, found=ty.pointee.written())
             return UndefConst(ERROR)
         if not writing:
             found = builder.load(place, expr.span, ordering=Ordering.ACQUIRE)
@@ -12009,7 +12009,7 @@ class Checker:
             return self._narrowed_to_enum(builder, expr, wanted, expected)
         if not isinstance(wanted, IntType):
             self._diags.emit(D.LANG_NARROW_NOT_AN_INTEGER, written.span,
-                             found=wanted.render())
+                             found=wanted.written())
             return UndefConst(ERROR)
         given = self._lower_expr(builder, expr.args[0], None)
         found = self._value_type_of(given)
@@ -12017,7 +12017,7 @@ class Checker:
             return UndefConst(ERROR)
         if not isinstance(found, IntType):
             self._diags.emit(D.LANG_NARROW_NOT_AN_INTEGER, expr.args[0].span,
-                             found=found.render())
+                             found=found.written())
             return UndefConst(ERROR)
         # What it counts is its own and travels with it; what the type says is
         # how much room the number has.
@@ -12059,7 +12059,7 @@ class Checker:
             return UndefConst(ERROR)
         if not isinstance(wanted, IntType):
             self._diags.emit(D.LANG_WIDEN_NOT_AN_INTEGER, written.span,
-                             found=wanted.render())
+                             found=wanted.written())
             return UndefConst(ERROR)
         given = self._lower_expr(builder, expr.args[0], None)
         found = self._value_type_of(given)
@@ -12067,12 +12067,12 @@ class Checker:
             return UndefConst(ERROR)
         if not isinstance(found, IntType):
             self._diags.emit(D.LANG_WIDEN_NOT_AN_INTEGER, expr.args[0].span,
-                             found=found.render())
+                             found=found.written())
             return UndefConst(ERROR)
         into = _carrying(wanted, found.unit)
         if not _every_value_fits(found, into):
             self._diags.emit(D.LANG_WIDEN_DOES_NOT_FIT, expr.span,
-                             found=found.render(), wanted=into.render())
+                             found=found.written(), wanted=into.written())
             return UndefConst(ERROR)
         made = (given if found.bits == into.bits
                 else builder.cast(CastKind.SEXT if found.signed else CastKind.ZEXT,
@@ -12104,7 +12104,7 @@ class Checker:
             return UndefConst(ERROR)
         if not isinstance(found, IntType):
             self._diags.emit(D.LANG_NARROW_NOT_AN_INTEGER, expr.args[0].span,
-                             found=found.render())
+                             found=found.written())
             return UndefConst(ERROR)
         span = expr.span
         answer = self._module.types.result_type(wanted, NARROWING)
@@ -12427,7 +12427,7 @@ class Checker:
                 ty = seen[at]
                 if not (isinstance(ty, ArrayType) and ty.fixed):
                     self._diags.emit(D.LANG_LISTABLE_CANNOT_WALK, span,
-                                     found=ty.render(), wanted=wanted[at].render())
+                                     found=ty.written(), wanted=wanted[at].written())
                     return None
                 if along is None:
                     along = ty.shape[0]
@@ -12510,8 +12510,8 @@ class Checker:
                     self._diags.emit(D.LANG_LISTABLE_CANNOT_WALK,
                                      expr.args[at].span if at < len(expr.args)
                                      else expr.span,
-                                     found=one.render(),
-                                     wanted=ty.params[at].render())
+                                     found=one.written(),
+                                     wanted=ty.params[at].written())
                     return None
                 if along is None:
                     along = one.shape[0]
@@ -12657,14 +12657,14 @@ class Checker:
                     for at, member in enumerate(ty.members)]
         if not isinstance(ty, ArrayType):
             self._diags.emit(D.LANG_SPREAD_NOT_SEVERAL, spread.operand.span,
-                             found=ty.render())
+                             found=ty.written())
             return None
         if not ty.fixed:
             # The length is beside the elements rather than in the type, so it
             # is a thing the program works out and this is a thing the compiler
             # writes down.
             self._diags.emit(D.LANG_SPREAD_NOT_FIXED, spread.operand.span,
-                             found=ty.render())
+                             found=ty.written())
             return None
         start, lengths = self._shape_of(builder, value, ty, spread.span)
         along = ty.shape[0]
@@ -12704,7 +12704,7 @@ class Checker:
                 if isinstance(found, Function):
                     if self._notes is not None:
                         self._note(expr.span, FUNCTION, expr.name,
-                                   found.ty.render(), found.name_span,
+                                   found.ty.written(), found.name_span,
                                    found.doc or None)
                     self._only_at_build(found, expr.span)
                     return found
@@ -12765,7 +12765,7 @@ class Checker:
             self._note(base.span, MODULE, base.name, held.path.as_posix(),
                        where[0] if where is not None else INVALID_SPAN)
             self._note(expr.name_span, FUNCTION, expr.name,
-                       found.ty.render(), found.name_span, found.doc or None)
+                       found.ty.written(), found.name_span, found.doc or None)
         self._only_at_build(found, expr.span)
         return found
 
@@ -13055,7 +13055,7 @@ class Checker:
             return
         if self._leaving:
             self._diags.emit(D.LANG_LOOP_VALUE_MISMATCH, span,
-                             found=found.render(), expected=expected.render())
+                             found=found.written(), expected=expected.written())
             return
         if self._operand_of is not None:
             # Three different mistakes: an operand where a truth value is what
@@ -13063,33 +13063,33 @@ class Checker:
             # and two operands of one kind whose widths differ.
             if expected is BOOL:
                 self._diags.emit(D.LANG_TYPE_OPERAND_NOT_BOOLEAN, span,
-                                 operator=self._operand_of, found=found.render())
+                                 operator=self._operand_of, found=found.written())
             elif not isinstance(found, IntType):
                 self._diags.emit(D.LANG_TYPE_OPERAND_NOT_INTEGER, span,
-                                 operator=self._operand_of, found=found.render())
+                                 operator=self._operand_of, found=found.written())
             else:
                 self._diags.emit(D.LANG_TYPE_OPERAND_MISMATCH, span,
                                  operator=self._operand_of,
-                                 expected=expected.render(), found=found.render())
+                                 expected=expected.written(), found=found.written())
             return
         if self._handing_over is not None:
             name, position = self._handing_over
             self._diags.emit(D.LANG_CALL_ARGUMENT_MISMATCH, span, position=position,
-                             name=name, expected=expected.render(),
-                             found=found.render())
+                             name=name, expected=expected.written(),
+                             found=found.written())
             return
         if self._assigning is not None:
             self._diags.emit(D.LANG_TYPE_ASSIGNMENT_MISMATCH, span,
-                             name=self._assigning, expected=expected.render(),
-                             found=found.render())
+                             name=self._assigning, expected=expected.written(),
+                             found=found.written())
             return
         if self._initializing is not None:
             self._diags.emit(D.LANG_TYPE_INITIALIZER_MISMATCH, span,
-                             name=self._initializing, expected=expected.render(),
-                             found=found.render())
+                             name=self._initializing, expected=expected.written(),
+                             found=found.written())
             return
-        self._diags.emit(D.LANG_TYPE_RETURN_MISMATCH, span, found=found.render(),
-                         expected=expected.render())
+        self._diags.emit(D.LANG_TYPE_RETURN_MISMATCH, span, found=found.written(),
+                         expected=expected.written())
 
     # -- program level ---------------------------------------------------------
 

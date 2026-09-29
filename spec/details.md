@@ -3026,6 +3026,35 @@ into the arm it should have jumped over -- a miscompile with nothing wrong in th
 instruction that was emitted.  The loop variable is called `at` now, and the
 comment beside it says why.
 
+Two spellings for a type, and who reads which
+--------------------------------------------
+
+`Type.render` is the IR's: `ptr<mut Pair>`, `u64?i32`.  `Type.written` is the
+language's: `&mut Pair`, `u64 ? i32`.  Every message, every note the language
+server shows and every line of the report log asks for the second; the printer,
+the reader and a mangled symbol name ask for the first.
+
+It is two methods and not one changed method because **the IR's textual form is
+read back as well as written**.  `ir/printer.py` and `ir/reader.py` are two
+halves of one format, and a printer that wrote `&mut u8` where the reader expects
+`ptr<mut u8>` would be a format that no longer round-trips -- so the spelling a
+person reads had to be the new one rather than the old one moved.
+
+`written` defaults to `render`, which is right for most types: the IR borrowed
+the language's own notation wherever it could, so an array, a tuple, a list, a
+set, a dictionary and a string are the same either way.  What differs is a
+reference (`&mut T` against `ptr<mut T>`), a result (`T ? E`, with the spaces a
+signature has, against `T?E`), and a function type, whose `listable` is written
+as the attribute a program writes.  Every type that holds another overrides it
+too, so that the element of a list of references is written the language's way
+as well -- a default that recursed through `render` would have said `[ptr<mut
+u8>]`.
+
+Two types have no spelling at all: a cursor, which lives in a name whose type is
+read off its value, and a vector, which is what an operator walked over an array
+works on.  A message about either says what it *is* -- `cursor over [u8]` --
+rather than a spelling nobody could have written.
+
 A cursor is where the list is, and how far along
 -----------------------------------------------
 

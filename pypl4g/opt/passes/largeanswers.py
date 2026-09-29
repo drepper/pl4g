@@ -80,7 +80,7 @@ class LargeAnswers:
         for func in wanted.values():
             reports.record(
                 ReportKind.ANSWER_IN_STORAGE, func.name,
-                "".join(("'", answers[id(func)].render(), "' is more values ",
+                "".join(("'", answers[id(func)].written(), "' is more values ",
                          "than the style answers in registers, so the caller ",
                          "provides the place")),
                 func.name_span if func.name_span.is_valid else func.span)

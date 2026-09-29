@@ -4055,8 +4055,8 @@ let count := 0u8            ※ neither
 
 Whether a thing may be changed is a property of the thing, not of the name it is reached by, which is why it belongs to the type.
 The distinction is not merely tidiness: a value is a value, and it is the *place* that is writable or not -- so when a variable is
-an address, as one at the top level is, what carries the qualifier is the pointer.  That is what will make `ptr<mut u8>` and
-`ptr<u8>` different types once pointers can be written down, and what keeps the rule in one place rather than in two.
+an address, as one at the top level is, what carries the qualifier is the reference.  That is what makes `&mut u8` and `&u8`
+different types, and what keeps the rule in one place rather than in two.
 
 The word is Rust's.  The placement differs: Rust writes `let mut x: u8`, qualifying the binding, and spells the type-level form
 `&mut u8` only for references.  Compare C and C++, where `const` qualifies the type and the default is the other way round; Kotlin
@@ -4457,7 +4457,7 @@ fn total(n: mut u8) → u8:
 body's business: two functions differing only in `mut` are one signature, carry one symbol and are called the same way.  Nothing
 outside can tell, and nothing outside has to be told -- adding `mut` to a parameter changes no caller.
 
-That is where a parameter's `mut` differs from a pointer's.  A `ptr<mut T>` says something about the *place* it names, which the
+That is where a parameter's `mut` differs from a reference's.  A `&mut T` says something about the *place* it names, which the
 caller and the callee both reach, so it is part of the type and has to be; a parameter's says something about a name, and a name
 is not shared.
 

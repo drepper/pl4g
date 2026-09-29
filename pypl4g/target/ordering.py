@@ -30,8 +30,8 @@ def cannot_order(inst: object) -> str | None:
         return None
     ty = inst.ty if isinstance(inst, LoadInst) else inst.operands[2].ty
     if made_of_parts(ty):
-        return "".join(("an ordered access to '", ty.render(),
+        return "".join(("an ordered access to '", ty.written(),
                         "', which is several values and not one"))
     if isinstance(ty, (FloatType, VecType)):
-        return "".join(("an ordered access to '", ty.render(), "'"))
+        return "".join(("an ordered access to '", ty.written(), "'"))
     return None
