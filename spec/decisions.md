@@ -6743,6 +6743,57 @@ What is *not* decided here: a plain `l⟦i⟧` read, which is still refused (444
 what reads one element is a cursor -- and a spelling for a cursor's type, without
 which one cannot be passed to a function.  Both are in the to-do list.
 
+## 2026-09-29T12:00+02:00 — language, compiler
+
+**A value of a sum, which is where its bytes are**
+
+At the user's direction, the first open entry of TODO-pypl4g.md: "hold a value of
+a product or a sum type".  The product half had been done since 2026-09-17 -- a
+record is made, passed, answered with and read -- so what was left was the sum.
+Asked how a value of one should be written, the user chose `Number(.whole ← 5i64)`,
+which is what the language to-do list had already recorded as the decision: the
+two types are one construct, so a value of either is one shape, and what differs
+is that a product writes every field and a sum writes one part.
+
+**A sum is bytes in a place, not values in registers.**  A product travels as its
+fields; a sum is its largest part with a tag after it, and there is no register
+that holds that.  So a value of one is room in the frame and what travels is the
+address -- the bargain an array whose type says its shape already strikes, which
+is what the entry meant by "arrays have shown what the answer looks like".  The
+alternative was the *parts* convention -- the largest part's registers and a tag
+beside them, which is what Rust and Swift do for small enums -- and it was turned
+down for one reason: reading the part back means reading those registers as a
+different type per arm, and two parts of one sum may be `i64` and `f64`, which
+are two register banks.  A place has one answer for every part.
+
+**Answering with one is the caller's room**, through the convention the compiler
+already had for an answer of more values than the registers hold.  What made that
+cheap is that a value held in memory needs no taking apart and no putting back
+together: the callee copies its bytes into the room, and at the call the room
+*is* the answer.  `ReturnStyle.in_registers` says no for such a type whatever its
+size, which is the one line that routes it.
+
+**A part carrying nothing is written `.name ← true`** (4802).  Something has to
+stand where a value is written; `true` says the part is the one, which is the
+whole of what such a part says.  Considered: writing the name alone, which is not
+an argument and would need its own syntax in a call; and `void`, which is a type
+and not a value.
+
+**A record or a tuple holding a sum is refused** (9902) rather than quietly
+wrong.  Both travel as the values they are made of, so one holding a sum would
+carry the address of the room the sum was made in -- safe going down and dangling
+coming back.  What fixes both is holding a record or a tuple in memory too, which
+is the next step and a larger one.  An array in a record has the same hazard
+today and is not touched here: the one such record in the language is `@[abi]` and
+only ever handed over by reference.
+
+Compare: **Rust**, whose `enum` this is, and whose values are written
+`Number::Whole(5)` -- a name per variant, where this names the part and its type;
+**Haskell**, where a constructor is a function and the type is inferred from it;
+**C**, whose union carries no tag and where keeping the two in step is the
+program's business; **Zig**, whose `union(enum)` writes the tag as an enumeration
+of its own, which is this with the tag given a name.
+
 Open questions
 --------------
 

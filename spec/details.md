@@ -1009,6 +1009,7 @@ that diagnostics of one family stay numerically adjacent as they grow while unre
 | 4400-4599 | special functions |
 | 4600-4699 | documentation comments |
 | 4700-4799 | collections, and what is taken out of them |
+| 4800-4899 | products and sums |
 | 5000-5299 | control flow and returns |
 | 6000-6999 | purity, effects, aliasing and parallelization |
 | 7000-7499 | compile-time evaluation and reflection |
@@ -3054,6 +3055,43 @@ Two types have no spelling at all: a cursor, which lives in a name whose type is
 read off its value, and a vector, which is what an operator walked over an array
 works on.  A message about either says what it *is* -- `cursor over [u8]` --
 rather than a spelling nobody could have written.
+
+A sum is where its bytes are
+----------------------------
+
+`held_in_memory` is the one question everything asks about a sum: what a value
+of one *is*, is where its bytes are, so it is an address in a register and never
+a value.  An array whose type says its shape already answered yes to it, which
+is what the entry in the to-do list meant by "arrays have shown what the answer
+looks like": a place, an address to reach it by, and room in the frame where the
+value is a function's own.
+
+**Making one** takes room in the frame, writes the part at its start and the tag
+after it -- `tag_offset_of` says where, which is after the largest part, the tag
+last so that a tag ahead of a part wanting eight bytes is not seven bytes of
+padding -- and the value is that address, bitcast to the sum's type.  A part that
+is itself held in memory is *copied* into the room rather than stored, since what
+the value in hand says is where those bytes are.
+
+**Matching** is the chain of comparisons an enumeration is taken apart with, over
+the tag.  What differs is what an arm binds: the part is at the start of the
+room, read as the type that part has -- a record read out field by field, a
+number loaded, and a part held in memory answered as the address it already is.
+The read is done in the arm's own block, since each arm reads a different type
+out of the same place.
+
+**Answering with one** is the caller's room.  `ReturnStyle.in_registers` says no
+for anything held in memory whatever its size, so `largeanswers` gives the
+function the parameter that says where to put the answer -- and for such a value
+the rewrite is shorter than for a record: the answer is copied into the room with
+a copy written out in the largest pieces that fit, and at the call there is
+nothing to read back, the room being the answer.
+
+**What is refused** is a record or a tuple holding a sum (9902).  Both travel as
+the values they are made of, so one holding a sum would carry the address of the
+room the sum was made in -- which is the caller's frame going down and nothing at
+all coming back.  Holding either in memory is the step that fixes both, and the
+to-do list carries it.
 
 A cursor is where the list is, and how far along
 -----------------------------------------------

@@ -31,8 +31,10 @@ from ...ir.inst import (BinOp, BinaryInst, CallInst, CastInst, CastKind,
 from ...ir.layout import (DataLayout, error_offset_of,
                           part_offsets_of, tag_offset_of)
 from ...ir.module import Module
-from ...ir.types import (MEM, ProductType, ResultType, TupleType, Type, U64,
-                         VOID, parts_of)
+from ...ir.layout import size_of
+from ...ir.types import (MEM, ProductType, ResultType, TupleType, Type, U8,
+                         U16, U32, U64,
+                         VOID, held_in_memory, parts_of)
 from ...ir.value import IntConst, Value
 
 #: The one layout this compiler has.  Where it grows a second, the pass is
@@ -47,9 +49,17 @@ def through_storage(func: Function) -> bool:
     is left alone, and the instruction selector says what it says about such an
     answer today.  Nothing anywhere counts registers per part recursively, so
     routing one through storage here would only move where it went wrong.
+
+    A value held in memory -- a sum -- goes through storage whatever its size:
+    what a value of one *is*, is where its bytes are, and the bytes of one a
+    function made are in that function's own room.  So the caller provides the
+    room and the answer is written into it, which is the one way such a value
+    can outlive the call that made it.
     """
     if func.ty.ret is VOID or func.answering.in_registers(func.ty.ret):
         return False
+    if held_in_memory(func.ty.ret):
+        return True
     return all(len(parts_of(part)) == 1 for part in parts_of(func.ty.ret))
 
 
@@ -121,6 +131,14 @@ class LargeAnswers:
             token = _token_before(func, block, len(block.insts) - 1)
             at = block.insts.index(last)
             value = last.operands[0]
+            if held_in_memory(answer):
+                # Its bytes, copied into the caller's room: there is nothing to
+                # take apart, the value being where the bytes are.
+                token = _copied(module, place, value, size_of(answer, LAYOUT),
+                                token, made, last.span)
+                made.append(RetInst(None, last.span))
+                _splice(block, at, made)
+                continue
             for index, (part, offset) in enumerate(
                     zip(parts_of(answer), _offsets(answer))):
                 taken = _part(value, index, part, answer, last.span)
@@ -157,6 +175,15 @@ class LargeAnswers:
                              span)
             made.append(slot)
             made.append(CallInst(callee, (*inst.operands, slot), VOID, span))
+            if held_in_memory(answer):
+                # Nothing to read back: the room the caller made *is* the
+                # answer, since a value of such a type is where its bytes are.
+                rebuilt = CastInst(CastKind.BITCAST, slot, answer, span)
+                made.append(rebuilt)
+                _splice(block, index, made)
+                _stands_for(block.parent, inst, rebuilt)
+                index += len(made)
+                continue
             taken: list[Value] = []
             for part, offset in zip(parts_of(answer), _offsets(answer)):
                 read = LoadInst(part, (token, _at(module, slot, part, offset,
@@ -202,6 +229,29 @@ def _whole(taken: Sequence[Value], answer: Type,
     if not isinstance(answer, ResultType):
         return TupleInst(list(taken), answer, span)
     return WrapInst(taken[0], taken[1], answer, span, taken[2])
+
+
+#: What the bytes of a value held in memory are copied in, largest first.  A
+#: copy of a size known while compiling is written out rather than looped over:
+#: the sizes here are a handful of words, and a loop would be a block to splice
+#: into a function this pass is walking.
+_CHUNKS: Sequence[tuple[Type, int]] = ((U64, 8), (U32, 4), (U16, 2), (U8, 1))
+
+
+def _copied(module: Module, into: Value, from_: Value, size: int, token: Value,
+            made: list[Instruction], span) -> Value:  # noqa: ANN001
+    """Copy *size* bytes into *into*, and answer the token that follows."""
+    at = 0
+    while at < size:
+        part, width = next(one for one in _CHUNKS if one[1] <= size - at)
+        source = _at(module, from_, part, at, made, span)
+        read = LoadInst(part, (token, source), span)
+        made.append(read)
+        token = StoreInst(token, _at(module, into, part, at, made, span), read,
+                          span)
+        made.append(token)
+        at += width
+    return token
 
 
 def _at(module: Module, place: Value, part: Type, offset: int,

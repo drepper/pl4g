@@ -203,8 +203,9 @@ To Do List for the PL4g language
     answer with one.  Done for a record whose fields are each one value: to everything below the checker it is what a tuple is,
     which is what `parts_of` now says, so a convention places it with no rule of its own.
 
-[ ] write a value of a sum.  The decision was that the two are one shape, the definitions being one construct, so it is
-    `Colour(.red ← …)` -- but a sum is a tag and a payload rather than its parts side by side, and nothing places one yet.
+[x] write a value of a sum.  Done on 2026-09-29, as the decision said: `Colour(.red ← …)`, one part where a product writes every
+    field, and `.name ← true` where the part carries nothing.  A value of one is room holding the part and a tag, and what
+    travels is where that room is.
 
 [x] let a record hold a record.  Both are refused by the code generator today
     (8501): a record travels as its fields, so a field that is itself several values has no one register to go in, and a load of

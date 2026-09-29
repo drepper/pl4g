@@ -32,7 +32,7 @@ from ..front.token import (ACQUIRE_NAME, RELEASE_NAME, AT_NAME, SPAN_NAME,
 from ..ir.builder import IRBuilder
 from ..ir.reports import ReportKind
 from ..ir.layout import (DataLayout, member_offsets_of, offsets_of,
-                         stride_of)
+                         size_of, stride_of, tag_offset_of)
 from ..ir.inst import (AddressInst, BinaryInst, BinOp, CallInst, CastInst,
                        CastKind, CmpPred,
                        ExtractInst, FrameInst, Instruction, LoadInst, RetInst,
@@ -50,14 +50,15 @@ from ..ir.types import (ARENA, ArrayType, BOOL, BoolType, BUILTIN_TYPES,
                         CursorType,
                         DictType,
                         ERROR, EnumType,
-                        I64, U32, U64,
+                        I64, U16, U32, U64,
                         F64,
                         FloatType, IntType, MEM, ProductType, PtrType,
                         ResultType,
                         ListType, SetType, STR, SumType, TupleType, Type,
                         NARROWING, NO_UNIT, Unit, VecType, VOID,
                         without_units,
-                        CHAR, MAX_CODE_POINT, U8, made_of_parts, parts_of)
+                        CHAR, MAX_CODE_POINT, U8, made_of_parts, parts_of,
+                        held_in_memory as _held_in_memory)
 from . import environ, lists, strings, tables
 from .modules import (SUFFIX, ImportCycle, LoadedModule, ModuleNotFound,
                       ModuleRegistry, base_name, system_modules)
@@ -207,6 +208,10 @@ class _ArmPlan:
     #: The two are read out of a result by different instructions, being of
     #: different types.
     carried: bool = False
+    #: Whether what it binds is a part of a sum, read where the sum is.  The
+    #: read is done in the arm's own block, since a part is read as the type
+    #: that part has and no other arm's type is that one.
+    payload: bool = False
 
 
 @dataclass(slots=True)
@@ -1166,6 +1171,12 @@ _ROUNDINGS: Final[dict[ast.UnaryOp, UnOp]] = {
 #: pointer, and the one thing the front end needs a layout for is how far apart
 #: two elements of an array are.
 _LAYOUT: Final[DataLayout] = DataLayout(pointer_size=8)
+
+#: What the bytes of a value held in memory are copied in, largest first.  The
+#: same pieces the pass that routes a large answer through storage copies in,
+#: and for the same reason: a size known while compiling is written out.
+_CHUNKS: Final[tuple[tuple[Type, int], ...]] = ((U64, 8), (U32, 4), (U16, 2),
+                                                (U8, 1))
 
 TOLERANCE_SYMBOL: Final[str] = "__pl4g_tolerance"
 
@@ -3235,6 +3246,16 @@ class Checker:
             if ty is ERROR:
                 spoiled = True
                 continue
+            if node.kind is ast.TypeKind.PRODUCT and _held_in_memory(ty) \
+                    and isinstance(ty, SumType):
+                # A record travels as the values it is made of, and a sum is
+                # not one of those: what a value of one is, is where its bytes
+                # are.  A record holding one would therefore have to be held in
+                # memory itself, which is the next step and not this one.
+                self._diags.emit(D.IMPL_UNIMPLEMENTED_FEATURE, field.type.span,
+                                 feature="a record holding a sum")
+                spoiled = True
+                continue
             if node.kind is ast.TypeKind.SUM:
                 # An arm of a `match` names the type of the alternative it
                 # takes, so two alternatives of one type would be two no arm
@@ -3300,6 +3321,15 @@ class Checker:
             members = [self._resolve_type(m) for m in ref.members]
             if any(m is ERROR for m in members):
                 return ERROR
+            for written, held in zip(ref.members, members):
+                if isinstance(held, SumType):
+                    # A tuple travels as its members, and a sum is where its
+                    # bytes are: a tuple holding one and handed back would hand
+                    # back where the room it was made in was.  The same step a
+                    # record holding one waits on.
+                    self._diags.emit(D.IMPL_UNIMPLEMENTED_FEATURE, written.span,
+                                     feature="a tuple holding a sum")
+                    return ERROR
             return self._module.types.tuple_type(members)
         if isinstance(ref, ast.RefTypeRef):
             return self._reference_type(ref)
@@ -8016,12 +8046,8 @@ class Checker:
         if taken is None:
             return UndefConst(ERROR)
         if isinstance(ty, SumType):
-            # Everything about the arms has been checked; what is missing is a
-            # value of a sum to take apart, which nothing in the language makes
-            # -- and with it the way one is held, which is not a register.
-            self._diags.emit(D.IMPL_UNIMPLEMENTED_FEATURE, stmt.span,
-                             feature="a match on a sum")
-            return UndefConst(ERROR)
+            return self._lower_match_on_sum(builder, stmt, func, subject, ty,
+                                            taken, wanted, produces)
         if isinstance(ty, EnumType):
             return self._lower_match_on_enum(builder, stmt, func, subject, ty,
                                              taken, wanted, produces)
@@ -8181,6 +8207,58 @@ class Checker:
              _ArmPlan(body=second.body, block=failed, binds=carried,
                       carried=True)], wanted, produces)
 
+    def _lower_match_on_sum(self, builder: IRBuilder, stmt: ast.Match,
+                            func: Function, subject: Value, ty: SumType,
+                            taken: list[tuple[ast.MatchArm, frozenset[int]]],
+                            wanted: Type | None, produces: bool) -> Value:
+        """Lower a `match` over a sum.
+
+        A chain of comparisons over the tag, which is the shape an enumeration
+        is taken apart with and for the same reason -- what a value holds is a
+        number, and which arm runs follows from it.  What differs is what an arm
+        binds: the part is at the start of the place the sum is in, read as the
+        type that part has.
+
+        One arm may take every part, where it is the wildcard: then there is
+        nothing to ask, and the arm is the whole of it.
+        """
+        if len(taken) == 1 and taken[0][0].pattern.wildcard:
+            return self._run_arms(builder, stmt, func,
+                                  [_ArmPlan(body=taken[0][0].body)],
+                                  wanted, produces)
+        place = builder.cast(CastKind.BITCAST, subject,
+                             self._module.types.ptr_type(ty, mutable=True),
+                             stmt.span)
+        tag = builder.load(self._tag_place(builder, place, ty, stmt.span),
+                           stmt.span)
+        fallback = next((arm for arm, _ in taken if arm.pattern.wildcard),
+                        taken[-1][0])
+        blocks = {id(arm): builder.new_block("case") for arm, _ in taken}
+        for arm, indices in taken:
+            if arm is fallback:
+                continue
+            for index in sorted(indices):
+                following = builder.new_block("otherwise")
+                builder.condbr(
+                    builder.compare(CmpPred.EQ, tag,
+                                    builder.int_const(U8, index),
+                                    arm.pattern.span),
+                    blocks[id(arm)], following, span=arm.pattern.span)
+                builder.position_at(following)
+        builder.br(blocks[id(fallback)], (), stmt.span)
+        plan: list[_ArmPlan] = []
+        for arm, indices in taken:
+            binds = None
+            if arm.pattern.name is not None:
+                # One part, since an arm that binds names one type: what it
+                # binds is what that part carries, read where the sum is.
+                held = ty.variants[min(indices)][1]
+                binds = (arm.pattern.name, arm.pattern.name_span,
+                         arm.pattern.span, place, held)
+            plan.append(_ArmPlan(body=arm.body, block=blocks[id(arm)],
+                                 binds=binds, payload=True))
+        return self._run_arms(builder, stmt, func, plan, wanted, produces)
+
     def _lower_match_on_enum(self, builder: IRBuilder, stmt: ast.Match,
                              func: Function, subject: Value, ty: EnumType,
                              taken: list[tuple[ast.MatchArm, frozenset[int]]],
@@ -8249,9 +8327,11 @@ class Checker:
             self._push_scope()
             if arm.binds is not None:
                 name, name_span, where_span, value, answer_ty = arm.binds
-                bound = (builder.error(value, answer_ty, where_span)
-                         if arm.carried
-                         else builder.unwrap(value, answer_ty, where_span))
+                bound = (
+                    self._payload_from(builder, value, answer_ty, where_span)
+                    if arm.payload else
+                    builder.error(value, answer_ty, where_span) if arm.carried
+                    else builder.unwrap(value, answer_ty, where_span))
                 self._name_value(bound, name, name_span)
                 self._bind_local(name, bound, name_span, value_span=where_span,
                                  builder=builder)
@@ -11370,6 +11450,10 @@ class Checker:
                     and isinstance(self._resolved(named), ProductType):
                 return self._lower_record(builder, expr,
                                           self._resolved(named), expected)
+            if isinstance(named, _NamedType) \
+                    and isinstance(self._resolved(named), SumType):
+                return self._lower_sum(builder, expr,
+                                       self._resolved(named), expected)
         if isinstance(expr.callee, ast.Member):
             # A record another module defined, written the way one defined here
             # is: what the mark before a field means does not change with where
@@ -11687,6 +11771,133 @@ class Checker:
             self._report_mismatch(expr.span, ty, expected)
             return UndefConst(ERROR)
         return made
+
+    def _lower_sum(self, builder: IRBuilder, expr: ast.Call, ty: Type,
+                   expected: Type | None) -> Value:
+        """Lower `Number(.whole ← 5i64)`: a value of a sum.
+
+        Written the way a record is and saying one part where a record says
+        every one, which is the difference between the two types said in the
+        one place a reader is looking: a sum holds exactly one of its parts.
+
+        What it comes to is a *place*.  A sum is its largest part with a tag
+        after it, which is bytes and not a value in a register -- so the value
+        is room in the frame, the part written at its start and the tag written
+        after it, and what travels is where that room is.
+        """
+        assert isinstance(ty, SumType)
+        if len(expr.args) != 1:
+            self._diags.emit(D.LANG_SUM_ONE_PART, expr.span, type=ty.written(),
+                             found="none" if not expr.args else str(len(expr.args)))
+            return UndefConst(ERROR)
+        written = expr.args[0]
+        if not isinstance(written, ast.Named):
+            self._diags.emit(D.LANG_PRODUCT_FIELD_NOT_NAMED, written.span,
+                             type=ty.written())
+            return UndefConst(ERROR)
+        at = next((index for index, (name, _) in enumerate(ty.variants)
+                   if name == written.name), None)
+        if at is None:
+            self._diags.emit(D.LANG_SUM_NO_SUCH_PART, written.span,
+                             type=ty.written(), name=written.name)
+            return UndefConst(ERROR)
+        held = ty.variants[at][1]
+        if not self._accepts(expected, ty):
+            self._report_mismatch(expr.span, ty, expected)
+            return UndefConst(ERROR)
+        place = builder.frame(ty, expr.span)
+        if held is not VOID:
+            value = self._lower_into(builder, written.value, held, written.span)
+            if self._value_type_of(value) is ERROR:
+                return UndefConst(ERROR)
+            self._payload_into(builder, place, value, held, expr.span)
+        elif not isinstance(written.value, ast.BoolLit) \
+                or written.value.value is not True:
+            # A part carrying nothing is written `.name ← true`: something has
+            # to stand there, and what it says is that this is the part.
+            self._diags.emit(D.LANG_SUM_PART_CARRIES_NOTHING, written.span,
+                             type=ty.written(), name=written.name)
+            return UndefConst(ERROR)
+        builder.store(self._tag_place(builder, place, ty, expr.span),
+                      builder.int_const(U8, at), expr.span)
+        return builder.cast(CastKind.BITCAST, place, ty, expr.span)
+
+    def _tag_place(self, builder: IRBuilder, place: Value, ty: SumType,
+                   span: Span) -> Value:
+        """Where the tag of a sum is: after its largest part.
+
+        After rather than before, which is what the layout says and why: a tag
+        ahead of a part wanting eight bytes is seven bytes of padding, and
+        behind it is often none.
+        """
+        return builder.cast(
+            CastKind.BITCAST,
+            builder.binary(BinOp.ADD, place,
+                           builder.int_const(U64, tag_offset_of(ty, _LAYOUT)),
+                           span),
+            self._module.types.ptr_type(U8, mutable=True), span)
+
+    def _payload_into(self, builder: IRBuilder, place: Value, value: Value,
+                      held: Type, span: Span) -> None:
+        """Write what a part carries at the start of the place holding a sum."""
+        where = builder.cast(CastKind.BITCAST, place,
+                             self._module.types.ptr_type(held, mutable=True),
+                             span)
+        if isinstance(held, ProductType):
+            self._record_into(builder, where, value, held, span)
+            return
+        if _held_in_memory(held):
+            # A part that is itself bytes in a place -- a sum -- is copied into
+            # this one's room: what the value in hand says is where those bytes
+            # are, and where they are is the room the part was made in.
+            self._copy_bytes(builder, where, value, size_of(held, _LAYOUT), span)
+            return
+        builder.store(where, value, span)
+
+    def _copy_bytes(self, builder: IRBuilder, into: Value, from_: Value,
+                    size: int, span: Span) -> None:
+        """Copy *size* bytes, in the largest pieces that fit.
+
+        Written out rather than looped over: the size is known while compiling
+        and is a handful of words, so a loop would be blocks and a counter for
+        what is four instructions.
+        """
+        at = 0
+        while at < size:
+            part, width = next(one for one in _CHUNKS if one[1] <= size - at)
+            builder.store(self._byte_place(builder, into, part, at, span),
+                          builder.load(
+                              self._byte_place(builder, from_, part, at, span),
+                              span), span)
+            at += width
+
+    def _byte_place(self, builder: IRBuilder, place: Value, part: Type,
+                    offset: int, span: Span) -> Value:
+        """One piece of a copy, as a pointer to a value of *part*."""
+        where = builder.cast(CastKind.BITCAST, place,
+                             self._module.types.ptr_type(part, mutable=True),
+                             span)
+        if offset == 0:
+            return where
+        return builder.binary(BinOp.ADD, where,
+                              builder.int_const(U64, offset), span)
+
+    def _payload_from(self, builder: IRBuilder, place: Value, held: Type,
+                      span: Span) -> Value:
+        """Read what a part carries out of the place holding a sum.
+
+        A part that is itself a place -- a record, another sum -- is read as
+        where it is and not copied out: that is what a value of such a type is,
+        and the arm that took it apart is what decides whether it keeps one.
+        """
+        where = builder.cast(CastKind.BITCAST, place,
+                             self._module.types.ptr_type(held, mutable=True),
+                             span)
+        if isinstance(held, ProductType):
+            return self._record_from(builder, where, held, span)
+        if _held_in_memory(held):
+            return builder.cast(CastKind.BITCAST, place, held, span)
+        return builder.load(where, span)
 
     def _lower_syscall(self, builder: IRBuilder, expr: ast.Call,
                        expected: Type | None) -> Value:

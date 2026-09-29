@@ -8,7 +8,7 @@ from typing import Final, Mapping, Sequence
 
 from ..source.location import INVALID_SPAN, Span
 from .inst import Instruction, Terminator
-from .types import FuncType, Type, parts_of
+from .types import FuncType, Type, held_in_memory, parts_of
 from .value import BlockParam, Const
 
 
@@ -160,7 +160,14 @@ class ReturnStyle(Enum):
     TWO_IN_REGISTERS = "two-in-registers"
 
     def in_registers(self, ty: Type) -> bool:
-        """Whether an answer of *ty* travels in registers rather than storage."""
+        """Whether an answer of *ty* travels in registers rather than storage.
+
+        A value held in memory never does, whatever its size: what a value of
+        such a type *is*, is where its bytes are, and the bytes of one a
+        function made are in that function's own room.
+        """
+        if held_in_memory(ty):
+            return False
         match self:
             case ReturnStyle.TWO_IN_REGISTERS:
                 return len(parts_of(ty)) <= 2

@@ -191,6 +191,8 @@ GROUPS: tuple[Group, ...] = (
            "record-in-a-record": "a record holding records, and a reference into one",
            "record-through-a-call": "a record holding records handed to a call and answered with",
            "record-of-one-field": "a record of one field made, passed, answered with and referred into",
+           "match-on-a-sum": "a value of a sum made, matched and taken apart",
+           "sum-through-a-call": "a sum handed to a function and answered with",
            "std-init": "the descriptors a program starts with, and a write through one",
            "ordered-access": "a read that acquires and a write that releases",
            "place-at-an-address": "memory the kernel gave the program, read one value and many at a time",

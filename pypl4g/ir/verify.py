@@ -26,7 +26,7 @@ from .types import (ArrayType, BOOL, BoolType, CharType, DictType, EnumType,
                     FuncType, IntType,
                     MEM, PtrType, ResultType, SetType, TupleType, Type,
                     U64,
-                    VecType, VOID, parts_of)
+                    VecType, VOID, held_in_memory, parts_of)
 from .value import Const, IntConst, Value
 
 
@@ -507,10 +507,10 @@ def _is_an_address(ty: Type) -> bool:
     A collection is one: what a program passes around is where its table is, and
     nothing else.  So is an array whose type says how many elements it has: what
     a value of one *is*, is where the elements are, since how many there are is
-    in the type and there is nothing else to carry.
+    in the type and there is nothing else to carry.  And so is a sum, which is
+    its largest part with a tag after it -- bytes, and never a register.
     """
-    return isinstance(ty, (PtrType, SetType, DictType)) or (
-        isinstance(ty, ArrayType) and ty.fixed)
+    return isinstance(ty, (PtrType, SetType, DictType)) or held_in_memory(ty)
 
 
 def _held_as(one: Type, other: Type) -> bool:

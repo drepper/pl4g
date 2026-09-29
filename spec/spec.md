@@ -1971,10 +1971,28 @@ Considered and rejected: `type Point = (x: i32, y: i32)`, which reuses the paren
 obvious spelling for a sum; separate keywords after Rust, which is two constructs for two things that are dual; and an untagged
 `type Result = i32 | Error`, naming only the types, which leaves a sum's parts unnamed and so unreachable.
 
-**No value of one can be written yet.**  The language has no syntax for making a product or a sum, none for reading a field, and
-none for asking which variant a sum holds -- the last of which needs control flow the language also does not have.  The types are
-therefore declarable and not yet usable: a function that takes or answers with one compiles as far as the code generator, which
-says it cannot generate for it (8501).  The to-do list carries the three questions.
+**A value of either is written the same way**, which is what one construct for the two means where a value is made rather than
+where a type is declared:
+
+```
+let p: Point = Point(.x ← 1f64, .y ← 2f64)          ※ every field of a product
+let n: Number = Number(.whole ← 5i64)          ※ one part of a sum
+let c: Choice = Choice(.nothing ← true)        ※ a part that carries nothing
+```
+
+A product writes every field and each once, there being no default to fall back on; a **sum writes exactly one part** (4800), which
+is what a sum holds.  The part named is one the definition has (4801), and a part whose type is `void` is written `.name ← true`
+(4802): something has to stand where a value is written, and what it says is that this is the part.
+
+**What a value of a sum is, is where its bytes are.**  A product travels as the values it is made of -- its fields, in registers --
+and a sum cannot: it is its largest part with a tag after it, which is bytes and not a value.  So a value of one is room holding
+those bytes, and what is passed to a function, matched on, or answered with is where that room is.  A function answering with one
+is handed the room by its caller, which is the convention an answer of more values than the registers hold already takes; nothing
+about that is written in the program.
+
+What is not there yet: a **record or a tuple holding a sum** (9902), which would have to be held in memory itself for the same
+reason, and a **sum at the top level**, which waits on the same thing a collection there waited on.  Reading a field of a product
+and asking which part a sum holds are both there: the first is `p.x`, the second is `match`.
 
 ##### What a value of one occupies
 

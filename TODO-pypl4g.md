@@ -95,10 +95,20 @@ To Do List for the pypl4g compiler
     that the scanner says nothing while the parse is recovering: manufacturing tokens of no width there multiplied the stacks
     the recovery was exploring and cost gigabytes on a file with a stray `()` in it.
 
-[ ] hold a value of a product or a sum type.  Still refused (8501), and arrays have now shown what the answer looks like: a place,
-    an address to reach it by, and room in the frame where the value is a function's own.  What is left that an array did not need
-    is a convention for passing one to a function and answering with one, which on all three targets means small aggregates in
-    registers and large ones behind a pointer.
+[x] hold a value of a product or a sum type.  The product half was done on 2026-09-17; the sum half on 2026-09-29.  A value of a
+    sum is room in the frame holding its largest part and a tag, and what travels is where that room is -- an address, as an
+    array's is.  Answering with one goes through the caller's room, by the convention an answer of more values than the registers
+    hold already took: `ReturnStyle.in_registers` says no for anything held in memory, and the rewrite copies the bytes in.
+
+[ ] hold a record or a tuple in memory, so that one may hold a sum.  Refused today (9902): both travel as the values they are
+    made of, so one holding a sum would carry the address of the room the sum was made in, which dangles the moment it is answered
+    with.  An array in a record has the same hazard and is not refused -- the one such record in the language is `@[abi]` and is
+    only ever handed over by reference -- so the fix is one thing for both: a type holding a value held in memory is itself held in
+    memory, passed as an address and answered through the caller's room.
+
+[ ] a sum at the top level.  Refused today by the rule that a variable there is bytes in the image (9902).  What it needs is what
+    a collection there needed: the bytes are known while compiling -- a part and a tag -- so this one is a constant to lay out
+    rather than a constructor to generate.
 
 [ ] generate the functions in the order the call graph gives.  What a call destroys is asked of the callee once it has been
     generated, so a callee generated before its caller is one the caller knows about and one generated after is not -- and the

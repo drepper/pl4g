@@ -1,0 +1,47 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ A sum handed to a function, and answered with.
+※
+※ **What travels is where the bytes are.**  A value of a sum is room holding its
+※ largest part and a tag, so passing one passes that address -- the bargain an
+※ array whose type says its shape already strikes, and for the same reason.
+※
+※ **Answering with one is the caller''s room.**  The bytes of a value the callee
+※ made are in the callee''s own room, gone by the time the caller reads them, so
+※ a function answering with a sum takes one parameter more -- where to put the
+※ answer -- and writes it there.  That is the convention the compiler already had
+※ for an answer of more values than the registers hold, and a value held in
+※ memory takes it whatever its size.  The program says nothing about it: the
+※ pointer is not an argument anything can pass.
+※
+※ Compare: **C**, where a `struct` answered by value is copied by the ABI and
+※ where the same hidden pointer appears for a large one; **Rust**, whose enums
+※ are returned the same way; **Go**, which copies.
+
+type Number = whole : i64 | fraction : f64
+
+※ Answered with, both ways round: what a function makes outlives it.
+fn pick(b: bool) → Number:
+    if b: Number(.whole ← 3i64) else: Number(.fraction ← 1.5f64)
+
+※ And handed over, which is the address of those bytes.
+fn doubled(n: Number) → i64:
+    match n:
+        i64(w):
+            w + w
+        f64:
+            0i64
+
+@[startup]
+fn main() → u6:
+    let taken: Number = pick(true)
+    let other: Number = pick(false)
+    if doubled(taken) ≠ 6i64:
+        1u6
+    elif doubled(other) ≠ 0i64:
+        2u6
+    ※ what a call answered with is a value like any other: it may be handed on
+    elif doubled(pick(true)) ≠ 6i64:
+        3u6
+    else:
+        0u6

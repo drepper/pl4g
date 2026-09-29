@@ -98,6 +98,11 @@
       "topic": "collections, and what is taken out of them"
     },
     {
+      "first": 4800,
+      "last": 4899,
+      "topic": "products and sums"
+    },
+    {
       "first": 5000,
       "last": 5299,
       "topic": "control flow and returns",
@@ -7133,6 +7138,87 @@
         "document": "spec/spec.md",
         "section": "The Language / Statements / while",
         "requirement": "`unless` takes a condition and not a binding."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4800,
+      "name": "LANG_SUM_ONE_PART",
+      "severity": "error",
+      "message": "a value of '{type}' is one of its parts, so one is written and this writes {found}",
+      "args": [
+        {
+          "name": "type",
+          "type": "string",
+          "description": "the sum type"
+        },
+        {
+          "name": "found",
+          "type": "string",
+          "description": "how many parts were written"
+        }
+      ],
+      "cause": "A sum holds exactly one of its parts -- that is what makes it a sum -- so a value of one says which part it is and what that part carries, and nothing else.  A product is the other way about: it holds all of its fields at once, so every one of them is written.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Product and sum types",
+        "requirement": "A value of a sum names exactly one of its parts."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4801,
+      "name": "LANG_SUM_NO_SUCH_PART",
+      "severity": "error",
+      "message": "'{type}' has no part called '{name}'",
+      "args": [
+        {
+          "name": "type",
+          "type": "string",
+          "description": "the sum type"
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the name written"
+        }
+      ],
+      "cause": "The parts of a sum are the ones its definition lists, each with a name and a type.  A value of one names the part it is, so a name the definition does not have names nothing.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Product and sum types",
+        "requirement": "The part a sum's value names is one of the sum's own."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4802,
+      "name": "LANG_SUM_PART_CARRIES_NOTHING",
+      "severity": "error",
+      "message": "the part '{name}' of '{type}' carries nothing, so it is written '.{name} ← true'",
+      "args": [
+        {
+          "name": "type",
+          "type": "string",
+          "description": "the sum type"
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the part written"
+        }
+      ],
+      "cause": "A part of a sum whose type is `void` says the value is this part and carries nothing further.  Something still has to stand where a value is written, and `true` is what stands there: it says the part is the one, which is the whole of what such a part says.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Product and sum types",
+        "requirement": "A part carrying nothing is written `.name ← true`."
       },
       "since": "0.1",
       "default_enabled": true,

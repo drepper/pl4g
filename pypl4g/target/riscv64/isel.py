@@ -1910,7 +1910,7 @@ def _new_value(ty: Type, registers: RegisterInfo,
     The hint says where the value is wanted anyway.  Taking it turns the move
     that would put it there into a move of a register to itself, which then goes.
     """
-    from ...ir.types import FloatType, ProductType, SumType
+    from ...ir.types import FloatType, ProductType
 
     if isinstance(ty, ProductType):
         # A record travels as the values it is made of, and whatever asks for a
@@ -1920,12 +1920,6 @@ def _new_value(ty: Type, registers: RegisterInfo,
         inner = parts_of(ty)
         if len(inner) == 1 and not made_of_parts(inner[0]):
             return _new_value(inner[0], registers, hint=hint)
-        raise UnsupportedOperation("".join((
-            "a value of type '", ty.written(), "'")), None)
-    if isinstance(ty, SumType):
-        # A sum is one of its variants and a tag, which is not a thing a
-        # register holds; what it wants is a place in memory, and nothing in
-        # the language makes a value of one yet.
         raise UnsupportedOperation("".join((
             "a value of type '", ty.written(), "'")), None)
     if isinstance(ty, FloatType):

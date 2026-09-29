@@ -2179,12 +2179,6 @@ def _new_value(ty: Type, registers: RegisterInfo,
             return _new_value(inner[0], registers, hint=hint)
         raise UnsupportedOperation("".join((
             "a value of type '", ty.written(), "'")), None)
-    if isinstance(ty, SumType):
-        # A sum is one of its variants and a tag, which is not a thing a
-        # register holds; what it wants is a place in memory, and nothing in
-        # the language makes a value of one yet.
-        raise UnsupportedOperation("".join((
-            "a value of type '", ty.written(), "'")), None)
     if isinstance(ty, VecType):
         # As wide as the run it holds, brought up to the narrowest of these
         # registers there is: a run shorter than one is held in a whole one with

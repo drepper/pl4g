@@ -1131,6 +1131,18 @@ def without_units(ty: Type) -> Type:
     return ty.bare if isinstance(ty, (IntType, FloatType)) else ty
 
 
+def held_in_memory(ty: Type) -> bool:
+    """Whether a value of *ty* is bytes in a place rather than values.
+
+    A sum is its largest part with a tag after it, and an array whose type says
+    its shape is its elements: neither is something a register holds, so what a
+    value of one *is*, is where those bytes are.  Everything that has to know
+    whether a value travels in registers asks this, so the answer cannot drift
+    between the parts of the compiler that ask it.
+    """
+    return isinstance(ty, SumType) or (isinstance(ty, ArrayType) and ty.fixed)
+
+
 def made_of_parts(ty: Type) -> bool:
     """Whether a value of *ty* is several values travelling as one.
 

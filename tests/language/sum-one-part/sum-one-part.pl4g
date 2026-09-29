@@ -1,0 +1,25 @@
+※ pl4g-test: compile=error diag=4800
+※ pl4g-test: expect-diag 4801 LANG_SUM_NO_SUCH_PART
+※ pl4g-test: expect-diag 4802 LANG_SUM_PART_CARRIES_NOTHING
+
+※ A value of a sum is one of its parts, and says which.
+※
+※ Writing two parts is writing a value that is both, which a sum is not: that is
+※ what a product is for, and the separator in the definition is what says which
+※ of the two a type is.  Writing none says nothing at all.
+※
+※ A name the definition does not have names nothing (4801), and a part carrying
+※ nothing is written `.name ← true` (4802) -- something has to stand where a
+※ value is written, and what it says is that this is the part.
+
+type Shape = dot : u8 | line : u32 | empty : void
+
+@[startup]
+fn main() → u6:
+    ※ two parts, which is a product's shape and not a sum's
+    let a: Shape = Shape(.dot ← 1u8, .line ← 2u32)
+    ※ a name the definition does not have
+    let b: Shape = Shape(.circle ← 1u8)
+    ※ and a part that carries nothing, given something
+    let c: Shape = Shape(.empty ← 3u8)
+    0u6
