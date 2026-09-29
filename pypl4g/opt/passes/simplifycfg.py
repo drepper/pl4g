@@ -27,10 +27,10 @@ from __future__ import annotations
 from typing import Final
 
 from ...ir.function import BasicBlock, Function
-from ...ir.inst import BrInst, CondBrInst
+from ...ir.inst import BlockTarget, BrInst, CondBrInst, SwitchInst
 from ...ir.module import Module
 from ...ir.rewrite import incoming_edges, stands_for
-from ...ir.value import BoolConst, IntConst
+from ...ir.value import BoolConst, EnumConst, IntConst
 
 #: How many times the four are run before it is taken to be a defect rather than
 #: a program.  Each round that changes anything removes a block or a parameter,
@@ -70,12 +70,16 @@ class SimplifyCFG:
         changed = False
         for block in func.blocks:
             terminator = block.terminator
-            if not isinstance(terminator, CondBrInst):
+            target = None
+            if isinstance(terminator, CondBrInst):
+                taken = _known_condition(terminator.operands[0])
+                if taken is not None:
+                    target = (terminator.true_target if taken
+                              else terminator.false_target)
+            elif isinstance(terminator, SwitchInst):
+                target = _known_case(terminator)
+            if target is None:
                 continue
-            taken = _known_condition(terminator.operands[0])
-            if taken is None:
-                continue
-            target = terminator.true_target if taken else terminator.false_target
             block.insts[-1] = BrInst(target, terminator.span)
             block.insts[-1].parent = block
             changed = True
@@ -193,6 +197,31 @@ class SimplifyCFG:
         target.params = []
         target.insts = []
         func.blocks.remove(target)
+
+
+def _known_case(switch: SwitchInst) -> BlockTarget | None:
+    """Where a switch on a value that is already known goes.
+
+    A `match` over an enumeration whose subject is a constant is the whole of
+    what asks: the case whose number the constant is, or the default where no
+    case names it.
+    """
+    number = _known_number(switch.operands[0])
+    if number is None:
+        return None
+    for value, target in switch.cases:
+        if value == number:
+            return target
+    return switch.default
+
+
+def _known_number(value: object) -> int | None:
+    """What a value is, where that is already settled and it is a number."""
+    if isinstance(value, EnumConst):
+        return value.number
+    if isinstance(value, IntConst):
+        return value.value
+    return None
 
 
 def _known_condition(value: object) -> bool | None:

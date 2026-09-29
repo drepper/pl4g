@@ -34,7 +34,7 @@ from typing import Callable, Protocol, Sequence
 
 from ..ir.function import BasicBlock, Function
 from ..ir.inst import (BlockTarget, BrInst, CmpInst, CmpPred, CondBrInst,
-                       Instruction, Terminator)
+                       Instruction, SwitchInst, Terminator)
 from ..ir.rewrite import carried_values, incoming_edges
 from ..ir.types import FloatType, made_of_parts, parts_of
 from ..ir.value import BlockParam
@@ -194,6 +194,14 @@ def lower_branch(asm: Assembler, func: Function, labels: Sequence[str], index: i
             else:
                 asm.jump(target, span)
             return True
+        case SwitchInst():
+            for edge in terminator.successors():
+                if carried_values(edge):
+                    raise UnsupportedBranch(
+                        "a switch that passes arguments", span)
+            _lower_switch(asm, func, labels, following, terminator, operands,
+                          zero)
+            return True
         case CondBrInst():
             for edge in (terminator.true_target, terminator.false_target):
                 if carried_values(edge):
@@ -335,6 +343,33 @@ def _lower_conditional(asm: Assembler, func: Function, labels: Sequence[str],
         asm.falls_through(when_false)
     else:
         asm.jump(when_false, span)
+
+
+def _lower_switch(asm: Assembler, func: Function, labels: Sequence[str],
+                  following: str | None, terminator: SwitchInst,
+                  operands: Operands, zero: MCImm) -> None:
+    """Emit a many-way branch as a chain of comparisons, one per case.
+
+    Which is what the chain of blocks this replaces came to, with the blocks
+    gone: a comparison and a branch taken where it holds, one after another in
+    the one block, and what falls off the end is the default.  A jump table is
+    the other way of doing it and is worth its relocations only where there are
+    enough cases; nothing here decides that yet.
+
+    The cases are emitted in the order the instruction holds them, so that the
+    code says what the program said.  That is also the order a reader of the
+    dump expects, and the order the front end puts the arms in.
+    """
+    span = terminator.span
+    value = operands.in_register(terminator.operands[0], span)
+    for number, target in terminator.cases:
+        asm.branch(Condition.EQ, value, MCImm(number, zero.bits, signed=True),
+                   _target_label(func, labels, target.block), span)
+    default = _target_label(func, labels, terminator.default.block)
+    if default == following:
+        asm.falls_through(default)
+    else:
+        asm.jump(default, span)
 
 
 def _condition_of(func: Function, terminator: CondBrInst, operands: Operands,

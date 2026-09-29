@@ -18,6 +18,7 @@ from .inst import (SyscallInst,
                    CastInst, CastKind,
                    CmpInst, CmpPred, CondBrInst, Instruction, LoadInst, MemStartInst, Ordering,
                    ErrorInst, ExtractInst, FailedInst, RetInst, StoreInst,
+                   SwitchInst,
                    Terminator,
                    TupleInst, UnaryInst, UnOp,
                    UnreachableInst, UnwrapInst, WrapInst)
@@ -245,6 +246,19 @@ class IRBuilder:
         return self._append(CondBrInst(  # type: ignore[return-value]
             cond, BlockTarget(true_block, true_args), BlockTarget(false_block, false_args),
             span))
+
+    def switch(self, value: Value, cases: Sequence[tuple[int, BasicBlock]],
+               default: BasicBlock, span: Span = INVALID_SPAN) -> Terminator:
+        """Append a branch that goes one way per value of *value*.
+
+        One terminator where a chain of comparisons would be a block each: what
+        the backend makes of it is its own business, and what it can make of a
+        chain is exactly the chain, so nothing is lost by saying the whole
+        question at once.
+        """
+        return self._append(SwitchInst(  # type: ignore[return-value]
+            value, [(number, BlockTarget(block)) for number, block in cases],
+            BlockTarget(default), span))
 
     def unreachable(self, span: Span = INVALID_SPAN) -> Terminator:
         """Append an unreachable marker."""

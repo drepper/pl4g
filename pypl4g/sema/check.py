@@ -8307,29 +8307,33 @@ class Checker:
                              wanted: Type | None, produces: bool) -> Value:
         """Lower a `match` over an enumeration.
 
-        A chain of comparisons, one per value an arm names, with the last arm --
-        or the wildcard, where there is one -- reached by falling off the end of
-        the chain.  A jump table would be the other way and wants the relocation
-        work that position-independent code needs anyway, which the to-do list
-        carries.
+        One `switch`: the whole question said at once, one case per value an arm
+        names, and the wildcard -- or the last arm, where there is none -- as
+        the way taken when no case matches.
+
+        What the backend makes of it is the backend's business.  It makes a
+        chain of comparisons today, which is what this used to build out of a
+        block per value; a jump table is the other way and wants relocations
+        that only enough cases pay for.  Saying the question once rather than
+        spelling out one answer to it is what lets that be decided there.
         """
         fallback = next((arm for arm, _ in taken if arm.pattern.wildcard),
                         taken[-1][0])
-        blocks = {id(arm): builder.new_block("case") for arm, _ in taken}
+        # The way taken when no case matches gets its block first, so that it is
+        # the block laid out after this one: what falls off the end of the chain
+        # a backend makes of the switch then falls into it rather than jumping.
+        blocks = {id(fallback): builder.new_block("case")}
+        for arm, _ in taken:
+            if id(arm) not in blocks:
+                blocks[id(arm)] = builder.new_block("case")
+        distinct = list(dict.fromkeys(ty.values))
+        cases: list[tuple[int, BasicBlock]] = []
         for arm, indices in taken:
             if arm is fallback:
                 continue
             for index in sorted(indices):
-                following = builder.new_block("otherwise")
-                asked = builder.compare(
-                    CmpPred.EQ, subject,
-                    self._module.enum_const(ty, ty.values.index(
-                        list(dict.fromkeys(ty.values))[index])),
-                    arm.pattern.span)
-                builder.condbr(asked, blocks[id(arm)], following,
-                               span=arm.pattern.span)
-                builder.position_at(following)
-        builder.br(blocks[id(fallback)], (), stmt.span)
+                cases.append((distinct[index], blocks[id(arm)]))
+        builder.switch(subject, cases, blocks[id(fallback)], stmt.span)
         return self._run_arms(
             builder, stmt, func,
             [_ArmPlan(body=arm.body, block=blocks[id(arm)]) for arm, _ in taken],

@@ -3702,3 +3702,45 @@ out of both -- the allocator already keeps a value out of a register whose life
 overlaps its own.  The move in costs nothing in practice either: where the
 factor is computed just before, the allocator gives it `rax` and the move
 becomes a move of a register to itself, which goes.
+
+The many-way branch
+-------------------
+
+`SwitchInst` had been in the representation from the beginning and nothing built
+one; a `match` over an enumeration built the answer instead -- a comparison and a
+conditional branch per value, each in a block of its own, with the last arm
+reached by falling off the end.  That is what the backend still emits, and it is
+no longer what the front end says.
+
+**The front end says the question once.**  One `switch`, one case per value an
+arm names, and the wildcard -- or the last arm, where there is none -- as the way
+taken when no case matches.  What that buys today is smaller: four fewer blocks
+on a three-armed `match`, and the same machine code to the byte, measured over
+every `match` and `enum` program in the language suite.  What it buys later is
+that the decision is in one place: a jump table is a property of how the switch
+is lowered, and a chain spelled out in blocks by the front end could not be made
+into one without recognising it first.
+
+**The backend makes a chain of it**, in `target/branches.py` beside the other two
+branches: the subject in a register, a comparison and a branch per case in the
+order the instruction holds them, and what falls off the end goes the default
+way.  A jump table is the other way, and wants a table of addresses in the
+read-only section, an indirect jump on each of the three architectures, and a
+bounds check -- worth its cost only past some number of cases, which is a
+measurement nobody has made.  The to-do list carries it.
+
+**The default is laid out first.**  The block the front end makes for the way
+taken when no case matches is created before the others, so it is the block laid
+out after the switch: what falls off the end of the chain then falls into it
+rather than jumping to it.  That is one instruction per `match`, and it is the
+reason the machine code came out identical rather than one instruction longer.
+
+**A switch on a value that is already known** is settled by `simplifycfg` the way
+a conditional branch on a known condition is: the case whose number the value is,
+or the default where no case names it.  Both are one question with the same
+shape, and a `match` inside a function that was inlined is where it arises.
+
+**An edge of a switch that carries values** is split by the pass that splits
+them, which asks how many ways out a branch has and not which instruction they
+belong to -- so a many-way branch was covered by those words before there was one
+to cover.

@@ -1036,7 +1036,7 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
     """
     from ...ir.inst import (CodeInst, AddressInst, AnyLaneInst, BinaryInst, BrInst,
                             CallInst, CmpInst,
-                            CondBrInst,
+                            CondBrInst, SwitchInst,
                             FrameInst, AssertInst,
                             LoadInst, MemStartInst, RetInst, SplatInst, StoreInst,
                             SyscallInst, UnaryInst, UnreachableInst)
@@ -2030,7 +2030,7 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                                     inst.span)
                 case UnreachableInst():
                     asm.op(ops.TRAP, None, span=inst.span)
-                case BrInst() | CondBrInst():
+                case BrInst() | CondBrInst() | SwitchInst():
                     try:
                         lower_branch(asm, func, labels, index, inst, operands,
                                      ZERO_IMMEDIATE)

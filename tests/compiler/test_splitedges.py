@@ -13,7 +13,8 @@ import pytest
 from conftest import compiler_targets
 from pypl4g.ir.function import FuncAttrs, Function, SpecialKind
 from pypl4g.ir.inst import (BinaryInst, BinOp, BlockTarget, BrInst, CmpInst,
-                            CmpPred, CondBrInst, MemStartInst, RetInst)
+                            CmpPred, CondBrInst, MemStartInst, RetInst,
+                            SwitchInst)
 from pypl4g.ir.module import Module
 from pypl4g.ir.types import BOOL, MEM, U8
 from pypl4g.ir.verify import verify
@@ -120,6 +121,31 @@ def test_the_block_goes_straight_after_the_branch() -> None:
     branch = func.blocks[1].terminator
     assert branch.true_target.block.label == "edge"
     assert branch.true_target.block.terminator.target.block.label == "header"
+
+
+def test_a_switch_is_a_branch_with_more_than_one_way_out_too() -> None:
+    """The rule is about how many ways out there are and not about which
+    instruction they belong to, so a many-way branch is covered by the same
+    words -- and every arm of one that carries a value gets its own block."""
+    module = Module("t")
+    func = Function("main", module.types.func_type((), U8),
+                    FuncAttrs(special=SpecialKind.STARTUP))
+    entry = func.add_block()
+    joined = func.add_block("joined")
+    answer = joined.add_param(U8, "answer")
+    subject = entry.append(BinaryInst(BinOp.ADD, module.int_const(U8, 1),
+                                      module.int_const(U8, 2)))
+    entry.append(SwitchInst(
+        subject,
+        [(1, BlockTarget(joined, (module.int_const(U8, 7),)))],
+        BlockTarget(joined, (module.int_const(U8, 9),))))
+    joined.append(RetInst(answer))
+    module.add_function(func)
+    module.startup = func
+    assert split(module)
+    assert labels(func) == ["block0", "edge", "edge1", "joined"]
+    switch = func.blocks[0].terminator
+    assert not switch.cases[0][1].args and not switch.default.args
 
 
 def test_a_branch_with_one_way_out_is_left_alone() -> None:

@@ -7141,6 +7141,52 @@ the register at the instruction and relies on its own move coalescing;
 tuple-producing operation and the register allocator is told by the op's
 `reg` specification.
 
+## 2026-09-30T02:00+02:00 — compiler
+
+**The many-way branch is lowered, and the front end builds one**
+
+Decided on the user's direction, from a to-do entry.  `SwitchInst` had been in
+the representation from the first and nothing built one; a `match` over an
+enumeration built the answer instead, a comparison and a branch per value with a
+block each.  Now the front end says the question once and the backend makes the
+chain.
+
+**What it buys today is small and was measured rather than assumed**: four fewer
+blocks on a three-armed `match`, and the same machine code to the byte over every
+`match` and `enum` program in the language suite.  What it buys later is that the
+decision has somewhere to live.  A jump table is a property of how a switch is
+lowered; a chain the front end had already spelled out in blocks could not have
+been turned into one without recognising it first.
+
+**The chain is emitted in one block** rather than in a block per comparison,
+which is what the front end's version cost.  A machine block may hold a
+conditional branch in the middle of it -- the saturating arithmetic has done
+that since it existed -- and the edge is recorded where the branch is emitted.
+
+**The default block is laid out first**, which is the front end's doing and the
+reason the code came out identical rather than one instruction longer: what falls
+off the end of the chain falls into the default rather than jumping to it.  The
+alternative was to let the backend reorder, which it must not do -- the block
+order is the order it walks, and a value has to be computed in a block standing
+before the one that reads it.
+
+**The jump table is not written**, and the entry that asked for this said why:
+it wants a table of addresses in the read-only section, an indirect jump on each
+of the three architectures, and a bounds check, and it is worth that only past
+some number of cases.  Three values are better off with the comparisons.  What
+the number is has not been measured, and measuring it wants a way to time
+*generated* code, which this compiler's harness does not have -- it times
+compilation.  So the entry stays, with what is now in place written into it.
+
+Compare: **LLVM**, whose `SwitchInst` is lowered by a whole pass that picks
+between a chain, a jump table, a bit test and a binary search by counting cases
+and measuring density; **GCC**, which does the same in `expand_case` and has done
+since long before that; **Cranelift**, whose `br_table` is a table and whose
+front ends are expected to have decided; **Go**, which compiles a type switch to
+a binary search over hashes and a value switch to a chain below eight cases.
+Every one of them makes the choice in the backend, which is the shape this now
+has.
+
 Open questions
 --------------
 

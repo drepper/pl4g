@@ -166,11 +166,12 @@ To Do List for the pypl4g compiler
     depends on it today -- the golden round-trip test names the cases it covers -- and what it costs is that a dump of a program
     using any of those cannot be fed back in.  Worth closing in one piece rather than a shape at a time.
 
-[ ] lower `SwitchInst`.  It exists in the representation and nothing generates one.  A `match` over a result is two ways and is
-    lowered as a conditional branch; a `match` over an *enumeration* is a chain of comparisons, one per value an arm names, which
-    is correct and is what a first version should do -- this is what would replace that chain.  A jump table wants the relocation
-    work that position-independent code needs anyway.  Worth measuring against the chain before it is written: an enumeration with
-    three values is better off with the comparisons.
+[ ] build a jump table for a switch with enough cases.  `SwitchInst` is lowered now, as a chain of comparisons in one block --
+    one per case, in the order the instruction holds them, with what falls off the end going the default way -- and a `match` over
+    an enumeration builds one.  A table wants a table of addresses in the read-only section, an indirect jump on each of the three
+    architectures, and a bounds check, and is worth that only past some number of cases: an enumeration with three values is
+    better off with the comparisons.  What the number is wants a way to time generated code, which the timing harness does not
+    have; it times compilation.
 
 [x] reach a place through an address that is not a name.  Done: a load or a store whose address operand is not a variable takes
     the address from a register, which every backend's move and store selection could already build and only the six guards above

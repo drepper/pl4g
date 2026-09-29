@@ -853,7 +853,7 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                    ) -> None:
     """Build the machine form of one IR function."""
     from ...ir.inst import (CodeInst, AddressInst, BinaryInst, BrInst, CallInst, CmpInst,
-                            CondBrInst,
+                            CondBrInst, SwitchInst,
                             FrameInst, AssertInst,
                             LoadInst, MemStartInst, RetInst, StoreInst,
                             UnaryInst, UnreachableInst, SyscallInst)
@@ -1787,7 +1787,7 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                                     inst.span)
                 case UnreachableInst():
                     asm.op(ops.TRAP, None, span=inst.span)
-                case BrInst() | CondBrInst():
+                case BrInst() | CondBrInst() | SwitchInst():
                     try:
                         lower_branch(asm, func, labels, index, inst, operands,
                                      ZERO_IMMEDIATE)
