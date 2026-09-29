@@ -3563,3 +3563,42 @@ A value nothing reads is found by the scope, not by a pass: a binding records wh
 and the report is made where the value is replaced or where the scope ends.  That is exact for straight-line code, which is all the
 language has; when control flow arrives it becomes a liveness analysis over the graph, and the place it is reported from will move
 with it.
+
+A block that need not exist
+---------------------------
+
+`simplifycfg` is four things now, and each of them is what the one before it
+leaves behind.  A branch on a condition the folder settled becomes the jump it
+would have taken; a block no branch reaches is removed; a **parameter every
+branch arriving supplies the same value for** is replaced by that value and
+taken off the block; and a **block with one way in, whose one predecessor has
+one way out**, is written into that predecessor and removed.  The four run until
+nothing changes rather than once each, because each creates work for the others:
+a settled branch leaves a block that one branch reaches, a block one branch
+reaches leaves a parameter with one incoming argument, and a parameter replaced
+by its argument leaves a block that is nothing but a jump.
+
+**A parameter is a question about where control came from**, and one whose
+answer is the same whichever way control came is not a question.  An argument
+that is the parameter itself is not counted, which is what lets a loop carrying a
+value it never changes lose the parameter as well: on the turn that supplies it,
+the parameter already holds what the way in supplied.  Nothing has to be proved
+about dominance, either -- the value replacing the parameter is computed before
+every branch that arrives, so it is computed before the block.
+
+**The blocks are never reordered.**  The order they are laid out in is the order
+the backend walks, and a value has to be computed in a block standing before the
+one that reads it; merging removes a block and moves nothing, so that stays true
+without anything having to reason about it.  What is merged away is also never
+a loop header: a header has the way in and the way round, which is two ways in.
+
+What it is for is less what the language writes than what the passes leave.  An
+`if` whose condition is known should leave no trace at all, and before this it
+left a chain of blocks that fell through; `match` leaves a join block that the
+one arm assigning nothing still branches to; and the inliner leaves three blocks
+per call -- the callee's entry, the block the copy answers into, and whatever the
+copy's own joins were.  On the standard library's read-and-write test that is
+four blocks and sixteen lines of IR gone and forty-eight bytes of image with
+them; over the two hundred and forty-two programs of the language suite, fifty
+smaller images, three larger by the sixteen bytes an alignment moves, and two
+thousand seven hundred bytes less in all.

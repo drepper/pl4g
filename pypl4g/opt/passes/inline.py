@@ -38,9 +38,10 @@ from ...ir.callgraph import (called_by_count, in_a_cycle, in_call_order,
 from ...ir.function import (BasicBlock, DEFAULT_CCONV, Function, InlineHint,
                             Linkage)
 from ...ir.inst import (BlockTarget, BrInst, CallInst, CondBrInst, Instruction,
-                        MemStartInst, RetInst, SwitchInst, Terminator)
+                        MemStartInst, RetInst, SwitchInst)
 from ...ir.module import Module
 from ...ir.reports import ReportKind
+from ...ir.rewrite import stands_for
 from ...ir.types import MEM, VOID
 from ...ir.value import BlockParam, Value
 
@@ -211,7 +212,7 @@ class Inlining:
                         [_mapped(one, values) for one in call.operands]),
             call.span))
         if answer is not None:
-            _stands_for(caller, call, answer)
+            stands_for(caller, call, answer)
         # And where the copy goes in the list: straight after the block that
         # branches into it, with what follows the call last of them.  The order
         # of the blocks is the order the backend walks them in, so a value has
@@ -259,18 +260,6 @@ def _mapped(value: Value, values: dict[int, Value]) -> Value:
     so there is nothing to copy and nothing to map.
     """
     return values.get(id(value), value)
-
-
-def _stands_for(func: Function, gone: Value, instead: Value) -> None:
-    """Make everything that read *gone* read *instead*."""
-    for block in func.blocks:
-        for one in block.insts:
-            one.operands = [instead if operand is gone else operand
-                            for operand in one.operands]
-            if isinstance(one, Terminator):
-                for target in one.successors():
-                    target.args = [instead if arg is gone else arg
-                                   for arg in target.args]
 
 
 def _token_before(func: Function, block: BasicBlock, at: int) -> Value:

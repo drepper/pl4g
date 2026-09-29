@@ -155,13 +155,6 @@ To Do List for the pypl4g compiler
     comparison that feeds it, since that is the shape all three architectures have, and the condition is inverted where that lets
     the branch fall through instead of jumping.  Every ordering is compiled and run on all three targets.
 
-[ ] merge a block into its only predecessor, and replace a block parameter that has one incoming argument by that argument.
-    `match` makes the first of these worth having: an arm that assigns nothing still ends in a branch to the block the arms join
-    at, and a join with one incoming edge is a block that need not exist.
-    What is left after a branch on a settled condition is replaced by its jump: a chain of blocks that fall through, which costs
-    nothing in the generated code and is why this was not done with the logical operators.  `if` is the right occasion for it,
-    since an `if` whose condition is known should leave no trace at all.
-
 [ ] split a critical edge so that a conditional branch can carry arguments.  Not needed by anything yet -- the short-circuit
     lowering is shaped to avoid it, and `if` will be too -- and refused (8501) rather than got wrong until something asks.  The
     same entry covers a branch handing a block its own parameters rearranged, which needs a temporary the way any parallel copy

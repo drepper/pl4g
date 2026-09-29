@@ -75,10 +75,10 @@ TABLE = [
     (NOR, True, False, False), (NOR, True, True, False),
 ]
 
-#: The same for the two that branch.  Their answer does not become a constant in
-#: the representation the way the others do -- it arrives at a block parameter,
-#: which nothing yet folds away -- so what is looked for is the branch carrying
-#: the right answer to the block that takes it.
+#: The same for the two that branch.  Their answer arrives at a block parameter
+#: rather than being computed, and it becomes a constant like every other once
+#: the parameter is replaced by the one value reaching it and the blocks left
+#: with nothing to do are written into the one before them.
 SHORT_TABLE = [
     ("and", False, False, False), ("and", False, True, False),
     ("and", True, False, False), ("and", True, True, True),
@@ -105,13 +105,15 @@ def test_every_row_of_every_truth_table(tmp_path, operator: str, left: bool,
                               for r in SHORT_TABLE])
 def test_every_row_of_the_two_that_branch(tmp_path, operator: str, left: bool,
                                           right: bool, expected: bool) -> None:  # noqa: ANN001
-    """The branch on a condition the folder settled becomes the jump it would
-    have taken, so what is left is the one edge that carries the answer."""
+    """And nothing of the branching is left: the branch on a condition the folder
+    settled becomes the jump it would have taken, the block that jump arrives at
+    has one way in, and a parameter one value reaches is that value."""
     text = compile_to_ir(tmp_path, keeping(" ".join((literal(left), operator,
                                                      literal(right)))))
-    wanted = "".join(("br joined(", literal(expected), ")"))
+    wanted = "".join(("store.bool %0, @answer, ", literal(expected)))
     assert wanted in text, "".join((literal(left), " ", operator, " ",
                                     literal(right), " gave\n", text))
+    assert "br " not in text and "block1" not in text, text
 
 
 @pytest.mark.parametrize("operand", (False, True))

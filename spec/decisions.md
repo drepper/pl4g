@@ -6948,6 +6948,49 @@ which is the furthest-reaching rule this replaces and which was described for
 straight-line code in a just-in-time compiler, where the analysis had to be
 cheap above all.
 
+## 2026-09-29T19:00+02:00 — compiler
+
+**A block that need not exist is removed, and so is a parameter with one answer**
+
+Decided on the user's direction, from a to-do entry, which named both halves: a
+block whose only predecessor's only successor it is, written into that
+predecessor; and a block parameter with one incoming argument, replaced by that
+argument.  Both are here, and they run with the two things `simplifycfg` already
+did until nothing changes, because each of the four creates work for the others.
+
+**The parameter rule is written a little wider than the entry asked**: not "one
+incoming argument" but "the same value on every branch arriving", with an
+argument that is the parameter itself not counted.  The first is the case the
+entry names and the commonest by far; the second costs nothing to say and is
+what lets a loop carrying a value it never changes lose the parameter too.  It
+is the standard trivial-phi rule and it is exactly as safe: the value replacing
+the parameter is computed before every branch that arrives, so it is computed
+before the block, and dominance follows without being asked for.
+
+**Nothing is reordered.**  The block order is the order the backend walks and a
+value has to be computed in a block standing before the one that reads it;
+merging removes a block and moves nothing, which keeps that true without a pass
+having to reason about it.  Turned down, therefore: laying blocks out afresh once
+the graph has settled, which is what a real block-placement pass would do and
+which wants a cost model and a profile before it is worth anything.
+
+**What it is for is what the passes leave, more than what the language writes.**
+An `if` whose condition is known should leave no trace at all, and left a chain
+of blocks that fell through; `match` leaves a join block that an arm assigning
+nothing still branches to; the inliner leaves three blocks at every call.  It is
+also why this was not done when the logical operators landed -- a chain of blocks
+that fall through costs nothing in the generated code, so there was nothing to
+point at until `match` and the inliner made blocks that do.
+
+Compare: **LLVM**, whose `SimplifyCFG` does these two among a great many others
+and whose `mem2reg` removes the trivial phi by the same rule this uses;
+**GCC**'s `cfgcleanup`, which merges a block into its predecessor as
+`merge_blocks` and is run after nearly every pass for the same reason this runs
+to a fixpoint; **Cranelift** and **Go**'s SSA backend, which both remove a block
+argument every edge agrees on as part of building the form rather than as a pass
+over it; **MLIR**, whose canonicalizer states this one as a rewrite pattern on
+the branch operation, which is the same rule written as data.
+
 Open questions
 --------------
 

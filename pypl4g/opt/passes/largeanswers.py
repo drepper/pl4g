@@ -26,11 +26,12 @@ from ...ir.function import BasicBlock, Function, ReturnStyle
 from ...ir.inst import (BinOp, BinaryInst, CallInst, CastInst, CastKind,
                         ErrorInst, ExtractInst, FailedInst, FrameInst,
                         Instruction, LoadInst,
-                        MemStartInst, RetInst, StoreInst, Terminator,
+                        MemStartInst, RetInst, StoreInst,
                         TupleInst, UnwrapInst, WrapInst)
 from ...ir.layout import (DataLayout, error_offset_of,
                           part_offsets_of, tag_offset_of)
 from ...ir.module import Module
+from ...ir.rewrite import stands_for
 from ...ir.layout import size_of
 from ...ir.types import (MEM, ProductType, ResultType, TupleType, Type, U8,
                          U16, U32, U64,
@@ -181,7 +182,7 @@ class LargeAnswers:
                 rebuilt = CastInst(CastKind.BITCAST, slot, answer, span)
                 made.append(rebuilt)
                 _splice(block, index, made)
-                _stands_for(block.parent, inst, rebuilt)
+                stands_for(block.parent, inst, rebuilt)
                 index += len(made)
                 continue
             taken: list[Value] = []
@@ -193,7 +194,7 @@ class LargeAnswers:
             rebuilt = _whole(taken, answer, span)
             made.append(rebuilt)
             _splice(block, index, made)
-            _stands_for(block.parent, inst, rebuilt)
+            stands_for(block.parent, inst, rebuilt)
             index += len(made)
 
 
@@ -300,18 +301,3 @@ def _splice(block: BasicBlock, at: int, made: list[Instruction]) -> None:
     block.insts[at:at + 1] = made
 
 
-def _stands_for(func: Function, gone: Value, instead: Value) -> None:
-    """Make everything that read *gone* read *instead*.
-
-    A branch's arguments count: a call whose answer is carried to another block
-    is the ordinary way a value leaves the block it was made in.
-    """
-    for block in func.blocks:
-        for one in block.insts:
-            for index, operand in enumerate(one.operands):
-                if operand is gone:
-                    one.operands[index] = instead
-            if isinstance(one, Terminator):
-                for target in one.successors():
-                    target.args = tuple(instead if arg is gone else arg
-                                        for arg in target.args)
