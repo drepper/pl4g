@@ -1,8 +1,21 @@
 """The pass manager.
 
-The verifier runs after every pass, at every optimization level, because the
-compiler must always perform all conformance checks.  The manager also records
-how long each pass took, which is what ``--time-report`` prints.
+The verifier runs after every pass that changed something, at every optimization
+level, and after the last pass whatever it says -- so the module that reaches the
+backend has always been verified, and so has every module a pass handed on.  A
+pass that changed nothing would be verifying what the verifier passed the last
+time it ran, which on the larger programs is most of the verifying that was being
+done: several of the passes change nothing on most programs, and one of them --
+the one that puts a block on an edge -- changes nothing on any program that
+exists today.
+
+What it gives up is which pass to blame: a pass that mutates the module and
+reports that it did not would be found by the next pass that does report one,
+and named as the culprit.  That is a defect in a pass either way, and the timing
+report would already be lying about it.
+
+The manager also records how long each pass took, which is what ``--time-report``
+prints.
 """
 
 from __future__ import annotations
@@ -46,11 +59,12 @@ class PassManager:
         self.passes.append(item)
 
     def run(self, module: Module) -> None:
-        """Run every pass, verifying the module after each one."""
+        """Run every pass, verifying the module after each one that changed it."""
         for item in self.passes:
             start = perf_counter()
             changed = item.run(module)
-            verify(module)
+            if changed or item is self.passes[-1]:
+                verify(module)
             self.timings.append(PassTiming(item.name, perf_counter() - start, changed))
 
 

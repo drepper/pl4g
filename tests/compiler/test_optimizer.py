@@ -605,3 +605,64 @@ def test_a_dropped_function_is_pointed_at_by_its_name() -> None:
     dropped = module.reports.of_kind(ReportKind.DROP_FUNCTION)
     assert [d.span.start for d in dropped] == [3], \
         "the log points at the definition rather than at the name"
+
+
+# -- when the module is verified ------------------------------------------------
+
+class _Says:
+    """A pass that does nothing and says what it was told to say."""
+
+    def __init__(self, changed: bool, name: str = "says") -> None:
+        self.name = name
+        self._changed = changed
+
+    def run(self, module: Module) -> bool:
+        """Change nothing and report what this one was built to report."""
+        return self._changed
+
+
+def _counting(monkeypatch) -> list[Module]:  # noqa: ANN001
+    """Replace the verifier by something that only counts, and return the count."""
+    from pypl4g.opt import pass_
+
+    seen: list[Module] = []
+    monkeypatch.setattr(pass_, "verify", seen.append)
+    return seen
+
+
+def test_a_pass_that_changed_nothing_is_not_verified_after(monkeypatch) -> None:  # noqa: ANN001
+    """It would be verifying what the last verification passed."""
+    from pypl4g.opt.pass_ import PassManager
+
+    seen = _counting(monkeypatch)
+    module = Module("t")
+    manager = PassManager()
+    manager.add(_Says(False))
+    manager.add(_Says(False))
+    manager.run(module)
+    assert len(seen) == 1, "only the last pass should have been verified after"
+
+
+def test_one_that_did_is_verified_after(monkeypatch) -> None:  # noqa: ANN001
+    """Which is what the verification is for: a pass that broke something."""
+    from pypl4g.opt.pass_ import PassManager
+
+    seen = _counting(monkeypatch)
+    module = Module("t")
+    manager = PassManager()
+    manager.add(_Says(True))
+    manager.add(_Says(False))
+    manager.run(module)
+    assert len(seen) == 2
+
+
+def test_the_last_pass_is_verified_after_whatever_it_says(monkeypatch) -> None:  # noqa: ANN001
+    """So that what reaches the backend has always been through the verifier."""
+    from pypl4g.opt.pass_ import PassManager
+
+    seen = _counting(monkeypatch)
+    module = Module("t")
+    manager = PassManager()
+    manager.add(_Says(False))
+    manager.run(module)
+    assert len(seen) == 1

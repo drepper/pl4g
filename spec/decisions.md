@@ -7031,6 +7031,20 @@ to have been done already, with the loops: `target/branches.py` sequences the
 moves so that none reads a register another has written and breaks a cycle with
 a fresh virtual register.  The entry had not been brought up to date.
 
+**The pass manager stops verifying after a pass that changed nothing**, which
+this is the change that asked for it and the user's choice from three.  A pass
+that never fires is still a pass, and a verification of the whole module was
+being done after every one of them; adding this one added about five per cent to
+a larger compilation for work that could not have found anything.  Verifying what
+the verifier passed the last time it ran is what it was doing, so now the module
+is verified after every pass that reports a change and after the last pass
+whatever it reports -- so what reaches the backend has always been through it.
+It wins back more than the new pass costs, several passes changing nothing on
+most programs.  Turned down: leaving the manager alone and paying the five per
+cent, and folding the split into the end of `dropunreached` so that no
+verification is added, which would have hidden a lowering step inside a pass
+about reachability.
+
 Compare: **LLVM**, whose `SplitCriticalEdges` is the classical rule and whose
 `PHIElimination` calls it for exactly this reason; **Cranelift**, which had the
 same block-parameter form and the same problem and answered it by forbidding a

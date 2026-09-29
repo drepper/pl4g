@@ -3646,3 +3646,17 @@ is written to carry them on a jump instead, which is the cheaper shape anyway.
 What the pass buys is that the first one that does not is compiled rather than
 refused -- and the backend keeps the refusal (8501), since such a branch
 reaching it now means the pass did not run.
+
+**What it cost, and what that paid for.**  A pass that never fires is still a
+pass, and the pass manager verified the whole module after every one of them --
+so adding this one added a verification, which on the larger programs was about
+five per cent of the compilation.  Verifying after a pass that changed nothing is
+verifying what the verifier passed the last time it ran, so it no longer happens:
+the module is verified after every pass that reports a change, and after the last
+pass whatever it reports, so what reaches the backend has always been through it.
+That won back more than the new pass cost -- `collection-string-keys` 74.7 ms
+before the pass, 78.5 with it and 68.0 with both -- because several passes change
+nothing on most programs.  What it gives up is which pass to blame: one that
+mutates the module and reports that it did not would be found by the next pass
+that does report a change, and named as the culprit.  That is a defect in a pass
+either way, and the timing report would already be lying about it.
