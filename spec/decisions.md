@@ -7093,6 +7093,54 @@ the call insn does not repeat; **Cranelift**, where the clobber set hangs off th
 `CallInfo` for the signature's ABI; **Go**'s assembler, where a call's clobber
 set is the ABI's and the instruction table says only what the instruction encodes.
 
+## 2026-09-30T00:30+02:00 — compiler
+
+**A product of the widest type, seen through both halves of itself**
+
+Decided on the user's direction, from a to-do entry.  A saturating or trapping
+multiplication of `u64` or `i64` was refused on every target (8501), because
+seeing that such a product went past the end of its type wants the upper half of
+it and one of the three architectures has that only in an instruction with a
+fixed pair of registers.  It is implemented now, on all three.
+
+**The product is computed whole.**  `Assembler.wide_product` answers both halves
+at once rather than the upper one alone: AArch64 and RISC-V have an instruction
+per half and want both factors twice over, while x86-64 gets both halves out of
+one instruction and would have to multiply twice if asked for one.  The two
+that emit two instructions emit the *upper* half first, the lower one possibly
+being wanted in a register a factor is in.  Unsigned, the upper half is nought
+exactly when the product fits; signed, it fits exactly when the upper half is
+the lower one's sign spread across it, and which end was passed is the sign of
+the upper half.
+
+**The entry's premise turned out to be wrong, and nothing was added for it.**
+It said an operand would have to be able to require a particular register, since
+x86-64's one-operand multiply reads a factor in `rax` and writes both halves to
+`rdx:rax` -- and that division had not needed such a thing only because it
+*writes* the fixed pair, while this one *reads* one.  The distinction does not
+hold: the selector moves the factor into `rax` itself, exactly as the division
+does, and the instruction declaring what it writes is enough to keep the other
+factor out of both, the allocator already keeping a value out of a register
+whose life overlaps its own.  The move in is free in practice as well -- where
+the factor is computed just before, the allocator gives it `rax` and the move
+becomes a move of a register to itself, which goes.
+
+So no mechanism was added.  What would bring the question back is an instruction
+whose operand must be a particular register *and* cannot be moved there -- a
+value spanning a fixed pair, say -- and nothing in these three architectures
+asks that of this compiler yet.  The entry is closed rather than reworded,
+since what it was for is done.
+
+Compare: **LLVM**, which has both -- a physical register copied into before the
+instruction, and `Constraints` on an instruction definition -- and uses the copy
+for exactly this instruction, leaving the coalescer to remove it, which is what
+happens here; **GCC**, whose machine description writes the constraint as `"a"`
+on the operand and lets reload place it; **Cranelift**, which pins the value to
+the register at the instruction and relies on its own move coalescing;
+**Go**'s compiler, where the amd64 rules write `MULQ` with its fixed pair as a
+tuple-producing operation and the register allocator is told by the op's
+`reg` specification.
+
 Open questions
 --------------
 

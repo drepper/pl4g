@@ -307,6 +307,20 @@ class InstructionSelector(Protocol):
         """
         ...
 
+    def select_wide_product(self, low: Reg, high: Reg, left: MCOperand,
+                            right: MCOperand, signed: bool,
+                            span: Span) -> Sequence[MCInst]:
+        """Instructions computing both halves of the product of *left* and
+        *right*, the low one into *low* and the upper one into *high*.
+
+        Both halves at once because one architecture answers both with one
+        instruction and the other two need the two factors twice over; asking
+        for the upper half alone would make that one compute the product twice.
+        The upper half is what says a product of the widest type went past the
+        end of it, there being nowhere wider to compute in.
+        """
+        ...
+
     def link_slot_size(self) -> int:
         """How much room a function that calls has to set aside for its own
         return address, which is none where a call has already put it somewhere
@@ -940,6 +954,13 @@ class Assembler:
         """Divide *left* by *right* into *dst*, truncating toward zero."""
         self._emit(self._selector.select_divide(dst, left, right, signed,
                                                 remainder, bits, span))
+
+    def wide_product(self, low: Reg, high: Reg, left: MCOperand,
+                     right: MCOperand, signed: bool,
+                     span: Span = INVALID_SPAN) -> None:
+        """Multiply *left* by *right* into the pair *high*:*low*."""
+        self._emit(self._selector.select_wide_product(low, high, left, right,
+                                                      signed, span))
 
     def clamp(self, cond: Condition, dst: Reg, lhs: MCOperand, rhs: MCOperand,
               bound: MCOperand, span: Span = INVALID_SPAN) -> None:

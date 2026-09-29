@@ -437,6 +437,22 @@ X86_INSTRS: Final[tuple[X86InstDesc, ...]] = (
                 modrm=ModRMUse.EXT_RM, ext=6, rm_op=0,
                 implicit_uses=(RAX, RDX), implicit_defs=(RAX, RDX, EFLAGS),
                 est_size=3, roles=(OperandRole.USE,)),
+    # The one-operand multiplies are the only way to see the upper half of a
+    # product on this architecture.  They read one factor in a fixed register
+    # and write both halves of the answer to a fixed pair, which is said here
+    # the way the divisions above say it -- and needs nothing else, since a
+    # value whose life overlaps a register the instruction writes is already
+    # kept out of it.
+    # mul r/m64                          REX.W F7 /4    (unsigned)
+    X86InstDesc("mul", (_rm(64),), opcode=0xF7, opsize=OpSize.REXW,
+                modrm=ModRMUse.EXT_RM, ext=4, rm_op=0,
+                implicit_uses=(RAX,), implicit_defs=(RAX, RDX, EFLAGS),
+                est_size=3, roles=(OperandRole.USE,)),
+    # imul r/m64                         REX.W F7 /5    (signed)
+    X86InstDesc("imul", (_rm(64),), opcode=0xF7, opsize=OpSize.REXW,
+                modrm=ModRMUse.EXT_RM, ext=5, rm_op=0,
+                implicit_uses=(RAX,), implicit_defs=(RAX, RDX, EFLAGS),
+                est_size=3, roles=(OperandRole.USE,)),
     # The variable-count shifts take their count in the low byte of one fixed
     # register, which is said here as an implicit use: the allocator then keeps
     # every other value out of it while the shift wants it.

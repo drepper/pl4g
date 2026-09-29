@@ -25,10 +25,17 @@ is done the other way round: the operation is allowed to wrap, and what says it
 wrapped is a property of the wrapped answer.  A sum that came out below what it
 was given has carried; a difference asked of too small a number is one whose
 left operand was the smaller; and a sum of two numbers of one sign that comes out
-with the other sign has gone past the end on that side.  A product is the one
-this cannot answer: seeing that it went past needs the upper half of it, which
-two of these architectures have as an instruction and the third has only in a
-form with a fixed pair of registers.
+with the other sign has gone past the end on that side.
+
+**A product is the one the wrapped answer cannot answer for**, there being no
+property of the low half that says the high half was not nought.  So it is not
+asked: the product is computed whole, both halves of it, and the upper half is
+what says whether the lower one is the answer.  Two of these architectures
+answer the upper half with an instruction of its own; the third has it only in
+the one-operand multiply, which reads a factor in a fixed register and writes
+both halves to a fixed pair -- which costs a move in and two out and nothing
+else, the instruction saying what it writes being enough to keep the other
+factor clear of it.
 """
 
 from __future__ import annotations
@@ -276,9 +283,8 @@ def _wrapping(asm: Assembler, op: BinOp, ty: IntType, left: MCOperand,
               fault: Fault | None, span: Span) -> None:
     """Let the operation wrap and ask the wrapped answer what happened."""
     if _ORDINARY[op] is BinOp.MUL:
-        raise Unsupported(
-            "a saturating multiplication of the widest type, which needs the "
-            "upper half of the product")
+        _wide_product(asm, ty, left, right, destination, scratch, fault, span)
+        return
     # The left operand is read again after the operation, so it has to be
     # somewhere reading it is possible; a constant is put in a register first.
     if isinstance(left, MCReg):
@@ -297,6 +303,47 @@ def _wrapping(asm: Assembler, op: BinOp, ty: IntType, left: MCOperand,
             _answer(asm, Condition.ULT, destination, held, right, zero, fault, span)
         return
     _signed_wrapping(asm, op, ty, held, right, destination, scratch, fault, span)
+
+
+def _wide_product(asm: Assembler, ty: IntType, left: MCOperand,
+                  right: MCOperand, destination: Reg, scratch: Scratch,
+                  fault: Fault | None, span: Span) -> None:
+    """A product of the widest type, seen through the upper half of itself.
+
+    There is nowhere wider to compute in, so the product is computed whole --
+    both halves of it -- and the upper half is what says whether the lower one
+    is the answer.
+
+    **Unsigned**, the upper half is nought exactly when the product fits, and
+    the only end such a product can reach is the top.
+
+    **Signed**, the product fits exactly when the upper half is what the lower
+    one's sign says it should be: all ones under a negative answer and nought
+    under a positive one, which is the lower half shifted right by its whole
+    width less one.  Which end was passed is then the sign of the upper half,
+    that being the sign of the product itself.
+    """
+    high = scratch.scratch()
+    asm.wide_product(destination, high, left, right, ty.signed, span)
+    zero = MCImm(0, 32, signed=False)
+    if not ty.signed:
+        bound = scratch.scratch()
+        asm.loadreg(bound, MCImm(ty.high, 64, signed=False), span)
+        _answer(asm, Condition.NE, destination, MCReg(high), zero,
+                MCReg(bound), fault, span)
+        return
+    expected = scratch.scratch()
+    asm.shift(ops.SHIFT_RIGHT_SIGNED, expected, MCReg(destination),
+              MCImm(63, 32, signed=False), 64, span)
+    bound = scratch.scratch()
+    asm.loadreg(bound, MCImm(ty.high, 64, signed=True), span)
+    if fault is None:
+        # A product that went past and whose upper half is negative went past
+        # the bottom; the bound is the other end for it.
+        asm.clamp(Condition.SLT, bound, MCReg(high), zero,
+                  MCImm(ty.low, 64, signed=True), span)
+    _answer(asm, Condition.NE, destination, MCReg(high), MCReg(expected),
+            MCReg(bound), fault, span)
 
 
 def _signed_wrapping(asm: Assembler, op: BinOp, ty: IntType, left: MCReg,

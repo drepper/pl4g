@@ -1,0 +1,14 @@
+※ pl4g-test: compile=ok run=native,qemu exit=64 diag=none
+
+※ And the widest signed type, where what says the product went past is that the
+※ upper half of it is not what the lower one's sign says it should be.  Two
+※ negative factors make a positive product, so this one goes past the top.
+
+let big: i64 = ⁻4294967296i64
+
+@[startup]
+fn main() → u6:
+    if big × big = big:
+        1u6
+    else:
+        2u6

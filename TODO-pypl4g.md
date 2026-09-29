@@ -161,12 +161,6 @@ To Do List for the pypl4g compiler
     builds the mapping the allocator wants.  A frame slot is still eight bytes whatever the class, which is right until there is a
     value wider than that.
 
-[ ] let an operand require a particular register, so that an instruction with a fixed register pair can be used.  Division turned
-    out not to need it -- an instruction that declares it writes a register is already enough to keep other values out of it, so
-    the divisor cannot land in the pair -- but the one-operand multiply does, since its *input* has to be in a particular register
-    and nothing can say so.  That is the only way to see the upper half of a product on x86-64, and until then a saturating
-    multiplication of the widest type is refused on every target rather than on the one that cannot do it.
-
 [ ] let the textual IR be read back for everything it can be written for.  The reader lags the printer: it does not know
     floating-point types or constants, calls, casts, the result type or the three instructions that make and read one.  Nothing
     depends on it today -- the golden round-trip test names the cases it covers -- and what it costs is that a dump of a program

@@ -1,18 +1,40 @@
-※ pl4g-test: compile=fail
-※ pl4g-test: expect-diag 8501 IMPL_BACKEND_UNSUPPORTED
+※ pl4g-test: compile=ok opt=0,1
+※ pl4g-test: run=native,qemu exit=0
+※ pl4g-test: diag=none
 
-※ Seeing that a product of two whole registers went past the end needs the
-※ upper half of it, which two of the three architectures have as a single
-※ instruction and the third has only in a form with a fixed pair of registers.
-※ Refused on every target, so that a program means the same thing wherever it
-※ is compiled.
+※ A product of two whole registers is the one answer there is nowhere wider to
+※ compute in, so it is computed whole -- both halves of it -- and the upper
+※ half is what says whether the lower one is the answer.
+※
+※ Unsigned, the upper half is nought exactly when the product fits, and the
+※ only end such a product can reach is the top.  Signed, it fits exactly when
+※ the upper half is what the lower one's sign says it should be -- all ones
+※ under a negative answer and nought under a positive one -- and which end was
+※ passed is the sign of the upper half, that being the sign of the product.
+※
+※ Two of the three architectures answer the upper half with one instruction;
+※ the third has it only in the one-operand multiply, which reads a factor in a
+※ fixed register and writes both halves of the answer to a fixed pair.
 
 let big: u64 = 4294967296u64
+let near: u64 = 4294967295u64
+let signed: i64 = 4294967296i64
+let negative: i64 = ⁻4294967296i64
+let root: i64 = 3037000499i64
 
-@[visible]
-let answer: mut u64 = 0u64
-
-@[startup, impure]
+@[startup]
 fn main() → u6:
-    answer ← big ⊠ big
-    0u6
+    let wrong: mut u6 = 0u6
+    if big ⊠ big ≠ 18446744073709551615u64:
+        wrong ← 1u6
+    if near ⊠ near ≠ 18446744065119617025u64:
+        wrong ← 2u6
+    if signed ⊠ signed ≠ 9223372036854775807i64:
+        wrong ← 3u6
+    if signed ⊠ negative ≠ ⁻9223372036854775808i64:
+        wrong ← 4u6
+    if negative ⊠ negative ≠ 9223372036854775807i64:
+        wrong ← 5u6
+    if root ⊠ root ≠ 9223372030926249001i64:
+        wrong ← 6u6
+    wrong

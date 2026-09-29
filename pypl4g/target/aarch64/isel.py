@@ -951,6 +951,25 @@ class A64Selector(InstructionSelector):
                                (MCReg(dst, bits=bits), held_value, counted), span))
         return tuple(held)
 
+    def select_wide_product(self, low: Reg, high: Reg, left: MCOperand,
+                            right: MCOperand, signed: bool,
+                            span: Span) -> Sequence[MCInst]:
+        """Both halves of the product of *left* and *right*.
+
+        Two instructions, one for each half, and the upper one goes first: the
+        low half may be asked for in a register one of the factors is in, and
+        the upper half still wants both of them.
+        """
+        held: list[MCInst] = []
+        first, before = self._in_register(left, 64, span)
+        held.extend(before)
+        second, before = self._in_register(right, 64, span)
+        held.extend(before)
+        held.append(self._inst("smulh" if signed else "umulh",
+                               (MCReg(high, bits=64), first, second), span))
+        held.append(self._inst("mul", (MCReg(low, bits=64), first, second), span))
+        return tuple(held)
+
     def select_divide(self, dst: Reg, left: MCOperand, right: MCOperand,
                       signed: bool, remainder: bool, bits: int,
                       span: Span) -> Sequence[MCInst]:

@@ -3666,3 +3666,39 @@ nothing on most programs.  What it gives up is which pass to blame: one that
 mutates the module and reports that it did not would be found by the next pass
 that does report a change, and named as the culprit.  That is a defect in a pass
 either way, and the timing report would already be lying about it.
+
+Both halves of a product
+------------------------
+
+A saturating or trapping operation on the widest type has nowhere wider to be
+computed in, so what says it went past the end of that type is a property of the
+wrapped answer: a sum that came out below what it was given has carried, and so
+on.  A product has no such property -- nothing about the low half says the high
+half was not nought -- so the product is computed whole instead, and the upper
+half is what says whether the lower one is the answer.
+
+**Unsigned**, the upper half is nought exactly when the product fits, and the
+only end such a product can reach is the top.  **Signed**, it fits exactly when
+the upper half is what the lower one's sign says it should be: all ones under a
+negative answer and nought under a positive one, which is the lower half shifted
+right by its whole width less one.  Which end was passed is then the sign of the
+upper half, that being the sign of the product itself.
+
+`Assembler.wide_product` asks for both halves at once rather than the upper one
+alone, because the three do not agree on how many instructions it is.  AArch64
+and RISC-V have one instruction per half and want both factors twice over;
+x86-64 has both halves out of one instruction, and asking for the upper one
+alone would make it multiply twice.  Each of the two-instruction targets emits
+the *upper* half first, since the lower one may be wanted in a register a factor
+is in.
+
+**And the fixed pair needed nothing new.**  The to-do entry that asked for this
+said an operand would have to be able to require a particular register, because
+x86-64's one-operand multiply reads a factor in `rax` and writes both halves to
+`rdx:rax`.  It turned out to be the same situation as the division, which reads
+a fixed pair and writes one: the selector moves the factor into `rax` itself,
+and the instruction declaring what it writes is enough to keep the other factor
+out of both -- the allocator already keeps a value out of a register whose life
+overlaps its own.  The move in costs nothing in practice either: where the
+factor is computed just before, the allocator gives it `rax` and the move
+becomes a move of a register to itself, which goes.

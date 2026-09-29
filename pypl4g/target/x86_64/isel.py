@@ -940,6 +940,31 @@ class X86Selector(InstructionSelector):
         held.extend(self.select_move(dst, MCReg(answer), span))
         return tuple(held)
 
+    def select_wide_product(self, low: Reg, high: Reg, left: MCOperand,
+                            right: MCOperand, signed: bool,
+                            span: Span) -> Sequence[MCInst]:
+        """Both halves of the product of *left* and *right*.
+
+        The one-operand multiply is the only instruction here that answers with
+        the upper half.  It reads one factor in a fixed register and writes both
+        halves to a fixed pair; the other factor cannot land in either of them,
+        and nothing here has to say so, for the reason the division above gives.
+        """
+        held: list[MCInst] = []
+        accumulator = REGISTERS.view(RAX.unit, 64)
+        first, before = self._in_register(left, 64, span)
+        held.extend(before)
+        held.extend(self.select_move(accumulator, first, span))
+        second, before = self._in_register(right, 64, span)
+        held.extend(before)
+        held.append(self._inst("imul" if signed else "mul", (second,), span))
+        # The upper half first: the low one is in the register the factor came
+        # from, and a caller may well have asked for the two in one register.
+        held.extend(self.select_move(high, MCReg(REGISTERS.view(RDX.unit, 64)),
+                                     span))
+        held.extend(self.select_move(low, MCReg(accumulator), span))
+        return tuple(held)
+
     def _in_register(self, operand: MCOperand, bits: int,
                      span: Span) -> tuple[MCReg, Sequence[MCInst]]:
         """*operand* as a register of *bits*, with whatever puts it in one."""

@@ -60,6 +60,19 @@ CASES = [
     (SUB, I64, -9223372036854775808, 1, -9223372036854775808),
     (SUB, I64, 9223372036854775807, -1, 9223372036854775807),
     (SUB, I64, 3, 5, -2),
+    # A product of two whole registers is the one answer there is nowhere wider
+    # to compute: what says it went past the end is the upper half of it.
+    (MUL, U64, 3, 5, 15), (MUL, U64, 0, 18446744073709551615, 0),
+    (MUL, U64, 4294967295, 4294967295, 18446744065119617025),
+    (MUL, U64, 4294967296, 4294967296, 18446744073709551615),
+    (MUL, U64, 18446744073709551615, 2, 18446744073709551615),
+    (MUL, I64, 3, -5, -15), (MUL, I64, 0, -9223372036854775808, 0),
+    (MUL, I64, 3037000499, 3037000499, 9223372030926249001),
+    (MUL, I64, 4294967296, 4294967296, 9223372036854775807),
+    (MUL, I64, -4294967296, -4294967296, 9223372036854775807),
+    (MUL, I64, 4294967296, -4294967296, -9223372036854775808),
+    (MUL, I64, -9223372036854775808, -1, 9223372036854775807),
+    (MUL, I64, -9223372036854775808, 1, -9223372036854775808),
 ]
 
 
@@ -94,31 +107,6 @@ def test_the_answer_is_the_nearest_the_type_can_hold(triple: str, op: BinOp, ty,
     assert run(triple, path) == 1, "".join((
         op.value, " of ", str(left), " and ", str(right), " as ", ty.render(),
         " is not ", str(expected)))
-
-
-@pytest.mark.parametrize("triple", compiler_targets())
-@pytest.mark.parametrize("ty", (U64, I64), ids=("u64", "i64"))
-def test_the_widest_multiplication_is_reported_not_guessed(triple: str, ty,  # noqa: ANN001
-                                                           tmp_path) -> None:  # noqa: ANN001
-    """Seeing that a product of two whole registers went past the end needs the
-    upper half of it, which two of these architectures have as one instruction
-    and the third has only in a form with a fixed pair of registers.
-
-    Refused on every target rather than on the one that cannot do it, so that a
-    program means the same thing wherever it is compiled.
-    """
-    from pypl4g.diag.engine import collecting_engine
-    from pypl4g.mc.streamer import MCStreamer
-    from pypl4g.target.registry import lookup as lookup_target
-
-    module = answers(triple, MUL, ty, 2, 3, 6)
-    target = lookup_target(triple)
-    assert target is not None
-    engine, collected = collecting_engine(None)
-    streamer = MCStreamer(encode=target.encode)
-    target.generate(module, target.new_assembler(streamer, 0), engine, 0)
-    assert 8501 in [d.info.number for d in collected], \
-        [d.info.name for d in collected]
 
 
 # -- dividing, and what is left over --------------------------------------------

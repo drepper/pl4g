@@ -291,6 +291,9 @@ SAMPLES = [
     ("idiv rbx", "idiv", MCReg(reg("rbx"))),
     ("div ebx", "div", MCReg(reg("ebx"))),
     ("div rbx", "div", MCReg(reg("rbx"))),
+    # The one-operand multiplies, which answer with both halves of the product.
+    ("mul rbx", "mul", MCReg(reg("rbx"))),
+    ("imul rbx", "imul", MCReg(reg("rbx"))),
     ("shl ebx,cl", "shl", MCReg(reg("ebx")), MCReg(reg("cl"))),
     ("shl rbx,cl", "shl", MCReg(reg("rbx")), MCReg(reg("cl"))),
     ("shr ebx,cl", "shr", MCReg(reg("ebx")), MCReg(reg("cl"))),

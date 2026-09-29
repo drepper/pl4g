@@ -774,6 +774,26 @@ class RVSelector(InstructionSelector):
                                (MCReg(dst), held_value, counted), span))
         return tuple(held)
 
+    def select_wide_product(self, low: Reg, high: Reg, left: MCOperand,
+                            right: MCOperand, signed: bool,
+                            span: Span) -> Sequence[MCInst]:
+        """Both halves of the product of *left* and *right*.
+
+        Two instructions, one for each half, and the upper one goes first --
+        which is what the architecture itself asks for where a pair like this
+        is to be recognised as one multiplication, and is needed anyway where
+        the low half is asked for in a register a factor is in.
+        """
+        held: list[MCInst] = []
+        first, before = self._as_register(left, span)
+        held.extend(before)
+        second, before = self._as_register(right, span)
+        held.extend(before)
+        held.append(self._inst("mulh" if signed else "mulhu",
+                               (MCReg(high), first, second), span))
+        held.append(self._inst("mul", (MCReg(low), first, second), span))
+        return tuple(held)
+
     def select_divide(self, dst: Reg, left: MCOperand, right: MCOperand,
                       signed: bool, remainder: bool, bits: int,
                       span: Span) -> Sequence[MCInst]:
