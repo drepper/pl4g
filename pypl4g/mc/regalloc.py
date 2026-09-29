@@ -20,9 +20,17 @@ write and the last read in layout order stops being a superset of the live set
 as soon as control can come back, and a value last read in the middle of a loop
 would have its register handed to something later in the same loop.
 
-Where there are not enough registers, a value is spilled: given a slot in the
-function's frame, written there when it is computed and read back before each
-use.  That is the whole of it -- the value is in memory for its whole life, and
+Where there are not enough registers, a value is spilled, and which value that
+is asks what spilling each would cost and what it would give back.  The cost is
+every read and every write of it, each weighed by ten to the depth of the loop
+it stands in; what it gives back is the stretch of register time it was holding.
+The value with the lowest cost per point is the one that goes.  Linear scan was
+described with "the range that reaches furthest", which is that with the cost
+left out -- and in a loop it names the value the loop carries, whose reload then
+runs every turn.
+
+A spilled value is given a slot in the function's frame, written there when it
+is computed and read back before each use.  That is the whole of it -- the value is in memory for its whole life, and
 what occupies a register is a fresh one that lives for the single instruction
 that reads or writes it.  Splitting a range so that a value is in a register
 where it is busy and in memory where it is not would generate better code and is
@@ -44,10 +52,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from collections.abc import Mapping
+from fractions import Fraction
 from typing import Final, Protocol, Sequence
 
 from .desc import OperandRole
 from .inst import MCInst
+from .loops import loop_depths
 from .machine import MachineFunction
 from .operand import MCMem, MCOperand, MCReg
 from ..source.location import Span
@@ -79,10 +89,32 @@ class LiveRange:
     reg: Reg
     start: int
     end: int
+    #: What spilling it would cost: every read and every write of it, each
+    #: counted as ten to the depth of the loop it stands in.  A value the code
+    #: only mentions outside a loop is counted once per mention, and one read
+    #: inside a loop is counted as the ten times it runs.
+    cost: int = 0
 
     def covers(self, other: LiveRange) -> bool:
         """Whether the two ranges are wanted at the same time."""
         return self.start <= other.end and other.start <= self.end
+
+    @property
+    def length(self) -> int:
+        """How many points it holds a unit for, which is never fewer than one."""
+        return self.end - self.start + 1
+
+    @property
+    def price(self) -> Fraction:
+        """What it costs to spill, per point of register time that gives back.
+
+        The measure the victim is chosen by, and both halves of it matter: the
+        cost alone would keep a value that is read twice over the whole function
+        and give up one read twice in three instructions, and the length alone
+        -- which is what linear scan was described with -- gives up the value a
+        loop carries, since that is the one that reaches furthest.
+        """
+        return Fraction(self.cost, self.length)
 
 
 @dataclass(slots=True)
@@ -159,6 +191,17 @@ class Assignment:
     coalesced: int = 0
     #: The virtual registers that had to go to the frame, by their identity.
     spilled: dict[int, int] = field(default_factory=dict)
+
+
+def _victim_order(found: LiveRange) -> tuple[Fraction, int]:
+    """How good a victim a range is: the smaller this is, the sooner it goes.
+
+    Its price first, and where two are worth the same the one that reaches
+    furthest, which is what linear scan chose on its own and is still the right
+    thing to break a tie with -- of two values that cost the same to spill, the
+    one holding a register longer is the one giving more back.
+    """
+    return (found.price, -found.end)
 
 
 def registers_of(operand: MCOperand) -> list[tuple[Reg, bool]]:
@@ -285,8 +328,10 @@ class LinearScan:
         """
         flows, seen = self._flow(function)
         _propagate(flows)
+        weights = self._weights(function, flows)
         first: dict[int, int] = {}
         last: dict[int, int] = {}
+        cost: dict[int, int] = {}
 
         def touch(key: int, point: int) -> None:
             """Note that the register is live at *point*."""
@@ -304,10 +349,18 @@ class LinearScan:
         # up moving a register to itself and going away.
         for position, inst in enumerate(function.instructions()):
             defs, uses = defs_and_uses(inst)
+            weight = weights[position]
             for reg in uses:
-                touch(self._key(reg), position * 2)
+                key = self._key(reg)
+                touch(key, position * 2)
+                # A read of a spilled value is a read of the frame here, and a
+                # write of one is a write of the frame here; both are paid for
+                # as often as this instruction runs.
+                cost[key] = cost.get(key, 0) + weight
             for reg in defs:
-                touch(self._key(reg), position * 2 + 1)
+                key = self._key(reg)
+                touch(key, position * 2 + 1)
+                cost[key] = cost.get(key, 0) + weight
         # And a register live where a block begins or ends is live there even
         # though no instruction of that block names it.  A block with nothing
         # in it has no point to name, and skipping it opens no hole: what is
@@ -319,11 +372,31 @@ class LinearScan:
                 touch(key, flow.entry_point)
             for key in flow.live_out:
                 touch(key, flow.exit_point)
-        virtual = [LiveRange(reg=reg, start=first[key], end=last[key])
+        virtual = [LiveRange(reg=reg, start=first[key], end=last[key],
+                             cost=cost.get(key, 0))
                    for key, reg in seen.items() if isinstance(reg, VirtReg)]
         physical = self._physical_ranges(function, flows, seen)
         virtual.sort(key=lambda r: (r.start, r.end))
         return virtual, physical
+
+    def _weights(self, function: MachineFunction,
+                 flows: Sequence[BlockFlow]) -> list[int]:
+        """What one run of each instruction is worth, in layout order.
+
+        Ten to the depth of the loops the instruction stands in, which is the
+        weight priority-based colouring was first described with and what every
+        allocator since has some version of.  It is a guess at how often the
+        instruction runs and is deliberately a crude one: nothing here knows how
+        many turns a loop takes, and the thing the weight has to get right is
+        only that inside is worth more than outside.
+        """
+        depths = loop_depths(function)
+        found: list[int] = []
+        for flow, depth in zip(flows, depths):
+            if flow.empty:
+                continue
+            found.extend([10 ** depth] * (flow.last - flow.first + 1))
+        return found
 
     def _physical_ranges(self, function: MachineFunction,
                          flows: Sequence[BlockFlow],
@@ -427,10 +500,15 @@ class LinearScan:
         """Give each range a unit, and say which ranges could not have one.
 
         A unit is released as soon as the range holding it ends.  Where none is
-        free, the value whose range reaches furthest is the one to send to the
-        frame: it is the one that would hold a register longest, so giving it up
-        frees the most.  That is the choice linear scan was described with, and
-        it is still the right one for straight-line code.
+        free, the value to send to the frame is the one whose `price` is lowest
+        -- what spilling it costs, per point of register time it gives back.
+        Linear scan was described with the range that reaches furthest, which is
+        that measure with the cost left out; the cost is what keeps a value a
+        loop carries out of the frame, it being the one that both reaches
+        furthest and is read every turn.
+
+        The incoming range is a candidate like any other: where it is the
+        cheapest, it is the one that goes and the unit stays where it is.
         """
         active: list[tuple[LiveRange, RegUnit]] = []
         crowded: list[VirtReg] = []
@@ -448,20 +526,24 @@ class LinearScan:
             # that may not has to be kept whatever else goes.
             candidates = [pair for pair in active
                           if isinstance(pair[0].reg, VirtReg) and pair[0].reg.spillable]
-            furthest = max(candidates, key=lambda pair: pair[0].end, default=None)
-            steal = furthest is not None and (furthest[0].end > found.end
-                                              or not found.reg.spillable)
-            if steal:
-                assert furthest is not None
-                victim, freed = furthest
-                assert isinstance(victim.reg, VirtReg)
-                crowded.append(victim.reg)
-                assignment.units.pop(victim.reg.ident, None)
-                active.remove(furthest)
-                assignment.units[found.reg.ident] = freed
-                active.append((found, freed))
-            else:
+            cheapest = min(candidates, key=lambda pair: _victim_order(pair[0]),
+                           default=None)
+            if cheapest is None:
+                # Nothing here may be given up.  The incoming range goes, and
+                # where it may not be spilled either the pressure is reported.
                 crowded.append(found.reg)
+                continue
+            if found.reg.spillable \
+                    and _victim_order(found) < _victim_order(cheapest[0]):
+                crowded.append(found.reg)
+                continue
+            victim, freed = cheapest
+            assert isinstance(victim.reg, VirtReg)
+            crowded.append(victim.reg)
+            assignment.units.pop(victim.reg.ident, None)
+            active.remove(cheapest)
+            assignment.units[found.reg.ident] = freed
+            active.append((found, freed))
         return crowded
 
     def _blocked_by(self, found: LiveRange,

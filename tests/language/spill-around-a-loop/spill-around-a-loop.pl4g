@@ -1,0 +1,123 @@
+※ pl4g-test: compile=ok opt=0,1
+※ pl4g-test: run=native,qemu exit=8
+※ pl4g-test: diag=none
+
+※ Thirty values are wanted at once across a loop, which is more registers than
+※ any of the three architectures has.  What makes this more than the test that
+※ fills the registers with no loop in sight is *which* of them goes to the
+※ frame: the four the loop reads are read again last of all, so their ranges
+※ are the ones that reach furthest, and the rule linear scan was described with
+※ -- give up the range that reaches furthest -- picks exactly those.  Every
+※ reload it puts in then runs on every turn of the loop.
+※
+※ So what a spill costs is weighed by where it is paid: a read inside a loop
+※ counts as ten to the depth of the loop, and the four the loop reads stay in
+※ registers while the twenty-six read only twice go to the frame.  What the
+※ program answers is what says they all came back unchanged.
+
+let a0: u6 = 1u6
+let a1: u6 = 2u6
+let a2: u6 = 3u6
+let a3: u6 = 4u6
+let a4: u6 = 5u6
+let a5: u6 = 6u6
+let a6: u6 = 7u6
+let a7: u6 = 8u6
+let a8: u6 = 9u6
+let a9: u6 = 1u6
+let a10: u6 = 2u6
+let a11: u6 = 3u6
+let a12: u6 = 4u6
+let a13: u6 = 5u6
+let a14: u6 = 6u6
+let a15: u6 = 7u6
+let a16: u6 = 8u6
+let a17: u6 = 9u6
+let a18: u6 = 1u6
+let a19: u6 = 2u6
+let a20: u6 = 3u6
+let a21: u6 = 4u6
+let a22: u6 = 5u6
+let a23: u6 = 6u6
+let a24: u6 = 7u6
+let a25: u6 = 8u6
+let b0: u6 = 9u6
+let b1: u6 = 1u6
+let b2: u6 = 2u6
+let b3: u6 = 3u6
+
+@[expect(4007)]
+let w: mut u6 = 0u6
+
+@[startup, impure]
+fn main() → u6:
+    let n: mut u6 = 3u6
+    let total: mut u6 = 0u6
+    let va0: u6 = a0
+    let va1: u6 = a1
+    let va2: u6 = a2
+    let va3: u6 = a3
+    let va4: u6 = a4
+    let va5: u6 = a5
+    let va6: u6 = a6
+    let va7: u6 = a7
+    let va8: u6 = a8
+    let va9: u6 = a9
+    let va10: u6 = a10
+    let va11: u6 = a11
+    let va12: u6 = a12
+    let va13: u6 = a13
+    let va14: u6 = a14
+    let va15: u6 = a15
+    let va16: u6 = a16
+    let va17: u6 = a17
+    let va18: u6 = a18
+    let va19: u6 = a19
+    let va20: u6 = a20
+    let va21: u6 = a21
+    let va22: u6 = a22
+    let va23: u6 = a23
+    let va24: u6 = a24
+    let va25: u6 = a25
+    let vb0: u6 = b0
+    let vb1: u6 = b1
+    let vb2: u6 = b2
+    let vb3: u6 = b3
+    while n > 0u6:
+        total ← total ^ vb0
+        total ← total ^ vb1
+        total ← total ^ vb2
+        total ← total ^ vb3
+        n ← n - 1u6
+    total ← total ^ va0
+    total ← total ^ va1
+    total ← total ^ va2
+    total ← total ^ va3
+    total ← total ^ va4
+    total ← total ^ va5
+    total ← total ^ va6
+    total ← total ^ va7
+    total ← total ^ va8
+    total ← total ^ va9
+    total ← total ^ va10
+    total ← total ^ va11
+    total ← total ^ va12
+    total ← total ^ va13
+    total ← total ^ va14
+    total ← total ^ va15
+    total ← total ^ va16
+    total ← total ^ va17
+    total ← total ^ va18
+    total ← total ^ va19
+    total ← total ^ va20
+    total ← total ^ va21
+    total ← total ^ va22
+    total ← total ^ va23
+    total ← total ^ va24
+    total ← total ^ va25
+    total ← total ^ vb0
+    total ← total ^ vb1
+    total ← total ^ vb2
+    total ← total ^ vb3
+    w ← total
+    total

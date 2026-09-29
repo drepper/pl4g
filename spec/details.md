@@ -1364,12 +1364,11 @@ reached from a program that compiled, so reaching one reports a defect in the co
 reinterpretation there as anywhere, and it would be harder to notice.
 
 Instruction selection names each value it computes with a register of its own and says nothing about where that register is; the
-allocator decides.  The method is linear scan: every instruction is given a position, each register gets the range between the
-first position that writes it and the last that reads it, and the ranges are walked in order of their start, a unit being held for
-as long as a range needs one and released as soon as it ends.  That is much less than a colouring allocator does and it is the
-right amount for straight-line code, which is all the language can express -- with no branches there is no interference graph, only
-an interval on a line.  The entry that adds a branch backwards has to replace the liveness with an analysis over the control-flow
-graph, and the pass says so where it computes the ranges.
+allocator decides.  The method is linear scan: every instruction is given a position, each register gets the hull of the positions
+at which it is live, and the ranges are walked in order of their start, a unit being held for as long as a range needs one and
+released as soon as it ends.  That is much less than a colouring allocator does, and it is the right amount here: what it gives up
+is the ability to say that two ranges which overlap are never live at the same moment, which costs a register now and again and
+never costs correctness.
 
 One instruction is two positions, a read and then a write.  That is not a detail: it is what lets a value be moved into the
 register it is read from, so that a value hinted towards the register a result is returned in gets that register, the move becomes
@@ -1410,11 +1409,27 @@ A value read again by the instruction straight after the one that read it is not
 already in serves both, and the register is held across exactly as many instructions as are reading it and no further.  The same
 rule covers a value read straight after it was computed, which is used from the register it was written from rather than read back
 at once.  That is as far as splitting a range goes here; keeping a value in a register across instructions that are *not* reading
-it would need a cost model, since the register held is one another value cannot have, and there is nothing yet to base one on.
+it would need a cost model, since the register held is one another value cannot have, and the weight below is what such a model
+would be built on.
 
 Spilling is done by rewriting and starting again rather than by patching the assignment as it goes.  A spill adds instructions,
-which moves every position after it and so changes every range, and recomputing is simpler than repairing.  The value given up is
-the one whose range reaches furthest, since that is the one that would hold a register longest.
+which moves every position after it and so changes every range, and recomputing is simpler than repairing.
+
+**The value given up is the one with the lowest price**, which is what spilling it would cost divided by the register time it
+gives back.  The cost is every read and every write of it, each weighed by ten to the depth of the loops the instruction stands in;
+what it gives back is how many positions the range covers.  Linear scan was described with "the range that reaches furthest",
+which is that measure with the cost left out -- and left out, it names the value a loop carries, since a value read every turn and
+read again after the loop is precisely the one that reaches furthest.  The reload the spill puts in then runs on every turn.  The
+incoming range is a candidate like any other, so where it is the cheapest it is the one that goes and the unit stays where it is;
+where two are worth the same, the one reaching furthest goes, which is the old rule kept as the tie-break it always was.
+
+**What a loop is** is asked of the machine graph and not of the front end: an edge to a block that dominates the one it leaves is a
+back edge, the loop it closes is that block together with everything reaching the latch without passing through it, and a block's
+depth is how many such loops hold it.  By the time the machine function exists there is no `while` left, only blocks and edges, so
+a loop lowered from something else counts as much as one written down.  A block the entry cannot reach is at depth 0: nothing runs
+there, and weighing code that does not run says nothing.  Ten to the depth is the weight priority-based colouring was first
+described with; it is a guess at how often an instruction runs and deliberately a crude one, since nothing here knows how many
+turns a loop takes and the only thing the weight has to get right is that inside is worth more than outside.
 
 Only the allocator puts anything on the stack, so the frame is made after it has run and only where it took a slot: a function that
 needed none has no frame and no instruction saying so.  The room is given back before every return rather than at one place,

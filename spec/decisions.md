@@ -6889,6 +6889,65 @@ architecture that has no such thing is a warning and is ignored, which is the
 behaviour this replaces; **Go**, which offers no way to name a convention,
 there being one.
 
+## 2026-09-29T17:00+02:00 — compiler
+
+**A loop is weighed when the allocator chooses what to spill**
+
+Decided on the user's direction, from a to-do entry, and the user chose the
+measure from three that were put.  Linear scan gives up the range that reaches
+furthest, which is the choice it was described with and which says nothing about
+what giving it up will cost.  In a loop it names the worst candidate there is:
+a value read every turn and read again after the loop reaches further than
+anything else in the function, and the reload the spill puts in runs on every
+turn.
+
+**What is asked instead is a price**: what spilling the value would cost,
+divided by the register time it gives back.  The cost is every read and every
+write of it, each weighed by ten to the depth of the loops it stands in; what it
+gives back is the length of the range.  Both halves matter.  The cost alone
+would keep a value read twice over a whole function and give up one read twice
+in three instructions; the length alone is what the entry was written about.
+Where two are worth the same the one reaching furthest goes, so the old rule
+survives as the tie-break it always was -- and where no loop is involved the new
+measure is still the better one, a value read five times no longer being spilled
+merely because it lives longest.
+
+**The loop is found in the machine graph** rather than carried down from the
+`while` the program wrote.  By then there is no `while` left, only blocks and
+edges, and a loop lowered from something else -- or made by a pass -- is as much
+a loop as one written down.  So: an edge to a block that dominates the one it
+leaves is a back edge, the loop it closes is that block together with everything
+reaching the latch without passing through it, and the depth is how many such
+loops hold a block.  That also means the analysis is worth having on its own,
+which is why it is `mc/loops.py` and not three lines inside the allocator.
+
+Turned down: **weighing the length instead of the cost**, so that a stretch
+inside a loop counts ten times over -- which makes the value a loop carries look
+*longer* and picks it even faster, the very thing the entry calls the worst
+possible choice.  Turned down as well: **depth as a tie-break only**, taking the
+shallowest value and the furthest-reaching of those, which would have left
+straight-line code exactly as it is and ignored how often a value is read.  The
+user took the fuller measure knowing it changes choices where there is no loop
+at all.
+
+Ten to the depth is a guess at how often an instruction runs, and a crude one on
+purpose: nothing here knows how many turns a loop takes, and the only thing the
+weight has to get right is that inside is worth more than outside.  A profile,
+or a count the front end could sometimes work out, would be the next step and
+neither is needed for the thing the entry names.
+
+Compare: **Chow and Hennessy's** priority-based colouring, whose spill cost is
+exactly σ 10 to the loop depth over the definitions and uses, which is what
+this is; **LLVM**, whose greedy allocator divides that by the size of the live
+interval, which is what makes it a price rather than a cost and is the shape
+taken here; **GCC**, whose integrated register allocator does the same through
+block frequencies it gets from the profile where there is one; **HotSpot's**
+client compiler, a linear scan like this one that weighs each use position by
+loop depth for the same reason; **Poletto and Sarkar's** original linear scan,
+which is the furthest-reaching rule this replaces and which was described for
+straight-line code in a just-in-time compiler, where the analysis had to be
+cheap above all.
+
 Open questions
 --------------
 

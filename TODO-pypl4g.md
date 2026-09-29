@@ -140,15 +140,11 @@ To Do List for the pypl4g compiler
     virtual register still gets one hull, which is right for a value with one definition and wrong for one the spill rewrite
     redefines; the hull is conservative, so this is a missed register rather than a defect.
 
-[ ] weigh a loop when choosing what to spill.  The victim is the range that reaches furthest, which in a loop is systematically
-    the value the loop carries -- the worst possible choice, since its reload runs every turn.  The standard answer is a weight by
-    loop depth, and the block flow the liveness already builds is what it needs.
-
 [ ] keep a spilled value in a register across instructions that do not read it, where that is cheaper than reloading.  The step
     beyond the entry above, and the one that needs a cost model: the register held is one another value cannot have, so holding it
-    causes a spill somewhere else, which is exactly what the x86-64 measurement above shows in miniature.  Now that there are
-    loops, the count of times a load runs has stopped being the count of times it is written, so there is something to base a
-    model on.
+    causes a spill somewhere else, which is exactly what the x86-64 measurement above shows in miniature.  The weight by loop
+    depth the allocator now chooses a victim with is what such a model would be built on: it already says how often an
+    instruction runs, which is the number this has to compare against a reload.
 
 [ ] a frame larger than the immediate a stack adjustment can carry is reported rather than built in steps.  RISC-V reaches this
     first, at about two hundred and fifty slots, and AArch64 at about five hundred; x86-64 does not.  Now that a constant of any
