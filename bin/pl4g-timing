@@ -106,6 +106,7 @@ GROUPS: tuple[Group, ...] = (
            "saturating-widest-multiplication": "six products of whole registers",
            "arithmetic-operators": "a sum and a product that check and can fault",
            "arithmetic-at-each-width": "a sum and a difference at each of the four widths",
+           "count-bits": "counting bits, with the instruction where there is one",
            "wrap-arithmetic": "fifteen operators that may go past the end of their type",
            "call-nested": "four calls, two of them nested",
            "assign-to-the-wildcard": "two answers taken and two dropped into '_'",
