@@ -3602,3 +3602,47 @@ four blocks and sixteen lines of IR gone and forty-eight bytes of image with
 them; over the two hundred and forty-two programs of the language suite, fifty
 smaller images, three larger by the sixteen bytes an alignment moves, and two
 thousand seven hundred bytes less in all.
+
+A block on an edge
+------------------
+
+A branch carries the values the block it goes to takes as parameters, and
+putting them where that block will look for them is a move -- an instruction,
+which has to be in a block.  A branch with one way out has one: its own, just
+before the jump.  A branch with more than one does not, since before the branch
+is every way out at once, and moves made on the way that was not taken would
+write what the other way's block reads.
+
+So `splitedges` puts a block there.  The edge becomes two: the branch goes to a
+new block carrying nothing, and that block goes on to where the branch was
+going, carrying what the branch carried.  One way in, one way out, nothing in it
+but the moves -- which is the place the moves needed.
+
+**Which edges.**  The ones whose source has more than one way out and which
+carry a value.  The classical rule asks for the target to have more than one way
+in as well -- a *critical* edge, the only kind worth splitting where the
+alternative is to put the moves at the top of the target block.  That
+alternative does not exist here: what places the moves is the backend, which
+writes them before the branch and never inside the block it goes to.  An edge
+carrying only a memory token is not counted either, a token being an ordering
+and not a value, so there is nothing to move for it.
+
+**Where the new block goes: straight after the branch.**  The order blocks are
+laid out in is the order the backend walks, and a value has to be computed in a
+block standing before the one that reads it.  What the new block reads is what
+the branch carried, which is computed before the branch -- so just after the
+branch is right whatever the rest of the layout looks like.  In front of the
+block the edge arrives at would be right for an edge going forwards and wrong
+for one going back: a loop that goes round from its conditional branch carries
+values its header computed, and a block in front of the header would read two
+values nothing had worked out yet.
+
+The pass runs at every optimization level, because what it does is not an
+optimization but a shape the machine needs, and it runs last, after everything
+that could make such an edge.  **Nothing makes one yet**: over the whole language
+suite compiled at both levels, one thousand and twenty-two compilations, it
+splits nothing.  Every lowering that could carry values on a conditional branch
+is written to carry them on a jump instead, which is the cheaper shape anyway.
+What the pass buys is that the first one that does not is compiled rather than
+refused -- and the backend keeps the refusal (8501), since such a branch
+reaching it now means the pass did not run.

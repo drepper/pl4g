@@ -1,16 +1,18 @@
-"""Small changes to a function that several passes make the same way.
+"""Small things about a function that more than one place wants answered.
 
-What is here is what more than one pass needs and none of them owns: making
-every reader of a value read another one instead, and asking which branches
-arrive at a block.  Both were written out where they were wanted, more than
-once and not quite alike, which is the reason for a place to put them.
+What is here is what several passes and the backend need and none of them owns:
+making every reader of a value read another one instead, asking which branches
+arrive at a block, and asking what a branch actually has to move.  Each was
+written out where it was wanted -- two of them more than once and not quite
+alike -- which is the reason for a place to put them.
 """
 
 from __future__ import annotations
 
 from .function import BasicBlock, Function
 from .inst import BlockTarget, Terminator
-from .value import Value
+from .types import MEM
+from .value import BlockParam, Value
 
 
 def stands_for(func: Function, gone: Value, instead: Value) -> None:
@@ -48,3 +50,18 @@ def incoming_edges(func: Function) -> dict[int, list[tuple[BasicBlock,
             if isinstance(target.block, BasicBlock):
                 found.setdefault(id(target.block), []).append((block, target))
     return found
+
+
+def carried_values(target: BlockTarget) -> list[tuple[BlockParam, Value]]:
+    """The parameters a branch to *target* actually has to put something in.
+
+    A memory token is not held anywhere: it exists to order the operations that
+    touch memory, and a parameter of one says only which path's ordering holds
+    from here.  There is nothing to move for it, which is why an edge carrying
+    only one costs no instruction -- and why nothing has to be done to such an
+    edge before a branch with more than one way out can take it.
+    """
+    block = target.block
+    assert isinstance(block, BasicBlock)
+    return [(param, arg) for param, arg in zip(block.params, target.args)
+            if param.ty is not MEM]

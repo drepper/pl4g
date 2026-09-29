@@ -73,15 +73,20 @@ def pipeline_for(level: int) -> Sequence[str]:
     # It runs before `largeanswers`, which is what asks the question about the
     # program as written: after that pass a call of the wrong shape writes the
     # caller's storage and is not droppable at all.
+    # And putting a block on an edge that has moves to make is not one either:
+    # it is a shape the machine needs rather than anything the program asked
+    # for, so it runs whatever was asked for.  It goes last, after everything
+    # that could make such an edge and after everything that might otherwise
+    # take the block it puts there straight back out again.
     if level <= 0:
-        return ("dropignored", "largeanswers", "dropunreached")
+        return ("dropignored", "largeanswers", "dropunreached", "splitedges")
     # Inlining goes after the two that are not optimizations and before the
     # rest: what it leaves behind is a call gone and a body in its place, which
     # is what folding, simplifying and sweeping are for -- and a function
     # nothing calls any more, which the last pass drops.
     # Dead code is swept before that, since both of the others leave some.
     return ("dropignored", "largeanswers", "inline", "constfold", "simplifycfg",
-            "dce", "dropunreached")
+            "dce", "dropunreached", "splitedges")
 
 
 def build_manager(level: int) -> PassManager:
@@ -93,6 +98,7 @@ def build_manager(level: int) -> PassManager:
     from .passes.inline import Inlining
     from .passes.largeanswers import LargeAnswers
     from .passes.simplifycfg import SimplifyCFG
+    from .passes.splitedges import SplitEdges
 
     available: dict[str, Pass] = {
         "constfold": ConstantFolding(),
@@ -102,6 +108,7 @@ def build_manager(level: int) -> PassManager:
         "inline": Inlining(),
         "largeanswers": LargeAnswers(),
         "simplifycfg": SimplifyCFG(),
+        "splitedges": SplitEdges(),
     }
     manager = PassManager()
     for name in pipeline_for(level):

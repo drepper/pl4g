@@ -35,7 +35,8 @@ from typing import Callable, Protocol, Sequence
 from ..ir.function import BasicBlock, Function
 from ..ir.inst import (BlockTarget, BrInst, CmpInst, CmpPred, CondBrInst,
                        Instruction, Terminator)
-from ..ir.types import FloatType, MEM, made_of_parts, parts_of
+from ..ir.rewrite import carried_values, incoming_edges
+from ..ir.types import FloatType, made_of_parts, parts_of
 from ..ir.value import BlockParam
 from ..mc.asmbuilder import Assembler
 from ..mc.operand import MCImm, MCOperand, MCReg
@@ -208,20 +209,6 @@ def lower_branch(asm: Assembler, func: Function, labels: Sequence[str], index: i
             return True
         case _:
             return False
-
-
-def carried_values(target: BlockTarget) -> list[tuple[BlockParam, object]]:
-    """The parameters a branch actually has to put something in.
-
-    A memory token is not held anywhere: it exists to order the operations that
-    touch memory, and a parameter of one says only which path's ordering holds
-    from here.  There is nothing to move for it, which is why an edge carrying
-    only one costs no instruction and is not refused.
-    """
-    block = target.block
-    assert isinstance(block, BasicBlock)
-    return [(param, arg) for param, arg in zip(block.params, target.args)
-            if param.ty is not MEM]
 
 
 @dataclass(frozen=True, slots=True)

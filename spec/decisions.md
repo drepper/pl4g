@@ -6991,6 +6991,56 @@ argument every edge agrees on as part of building the form rather than as a pass
 over it; **MLIR**, whose canonicalizer states this one as a rewrite pattern on
 the branch operation, which is the same rule written as data.
 
+## 2026-09-29T21:00+02:00 — compiler
+
+**A block is put on an edge that has moves to make**
+
+Decided on the user's direction, from a to-do entry.  A branch with more than one
+way out that carries values had nowhere to put the moves -- before the branch is
+every way out at once -- and was refused (8501) rather than got wrong.  Now a
+block is put on the edge and the moves go there.
+
+**It is a pass and not a rule in the backend.**  By the time the backend has the
+function the block order is fixed and is the order it walks; a backend that
+invented a block would have to decide where it goes in an order it is halfway
+through using.  A pass does it while the order is still the module's, and says
+plainly where the block goes: straight after the branch, which is right for an
+edge going forwards and for one going back, because what the block reads is what
+the branch carried and that is computed before the branch.  In front of the block
+the edge arrives at would be the better placement -- the new block could then
+fall through instead of jumping -- and it is wrong for a back edge, so it is not
+taken.
+
+**The rule is "the source has more than one way out", not the classical
+"critical".**  The classical rule adds "and the target has more than one way in",
+because where the target has only one the moves can be put at the top of it
+instead.  That is not available here: the moves are placed by the backend, which
+writes them before the branch and never inside the block it goes to.  Making
+that other placement available would be a second mechanism for the sake of a
+block that costs one jump, in a shape nothing generates.
+
+**Nothing generates it yet**, which is stated rather than assumed: the whole
+language suite compiled at both levels, one thousand and twenty-two
+compilations, splits nothing.  Every lowering that could carry values on a
+conditional branch carries them on a jump instead, which is the cheaper shape.
+What the pass is for is the first one that does not.
+
+The other half of the entry -- a branch handing a block its own parameters
+rearranged, which needs a temporary the way any parallel copy does -- turned out
+to have been done already, with the loops: `target/branches.py` sequences the
+moves so that none reads a register another has written and breaks a cycle with
+a fresh virtual register.  The entry had not been brought up to date.
+
+Compare: **LLVM**, whose `SplitCriticalEdges` is the classical rule and whose
+`PHIElimination` calls it for exactly this reason; **Cranelift**, which had the
+same block-parameter form and the same problem and answered it by forbidding a
+branch with more than one way out to carry arguments at all, so that the
+splitting is the *front end's* to do -- the shape this compiler's lowerings
+happen to be written in already; **Go**'s SSA backend, which splits critical
+edges in a pass of its own before register allocation; **GCC**, where the same
+question is asked of the edge insertion machinery and answered by
+`split_edge`, called on demand wherever an insertion has nowhere to go.
+
 Open questions
 --------------
 

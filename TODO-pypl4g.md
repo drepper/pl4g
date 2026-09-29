@@ -155,11 +155,6 @@ To Do List for the pypl4g compiler
     comparison that feeds it, since that is the shape all three architectures have, and the condition is inverted where that lets
     the branch fall through instead of jumping.  Every ordering is compiled and run on all three targets.
 
-[ ] split a critical edge so that a conditional branch can carry arguments.  Not needed by anything yet -- the short-circuit
-    lowering is shaped to avoid it, and `if` will be too -- and refused (8501) rather than got wrong until something asks.  The
-    same entry covers a branch handing a block its own parameters rearranged, which needs a temporary the way any parallel copy
-    does.
-
 [ ] let the instruction table stop naming the registers a call destroys.  They are a convention's business and the table cannot
     reach a convention, so each backend names them beside its registers and the call row uses them.  It costs nothing today,
     every convention each target has naming the same set; the day one does not, the call will have to carry them per instance.
