@@ -203,9 +203,24 @@ To Do List for the PL4g language
     is there another, what does this turn give, what does the next turn start from -- which is a `next` answering a result said in
     the three places a loop has room for them.
 
-[ ] a small-array optimization.  A `T⟦⟧` of a few small elements could hold them in the two words it already takes rather
-    than pointing at them, the way a small string can.  It costs a check on every read, and it pays only once something allocates
-    the elements -- which is the entry about growing.  Worth measuring when there is something to measure.
+[ ] a small-array optimization.  Looked at and **not** done, because as written it is not an optimization.  A `T⟦⟧` **owns
+    nothing**: it is where some elements are and how many, and the elements are an array's or part of one.  Holding them in the two
+    words instead of pointing at them makes the value own them, which turns a view into a copy -- and a slice is a view a program
+    writes through:
+
+        let a: mut u8⟦4⟧ = ⟦1u8, 2u8, 3u8, 4u8⟧
+        let view: u8⟦⟧ = a⟦1…3⟧   → two elements, as small as a small array gets
+        a⟦1⟧ ← 9u8
+        view⟦0⟧ + view⟦1⟧            → 12 as a view, 5 as a copy
+
+    which answers 12 today.  So this is a change to what a program *means* and not to how fast it runs, and the flag that would say
+    which form a value is in cannot help: whoever made the value chose, and a slice may not choose the inline one.
+    Its other premise is also false.  There is no small-string optimization to copy: a `str` is a pointer and a count exactly as a
+    `T⟦⟧` is, and nothing anywhere inlines anything.
+    What it really waits on is not measurement but **possibility**: only a `T⟦⟧` that owns its elements can hold them, which is the
+    entry about an array that can grow -- and nothing constructs an owning one today, so the inline form would never be built.  It
+    also wants the three entries that each change what a `T⟦⟧` carries -- a stride for a table's slice, room for growing, the
+    counts a half-told shape left out -- to be settled first, since it would be rewritten by each of them.
 
 [ ] add floating-point types `f16` and `bfloat`, optional if there is no hardware support.
     `f32` and `f64` are done: a value can be written, held, passed, returned, computed with and compared, and the hardware's
