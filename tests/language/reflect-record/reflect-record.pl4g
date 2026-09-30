@@ -1,0 +1,60 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ Reflection over a record, which is what lets one generic definition write the text of
+※ a type it was never told about.
+※
+※ Three questions do it.  `⎕isrecord(⌜T⌝)` is a truth the compiler settles, so it picks
+※ an arm of a `comptime if` and leaves nothing behind.  `⎕typename(⌜T⌝)` is the type
+※ written out.  And `⎕fields(v)` answers the fields as a tuple of pairs -- the name and
+※ the value -- in the order the type declares them, which `comptime foreach` walks
+※ because a tuple is the one thing whose turns may differ in type.
+※
+※ Pairs rather than two tuples because two walks cannot be taken together.  And in
+※ declaration order rather than layout order, the compiler being free to reorder a
+※ product's fields and a reader wanting what the program wrote.
+※
+※ What comes out is the notation the language itself uses for a record, and it recurses:
+※ a field that is a record is written by the same definition.
+
+type Point = x: u8 ; y: u16
+type Line = from: Point ; to: Point
+
+@[impure]
+fn `⍕`(v: T') → str:
+    comptime if ⎕typeof(⌜v⌝) = ⌜bool⌝:
+        if v: "true" else: "false"
+    comptime elif ⎕typeof(⌜v⌝) = ⌜str⌝:
+        v
+    comptime elif ⎕isrecord(⌜T'⌝):
+        let opened: str = ⎕typename(⌜T'⌝) ⧺ "("
+        let out: mut str = opened
+        comptime foreach f := ⎕fields(v):
+            if out ≠ opened:
+                out ← out ⧺ ", "
+            out ← out ⧺ "." ⧺ f⟦0⟧ ⧺ " ← " ⧺ ⍕f⟦1⟧
+        out ⧺ ")"
+    else:
+        ※ Every integer width in one body: nothing here names one, the type it is
+        ※ compiled for settling what the arithmetic is.
+        let digits: str⟦10⟧ = ⟦"0", "1", "2", "3", "4", "5", "6", "7", "8", "9"⟧
+        let ten: T' = ⎕narrow(10u8, ⌜T'⌝) ?? v
+        let low: u64 = ⎕narrow(v % ten ?? v, ⌜u64⌝) ?? 0u64
+        if v < ten:
+            digits⟦⎕unit(low, ⌜idx⌝)⟧
+        else:
+            let rest: str = ⍕(v ÷ ten ?? v)
+            rest ⧺ digits⟦⎕unit(low, ⌜idx⌝)⟧
+
+@[startup, impure]
+fn main() → u6:
+    let l: Line = Line(.from ← Point(.x ← 1u8, .y ← 234u16),
+                       .to ← Point(.x ← 56u8, .y ← 7u16))
+    let want: str = "Line(.from ← Point(.x ← 1, .y ← 234), .to ← Point(.x ← 56, .y ← 7))"
+    if ⍕l ≠ want:
+        1u6
+    elif ⍕true ≠ "true":
+        2u6
+    elif ⍕1234u32 ≠ "1234":
+        3u6
+    else:
+        0u6

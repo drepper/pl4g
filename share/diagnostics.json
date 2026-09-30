@@ -5239,6 +5239,60 @@
       "option": null
     },
     {
+      "number": 4605,
+      "name": "LANG_ISRECORD_OUTSIDE_COMPTIME",
+      "severity": "error",
+      "message": "'⎕isrecord' where a value is wanted",
+      "args": [],
+      "cause": "It is a truth the compiler settles rather than one a program works out, so it stands in a condition `comptime` was written on and nowhere else -- which is the rule `⎕typeof` follows and for the same reason: there is nothing for it to be at run time.  A program that wants the answer where a value goes has already been told it by the arm it is in.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Settled while compiling / Asking what a type is",
+        "requirement": "Reflection over a type answers what the compiler knows and nothing a program works out."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4606,
+      "name": "LANG_FIELDS_NOT_A_RECORD",
+      "severity": "error",
+      "message": "'⎕fields' asked of '{found}', which has no fields",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type it was asked of"
+        }
+      ],
+      "cause": "A record is what has fields to answer.  A sum holds one of its parts rather than all of them, so what its fields are is not a question with one answer; a tuple's members have no names; and everything else is one value.  A generic definition asks `⎕isrecord` first, in a condition the compiler settles, and reaches this only where it did not.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Settled while compiling / Asking what a type is",
+        "requirement": "Reflection over a type answers what the compiler knows and nothing a program works out."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4607,
+      "name": "LANG_TYPENAME_TAKES_A_LIFT",
+      "severity": "error",
+      "message": "'⎕typename' takes a type, written between '⌜' and '⌝'",
+      "args": [],
+      "cause": "What a type is called is a question about a type, and a type is written between the lifting marks where one is wanted -- `⎕typename(⌜u8⌝)` or `⎕typename(⎕typeof(⌜v⌝))`.  Without the marks the compiler would have to know what the name meant before it could read it, which is what the marks are there to settle.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Settled while compiling / Asking what a type is",
+        "requirement": "Reflection over a type answers what the compiler knows and nothing a program works out."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 4516,
       "name": "LANG_ENUMERATE_TAKES_ONE_OR_TWO",
       "severity": "error",

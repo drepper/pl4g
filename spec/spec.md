@@ -3726,6 +3726,71 @@ discarded branch is still parsed and instantiated unless the enclosing thing is 
 **D**, whose `static if` and `foreach` over a tuple are the direct ancestors of both; and **Rust**, which has neither and reaches
 for macros and traits instead.
 
+##### Asking what a type is
+
+**Three questions the compiler answers about a type**, which is what lets one generic definition do a different thing for a
+record than for a number -- the language having no overloading, so that a glyph has one meaning per number of operands and a
+`comptime if` arm is what stands in for a second definition.
+
+| Written | Answers | Where it stands |
+|---|---|---|
+| `⎕isrecord(⌜T⌝)` | whether `T` is a record | a condition `comptime` was written on, and nowhere else (4605) |
+| `⎕typename(⌜T⌝)` | the type written out, as `str` | anywhere a value stands |
+| `⎕fields(v)` | a record's fields as a tuple of pairs | anywhere a value stands |
+
+```
+type Point = x : u8 ; y : u16
+
+fn `⍕`(v: T') → str:
+    comptime if ⎕isrecord(⌜T'⌝):
+        let opened: str = ⎕typename(⌜T'⌝) ⧺ "("
+        let out: mut str = opened
+        comptime foreach f := ⎕fields(v):
+            if out ≠ opened:
+                out ← out ⧺ ", "
+            out ← out ⧺ "." ⧺ f⟦0⟧ ⧺ " ← " ⧺ ⍕f⟦1⟧
+        out ⧺ ")"
+    else:
+        …
+```
+
+**`⎕isrecord` is a truth the compiler settles and not a value**, so it may stand only where `comptime` says the compiler is
+answering -- the rule `⎕typeof` follows, for the same reason: there is nothing for it to be at run time.  A program that wants the
+answer where a value goes has already been told it by the arm it is standing in.
+
+**`⎕fields` answers a tuple of pairs**, each pair a field's name and its value.  A tuple because `comptime foreach` walks one and
+because the fields are of different types, which is the one thing a tuple is for; **pairs rather than two tuples** because two
+walks cannot be taken together, so a name and its value travel as one turn.
+
+**In the order the type declares them**, which is not the order they lie in: the compiler may reorder a product's fields, and what
+a reader of the answer wants is what the program wrote.  **It costs nothing beyond the names**: a record already travels as its
+fields, so a pair is the field read where it lies with a literal beside it.
+
+**Only a record has fields to answer** (4606).  A sum holds one of its parts rather than all of them, so what its fields are is not
+a question with one answer; a tuple's members have no names; and everything else is one value.  A generic definition asks
+`⎕isrecord` first and reaches the refusal only where it did not.
+
+**`⎕typename` is defined for every type**, not only a record's: `⌜u8⌝` is as much a type as `⌜Point⌝`, and what wants the name is
+a value's text, which puts it in front of the fields.  It takes a lift (4607) for the reason `⎕typeof` does.
+
+What this adds up to is that **a generic definition can write the text of a type it was never told about**, recursively -- a field
+that is a record is written by the same definition -- and in the notation the language itself uses:
+
+```
+Line(.from ← Point(.x ← 1, .y ← 234), .to ← Point(.x ← 56, .y ← 7))
+```
+
+Compare: **Zig**, whose `@typeInfo` this is a narrow slice of -- one union with a payload per kind of type, walked at `comptime`
+exactly this way, and whose `std.fmt` prints a struct by this method; **Odin** and **D**, which have full compile-time
+introspection over a type's members; **Rust**, which has none and derives an implementation with a procedural macro instead;
+**Go**, whose `reflect` does this at run time and pays for it there; **C++26**, whose reflection answers a `std::meta::info` a
+`consteval` function takes apart, which is the same shape arrived at thirty years later; and **C**, where the question cannot be
+asked.
+
+What is deliberately absent is **a general question about what kind of type something is**.  `⎕isrecord` is one predicate, and a
+second kind -- a sum, an array, an enumeration -- would want an answer naming which, rather than a predicate each.  That wants a
+`comptime if` that can compare something other than two types, and it waits for a use.
+
 #### foreach
 
 `foreach` runs its body once for each value something gives out.

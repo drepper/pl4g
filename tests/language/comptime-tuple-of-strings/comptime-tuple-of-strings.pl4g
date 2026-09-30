@@ -1,0 +1,21 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ A `comptime foreach` over a tuple whose members are more than one value each.
+※
+※ A member is one value to the program and may be several to the machine: a `str` is
+※ where the bytes are and how many there are, and a tuple inside a tuple is all of its
+※ own members.  So which of the outer tuple's parts belong to a turn is asked rather
+※ than assumed -- taking one part per member was wrong for exactly these, and what
+※ found it was reflection over a record, whose answer is a tuple of pairs holding
+※ strings.
+
+@[startup, impure]
+fn main() → u6:
+    let held: 〈〈str, u8〉, 〈str, u16〉〉 = 〈〈"x", 1u8〉, 〈"yz", 2u16〉〉
+    let out: mut str = ""
+    comptime foreach one := held:
+        out ← out ⧺ one⟦0⟧
+    if out ≠ "xyz":
+        1u6
+    else:
+        0u6

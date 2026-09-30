@@ -22,6 +22,7 @@ from ..front.token import (ACQUIRE_NAME, ANSWER_NAME, ENTRY_NAME,
                            RELEASE_NAME,
                            AT_NAME, SPAN_NAME,
                            ADDRESS_NAME, BYTES_NAME,
+                           IS_RECORD_NAME, FIELDS_NAME, TYPENAME_NAME,
                            WIDEN_NAME,
                            BOTTOM_GLYPH, BUILTIN_GLYPH, CHR_NAME, DEREF_GLYPH,
                            LIFETIME_GLYPH, LIFT_OPEN_GLYPH,
@@ -8153,8 +8154,30 @@ class Checker:
                     return None
                 alike = left is right
                 return alike if condition.op is ast.BinaryOp.EQUAL else not alike
+            case ast.Call() if isinstance(condition.callee, ast.NameRef) \
+                    and condition.callee.name == IS_RECORD_NAME:
+                return self._settled_is_record(condition)
             case _:
                 return None
+
+    def _settled_is_record(self, call: ast.Call) -> bool | None:
+        """Whether `⎕isrecord` was asked of a record.
+
+        A truth the compiler settles and not a value, so it stands in a condition
+        `comptime` was written on and nowhere else.  What it is for is the one
+        thing a generic definition cannot otherwise ask: whether the type it was
+        given has fields to walk, there being no list of every record to compare
+        against the way there is a list of the language's own types.
+        """
+        if len(call.args) != 1:
+            self._diags.emit(D.LANG_CALL_WRONG_ARGUMENT_COUNT, call.span,
+                             name=IS_RECORD_NAME, expected=1,
+                             found=len(call.args))
+            return None
+        found = self._type_stood_for(call.args[0])
+        if found is None:
+            return None
+        return isinstance(found, ProductType)
 
     def _both_settled(self, condition: ast.Binary,
                       joined: object) -> bool | None:
@@ -8888,14 +8911,22 @@ class Checker:
                              found=ty.written())
             return UndefConst(ERROR)
         declared = self._resolve_type(stmt.type) if stmt.type is not None else None
+        # A member is one value to the program and may be several to the machine,
+        # so which leaves belong to it is asked rather than assumed: a member that
+        # is itself a tuple, or holds a string, is more than one.
+        inside = parts_within(ty)
+        held = parts_of(ty)
         for at, member in enumerate(ty.members):
             if declared is not None and declared is not member:
                 self._report_mismatch(stmt.iterable.span, member, declared)
                 return UndefConst(ERROR)
+            first, count = inside[at]
+            turn = builder.whole(
+                [builder.extract(value, first + which, held[first + which],
+                                 stmt.span) for which in range(count)],
+                member, stmt.span)
             self._push_scope()
-            self._bind_local(stmt.name, builder.extract(value, at, member,
-                                                        stmt.span),
-                             stmt.name_span, builder=builder)
+            self._bind_local(stmt.name, turn, stmt.name_span, builder=builder)
             self._lower_block(builder, stmt.body, func, as_result=False)
             self._pop_scope()
         return UndefConst(VOID)
@@ -12454,6 +12485,9 @@ class Checker:
             case ast.Quote():
                 return SYNTAX
             case ast.Call() if isinstance(expr.callee, ast.NameRef) \
+                    and expr.callee.name == TYPENAME_NAME:
+                return STR
+            case ast.Call() if isinstance(expr.callee, ast.NameRef) \
                     and expr.callee.name in _SYNTAX_ANSWERS:
                 return _SYNTAX_ANSWERS[expr.callee.name]
             case ast.Call() if isinstance(expr.callee, ast.NameRef):
@@ -12890,6 +12924,15 @@ class Checker:
                 return self._lower_iter(builder, expr, expected)
             if given == BYTES_NAME:
                 return self._lower_bytes(builder, expr, expected)
+            if given == FIELDS_NAME:
+                return self._lower_fields(builder, expr, expected)
+            if given == TYPENAME_NAME:
+                return self._lower_typename(builder, expr, expected)
+            if given == IS_RECORD_NAME:
+                # Reaching here means it stood where a value was wanted, a
+                # condition the compiler settles never lowering what is in it.
+                self._diags.emit(D.LANG_ISRECORD_OUTSIDE_COMPTIME, expr.span)
+                return UndefConst(ERROR)
             if given in _ASKS_ABOUT_A_PIECE:
                 return self._lower_asked(builder, expr, given, expected)
             if given == TYPEOF_NAME:
@@ -13509,6 +13552,79 @@ class Checker:
             self._report_mismatch(expr.span, answer, expected)
             return UndefConst(ERROR)
         return made
+
+    def _lower_typename(self, builder: IRBuilder, expr: ast.Call,
+                        expected: Type | None) -> Value:
+        """Lower `⎕typename(⌜T⌝)`: the type written out, as text.
+
+        A literal in the image and nothing else: what a type is called is settled
+        while compiling, so this is the text the compiler would have printed in a
+        message about that type.  Defined for every type and not only a record's,
+        `⌜u8⌝` being as much a type as `⌜Point⌝` is -- and what wants it is a
+        value's text, which puts the name in front of the fields.
+        """
+        if len(expr.args) != 1:
+            self._diags.emit(D.LANG_CALL_WRONG_ARGUMENT_COUNT, expr.span,
+                             name=TYPENAME_NAME, expected=1,
+                             found=len(expr.args))
+            return UndefConst(ERROR)
+        found = self._type_stood_for(expr.args[0])
+        if found is None:
+            self._diags.emit(D.LANG_TYPENAME_TAKES_A_LIFT, expr.args[0].span)
+            return UndefConst(ERROR)
+        if not self._accepts(expected, STR):
+            self._report_mismatch(expr.span, STR, expected)
+            return UndefConst(ERROR)
+        return self._written_text(builder, found.written(), expr.span)
+
+    def _lower_fields(self, builder: IRBuilder, expr: ast.Call,
+                      expected: Type | None) -> Value:
+        """Lower `⎕fields(v)`: a record's fields as a tuple of name and value.
+
+        **In the order the type declares them**, which is not the order they lie
+        in: the compiler is allowed to reorder a product's fields, and what a
+        reader of the answer wants is what the program wrote.
+
+        A tuple of pairs and not two tuples, because `comptime foreach` walks one
+        tuple and two walks cannot be taken together -- so the name and the value
+        travel as one turn.  It costs nothing beyond the names: a record already
+        travels as its fields, so each pair is the field read where it lies.
+        """
+        if len(expr.args) != 1:
+            self._diags.emit(D.LANG_CALL_WRONG_ARGUMENT_COUNT, expr.span,
+                             name=FIELDS_NAME, expected=1, found=len(expr.args))
+            return UndefConst(ERROR)
+        given = self._lower_expr(builder, expr.args[0], None)
+        found = self._value_type_of(given)
+        if found is ERROR:
+            return UndefConst(ERROR)
+        if not isinstance(found, ProductType):
+            self._diags.emit(D.LANG_FIELDS_NOT_A_RECORD, expr.args[0].span,
+                             found=found.written())
+            return UndefConst(ERROR)
+        # The leaves of the whole answer, in order.  A tuple is built from one
+        # value per leaf and not one per member: a `str` is two of them and so is
+        # a field that is itself several values, which is why the pairs are not
+        # assembled one at a time and then put together.
+        inside = parts_within(found)
+        held = parts_of(found)
+        text = parts_of(STR)
+        leaves: list[Value] = []
+        kinds: list[Type] = []
+        for at, (name, kind) in enumerate(found.fields):
+            written = self._written_text(builder, name, expr.span)
+            leaves.extend(builder.extract(written, which, text[which], expr.span)
+                          for which in range(len(text)))
+            first, count = inside[at]
+            leaves.extend(builder.extract(given, first + which,
+                                          held[first + which], expr.span)
+                          for which in range(count))
+            kinds.append(self._module.types.tuple_type((STR, kind)))
+        answer = self._module.types.tuple_type(tuple(kinds))
+        if not self._accepts(expected, answer):
+            self._report_mismatch(expr.span, answer, expected)
+            return UndefConst(ERROR)
+        return builder.make_tuple(tuple(leaves), answer, expr.span)
 
     def _lower_address_of(self, builder: IRBuilder, expr: ast.Call,
                           expected: Type | None) -> Value:

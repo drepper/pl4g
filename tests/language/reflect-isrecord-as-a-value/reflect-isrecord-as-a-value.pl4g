@@ -1,0 +1,15 @@
+※ pl4g-test: compile=error diag=4605
+
+※ `⎕isrecord` is a truth the compiler settles and not one a program works out, so it
+※ stands in a condition `comptime` was written on and nowhere else -- which is the rule
+※ `⎕typeof` follows and for the same reason: there is nothing for it to be at run time.
+※
+※ A program that wants the answer where a value goes has already been told it by the arm
+※ it is standing in.
+
+type Point = x: u8 ; y: u8
+
+@[startup]
+fn main() → u6:
+    let held: bool = ⎕isrecord(⌜Point⌝)
+    if held: 0u6 else: 1u6

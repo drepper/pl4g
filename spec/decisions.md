@@ -8078,6 +8078,77 @@ Left open: what an arm should do for a type the list does not name, which today 
 whatever the `else` says; and reflection over a record's fields, without which a generic
 `⍕` cannot print a type it was not told about.  That is the next thing formatting needs.
 
+---
+
+## 2026-10-01T01:50+02:00 — language
+
+**Reflection over a record: three questions the compiler answers about a type**
+
+    fn `⍕`(v: T') → str:
+        comptime if ⎕isrecord(⌜T'⌝):
+            let opened: str = ⎕typename(⌜T'⌝) ⧺ "("
+            let out: mut str = opened
+            comptime foreach f := ⎕fields(v):
+                if out ≠ opened:
+                    out ← out ⧺ ", "
+                out ← out ⧺ "." ⧺ f⟦0⟧ ⧺ " ← " ⧺ ⍕f⟦1⟧
+            out ⧺ ")"
+        else:
+            …
+
+    Line(.from ← Point(.x ← 1, .y ← 234), .to ← Point(.x ← 56, .y ← 7))
+
+What formatting needed next, and the thing that lets a generic definition write the text
+of a type it was never told about.  `⎕isrecord(⌜T⌝)` is whether a type is a record,
+`⎕typename(⌜T⌝)` is the type written out, and `⎕fields(v)` is the fields as a tuple of
+pairs.
+
+**`⎕isrecord` is a truth the compiler settles**, so it stands in a condition `comptime`
+was written on and nowhere else (4605) -- the rule `⎕typeof` follows, for the reason
+`⎕typeof` follows it: there is nothing for it to be at run time.  Compile-time conditions
+could compare two types and nothing else until now; this is the first predicate among
+them, and it is a predicate rather than a question naming *which* kind of type because one
+kind is what there is a use for.
+
+**`⎕fields` answers a tuple of pairs.**  A tuple because `comptime foreach` walks one and
+because the fields differ in type, which is what a tuple is for.  **Pairs rather than two
+tuples** -- names in one and values in the other -- because two walks cannot be taken
+together, so the name and its value have to travel as one turn.  **In declaration order**
+and not layout order, the compiler being free to reorder a product's fields and a reader
+wanting what the program wrote.  It costs nothing beyond the names: a record already
+travels as its fields.
+
+**Only a record answers** (4606): a sum holds one part rather than all of them, so its
+fields are not a question with one answer; a tuple's members have no names; everything
+else is one value.
+
+**`⎕typename` is defined for every type** and not only a record's, `⌜u8⌝` being as much a
+type as `⌜Point⌝`, and takes a lift (4607) for the reason `⎕typeof` does.
+
+Turned down: **`⎕names(⌜T⌝)` beside `⎕fields(v)`**, two tuples to be walked together,
+which `comptime foreach` cannot do.  And **a general `⎕kindof(⌜T⌝)` answering an
+enumeration** -- the shape to grow into, and it needs a compile-time condition that
+compares something other than two types, which is more machinery than one predicate and
+has no second use yet.  The specification says so where the questions are described.
+
+Compare: **Zig**, whose `@typeInfo` this is a narrow slice of, walked at `comptime` in
+exactly this way, and whose `std.fmt` prints a struct by this method; **Odin** and **D**,
+with full compile-time introspection; **C++26**, whose reflection answers a
+`std::meta::info` that a `consteval` function takes apart -- the same shape arrived at
+much later; **Rust**, which has none and derives an implementation with a procedural macro;
+**Go**, whose `reflect` does this at run time and pays there; **C**, where the question
+cannot be asked.
+
+**And a bug it found.**  `comptime foreach` took one part per member, which is wrong for a
+member that is several values to the machine -- a `str`, a tuple inside a tuple, a record
+holding either.  It asks now which of the outer tuple's parts belong to a turn, the way
+reading a member out of a tuple already did.  `⎕fields` is what found it, its answer being
+pairs holding strings, and it has a test of its own since nothing about it is reflection.
+
+Left open: the general question above; a field whose name is wanted without its value;
+and reflection over a sum, which would have to answer which part is held before anything
+else.
+
 Open questions
 --------------
 

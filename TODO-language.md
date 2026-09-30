@@ -201,11 +201,16 @@ To Do List for the PL4g language
         literals is not implemented (9902), so the digit table is filled per call until
         that is.  What is missing for a type the list does not name is reflection over a
         record's fields.
-    [ ] **reflection over a type**, without which a generic `⍕` cannot print a record it
-        was not told about.  `comptime foreach` already walks a tuple and the
-        specification already says a record travels as its fields, so the shape to weigh
-        first is a question answering a record's fields as a tuple, plus something to tell
-        a record from a number and the field names for output.  Nothing is decided.
+    [x] **reflection over a record.**  Done: `⎕isrecord(⌜T⌝)`, a truth the compiler
+        settles and so the first predicate a compile-time condition admits;
+        `⎕typename(⌜T⌝)`, the type written out; and `⎕fields(v)`, the fields as a tuple of
+        pairs in declaration order, walked by `comptime foreach`.  A generic definition can
+        now write the text of a type it was never told about, recursively and in the
+        language's own notation.  It also found a bug: `comptime foreach` took one part per
+        member, which is wrong for a member that is several values to the machine.
+        Left over: a general question naming *which* kind of type something is, which wants
+        a compile-time condition comparing something other than two types; and reflection
+        over a sum, which would have to answer which part is held first.
     [ ] **the five pieces the macro machine needs** to read a template: globals
         materialized into its memory, `__pl4g_alloc` as a native bump (the one callee
         with no body -- `__pl4g_str_join` is ordinary IR and so is a walk over a string),

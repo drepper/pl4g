@@ -1,0 +1,17 @@
+※ pl4g-test: compile=error diag=4606
+
+※ A record is what has fields to answer.  A sum holds one of its parts rather than all
+※ of them, so what its fields are has no one answer; a tuple's members have no names;
+※ and everything else is one value.
+※
+※ A generic definition asks `⎕isrecord` first, in a condition the compiler settles, and
+※ reaches this only where it did not.
+
+type Either = left: u8 | right: u16
+
+@[startup, impure]
+fn main() → u6:
+    let e: Either = Either(.left ← 1u8)
+    comptime foreach f := ⎕fields(e):
+        ⎕drop(f⟦0⟧)
+    0u6

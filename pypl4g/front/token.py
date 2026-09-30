@@ -270,6 +270,31 @@ SPAN_NAME: Final[str] = "".join((BUILTIN_GLYPH, "span"))
 #: being the one thing that answers them.
 BYTES_NAME: Final[str] = "".join((BUILTIN_GLYPH, "bytes"))
 
+#: What a type turns out to be, asked of the type rather than of a value.  Three
+#: questions, and they are the compiler's names because the answers are not
+#: things a program can work out: a type is not a value here, so nothing a
+#: program writes could look at one.
+#:
+#: `⎕isrecord(⌜T⌝)` is a truth the compiler settles, so it stands in a
+#: `comptime if` and nowhere else -- the same rule `⎕typeof` follows and for the
+#: same reason, there being nothing for it to be at run time.  It is what lets one
+#: generic definition say a different thing for a record than for a number, which
+#: is what this language has in place of overloading.
+IS_RECORD_NAME: Final[str] = "".join((BUILTIN_GLYPH, "isrecord"))
+
+#: `⎕fields(v)` answers a record's fields as a tuple of pairs, each pair the
+#: field's name and its value, **in the order the type declares them**.  A tuple
+#: because `comptime foreach` walks one and because the fields are of different
+#: types, which is the one thing a tuple is for; pairs rather than two tuples
+#: because two walks cannot be taken together.  A record already travels as its
+#: fields, so this costs nothing but the names.
+FIELDS_NAME: Final[str] = "".join((BUILTIN_GLYPH, "fields"))
+
+#: `⎕typename(⌜T⌝)` is the type written out, as text.  Defined for every type and
+#: not only a record's: it is what a value's text needs in front of its fields,
+#: and a program that wants it for anything else may have it.
+TYPENAME_NAME: Final[str] = "".join((BUILTIN_GLYPH, "typename"))
+
 #: And the way back: a place as the number it is.  The inverse of `⎕at`, and
 #: the compiler's name for the same reason -- what a program does with a number
 #: that was a place is nothing the compiler can check.  It is what a program has

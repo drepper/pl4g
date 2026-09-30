@@ -1,0 +1,11 @@
+※ pl4g-test: compile=error diag=4607
+
+※ What a type is called is a question about a type, and a type is written between the
+※ lifting marks where one is wanted.  Without them the compiler would have to know what
+※ the name meant before it could read it, which is what the marks settle.
+
+@[startup, impure]
+fn main() → u6:
+    let n: u8 = 7u8
+    let name: str = ⎕typename(n)
+    if #name = 0: 1u6 else: 0u6
