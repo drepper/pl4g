@@ -159,7 +159,10 @@ GROUPS: tuple[Group, ...] = (
            "run-of-each-width": "the bitwise three at every lane width",
            "run-arithmetic": "eight runs added and subtracted, each checked",
            "run-longer-than-a-register": "a run of two registers and one of one and a bit",
-           "wrap-over-a-run": "four runs whose operators may go past, one of them multiplied"}),
+           "wrap-over-a-run": "four runs whose operators may go past, one of them multiplied",
+           "conditions-pre-and-post": "a condition on the way in and one on the way out",
+           "requirements-bundle": "two bundles applied, and four requirements met",
+           "requirements-settle-a-type": "one requirement, whose arrow settles the answer"}),
     Group("Loops",
           "A branch backwards, which is what makes liveness a question about "
           "the graph rather than about the layout.  These move when the "
