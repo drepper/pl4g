@@ -401,7 +401,10 @@ may be a type.
 
 So: layer 1 of that document becomes this clause, layer 2's bundles are the next
 section, and layer 3 -- the body may use nothing it did not ask for -- is unchanged
-in meaning, with "ask for" now meaning "appears in a requirement".
+in meaning, with "ask for" now meaning "appears in a requirement".  `needs` does not
+survive any of the three: layer 2 applies a bundle inside a `pre` rather than naming
+it after a keyword, so **the whole design has two clause keywords, `pre` and
+`post`**, and nothing else.
 
 
 Bundles, and what abbreviates what
@@ -430,104 +433,116 @@ there is no function from types to a verdict, and a set of requirements that wan
 name has to be named by something new.  That something is the bundle.
 
 So the two halves of the clause abbreviate in the two ways the language allows, and
-the split is the same split the rule already draws:
+the split is the same one the rule already draws:
 
 | Clause kind | What abbreviates it | Why |
 |---|---|---|
 | a condition, over values | a pure function answering `bool` | values can be passed and calls can happen |
 | a requirement, over types | a bundle | types cannot be passed, so nothing can be called |
 
-Two consequences follow without further argument.  **A bundle holds requirements
-only**: a condition inside one would have no values to be about, a bundle's
-parameters being types.  And **a bundle holds no `post`**, a `post` being always a
-condition.
-
-### How a bundle is asked for
-
-A third clause kind, beside `pre` and `post`:
+### A bundle holds expressions, and says nothing else
 
     bundle number(T'):
-        pre(T' + T' → T')
-        pre(T' - T' → T')
-        pre(T' ⌈ T' → T')
-        pre(T' = T' → bool)
+        T' + T' → T'
+        T' - T' → T'
+        T' ⌈ T' → T'
+        T' = T' → bool
 
-    bundle iterator(I', E'):
-        pre(next(I') → E' ?)
+    bundle iterator(I', E'):  next(I') → E' ?
+
+    bundle indexed(A', I', E'):  A'⟦I'⟧ → E' ; ⍴A' → u64
+
+**No `pre` inside a bundle.**  Everything in a bundle is a requirement -- a
+condition there would have no values to be about, and a `post` no call to be after
+-- so the keyword would be a word repeated on every line to say the only thing a
+line there can say.  What separates the lines is what separates statements
+everywhere: a line, a `;`, or braces.  A bundle's body is an ordinary block.
+
+Three simplifications come with that, and they are the argument for it.  **The
+layout question does not touch a bundle**: the `:` and the indentation are `fn`'s,
+so the newline problem the clause list has does not arise here.  **The level
+question does not arise either**: a bundle's parameters are types and its body can
+name no value, so every expression in it is over types by construction and there is
+no rule to state.  And the body is exactly what layer 2 of the other document
+already wrote, so that document's notation survives unchanged.
+
+### A bundle is asked for by applying it
 
     fn largest(a: T', b: T') → T'
-        needs number(T')
+        pre(number(T'))
         pre(a ≠ b):
 
-    fn sum(it: I') → E'
-        needs iterator(I', E'):
+    fn sum(it: I') → E'  pre(iterator(I', E')):
 
-`needs` takes a bundle and its type arguments; `pre` and `post` take an expression.
-The three are alternatives in one clause list, written in any order and any number
-of times, and a bundle's own body is a clause list of `pre` and `needs`.
+No third keyword.  `pre(number(T'))` is a clause over types like any other, and it
+means what such a clause always means: **that the application can be written.**  If
+`number` is a function, that is a `number` accepting a `T'`; if it is a bundle, it is
+every expression the bundle holds with `T'` put where its parameter stands.  One
+reading, computed two ways according to what the name is of.
 
-**Why a keyword of its own rather than `pre(number(T'))`.**  Three reasons, and the
-first is the one that decides it.
+That is also the answer to the objection an earlier draft raised against this
+notation, that a clause standing for four requirements is not one clause.  It is one:
+the requirement is that the application is well-formed, and *checking* it recurses
+into the bundle exactly as checking a call recurses into what the callee requires.
+Nothing about a clause changes.
 
-*A bundle is the only clause that is many.*  Every `pre` is one requirement; a
-`needs` is however many the bundle holds.  A reader counting what a signature asks
-for is counting clauses, and a clause that silently stands for four is worth a word.
+**A bundle answers nothing**, and from that one fact two refusals follow:
+`pre(number(T') → X')` is refused, there being nothing for the arrow to name, and a
+bundle may appear only as the whole of a clause, never as an operand inside one --
+`pre(f(number(T')))` has no reading.
 
-*It costs no lookup to read.*  `pre(foo(T'))` means "there is a `foo` that accepts a
-`T'`" if `foo` is a function and "the bundle `foo` holds of `T'`" if it is a bundle,
-and nothing in the line says which.  The meaning is never in doubt -- one name
-resolves one way -- but the *reader's* knowing requires resolving it, and with
-`needs` it does not.
+**Settling, nesting and concrete arguments** all follow from expansion.  A bundle
+settles what its expressions settle, in the order they are written in the bundle, and
+where the clause stands in the signature is where that happens -- so
+`pre(iterator(I', E'))` settles `E'` exactly as the `next(I') → E' ?` it stands for
+would.  A bundle may name another by applying it, which is what a line of a bundle
+body holding `ordered(T')` does; a cycle among them is refused.  An argument may be
+any type an operand may be, so `pre(number(⌜u8⌝))` is how a test asks whether `u8`
+is one.
 
-*It is the other document's notation.*  `needs number(T')` is what layer 2 already
-wrote, so nothing there has to be rewritten, and the `needs` that this document
-turned down as a second spelling of `pre` is not this one: that `needs` would have
-meant "a requirement", which `pre` means; this one means "a named set of them",
-which `pre` cannot.
-
-**Settling, nesting, and concrete arguments** all follow from expansion.  A
-`needs` settles what its bundle's clauses settle, in the order they are written
-inside the bundle, and where the `needs` stands in the clause list is where that
-happens -- so `needs iterator(I', E')` settles `E'` exactly as the `pre(next(I') →
-E' ?)` it stands for would.  A bundle may name another; a cycle among them is
-refused.  A bundle's argument may be any type a requirement's operand may be, so
-`needs number(⌜u8⌝)` is how a test asks whether `u8` is one.
-
-**A failure names both places.**  Each clause inside a bundle has its own span, in
-the bundle's definition, and the `needs` has one in the signature -- so a bound that
-is not met reports the clause, the bundle, and the function that asked:
+**A failure names both places.**  Each expression in a bundle has its own span, in
+the bundle's definition, and the clause has one in the signature -- so a bound that
+is not met reports the line, the bundle, and the function that asked:
 
     error: 'largest' needs 'T' ⌈ T' → T'' for T' = 'Colour', and there is none
         largest(red, blue)
     note: 'number' asks for it here
-        pre(T' ⌈ T' → T')
-    note: 'largest' needs 'number' here
-        needs number(T')
+        T' ⌈ T' → T'
+    note: 'largest' asks for 'number' here
+        pre(number(T'))
 
 ### Alternatives for the bundle
 
-**`pre(number(T'))`, a bundle as a name in a requirement.**  One keyword instead of
-two, and a bundle becomes a name that resolves differently rather than a slot of its
-own.  It is the cheapest and it is the runner-up; the argument against is the one
-above, that a clause standing for four is not a clause.  Worth noting that this
-language is meant to be *generated*, so a reader's lookup costs less here than it
-would elsewhere -- which is why this is a runner-up and not a mistake.
+**A keyword of its own**, `needs number(T')` as a third clause kind beside `pre` and
+`post`, which is layer 2's notation in the other document and was this section's
+recommendation in an earlier draft.  What it buys is that a reader knows a bundle
+from a function without resolving the name: `pre(foo(T'))` requires a function `foo`
+or expands a bundle `foo`, and nothing in the line says which.  What it costs is a
+keyword for a distinction the rule does not otherwise draw -- the two mean the same
+thing, that the application can be written -- so the keyword would be marking how
+the compiler answers a question rather than which question was asked.  Turned down
+for that, at the user's direction, and worth remembering as the fallback if the
+lookup proves to matter: this language is meant to be *generated*, which is the
+reason to expect it will not.
 
-**A bare `number(T')` in the clause list**, with no keyword at all, the absence of
-`pre` being what says it is a bundle.  Turned down for reading badly: a signature
-would end in a call that is not one, and nothing in the line says that anything is
-being required.
+**`pre` inside a bundle**, so that a bundle body and a signature's clause list look
+alike.  Turned down as a word that can only say one thing, and with it goes the
+newline problem: a bundle body is a block, and a block already knows how to hold many
+lines.
 
 **A function over types, as D and Zig have.**  D writes `if (isNumeric!T)` and Zig
 writes a `comptime` function taking a `type` and answering `bool`; both are the
 value-level abbreviation applied one level up, and both make a bundle unnecessary.
-This is the alternative with the most weight behind it, and it is turned down for
-now rather than refuted: a function over types needs types to be values, which is
-the alternative this document already turned down for the reason that type
-parameters here are inferred and not passed.  What is worth saying is that it does
-not conflict: such a function would still need a primitive for "this expression can
-be written", which is exactly the requirement clause, so a later language of
-type-level computation would be *built on* this proposal rather than replace it.
+This is the alternative with the most weight behind it, and it is turned down for now
+rather than refuted: a function over types needs types to be values, which is the
+alternative this document already turned down for the reason that type parameters
+here are inferred and not passed.  What is worth saying is that it does not conflict:
+such a function would still need a primitive for "this expression can be written",
+which is exactly the requirement clause, so a later language of type-level
+computation would be *built on* this proposal rather than replace it.  Note also how
+little separates the two once a bundle is applied rather than named: `pre(number(T'))`
+is already the syntax a type-level predicate would use, so adopting one later changes
+what `number` is and not how it is asked for.
 
 **A bundle as a nominal type, as Rust and Swift have.**  A trait or a protocol is a
 bundle *and* a type a value can be behind, and `where T: Add + Sub` is a list of
@@ -538,12 +553,11 @@ conforms to it, so there is no coherence rule and no orphan rule to write.
 ### Bundles in other languages
 
 **C++20** is the closest: a concept is exactly a bundle, `requires Number<T>` is
-exactly `needs number(T')`, and a concept's body is a list of requirements over
-named stand-in values.  The differences are that a C++ concept is a `bool`-valued
-expression, so concepts compose with `&&` and `||`, and that subsumption gives
-partial ordering of overloads.  A bundle composes by naming another bundle and does
-not order anything, which is the whole of what it gives up and the whole of what it
-saves.
+`pre(number(T'))`, and a concept's body is a list of requirements over named stand-in
+values.  The differences are that a C++ concept is a `bool`-valued expression, so
+concepts compose with `&&` and `||`, and that subsumption gives partial ordering of
+overloads.  A bundle composes by naming another bundle and does not order anything,
+which is the whole of what it gives up and the whole of what it saves.
 
 **Haskell**'s classes are bundles with two things added: laws, which are not checked,
 and coherence, which makes an instance global and unique.  Superclasses are a bundle
@@ -579,9 +593,9 @@ one language on this list where a type-level one would have nothing to mean.
 ### What the bundle does not decide
 
 - **Whether a bundle may hold a comptime condition** -- something over lifted types
-  that the compiler settles, `pre(⌈⌜T'⌝ ≥ 255u64)` being one.  It is a condition by the rule
-  and a bundle holds none, but it is the one kind of condition a bundle could hold
-  without needing values, so the rule may want an exception and does not have one.
+  that the compiler settles, `⌈⌜T'⌝ ≥ 255u64` being one.  It is over values by the rule,
+  and a bundle's body is over types, but it is the one kind of value-level expression
+  that needs no values -- so the rule may want an exception and does not have one.
 - **Whether a bundle may be asked for anywhere but a function** -- on a record, on a
   type definition, on a collection's element type.
 - **Whether two bundles may overlap**, which is a question only if anything ever
@@ -813,14 +827,18 @@ What it would take
   refuses while compiling, a `post` over `⎕answer`, a requirement that settles a
   type, one that fails at the call, `pre(zero(E') → E')` where nothing provides a
   `zero`, `pre(somefunc(⌜u8⌝))` for a concrete type, one test for each of the six
-  refusals, `⌈⌜T'⌝` and `⌈T'` in two clauses meaning the two different things, and a
-  condition checked per instantiation of a generic.
+  refusals, `⌈⌜T'⌝` and `⌈T'` in two clauses meaning the two different things, a condition
+  checked per instantiation of a generic, and for bundles: one that holds, one whose
+  line is not satisfied and which reports all three spans, one naming another, a cycle
+  refused, an arrow on one refused, and one used as an operand refused.
 
-- **Bundles**, which are a layer of their own and come last: a `bundle` definition
-  holding a clause list, a `needs` clause that expands one with its arguments
-  substituted, the refusal of a cycle and of a condition inside a bundle, and the two
-  notes a failure reports.  Nothing in the earlier work has to anticipate it, a
-  `needs` being exactly the `pre` clauses it stands for.
+- **Bundles**, which are a layer of their own and come last: a `bundle` definition,
+  whose body is an ordinary block of expressions and so needs no new layout and no
+  new grammar beyond the definition itself; a name in a clause that resolves to one,
+  which is one arm where a call is resolved; the refusals of a cycle, of an arrow on
+  one, and of one used as an operand; and the two notes a failure reports.  Nothing
+  in the earlier work has to anticipate it -- applying a bundle is a clause like any
+  other, and no keyword is added.
 
 The order to land it in is requirements first -- they need no scope of values, and
 they are what makes the other document buildable -- conditions second, which are an

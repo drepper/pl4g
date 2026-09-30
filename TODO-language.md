@@ -118,10 +118,13 @@ To Do List for the PL4g language
     values, and they are what makes the entry below buildable.  With them `needs A'⟦I'⟧ → E'` is `pre(A'⟦I'⟧ → E')` and there is
     nothing to learn twice.  Bundles land last and come out of one observation: a condition needs no abbreviation mechanism because a
     pure function answering `bool` is one, and a requirement cannot use a function because there is nothing to call at the type
-    level -- so a bundle is what the type level needs and the value level does not.  It holds `pre` clauses only, no `post`, and
-    `needs number(T')` asks for one; `needs` survives as a third clause kind rather than a second spelling of `pre`, because it
-    stands for however many clauses the bundle holds where every `pre` is one.  D's `isNumeric!T` and Zig's comptime predicate are
-    the alternative that needs no bundle, and they need types to be values.
+    level -- so a bundle is what the type level needs and the value level does not.  A bundle's body is bare expressions separated
+    by a line, a `;` or braces, with no `pre` on them, everything in a bundle being a requirement; so the body is an ordinary block
+    and neither the layout question nor the level question touches it.  One is asked for by applying it -- `pre(number(T'))`, no
+    third keyword -- which means what a clause over types always means, that the application can be written, computed for a bundle
+    by substituting into every expression it holds.  It answers nothing, so an arrow on it and any use as an operand are refused.
+    D's `isNumeric!T` and Zig's comptime predicate are the alternative that needs no bundle, and they need types to be values;
+    adopting one later would change what `number` is and not how it is asked for.
 
 [ ] a language for constraining a generic.  A generic is checked per instantiation and a generic nobody calls is not checked at
     all -- not loosely but not at all: a body naming an identifier no program defined compiles clean.  Two different things a bound

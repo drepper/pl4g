@@ -277,21 +277,23 @@ That a bundle takes parameters is what lets it carry the answer type: `iterator(
 E')` says `E'` is settled by the bound, exactly as the written-out form does.  A
 bundle may name another bundle; a cycle among them is refused.
 
-With the clause notation of [conditions](conditions.md) a bundle holds a list of
-`pre` clauses and `needs` is how one is asked for, which that document works out in
-full under *Bundles, and what abbreviates what*:
+With the clause notation of [conditions](conditions.md) **a bundle's body is
+unchanged from what is written above** -- bare expressions, separated by a line, a
+`;` or braces, since everything in a bundle is a requirement and a word saying so on
+every line would say the only thing a line there can say.  What changes is that
+`needs` goes away: a bundle is asked for by applying it inside a clause, which that
+document works out in full under *Bundles, and what abbreviates what*:
 
-    bundle iterator(I', E'):
-        pre(next(I') → E' ?)
+    bundle iterator(I', E'):  next(I') → E' ?
 
-    fn sum(it: I') → E'  needs iterator(I', E'):
+    fn sum(it: I') → E'  pre(iterator(I', E')):
 
-So `needs` survives the unification, but not as a second spelling of `pre`: it takes
-a *bundle* where `pre` takes an expression, and the reason the two cannot be one word
-is that a `needs` stands for however many clauses the bundle holds.  The observation
-that makes the whole of it fall out is that a condition needs no bundle -- a pure
-function answering `bool` abbreviates one -- and that a requirement cannot use a
-function, there being nothing to call at the type level.
+`pre(iterator(I', E'))` is a clause over types and means what one always means, that
+the application can be written -- which for a bundle is every expression it holds
+with the arguments put in.  So no keyword is added at all.  The observation that
+makes the whole of it fall out is that a condition needs no bundle -- a pure function
+answering `bool` abbreviates one -- and that a requirement cannot use a function,
+there being nothing to call at the type level.
 
 That is the whole of what V3's ergonomics are worth, at none of V3's price -- and
 with parameters it reaches what V3 needs an associated type for.
