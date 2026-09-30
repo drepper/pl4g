@@ -100,15 +100,21 @@ about `⌈` and not about the word `number`.
 
 ### V2. The operations the body may use
 
-A bound is a list of names -- operators and, once code can attach to types,
-functions:
+A bound is the operation the body performs, written out -- operators and, once
+code can attach to types, functions:
 
-    fn largest(a: T', b: T') → T'  needs T' ⌈
-    fn sum(it: I') → u8            needs I' next
+    fn largest(a: T', b: T') → T'  needs T' ⌈ T' → T'
+    fn sum(it: I') → E'            needs next(&mut I') → E' ?
+
+A name alone will not do, and the reason is worth stating here rather than under
+the recommendation: `needs T' ⌈` would say that `T'` admits `⌈` and would quietly
+assume the other operand is a `T'`.  That is true of `⌈` and false of a dictionary
+read, an index, and any function of more than one type -- so a bound is written
+with a type in every position the operation has, and with what it answers.
 
 *Costs.*  Verbose for a body that does much: a loop over a collection wants `⍴`,
-an index, a comparison and an addition, and listing four glyphs in every signature
-is a tax on the common case.  That is what bundles are for, below.
+an index, a comparison and an addition, and writing four signatures in every
+declaration is a tax on the common case.  That is what bundles are for, below.
 
 *Buys.*  Three things, and they are why this is the recommendation.  It needs **no
 new kind of definition** -- no `trait`, no `class`, no `instance` -- because the
@@ -152,43 +158,112 @@ Recommendation
 
 **V2, checked at the call, with bundles as pure abbreviations, and P2 later.**
 
+One thing this says that the first draft of it did not: **a bound is a signature
+and not a name.**  A name says which operation and nothing about where the
+constrained type stands in it, which is enough for `⌈` -- both operands being the
+same type -- and enough for nothing else.  A dictionary read has a container on
+one side and a key on the other; a function of three parameters may have one that
+is constrained; and an iterator's element type is not in any argument at all.  So
+the required operation is written out, with a type in every position and `→` for
+what it answers, and the three questions a name left open are answered by the
+notation rather than by a rule.
+
 Three layers, each landable on its own and each useful without the next.
 
-### Layer 1: a bound is a list of names, checked at the call
+### Layer 1: a bound is a signature, checked at the call
 
-    fn largest(a: T', b: T') → T'  needs T' ⌈
-    fn walk(it: I') → u8           needs I' next, ⍴
+A bound is **not** a name.  Writing `needs T' ⌈` would say that `T'` admits `⌈`
+and would quietly assume the other operand is a `T'` too -- which is true of `⌈`
+and false of half the operations a generic body performs.  So a bound is the
+required operation *written out*, with a type in every position it has and `→`
+for what it answers:
 
-A call settles `T'` as it does today, and then each name in the bound is asked of
-the settled type.  A type that does not admit one is reported **at the call**,
+    fn largest(a: T', b: T') → T'        needs T' ⌈ T' → T'
+    fn count(d: D', k: K') → u64         needs D' ⸨K'⸩ → u64 ?
+    fn at(xs: A', i: I') → E'            needs A'⟦I'⟧ → E'
+    fn sum(it: I') → E'                  needs next(&mut I') → E' ?
+    fn same(a: T', b: U') → bool         needs T' = U' → bool
+    fn many(x: T') → u64                 needs ⍴T' → u64
+
+Each form is the operation as a body would write it, with the operand positions
+filled in.  An operator keeps its shape -- `T' ⌈ T'` is infix because `⌈` is
+infix, `A'⟦I'⟧` puts the index where an index goes, `⍴T'` is prefix -- and a
+function is written as a call.  That is what makes the answer to "which position
+is the constrained type in?" not need asking: it is in the position it is written
+in.
+
+**Three things this buys that a list of names cannot say.**
+
+*Which operand is which.*  `needs D' ⸨K'⸩ → u64 ?` says a `D'` may be read with a
+`K'`.  `needs K' ⸨D'⸩ → u64 ?` says something else and would be a different
+bound.  A list of names has no way to tell them apart, and `⸨⸩` is the case that
+makes this plain: a dictionary read has a container on one side and a key on the
+other, and they are never the same type.
+
+*What else the operation takes.*  A function of three parameters where one is
+constrained is written with all three: `needs put(&mut T', K', V') → bool`.
+
+*What it answers.*  `needs A'⟦I'⟧ → E'` is where `E'` comes from.  That is the
+work an associated type does elsewhere, done by the bound that needs it.
+
+**A type parameter may be settled by a bound.**  Rule 4555 says every type
+parameter stands in a parameter's type, because one written only in what the
+function answers with is one no call could settle.  A bound settles one too:
+`E'` in `needs A'⟦I'⟧ → E'` is whatever indexing an `A'` with an `I'` answers, and
+the call knows that once `A'` and `I'` are settled.  So the rule becomes: **every
+type parameter is settled by an argument or by a bound**, bounds read after the
+arguments and left to right, and one that neither settles is refused as 4555
+refuses one now.
+
+That is what lets `fn sum(it: I') → E'` be written at all: the element type is
+not in any argument and is not the program's to write -- it is what `next`
+answers.
+
+**The check.**  A call settles the parameters as it does today, then each bound is
+asked of the settled types.  One that does not hold is reported **at the call**,
 which is P1:
 
-    error: 'largest' needs a type that admits '⌈', and '⸨u8⸩' does not
+    error: 'largest' needs '⸨u8⸩ ⌈ ⸨u8⸩', and '⌈' is not defined on a set
         let n: ⸨u8⸩ = largest(s, t)
     note: largest says so here
-        fn largest(a: T', b: T') → T'  needs T' ⌈
+        fn largest(a: T', b: T') → T'  needs T' ⌈ T' → T'
 
 The body is still checked per instantiation, exactly as now.  So **nothing that
-compiles today stops compiling**: a bound is a promise the call must keep, not
-yet a limit on the body.  A generic with no bound behaves as it does now.
+compiles today stops compiling**: a bound is a promise the call must keep, not yet
+a limit on the body.  A generic with no bound behaves as it does now.
 
-A generic calling a generic must satisfy the callee's bound, which with a list of
-names is a subset check and needs no inference machinery.
+A generic calling a generic must satisfy the callee's bounds.  With signatures
+that is not a subset check on names but the same question asked one level up --
+does *this* function's set of bounds license the one the callee wants -- and where
+the caller's parameters are still open it is answered by matching the callee's
+bound against the caller's, which is the same shape-matching rule 4556 already
+does between a parameter's written type and an argument's.
 
 ### Layer 2: a bundle is an abbreviation
 
-    bundle number: + - × ÷ ⌈ ⌊ = <
+A bundle names a set of bound signatures, and takes the parameters they are
+written over:
 
-    fn largest(a: T', b: T') → T'  needs T' number
+    bundle number(T'):    T' + T' → T'  ;  T' - T' → T'  ;  T' ⌈ T' → T'
+                          T' = T' → bool
+    bundle iterator(I', E'):  next(&mut I') → E' ?
+    bundle indexed(A', I', E'):  A'⟦I'⟧ → E'  ;  ⍴A' → u64
 
-A bundle names a list.  It is **not** a type, not a value, and nothing conforms
-to it: `needs T' number` expands to the list and is checked name by name.  So
-there is no conformance rule and no coherence, because there is nothing to
-conform *to* -- a type admits `⌈` if `⌈` works on it, which is a question about
-`⌈`.
+    fn largest(a: T', b: T') → T'   needs number(T')
+    fn sum(it: I') → E'             needs iterator(I', E')
 
-That is the whole of what V3's ergonomics are worth, at none of V3's price.  A
+A bundle is **not** a type, not a value, and nothing conforms to it: `needs
+number(T')` expands to its signatures with the parameters substituted, and each is
+checked as layer 1 checks one.  So there is no conformance rule and no coherence,
+because there is nothing to conform *to* -- a type admits `⌈` if `⌈` works on it,
+which is a question about `⌈`.
+
+That a bundle takes parameters is what lets it carry the answer type: `iterator(I',
+E')` says `E'` is settled by the bound, exactly as the written-out form does.  A
 bundle may name another bundle; a cycle among them is refused.
+
+That is the whole of what V3's ergonomics are worth, at none of V3's price -- and
+with parameters it reaches what V3 needs an associated type for.
 
 ### Layer 3: the body may use nothing it did not ask for
 
@@ -224,13 +299,26 @@ What this does not decide
   a reader of the call can see it.
 - **Whether an operator's name in a bound is the glyph or a word.**  `⌈` is what
   a body writes; `largest` is what a person says.  The glyph is fewer decisions.
-- **Whether a bound may say anything about a *shape*** -- `needs T' iterable`
-  versus `needs E'⟦⟧`.  The second is already expressible as a parameter type and
-  probably answers it.
+- **Whether a bound may say anything about a *shape*** -- `needs iterable(T')`
+  versus writing the parameter as `E'⟦⟧`.  The second is already expressible as a
+  parameter type and probably answers it.
 - **Whether a bundle may be exported from a module.**  It is a name like any
   other, so probably yes, and then nothing more.
-- **What a bound over two parameters says** -- `needs T' U' =`, that the two may
-  be compared with each other.  Worth having and not worth deciding first.
+- **Whether a bound may be satisfied by more than one candidate.**  `needs
+  next(&mut I') → E' ?` asks for *a* `next`; the language has no overloading, so
+  today at most one can exist and the question does not arise.  It arises the day
+  it does, and the answer wanted then is probably that an ambiguous bound is
+  refused rather than resolved.
+- **Whether what a bound answers must match exactly.**  `needs A'⟦I'⟧ → E'`
+  settles `E'`, so there is nothing to match; but `needs T' = T' → bool` states
+  `bool` outright and a type whose `=` answered something else would fail it.
+  Stating the answer and settling it are two different uses of one notation, and
+  which is meant is currently read off whether the answer names a fresh parameter.
+  That is subtle enough to want saying in the specification rather than inferring.
+- **How a bound reaches an operation with no notation** -- a cast, a field, a
+  match arm.  Every example here is an operator or a call because those are what
+  a bound can be written as; `needs .name : T' → U'` and its like are questions
+  nobody has asked yet.
 
 
 Comparisons
@@ -247,6 +335,15 @@ system; concepts arrived twenty-nine years later and are, in essence, layer 1 an
 layer 3 of this proposal with a much larger vocabulary.  `requires
 requires` is what happens when the syntax is grown rather than designed.
 
+Its **requires-expression** is layer 1's signature form almost exactly, and is
+worth reading beside it: `requires(T a, T b) { { a < b } -> convertible_to<bool>;
+}` writes the operation with its operands and says what the result must be, which
+is `needs T' < T' → bool` with more punctuation.  That C++ arrived at the same
+shape after thirty years of trying the alternatives is the strongest argument for
+it here.  What C++ has that this does not propose is a *conversion* on the answer
+-- `convertible_to<bool>` rather than `bool` -- which is a question the open list
+above now carries.
+
 **D** has template constraints as ordinary compile-time boolean expressions --
 `if (isNumeric!T)` -- which is V4 with a place in the signature to write it.  That
 is the cheapest thing anyone has shipped that still reports at the call, and it
@@ -257,6 +354,12 @@ its cost is that a bound is code and cannot be read as a list.
 interface used as a constraint may name methods *or* a set of types, including
 unions of primitives, which is exactly `bundle number`.  Go declares nothing:
 conformance is structural, which this proposal follows.
+
+Where Go cannot follow is the thing that made a signature necessary here: an
+interface constrains **one** type, the receiver, so "a `D'` may be read with a
+`K'`" is not a Go constraint at all -- `map[K]V` is built in because a
+user-written one could not be constrained.  That is the clearest evidence that a
+bound over one name is not enough.
 
 **Rust** is V3 in full: traits, `impl`, coherence, associated types, where
 clauses, and a body checked once.  It is the most complete answer available and
@@ -291,7 +394,11 @@ the program to find out whether it compiles.
 
 **Haskell** is the other limit: a class *is* the constraint, an instance is
 declared apart from both the class and the type, inference finds the constraints
-the programmer did not write, and a body is checked exactly once.  It is the most
+the programmer did not write, and a body is checked exactly once.  Its
+multi-parameter type classes are layer 2's parameterised bundles -- `class
+Indexed a i e` is `bundle indexed(A', I', E')` -- and its associated types are
+what `→ E'` does here; that Haskell needed a language extension for each says
+which of the two notations grew and which was designed.  It is the most
 principled answer and it buys the principle with a language where the
 constraints are inferred -- which is not available here, the types coming from the
 call and not from a solver.
@@ -306,12 +413,20 @@ definitions of a name open-ended.
 What each layer would take
 --------------------------
 
-**Layer 1.**  A form in the signature (one parser rule, and the same rule in the
-grammar, in the same commit); the list carried on the function; a check after the
-types are settled, beside the checks at 4555 through 4557; two diagnostics -- a
-call whose type does not admit a name, and a bound naming something that is not
-an operation; and the subset check for a generic calling a generic.  The backend
-is untouched: a bound is gone before anything is lowered.
+**Layer 1.**  A form in the signature, which is a small grammar of its own -- an
+operator between operand types, a call, a prefix operator, an index -- and the
+same rule in `tree-sitter-pl4g/grammar.js` in the same commit.  The bounds carried
+on the function; the amendment to 4555 so that a bound may settle a parameter, and
+the ordering that goes with it; a check after the types are settled, beside 4555
+through 4557; three diagnostics -- a call whose types do not satisfy a bound, a
+bound written over an operation that does not exist, and a parameter nothing
+settles; and the matching rule for a generic calling a generic.  The backend is
+untouched: a bound is gone before anything is lowered.
+
+The signature grammar is the part that grew when the hole in the name-only form
+was found, and it is worth saying that it is *reused* rather than new: an operator
+written between two types is the shape `_parse_type_ref` and the expression parser
+each already read, on either side of the same glyph.
 
 **Layer 2.**  A definition form for a bundle, a name to resolve, an expansion,
 and a refusal for a cycle.  No checking of its own -- it expands into layer 1.
@@ -333,11 +448,15 @@ two ways.
 
 Its fourth decided point -- *a protocol is a name, and nothing declares
 conformance* -- stops being a position the proposal has to argue and becomes the
-way bounds already work: `needs I' next` is the protocol, checked at the call.
+way bounds already work: `needs next(&mut I') → E' ?` is the protocol, checked at
+the call, and it says what the other document could not -- which argument the
+iterator is, that it is taken by reference, and that the element type comes from
+what `next` answers.
 
 And `foreach`'s rule becomes one sentence with no new machinery: *the loop's
-expression must admit `next`*.  That is layer 1's check, asked by the loop instead
-of by a call.
+expression must satisfy `iterator(I', E')`, and the name it binds is an `E'`*.
+That is layer 1's check, asked by the loop instead of by a call, and the element
+type falls out of it rather than being a further question.
 
 The recommendation there does not change -- a function named `T.next` is still
 the smallest way to say which code is a type's -- but it is now the second half of
