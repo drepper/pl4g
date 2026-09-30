@@ -575,6 +575,17 @@ class _Generic:
     attrs: list[BoundAttr]
     #: The type parameters, in the order they are first written.
     parameters: tuple[str, ...]
+    #: Whether a file importing this one may call it.  Nothing of a generic is
+    #: compiled where it is written, so there is no function for the usual test to
+    #: ask about and this is what says so instead.
+    exported: bool = False
+    #: The top-level names of the file that wrote it, and the bundles beside it
+    #: there, for the same reason a bundle keeps them: the body means what it means
+    #: where it was written, so an instance made for an importing file is checked
+    #: with these in force and not with that file's names.  Held by reference, the
+    #: tables still being filled when the definition is collected.
+    scope: dict[str, object] | None = None
+    siblings: dict[str, "_Bundle"] | None = None
     #: What has been made of it so far, by what the types turned out to be.
     made: dict[tuple[Type, ...], Function] = field(default_factory=dict)
     #: Whether it is being made just now, so that a function that calls itself
@@ -3045,7 +3056,9 @@ class Checker:
                              name=node.name, attribute=str(kind))
             return None
         self._check_clause_shapes(node.clauses)
-        made = _Generic(node=node, path=path, attrs=attrs, parameters=written)
+        made = _Generic(node=node, path=path, attrs=attrs, parameters=written,
+                        exported=self._is_export(attrs),
+                        scope=self._top, siblings=self._bundles)
         self._top[node.name] = made
         self._an_operator(node, made)
         return None
@@ -6321,19 +6334,30 @@ class Checker:
             function=written.node.name,
             types=", ".join("".join((one, " = ", bound[one].written()))
                             for one in written.parameters if one in bound))
+        # From here on it is the definition's file that is being read, not this
+        # one: what its requirements name and what its body calls are what the
+        # file that wrote it could see.  The arguments above were this file's
+        # expressions and were lowered with this file's names, which is the
+        # division a bundle already makes.
+        kept = (self._top, self._bundles)
+        if written.scope is not None and written.siblings is not None:
+            self._top, self._bundles = written.scope, written.siblings
         try:
-            met = self._check_clauses(written.node.clauses, bound,
-                                      written.node.name, expr.span)
+            try:
+                met = self._check_clauses(written.node.clauses, bound,
+                                         written.node.name, expr.span)
+            finally:
+                self._diags.and_no_longer(mark)
+            if not met:
+                return UndefConst(ERROR)
+            missing = [name for name in written.parameters if name not in bound]
+            if missing:
+                self._diags.emit(D.LANG_GENERIC_NOT_DETERMINED, expr.span,
+                                 name=missing[0])
+                return UndefConst(ERROR)
+            func = self._instance_of(written, bound, expr.span)
         finally:
-            self._diags.and_no_longer(mark)
-        if not met:
-            return UndefConst(ERROR)
-        missing = [name for name in written.parameters if name not in bound]
-        if missing:
-            self._diags.emit(D.LANG_GENERIC_NOT_DETERMINED, expr.span,
-                             name=missing[0])
-            return UndefConst(ERROR)
-        func = self._instance_of(written, bound, expr.span)
+            self._top, self._bundles = kept
         if func is None:
             return UndefConst(ERROR)
         return self._made_call(builder, expr, func, args, expected)
@@ -12894,13 +12918,13 @@ class Checker:
         held = self._callee_value(expr.callee)
         if held is not None:
             return self._lower_indirect(builder, expr, held, expected)
-        if isinstance(expr.callee, ast.NameRef):
-            # A function whose types this call settles, which is not a function
-            # yet: what it comes to depends on what the arguments turn out to
-            # be, so the call is what makes it.
-            template = self._top.get(expr.callee.name)
-            if isinstance(template, _Generic):
-                return self._lower_generic(builder, expr, template, expected)
+        # A function whose types this call settles, which is not a function yet:
+        # what it comes to depends on what the arguments turn out to be, so the
+        # call is what makes it.  Reached by a bare name or through the module it
+        # was imported from, those being the two ways any name is reached.
+        template = self._generic_named(expr.callee)
+        if template is not None:
+            return self._lower_generic(builder, expr, template, expected)
         func = self._callee(expr.callee)
         if func is None:
             return UndefConst(ERROR)
@@ -14388,6 +14412,24 @@ class Checker:
         if not isinstance(found, _NamedType):
             return None
         return found.ty
+
+    def _generic_named(self, callee: ast.Expr) -> "_Generic | None":
+        """The generic definition a callee names, by a bare name or through a module.
+
+        Asked quietly: a callee that names something else is not this, and what it
+        is, is decided by whatever is asked next.
+        """
+        match callee:
+            case ast.NameRef():
+                found = self._top.get(callee.name)
+            case ast.Member() if isinstance(callee.base, ast.NameRef):
+                held = self._top.get(callee.base.name)
+                if not isinstance(held, LoadedModule):
+                    return None
+                found = held.exports.get(callee.name)
+            case _:
+                return None
+        return found if isinstance(found, _Generic) else None
 
     def _callee_of_module(self, expr: ast.Member) -> Function | None:
         """The function another module exports under this name."""

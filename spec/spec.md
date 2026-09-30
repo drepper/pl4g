@@ -5571,6 +5571,52 @@ generic function was compiled for is written to the report log (`instantiate`), 
 **A generic function is not the runtime's entry point, a constructor or a test** (4558): each of those is one thing the program
 has, and something written once per set of types is none of them.
 
+**A generic function may be exported**, and is reached by name through the module or -- where its name is a glyph -- by being in
+force there:
+
+```
+※ text.pl4g
+@[export, impure]
+fn text(v: T') → str: …
+@[export, impure]
+fn `⍕`(v: T') → str: text(v)
+
+※ and in a file that imports it
+let t := ⎕import("text")
+t.text(1234u64)
+⍕true
+```
+
+**An instance made for an importing file is checked where the function was written**, not where it was called: its body names
+what its own file can see, and a name the calling file happens to have of the same spelling does not change what the body means.
+That is the rule a bundle's lines already follow and it is the same reason -- substituting *into* a definition is not
+substituting the definition into the place that used it.  The arguments are the calling file's expressions and are lowered
+there, which is the line between the two.
+
+**A generic body with `comptime if` is what this language has in place of overloading.**  A glyph has one meaning per number of
+operands and two definitions of one name are a duplicate (4001), so a type does not get its own definition of `⍕` -- the one
+definition tests the type while the compiler runs:
+
+```
+fn `⍕`(v: T') → str:
+    comptime if ⎕typeof(⌜v⌝) = ⌜bool⌝:
+        if v: "true" else: "false"
+    comptime elif ⎕typeof(⌜v⌝) = ⌜str⌝:
+        v
+    else:
+        …                        ※ every integer width, in one body
+```
+
+An arm not taken is not checked, which is what lets the arms be of different shapes; and nothing in the arithmetic branch needs
+to know how wide the integer is, the type it is compiled for settling that.  **A program says what its own type's text is by
+writing the definition for its file** -- which wins over an imported one silently -- testing for the types it cares about and
+handing the rest back to the module's under its name.  So the extension point is an arm and not an overload, which is why a
+module exporting one of these exports the same body twice: once as the operator and once under a name.
+
+This is **Zig**'s answer to the same problem, `comptime` branching on `@typeInfo` where C++ would specialize a template and Rust
+would write a second `impl`.  What it costs is that the arms are a closed list in one place; what it buys is that there is no
+overload resolution to specify, and nothing about which of two candidates is better.
+
 Compare: **C++** templates, whose instantiation-time checking this is, and whose `template<typename T>` this leaves out -- the
 parameters being named by being used, as C++20's abbreviated `void f(auto x)` does.  **Rust** and **Swift**, which check a
 generic body once against bounds written on it, which is stronger than checking a body per instantiation against requirements a

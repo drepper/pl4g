@@ -1,0 +1,17 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=10 diag=none
+
+※ A generic function a module exports, reached both ways: as an operator, which is in
+※ force because the module is imported, and by name through the module.
+※
+※ Nothing of a generic function is compiled where it is written, so what says a file
+※ importing it may call it cannot be a function's own flag -- and an instance made for
+※ this file is checked with the *defining* file's names in force, which is the rule a
+※ bundle's lines already follow and for the same reason.
+
+let t := ⎕import("text")
+
+@[startup, impure]
+fn main() → u6:
+    let a: str = ⍕true ⧺ ⍕"x"                    ※ the operator
+    let b: str = t.text(1234u64) ⧺ t.text(7u16)  ※ and the name
+    ⎕narrow(⎕drop(#a + #b), ⌜u6⌝) ?? 1u6

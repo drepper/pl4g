@@ -1,0 +1,14 @@
+※ pl4g-test: module
+※※ A generic definition whose body names something only this file can see.
+
+※※ Not exported, and the generic one below calls it anyway.
+fn secret() → str:
+    "here"
+
+※※ The text of a value, made where this file's names are what is in force.
+@[export, impure]
+fn describe(v: T') → str:
+    comptime if ⎕typeof(⌜v⌝) = ⌜bool⌝:
+        secret()
+    else:
+        "other"

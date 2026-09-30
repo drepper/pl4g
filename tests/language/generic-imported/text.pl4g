@@ -1,0 +1,30 @@
+※ pl4g-test: module
+※※ What a value's text is, in one definition for every type.
+
+※※ The text of a value, branching on the type while the compiler runs.
+※
+※ One definition and not one per type: the language has no overloading, so a glyph
+※ has one meaning per number of operands -- and a generic body with `comptime if` is
+※ what says a different thing for each type inside that one meaning.  Which is also
+※ why nothing here needs to know the width of an integer: the arithmetic is written
+※ once and the type it is compiled for settles it.
+@[export, impure]
+fn text(v: T') → str:
+    comptime if ⎕typeof(⌜v⌝) = ⌜bool⌝:
+        if v: "true" else: "false"
+    comptime elif ⎕typeof(⌜v⌝) = ⌜str⌝:
+        v
+    else:
+        let digits: str⟦10⟧ = ⟦"0", "1", "2", "3", "4", "5", "6", "7", "8", "9"⟧
+        let ten: T' = ⎕narrow(10u8, ⌜T'⌝) ?? v
+        let low: u64 = ⎕narrow(v % ten ?? v, ⌜u64⌝) ?? 0u64
+        if v < ten:
+            digits⟦⎕unit(low, ⌜idx⌝)⟧
+        else:
+            let rest: str = text(v ÷ ten ?? v)
+            rest ⧺ digits⟦⎕unit(low, ⌜idx⌝)⟧
+
+※※ And the operator, which is the same thing written where a reader expects it.
+@[export, impure]
+fn `⍕`(v: T') → str:
+    text(v)

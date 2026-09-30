@@ -186,10 +186,26 @@ To Do List for the PL4g language
         `m.twice⌜3u8⌝` does not parse, and `@[export]` on a macro crashes the compiler
         with 9901 from the module loader.  The macros entry left this open; `std.format`
         closes it, and the internal error is a bug either way.
+    [x] **a generic function may be exported.**  Done, and it was three things: a
+        `_Generic` had no export flag at all, so `@[export]` on one was silently ignored
+        and a module could ship no generic function whatever; an instance made for an
+        importing file now resolves its body where the function was written, which is the
+        bundle rule; and a generic is now reached through a module's name.  With it went
+        the larger question of how a type says what an operator means for it: **not by
+        overloading** -- one generic definition tests the type with `comptime if`, and a
+        program overrides by writing the definition for its own file and handing the rest
+        back to the module's under its name.
     [ ] **`⍕` for the built-in types**, in `std`: the integers, `bool`, `char`, `str`.
-        Measured as writable in the language today -- `⍕1234u64` answers text of length
-        four -- except that a top-level array of string literals is not implemented
-        (9902), so the digit table is filled per call until that is.
+        Measured as writable in the language today, in one generic definition covering
+        `bool`, `str` and every integer width -- except that a top-level array of string
+        literals is not implemented (9902), so the digit table is filled per call until
+        that is.  What is missing for a type the list does not name is reflection over a
+        record's fields.
+    [ ] **reflection over a type**, without which a generic `⍕` cannot print a record it
+        was not told about.  `comptime foreach` already walks a tuple and the
+        specification already says a record travels as its fields, so the shape to weigh
+        first is a question answering a record's fields as a tuple, plus something to tell
+        a record from a number and the field names for output.  Nothing is decided.
     [ ] **the five pieces the macro machine needs** to read a template: globals
         materialized into its memory, `__pl4g_alloc` as a native bump (the one callee
         with no body -- `__pl4g_str_join` is ordinary IR and so is a walk over a string),

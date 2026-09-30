@@ -8007,6 +8007,77 @@ nothing yet needs; and whether a template may be a value, which it may not, bein
 literal so that the check can happen at all -- the same trade Rust's `format!` makes and
 the one every format-string vulnerability comes from in the languages that did not.
 
+---
+
+## 2026-10-01T01:05+02:00 — language
+
+**A generic function may be exported, and `comptime if` is what stands in for overloading**
+
+    ※ text.pl4g
+    @[export, impure]
+    fn text(v: T') → str:
+        comptime if ⎕typeof(⌜v⌝) = ⌜bool⌝:
+            if v: "true" else: "false"
+        comptime elif ⎕typeof(⌜v⌝) = ⌜str⌝:
+            v
+        else:
+            …                    ※ every integer width, in one body
+
+    @[export, impure]
+    fn `⍕`(v: T') → str:
+        text(v)
+
+Found by trying to put `⍕` in a module, which the formatting decision requires.  Three
+things were wrong and are now right.
+
+**A generic function could not be exported at all.**  `@[export]` on one was silently
+ignored: nothing of a generic is compiled where it is written, so there was no function
+for the usual test to ask about, and `_Generic` simply had no flag.  That blocked a module
+from shipping *any* generic function -- much more than formatting.
+
+**An instance made for an importing file is checked where the function was written.**  Its
+body names what its own file can see, and a name the calling file happens to have of the
+same spelling does not change what the body means.  That is the rule bundles already
+follow, arrived at for the same reason and implemented the same way: the defining file's
+tables are kept on the definition and put in force while the instance is made.  The
+arguments stay the calling file's, lowered there, which is the line between the two.
+
+**And a generic is now reached through a module's name**, `t.text(v)`, which the call
+lowering looked for only under a bare name.
+
+**The larger thing this settles is how a type says what an operator means for it.**  The
+language has no overloading, so a glyph has one meaning per number of operands and two
+definitions of one name are a duplicate (4001): `fn ⍕(n: u8)` and `fn ⍕(p: Point)` in one
+file is refused, measured.  So a type does not get its own definition -- **one generic
+definition tests the type with `comptime if`**, an arm not taken not being checked, which
+is what lets the arms be of different shapes.  A program says what its own type's text is
+by writing the definition for its file, which wins over an imported one silently, and
+handing every other type back to the module's under its name.  Measured end to end: a
+`⍕` covering `bool`, `str` and every integer width in one body, overridden in an importing
+file for a record of its own.
+
+So **the extension point is a `comptime if` arm and not an overload**, and that is why a
+module exporting one of these exports the same body twice -- once as the operator and once
+under a name, for the delegation to have something to call.
+
+This is **Zig**'s answer to the same problem: `comptime` branching on `@typeInfo` where
+**C++** specializes a template and **Rust** writes a second `impl`.  **Haskell** and
+**Swift** would write another instance or conformance; **Go** has no operator to say
+anything about; **Odin** would look in a table at run time.  What it costs is that the arms
+are a closed list in one place, and that a library's list cannot be added to except by
+overriding the whole definition.  What it buys is that there is no overload resolution to
+specify: nothing about which of two candidates is better, no partial ordering, no rule for
+a tie.
+
+Turned down: **overloading for operators only**, on the first operand's type -- which was
+the obvious fix before the generic route was measured, and which would have added a
+resolution rule to a language that has managed without one.  And **overloading for every
+function**, which the bundles decision relies on the absence of.
+
+Left open: what an arm should do for a type the list does not name, which today is
+whatever the `else` says; and reflection over a record's fields, without which a generic
+`⍕` cannot print a type it was not told about.  That is the next thing formatting needs.
+
 Open questions
 --------------
 

@@ -1,0 +1,19 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=4 diag=none
+
+※ An instance of an imported generic function is checked where the function was
+※ written, not where it was called: its body names `secret`, which this file cannot
+※ see and does not have to.  That is the rule a bundle's lines follow, arrived at for
+※ the same reason -- substituting *into* a definition is not the same as substituting
+※ the definition into the place that used it.
+※
+※ And this file has a `secret` of its own, of a different type, which the instance
+※ does not reach: if it did, the body would not compile.
+
+let k := ⎕import("kinds")
+
+fn secret() → u8:
+    9u8
+
+@[startup, impure]
+fn main() → u6:
+    ⎕narrow(⎕drop(#(k.describe(true))), ⌜u6⌝) ?? 1u6
