@@ -644,7 +644,14 @@ def _of_its_own(ty: Type | None) -> bool:
     A record, a choice between records, and an enumeration.  Not an array or a
     collection of them: what those are is the language's, and the operators it
     gives them are the language's too.
+
+    **And a reference to one of those**, because an operator that changes what it
+    is given has to take a reference and the language has no operator on a
+    reference to a record either -- so `fn \N{GRAVE ACCENT}\N{UPWARDS WHITE ARROW}\N{GRAVE ACCENT}(t: &mut Walk) \N{RIGHTWARDS ARROW} \N{HORIZONTAL ELLIPSIS}` is a thing to
+    write and was refused before this saw through the mark.
     """
+    if isinstance(ty, PtrType):
+        return _of_its_own(ty.pointee)
     return (isinstance(ty, (ProductType, SumType, EnumType))
             and bool(getattr(ty, "name", "")))
 
@@ -12153,6 +12160,14 @@ class Checker:
                     found = self._resolved(named)
                     return None if found is ERROR else found
                 return named.ty.ret if isinstance(named, Function) else None
+            case ast.AddressOf():
+                # A reference to the place a name stands for, which is a pointer
+                # to whatever that holds.  The other direction of the mark below,
+                # and what lets an operator a program wrote for `&mut T` be found
+                # where one written for `T` already was.
+                found = self._hint_of(expr.operand)
+                return None if found is None or found is ERROR \
+                    else self._module.types.ptr_type(found, mutable=expr.mutable)
             case ast.Deref():
                 # What is at the place a reference names, which its type says
                 # without anything being read.  It is what lets `0 = r⌖` mean

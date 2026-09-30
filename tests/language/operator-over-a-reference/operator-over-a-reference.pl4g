@@ -1,0 +1,24 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=5 diag=none
+
+※ An operator may be defined over a **reference** to a type a program wrote, which
+※ is how one that changes what it is given is written: a parameter taken by value
+※ is a copy, and a step that advances a walk in place has to name the place.
+※
+※ It was refused before: the rule that says "the language has no meaning for these
+※ operands" looked at a record and not through the mark, and the hint that reads a
+※ type off the syntax had no reading for `&mut x` at all -- so `⇧&mut i` was told
+※ that `⇧` moves a cursor along a list.
+
+type Test = a : i32 ; b : i32
+
+@[impure]
+fn `⇧`(t: &mut Test) → i32:
+    if t⌖.a < t⌖.b:
+        t⌖.a ← t⌖.a + 1i32
+    t⌖.a
+
+@[startup, impure]
+fn main() → u6:
+    let i: mut Test = Test(.a ← 1i32, .b ← 4i32)
+    let first: i32 = ⇧&mut i
+    ⎕narrow(first + ⇧&mut i, ⌜u6⌝) ?? 1u6
