@@ -176,10 +176,12 @@ To Do List for the PL4g language
     naming something in scope.
     In dependency order, and each of the first two is a gap in something that already
     landed rather than new work:
-    [ ] **an exported operator is in force where its module is imported.**  Measured: it
-        is not, and `⍕` from a module is refused at the use (4923), so `⍕` cannot live in
-        `std` until this changes.  Two modules claiming one glyph for one type becomes a
-        conflict to report.
+    [x] **an exported operator is in force where its module is imported.**  Done: an
+        operator a module exports is written without naming the module, two modules
+        exporting one glyph for one number of operands are refused at the second import
+        (4924), and a definition in the importing file wins silently.  An operator a
+        module does not export cannot be told from one it never wrote, there being no
+        name to ask about, which is where this differs from a bundle.
     [ ] **a macro may be exported and invoked through a module's name.**  Measured:
         `m.twice⌜3u8⌝` does not parse, and `@[export]` on a macro crashes the compiler
         with 9901 from the module loader.  The macros entry left this open; `std.format`

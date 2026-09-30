@@ -73,6 +73,13 @@ class LoadedModule:
     #: than among them because a bundle is neither a type nor a value: nothing
     #: that reaches for a name expecting one of those should find one.
     bundles: dict[str, object] = field(default_factory=dict)
+    #: The operators this file exports, by the glyph and how many operands it
+    #: takes.  Beside the exports rather than among them for the reason a bundle
+    #: is: an operator is reached by neither, having no name to qualify it by --
+    #: which is also why only the exported ones are here.  One not exported
+    #: cannot be told apart from one that was never written, there being no name
+    #: to ask about.
+    operators: dict[tuple[str, int], object] = field(default_factory=dict)
     #: Every name this module could be known by, one per route that reached it.
     candidates: set[str] = field(default_factory=set)
     #: The name finally chosen, once every route is known.

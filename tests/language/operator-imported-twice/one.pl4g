@@ -1,0 +1,4 @@
+※ pl4g-test: module
+※※ One module saying what a glyph means.
+@[export, impure]
+fn `⍕`(n: u64) → str: "a"

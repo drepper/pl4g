@@ -7928,6 +7928,43 @@
       "option": null
     },
     {
+      "number": 4924,
+      "name": "LANG_OPERATOR_TWICE_IMPORTED",
+      "severity": "error",
+      "message": "'{glyph}' taking {count} is exported by '{module}' and by '{other}'",
+      "args": [
+        {
+          "name": "glyph",
+          "type": "string",
+          "description": "the operator"
+        },
+        {
+          "name": "count",
+          "type": "string",
+          "description": "how many operands it takes"
+        },
+        {
+          "name": "module",
+          "type": "string",
+          "description": "the module being imported"
+        },
+        {
+          "name": "other",
+          "type": "string",
+          "description": "where the other definition came from"
+        }
+      ],
+      "cause": "An operator has no name to qualify it by, so an exported one is in force wherever its module is imported -- which is what lets a library say what a glyph means for the types it defines.  Two modules exporting the same glyph for the same number of operands would leave nothing to decide which is meant, so it is refused where the second is imported rather than where the operator is used.  Importing one of the two is the way out; so is defining the operator in this file, which is what applies where it is written.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition / Operators",
+        "requirement": "An exported operator is in force where its module is imported, and two of one glyph are refused."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 5001,
       "name": "LANG_STMT_UNREACHABLE",
       "severity": "warning",

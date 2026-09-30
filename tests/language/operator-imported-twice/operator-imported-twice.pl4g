@@ -1,0 +1,15 @@
+※ pl4g-test: compile=error diag=4924
+
+※ Two modules exporting one glyph for one number of operands leave nothing to decide
+※ between them, so the second import is refused -- at the import, which is where the
+※ choice was made, rather than at a use.
+※
+※ Defining the operator here instead is the way out, since what is written in this
+※ file is what applies.
+
+let a := ⎕import("one")
+let b := ⎕import("other")
+
+@[startup, impure]
+fn main() → u6:
+    ⎕narrow(⎕drop(#(⍕1u64)), ⌜u6⌝) ?? 1u6

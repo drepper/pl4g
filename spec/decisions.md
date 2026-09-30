@@ -7992,7 +7992,9 @@ landed, and both are now required:
   two modules claiming one glyph for one type reported as the conflict it is.  That is
   what **Rust** and **Haskell** do with instances and what **C++** does by argument-
   dependent lookup; the alternative, that an operator must be defined in the file that
-  uses it, would make a library unable to ship one.
+  uses it, would make a library unable to ship one.  **Done**, the same day: an exported
+  operator is in force where the module is imported, two of one glyph are refused at the
+  second import (4924), and a definition in the importing file wins silently.
 - **A macro cannot be exported, and trying crashes the compiler** (9901, an internal
   error from the module loader), and `m.twice⌜…⌝` does not parse.  The macros decision
   left "whether a macro may be exported" open; `std.format` closes it, and the ICE is a

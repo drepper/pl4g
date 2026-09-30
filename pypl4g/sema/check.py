@@ -1584,6 +1584,9 @@ class Checker:
         #: `⌈` is: the arity is what tells the two definitions apart, so it is part
         #: of the key rather than something looked at afterwards.
         self._operators: dict[tuple[str, int], object] = {}
+        #: Where each of them came from, for the one message that has to name two
+        #: places: a module's name, or nothing for one written in this file.
+        self._operators_from: dict[tuple[str, int], str] = {}
         #: Whether a `post` clause is being lowered just now, which is the one
         #: place `⎕answer` and `⎕entry` mean anything.
         self._after: bool = False
@@ -2004,6 +2007,32 @@ class Checker:
         # with is settled once every route is known.
         found.add_candidate(self._prefix, base_name(path))
         self._top[node.name] = found
+        self._import_operators(found, node)
+
+    def _import_operators(self, found: LoadedModule,
+                          node: ast.ModuleImport) -> None:
+        """Put a module's exported operators in force in this file.
+
+        An operator has no name to qualify it by, so an exported one is in force
+        wherever its module is imported -- which is what lets a library say what a
+        glyph means for the types it defines, and there is nothing else it could
+        mean.  Two modules exporting one glyph for one number of operands leave
+        nothing to decide between them, so the second import is refused: it points
+        at the import rather than at a use, which is where the choice was made.
+
+        A definition in this file wins, and silently.  What applies where it is
+        written is what a reader has in front of them, and it is the way out of
+        the refusal above.
+        """
+        for key, what in found.operators.items():
+            if key in self._operators:
+                self._diags.emit(D.LANG_OPERATOR_TWICE_IMPORTED, node.source_span,
+                                 glyph=key[0], count=str(key[1]),
+                                 module=node.source,
+                                 other=self._operators_from.get(key) or "this file")
+                continue
+            self._operators[key] = what
+            self._operators_from[key] = node.source
 
     def _read_module(self, path: Path, node: ast.ModuleImport) -> LoadedModule | None:
         """Read and check the file at *path*, returning what it holds."""
@@ -2030,6 +2059,12 @@ class Checker:
             # cannot see at all, so that "there is no such bundle" and "it is not
             # yours to apply" are two different things to be told.
             loaded.bundles = dict(inner._bundles)
+            # Only the exported ones, unlike the bundles above: a bundle has a
+            # name and so can be told "it is not yours to apply", and an operator
+            # has none to be told anything about.
+            loaded.operators = {key: what
+                                for key, what in inner._operators.items()
+                                if _is_exported(what)}
             loaded.owned = inner._owned
         finally:
             self._registry.finish(path)

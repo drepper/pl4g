@@ -1,0 +1,4 @@
+※ pl4g-test: module
+※※ And another, saying it for the same number of operands.
+@[export, impure]
+fn `⍕`(n: u32) → str: "b"

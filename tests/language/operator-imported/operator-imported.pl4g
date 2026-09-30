@@ -1,0 +1,15 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=6 diag=none
+
+※ An operator a module exports is in force here, and is written without naming the
+※ module: there is no name to qualify an operator by, so putting it in force is the
+※ only thing exporting one could mean.
+※
+※ This is what lets a library say what a glyph means for the types it deals in --
+※ `⍕` for a number being the case it was found for.
+
+let d := ⎕import("digits")
+
+@[startup, impure]
+fn main() → u6:
+    let s: str = "n=" ⧺ ⍕1234u64
+    ⎕narrow(⎕drop(#s), ⌜u6⌝) ?? 1u6

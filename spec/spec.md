@@ -4830,6 +4830,25 @@ of.  Nothing is written to say so, and a glyph may have both: they are two defin
 operands to begin with, so `1u8 + 2u8` is three in every program and a definition over `u8` is never reached.  That is what makes
 the feature purely additive: no program can change what another's arithmetic means by being linked with it.
 
+**An exported operator is in force wherever its module is imported**, and is written without naming the module:
+
+```
+※ digits.pl4g
+@[export, impure]
+fn `⍕`(n: u64) → str: …
+
+※ and in a file that imports it
+let d := ⎕import("digits")
+… "n=" ⧺ ⍕1234u64
+```
+
+There is no name to qualify an operator by, so putting it in force is the only thing exporting one could mean -- and it is what
+lets a library say what a glyph means for the types it deals in.  **Two modules exporting one glyph for one number of operands are
+refused** (4924), at the second import rather than at a use, there being nothing to decide between them; **a definition in this
+file wins over an imported one**, silently, because what is written here is what a reader has in front of them and it is the way
+out of that refusal.  An operator a module does *not* export cannot be told from one it never wrote, there being no name to ask
+about -- which is where this differs from a bundle.
+
 ###### Which glyphs
 
 **Unicode decides.**  A glyph may be an operator if it is a symbol -- the `Sm` category, which is the mathematical symbols, and
