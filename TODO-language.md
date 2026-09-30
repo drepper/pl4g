@@ -166,6 +166,42 @@ To Do List for the PL4g language
     running before the definitions are installed leaves nothing to ask.  And whether a macro may be exported, which bundles answered
     with `@[export]`.
 
+[ ] turn a value into text, and format.  **Decided** on 2026-10-01, nothing implemented;
+    [spec/formatting.md](spec/formatting.md) has the proposal and
+    [spec/decisions.md](spec/decisions.md) the entry.  `⍕` (U+2355, APL's format
+    primitive) is a value's text, an operator like any other and so dispatched by the
+    operand's type -- which the language forces, having no overloading.  `std.format` is
+    a macro invoked with the marks, `std.print` the same macro writing instead of
+    joining, and the template holds `{}` counted against the arguments and `{name}`
+    naming something in scope.
+    In dependency order, and each of the first two is a gap in something that already
+    landed rather than new work:
+    [ ] **an exported operator is in force where its module is imported.**  Measured: it
+        is not, and `⍕` from a module is refused at the use (4923), so `⍕` cannot live in
+        `std` until this changes.  Two modules claiming one glyph for one type becomes a
+        conflict to report.
+    [ ] **a macro may be exported and invoked through a module's name.**  Measured:
+        `m.twice⌜3u8⌝` does not parse, and `@[export]` on a macro crashes the compiler
+        with 9901 from the module loader.  The macros entry left this open; `std.format`
+        closes it, and the internal error is a bug either way.
+    [ ] **`⍕` for the built-in types**, in `std`: the integers, `bool`, `char`, `str`.
+        Measured as writable in the language today -- `⍕1234u64` answers text of length
+        four -- except that a top-level array of string literals is not implemented
+        (9902), so the digit table is filled per call until that is.
+    [ ] **the five pieces the macro machine needs** to read a template: globals
+        materialized into its memory, `__pl4g_alloc` as a native bump (the one callee
+        with no body -- `__pl4g_str_join` is ordinary IR and so is a walk over a string),
+        `⎕name` of a literal answering its text, `$(EXPR)` where the expression answers a
+        `str`, and **a way for a macro to refuse with its own message**, without which
+        the check the template exists for is reported as the compiler stopping.
+    [ ] **`std.format` and `std.print`**, and then `{name}`, which needs a piece made
+        from text and is the one exception to hygiene the language admits.
+    Left over and named in the proposal: float text, which is the large piece; whether an
+    enumeration's names reach run time; the dyadic `⍕`, which is APL's
+    format-by-specification and which nothing yet needs; and a chain of joins folded into
+    one allocation, which every join wants and which is measured at three allocations for
+    four pieces today.
+
 [ ] let a program write an iterator.  The compiler is the only implementor of the protocol, and there are five of its
     implementations now: a range, an array, a list, a string and a table.  What the entry used to say waits on "something to
     iterate over that is not a range" has arrived, so nothing waits on that any more.  What is actually missing, measured against

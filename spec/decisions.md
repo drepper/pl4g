@@ -7926,6 +7926,85 @@ array of `syntax`, which the design leaves out on purpose since `⎕part` exists
 macro need not hold the parts at once; a macro writing a *definition*; and following a
 reference to what it names.
 
+---
+
+## 2026-10-01T00:20+02:00 — language
+
+**Formatting: `⍕` for a value's text, and `std.format` as a macro**
+
+    std.format⌜"x = {}, y = {y}\n", x⌝
+    std.print⌜io.output, "x = {x}\n"⌝
+
+What this language has where C++ has `std::format` and `std::print` and Python has
+f-strings.  The proposal and the reasoning are in [formatting.md](formatting.md); three
+things were decided out of it.
+
+**`⍕` is the text of a value**, an operator whose name is the glyph, dispatched by the
+operand's type like every other operator.  U+2355 is APL's own format primitive --
+monadic format, and dyadic format by specification -- so the glyph brings its meaning,
+which is what `⍴`, `⌈` and `⌊` already did here.  Measured while proposing it: the glyph
+is free, it is category `So`, and a program can define it today for a type of its own,
+for a built-in type, as a prefix and as an infix at once, and once generically over every
+integer width by a requirement -- each compiled and run.
+
+The mechanism is not chosen so much as forced: the language has no overloading, so an
+operator is the only thing in it that dispatches on a type.  That is the same answer the
+attaching-code document reached for `⇧` and `⇩`, asked about a different operation.
+Compare **Rust**'s `Display`, **Go**'s `String()`, **Zig**'s `format` method found by
+name at `comptime`, **Haskell**'s `Show`, **Python**'s `__str__`, **C++**'s `formatter`
+specialization -- every one of them an interface or a specialization, none available here;
+and **APL**, where `⍕` is a primitive with no extension point at all.
+
+**The template is checked while compiling, and `std.format` is a macro.**  Concatenation
+alone was turned down: the check is the point, and the same thing has to reach
+`std.print`.  Only two things in this compiler can generate code from a template -- the
+checker, as a compiler-known call, and the expander, as a macro.  A `comptime fn` cannot,
+receiving values where a run-time value has none.
+
+Of those two, **the macro**, invoked with the marks it already has.  So the format
+language lives in a module rather than in the compiler, a program may write its own
+`format`-like function, and a second implementation of the language reads the template
+rules out of `std` rather than reproducing them.  What it costs against the
+compiler-known route is named in the proposal and is not small: five pieces the macro
+machine does not have, and two prerequisites found while deciding (below).
+
+Turned down: **a parameter of type `syntax` making an ordinary call's arguments
+unevaluated**, which is Zig's `comptime` parameter and would have let the call read
+`std.format(…)`.  It is a third calling convention for a macro, and a macro is invoked
+with the marks: what they say -- handed over as written -- is exactly what is true of a
+template.  Turned down with it: **a mini-language inside the template** (`{:>8.2}`),
+which is a second language written where this project's grammar test cannot see it, and
+which a generator gains nothing from, holding a width as a number already.  A width is
+asked for by a call in the hole.
+
+**Both `{}` and `{name}`**: positional, counted against the arguments, and named, which
+is the f-string.  `{name}` is deliberately unhygienic -- a name read out of the caller's
+template has to resolve at the caller, where every other name a macro writes resolves
+where the macro was written.  It is the one exception to a rule decided on purpose, it is
+the hole Python's f-string has, and it lands last and separately for that reason.
+
+**Two prerequisites, found by trying it.**  Neither was noticed when operators and macros
+landed, and both are now required:
+
+- **An exported operator is not in force in a file that imports it** -- `⍕` defined and
+  exported in a module is refused at the use (4923).  `⍕` belongs in `std`, so the rule
+  has to be that an exported operator is in force wherever its module is imported, with
+  two modules claiming one glyph for one type reported as the conflict it is.  That is
+  what **Rust** and **Haskell** do with instances and what **C++** does by argument-
+  dependent lookup; the alternative, that an operator must be defined in the file that
+  uses it, would make a library unable to ship one.
+- **A macro cannot be exported, and trying crashes the compiler** (9901, an internal
+  error from the module loader), and `m.twice⌜…⌝` does not parse.  The macros decision
+  left "whether a macro may be exported" open; `std.format` closes it, and the ICE is a
+  bug to fix whatever is decided.
+
+Left open: float text, which is the one large piece of work here; whether an
+enumeration's names reach run time, which is what printing a name needs and which every
+program would pay for; the dyadic `⍕`, which is APL's format-by-specification and which
+nothing yet needs; and whether a template may be a value, which it may not, being a
+literal so that the check can happen at all -- the same trade Rust's `format!` makes and
+the one every format-string vulnerability comes from in the languages that did not.
+
 Open questions
 --------------
 

@@ -1,6 +1,12 @@
 Turning Values into Text
 ========================
 
+**Decided**, on 2026-10-01; see [decisions.md](decisions.md) for the entry.  `⍕` is a
+value's text, `std.format` is a macro invoked with the marks, and the template holds
+`{}` and `{name}`.  What follows is the reasoning as it was written, with the section
+on the call marking which of its four ways was taken and why -- and with the two
+prerequisites that trying it turned up.
+
 **A proposal.  The shape is decided and the pieces are not.**  The question is what
 this language should have where C++ has `std::format` and `std::print` and Python has
 f-strings, and the answer comes out in three layers that can be decided separately --
@@ -246,7 +252,11 @@ macro format(template: syntax, ⁂args: syntax) → str:
 std.format("x = {}", x)
 ```
 
-This is the recommendation, and the reason is that **the rule falls out of what
+**Turned down.**  It is a third way to invoke a macro, and a macro is invoked with the
+marks; what they say -- handed over as written -- is exactly what is true of a template.
+The reasoning as it was written follows.
+
+The argument for it was that **the rule falls out of what
 `syntax` already means** rather than being added.  A function with a `syntax` parameter
 already cannot be an ordinary function: nothing at run time may hold a piece of the
 program (7022), so such a function is already the macros' alone and already cannot be
@@ -265,15 +275,17 @@ a macro and a function today, precisely because the two invocations cannot be co
 and this would make them confusable.
 
 **M3.  A compiler-known call**, `std.format` special-cased in the checker the way
-`⎕narrow` is.  **Much cheaper** -- the compiler has the literal's text in hand and
+`⎕narrow` is.  Turned down in favour of the macro, and it is the one to come back to if
+the prerequisites below prove worse than they look.  **Much cheaper** -- the compiler has the literal's text in hand and
 nothing in the macro system has to change at all -- and it is the fallback if the
 estimate below comes out badly.  What it costs is that the format language lives in the
 compiler rather than in a module: `std.print` needs the compiler changed, a program
 cannot write its own `format`-like function, and a second implementation of the language
 has to reproduce the mini-language rather than reading it out of `std`.
 
-**M4.  Keep `⌜⌝`**: `std.format⌜"x = {}", x⌝`.  Cheapest of all and it is what exists;
-turned down because it does not look like a call.
+**M4.  Keep `⌜⌝`**: `std.format⌜"x = {}", x⌝`.  **Taken.**  Cheapest of all and it is
+what exists, and the objection -- that it does not look like a call -- is answered by
+what the marks say about what is between them, which for a template is the truth.
 
 ### Variadics, which the language does not have and does not need here
 
@@ -485,6 +497,71 @@ fallback for 5 and 6 together, and it is much cheaper.  It is worth keeping in v
 globals in the interpreter turn out to be more than they look, the notation and the check
 can be had without them, at the price of the format language living in the compiler.
 
+
+What trying it turned up
+------------------------
+
+Two things that have to land first, neither of them about formatting.  Both were found
+by writing the program and compiling it.
+
+**An exported operator is not in force where the module is imported.**
+
+```
+※ m.pl4g
+@[export, impure]
+fn `⍕`(n: u64) → str: …
+
+※ use.pl4g
+let m := ⎕import("m")
+… ⍕1234u64          ※ error: nothing says what '⍕' means for one operand (4923)
+```
+
+The operator table is built from the file's own definitions.  `⍕` for the built-in
+types belongs in `std`, so this has to change, and the rule has to be that **an exported
+operator is in force wherever its module is imported** -- there being no name to qualify
+an operator by.  Two modules claiming one glyph for one type is then a conflict to
+report, which is the price and is the same price Rust and Haskell pay for global
+instances.
+
+**A macro cannot be exported, and trying crashes the compiler.**
+
+```
+※ m.pl4g
+@[export]
+macro twice:
+    ⌜$x⌝ → ⌜$x + $x⌝
+
+※ use.pl4g
+… m.twice⌜3u8⌝
+```
+
+reports `expected ')' to close the group` at the marks, and then
+`internal compiler error: unknown kind of top-level definition` (9901) from the module
+loader.  So two pieces: a macro invoked through a module's name has to parse, and the
+loader has to know what a macro is.  The macros decision left "whether a macro may be
+exported" open and `std.format` closes it; the internal error is a bug either way, an
+unimplemented thing being a diagnostic and not a crash.
+
+**And one smaller thing.**  A top-level array of string literals is not implemented
+(9902), which is what a digit table wants to be:
+
+```
+let DIGITS: str⟦10⟧ = ⟦"0", "1", …⟧      ※ fatal: not implemented yet
+```
+
+A local one works, so `⍕` for an integer can be written today at the cost of filling the
+table on every call.  Integer-to-text needs nothing else: this compiles and answers 4
+for `⍕1234u64`, which is the length of what it built.
+
+```
+@[impure]
+fn `⍕`(n: u64) → str:
+    let digits: str⟦10⟧ = ⟦"0", "1", "2", "3", "4", "5", "6", "7", "8", "9"⟧
+    if n < 10u64:
+        digits⟦⎕unit(n, ⌜idx⌝)⟧
+    else:
+        ⍕(n ÷ 10u64 ?? 0u64) ⧺ digits⟦⎕unit(n % 10u64 ?? 0u64, ⌜idx⌝)⟧
+```
 
 What this does not decide
 -------------------------
