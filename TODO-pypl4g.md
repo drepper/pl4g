@@ -556,3 +556,16 @@ Optimizations
     that calls one is refused as asking about a piece of the program where nothing has one.  `⎕head`, `⎕parts`, `⎕part` and `=` are
     what the tests needed.  What `⎕kind` should answer for a clause, a bundle or an operator definition is the open part, and
     `⎕apply` wants a decision about whether a macro may build a piece the parser could not have produced.
+
+[ ] The timing table compares columns that are not comparable.  Measured three times on 2026-09-30/10-01: the same code, timed
+    hours apart on this machine, differs by up to 14% -- `enum-values` recorded 6.49 ms in one column and 7.42 in the next with
+    the compiler unchanged between them.  Every apparent regression reported from the table on those days was noise, and each was
+    settled by running the two commits interleaved, twice each way, which resolves a difference the table cannot.
+
+    So the table records history and cannot answer "did this change cost anything".  `bin/pl4g-timing` takes the best of several
+    runs per sample, which handles a momentary disturbance and not a machine that is slower all afternoon.
+
+    What would fix it, in rising order of cost: time a **fixed reference commit** in the same run and record every sample as a
+    ratio to it, so that a column is normalized against the machine as it was at that moment; or run the A/B interleave the
+    discipline already relies on, for every sample, as the recording itself -- accurate and twice the work per column.  The first
+    is the one to do: one extra checkout per run and one extra column, and it makes the table answer the question it is for.
