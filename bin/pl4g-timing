@@ -164,7 +164,8 @@ GROUPS: tuple[Group, ...] = (
            "requirements-bundle": "two bundles applied, and four requirements met",
            "requirements-settle-a-type": "one requirement, whose arrow settles the answer",
            "conditions-entry-value": "a post-condition over what a parameter was at entry",
-           "conditions-observed": "two conditions a build asked to observe rather than stop for"}),
+           "conditions-observed": "two conditions a build asked to observe rather than stop for",
+           "bundle-imported": "a bundle from another module, which applies one of its own"}),
     Group("Loops",
           "A branch backwards, which is what makes liveness a question about "
           "the graph rather than about the layout.  These move when the "
