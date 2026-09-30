@@ -90,21 +90,121 @@ The proposal
 The reading is decided by the notation and nothing else.  With `→ T'` the clause
 states no condition -- there is nothing to be true, the expression's *type* being
 what was asked about -- and without it the expression must be a `bool` and is
-checked.  A clause takes a list, and a function may have as many as it likes:
+checked.
+
+**One expression per clause, and as many clauses as a function wants.**  A clause
+holds one expression; a function that has several things to say writes several
+clauses, and `pre` and `post` may be written in any order and any number of times:
 
     fn take(xs: A', i: I') → E'
-        pre(xs⟦i⟧ → E', i < ⍴xs):
+        pre(xs⟦i⟧ → E')
+        pre(i < ⍴xs):
 
-Read left to right: indexing an `A'` with an `I'` must be writable and `E'` is what
-it answers; and the index must be less than the length, which is a condition on
-the values.  One clause has said what the other document needed two notations for.
+Read in the order written: indexing an `A'` with an `I'` must be writable and `E'`
+is what it answers; and the index must be less than the length, which is a
+condition on the values.  One clause form has said what the other document needed
+two notations for.
 
-### The scope inside the clause
+That the clauses are separate rather than a comma-separated list inside one is not
+only taste.  **Each clause is its own check with its own span**, so the message a
+failure reports points at the clause that failed and not at a list containing it:
 
-The parameters, and nothing else the body has.  A clause may mention a parameter
-to its left in the list and a parameter of the function, which is what makes
-`pre(i < ⍴xs)` mean what it looks like.  It may not mention a local of the body:
-the body has not begun.
+    error: 'take' needs 'i < ⍴xs', and it does not hold here
+        take(row, 9)
+    note: take says so here
+        pre(i < ⍴xs)
+
+A list inside one `pre` would have to carry its own positions to say that much, and
+would then be a list of clauses with worse punctuation.  Separate clauses also let
+a reader put a requirement next to the condition that depends on it, and let the
+settling order be read off the page rather than off a rule about commas.
+
+### Where the clauses go, which is the one real cost
+
+Several clauses want several lines, and **a signature may not span lines today
+except inside its parentheses.**  Measured, both of these compiled while this was
+written.  Parameters across lines are fine, the existing rule that line breaks are
+free inside brackets covering them:
+
+    fn plus(a: u8,
+            b: u8) → u8:
+        a + b
+
+Anything after the closing parenthesis is not:
+
+    fn plus(a: u8, b: u8)
+            → u8:
+        a + b
+
+    t.pl4g:3:1: error: indentation does not match any enclosing block [PL4G-2101]
+
+The newline ended the header, the indented `→ u8:` line opened a block of its own,
+and the body then matched no indentation -- which is the error, three lines away
+from the cause.  And the newline *had* to end the header, because **a header with
+no body is a declaration**: `@[external]` functions are written that way, and the
+parser says so where it decides, that "what says there is none is that the line
+ends here".
+
+So a clause on a line of its own asks for a newline inside a header, in the one
+place a newline already means something else.  Three ways out:
+
+**W1.  One line, and nothing changes.**
+
+    fn take(xs: A', i: I') → E' pre(xs⟦i⟧ → E') pre(i < ⍴xs):
+
+Legal under today's rules exactly as written -- the clauses are after the return
+type and before the colon, all on the header's line.  It reads well for two short
+clauses and badly for four, which is the whole of the objection to it.
+
+**W2.  A newline before `pre` or `post` continues the header** (recommended).  The
+clause lines are indented past the `fn`, and the header ends where it ended before,
+at the colon that opens the body:
+
+    fn take(xs: A', i: I') → E'
+            pre(xs⟦i⟧ → E')
+            pre(i < ⍴xs):
+        xs⟦i⟧
+
+The rule is one token of lookahead: a newline whose next line begins with `pre` or
+`post` does not end the header, and the indentation of those lines is not a block.
+For the compiler's parser that is a line of code where it decides between a body
+and a declaration.  For the grammar it is the external scanner's business, since
+the scanner is what turns a line's leading spaces into INDENT, and it would have to
+be told that these lines are a continuation -- **which is the piece to prototype
+first**, the scanner being where this project has paid for cleverness before.
+
+**W3.  The clauses inside brackets**, where line breaks are already free:
+
+    fn take(xs: A', i: I') → E' ⟨pre(xs⟦i⟧ → E'),
+                             pre(i < ⍴xs)⟩:
+
+No layout rule at all, and no scanner work: the brackets do what brackets already
+do.  The cost is a bracket pair that means nothing but "more lines follow", and a
+closing bracket wedged between the last clause and the colon.  It is the safe
+answer if W2's scanner work turns out badly.
+
+Eiffel is the language that had this problem and solved it by giving every part of
+a routine its own keyword -- `require`, `do`, `ensure`, `end` -- so that no line
+break is ambiguous, the body having an introducer of its own.  This language's body
+introducer is the colon, which is enough for W2 to end the clause list on; what it
+lacks is Eiffel's `end`, which is why the newline rather than the colon is the
+question.
+
+**The semantics do not depend on which.**  W1 is legal today, so the checking, the
+settling and the folding below can land whole, with clauses on one line, before any
+layout question is answered -- and W2 then becomes a change to the parser and the
+scanner that no other part of the feature waits on.  That is the recommended
+order.
+
+### The scope inside a clause
+
+The parameters, and nothing else the body has.  Every parameter is in scope in
+every clause -- not only those to the left, the whole signature having been read
+before any clause is checked -- which is what makes `pre(i < ⍴xs)` mean what it
+looks like.  A clause may not mention a local of the body: the body has not begun.
+
+A type parameter a clause *settles* is in scope from that clause onwards, which is
+the one thing the order of the clauses decides.
 
 ### Post-conditions, and what the answer is called
 
@@ -174,9 +274,12 @@ a permanent half is the strongest argument for the unification.
 ### Settling order
 
 A type parameter is settled by an argument, or by a requirement's arrow, read
-after the arguments and left to right through the clause list.  A parameter whose
-settling would depend on itself is refused; so is one nothing settles, which is
-rule 4555 extended once more.
+after the arguments and then clause by clause in the order written.  A parameter
+whose settling would depend on itself is refused; so is one nothing settles, which
+is rule 4555 extended once more.
+
+With one clause per expression the order is the order on the page, so a reader
+working out where `E'` came from reads down the clauses rather than along a list.
 
 
 What this replaces
@@ -337,11 +440,13 @@ has many definitions.
 What it would take
 ------------------
 
-- **Parsing**: a clause after the return type, `pre(` with a comma-separated list
-  of expressions each optionally followed by `→ NAME`, and the same in
-  `tree-sitter-pl4g/grammar.js` in the same commit.  `pre` may be a contextual
-  keyword: a type cannot be followed by an identifier, so one token of lookahead
-  decides.
+- **Parsing**: any number of clauses after the return type, each `pre(` or `post(`
+  holding one expression optionally followed by `→ NAME`, and the same in
+  `tree-sitter-pl4g/grammar.js` in the same commit.  `pre` and `post` may be
+  contextual keywords: a type cannot be followed by an identifier, so one token of
+  lookahead decides.  With the clauses on the header's line (W1 above) that is all
+  of it; the newline rule (W2) is a second change, to the parser and to the external
+  scanner, and is where the estimate is least certain.
 - **The front end**: a scope holding the parameters, open while the clauses are
   checked and closed before the body -- which is the one genuinely new thing here,
   and is smaller than it sounds because the parameters are already bound by the
