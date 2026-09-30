@@ -168,7 +168,9 @@ GROUPS: tuple[Group, ...] = (
            "bundle-imported": "a bundle from another module, which applies one of its own",
            "operator-defined": "an operator a program defined for a type of its own",
            "operator-fresh": "two operators the language has no meaning for at all",
-           "operator-pair": "brackets a program defined, one of them with two indices"}),
+           "operator-pair": "brackets a program defined, one of them with two indices",
+           "macro-rules": "four invocations of two macros, one matching a product",
+           "macro-statements-and-hygiene": "a macro writing statements, with a name renamed"}),
     Group("Loops",
           "A branch backwards, which is what makes liveness a question about "
           "the graph rather than about the layout.  These move when the "
