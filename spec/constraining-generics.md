@@ -181,6 +181,11 @@ at all.  Read this section for what a bound *is* and that one for how it should 
 written; everything below about checking, settling and P1 is unchanged by the
 change of notation.
 
+And it loses nothing, which was the one open worry: a clause may hold a **type
+parameter where a value would go**, so `needs A'⟦I'⟧ → E'` is written
+`pre(A'⟦I'⟧ → E')` with the same operators in the same places.  Every bound this
+section can write, that notation writes; the reverse is not true.
+
 
 A bound is **not** a name.  Writing `needs T' ⌈` would say that `T'` admits `⌈`
 and would quietly assume the other operand is a `T'` too -- which is true of `⌈`

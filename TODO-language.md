@@ -102,7 +102,11 @@ To Do List for the PL4g language
 [ ] pre- and post-conditions on a function, with a constraint as one of them.  [spec/conditions.md](spec/conditions.md) is a
     proposal: one clause with two readings, told apart by an arrow -- `pre(EXPR)` is a condition, which must be a `bool` and is
     checked, and `pre(EXPR → T')` is a requirement, which asks only that the expression can be written and binds `T'` to its
-    type.  One expression per clause and as many clauses as a function wants, so that each failure reports the clause that failed;
+    type.  A type parameter may stand where a value would -- `pre(somefunc(T'))`, which is no expression -- and that is what lets a
+    clause speak about a type no parameter holds a value of, `pre(zero(E') → E')` being `Default` in Rust and `mempty` in
+    Haskell; the apostrophe is what makes the bare name tellable from a value's, so the lifting rule is untouched and `⌈⌜T'⌝` still
+    means the largest value the type holds where `⌈T'` means the largest in one of them.  With that the expression notation is a
+    strict superset of the signature notation of the entry below.  One expression per clause and as many clauses as a function wants, so that each failure reports the clause that failed;
     several clauses want several lines, and a header may not span lines outside its parentheses today, which the document measures
     and answers three ways -- clauses on the header's line needs no change at all and is what should land first.
     The expression is written over the function's parameters, which is the one new thing the front end needs and is what

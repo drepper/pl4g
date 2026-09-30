@@ -14,6 +14,14 @@ expression form is **better than the signature form** proposed in
 [constraining generics](constraining-generics.md) -- so that document's layer 1
 should adopt it.
 
+A third form, which the user asked for after reading the first draft, is
+
+    fn f(a: T') → T'  pre(somefunc(T')):
+
+where a type parameter stands where a value would.  It is not an expression, and
+allowing it is what makes the notation able to say everything the signature form
+could -- a requirement about a type no parameter holds a value of.
+
 
 Three things a condition could mean
 -----------------------------------
@@ -33,7 +41,8 @@ place a proof fails that is not a bug.  It is a different project.
 **Typed (C3).**  The condition is not evaluated at all: what it asks is that the
 expression *can be written*, and that is a fact about types.  `pre(somefunc(a))`
 requires a `somefunc` that accepts a `T'`; `pre(somefunc(a) → E')` requires one
-and names what it answers.
+and names what it answers; and `pre(somefunc(T'))` requires one without needing a
+value of the type to write it over.
 
 This proposal is **C1 and C3, with C3 doing the work of a constraint**, and C2
 noted as what neither forecloses.  The important observation is that C3 is not a
@@ -86,11 +95,14 @@ The proposal
 
     pre(EXPR)              a condition: EXPR must be writable, and must be true
     pre(EXPR → T')         a requirement: EXPR must be writable, and T' is its type
+    pre(EXPR)              where EXPR holds a type parameter in a value's place:
+                           a requirement, and nothing is checked
 
 The reading is decided by the notation and nothing else.  With `→ T'` the clause
 states no condition -- there is nothing to be true, the expression's *type* being
 what was asked about -- and without it the expression must be a `bool` and is
-checked.
+checked, unless it holds a type where a value goes, which the next section is
+about.
 
 **One expression per clause, and as many clauses as a function wants.**  A clause
 holds one expression; a function that has several things to say writes several
@@ -118,6 +130,92 @@ A list inside one `pre` would have to carry its own positions to say that much, 
 would then be a list of clauses with worse punctuation.  Separate clauses also let
 a reader put a requirement next to the condition that depends on it, and let the
 settling order be read off the page rather than off a rule about commas.
+
+### A type where a value goes
+
+    fn f(a: T') → T'  pre(somefunc(T')):
+
+**A type parameter may stand where a value would, and means "some value of this
+type".**  The clause above asks for a `somefunc` that accepts a `T'` and says
+nothing about any particular value, there being none to speak of.
+
+This is not a convenience.  It is the only way to write a requirement about a type
+that **no parameter has a value of**:
+
+    fn total(xs: A') → E'
+        pre(xs⟦0u64⟧ → E')
+        pre(zero(E') → E'):
+
+`E'` is the element type, settled by the first clause.  The second asks that a
+`zero` of it can be had -- which the summation needs before it has added anything,
+and which no expression over `xs` and nothing else can ask for, because there is no
+`E'` in the signature to write it over.  That requirement is `Default` in Rust,
+`mempty` in Haskell, `T{}` in C++, `create make` in an Eiffel generic constraint,
+and a gap in Go; every language that has generics has had to answer it, and an
+expression over parameters alone cannot.
+
+**Why the bare `T'` is allowed to be bare.**  The language's rule is that a type in
+an expression is written between lifting marks, and the specification says why in
+so many words: a type's name and a value's name are both identifiers, so without
+the marks the parser would have to know what a name turned out to mean before it
+could read it.  **A type parameter is the exception, because the apostrophe is
+already the marker.**  `T'` cannot be a value's name -- the suffix is what makes it
+a type parameter -- so it is tellable in an operand position with no lookup, which
+is the whole of what the marks were for.  So this is not a new hole in the rule;
+it is the one name the rule never needed to cover.
+
+**And it costs the grammar nothing, measured.**  The apostrophe already continues an
+identifier in the lexer and in `tree-sitter-pl4g/grammar.js` alike, so `T'` is one
+identifier token today and an identifier is already an operand.  Written in an
+expression it parses and then fails to resolve, which is the whole of the distance
+between here and there:
+
+    let x: u6 = T'
+    t.pl4g:3:17: error: 'T'' is not defined [PL4G-4003]
+
+A syntax error would have meant a grammar change.  A name that is not defined means
+the clause's operand needs one arm in the name resolution and nothing else.
+
+**The marks keep their meaning, and that is what tells the two apart.**
+
+    ⌈⌜T'⌝       the largest value the type T' holds -- a lift, as today
+    ⌈T'         the largest of the values in some T' -- a stand-in, asking that ⌈ applies to one
+
+A lifted type is the type itself, which is what `⌈`, `⌊`, `⎕typeof` and the
+comparison of two lifts already take; a bare type parameter is a value of it.  The
+three places that read a lift are unchanged, and 4514 -- a lift anywhere else is
+refused -- is unchanged, so nothing that compiles today reads differently.
+
+**A concrete type needs nothing.**  There is no `pre(somefunc(u8))`: `u8` is an
+identifier and the lifting rule's reason applies to it in full.  None is needed,
+because a concrete type always has a value that can be written -- `pre(somefunc(0u8))`
+says it with an ordinary expression.  The stand-in is needed exactly where the type
+has no writable value, which is exactly where the apostrophe makes it free.  The
+design closes.
+
+**Three consequences, each a rule.**
+
+*Nothing is checked.*  A stand-in has no value, so a clause holding one cannot be
+evaluated and is a requirement whatever else it looks like.  The rule that a
+condition must be a `bool` does not apply to it: whatever `somefunc(T')` answers is
+ignored, the question having been whether it can be written.
+
+*A clause holds one or the other, never both.*  `pre(i < ⍴xs ∧ somefunc(T'))` is
+refused rather than given a meaning, because the reading that makes the stand-in
+legal is the reading that stops checking the other half -- a condition silently
+becoming a requirement is the one failure mode this notation could have.  What to
+write instead is two clauses, which is what several clauses are for.
+
+*A stand-in is a use and never a settling.*  `pre(zero(E') → E')` reads the
+already-settled `E'` on the left and states the answer's type on the right; a type
+parameter first mentioned as a stand-in is settled by nothing, which is 4555's
+refusal and not a new one.
+
+**And purity does not arise.**  A condition must be pure because it is evaluated.
+A requirement is not evaluated, so a requirement may name an impure function: the
+question was whether the call type-checks.  That asymmetry is worth stating in the
+specification rather than discovering, and it is a second place the two readings
+come apart cleanly -- the first being removability, below.
 
 ### Where the clauses go, which is the one real cost
 
@@ -204,7 +302,9 @@ before any clause is checked -- which is what makes `pre(i < ⍴xs)` mean what i
 looks like.  A clause may not mention a local of the body: the body has not begun.
 
 A type parameter a clause *settles* is in scope from that clause onwards, which is
-the one thing the order of the clauses decides.
+the one thing the order of the clauses decides.  A type parameter may also stand
+where a value would, which the next section but one is about, and one standing
+there must already be settled.
 
 ### Post-conditions, and what the answer is called
 
@@ -226,9 +326,12 @@ than given a meaning.
 **It must be pure.**  A condition that changed something would be a condition
 whose checking changed the program, and a condition that may be compiled out (see
 below) would then change the program by being compiled out.  Purity is a property
-the compiler already tracks, so this is a check and not a new analysis.
+the compiler already tracks, so this is a check and not a new analysis.  It is
+asked of a condition only: a requirement is not evaluated, so what it names need
+not be pure.
 
-**A condition must be a `bool`.**  A requirement need not: its type is the point.
+**A condition must be a `bool`.**  A requirement need not: its type is the point,
+and a requirement written with a stand-in has no type worth asking about at all.
 
 **A requirement's arrow may name a fresh parameter or an existing type.**
 `pre(xs⟦i⟧ → E')` settles `E'`; `pre(a ⌈ b → T')` states that the answer is the
@@ -276,7 +379,8 @@ a permanent half is the strongest argument for the unification.
 A type parameter is settled by an argument, or by a requirement's arrow, read
 after the arguments and then clause by clause in the order written.  A parameter
 whose settling would depend on itself is refused; so is one nothing settles, which
-is rule 4555 extended once more.
+is rule 4555 extended once more.  A stand-in settles nothing, so a clause that
+mentions a type parameter only as a stand-in must come after whatever settled it.
 
 With one clause per expression the order is the order on the page, so a reader
 working out where `E'` came from reads down the clauses rather than along a list.
@@ -303,6 +407,19 @@ they stand.
 type-correct.  `pre(i < ⍴xs)` is a requirement no bound can express, and it is the
 one a reader of `take` most wants to see.
 
+**And with stand-ins it loses nothing.**  The one thing the signature form could do
+that an expression over parameters could not was speak about a type no parameter
+holds a value of; a type parameter standing where a value goes says it, and says it
+in the same positions:
+
+    needs A'⟦I'⟧ → E'          the other document's notation
+    pre(A'⟦I'⟧ → E')          this one, character for character where it matters
+
+So the expression form is a **strict superset**: every bound the signature form can
+write, it writes with the same operators in the same places, and it writes value-level
+requirements besides.  There is nothing left that only the signature form could say,
+which is what turns "better" into "replaces".
+
 **And bundles still work**, now holding expressions over named parameters:
 
     bundle iterator(I', E'):  (it: &mut I') pre(next(it) → E' ?)
@@ -327,6 +444,30 @@ means something that is not a condition -- which is a real readability gain, sin
 The recommendation is the single keyword because the user asked for the
 integration and because the arrow is a visible marker; the two-keyword form is a
 one-line change to this proposal if the lie grates.
+
+**A named stand-in, as C++ has.**  `pre(t: T')(somefunc(t))` introduces a name for
+the value the type stands in for, which is exactly a requires-expression's
+parameter list.  It is turned down because the name buys nothing here: C++ needs it
+to write `a < b` with two values of one type, and a clause that wants that writes
+two stand-ins and means two unrelated values -- which is the honest reading, a
+requirement being about what can be written and not about which values.  If a
+requirement ever needs to say "these two are the same value", this is the notation
+to come back to.
+
+**The lifting marks for the stand-in.**  `pre(somefunc(⌜T'⌝))`, reusing the notation
+the language already has for a type in an expression.  Turned down because the marks
+already mean the type *itself* -- `⌈⌜u8⌝` is 255 -- so spelling the stand-in that way
+would make `⌈⌜T'⌝` ambiguous between the largest value the type holds and the largest
+value in one of them.  Leaving the marks alone and letting the apostrophe do the
+work keeps both readings and adds no rule.
+
+**Types as values, as Zig has.**  Make a type an ordinary comptime value and
+`somefunc(T')` is an expression with nothing special about it -- no stand-in, no
+rule, and `⌈` on a type is just a call.  It is the largest of the alternatives and
+the most principled; it is turned down because this language's type parameters are
+*inferred* rather than passed, so there is no parameter to hold the type and no
+place a value of it would come from.  The stand-in is the restricted form of this
+that inference allows.
 
 **Caller-side checking.**  The message points at the call without a stack walk,
 and the fold is immediate rather than waiting for the inliner.  It costs code at
@@ -437,6 +578,54 @@ the program.  It is the fifth meaning, and it belongs to a language where a name
 has many definitions.
 
 
+### A type where a value goes, in other languages
+
+The stand-in is the part of this proposal with the most prior art, and every
+language with generics has had to answer the same question: how does a constraint
+speak about a type when no value of it is in hand?
+
+**Zig** answers it by making types values -- `comptime T: type` is a parameter, so
+`somefunc(T)` needs no notation at all -- and is the reason the specification's own
+comparison already notes that `std.math.maxInt(T)` takes a type where `@TypeOf(x)`
+takes an expression.  It is the design this proposal is a restricted form of.
+
+**C++20** answers it by naming the stand-in: `requires(T t) { somefunc(t); }`.  The
+value `t` does not exist and is never evaluated; it is there so that the operations
+can be written over something.  `pre(somefunc(T'))` is that with the name left out.
+
+**D** answers it with `T.init` -- a value of the type spelled as an attribute of it
+-- inside `is(typeof(somefunc(T.init)))`.  **Ada**'s `T'First` is the same shape of
+answer, and the apostrophe is on the other side of the name, which is a coincidence
+worth smiling at.
+
+**Rust** and **Haskell** answer it by not using expressions at all: `T: Default` and
+`mempty :: a` are declarations that the type provides something, carried by a trait
+or a class dictionary.  Haskell's is the cleanest statement of the problem -- a class
+method whose type mentions `a` in no argument position is precisely a requirement no
+expression over values can express.
+
+**Swift** does the same with protocol `init()` requirements and static members, for
+the same reason.
+
+**Go** does not answer it.  A type set constrains what operators work and a method
+set constrains what methods exist, and neither can require a way to *make* a value;
+`new(T)` gives the zero value and that is the whole of it.  Go is the evidence that
+the gap is real and that a language can ship with it.
+
+**Eiffel** answers it in the constraint itself: `[G -> ANY create make end]` says a
+`G` can be made, which is the `pre(zero(E') → E')` of the motivating example, forty
+years earlier.
+
+**Wolfram** writes the type in the argument position literally -- `f[x_Integer]` --
+and is the one language whose notation for this is the same notation, though there
+the head test is checked at run time and selects a definition rather than stating a
+requirement.
+
+**APL**, **BQN** and **UIUA** have no static types, so the question does not arise;
+what corresponds is that a function's conformance is a fact about shape, discovered
+when the data arrives.  **LISP** and **Scheme** likewise: a macro can look at a form
+and not at a type.
+
 What it would take
 ------------------
 
@@ -444,13 +633,18 @@ What it would take
   holding one expression optionally followed by `→ NAME`, and the same in
   `tree-sitter-pl4g/grammar.js` in the same commit.  `pre` and `post` may be
   contextual keywords: a type cannot be followed by an identifier, so one token of
-  lookahead decides.  With the clauses on the header's line (W1 above) that is all
+  lookahead decides.  A type parameter as an operand needs **nothing** here: the
+  apostrophe already continues an identifier in both the lexer and the grammar, so
+  `T'` already parses where a value goes and only fails to resolve.  With the clauses
+  on the header's line (W1 above) that is all
   of it; the newline rule (W2) is a second change, to the parser and to the external
   scanner, and is where the estimate is least certain.
 - **The front end**: a scope holding the parameters, open while the clauses are
   checked and closed before the body -- which is the one genuinely new thing here,
   and is smaller than it sounds because the parameters are already bound by the
-  time the body is lowered.
+  time the body is lowered.  A type parameter in that scope resolves as a stand-in
+  rather than as a value, which is one arm in the name resolution and the refusal
+  for a clause that mixes a stand-in with something checkable.
 - **Settling**: the arrow's name bound from the expression's type, ordered after
   the arguments; the refusals for a cycle and for a parameter nothing settles.
 - **Lowering**: a condition becomes an `AssertInst` at the top of the body, or
@@ -463,8 +657,12 @@ What it would take
 - **Tests**: a condition that holds, one that fails at run time, one the folder
   refuses while compiling, a requirement that settles a type, a requirement that
   fails at the call, a `post` over `⎕answer`, an impure condition refused, a
-  `post` with an arrow refused, and the interaction with a generic -- a condition
-  checked per instantiation.
+  `post` with an arrow refused, a requirement written with a stand-in that is
+  satisfied, one that is not, `pre(zero(E') → E')` where nothing provides a `zero`,
+  a clause mixing a stand-in with a condition refused, a stand-in for a type
+  parameter nothing settled refused, `⌈⌜T'⌝` and `⌈T'` in one clause meaning the
+  two different things, and the interaction with a generic -- a condition checked
+  per instantiation.
 
 The order to land it in is requirements first (C3, which makes the other document
 buildable) and conditions second (C1, which is an `AssertInst` and a status), and
