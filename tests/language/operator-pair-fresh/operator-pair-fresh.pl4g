@@ -1,0 +1,27 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=16 diag=none
+
+※ A pair the language has no brackets for at all.  What qualifies is what
+※ Unicode says: `Ps` for the opener and `Pe` for the closer, which is every
+※ bracket there is -- less the ones the grammar needs for itself and the two
+※ Unicode calls brackets and this language calls the larger and the smaller of
+※ two.
+※
+※ Nothing checks that the two are each other's mirror: Unicode does not say
+※ which closer belongs to which opener, and what closes a use is what the
+※ definition says closes it.
+
+type Grid = a : u8 ; b : u8
+
+fn `⟬⟭`(g: Grid, i: u64) → u8:
+    if i = 0u64:
+        g.a
+    else:
+        g.b
+
+fn `⟬⟭`(g: Grid, i: u64, j: u64) → u8:
+    g.a ⊞ g.b ⊞ (⎕narrow(i ⊞ j, ⌜u8⌝) ?? 0u8)
+
+@[startup]
+fn main() → u6:
+    let g: Grid = Grid(.a ← 3u8, .b ← 5u8)
+    ⎕narrow(g⟬1u64⟭ ⊞ g⟬1u64, 2u64⟭, ⌜u6⌝) ?? 1u6

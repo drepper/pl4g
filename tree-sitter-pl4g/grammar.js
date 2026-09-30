@@ -724,6 +724,7 @@ module.exports = grammar({
       $.set_literal,
       $.dictionary_literal,
       $.index_expression,
+      $.fresh_pair_expression,
       $.take_expression,
       $.step_expression,
       $.or_else_expression,
@@ -877,6 +878,18 @@ module.exports = grammar({
     // where it stands and by nothing else, as it is in C.
     address_expression: $ => prec(13, seq(
       '&', optional($.mutable), field('place', $._non_comparison),
+    )),
+
+    // A pair of brackets the language gives no meaning, written around what
+    // stands inside it and after what it is applied to -- which is where the
+    // brackets the language has are written.  What closes it is whatever closing
+    // bracket arrives: which closer belongs to which opener is what a definition
+    // says, and Unicode does not say it.
+    fresh_pair_expression: $ => prec(14, seq(
+      field('base', $._non_comparison),
+      field('open', $.fresh_open),
+      sepBy1(',', $._expression),
+      field('close', $.fresh_close),
     )),
 
     // What is at the place a reference names, written after it so that
@@ -1116,13 +1129,26 @@ module.exports = grammar({
     // checks the two against each other.
     operator_name: _ => token(seq(
       '`',
-      /[[\p{Sm}\p{So}\-^&%#\u2308\u230a\u00ab\u00bb\u207f]--[?\u207b\u2190\u2192\u2227\u2228\u22a5\u2316\u231c\u231d\u2395\u29d6]]/,
+      choice(
+        /[[\p{Sm}\p{So}\-^&%#\u2308\u230a\u00ab\u00bb\u207f]--[?\u207b\u2190\u2192\u2227\u2228\u22a5\u2316\u231c\u231d\u2395\u29d6]]/,
+        // Or a pair: an opening bracket and a closing one written together, which
+        // is what a pair is called.  The brackets the grammar needs for itself are
+        // out, and so are the two Unicode calls brackets and this language calls
+        // the larger and the smaller of two.
+        seq(/[[\p{Ps}]--[(\[{\u3008\u2308\u230a]]/, /[[\p{Pe}]--[)\]}\u3009\u2309\u230b]]/),
+      ),
       '`')),
 
     // A glyph the language gives no meaning, standing where an operator stands.
     // What it means is what a program said it means; the grammar only says where
     // one may be written and how tightly it binds.
     fresh_operator: _ => token(/[[\p{Sm}\p{So}]--[+<=>|~\u00ac\u00d7\u00f7\u207b\u2190-\u2193\u2195\u21ba\u21bb\u21d5\u21e7\u21e9\u2223\u2224\u2227\u2228\u2245\u2247\u2260\u2264\u2265\u2295\u229e-\u22a0\u22a5\u22bc\u22bd\u2316\u231c\u231d\u2374\u2395\u29d6\u29fa\u2a85\u2a86\u2a89\u2a8a]]/),
+
+    // The two halves of a pair the language gives no meaning.  The brackets it
+    // needs for itself are out, its own two operator glyphs are out, and so are
+    // the array and collection brackets, which have tokens of their own.
+    fresh_open: _ => token(/[[\p{Ps}]--[(\[{\u3008\u2308\u230a\u27e6\u2e28]]/),
+    fresh_close: _ => token(/[[\p{Pe}]--[)\]}\u3009\u2309\u230b\u27e7\u2e29]]/),
 
     // Neither kind swallows the newline after it: the layout depends on that
     // newline, and a comment that took it would end a block.

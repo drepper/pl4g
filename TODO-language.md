@@ -149,10 +149,10 @@ To Do List for the PL4g language
     `fn `+`(a: Point, b: Point) → Point`, which needs nothing from this entry and is generic for nothing -- `fn `+`(a: T', b: T')` is
     one definition for every type whose body works, which a receiver form cannot express.  So a bundle requiring `T' ⊞ T' → T'`
     can now be met by a type a program defined, which was the sharpest of the four things this entry is for.
-    Left over from the operator half: a **bracket pair** as a definable operator, so that `A'⟦I'⟧ → E'` can be met -- a program's own
-    collection is the thing most likely to want code attached to it, and a bracket pair is not a glyph; `=` together with a hash,
-    which is what turns a record into a dictionary key (4429 already calls a key a type that "answers" both); `≠` following from `=`
-    and the three orderings from `<`; and mixed-type operators.
+    A **bracket pair** is a definable operator too, named by the pair and taking as many operands as it likes, so `A'⟦I'⟧ → E'`
+    is met by a program's own collection and `g⟦i, j⟧` is sayable -- which C++ took until C++23 to allow.
+    Left over from the operator half: `=` together with a hash, which is what turns a record into a dictionary key (4429 already
+    calls a key a type that "answers" both); `≠` following from `=` and the three orderings from `<`; and mixed-type operators.
     **`foreach` over a cursor is refused** (4438) although a cursor is the compiler's own iterator value and the loop's own shape
     fits it.  That is the same rule asked of a type the compiler already has, and it is worth doing first: it needs no decision
     about methods at all.

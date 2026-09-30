@@ -135,6 +135,13 @@ OPNAME_GLYPH: Final[str] = "`"
 #: notation, which is what the specification needs to define them with it.
 OPERATOR_CATEGORIES: Final[frozenset[str]] = frozenset({"Sm", "So"})
 
+#: Which glyphs may open and close a *pair* -- an operator written around what it
+#: is applied to rather than before or between.  Unicode decides here too: `Ps` is
+#: the opening punctuation and `Pe` the closing, which is every bracket there is
+#: and nothing else.
+OPENER_CATEGORY: Final[str] = "Ps"
+CLOSER_CATEGORY: Final[str] = "Pe"
+
 #: What a function answered, which is the one thing a post-condition is about
 #: and which there is nothing else to call.  A name the compiler provides rather
 #: than a keyword, because that is what the language already does for a name it
@@ -481,6 +488,11 @@ class TokKind(StrEnum):
     #: What it means is what a program said it means, and nothing where a program
     #: said nothing.
     OPERATOR = "an operator"
+    #: A bracket the language gives no meaning, opening or closing a pair a
+    #: program defined.  Two kinds rather than one, because where a bracket may
+    #: stand depends on which of the two it is.
+    OPEN_OPERATOR = "an opening bracket"
+    CLOSE_OPERATOR = "a closing bracket"
 
     KW_PRE = "'pre'"
     KW_POST = "'post'"
@@ -639,6 +651,12 @@ OPERATORS_NOT_NAMEABLE: Final[frozenset[str]] = frozenset({
     AND_GLYPH, OR_GLYPH, QUESTION_GLYPH, DEREF_GLYPH,
     ARROW_GLYPH, ASSIGN_GLYPH, BOTTOM_GLYPH, BUILTIN_GLYPH, LIFETIME_GLYPH,
     LIFT_OPEN_GLYPH, LIFT_CLOSE_GLYPH, NEGATIVE_GLYPH,
+    # And the brackets the grammar needs for itself: a group, a list of
+    # attributes, a block, and the members of a tuple.  The array brackets and the
+    # collection brackets are *not* here: the language uses them as operators, so
+    # a program may say what they mean for a type of its own, exactly as it may
+    # for `+`.
+    "(", ")", "[", "]", "{", "}", TUPLE_OPEN_GLYPH, TUPLE_CLOSE_GLYPH,
 })
 
 KEYWORDS: Final[dict[str, TokKind]] = {

@@ -3371,6 +3371,10 @@
         },
         {
           "type": "SYMBOL",
+          "name": "fresh_pair_expression"
+        },
+        {
+          "type": "SYMBOL",
           "name": "take_expression"
         },
         {
@@ -4317,6 +4321,64 @@
             "content": {
               "type": "SYMBOL",
               "name": "_non_comparison"
+            }
+          }
+        ]
+      }
+    },
+    "fresh_pair_expression": {
+      "type": "PREC",
+      "value": 14,
+      "content": {
+        "type": "SEQ",
+        "members": [
+          {
+            "type": "FIELD",
+            "name": "base",
+            "content": {
+              "type": "SYMBOL",
+              "name": "_non_comparison"
+            }
+          },
+          {
+            "type": "FIELD",
+            "name": "open",
+            "content": {
+              "type": "SYMBOL",
+              "name": "fresh_open"
+            }
+          },
+          {
+            "type": "SEQ",
+            "members": [
+              {
+                "type": "SYMBOL",
+                "name": "_expression"
+              },
+              {
+                "type": "REPEAT",
+                "content": {
+                  "type": "SEQ",
+                  "members": [
+                    {
+                      "type": "STRING",
+                      "value": ","
+                    },
+                    {
+                      "type": "SYMBOL",
+                      "name": "_expression"
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "type": "FIELD",
+            "name": "close",
+            "content": {
+              "type": "SYMBOL",
+              "name": "fresh_close"
             }
           }
         ]
@@ -5433,8 +5495,26 @@
             "value": "`"
           },
           {
-            "type": "PATTERN",
-            "value": "[[\\p{Sm}\\p{So}\\-^&%#\\u2308\\u230a\\u00ab\\u00bb\\u207f]--[?\\u207b\\u2190\\u2192\\u2227\\u2228\\u22a5\\u2316\\u231c\\u231d\\u2395\\u29d6]]"
+            "type": "CHOICE",
+            "members": [
+              {
+                "type": "PATTERN",
+                "value": "[[\\p{Sm}\\p{So}\\-^&%#\\u2308\\u230a\\u00ab\\u00bb\\u207f]--[?\\u207b\\u2190\\u2192\\u2227\\u2228\\u22a5\\u2316\\u231c\\u231d\\u2395\\u29d6]]"
+              },
+              {
+                "type": "SEQ",
+                "members": [
+                  {
+                    "type": "PATTERN",
+                    "value": "[[\\p{Ps}]--[(\\[{\\u3008\\u2308\\u230a]]"
+                  },
+                  {
+                    "type": "PATTERN",
+                    "value": "[[\\p{Pe}]--[)\\]}\\u3009\\u2309\\u230b]]"
+                  }
+                ]
+              }
+            ]
           },
           {
             "type": "STRING",
@@ -5448,6 +5528,20 @@
       "content": {
         "type": "PATTERN",
         "value": "[[\\p{Sm}\\p{So}]--[+<=>|~\\u00ac\\u00d7\\u00f7\\u207b\\u2190-\\u2193\\u2195\\u21ba\\u21bb\\u21d5\\u21e7\\u21e9\\u2223\\u2224\\u2227\\u2228\\u2245\\u2247\\u2260\\u2264\\u2265\\u2295\\u229e-\\u22a0\\u22a5\\u22bc\\u22bd\\u2316\\u231c\\u231d\\u2374\\u2395\\u29d6\\u29fa\\u2a85\\u2a86\\u2a89\\u2a8a]]"
+      }
+    },
+    "fresh_open": {
+      "type": "TOKEN",
+      "content": {
+        "type": "PATTERN",
+        "value": "[[\\p{Ps}]--[(\\[{\\u3008\\u2308\\u230a\\u27e6\\u2e28]]"
+      }
+    },
+    "fresh_close": {
+      "type": "TOKEN",
+      "content": {
+        "type": "PATTERN",
+        "value": "[[\\p{Pe}]--[)\\]}\\u3009\\u2309\\u230b\\u27e7\\u2e29]]"
       }
     },
     "doc_comment": {

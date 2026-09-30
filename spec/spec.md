@@ -4628,8 +4628,55 @@ its arguments already worked out -- so one written for them would change when th
 trap C++ left open on `&&`.  `?` and its pair are about a result rather than about what a result holds, and `⌖` is about a
 reference.
 
-**An operator is one glyph** (3051).  Two beside each other are two operators, which is what makes an expression readable without a
-table of which pairs mean something.
+**An operator is one glyph** (3051), or a **pair of brackets**, which is the next section.  Two glyphs beside each other that are
+not a pair are two operators, which is what makes an expression readable without a table of which pairs mean something.
+
+###### A pair of brackets
+
+**The brackets the language uses are operators like any other**, so a program may say what they mean for a type of its own.  The
+name is the *pair*: an opening bracket and a closing one written together.
+
+```
+type Grid = a : u8 ; b : u8 ; c : u8 ; d : u8
+
+fn `⟦⟧`(g: Grid, i: u64) → u8:            …
+fn `⟦⟧`(g: Grid, i: u64, j: u64) → u8:    …
+fn `⸨⸩`(g: Grid, k: u8) → bool:            …
+
+g⟦0u64⟧   g⟦1u64, 1u64⟧   g⸨3u8⸩
+```
+
+**A pair is written around what it is applied to**, so its first parameter is that and the rest are whatever stands inside -- **as
+many as it likes** (4922), which is what lets `g⟦i, j⟧` be said.  A definition of one parameter would be a pair with nothing
+between the brackets and is refused.  Two definitions of one pair taking different numbers are two definitions, told apart the way
+a glyph's prefix and infix readings are.
+
+**`Ps` and `Pe` decide which brackets**, as `Sm` and `So` decide which glyphs: Unicode's opening and closing punctuation, which is
+every bracket there is.  Out of it come the brackets the grammar needs for itself -- `(`, `[`, `{`, `〈` and their partners -- and `⌈`
+and `⌊`, which Unicode calls brackets and this language calls the larger and the smaller of two: a pair beginning with one of those
+could be defined and never written.  The array brackets and the collection brackets are neither, which is why they are the two the
+language itself uses and a program may define.
+
+**A pair the language has no brackets for may be defined too**, and is then written where the language's are:
+
+```
+fn `⟬⟭`(g: Grid, i: u64) → u8:  …        g⟬1u64⟭
+```
+
+**Nothing checks that the two halves are each other's mirror.**  Unicode does not say which closer belongs to which opener, and a
+program that pairs them oddly has written something odd rather than something ambiguous: what closes a use is whatever closing
+bracket arrives, and the pair it makes is then looked up like any other name.  A line may be broken inside a pair a program defined,
+as it may inside one the language has.
+
+**This is what makes `pre(A'⟦I'⟧ → E')` satisfiable** by a type a program defined, which is the requirement a program's own collection
+would most want to meet and the one a design thinking only about `+` forgets.
+
+Compare: **C++**'s `operator[]`, which took until C++23 to accept more than one index, and `operator()`, which always did -- the
+distinction this language does not have to draw, a pair being a pair.  **Python**'s `__getitem__`, which takes one argument and gets
+several by being handed a tuple.  **Rust**'s `Index<Idx>`, one index of a type the trait names.  **Haskell** has no brackets to
+define and uses `!` as an ordinary operator.  **Ada** has no indexing operator to overload at all: indexing and calling are spelled
+alike there, so a function *is* the answer -- which is the other way to make a program's own collection readable, and the one a
+language pays for at every call.
 
 ###### An operator the language does not have
 
@@ -4694,12 +4741,15 @@ fn `↕`(a: F') → F'                    fn `⇕`(a: F') → F'
 fn `#`(c: C') → u64 ¤size              fn `⍴`(c: C') → u64 ¤size
 fn `⍴`(shape: I', c: C') → C'           fn `⫽`(a: C', b: C') → C'
 fn `⇧`(c: cursor) → cursor             fn `⇩`(c: cursor) → cursor
+
+fn `⟦⟧`(a: A', i: I', …) → E'          fn `⸨⸩`(d: D', k: K') → V' ?
 ```
 
 **What the table leaves out is what a function cannot say.**  `∧`, `∨`, `and` and `or` decide whether to work their right
-side out, so no signature describes them; `?` and `??` are about a result; `⌖` is about a reference; and `⟦⟧`, `⸨⸩` and
-`⌜⌝` are brackets rather than operators.  That the rest fit is the argument for the notation: what the language does to values and
-what a program may do to its own are the same kind of thing, said the same way.
+side out, so no signature describes them; `?` and `??` are about a result; `⌖` is about a reference; and `⌜⌝` is the grammar
+saying that a type follows.  That everything else fits -- down to the two bracket pairs, whose last line is the one a program's own
+collection wants -- is the argument for the notation: what the language does to values and what a program may do to its own are the
+same kind of thing, said the same way.
 
 Compare: **Ada**, which writes `function "+" (Left, Right : Vector) return Vector` -- this with quotation marks, which Ada needs
 because `+` is not a legal identifier there and a language whose operators are glyphs does not.  **Haskell**, where an operator *is*

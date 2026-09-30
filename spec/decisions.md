@@ -7728,6 +7728,62 @@ Left open: mixed-type operators, a bracket pair as a definable operator, `=` wit
 a hash so that a record may be a dictionary key, and attaching an operator to a
 type from outside the file that defined it.
 
+---
+
+## 2026-09-30T18:05+02:00 — language
+
+**A pair of brackets is an operator, and takes as many operands as it likes**
+
+    fn `⟦⟧`(g: Grid, i: u64) → u8:          …     g⟦0u64⟧
+    fn `⟦⟧`(g: Grid, i: u64, j: u64) → u8:  …     g⟦1u64, 1u64⟧
+    fn `⟬⟭`(g: Grid, i: u64) → u8:          …     g⟬1u64⟭
+
+The operator notation extended, at the user's direction: **`Ps` and `Pe` decide
+which brackets**, as `Sm` and `So` decide which glyphs.  The name is the pair,
+written together.
+
+**A pair is written around what it is applied to**, so its first parameter is that
+and the rest are whatever stands inside -- **as many as it likes**, which is what
+lets `g⟦i, j⟧` be said and what C++ took until C++23 to allow of `operator[]`.  A
+definition of one parameter is refused: a pair with nothing between the brackets is
+not what brackets are for.  Two definitions of one pair taking different numbers
+are two definitions, told apart the way a glyph's prefix and infix readings are.
+
+**Out of `Ps` and `Pe` come three groups.**  The brackets the grammar needs for
+itself (`(`, `[`, `{`, `〈` and their partners).  `⌈` and `⌊`, which Unicode calls
+brackets and this language calls the larger and the smaller of two -- a pair
+beginning with one of those could be defined and never written, since the glyph
+lexes as the operator.  And nothing else: the array brackets and the collection
+brackets are *definable*, which is the point, they being the two the language
+itself uses as an operator.
+
+**Nothing checks that the two halves are each other's mirror.**  Unicode does not
+say which closer belongs to which opener -- the property exists for bidirectional
+rendering and not as a table of pairs -- and a program that pairs them oddly has
+written something odd rather than something ambiguous: what closes a use is
+whatever closing bracket arrives, and the pair it makes is looked up like any other
+name.  Turned down: a mirror table, which would be a second list to keep and would
+refuse a pair somebody had a reason for.
+
+**What this closes.**  `pre(A'⟦I'⟧ → E')` is now satisfiable by a type a program
+defined, which is the requirement a program's own collection would most want to
+meet and the one [attaching-code.md](attaching-code.md) called "the one a design
+that thinks only about `+` and `-` forgets".  It was the last of the four things
+that document exists for.
+
+Compare: **C++**'s `operator[]`, one index until C++23 and several since, beside
+`operator()`, which always took several -- a distinction this language does not
+have to draw, a pair being a pair.  **Python**'s `__getitem__`, which takes one
+argument and gets several by being handed a tuple.  **Rust**'s `Index<Idx>`, one
+index of a type the trait names.  **Ada** has no indexing operator at all:
+indexing and calling are spelled alike, so a function is the answer, which is the
+other way to make a program's own collection readable and the one a language pays
+for at every call.
+
+Left open, unchanged: `=` together with a hash, which is what turns a record into a
+dictionary key; `≠` following from `=` and the three orderings from `<`; and
+mixed-type operators.
+
 Open questions
 --------------
 

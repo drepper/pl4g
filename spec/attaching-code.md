@@ -263,11 +263,19 @@ expressible, and still for a decision of its own.
 a glyph and two the infix one.  That was the best part of O1 and it needed no
 receiver.
 
+**And a bracket pair is an operator after all.**  This section called the pair
+"the one a design that thinks only about `+` and `-` forgets" and then listed it as
+a name of two characters; what landed is that, with the part this section did not
+work out -- Unicode's `Ps` and `Pe` decide which brackets, the pair is written
+around what it is applied to, and it takes **as many operands as it likes**, which
+is what `g⟦i, j⟧` needs and what C++ took until C++23 to allow.  So `pre(A'⟦I'⟧ → E')` is
+satisfiable by a type a program defined, which was the last of the four things this
+document is for.
+
 What is left of this section is the reasoning that chose *what may be a glyph* and
 *what may not be attached*, which the implementation took as it stands: Unicode's
 symbol categories decide, with the language's own operator glyphs added and the
-glyphs it has given another meaning removed; `∧` and `∨` cannot be functions; a
-bracket pair is not an operator.  The rest of the section is the road not taken,
+glyphs it has given another meaning removed; `∧` and `∨` cannot be functions.  The rest of the section is the road not taken,
 kept because the comparison is what makes the notation that landed look inevitable
 rather than arbitrary.
 
@@ -372,6 +380,8 @@ and has no path to be called by.*
 6. **A bracket pair is a name of two characters.**  `fn Table.⟦⟧` and
    `fn Table.⸨⸩`, with the index as a second parameter.  Writing the pair with
    nothing between it is what says the operator rather than an empty literal.
+   *Taken as it stands, and with the part this point missed: the indices may be
+   several, so a pair takes two parameters or more.*
 
 ### What may not be attached, and why
 
@@ -472,6 +482,8 @@ answer on this list and it needs a term rewriter.
   same question design B leaves open, with the same answer available: no is
   smaller and can be relaxed.
 - **A new operator.**  Swift's, and not this: the glyph set is the language's.
+- ~~**A bracket pair.**~~  *Decided: `Ps` and `Pe` name one, and it takes as many
+  operands as it likes.*
 - **What a hash looks like.**  The `=`-and-hash pair needs a name for the hash and
   a shape for what it answers, and that is the decision that turns a record into a
   dictionary key.  It belongs with this and is not in it.

@@ -252,3 +252,20 @@ def test_which_glyphs_may_be_an_operator_is_one_rule() -> None:
         assert _named_in_pattern(glyph, fresh), \
             "".join(("the grammar reads ", glyph, ", which the language uses,",
                      " as an operator of a program's own"))
+    # And the brackets, by the same rule and for the same reason: one the grammar
+    # read as a pair of a program's own would be a second reading of a bracket the
+    # language needs.
+    opens = source[source.index("fresh_open:"):]
+    opens = opens[:opens.index("\n")]
+    closes = source[source.index("fresh_close:"):]
+    closes = closes[:closes.index("\n")]
+    for glyph in sorted(lexer._SIMPLE):
+        if len(glyph) != 1:
+            continue
+        kind = unicodedata.category(glyph)
+        if kind == "Ps":
+            assert _named_in_pattern(glyph, opens), \
+                "".join(("the grammar reads ", glyph, " as a pair's opener"))
+        elif kind == "Pe":
+            assert _named_in_pattern(glyph, closes), \
+                "".join(("the grammar reads ", glyph, " as a pair's closer"))

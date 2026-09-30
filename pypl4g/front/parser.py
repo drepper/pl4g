@@ -1748,7 +1748,7 @@ class Parser:
                 token = self._advance()
                 right = self._parse_expression(_FRESH_PRECEDENCE + 1)
                 left = ast.Fresh(span=left.span.to(right.span),
-                                 glyph=token.text, left=left, right=right)
+                                 glyph=token.text, operands=(left, right))
                 continue
             operator = _BINARY_OPERATORS.get(self._current.kind)
             if operator is None or operator.precedence < minimum:
@@ -1795,7 +1795,7 @@ class Parser:
             token = self._advance()
             operand = self._parse_unary()
             return ast.Fresh(span=token.span.to(operand.span), glyph=token.text,
-                             left=operand)
+                             operands=(operand,))
         if self._check(TokKind.AMPERSAND):
             # `&` before an operand asks for a reference to the place it names;
             # `&` between two asks for their bits in common.  Which it is, is
@@ -1874,6 +1874,22 @@ class Parser:
                                    D.LANG_SYNTAX_EXPECTED_CLOSING_ARRAY).span
                 found = ast.Element(span=found.span.to(end), base=found,
                                     indices=tuple(indices))
+                continue
+            if self._check(TokKind.OPEN_OPERATOR):
+                # A pair of brackets the language gives no meaning, written
+                # around what stands inside it and after what it is applied to,
+                # which is where the brackets the language has are written.  What
+                # closes it is whatever closing bracket arrives: which closer
+                # belongs to which opener is what a definition says, and Unicode
+                # does not say it.
+                opener = self._advance()
+                inside = [self._parse_expression()]
+                while self._accept(TokKind.COMMA) is not None:
+                    inside.append(self._parse_expression())
+                closer = self._expect(TokKind.CLOSE_OPERATOR)
+                found = ast.Fresh(span=found.span.to(closer.span),
+                                  glyph="".join((opener.text, closer.text)),
+                                  operands=(found, *inside))
                 continue
             if self._check(TokKind.DEREF):
                 # What is at the place a reference names.  It stands after its

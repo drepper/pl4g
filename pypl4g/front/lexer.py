@@ -18,6 +18,7 @@ from ..source.location import Span
 from ..source.manager import SourceFile
 from .token import (ABOVE_NOT_ALIKE_GLYPH, ABOVE_OR_ALIKE_GLYPH, ALIKE_GLYPH,
                     OPNAME_GLYPH, OPERATOR_CATEGORIES, OPERATOR_GLYPHS,
+                    OPENER_CATEGORY, CLOSER_CATEGORY,
                     OPERATORS_NOT_NAMEABLE,
                     BOTTOM_GLYPH, BUILTIN_GLYPH,
                     AND_GLYPH, ARROW_GLYPH, ASCII_SUBSTITUTES, ASSIGN_GLYPH,
@@ -145,6 +146,44 @@ _DIGITS: Final[dict[str, str]] = {
 }
 
 _RADIX: Final[dict[str, int]] = {"x": 16, "o": 8, "b": 2}
+
+
+def is_operator_opener(ch: str) -> bool:
+    """Whether one character may open a pair a program defines.
+
+    Unicode's opening punctuation, `Ps`, which is every bracket there is -- less
+    the ones the grammar needs for itself, and less the ones the language already
+    uses as an operator of one glyph.  `\N{LEFT CEILING}` is the second kind: Unicode calls it a
+    bracket and this language calls it the larger of two, so a pair beginning with
+    it could be defined and never written.  The array brackets and the collection
+    brackets are neither, so a program may say what they mean for a type of its
+    own, exactly as it may for `+`.
+    """
+    return (len(ch) == 1 and ch not in OPERATORS_NOT_NAMEABLE
+            and ch not in OPERATOR_GLYPHS
+            and unicodedata.category(ch) == OPENER_CATEGORY)
+
+
+def is_operator_closer(ch: str) -> bool:
+    """Whether one character may close a pair, which is `Pe` by the same rule."""
+    return (len(ch) == 1 and ch not in OPERATORS_NOT_NAMEABLE
+            and ch not in OPERATOR_GLYPHS
+            and unicodedata.category(ch) == CLOSER_CATEGORY)
+
+
+def is_operator_name(written: str) -> bool:
+    """Whether what stands between the accents names an operator.
+
+    One glyph, or a pair: an opening bracket and a closing one written together,
+    which is what a pair is called.  Nothing checks that the two are each other's
+    mirror -- Unicode does not say which closer belongs to which opener, and a
+    program that pairs them oddly has written something odd rather than something
+    ambiguous, since what closes a use is what the definition says closes it.
+    """
+    if len(written) == 1:
+        return is_operator_glyph(written)
+    return (len(written) == 2 and is_operator_opener(written[0])
+            and is_operator_closer(written[1]))
 
 
 def is_operator_glyph(ch: str) -> bool:
@@ -378,15 +417,27 @@ class Lexer:
         if ch == "'":
             self._lex_character(start)
             return True
-        if is_operator_glyph(ch):
-            # A symbol the language gives no meaning, which is an operator a
+        if is_operator_glyph(ch) or is_operator_opener(ch) \
+                or is_operator_closer(ch):
+            # A glyph the language gives no meaning, which is an operator a
             # program may have defined.  It is a token here and a question for the
             # checker: whether anything defined it is not something the lexer can
             # know, and a glyph that turns out to be nobody's is reported there
             # with the one thing worth saying about it.
+            #
+            # A bracket counts its depth as the grammar's own do, so that a line
+            # may be broken inside a pair a program defined exactly as it may
+            # inside one the language has.
+            kind = TokKind.OPERATOR
+            if is_operator_opener(ch):
+                kind = TokKind.OPEN_OPERATOR
+                self._bracket_depth += 1
+            elif is_operator_closer(ch):
+                kind = TokKind.CLOSE_OPERATOR
+                self._bracket_depth = max(0, self._bracket_depth - 1)
             self._pos += 1
-            self._tokens.append(Token(TokKind.OPERATOR,
-                                      self._span(start, self._pos), text=ch))
+            self._tokens.append(Token(kind, self._span(start, self._pos),
+                                      text=ch))
             return True
         self._pos += 1
         self._diags.emit(D.LANG_SYNTAX_UNEXPECTED_CHAR, self._span(start, self._pos),
@@ -413,11 +464,11 @@ class Lexer:
             return
         written = self._text[self._pos:end]
         self._pos = end + 1
-        if len(written) != 1:
+        if len(written) not in (1, 2):
             self._diags.emit(D.LANG_OPNAME_NOT_ONE_GLYPH,
                              self._span(start, self._pos), count=str(len(written)))
             return
-        if not is_operator_glyph(written):
+        if not is_operator_name(written):
             self._diags.emit(D.LANG_OPNAME_NOT_AN_OPERATOR,
                              self._span(start, self._pos), glyph=written)
             return

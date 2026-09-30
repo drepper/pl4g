@@ -1,0 +1,40 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=6 diag=none
+
+※ The brackets the language uses are operators like any other, so a program may
+※ say what they mean for a type of its own: the name is the *pair*, an opening
+※ bracket and a closing one written together.
+※
+※ A pair is written around what it is applied to, so its first parameter is that
+※ and the rest are whatever stands inside -- however many.  `⟦⟧` with one index
+※ and `⟦⟧` with two are two definitions, told apart the way a prefix and an infix
+※ reading of one glyph are: by how many operands they take.
+※
+※ This is what makes `pre(A'⟦I'⟧ → E')` satisfiable by a type a program defined,
+※ which is the requirement a program's own collection would most want to meet.
+
+type Grid = a : u8 ; b : u8 ; c : u8 ; d : u8
+
+fn `⟦⟧`(g: Grid, i: u64) → u8:
+    if i = 0u64:
+        g.a
+    else:
+        g.d
+
+fn `⟦⟧`(g: Grid, i: u64, j: u64) → u8:
+    if i = j:
+        g.a
+    else:
+        g.b
+
+fn `⸨⸩`(g: Grid, k: u8) → bool:
+    g.a = k
+
+@[startup]
+fn main() → u6:
+    let g: Grid = Grid(.a ← 3u8, .b ← 5u8, .c ← 7u8, .d ← 9u8)
+    let one: u8 = g⟦0u64⟧
+    let two: u8 = g⟦1u64, 1u64⟧
+    if g⸨3u8⸩:
+        ⎕narrow(one ⊞ two, ⌜u6⌝) ?? 1u6
+    else:
+        0u6

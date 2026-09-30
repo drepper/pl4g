@@ -1,0 +1,15 @@
+※ pl4g-test: compile=error
+※ pl4g-test: expect-diag 4922 LANG_OPERATOR_ARITY
+
+※ A pair is written around what it is applied to, so it takes that and at least
+※ one thing to stand inside: a definition of one parameter would be a pair with
+※ nothing between the brackets, which is not what brackets are for.
+
+type Grid = a : u8 ; b : u8
+
+fn `⟬⟭`(g: Grid) → u8:
+    g.a
+
+@[startup]
+fn main() → u6:
+    0u6

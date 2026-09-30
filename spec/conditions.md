@@ -612,8 +612,12 @@ the language has no way to provide: measured, `a = b` over a record is refused
 (4207), and a record cannot be a dictionary key because it "answers neither" a
 hash nor a comparison (4429).
 
-So `pre(number(T'))` is a bound nothing a program writes can meet, which is a hole
-in this feature and not in that one -- and it is why
+*Answered since: an operator is a function whose name is the glyph, and a pair of
+brackets is one of those, so `pre(number(T'))` and `pre(A'⟦I'⟧ → E')` are both met by
+a type a program defined.  What follows is why it mattered.*
+
+So `pre(number(T'))` was a bound nothing a program wrote could meet, which was a
+hole in this feature and not in that one -- and it is why
 [attaching code to objects](attaching-code.md) matters to this document.  That
 document now works the operator question out: the operator where the name goes,
 `fn Colour.⊞(a: Colour, b: Colour)`, with the arity deciding prefix from infix and a

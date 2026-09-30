@@ -409,10 +409,14 @@ class Fresh(Expr):
     the definition and nothing else.
     """
 
+    #: The operator's name: one glyph, or an opening and a closing bracket
+    #: written together, which is what a pair is called.
     glyph: str
-    left: Expr
-    #: Nothing where the operator was written before one operand.
-    right: Expr | None = None
+    #: What it was applied to.  One for an operator written before its operand,
+    #: two for one written between them, and for a bracket pair the value the
+    #: brackets follow and then whatever was written inside them -- so a pair may
+    #: have as many as it likes, which is what makes `t⟦i, j⟧` sayable.
+    operands: tuple[Expr, ...]
 
 
 @dataclass(frozen=True, slots=True)

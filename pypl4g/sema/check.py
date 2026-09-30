@@ -17,7 +17,7 @@ from ..target import statuses
 from ..diag.engine import DiagEngine, Expectation
 from ..front import ast
 from ..front.doccomment import Part as DocPart, parse as parse_doc
-from ..front.lexer import is_operator_glyph
+from ..front.lexer import is_operator_glyph, is_operator_name
 from ..front.token import (ACQUIRE_NAME, ANSWER_NAME, ENTRY_NAME,
                            RELEASE_NAME,
                            AT_NAME, SPAN_NAME,
@@ -25,6 +25,8 @@ from ..front.token import (ACQUIRE_NAME, ANSWER_NAME, ENTRY_NAME,
                            WIDEN_NAME,
                            BOTTOM_GLYPH, BUILTIN_GLYPH, CHR_NAME, DEREF_GLYPH,
                            LIFETIME_GLYPH, LIFT_OPEN_GLYPH,
+                           ARRAY_OPEN_GLYPH, ARRAY_CLOSE_GLYPH,
+                           SET_OPEN_GLYPH, SET_CLOSE_GLYPH,
                            DROP_NAME, LEAD_NAME, NARROW_NAME, ONES_NAME,
                            UNIT_NAME,
                           ENUMERATE_NAME, TYPEOF_NAME,
@@ -611,6 +613,12 @@ _PURITY: Final[frozenset[int]] = frozenset({
     D.LANG_PURE_CALLS_IMPURE, D.LANG_PURE_CHANGES_A_VARIABLE,
     D.LANG_PURE_READS_THE_ROUNDING_MODE, D.LANG_PURE_WRITES_ELSEWHERE})
 
+#: The two pairs of brackets the language uses as an operator, named so that a
+#: definition of one and a use of one agree on what it is called.  The lifting
+#: marks are not among them: they are the grammar saying that a type follows.
+ARRAY_PAIR: Final[str] = "".join((ARRAY_OPEN_GLYPH, ARRAY_CLOSE_GLYPH))
+TABLE_PAIR: Final[str] = "".join((SET_OPEN_GLYPH, SET_CLOSE_GLYPH))
+
 #: What a dummy made for a lifted type is called.  It begins with the lifting
 #: mark, which a program cannot write in a name, so it collides with nothing.
 DUMMY_PREFIX: Final[str] = LIFT_OPEN_GLYPH
@@ -625,7 +633,7 @@ def _declared_as(node: ast.FuncDef) -> str:
     rule keys on and nothing else reads it, a program never writing a glyph where
     a name goes except between the accents.
     """
-    if not is_operator_glyph(node.name):
+    if not is_operator_name(node.name):
         return node.name
     return "".join((node.name, "/", str(len(node.params))))
 
@@ -3784,13 +3792,38 @@ class Checker:
         reading and two the infix one -- which is what tells `fn \N{GRAVE ACCENT}\N{LEFT CEILING}\N{GRAVE ACCENT}(b: Bag)`, the
         largest of what a `Bag` holds, from `fn \N{GRAVE ACCENT}\N{LEFT CEILING}\N{GRAVE ACCENT}(a: C, b: C)`, the larger of two.
         """
-        if not is_operator_glyph(node.name):
+        if not is_operator_name(node.name):
             return
-        if len(node.params) not in (1, 2):
+        # A pair is written around what it is applied to, so its first parameter
+        # is that and the rest are whatever stands inside -- however many, which
+        # is what makes `t⟦i, j⟧` sayable.  A glyph is written before one operand
+        # or between two and has nowhere to put a third.
+        paired = len(node.name) == 2
+        enough = len(node.params) >= 2 if paired \
+            else len(node.params) in (1, 2)
+        if not enough:
             self._diags.emit(D.LANG_OPERATOR_ARITY, node.name_span,
-                             glyph=node.name, count=str(len(node.params)))
+                             glyph=node.name, count=str(len(node.params)),
+                             wanted="two or more" if paired
+                             else "one operand or two")
             return
         self._operators[(node.name, len(node.params))] = what
+
+    def _paired(self, builder: IRBuilder, base: ast.Expr, pair: str,
+                inside: Sequence[ast.Expr], span: Span,
+                expected: Type | None) -> Value | None:
+        """Lower a bracket pair a program defined, where this is one of those.
+
+        The brackets the language has are operators like any other, so a program
+        may say what they mean for a type of its own -- and where the type is one
+        of the language's, the language's meaning is what applies and this answers
+        nothing.  Asked before the base is lowered, so the operands go to the
+        definition's parameters.
+        """
+        if not self._operators or not _of_its_own(self._hint_of(base)):
+            return None
+        return self._operator_call(builder, pair, (base, *inside), span,
+                                   expected)
 
     def _operator_stands(self, expr: ast.Binary, context: Type | None) -> bool:
         """Whether the language's own meaning of this operator covers the operands.
@@ -3855,16 +3888,14 @@ class Checker:
         has never heard of it, so what it means is the definition or it is a
         mistake.  That makes this the one operator path with no native half.
         """
-        operands = (expr.left,) if expr.right is None \
-            else (expr.left, expr.right)
-        found = self._operator_call(builder, expr.glyph, operands, expr.span,
-                                    expected)
+        found = self._operator_call(builder, expr.glyph, expr.operands,
+                                    expr.span, expected)
         if found is not None:
             return found
         self._diags.emit(D.LANG_OPERATOR_NOT_DEFINED, expr.span,
                          glyph=expr.glyph,
-                         found="one operand" if expr.right is None
-                         else "two operands")
+                         found="one operand" if len(expr.operands) == 1
+                         else "".join((str(len(expr.operands)), " operands")))
         return UndefConst(ERROR)
 
     def _operator_written(self, glyph: str, arity: int) -> object | None:
@@ -5280,6 +5311,10 @@ class Checker:
         is what the index may be, and that follows from what a tuple is rather
         than from any choice made here -- see `_lower_tuple_member`.
         """
+        found = self._paired(builder, expr.base, ARRAY_PAIR, expr.indices,
+                             expr.span, expected)
+        if found is not None:
+            return found
         base = self._lower_expr(builder, expr.base, None)
         ty = self._value_type_of(base)
         if ty is ERROR:
@@ -7424,6 +7459,10 @@ class Checker:
         key that is not there impossible to read past by accident, and what lets
         `d⸨k⸩ ?? 0u8` say "or this instead" with nothing new to learn.
         """
+        found = self._paired(builder, expr.base, TABLE_PAIR, (expr.key,),
+                             expr.span, expected)
+        if found is not None:
+            return found
         base = self._lower_expr(builder, expr.base, None)
         ty = self._value_type_of(base)
         if ty is ERROR:
@@ -12089,8 +12128,8 @@ class Checker:
                 # It has no meaning but the definition's, so what it answers is
                 # what the definition answers -- and nothing where the definition
                 # is generic, an instantiation being what settles that.
-                written = self._operator_written(
-                    expr.glyph, 1 if expr.right is None else 2)
+                written = self._operator_written(expr.glyph,
+                                                 len(expr.operands))
                 if not isinstance(written, Function):
                     return None
                 return None if written.ty.ret is VOID else written.ty.ret

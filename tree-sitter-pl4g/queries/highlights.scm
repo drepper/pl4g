@@ -69,6 +69,9 @@
 ; one, which is what tells a reader which of the two a line is doing.
 (operator_name) @function
 (fresh_operator) @operator
+; A pair a program defined reads as the brackets it is: what the language's own
+; brackets are coloured, since what it does is what they do.
+[(fresh_open) (fresh_close)] @punctuation.bracket
 "let" @keyword
 "return" @keyword.return
 ["if" "elif" "else" "match"] @keyword.conditional

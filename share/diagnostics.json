@@ -7872,7 +7872,7 @@
       "number": 4922,
       "name": "LANG_OPERATOR_ARITY",
       "severity": "error",
-      "message": "'{glyph}' takes one operand or two, and this takes {count}",
+      "message": "'{glyph}' takes {wanted}, and this takes {count}",
       "args": [
         {
           "name": "glyph",
@@ -7883,9 +7883,14 @@
           "name": "count",
           "type": "string",
           "description": "how many parameters were written"
+        },
+        {
+          "name": "wanted",
+          "type": "string",
+          "description": "how many it may take"
         }
       ],
-      "cause": "An operator is written before one operand or between two, so a definition of one takes one parameter or two.  Which of the two it is, is what tells a prefix reading from an infix one where a glyph has both, so the number is not something the definition may leave for a reader to work out.",
+      "cause": "An operator written before one operand or between two takes one parameter or two, and which of the two it is tells a prefix reading from an infix one where a glyph has both.  A pair of brackets is written *around* what it is applied to, so its first parameter is that and the rest are whatever stands inside -- however many, which is what lets a pair be written with two indices.",
       "spec": {
         "document": "spec/spec.md",
         "section": "The Language / File Structure / Function Definition / Operators",
