@@ -7234,10 +7234,11 @@ class Checker:
         that is said, and it does not surface: the names are bound to what
         there was, and a loop over something with nothing in it runs no turns.
 
-        Four things are iterators, and none of them is called: each one's `next`
-        is lowered where it is asked, which for a range is a comparison and an
-        addition, for an array a comparison and a read, and for a table a walk
-        that steps past the places holding nothing.  What they have in common is
+        Five things are iterators -- a range, an array, a list, a string and a
+        table -- and none of them is called: each one's `next` is lowered where
+        it is asked, which for a range is a comparison and an addition, for an
+        array a comparison and a read, and for a table a walk that steps past
+        the places holding nothing.  What they have in common is
         the shape below, so the loop is one loop:
 
             before:  br loop(s₁ … sₖ, v₁ … vₙ, mem)

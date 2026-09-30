@@ -26,8 +26,9 @@ To Do List for the PL4g language
     it hands out were all built for `match`.
 
 [x] add tuple types.  Done: `〈a, b〉` is a tuple and `〈T, T〉` the type of one, and names written next to
-    each other take one apart in a definition or an assignment.  In registers a tuple is one register per member, which is the
-    result type's arrangement generalized.
+    each other take one apart in a definition or an assignment.  In registers a tuple is one register per *leaf*, which is the
+    result type's arrangement generalized: a member that is itself several values is that many registers, since what a register
+    holds is one value.
 
 [ ] what else a build may say.  Today a build describes executables, each built from a run of sources with the settings the
     object carries, and that is all: no library, no test artifact, no artifact that depends on another, no step to run by name
@@ -98,10 +99,34 @@ To Do List for the PL4g language
     meaning, and its `next` is lowered where it is asked rather than called -- a comparison against the end and an addition.
     `_` as the name binds nothing, as it does in a `match` arm.
 
-[ ] let a program write an iterator.  There is one implementor of the protocol and the compiler is it.  What a second one needs:
-    a way to write a type with a `next` that answers a result, and a rule that says a `foreach` over a value of such a type calls
-    it.  Neither is much on its own, and both wait on something to iterate over that is not a range -- a collection, most
-    likely, whose iterator is the reason the protocol is a protocol.
+[ ] let a program write an iterator.  The compiler is the only implementor of the protocol, and there are five of its
+    implementations now: a range, an array, a list, a string and a table.  What the entry used to say waits on "something to
+    iterate over that is not a range" has arrived, so nothing waits on that any more.  What is actually missing, measured against
+    what the language can do today:
+    A program **can** already write one and drive it by hand.  A record, a free `fn next(it: &mut Walk) → T?` marked `@[impure]`,
+    and a `while` whose body is a `match` over what `next` answered: that compiles and runs on all three targets today.  So the
+    protocol is not what is missing; the *loop* is.
+    **`foreach` has no rule for it** (4438).  The rule wants to know which function is a type's `next`, and the language has no way
+    to attach anything to a type -- no method, no trait, no `impl` -- so this is the first decision about that and not a small one.
+    By name and signature (a function called `next` whose one parameter is a reference to the type) is the cheapest; an attribute
+    on the function says it outright; a trait is what Rust has and what the specification says there is nothing yet to abstract
+    over.
+    **`foreach` over a cursor is refused** (4438) although a cursor is the compiler's own iterator value and the loop's own shape
+    fits it.  That is the same rule asked of a type the compiler already has, and it is worth doing first: it needs no decision
+    about methods at all.
+    **A cursor has no spelling**, so a program cannot write a function that takes or answers one -- which is what a program
+    wrapping the compiler's iterator would want.
+    **The pure shape cannot be written.**  A `next` that advances through `&mut` writes memory that outlives the call, so it is
+    impure, and every `foreach` over a program's iterator would be in an impure function.  The pure alternative is a `next` that
+    answers the element and the next iterator together -- `fn next(it: Walk) → 〈T, Walk〉?` -- and a result whose answer is a
+    tuple cannot be written at all: the `?` is parsed only after a named type, in the compiler and in the grammar alike.  That is
+    an entry of its own below, and this one waits on it if the pure shape is the one wanted.
+
+[ ] let a result's answer be any type.  `u8 ? ⎕narrowing` is written today and `〈u8, u8〉 ? ⎕narrowing` is not: the `?` is read
+    only after a named type, in `_parse_named_type` and in the grammar's `_plain_type` alike, so a tuple, a list, a set or an
+    array cannot be the answer of one.  Nothing in the representation minds -- `parts_of` spreads a result's answer out whatever
+    it is, and a tuple holding a result already works -- so this is the type grammar and nothing else.  What wants it first is a
+    function that answers several values and may fail, which is the shape a pure iterator's `next` has.
 
 [ ] a range as a value.  Refused today (4443): a range stands where a loop takes its values from and nowhere else.  Making it a
     value means a type for it, a layout, and a rule about what a range of one type compared with a range of another means; Rust
