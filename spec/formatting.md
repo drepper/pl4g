@@ -1,10 +1,21 @@
 Turning Values into Text
 ========================
 
-**A proposal.  Nothing here is decided.**  The question is what this language should
-have where C++ has `std::format` and Python has f-strings, and the answer comes out in
-three layers that can be decided separately -- which is the useful part, because the
-first of them needs no change to the compiler at all.
+**A proposal.  The shape is decided and the pieces are not.**  The question is what
+this language should have where C++ has `std::format` and `std::print` and Python has
+f-strings, and the answer comes out in three layers that can be decided separately --
+which is the useful part, because the first two need no change to the compiler at all.
+
+**What is settled**: a `std.format`-like call, whose template is a literal taken apart
+while compiling by a compile-time function; it counts the holes against the argument
+list, or reads a name out of the template as an f-string does; and what it answers is
+the conversions and the constant pieces already put together -- a `str` for
+`std.format`, and the writes themselves for `std.print`.  It should look like an
+ordinary call and not like a macro invocation.  Concatenation alone is not enough,
+because the check is the point and because the same thing has to reach `std.print`.
+
+**What is open** is listed at the end, and the biggest of them is which of two ways an
+ordinary-looking call gets its arguments unevaluated.
 
 Everything said below about what the language does today was compiled and run while
 this was written, and the programs are quoted as they were.
@@ -157,7 +168,8 @@ for a type knows how its text is.
 Layer 2 -- a width, a base, a precision
 ---------------------------------------
 
-Three possibilities, and only the third needs anything new.
+Three possibilities.  The first two need nothing at all and the third is the one the
+template would otherwise grow into.
 
 ### W1.  Dyadic `⍕`, which is APL's answer
 
@@ -187,83 +199,174 @@ layer-2 generics, which are in.
 
 ### W3.  A mini-language inside the string, which is what C++ and Rust and Python have
 
-`{:>8.2}`.  For: it is what everyone knows.  Against, and this is the argument that
-matters here: **it is a second language written inside a string literal, where this
-project's grammar cannot see it.**  The tree-sitter grammar and the test that holds it
-to the compiler are the reason a syntax cannot drift in this project, and a syntax
-inside a string escapes both.  It is also the one part of `std::format` that a
-generator gains nothing from: a generator has the width as a number and would have to
-print it into a string for the formatter to parse back out.
+`{:>8.2}`.  For: it is what everyone knows.  Against: **it is a second language written
+inside a string literal, where this project's grammar cannot see it** -- the tree-sitter
+grammar and the test that holds it to the compiler are the reason a syntax cannot drift
+here, and a syntax inside a string escapes both.  And it is the one part of
+`std::format` a generator gains nothing from: a generator has the width as a number and
+would have to print it into the template for the formatter to parse back out.
+
+Turned down; the section on alternatives says the rest of it.
 
 **W2 is the recommendation**, and W1 as well if the glyph's own meaning is wanted --
-they do not conflict.
+they do not conflict.  What stays in the template is then `{}` and `{name}`, and nothing
+that needs parsing beyond finding them.
 
 
-Layer 3 -- the template
------------------------
+Layer 3 -- the call
+-------------------
 
-### T1.  No template at all: a join
+**This is the layer the question was really about, and its direction is settled**: a
+`std.format`-like call whose template is checked while compiling.  A join is not
+enough, because the same thing has to extend to `std.print`, and because what a
+template buys is the check -- that the holes and the arguments agree -- which a join has
+no way to get wrong and no way to state.
+
+What happens at compile time is the whole of it: a compile-time function takes the
+template apart, either counting its holes against the argument list or reading a name
+out of it, and answers **the conversions and the constant pieces already put together**.
+`std.format` answers that as a `str`; `std.print` writes it.
+
+### It should look like an ordinary call, and here is how it can
+
+The macros landed with `f⌜…⌝`, which marks the arguments as handed over unevaluated.
+That is right for a rewrite rule and wrong here: `std.format("x = {}", x)` is a call in
+every language that has it, and a notation of its own would be a second thing to learn
+for a function whose arguments *are* evaluated -- just inside the expansion rather than
+before it.
+
+Four ways to get an ordinary-looking call expanded while compiling:
+
+**M1.  A parameter of type `syntax` means the argument is handed over as written.**
+The callee's signature decides, and nothing at the call is marked.
 
 ```
-let line: str = "x = " ⧺ ⍕x ⧺ ", y = " ⧺ ⍕y
+macro format(template: syntax, ⁂args: syntax) → str:
+    …
+std.format("x = {}", x)
 ```
 
-Needs nothing but layer 1.  It is what Go asks for with `+` and `strconv`, and it is
-what a generator would emit anyway: a generator has the pieces as a list and joining
-them is one loop, where writing a format string means printing a template and then
-having it parsed back.
+This is the recommendation, and the reason is that **the rule falls out of what
+`syntax` already means** rather than being added.  A function with a `syntax` parameter
+already cannot be an ordinary function: nothing at run time may hold a piece of the
+program (7022), so such a function is already the macros' alone and already cannot be
+called in the ordinary way.  Saying that its arguments arrive as written is the only
+reading left.  It is Zig's `comptime` parameter exactly -- a parameter whose argument is
+compile-time-known, at a call that looks like any other.
 
-**What it costs today is real, and measured.**  `"a" ⧺ "b" ⧺ "c" ⧺ "d"` emits three
-calls to the allocator at `-O1`, one per join, each copying everything to its left:
-n−1 allocations and O(n²) bytes copied for n pieces.  Nothing folds a chain and nothing
-folds a join of two literals.
+What it costs is what the macros decision spent a paragraph avoiding: a reader at the
+call cannot see that the arguments are not evaluated first.  For this use the difference
+is invisible -- the arguments *are* evaluated, in the order written, in the expansion --
+and the trade is worth making for a call everyone already knows how to read.
 
-**So T1 wants an optimization, and it is worth having on its own.**  A chain of joins
-is one expression the compiler can see whole: add the lengths, allocate once, copy each
-piece in.  Every join in the language gets faster, not only the formatted ones, and a
-join of literals folds into a literal in the image.  That is the piece of work this
-proposal would put first whichever template is chosen, because every template lowers to
-a chain.
+**M2.  `macro` invoked with parentheses.**  The same thing said by the keyword instead
+of by the parameter type.  It needs the namespace question reopened: a name may be both
+a macro and a function today, precisely because the two invocations cannot be confused,
+and this would make them confusable.
 
-### T2.  An interpolating literal, with the holes the macros already have
+**M3.  A compiler-known call**, `std.format` special-cased in the checker the way
+`⎕narrow` is.  **Much cheaper** -- the compiler has the literal's text in hand and
+nothing in the macro system has to change at all -- and it is the fallback if the
+estimate below comes out badly.  What it costs is that the format language lives in the
+compiler rather than in a module: `std.print` needs the compiler changed, a program
+cannot write its own `format`-like function, and a second implementation of the language
+has to reproduce the mini-language rather than reading it out of `std`.
+
+**M4.  Keep `⌜⌝`**: `std.format⌜"x = {}", x⌝`.  Cheapest of all and it is what exists;
+turned down because it does not look like a call.
+
+### Variadics, which the language does not have and does not need here
+
+A call's arguments are counted and there is no variadic parameter list.  But a macro is
+handed *pieces*, and how many pieces a piece holds is `⎕parts` -- a compile-time
+question.  So **a trailing `syntax` parameter that collects the remaining arguments as
+one piece** gives a variadic call without the language gaining variadic functions:
 
 ```
-let line: str = ⁋"x = $x, y = $(y + 1)"
+macro format(template: syntax, ⁂args: syntax) → str
 ```
 
-`$name` and `$(EXPR)` are **exactly** the notation the macros landed with, and they mean
-here what they mean there: something is put in at this point.  A hole is an ordinary
-expression, checked as one, with no mini-language anywhere -- `$(⍕(x, .base ← 16u8))`
-is how a width is asked for, which is a call and not a spelling inside a string.
+`⁂` is the glyph for "several things stand where one is written", which is what this is,
+and it is being read here in the direction opposite to the one it already has.  That
+symmetry is either the argument for the glyph or the argument against it.
 
-It lowers to T1, so it is sugar, and it is the sugar a human reader gets the most from.
+The alternative is `std.format("x = {}", 〈x, y〉)` with the tuple written out, which
+needs nothing new and which a generator would not mind at all -- and which a person
+writing a print statement would mind every time.
 
-What has to be decided is **what marks such a literal**, because `$` cannot start
-meaning something inside every string that already exists.  A mark is needed and the
-language has no letter prefixes, so it is a glyph before the quotation mark (`⁋` above
-stands in for whichever) or a bracket pair of its own.  This is the weakest part of the
-proposal and the place to argue.
+### What the macro system has to gain, measured
 
-### T3.  `std.format("x = {}, y = {}", x, y)`, which is C++ and Rust
+Four things, and the interpreter's share of it is smaller than expected.  Both of these
+were read out of the compiler while this was written:
 
-For: it is what the question asked about, and the template reads as one piece of text.
+- **`__pl4g_str_join` is ordinary IR in the module** -- an allocation and two copy loops
+  -- so the macro machine can already run a join.  The one callee with no body is
+  `__pl4g_alloc`, which is per-target assembly, so the interpreter needs exactly **one
+  native hook**: a bump over the `bytearray` it already has.
+- **`foreach` over a string is inlined IR** too, continuation-byte test and all, and so
+  is a string comparison.  So walking a template needs no new opcode.
 
-Against, and each of these is concrete here:
+What is actually missing:
 
-- **It has no argument list to put the values in.**  This language has no variadic
-  functions; a call's arguments are counted and `⁂` spreads a tuple whose length is in
-  its type.  So it is `std.format("…", 〈x, y〉)`, a tuple written out.
-- **Checking the template against the arguments is a macro**, and a macro cannot do it.
-  The macro that just landed is handed *pieces of the program*; it can be handed the
-  string literal, and there is no way to see the literal's text and no way to build a
-  piece from a number.  Those are `⎕name` and `⎕apply` -- which are precisely the three
-  things the function form left over.  So T3's cost is "finish the macro system, then
-  write a parser for the mini-language as a `comptime fn`".
-- **And the mini-language is W3**, with the objection W3 already has.
+1. **Globals in the interpreter.**  A string literal is a global holding its bytes, and
+   the machine has no `GlobalVar` at all -- it would have to materialize a global's
+   initial bytes into its memory and answer an address as an offset.  This is what makes
+   a literal readable, and it is the larger half of the work.
+2. **`__pl4g_alloc` as a native bump**, per the above.
+3. **A question that answers what a piece is written as**, for a string literal: its
+   text, as a `str`.  This is `⎕name` from the design, which the function form left over,
+   asked of a literal rather than of a name.
+4. **`$(EXPR)` where the expression answers a `str`**, making a string literal piece.
+   The rule already there is that `$(…)` puts "a piece of the program as itself, and a
+   number as what a program would have written to mean it"; text is the same sentence
+   with one more type in it.
 
-T3 is the most expensive of the three and the one that fits this language least.  It is
-not absurd -- once `⎕name` exists it is a weekend -- but it buys a notation whose whole
-value is familiarity.
+And one thing that is missing and is not about strings at all:
+
+5. **A way for a macro to refuse with its own message.**  A template with three holes and
+   two arguments has to say that, and today a macro that will not do its job can only
+   stop, which is reported as "running 'format' stopped" (7023) -- a message about the
+   compiler where the program is what is wrong.  Nothing else in this proposal is worth
+   having without it: the check is the whole reason the template is not a join.
+
+### `std.print`, and why it comes out better here than in C++
+
+`std::print` formats into a buffer and writes the buffer.  Here the pieces are known
+while compiling and the device takes bytes, so the expansion can be **a write per
+piece** and there need be no buffer and no allocation at all:
+
+```
+std.print(&mut io.output, "x = {}, y = {}\n", x, y)
+```
+
+becomes the writes for `"x = "`, for `⍕x`, for `", y = "`, for `⍕y` and for `"\n"` --
+and the constant ones are literals already in the image.  The I/O design makes that the
+good shape rather than a clever one: `write` submits to the ring and does not wait, so
+several are in flight at once and the drain before the program ends collects them.  A
+formatted line costs one submission per piece and no heap, which is something
+`std::print` cannot do because its formatter has nowhere to put the pieces.
+
+That also means `std.print` is not "`std.format` then write": it is the same macro
+answering a different thing, and it is the form that works in a program with no arena.
+
+### Which template style
+
+The question left two open, and they are not exclusive:
+
+- **`{}` positional**, counted against the argument list.  The check is "as many holes as
+  arguments", and this is C++, Rust and Python's older form.
+- **`{name}` naming something in scope**, which is Python's f-string, C#'s `$"{x}"` and
+  Rust's `format!("{x}")`.  It needs one more thing than the list above: a way to make a
+  *name* piece out of text, which `⎕name` in the other direction does not give.
+
+**And `{name}` is deliberately unhygienic**, which is the one thing to decide with open
+eyes.  Every other name a macro writes resolves where the macro was written -- that is
+the decided rule and the reason a macro means one thing everywhere.  A name read out of
+the caller's template must resolve at the *caller*, or the feature does nothing.  Python
+has the same hole and it is why an f-string cannot be passed around as a template.  So
+it is an exception, it has to be written down as one, and the honest way to spell it is a
+question of its own -- a macro asking for "the name the caller would have meant by this
+text" rather than the general power to conjure a name.
 
 
 Where the bytes go
@@ -311,54 +414,101 @@ The whole comparison
 | **Wolfram** | `ToString`, `StringTemplate` | no | `Format` | n/a |
 
 **What the table says** is that the two things the question asked about are not one
-feature.  Python's f-string is a *grammar* decision -- where the template is taken
+feature, and that this proposal takes one of them and borrows from the other.  Python's f-string is a *grammar* decision -- where the template is taken
 apart -- and every language that copied it copied the grammar.  `std::format` is a
 *library* decision resting on compile-time evaluation, and what it buys over
 interpolation is a template that can be a variable, which almost nothing wants and
 which is where every format-string vulnerability comes from.
 
-This language is unusual in the table in three ways, and each points the same direction:
-it has no overloading, so the extension point is an operator; it has no variadics, so a
-library function taking a template takes a tuple as well; and it is meant to be written
-by a generator, which would rather emit a join than a template.
+This language is unusual in the table in three ways: it has no overloading, so the
+extension point is an operator; it has no variadics, so a template's arguments arrive as
+one piece and are counted while compiling; and its writes go to a ring and do not wait,
+so a formatted line needs no buffer.
+
+The row the recommendation lands nearest is **Rust**'s: a template that must be a
+literal, checked by something that runs while compiling, with `{}` and `{name}` both, and
+a form that writes rather than allocates.  The difference is that Rust's is a macro
+invoked as one and this is a call.
+
+
+Alternatives considered, and what became of them
+------------------------------------------------
+
+**A join and nothing else** -- `"x = " ⧺ ⍕x ⧺ ", y = " ⧺ ⍕y`.  Not turned down so much as
+demoted: it is what the recommendation *lowers to*, and it stays the thing a generator
+emits directly.  What it cannot do is check anything, and it does not reach `std.print`
+without a buffer.
+
+**An interpolating string literal** -- a marked literal whose holes are the `$name` and
+`$(EXPR)` the macros landed with.  This is what `{name}` inside the template does
+instead, with the template staying an ordinary string the compiler happens to read.  The
+literal form is better notation and it is a grammar change, a new mark to choose, and a
+second way to say the same thing; if `{name}` lands it is not worth having as well.
+
+**A format mini-language** -- `{:>8.2}`.  Turned down for the reason the section on
+options gives: it is a second language inside a string literal, where this project's
+grammar test cannot see it, and a generator holding a width as a number would have to
+print it for the formatter to parse back out.  Named arguments with defaults say the same
+thing where both a reader and a checker can see it.
 
 
 What this proposal recommends
 -----------------------------
 
+In the order that has each piece useful before the next needs it:
+
 1. **`⍕` as the text of a value**, dispatched by the operand's type like every other
    operator, and the compiler providing it for the built-in types.  Needs no language
-   change: measured.
-2. **The buffer-filling form as the primitive**, with the arena form and the
-   write-to-a-device form on top of it.  Pure, no-heap formatting then exists rather
-   than being added later.
-3. **`std.text` and its siblings with default arguments** for width, base and
-   precision, and no mini-language anywhere.
-4. **Folding a chain of joins into one allocation**, which every join in the language
-   wants and which every template lowers to.
-5. **An interpolating literal reusing `$name` and `$(EXPR)`**, decided last and
-   separately, because it is sugar over 4 and because what marks it is the one thing
-   here with no obvious answer.
+   change: measured.  Nothing else here works without it, since it is what the
+   expansion calls for every hole.
+2. **The buffer-filling form as the primitive**, with the `str` form and the
+   write-to-a-device form on top.  Pure, no-heap formatting then exists rather than
+   being retrofitted, and `std.print` is the device form.
+3. **`std.text` and its siblings with default arguments** for a width, a base and a
+   precision, so that a hole asking for one is `$(std.text(x, .base ← 16u8))` -- a call,
+   checked, and not a spelling inside a string.  What stays in the template is `{}` and
+   nothing else, which is the part of a format mini-language that carries its weight.
+4. **A macro's own refusal**, without which the check the template exists for cannot be
+   reported as a fault in the program.
+5. **Globals and an allocation hook in the macro interpreter**, which is what lets a
+   macro read a literal and build a string; plus `⎕name` of a literal and `$(str)`.
+6. **`std.format` and `std.print` as macros with `syntax` parameters**, invoked as
+   ordinary calls, with a trailing parameter collecting the rest of the arguments.
+7. **Folding a chain of joins into one allocation**, which `std.format` wants and which
+   every join in the language wants anyway -- measured: a chain of four pieces allocates
+   three times today and copies everything to the left of each join.
+8. **`{name}` naming something in scope**, last and separately, because it is the one
+   part that has to break a rule the language decided on purpose.
 
-And **not** `std.format` with a template parsed at compile time, unless the familiarity
-is what is wanted for its own sake: it needs the three leftovers of the macro system, a
-tuple where C++ has a pack, and a mini-language in a place this project's grammar cannot
-check.
+**M3 -- `std.format` known to the compiler rather than written in `std`** -- is the
+fallback for 5 and 6 together, and it is much cheaper.  It is worth keeping in view: if
+globals in the interpreter turn out to be more than they look, the notation and the check
+can be had without them, at the price of the format language living in the compiler.
 
 
 What this does not decide
 -------------------------
 
-- **What marks an interpolating literal**, if there is one.
-- **Whether an enumeration's names reach run time**, which is what printing a name
-  needs and which is a cost every program would carry for something most do not use.
-  The alternative is that `⍕` of an enumeration is its number, and a program that wants
-  the name writes the operator itself over a `match`.
-- **Float text**, which is the one genuinely large piece of work here, and whether the
-  first version is shortest-round-trip or something honest and worse.
-- **Whether `⍕` is the glyph.**  It is APL's and it is free, which is the whole
-  argument for it; a reader who does not know APL sees a mark with no mnemonic.
-- **Padding a value whose text is not ASCII**, where a width in characters and a width
-  in columns are different questions and the second one is not answerable without tables.
-- **Whether a template may be a value**, which is what `std::format` allows and what
-  interpolation does not, and which is the difference the comparison table ends on.
+- **How an ordinary-looking call gets its arguments unevaluated**: a parameter of type
+  `syntax` saying so (M1), or `macro` invoked with parentheses (M2).  M1 is recommended
+  because the rule falls out of what `syntax` already means; M2 needs the question of
+  whether a name may be both a macro and a function reopened.
+- **How the rest of the arguments are collected**: `⁂args: syntax` read in the direction
+  opposite to the one `⁂` already has, or a tuple written out at the call.
+- **Whether `{name}` is in at all**, and if it is, how a macro spells "the name the
+  caller would have meant by this text" -- which is an exception to hygiene and has to
+  be written down as one.
+- **Whether an enumeration's names reach run time**, which is what printing a name needs
+  and which is a cost every program would carry for something most do not use.  The
+  alternative is that `⍕` of an enumeration is its number, and a program that wants the
+  name writes the operator over a `match`.
+- **Float text**, the one genuinely large piece of work here, and whether the first
+  version is shortest-round-trip or something honest and worse.
+- **Whether `⍕` is the glyph.**  It is APL's and it is free, which is the whole argument
+  for it; a reader who does not know APL sees a mark with no mnemonic.
+- **Padding a value whose text is not ASCII**, where a width in characters and a width in
+  columns are different questions and the second is not answerable without tables.
+- **Whether a template may be a value**, which is what `std::format` allows and what none
+  of this does: the template has to be a literal for the check to happen at all.  That is
+  the same trade Rust's `format!` makes, and it is where every format-string
+  vulnerability comes from in the languages that did not make it.
