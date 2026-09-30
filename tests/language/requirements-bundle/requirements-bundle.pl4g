@@ -1,0 +1,22 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=5 diag=none
+
+※ A **bundle** is a name for a set of requirements, and its lines carry no
+※ keyword: everything in a bundle is a requirement, so a word saying so would
+※ say on every line the only thing a line there can say.  The body is an
+※ ordinary block, separated by a line, a `;` or braces.
+※
+※ One is asked for by applying it, which is a clause over types like any other
+※ and means what one always means -- that the application can be written.
+
+bundle number(T'):
+    T' ⊞ T' → T'
+    T' ⌈ T' → T'
+
+bundle comparable(T'):  T' < T' → bool ; T' = T' → bool
+
+fn bigger(a: T', b: T') → T' pre(number(T')) pre(comparable(T')):
+    a ⌈ b
+
+@[startup]
+fn main() → u6:
+    ⎕narrow(bigger(3u8, 5u8), ⌜u6⌝) ?? 1u6

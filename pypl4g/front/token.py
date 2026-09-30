@@ -116,6 +116,12 @@ RANGE_GLYPH: Final[str] = "\N{HORIZONTAL ELLIPSIS}"
 HEAP_NAME: Final[str] = "\N{APL FUNCTIONAL SYMBOL QUAD}heap"
 EMPTY_ARENA_NAME: Final[str] = "\N{APL FUNCTIONAL SYMBOL QUAD}arena"
 
+#: What a function answered, which is the one thing a post-condition is about
+#: and which there is nothing else to call.  A name the compiler provides rather
+#: than a keyword, because that is what the language already does for a name it
+#: gives a meaning to -- and it cannot collide, the glyph being the compiler's.
+ANSWER_NAME: Final[str] = "\N{APL FUNCTIONAL SYMBOL QUAD}answer"
+
 #: What a `match` arm that takes every alternative left is written with.  It is
 #: a name no definition may have, so nothing a program writes can be mistaken
 #: for it; every language with pattern matching spells it this way.
@@ -442,6 +448,9 @@ class TokKind(StrEnum):
     KW_MUT = "'mut'"
     KW_UNIT = "'unit'"
     KW_TYPE = "'type'"
+    KW_PRE = "'pre'"
+    KW_POST = "'post'"
+    KW_BUNDLE = "'bundle'"
     KW_MATCH = "'match'"
     KW_ENUM = "'enum'"
     KW_IF = "'if'"
@@ -577,6 +586,9 @@ KEYWORDS: Final[dict[str, TokKind]] = {
     "mut": TokKind.KW_MUT,
     "unit": TokKind.KW_UNIT,
     "type": TokKind.KW_TYPE,
+    "pre": TokKind.KW_PRE,
+    "post": TokKind.KW_POST,
+    "bundle": TokKind.KW_BUNDLE,
     "match": TokKind.KW_MATCH,
     "enum": TokKind.KW_ENUM,
     "if": TokKind.KW_IF,

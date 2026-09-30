@@ -1,0 +1,17 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=7 diag=none
+
+※ A type that is not a type parameter has no apostrophe to mark it, so it is
+※ written between the lifting marks -- which is what the marks are for
+※ everywhere else, and is the fourth place that reads one.
+※
+※ A bundle applied to a concrete type is how a program asks whether that type
+※ is one of whatever the bundle names.
+
+bundle number(T'):  T' ⊞ T' → T'
+
+fn total(a: T', b: T') → T' pre(number(⌜u8⌝)) pre(T' ⊞ T' → T'):
+    a ⊞ b
+
+@[startup]
+fn main() → u6:
+    ⎕narrow(total(3u8, 4u8), ⌜u6⌝) ?? 1u6

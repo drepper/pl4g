@@ -47,6 +47,9 @@ class ReportKind(StrEnum):
     DROP_LOCAL = "drop-local"
     DROP_CALL = "drop-call"
     ANSWER_IN_STORAGE = "answer-in-storage"
+    #: A condition the compiler settled, so that nothing of it reaches the
+    #: binary.  A reader who wrote one wants to know it was free.
+    CONDITION_HOLDS = "condition-holds"
     #: A name a lambda brought in that its capture list did not write down,
     #: which is what `[=]` and `[&]` leave to the compiler.  One entry per
     #: name, so that "which variables were brought in" is a question the log

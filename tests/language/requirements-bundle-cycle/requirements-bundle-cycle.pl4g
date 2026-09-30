@@ -1,0 +1,13 @@
+※ pl4g-test: compile=error diag=4913
+
+※ A bundle may apply another, which is how one is written in terms of another.
+※ A cycle among them has no meaning -- expanding it would not end -- and it is
+※ a fact about the bundles rather than about any call, so it is refused once
+※ every bundle is known and whether or not anything applies one.
+
+bundle one(T'):  two(T')
+bundle two(T'):  one(T')
+
+@[startup]
+fn main() → u6:
+    0u6

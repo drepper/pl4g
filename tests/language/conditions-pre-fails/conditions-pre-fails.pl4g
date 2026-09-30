@@ -1,0 +1,19 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=89 diag=none
+
+※ A pre-condition that does not hold stops the program with a status of its
+※ own: it is the **caller** that was wrong, and a caller acting on the status
+※ can tell "I called this wrongly" from "the thing I called is broken".
+※
+※ The value comes out of a variable, which is what keeps the compiler from
+※ seeing the failure while compiling: one it can see is an error and not a
+※ fault, by the rule arithmetic already follows.
+
+let zero: u8 = 0u8
+
+@[inline(never)]
+fn twice(a: u8) → u8 pre(a > 0u8):
+    a ⊞ a
+
+@[startup, impure]
+fn main() → u6:
+    ⎕narrow(twice(zero), ⌜u6⌝) ?? 1u6

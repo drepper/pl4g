@@ -1078,6 +1078,47 @@ class FuncTypeRef(Node):
     attrs: tuple[Attribute, ...] = ()
 
 
+class ClauseKind(StrEnum):
+    """Which of the two places in a call a clause speaks about."""
+
+    PRE = "pre"
+    POST = "post"
+
+
+@dataclass(frozen=True, slots=True)
+class Clause(Node):
+    """One `pre(…)` or `post(…)` of a signature, or one line of a bundle.
+
+    What it holds is one expression, and what the expression is *over* decides
+    what the clause means: over values it is a condition, evaluated and checked;
+    over types it is a requirement, which asks only that it can be written.  The
+    arrow says what a requirement answers and may not be written on a condition.
+    """
+
+    kind: ClauseKind
+    expr: Expr
+    answers: TypeExpr | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class BundleDef(Node):
+    """`bundle NAME(T', …)`: a name for a set of requirements.
+
+    The lines of the body carry no keyword, everything in a bundle being a
+    requirement, so they are held as clauses whose kind is `pre` and whose spans
+    are the lines themselves.
+    """
+
+    name: str
+    name_span: Span
+    params: tuple[str, ...]
+    param_spans: tuple[Span, ...]
+    clauses: tuple[Clause, ...]
+    attrs: tuple[Attribute, ...] = ()
+    doc: str | None = None
+    doc_lines: tuple[Span, ...] = ()
+
+
 @dataclass(frozen=True, slots=True)
 class FuncDef(Node):
     """A function definition."""
@@ -1089,6 +1130,8 @@ class FuncDef(Node):
     #: nothing -- which is written by leaving the arrow off altogether.
     ret_type: TypeExpr | None
     body: Block | None
+    #: The `pre` and `post` clauses, in the order written.
+    clauses: tuple[Clause, ...] = ()
     attrs: tuple[Attribute, ...] = ()
     doc: str | None = None
     #: Where each line of that comment is, so that something reading the
@@ -1167,7 +1210,8 @@ class EnumDef(Node):
     doc_lines: tuple[Span, ...] = ()
 
 
-type Definition = FuncDef | VarDef | ModuleImport | TypeDef | EnumDef | UnitDef
+type Definition = (FuncDef | VarDef | ModuleImport | TypeDef | EnumDef
+                   | UnitDef | BundleDef)
 
 
 @dataclass(frozen=True, slots=True)

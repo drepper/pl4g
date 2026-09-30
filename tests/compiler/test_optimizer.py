@@ -9,7 +9,7 @@ from pypl4g.ir.function import FuncAttrs, Function, Linkage, SpecialKind
 from pypl4g.ir.inst import (BinaryInst, BinOp, CallInst, LoadInst, MemStartInst,
                             RetInst, StoreInst)
 from pypl4g.ir.module import GlobalVar, Module
-from pypl4g.ir.types import U8, VOID
+from pypl4g.ir.types import BOOL, U8, VOID
 from pypl4g.ir.verify import verify
 from pypl4g.opt.pass_ import pipeline_for
 from pypl4g.opt.passes.dce import DeadCodeElimination
@@ -666,3 +666,55 @@ def test_the_last_pass_is_verified_after_whatever_it_says(monkeypatch) -> None: 
     manager.add(_Says(False))
     manager.run(module)
     assert len(seen) == 1
+
+
+def test_a_check_that_holds_goes_away_with_its_condition() -> None:
+    """A condition in a signature is free where the compiler can see it holds.
+
+    The inliner puts the callee where it was called, the arguments become
+    constants there, and what is left is a check on a constant -- so the folder
+    is where a written-out condition stops costing anything.  Two sweeps: the
+    first folds the comparison, the second sees the check's operand is a truth.
+    """
+    from pypl4g.ir.inst import AssertInst, CmpInst, CmpPred
+    from pypl4g.opt.passes.constfold import ConstantFolding
+    from pypl4g.target import statuses
+
+    module = Module("t")
+    func = _startup(module)
+    block = func.entry
+    assert block is not None
+    held = block.append(CmpInst(CmpPred.UGT, module.int_const(U8, 5),
+                                module.int_const(U8, 0), BOOL))
+    block.append(AssertInst(held, "a pre-condition that does not hold",
+                            statuses.PRE_CONDITION))
+    block.append(RetInst(module.int_const(U8, 0)))
+    assert ConstantFolding().run(module)
+    assert [i.opcode for i in block.insts] == ["ret"]
+    verify(module)
+
+
+def test_a_check_that_cannot_hold_stays() -> None:
+    """The program stops when it runs, which is what it should do.
+
+    Removing it would make the program answer rather than stop, and reporting it
+    from here is not possible: the optimizer has no channel for a diagnostic
+    about the language.  What the compiler *can* see before the optimizer runs is
+    an error already, by the rule arithmetic follows.
+    """
+    from pypl4g.ir.inst import AssertInst, CmpInst, CmpPred
+    from pypl4g.opt.passes.constfold import ConstantFolding
+    from pypl4g.target import statuses
+
+    module = Module("t")
+    func = _startup(module)
+    block = func.entry
+    assert block is not None
+    held = block.append(CmpInst(CmpPred.UGT, module.int_const(U8, 0),
+                                module.int_const(U8, 5), BOOL))
+    block.append(AssertInst(held, "a pre-condition that does not hold",
+                            statuses.PRE_CONDITION))
+    block.append(RetInst(module.int_const(U8, 0)))
+    ConstantFolding().run(module)
+    assert [i.opcode for i in block.insts] == ["assert", "ret"]
+    verify(module)

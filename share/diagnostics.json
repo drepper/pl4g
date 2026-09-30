@@ -103,6 +103,15 @@
       "topic": "products and sums"
     },
     {
+      "first": 4900,
+      "last": 4999,
+      "topic": "conditions on functions, and bundles",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition / Conditions"
+      }
+    },
+    {
       "first": 5000,
       "last": 5299,
       "topic": "control flow and returns",
@@ -188,75 +197,6 @@
         "document": "spec/details.md",
         "section": "Implementation",
         "requirement": "Initially, the compiler will require a parameter `-o` or `--output` with a mandatory argument to specify the output file name (just like existing compilers like gcc).  Additional parameters are the names of the source files, ending with the extension `.pl4g`."
-      },
-      "since": "0.1",
-      "default_enabled": true,
-      "option": null
-    },
-    {
-      "number": 1013,
-      "name": "IMPL_CLI_BAD_COMMAND_LINE",
-      "severity": "error",
-      "message": "the command line cannot be read: {detail}",
-      "args": [
-        {
-          "name": "detail",
-          "type": "string",
-          "description": "what the argument parser said was wrong with it"
-        }
-      ],
-      "cause": "Something about the command line that no other number covers.  The argument parser found it and its own words are what the detail carries, since inventing a sentence for a thing that has one already would say the same in worse words.  A command line that reaches this is one the compiler could not begin to read.",
-      "spec": {
-        "document": "spec/details.md",
-        "section": "The Command Line",
-        "requirement": "Every way a command line can be wrong is a numbered diagnostic."
-      },
-      "since": "0.1",
-      "default_enabled": true,
-      "option": null
-    },
-    {
-      "number": 1014,
-      "name": "IMPL_TESTS_NOT_RUN",
-      "severity": "warning",
-      "message": "the {kind} tests were not run: this machine does not run '{triple}'",
-      "args": [
-        {
-          "name": "kind",
-          "type": "string",
-          "description": "which tests were not run"
-        },
-        {
-          "name": "triple",
-          "type": "string",
-          "description": "the target the binary was built for"
-        }
-      ],
-      "cause": "A test is a program and running one means running a program built for the target.  Where that is not this machine there is nothing to run it with unless one is named: `--test-runner=COMMAND` says what to run it through, and an emulator is the usual answer.  Without one the build finishes and says what it did not do, since refusing to cross-compile a program because its tests cannot be run here would be refusing the ordinary case.",
-      "spec": {
-        "document": "spec/details.md",
-        "section": "Tests"
-      },
-      "since": "0.1",
-      "default_enabled": true,
-      "option": "tests-not-run"
-    },
-    {
-      "number": 1015,
-      "name": "IMPL_TESTS_FAILED",
-      "severity": "error",
-      "message": "the {kind} tests did not pass",
-      "args": [
-        {
-          "name": "kind",
-          "type": "string",
-          "description": "which tests were run"
-        }
-      ],
-      "cause": "A test answered that it did not pass, and named itself as it stopped.  What is wrong is in the program rather than in the compiler, so the message naming it is the test binary's own; this is what makes the run that built it fail as well.",
-      "spec": {
-        "document": "spec/details.md",
-        "section": "Tests"
       },
       "since": "0.1",
       "default_enabled": true,
@@ -479,6 +419,101 @@
         "document": "spec/details.md",
         "section": "Targets",
         "requirement": "'--mclevel' is given only for a target that has levels."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 1013,
+      "name": "IMPL_CLI_BAD_COMMAND_LINE",
+      "severity": "error",
+      "message": "the command line cannot be read: {detail}",
+      "args": [
+        {
+          "name": "detail",
+          "type": "string",
+          "description": "what the argument parser said was wrong with it"
+        }
+      ],
+      "cause": "Something about the command line that no other number covers.  The argument parser found it and its own words are what the detail carries, since inventing a sentence for a thing that has one already would say the same in worse words.  A command line that reaches this is one the compiler could not begin to read.",
+      "spec": {
+        "document": "spec/details.md",
+        "section": "The Command Line",
+        "requirement": "Every way a command line can be wrong is a numbered diagnostic."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 1014,
+      "name": "IMPL_TESTS_NOT_RUN",
+      "severity": "warning",
+      "message": "the {kind} tests were not run: this machine does not run '{triple}'",
+      "args": [
+        {
+          "name": "kind",
+          "type": "string",
+          "description": "which tests were not run"
+        },
+        {
+          "name": "triple",
+          "type": "string",
+          "description": "the target the binary was built for"
+        }
+      ],
+      "cause": "A test is a program and running one means running a program built for the target.  Where that is not this machine there is nothing to run it with unless one is named: `--test-runner=COMMAND` says what to run it through, and an emulator is the usual answer.  Without one the build finishes and says what it did not do, since refusing to cross-compile a program because its tests cannot be run here would be refusing the ordinary case.",
+      "spec": {
+        "document": "spec/details.md",
+        "section": "Tests"
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": "tests-not-run"
+    },
+    {
+      "number": 1015,
+      "name": "IMPL_TESTS_FAILED",
+      "severity": "error",
+      "message": "the {kind} tests did not pass",
+      "args": [
+        {
+          "name": "kind",
+          "type": "string",
+          "description": "which tests were run"
+        }
+      ],
+      "cause": "A test answered that it did not pass, and named itself as it stopped.  What is wrong is in the program rather than in the compiler, so the message naming it is the test binary's own; this is what makes the run that built it fail as well.",
+      "spec": {
+        "document": "spec/details.md",
+        "section": "Tests"
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 1016,
+      "name": "IMPL_CLI_BAD_SIZE",
+      "severity": "error",
+      "message": "'{option}' wants a size, and '{given}' is not one",
+      "args": [
+        {
+          "name": "option",
+          "type": "string",
+          "description": "the option that was given"
+        },
+        {
+          "name": "given",
+          "type": "string",
+          "description": "what was written after it"
+        }
+      ],
+      "cause": "A size is a number of bytes, and may be written with 'K', 'M' or 'G' after it for a multiple of 1024.  It has to be a number: an option given something else is an option whose value came from somewhere that did not know what it was for.",
+      "spec": {
+        "document": "spec/details.md",
+        "section": "Implementation"
       },
       "since": "0.1",
       "default_enabled": true,
@@ -1310,6 +1345,28 @@
       "option": null
     },
     {
+      "number": 3029,
+      "name": "LANG_SYNTAX_RANGE_TOO_MANY_ENDS",
+      "severity": "error",
+      "message": "a range has two ends or three, and this has {count}",
+      "args": [
+        {
+          "name": "count",
+          "type": "number",
+          "description": "how many were written"
+        }
+      ],
+      "cause": "A range is a first value, a value it runs towards, and optionally how far it moves each turn.  A fourth would have nothing to mean, and a range of ranges is not a thing this language has.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Ranges",
+        "requirement": "A range is written with two ends or with three."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 3030,
       "name": "LANG_SYNTAX_EXPECTED_CLOSING_ARRAY",
       "severity": "error",
@@ -1320,6 +1377,60 @@
         "document": "spec/spec.md",
         "section": "The Language / Types / Arrays",
         "requirement": "An array is closed with `⟧`."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 3031,
+      "name": "LANG_SYNTAX_SPREAD_OUTSIDE_A_CALL",
+      "severity": "error",
+      "message": "'⁂' stands among the arguments of a call or the members of a tuple, and nowhere else",
+      "args": [],
+      "cause": "The asterism says that several things stand where one is written, which is a thing only a list of things has room for.  An argument list is one and a tuple's members are another; somewhere else exactly one value is wanted, so the glyph would have to mean something else and there is nothing for it to mean -- it is not an expression, and what follows it is not an operand.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Calls",
+        "requirement": "The asterism stands among the arguments of a call."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 3032,
+      "name": "LANG_SYNTAX_EXPECTED_LABEL_NAME",
+      "severity": "error",
+      "message": "expected the name of a loop after '§'",
+      "args": [],
+      "cause": "The section sign says that a loop is being named, so a name is what follows it.  Nothing else can: the glyph does nothing on its own.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Statements / Loops",
+        "requirement": "A label is written '§' followed by a name."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 3033,
+      "name": "LANG_SYNTAX_JUMP_WITHOUT_A_LABEL",
+      "severity": "error",
+      "message": "'{keyword}' says which loop it means, so a label is written after it",
+      "args": [
+        {
+          "name": "keyword",
+          "type": "string",
+          "description": "the keyword that was written"
+        }
+      ],
+      "cause": "A jump with no label would mean the loop nearest to it, which is a thing that changes when a loop is put around it -- and putting a loop around something is what a program that writes this language does.  Naming the loop makes the jump say what it means rather than where it stands.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Statements / Loops",
+        "requirement": "'break' and 'continue' are each written with the label of the loop they mean."
       },
       "since": "0.1",
       "default_enabled": true,
@@ -1480,60 +1591,6 @@
         "document": "spec/spec.md",
         "section": "The Language / File Structure / Blocks",
         "requirement": "A block written on one line may not open another."
-      },
-      "since": "0.1",
-      "default_enabled": true,
-      "option": null
-    },
-    {
-      "number": 3031,
-      "name": "LANG_SYNTAX_SPREAD_OUTSIDE_A_CALL",
-      "severity": "error",
-      "message": "'⁂' stands among the arguments of a call or the members of a tuple, and nowhere else",
-      "args": [],
-      "cause": "The asterism says that several things stand where one is written, which is a thing only a list of things has room for.  An argument list is one and a tuple's members are another; somewhere else exactly one value is wanted, so the glyph would have to mean something else and there is nothing for it to mean -- it is not an expression, and what follows it is not an operand.",
-      "spec": {
-        "document": "spec/spec.md",
-        "section": "The Language / Expressions / Calls",
-        "requirement": "The asterism stands among the arguments of a call."
-      },
-      "since": "0.1",
-      "default_enabled": true,
-      "option": null
-    },
-    {
-      "number": 3032,
-      "name": "LANG_SYNTAX_EXPECTED_LABEL_NAME",
-      "severity": "error",
-      "message": "expected the name of a loop after '§'",
-      "args": [],
-      "cause": "The section sign says that a loop is being named, so a name is what follows it.  Nothing else can: the glyph does nothing on its own.",
-      "spec": {
-        "document": "spec/spec.md",
-        "section": "The Language / Statements / Loops",
-        "requirement": "A label is written '§' followed by a name."
-      },
-      "since": "0.1",
-      "default_enabled": true,
-      "option": null
-    },
-    {
-      "number": 3033,
-      "name": "LANG_SYNTAX_JUMP_WITHOUT_A_LABEL",
-      "severity": "error",
-      "message": "'{keyword}' says which loop it means, so a label is written after it",
-      "args": [
-        {
-          "name": "keyword",
-          "type": "string",
-          "description": "the keyword that was written"
-        }
-      ],
-      "cause": "A jump with no label would mean the loop nearest to it, which is a thing that changes when a loop is put around it -- and putting a loop around something is what a program that writes this language does.  Naming the loop makes the jump say what it means rather than where it stands.",
-      "spec": {
-        "document": "spec/spec.md",
-        "section": "The Language / Statements / Loops",
-        "requirement": "'break' and 'continue' are each written with the label of the loop they mean."
       },
       "since": "0.1",
       "default_enabled": true,
@@ -1801,28 +1858,6 @@
         "document": "spec/spec.md",
         "section": "The Language / Functions / Attributes",
         "requirement": "`@[abi]` on a type is written without a convention."
-      },
-      "since": "0.1",
-      "default_enabled": true,
-      "option": null
-    },
-    {
-      "number": 3029,
-      "name": "LANG_SYNTAX_RANGE_TOO_MANY_ENDS",
-      "severity": "error",
-      "message": "a range has two ends or three, and this has {count}",
-      "args": [
-        {
-          "name": "count",
-          "type": "number",
-          "description": "how many were written"
-        }
-      ],
-      "cause": "A range is a first value, a value it runs towards, and optionally how far it moves each turn.  A fourth would have nothing to mean, and a range of ranges is not a thing this language has.",
-      "spec": {
-        "document": "spec/spec.md",
-        "section": "The Language / Expressions / Ranges",
-        "requirement": "A range is written with two ends or with three."
       },
       "since": "0.1",
       "default_enabled": true,
@@ -2847,6 +2882,28 @@
       "option": null
     },
     {
+      "number": 4406,
+      "name": "LANG_TYPEDEF_DUPLICATE_PART",
+      "severity": "error",
+      "message": "'{name}' is already a part of this type",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the name written twice"
+        }
+      ],
+      "cause": "Two fields of one product, or two variants of one sum, cannot share a name: the name is how a part is reached, and the specification lets the compiler reorder a product's fields, so there is nothing else to reach one by.  Rename one of them.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Product and sum types",
+        "requirement": "The parts of one type have distinct names."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 4407,
       "name": "LANG_FUNCDEF_SPECIAL_BAD_TEST_SIGNATURE",
       "severity": "error",
@@ -2868,28 +2925,6 @@
         "document": "spec/spec.md",
         "section": "The Language / File Structure / Function Definition",
         "requirement": "A test takes no parameters and answers with a truth value."
-      },
-      "since": "0.1",
-      "default_enabled": true,
-      "option": null
-    },
-    {
-      "number": 4406,
-      "name": "LANG_TYPEDEF_DUPLICATE_PART",
-      "severity": "error",
-      "message": "'{name}' is already a part of this type",
-      "args": [
-        {
-          "name": "name",
-          "type": "string",
-          "description": "the name written twice"
-        }
-      ],
-      "cause": "Two fields of one product, or two variants of one sum, cannot share a name: the name is how a part is reached, and the specification lets the compiler reorder a product's fields, so there is nothing else to reach one by.  Rename one of them.",
-      "spec": {
-        "document": "spec/spec.md",
-        "section": "The Language / Types / Product and sum types",
-        "requirement": "The parts of one type have distinct names."
       },
       "since": "0.1",
       "default_enabled": true,
@@ -4554,6 +4589,21 @@
       "option": null
     },
     {
+      "number": 4487,
+      "name": "LANG_WRAP_IS_NOT_A_VALUE",
+      "severity": "error",
+      "message": "'⎕wrap' is not a value; it is written around the expression whose operators are to wrap",
+      "cause": "'⎕wrap' looks like a function and is not one.  There is nothing for it to stand for on its own: what it does is decide what the operators written inside it mean, which is a property of where they are written and not a value that can be passed about.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Arithmetic",
+        "requirement": "'⎕wrap' appears only with an expression written inside it."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 4488,
       "name": "LANG_WRAP_SATURATING_INSIDE",
       "severity": "error",
@@ -4570,21 +4620,6 @@
         "document": "spec/spec.md",
         "section": "The Language / Expressions / Arithmetic",
         "requirement": "The saturating operators are not written inside '⎕wrap'."
-      },
-      "since": "0.1",
-      "default_enabled": true,
-      "option": null
-    },
-    {
-      "number": 4487,
-      "name": "LANG_WRAP_IS_NOT_A_VALUE",
-      "severity": "error",
-      "message": "'⎕wrap' is not a value; it is written around the expression whose operators are to wrap",
-      "cause": "'⎕wrap' looks like a function and is not one.  There is nothing for it to stand for on its own: what it does is decide what the operators written inside it mean, which is a property of where they are written and not a value that can be passed about.",
-      "spec": {
-        "document": "spec/spec.md",
-        "section": "The Language / Expressions / Arithmetic",
-        "requirement": "'⎕wrap' appears only with an expression written inside it."
       },
       "since": "0.1",
       "default_enabled": true,
@@ -5603,6 +5638,28 @@
       "option": null
     },
     {
+      "number": 4537,
+      "name": "LANG_REF_PLACE_NOT_MUTABLE",
+      "severity": "error",
+      "message": "'&mut' needs a place that may be changed, and '{name}' may not be",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the place"
+        }
+      ],
+      "cause": "A reference that allows writing is a way to write the place, so the place has to be one the program could have written where it stands.  A name defined without `mut` is not, and neither is a variable at the top level defined without it.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / References",
+        "requirement": "'&mut' is written before a place that may be changed."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 4539,
       "name": "LANG_UNIT_UNKNOWN",
       "severity": "error",
@@ -6059,28 +6116,6 @@
         "document": "spec/spec.md",
         "section": "The Language / File Structure / Generic Functions",
         "requirement": "A generic function's body is checked for each set of types."
-      },
-      "since": "0.1",
-      "default_enabled": true,
-      "option": null
-    },
-    {
-      "number": 4537,
-      "name": "LANG_REF_PLACE_NOT_MUTABLE",
-      "severity": "error",
-      "message": "'&mut' needs a place that may be changed, and '{name}' may not be",
-      "args": [
-        {
-          "name": "name",
-          "type": "string",
-          "description": "the place"
-        }
-      ],
-      "cause": "A reference that allows writing is a way to write the place, so the place has to be one the program could have written where it stands.  A name defined without `mut` is not, and neither is a variable at the top level defined without it.",
-      "spec": {
-        "document": "spec/spec.md",
-        "section": "The Language / Types / References",
-        "requirement": "'&mut' is written before a place that may be changed."
       },
       "since": "0.1",
       "default_enabled": true,
@@ -6928,32 +6963,6 @@
       "option": null
     },
     {
-      "number": 1016,
-      "name": "IMPL_CLI_BAD_SIZE",
-      "severity": "error",
-      "message": "'{option}' wants a size, and '{given}' is not one",
-      "args": [
-        {
-          "name": "option",
-          "type": "string",
-          "description": "the option that was given"
-        },
-        {
-          "name": "given",
-          "type": "string",
-          "description": "what was written after it"
-        }
-      ],
-      "cause": "A size is a number of bytes, and may be written with 'K', 'M' or 'G' after it for a multiple of 1024.  It has to be a number: an option given something else is an option whose value came from somewhere that did not know what it was for.",
-      "spec": {
-        "document": "spec/details.md",
-        "section": "Implementation"
-      },
-      "since": "0.1",
-      "default_enabled": true,
-      "option": null
-    },
-    {
       "number": 4600,
       "name": "LANG_DOC_UNKNOWN_COMMAND",
       "severity": "warning",
@@ -7306,6 +7315,444 @@
       "option": null
     },
     {
+      "number": 4900,
+      "name": "LANG_CLAUSE_NOT_MET",
+      "severity": "error",
+      "message": "'{function}' requires '{written}', and it cannot be written for {types}",
+      "args": [
+        {
+          "name": "function",
+          "type": "string",
+          "description": "the function or bundle the requirement belongs to"
+        },
+        {
+          "name": "written",
+          "type": "string",
+          "description": "the requirement as it was written"
+        },
+        {
+          "name": "types",
+          "type": "string",
+          "description": "what each type parameter turned out to be"
+        }
+      ],
+      "cause": "A clause whose operands are types is a requirement: what it asks is that the expression can be written, and nothing about any particular value.  Here it cannot -- no operation of that name and that shape accepts those types -- so the call is refused where it is made rather than inside a body the caller did not write.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition / Conditions",
+        "requirement": "A requirement is met by the types a call settles."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4901,
+      "name": "LANG_CLAUSE_ANSWERS_OTHERWISE",
+      "severity": "error",
+      "message": "'{function}' requires an answer of '{expected}' and the answer is '{found}'",
+      "args": [
+        {
+          "name": "function",
+          "type": "string",
+          "description": "the function or bundle the requirement belongs to"
+        },
+        {
+          "name": "expected",
+          "type": "string",
+          "description": "the type the arrow named"
+        },
+        {
+          "name": "found",
+          "type": "string",
+          "description": "what it answers"
+        }
+      ],
+      "cause": "The arrow of a requirement names what the expression answers.  Where the name it uses is already settled, the arrow is a check rather than a binding, and this is that check failing.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition / Conditions",
+        "requirement": "A requirement's arrow names what the expression answers."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4902,
+      "name": "LANG_CLAUSE_ARROW_OVER_VALUES",
+      "severity": "error",
+      "message": "an arrow on a clause whose operands are values",
+      "cause": "The arrow says what an expression *would* answer, which is a question about a requirement -- an expression that is not evaluated.  A clause over values is a condition: the call in it happens, and the type a value has is read off the parameter list, so there is nothing here for the arrow to name.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition / Conditions",
+        "requirement": "The arrow may be written only on a clause whose operands are types."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4903,
+      "name": "LANG_CLAUSE_POST_OVER_TYPES",
+      "severity": "error",
+      "message": "a 'post' whose operands are types",
+      "cause": "A requirement is a fact about types and does not happen at a point in the call, so it belongs to 'pre'.  A 'post' is always a condition, checked before the function answers.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition / Conditions",
+        "requirement": "A 'post' clause is always a condition."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4904,
+      "name": "LANG_CLAUSE_NOT_SETTLED_YET",
+      "severity": "error",
+      "message": "'{name}' stands where a value would in '{function}' and nothing has settled it yet",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the type parameter"
+        },
+        {
+          "name": "function",
+          "type": "string",
+          "description": "the function it belongs to"
+        }
+      ],
+      "cause": "A type parameter standing in an operand is read and not written: it says 'some value of this type', which needs the type to be known already.  What settles one is an argument of the call or the arrow of an earlier clause, so a clause that uses one must come after whatever settles it.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition / Conditions",
+        "requirement": "A type parameter used as an operand is already settled."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4905,
+      "name": "LANG_CLAUSE_MIXES_LEVELS",
+      "severity": "error",
+      "message": "a clause whose operands are of both kinds",
+      "cause": "What a clause means is decided by what its expression is over: values make it a condition, which is evaluated, and types make it a requirement, which is not.  An expression holding both has no reading -- taking it as a requirement would quietly stop checking the half that is about values -- so it is refused.  Two clauses say it.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition / Conditions",
+        "requirement": "A clause is over values or over types, and not both."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4906,
+      "name": "LANG_CLAUSE_NOT_A_TRUTH",
+      "severity": "error",
+      "message": "a condition of type '{found}' rather than 'bool'",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "what the expression answers"
+        }
+      ],
+      "cause": "A condition is evaluated and the program stops where it does not hold, so what it comes to has to be a truth.  Nothing is converted: an integer is not a condition here, exactly as it is not in an 'if'.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition / Conditions",
+        "requirement": "A condition is a 'bool'."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4907,
+      "name": "LANG_CLAUSE_IMPURE",
+      "severity": "note",
+      "message": "it is a condition, which is checked and may be compiled out",
+      "cause": "A note hung on whatever a condition changed.  A condition whose checking changed something would be a condition that could not be compiled out, and a build that compiled it out would run a different program -- so a condition may read what it likes and change nothing, whether or not the function it belongs to may.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition / Conditions",
+        "requirement": "A condition is pure."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4908,
+      "name": "LANG_CLAUSE_ANSWER_OUTSIDE_POST",
+      "severity": "error",
+      "message": "'⎕answer' outside a 'post' clause",
+      "cause": "What the function answered is a thing there is only after it has answered, which is where a 'post' is checked.  A 'pre' is checked before the body has run and there is nothing yet for the name to stand for.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition / Conditions",
+        "requirement": "'⎕answer' may be written only in a 'post' clause."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4909,
+      "name": "LANG_CLAUSE_ASKED_HERE",
+      "severity": "note",
+      "message": "'{function}' is asked for {types} here",
+      "args": [
+        {
+          "name": "function",
+          "type": "string",
+          "description": "the function whose requirements were checked"
+        },
+        {
+          "name": "types",
+          "type": "string",
+          "description": "what each type parameter turned out to be"
+        }
+      ],
+      "cause": "A note naming the call whose types a requirement was checked against.  What a requirement reports is about the definition -- the expression there cannot be written -- so this is the one thing the definition cannot show, which is who wanted it.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition / Conditions",
+        "requirement": "A failed clause is reported with the clause that failed."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4910,
+      "name": "LANG_BUNDLE_PARAMETER_NOT_A_TYPE",
+      "severity": "error",
+      "message": "'{name}' is not a type parameter, so bundle '{bundle}' cannot take it",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the parameter as written"
+        },
+        {
+          "name": "bundle",
+          "type": "string",
+          "description": "the bundle"
+        }
+      ],
+      "cause": "A bundle's parameters are the types its requirements are written over, so each of them is a type parameter and is written with the apostrophe that says so.  There is nothing else for a bundle to take: it holds requirements, and a requirement is over types.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition / Conditions",
+        "requirement": "A bundle's parameters are type parameters."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4911,
+      "name": "LANG_BUNDLE_WRONG_ARGUMENT_COUNT",
+      "severity": "error",
+      "message": "bundle '{bundle}' takes {expected} and is given {found}",
+      "args": [
+        {
+          "name": "bundle",
+          "type": "string",
+          "description": "the bundle"
+        },
+        {
+          "name": "expected",
+          "type": "string",
+          "description": "how many it takes"
+        },
+        {
+          "name": "found",
+          "type": "string",
+          "description": "how many were written"
+        }
+      ],
+      "cause": "A bundle is substitution: every one of its parameters has to be given a type, since its requirements are written over all of them.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition / Conditions",
+        "requirement": "A bundle is applied to as many types as it takes."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4912,
+      "name": "LANG_BUNDLE_ARGUMENT_NOT_A_TYPE",
+      "severity": "error",
+      "message": "argument {at} of bundle '{bundle}' is not a type",
+      "args": [
+        {
+          "name": "bundle",
+          "type": "string",
+          "description": "the bundle"
+        },
+        {
+          "name": "at",
+          "type": "string",
+          "description": "which argument"
+        }
+      ],
+      "cause": "A bundle's arguments are types, written as a type parameter or between the lifting marks.  A value there would have nothing to stand for: what a bundle holds are requirements, and a requirement is over types.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition / Conditions",
+        "requirement": "A bundle is applied to types."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4913,
+      "name": "LANG_BUNDLE_CYCLE",
+      "severity": "error",
+      "message": "bundle '{bundle}' is applied while it is being expanded",
+      "args": [
+        {
+          "name": "bundle",
+          "type": "string",
+          "description": "the bundle"
+        }
+      ],
+      "cause": "A bundle may apply another, which is how one is written in terms of another.  A cycle among them has no meaning -- expanding it would not end -- so it is refused where it is found.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition / Conditions",
+        "requirement": "Bundles do not form a cycle."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4914,
+      "name": "LANG_BUNDLE_ASKED_HERE",
+      "severity": "note",
+      "message": "'{name}' applies bundle '{bundle}' here",
+      "args": [
+        {
+          "name": "bundle",
+          "type": "string",
+          "description": "the bundle"
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "description": "what applied it"
+        }
+      ],
+      "cause": "A note naming the clause that applied the bundle, so that a requirement written in a bundle and the signature that asked for it are read together.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition / Conditions",
+        "requirement": "A bundle's failed requirement is reported with the clause that applied it."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4915,
+      "name": "LANG_BUNDLE_ANSWERS_NOTHING",
+      "severity": "error",
+      "message": "bundle '{bundle}' answers nothing, so nothing can be said of what it answers",
+      "args": [
+        {
+          "name": "bundle",
+          "type": "string",
+          "description": "the bundle"
+        }
+      ],
+      "cause": "A bundle holds requirements and comes to no value and no type.  So an arrow after one has nothing to name, and one written inside a larger expression stands where something with an answer is wanted.  A bundle is the whole of a clause or it is nowhere.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition / Conditions",
+        "requirement": "A bundle is the whole of a clause."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4916,
+      "name": "LANG_CLAUSE_PRE_FAILED",
+      "severity": "note",
+      "message": "a pre-condition of '{function}' that does not hold",
+      "args": [
+        {
+          "name": "function",
+          "type": "string",
+          "description": "the function"
+        }
+      ],
+      "cause": "A condition written in a signature is checked in the callee, once, before the body runs.  Which caller was wrong is what the stack walk beside this message says.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition / Conditions",
+        "requirement": "A pre-condition that does not hold stops the program."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4917,
+      "name": "LANG_BUNDLE_LINE_OVER_VALUES",
+      "severity": "error",
+      "message": "a line of bundle '{bundle}' is over values",
+      "args": [
+        {
+          "name": "bundle",
+          "type": "string",
+          "description": "the bundle"
+        }
+      ],
+      "cause": "Everything in a bundle is a requirement, and a requirement is over types.  A bundle's parameters are types and it can name no value, so a line over values has nothing to be about.  What abbreviates a condition is a pure function answering 'bool', which the language already has and which needs nothing added.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition / Conditions",
+        "requirement": "Every line of a bundle is a requirement."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4918,
+      "name": "LANG_CLAUSE_CANNOT_HOLD",
+      "severity": "error",
+      "message": "a condition of '{function}' that cannot hold",
+      "args": [
+        {
+          "name": "function",
+          "type": "string",
+          "description": "the function"
+        }
+      ],
+      "cause": "What the compiler can see is an error and what it cannot is a fault, which is the rule arithmetic already follows here.  A condition that comes to a constant falsehood is the first of those: every call of the function would stop, so the program is wrong where it is written rather than where it runs.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition / Conditions",
+        "requirement": "A condition the compiler settles is an error where it cannot hold."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 5001,
       "name": "LANG_STMT_UNREACHABLE",
       "severity": "warning",
@@ -7599,6 +8046,28 @@
       "option": null
     },
     {
+      "number": 8502,
+      "name": "IMPL_BACKEND_UNENCODABLE",
+      "severity": "error",
+      "message": "instruction cannot be encoded: {detail}",
+      "args": [
+        {
+          "name": "detail",
+          "type": "string",
+          "description": "the constraint that was violated"
+        }
+      ],
+      "cause": "The instruction, its operands, or the combination of the two cannot be represented in the target's encoding.  From generated code this reports a defect in the compiler; once inline assembly exists it will also report a constraint the written instruction violates, such as naming a high-byte register in a form that carries a REX prefix.",
+      "spec": {
+        "document": "spec/details.md",
+        "section": "Implementation",
+        "requirement": "The backends should use a symbolic version to generate the assembler code to allow, in future, inline assembler code."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 8503,
       "name": "IMPL_BACKEND_NEEDS_AN_EXTENSION",
       "severity": "error",
@@ -7620,28 +8089,6 @@
         "document": "spec/details.md",
         "section": "Targets",
         "requirement": "A program uses only what the ISA it is built for provides."
-      },
-      "since": "0.1",
-      "default_enabled": true,
-      "option": null
-    },
-    {
-      "number": 8502,
-      "name": "IMPL_BACKEND_UNENCODABLE",
-      "severity": "error",
-      "message": "instruction cannot be encoded: {detail}",
-      "args": [
-        {
-          "name": "detail",
-          "type": "string",
-          "description": "the constraint that was violated"
-        }
-      ],
-      "cause": "The instruction, its operands, or the combination of the two cannot be represented in the target's encoding.  From generated code this reports a defect in the compiler; once inline assembly exists it will also report a constraint the written instruction violates, such as naming a high-byte register in a form that carries a REX prefix.",
-      "spec": {
-        "document": "spec/details.md",
-        "section": "Implementation",
-        "requirement": "The backends should use a symbolic version to generate the assembler code to allow, in future, inline assembler code."
       },
       "since": "0.1",
       "default_enabled": true,

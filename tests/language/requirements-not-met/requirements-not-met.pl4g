@@ -1,0 +1,13 @@
+※ pl4g-test: compile=error diag=4900
+
+※ A requirement the types do not meet is reported at the **call**, by a note,
+※ and at the requirement itself, which is what cannot be written.  That is the
+※ whole of what a bound buys over checking the body per instantiation: the
+※ message is about the signature a caller can read.
+
+fn total(a: T', b: T') → T' pre(T' ⊞ T' → T'):
+    a ⊞ b
+
+@[startup]
+fn main() → u6:
+    ⎕narrow(total(true, false), ⌜u6⌝) ?? 1u6

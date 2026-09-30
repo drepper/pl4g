@@ -1,0 +1,14 @@
+※ pl4g-test: compile=error diag=4905
+
+※ A clause is over values or over types and not both.  The reading that makes
+※ the type operand legal is the reading that stops checking the half that is
+※ about values, and a condition silently becoming a requirement is the one
+※ failure mode this notation could have -- so it is refused, and two clauses
+※ say it.
+
+fn total(a: T', n: u64) → T' pre(n > 0u64 ∧ T' ⊞ T' → T'):
+    a
+
+@[startup]
+fn main() → u6:
+    ⎕narrow(total(3u8, 1u64), ⌜u6⌝) ?? 1u6

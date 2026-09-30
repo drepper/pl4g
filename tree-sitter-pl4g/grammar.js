@@ -79,7 +79,8 @@ module.exports = grammar({
 
     _item: $ => seq(
       choice($.function_definition, $.variable_definition, $.module_import,
-             $.type_definition, $.enum_definition, $.unit_definition),
+             $.type_definition, $.enum_definition, $.unit_definition,
+             $.bundle_definition),
       repeat($._newline),
     ),
 
@@ -175,7 +176,60 @@ module.exports = grammar({
       field('parameters', $.parameter_list),
       optional(seq($._return_arrow, optional($.mutable),
                    field('return_type', $.type))),
+      repeat($.clause),
       optional(field('body', $._block)),
+    ),
+
+    // What a function requires of its types and demands of its values.  One
+    // expression per clause and as many clauses as are written, so that a
+    // failure points at the clause that failed; they are on the header's line,
+    // a newline there being what says a function has no body.
+    // What the clause *means* is not a question about how it is written: an
+    // expression over values is a condition, which is evaluated and must be a
+    // `bool`, and one over types is a requirement, which asks only that it can
+    // be written.  So the grammar has one rule and the compiler reads the
+    // operands, which is the same division of labour the lifting marks have.
+    clause: $ => seq(
+      choice('pre', 'post'), '(', field('expression', $._expression),
+      optional(seq($._return_arrow, field('answers', $.type))), ')',
+    ),
+
+    // `bundle NAME(T', ...)`: a name for a set of requirements.  Its lines carry
+    // no keyword, everything in a bundle being a requirement, so a word saying
+    // so on every line would say the only thing a line there can say -- which is
+    // why the body is an ordinary block, separated by a line, a `;` or braces,
+    // and why a bundle needs no notation of its own.
+    bundle_definition: $ => seq(
+      optional($.attribute_list),
+      'bundle',
+      field('name', $.identifier),
+      '(', field('parameters', $.bundle_parameters), ')',
+      field('body', $._bundle_body),
+    ),
+
+    bundle_parameters: $ => sepBy1(',', $.identifier),
+
+    _bundle_body: $ => choice($.bundle_block, $.bundle_braces,
+                              $.bundle_inline),
+
+    bundle_block: $ => seq(
+      ':', repeat1($._newline), $._indent,
+      repeat1($._requirement_line), $._dedent,
+    ),
+
+    _requirement_line: $ => seq($.bundle_requirements, repeat1($._newline)),
+
+    bundle_inline: $ => seq(':', $.bundle_requirements),
+
+    bundle_braces: $ => seq('{', $.bundle_requirements, '}'),
+
+    bundle_requirements: $ => seq(
+      $.requirement, repeat(seq(';', $.requirement)),
+    ),
+
+    requirement: $ => seq(
+      field('expression', $._expression),
+      optional(seq($._return_arrow, field('answers', $.type))),
     ),
 
     parameter_list: $ => seq('(', sepBy(',', $.parameter), ')'),

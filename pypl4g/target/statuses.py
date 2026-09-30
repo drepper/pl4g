@@ -98,3 +98,13 @@ WRONG_PROCESSOR: Final[int] = FIRST + 8
 #: run and every failure named before this is reached: a run that stopped at the
 #: first would make a reader fix one thing and run again to be told the next.
 TESTS_FAILED: Final[int] = FIRST + 9
+
+#: A condition written in a signature that did not hold on the way in.  It is
+#: the *caller* that was wrong, which is why it is not the one below: a caller
+#: acting on a status can tell "I called this wrongly" from "the thing I called
+#: is broken", and those are two different things to do about it.
+PRE_CONDITION: Final[int] = FIRST + 10
+
+#: A condition written in a signature that did not hold on the way out.  The
+#: callee is what was wrong here, whatever it was called with.
+POST_CONDITION: Final[int] = FIRST + 11

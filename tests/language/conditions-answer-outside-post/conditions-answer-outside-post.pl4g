@@ -1,0 +1,12 @@
+※ pl4g-test: compile=error diag=4908
+
+※ What the function answered is a thing there is only after it has answered.
+※ A `pre` is checked before the body has run, so there is nothing yet for the
+※ name to stand for.
+
+fn step(a: u8) → u8 pre(⎕answer > a):
+    a
+
+@[startup]
+fn main() → u6:
+    ⎕narrow(step(1u8), ⌜u6⌝) ?? 1u6

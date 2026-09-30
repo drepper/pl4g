@@ -1,0 +1,12 @@
+※ pl4g-test: compile=error diag=4906
+
+※ A condition is evaluated and the program stops where it does not hold, so
+※ what it comes to has to be a truth.  Nothing is converted: an integer is not
+※ a condition here, exactly as it is not in an `if`.
+
+fn step(a: u8) → u8 pre(a):
+    a
+
+@[startup]
+fn main() → u6:
+    ⎕narrow(step(1u8), ⌜u6⌝) ?? 1u6

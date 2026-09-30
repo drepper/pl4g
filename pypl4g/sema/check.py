@@ -17,11 +17,12 @@ from ..target import statuses
 from ..diag.engine import DiagEngine, Expectation
 from ..front import ast
 from ..front.doccomment import Part as DocPart, parse as parse_doc
-from ..front.token import (ACQUIRE_NAME, RELEASE_NAME, AT_NAME, SPAN_NAME,
+from ..front.token import (ACQUIRE_NAME, ANSWER_NAME, RELEASE_NAME,
+                           AT_NAME, SPAN_NAME,
                            ADDRESS_NAME, BYTES_NAME,
                            WIDEN_NAME,
                            BOTTOM_GLYPH, BUILTIN_GLYPH, CHR_NAME, DEREF_GLYPH,
-                           LIFETIME_GLYPH,
+                           LIFETIME_GLYPH, LIFT_OPEN_GLYPH,
                            DROP_NAME, LEAD_NAME, NARROW_NAME, ONES_NAME,
                            UNIT_NAME,
                           ENUMERATE_NAME, TYPEOF_NAME,
@@ -535,6 +536,25 @@ def _parameters_in(written: object, into: list[str]) -> None:
             _parameters_in(one, into)
 
 
+def _type_names_in(written: object, into: list[str]) -> None:
+    """Every type parameter standing where a value would, in the order written.
+
+    A type parameter in an expression is a name like any other as far as the
+    grammar is concerned -- what tells it from a value's name is the apostrophe
+    -- so this is the same walk as the one over types, over the other kind of
+    node.
+    """
+    if isinstance(written, ast.NameRef) and _is_generic(written.name) \
+            and written.name not in into:
+        into.append(written.name)
+    if isinstance(written, ast.Node):
+        for one in fields_of(written):
+            _type_names_in(getattr(written, one.name), into)
+    elif isinstance(written, (list, tuple)):
+        for one in written:
+            _type_names_in(one, into)
+
+
 @dataclass(slots=True)
 class _Generic:
     """A function with type parameters: what was written, kept to be repeated.
@@ -554,6 +574,26 @@ class _Generic:
     #: Whether it is being made just now, so that a function that calls itself
     #: with the types it already has does not do so for ever.
     making: set[tuple[Type, ...]] = field(default_factory=set)
+
+
+@dataclass(slots=True)
+class _Bundle:
+    """A name for a set of requirements, kept to be substituted into.
+
+    Nothing of it is checked where it is written: its lines are over its own type
+    parameters, and what those are is what an application of it says.
+    """
+
+    node: ast.BundleDef
+    path: str
+    #: Whether it is being expanded just now, which is how a cycle among bundles
+    #: is found rather than followed.
+    opening: bool = False
+
+
+#: What a dummy made for a lifted type is called.  It begins with the lifting
+#: mark, which a program cannot write in a name, so it collides with nothing.
+DUMMY_PREFIX: Final[str] = LIFT_OPEN_GLYPH
 
 
 def _can_be_referred_to(ty: Type) -> bool:
@@ -1373,6 +1413,17 @@ class Checker:
         #: not the compilation's: two files may each define a `counter`, and
         #: neither can see the other's unless it imports it.
         self._top: dict[str, object] = {}
+        #: The bundles this file defines, by name.  They are beside the names
+        #: above rather than among them because a bundle is neither a type nor a
+        #: value: what it stands for is a set of requirements, and the only place
+        #: one may be written is a clause.
+        self._bundles: dict[str, _Bundle] = {}
+        #: The function whose body is being lowered and what was written of it,
+        #: so that a return knows which `post` clauses to check before it.
+        self._demanding: tuple[ast.FuncDef | None, Function | None] = (None, None)
+        #: Whose clauses have had their shapes reported on, so that a generic
+        #: compiled for five sets of types is refused once and not five times.
+        self._shaped: set[int] = set()
         #: The definitions this file owns, which carry its module's name once
         #: that name is settled.
         self._owned: list[object] = []
@@ -1532,6 +1583,13 @@ class Checker:
             for item in unit.items:
                 if isinstance(item, (ast.TypeDef, ast.EnumDef)):
                     self._collect_type(item, unit.path)
+        # Bundles before the functions, since a clause of one may apply a bundle
+        # written below it, exactly as a type may be named before it is defined.
+        for unit in units:
+            for item in unit.items:
+                if isinstance(item, ast.BundleDef):
+                    self._collect_bundle(item, unit.path)
+        self._check_bundle_cycles()
         for defined in self._named_types:
             self._resolved(defined)
         for unit in units:
@@ -1544,7 +1602,7 @@ class Checker:
                     case ast.VarDef():
                         self._collect_global(item)
                     case (ast.ModuleImport() | ast.TypeDef() | ast.EnumDef()
-                          | ast.UnitDef()):
+                          | ast.UnitDef() | ast.BundleDef()):
                         pass
                     case _:
                         self._diags.internal("unknown kind of top-level definition")
@@ -2771,6 +2829,7 @@ class Checker:
             self._diags.emit(D.LANG_GENERIC_IS_SPECIAL, node.name_span,
                              name=node.name, attribute=str(kind))
             return None
+        self._check_clause_shapes(node.clauses)
         self._top[node.name] = _Generic(node=node, path=path, attrs=attrs,
                                         parameters=written)
         return None
@@ -3644,6 +3703,526 @@ class Checker:
             return ERROR
         return self._module.types.result_type(found, carried)
 
+    # -- what a signature requires and demands ---------------------------------
+
+    def _collect_bundle(self, node: ast.BundleDef, path: str) -> None:
+        """Write down a bundle, whose lines are checked where it is applied.
+
+        Nothing of a bundle is checked here.  Its lines are written over its own
+        type parameters, and what those stand for is what an application says --
+        so a bundle nobody applies is a bundle nobody has asked a question of,
+        which is the same rule a generic function follows.
+        """
+        for name, where in zip(node.params, node.param_spans):
+            if not _is_generic(name):
+                self._diags.emit(D.LANG_BUNDLE_PARAMETER_NOT_A_TYPE, where,
+                                 name=name, bundle=node.name)
+        if node.name in self._bundles or node.name in self._top:
+            self._diags.emit(D.LANG_NAME_ALREADY_DEFINED, node.name_span,
+                             name=node.name)
+            return
+        self._check_clause_shapes(node.clauses)
+        for clause in node.clauses:
+            if self._levels_of(clause.expr) == {False}:
+                # A bundle's parameters are types and it can name no value, so a
+                # line over values has nothing to be about.  What abbreviates a
+                # condition is a function answering `bool`, which the language
+                # already has.
+                self._diags.emit(D.LANG_BUNDLE_LINE_OVER_VALUES, clause.span,
+                                 bundle=node.name)
+        self._bundles[node.name] = _Bundle(node=node, path=path)
+
+    def _as_written(self, clause: ast.Clause) -> str:
+        """A requirement as the source has it, for a message about it.
+
+        The source rather than a rendering of the tree: a reader is being told
+        which requirement failed, and the words they wrote are what they will
+        look for.
+        """
+        found = self._sources.snippet(clause.expr.span.to(
+            clause.answers.span if clause.answers is not None
+            else clause.expr.span))
+        return found if found else "the requirement"
+
+    def _check_bundle_cycles(self) -> None:
+        """Refuse a bundle that reaches itself, once every bundle is known.
+
+        Here rather than where one is applied, because a cycle is a thing about
+        the bundles and not about any call: a program that wrote one and never
+        applied it has still written something with no meaning.
+        """
+        told: set[str] = set()
+        for name, bundle in self._bundles.items():
+            if name in told:
+                continue
+            reached: set[str] = set()
+            if self._reaches(bundle, name, reached):
+                # Every bundle of the cycle is in one, and saying so of each
+                # would be saying one thing several times: the first names it.
+                told |= reached | {name}
+                self._diags.emit(D.LANG_BUNDLE_CYCLE, bundle.node.name_span,
+                                 bundle=name)
+
+    def _reaches(self, bundle: _Bundle, wanted: str, seen: set[str]) -> bool:
+        """Whether *bundle* applies *wanted*, however many bundles apart."""
+        for clause in bundle.node.clauses:
+            found = self._bundle_named(clause.expr)
+            if found is None:
+                continue
+            if found.node.name == wanted:
+                return True
+            if found.node.name in seen:
+                continue
+            seen.add(found.node.name)
+            if self._reaches(found, wanted, seen):
+                return True
+        return False
+
+    def _bundle_named(self, expr: ast.Expr) -> _Bundle | None:
+        """The bundle an expression applies, where it applies one."""
+        if not isinstance(expr, ast.Call) \
+                or not isinstance(expr.callee, ast.NameRef):
+            return None
+        return self._bundles.get(expr.callee.name)
+
+    def _over_types(self, expr: ast.Expr) -> bool:
+        """Whether the operands of *expr* are types, which is what decides
+        whether a clause holding it is a requirement or a condition.
+
+        A type parameter is one by its apostrophe, and a lift is one wherever it
+        does not stand in one of the three places that read a lift for what the
+        type *is*.  Anything else is a value, and a clause is one level or the
+        other throughout.
+        """
+        return True in self._levels_of(expr)
+
+    def _levels_of(self, expr: ast.Expr) -> set[bool]:
+        """Which levels the operands of *expr* are on: types, values, or both."""
+        found: set[bool] = set()
+        self._levels_in(expr, found)
+        return found
+
+    def _levels_in(self, expr: object, into: set[bool]) -> None:
+        """Whether a type stands anywhere below *expr*, and whether a value does.
+
+        The three places that read a lift for what the type *is* answer values --
+        `⌈⌜u8⌝` is 255 -- so they stop the walk with a value recorded, which is
+        what keeps `⌈⌜T'⌝` and `⌈T'` two different things.  A call's callee is
+        not an operand and is not walked: what a name is of is not what the clause
+        is over.
+        """
+        match expr:
+            case ast.NameRef() if _is_generic(expr.name):
+                into.add(True)
+                return
+            case ast.NameRef():
+                into.add(False)
+                return
+            case ast.Unary() if expr.op in (ast.UnaryOp.MAX, ast.UnaryOp.MIN) \
+                    and isinstance(expr.operand, ast.Lifted):
+                into.add(False)
+                return
+            case ast.Call() if isinstance(expr.callee, ast.NameRef) \
+                    and expr.callee.name == TYPEOF_NAME:
+                into.add(False)
+                return
+            case ast.Binary() if self._type_stood_for(expr.left) is not None \
+                    or self._type_stood_for(expr.right) is not None:
+                into.add(False)
+                return
+            case ast.Lifted():
+                into.add(True)
+                return
+            case ast.Call() if self._bundle_named(expr) is not None:
+                into.add(True)
+                for one in expr.args:
+                    self._levels_in(one, into)
+                return
+            case ast.Call():
+                for one in expr.args:
+                    self._levels_in(one, into)
+                return
+        if isinstance(expr, ast.Node):
+            for one in fields_of(expr):
+                self._levels_in(getattr(expr, one.name), into)
+        elif isinstance(expr, (list, tuple)):
+            for one in expr:
+                self._levels_in(one, into)
+
+    def _reading_of(self, clause: ast.Clause) -> bool | None:
+        """Whether a clause is a requirement, a condition, or neither.
+
+        True for a requirement and False for a condition; nothing where the
+        clause has no reading at all, which is what the refusals below report and
+        what keeps an ill-shaped clause from also being lowered as if it were
+        well-shaped.
+        """
+        levels = self._levels_of(clause.expr)
+        if len(levels) > 1:
+            return None
+        written: list[str] = []
+        _named_in(clause.expr, written)
+        if ANSWER_NAME in written and clause.kind is not ast.ClauseKind.POST:
+            return None
+        if True in levels:
+            return None if clause.kind is not ast.ClauseKind.PRE else True
+        return None if clause.answers is not None else False
+
+    def _check_clause_shapes(self, clauses: Sequence[ast.Clause]) -> bool:
+        """Whether every clause is of a shape that has a reading.
+
+        Asked where the definition is read and not where it is called, because
+        none of it depends on what the types turn out to be: a clause is over
+        values or over types, and which it is decides what the arrow may say and
+        whether a `post` is one at all.  A generic nobody calls is still refused
+        for these, which is the one thing about a generic's clauses that does not
+        wait for a call.
+        """
+        if not clauses or id(clauses) in self._shaped:
+            return True
+        self._shaped.add(id(clauses))
+        good = True
+        for clause in clauses:
+            if self._reading_of(clause) is not None:
+                continue
+            good = False
+            levels = self._levels_of(clause.expr)
+            written: list[str] = []
+            _named_in(clause.expr, written)
+            if len(levels) > 1:
+                self._diags.emit(D.LANG_CLAUSE_MIXES_LEVELS, clause.span)
+            elif ANSWER_NAME in written \
+                    and clause.kind is not ast.ClauseKind.POST:
+                self._diags.emit(D.LANG_CLAUSE_ANSWER_OUTSIDE_POST, clause.span)
+            elif True in levels:
+                self._diags.emit(D.LANG_CLAUSE_POST_OVER_TYPES, clause.span)
+            else:
+                # The arrow says what an unevaluated expression would answer.  A
+                # call that happens answers what it answers, and the parameter
+                # list is where a type is read off a value.
+                self._diags.emit(D.LANG_CLAUSE_ARROW_OVER_VALUES, clause.span)
+        return good
+
+    def _check_clauses(self, clauses: Sequence[ast.Clause],
+                       bound: dict[str, Type], name: str, span: Span) -> bool:
+        """Check every requirement of a signature, settling what it settles.
+
+        The clauses are read in the order written, which is what makes a
+        requirement able to settle a type parameter a later one uses.  A
+        condition is not checked here -- it is code, and it is lowered into the
+        body -- so what this walks is the type-level half.
+        """
+        for clause in clauses:
+            if self._reading_of(clause) is not True:
+                continue
+            if not self._met(clause, bound, name, span):
+                return False
+        return True
+
+    def _met(self, clause: ast.Clause, bound: dict[str, Type], name: str,
+             span: Span) -> bool:
+        """Whether one requirement is met, settling the type its arrow names."""
+        found = self._answered_by(clause, bound, name, span)
+        if found is None:
+            return False
+        if clause.answers is None:
+            return True
+        return self._settling(clause, found, bound, name)
+
+    def _answered_by(self, clause: ast.Clause, bound: dict[str, Type],
+                     name: str, span: Span) -> Type | None:
+        """What a requirement's expression answers, or nothing where it cannot
+        be written at all.
+
+        A bundle applied is expanded here rather than lowered: it answers
+        nothing, so there is nothing for an arrow to name and nothing for an
+        operand position to hold, and what it means is every line it holds with
+        the arguments put in.
+        """
+        bundle = self._bundle_named(clause.expr)
+        if bundle is not None:
+            if clause.answers is not None:
+                self._diags.emit(D.LANG_CLAUSE_BUNDLE_ANSWERS_NOTHING,
+                                 clause.span, bundle=bundle.node.name)
+                return None
+            assert isinstance(clause.expr, ast.Call)
+            return VOID if self._bundle_met(bundle, clause.expr, bound, name,
+                                            span) else None
+        dummies = self._dummies_for(clause, bound, name)
+        if dummies is None:
+            return None
+        written, values = dummies
+        found = self._written_over(values, written)
+        if found is None:
+            self._diags.emit(D.LANG_CLAUSE_NOT_MET, clause.span, function=name,
+                             written=self._as_written(clause),
+                             types=", ".join(
+                                 "".join((one, " = ", bound[one].written()))
+                                 for one in sorted(bound)))
+            return None
+        return found
+
+    def _bundle_met(self, bundle: _Bundle, expr: ast.Call,
+                    bound: dict[str, Type], name: str, span: Span) -> bool:
+        """Whether every line of an applied bundle is met.
+
+        The arguments are types, and they stand for the bundle's own parameters
+        while its lines are checked -- so a bundle is substitution and nothing
+        more, which is why nothing conforms to one and there is no coherence rule
+        to write.
+        """
+        written = bundle.node
+        if len(expr.args) != len(written.params):
+            self._diags.emit(D.LANG_BUNDLE_WRONG_ARGUMENT_COUNT, expr.span,
+                             bundle=written.name, expected=len(written.params),
+                             found=len(expr.args))
+            return False
+        if bundle.opening:
+            self._diags.emit(D.LANG_BUNDLE_CYCLE, expr.span, bundle=written.name)
+            return False
+        inner: dict[str, Type] = {}
+        for at, (arg, param) in enumerate(zip(expr.args, written.params)):
+            given = self._type_operand(arg, bound)
+            if given is None:
+                self._diags.emit(D.LANG_BUNDLE_ARGUMENT_NOT_A_TYPE, arg.span,
+                                 bundle=written.name, at=at + 1)
+                return False
+            inner[param] = given
+        bundle.opening = True
+        try:
+            for one in written.clauses:
+                if not self._met(one, inner, written.name, span):
+                    self._diags.emit(D.LANG_BUNDLE_ASKED_HERE, expr.span,
+                                     bundle=written.name, name=name)
+                    return False
+        finally:
+            bundle.opening = False
+        return True
+
+    def _type_operand(self, expr: ast.Expr,
+                      bound: dict[str, Type]) -> Type | None:
+        """The type an operand stands for, or nothing where it stands for a value.
+
+        Two things stand for a type: a type parameter, which the apostrophe
+        marks, and a type between the lifting marks, which is what the marks are
+        for everywhere else.
+        """
+        match expr:
+            case ast.NameRef() if _is_generic(expr.name):
+                return bound.get(expr.name)
+            case ast.Lifted():
+                return self._lifted_type(expr)
+            case _:
+                return None
+
+    def _dummies_for(self, clause: ast.Clause, bound: dict[str, Type],
+                     name: str) -> tuple[ast.Expr, list[tuple[str, Type]]] | None:
+        """The requirement rewritten so that every type operand is a name, and
+        what type each of those names stands for.
+
+        A requirement asks whether its expression can be written over *some*
+        value of each type, so that is what it is checked with: one value per
+        type operand, bound to the name that stood there.  A type parameter keeps
+        its own name, which is what makes `T' + T'` two reads of one value; a
+        lifted type gets a name no program could write.
+        """
+        values: dict[str, Type] = {}
+        made = [0]
+
+        def walked(node: object) -> object:
+            found = self._type_operand(node, bound) \
+                if isinstance(node, ast.Expr) else None
+            if found is not None:
+                assert isinstance(node, ast.Expr)
+                if isinstance(node, ast.NameRef):
+                    values[node.name] = found
+                    return node
+                made[0] += 1
+                called = "".join((DUMMY_PREFIX, str(made[0])))
+                values[called] = found
+                return ast.NameRef(span=node.span, name=called)
+            if isinstance(node, ast.Node):
+                return replace(node, **{one.name: walked(getattr(node, one.name))
+                                        for one in fields_of(node)})
+            if isinstance(node, tuple):
+                return tuple(walked(one) for one in node)
+            return node
+
+        written_over: list[str] = []
+        _type_names_in(clause.expr, written_over)
+        for one in written_over:
+            if one not in bound:
+                self._diags.emit(D.LANG_CLAUSE_NOT_SETTLED_YET, clause.span,
+                                 name=one, function=name)
+                return None
+        rewritten = walked(clause.expr)
+        assert isinstance(rewritten, ast.Expr)
+        return rewritten, list(values.items())
+
+    def _written_over(self, dummies: Sequence[tuple[str, Type]],
+                      expr: ast.Expr) -> Type | None:
+        """What *expr* answers where each name stands for a value of its type,
+        and nothing where it cannot be written.
+
+        The expression is checked the way any other is, with a function of its
+        own that nothing will emit and with what it reports thrown away: a
+        requirement asks exactly the question the checker already answers, so
+        asking it this way is what keeps one set of rules for what may be
+        written.
+        """
+        func = Function(name="", ty=self._module.types.func_type(
+            tuple(ty for _, ty in dummies), VOID))
+        block = func.add_block()
+        builder = IRBuilder(self._module, func)
+        told: list[object] = []
+        kept = (self._diags, self._impure, self._answering, self._borrows,
+                self._places, self._addressed)
+        self._diags = DiagEngine(told.append, kept[0].control, kept[0].catalog)
+        self._impure, self._answering = True, VOID
+        self._borrows, self._places, self._addressed = [], {}, set()
+        self._push_scope()
+        try:
+            for name, ty in dummies:
+                self._bind_local(name, block.add_param(ty, name), INVALID_SPAN,
+                                 False, is_parameter=True, builder=builder)
+            found = self._lower_expr(builder, expr, None)
+            answer = self._value_type_of(found)
+            self._pop_scope()
+        finally:
+            (self._diags, self._impure, self._answering, self._borrows,
+             self._places, self._addressed) = kept
+        return None if answer is ERROR or told else answer
+
+    def _settling(self, clause: ast.Clause, found: Type,
+                  bound: dict[str, Type], name: str) -> bool:
+        """Bind what a requirement's arrow names, or check it against what is
+        already bound.
+
+        A name nothing has settled is settled by this; one already settled is
+        compared, and a requirement that answers something else is not met.
+        """
+        assert clause.answers is not None
+        written = clause.answers
+        if isinstance(written, ast.TypeRef) and written.module is None \
+                and not written.result and _is_generic(written.name) \
+                and written.name not in bound:
+            bound[written.name] = found
+            return True
+        outer, self._bound = self._bound, bound
+        try:
+            wanted = self._resolve_type(written)
+        finally:
+            self._bound = outer
+        if wanted is ERROR:
+            return False
+        if wanted is not found:
+            self._diags.emit(D.LANG_CLAUSE_ANSWERS_OTHERWISE, clause.span,
+                             function=name, expected=wanted.written(),
+                             found=found.written())
+            return False
+        return True
+
+    # -- the conditions a body carries -----------------------------------------
+
+    def _lower_conditions(self, builder: IRBuilder, node: ast.FuncDef,
+                          func: Function) -> None:
+        """Emit the checks a function's `pre` clauses stand for.
+
+        At the top of the body and once: a check in the callee that fails already
+        names the function and, through the stack walk, who called it -- so the
+        thing a check at every call site would buy is had for nothing, and there
+        is one copy of the code.
+        """
+        for clause in node.clauses:
+            if clause.kind is not ast.ClauseKind.PRE \
+                    or self._reading_of(clause) is not False:
+                continue
+            self._demanded(builder, clause, func,
+                           "a pre-condition that does not hold",
+                           statuses.PRE_CONDITION)
+
+    def _returning(self, builder: IRBuilder, value: Value | None,
+                   span: Span) -> None:
+        """Check what a `post` clause demands, and then return.
+
+        Before *every* return, which is where the value there is to speak about
+        exists.  One copy per return rather than one at a join, because a
+        function may answer from several places and each of them answers its own
+        value.
+        """
+        node, func = self._demanding
+        if node is not None and func is not None:
+            for clause in node.clauses:
+                if clause.kind is not ast.ClauseKind.POST \
+                        or self._reading_of(clause) is not False:
+                    continue
+                self._push_scope()
+                if value is not None:
+                    self._bind_local(ANSWER_NAME, value, clause.span)
+                try:
+                    self._demanded(builder, clause, func,
+                                   "a post-condition that does not hold",
+                                   statuses.POST_CONDITION)
+                finally:
+                    self._scopes.pop()
+                    self._unit_scopes.pop()
+        builder.ret(value, span)
+
+    def _demanded(self, builder: IRBuilder, clause: ast.Clause, func: Function,
+                  what: str, status: int) -> None:
+        """Lower one condition and emit the check that stops where it fails."""
+        # A question the compiler settles is settled here and lowered nowhere:
+        # `⌜A⌝ = ⌜B⌝` is such a question, and a lift is not a value, so a
+        # condition holding one has to be answered before anything tries to
+        # lower it.
+        known = self._settled(clause.expr)
+        if known is not None:
+            self._already(clause, func, known)
+            return
+        # Pure whatever the function is: what makes a condition removable is
+        # that removing it changes nothing, and that is a property of the
+        # condition and not of what it belongs to.  The note says so on whatever
+        # the existing purity rules report.
+        outer = self._impure
+        self._impure = False
+        mark = self._diags.because(D.LANG_CLAUSE_IMPURE, clause.span)
+        try:
+            value = self._lower_expr(builder, clause.expr, None)
+        finally:
+            self._diags.and_no_longer(mark)
+            self._impure = outer
+        found = self._value_type_of(value)
+        if found is ERROR:
+            return
+        if found is not BOOL:
+            self._diags.emit(D.LANG_CLAUSE_NOT_A_TRUTH, clause.span,
+                             found=found.written())
+            return
+        if isinstance(value, BoolConst):
+            self._already(clause, func, value.value)
+            return
+        builder.check(value, what, status, clause.span)
+
+    def _already(self, clause: ast.Clause, func: Function, holds: bool) -> None:
+        """What becomes of a condition the compiler settled.
+
+        What the compiler can see is an error and what it cannot is a fault,
+        which is the rule arithmetic already follows: a condition that cannot
+        hold would stop every call of the function, so the program is wrong where
+        it is written.  One that always holds costs nothing, and the log is where
+        a reader is told it was free.
+        """
+        if not holds:
+            self._diags.emit(D.LANG_CLAUSE_CANNOT_HOLD, clause.span,
+                             function=func.name)
+            return
+        self._module.reports.record(
+            ReportKind.CONDITION_HOLDS, func.name,
+            "".join(("'", self._as_written(clause),
+                     "' was settled while compiling, so nothing of it reaches "
+                     "the binary")),
+            clause.span)
+
     # -- bodies ----------------------------------------------------------------
 
     def _lower_function(self, entry: _Collected) -> None:
@@ -3695,6 +4274,8 @@ class Checker:
         builder = IRBuilder(self._module, func)
         outer_answer, self._answering = self._answering, func.ty.ret
         outer_impure, self._impure = self._impure, func.attrs.impure
+        outer_demanding = self._demanding
+        self._demanding = (node, func)
         self._push_scope()
         outer_addressed = self._addressed
         self._addressed = set()
@@ -3709,6 +4290,14 @@ class Checker:
             self._bind_local(param.name, value, param.span,
                              param.mutable, is_parameter=True, builder=builder)
         assert node.body is not None
+        # A function with no type parameters has requirements that are settled
+        # where it is written, so they are checked once and here rather than at
+        # every call.
+        self._check_clause_shapes(node.clauses)
+        self._check_clauses(node.clauses, {}, func.name, node.name_span)
+        # Before the first statement: a condition is about what the function was
+        # called with, so it is checked where nothing of the body has run yet.
+        self._lower_conditions(builder, node, func)
         self._lower_block(builder, node.body, func)
         if func.borrows_from:
             # Before the scope goes: a parameter a reference was taken of lives
@@ -3726,11 +4315,12 @@ class Checker:
         self._impure = outer_impure
         if not builder.is_terminated:
             if func.ty.ret is VOID:
-                builder.ret()
+                self._returning(builder, None, node.span)
             else:
                 self._diags.emit(D.LANG_FUNCDEF_RETURN_MISSING, node.name_span,
                                  name=func.name, type=func.ty.ret.written())
                 builder.unreachable()
+        self._demanding = outer_demanding
 
     def _lower_block(self, builder: IRBuilder, block: ast.Block, func: Function,
                      as_result: bool = True, wanted: Type | None = None,
@@ -3850,7 +4440,7 @@ class Checker:
                     # mismatch says; the assignment itself was already checked.
                     if result.ty is not func.ty.ret:
                         self._report_mismatch(stmt.span, result.ty, func.ty.ret)
-                    builder.ret(result, stmt.span)
+                    self._returning(builder, result, stmt.span)
             case ast.EntryAssign():
                 self._lower_entry_assign(builder, stmt)
             case ast.UnitDef():
@@ -3878,7 +4468,7 @@ class Checker:
                 if is_last and func.ty.ret is not VOID:
                     value = self._lower_into(builder, stmt.value, func.ty.ret,
                                              stmt.span)
-                    builder.ret(value, stmt.span)
+                    self._returning(builder, value, stmt.span)
                 elif isinstance(stmt.value, ast.If):
                     # An `if` written as a statement of its own produces no
                     # value, and needs no `else` for that reason.
@@ -5130,6 +5720,25 @@ class Checker:
                                                    one.span, param.name):
                 return UndefConst(ERROR)
             args.append(value)
+        # The requirements come between the arguments and the instance: they are
+        # what the types must satisfy, and an arrow in one of them may settle a
+        # parameter no argument could -- which is why they are checked before the
+        # test for a parameter nothing settles.  What a requirement reports is
+        # about the definition, so the call that asked is hung on it as a note:
+        # the message points at what cannot be written and this says who wanted
+        # it, which is the one thing the definition cannot show.
+        mark = self._diags.because(
+            D.LANG_CLAUSE_ASKED_HERE, expr.span,
+            function=written.node.name,
+            types=", ".join("".join((one, " = ", bound[one].written()))
+                            for one in written.parameters if one in bound))
+        try:
+            met = self._check_clauses(written.node.clauses, bound,
+                                      written.node.name, expr.span)
+        finally:
+            self._diags.and_no_longer(mark)
+        if not met:
+            return UndefConst(ERROR)
         missing = [name for name in written.parameters if name not in bound]
         if missing:
             self._diags.emit(D.LANG_GENERIC_NOT_DETERMINED, expr.span,
@@ -8884,7 +9493,7 @@ class Checker:
             if func.ty.ret is not VOID:
                 self._diags.emit(D.LANG_FUNCDEF_RETURN_MISSING, stmt.span,
                                  name=func.name, type=func.ty.ret.written())
-            builder.ret(None, stmt.span)
+            self._returning(builder, None, stmt.span)
             return
         if func.ty.ret is VOID:
             if isinstance(stmt.value, ast.Call):
@@ -8894,13 +9503,14 @@ class Checker:
                 # the rule that such a call has nothing to use.
                 answer = self._lower_expr(builder, stmt.value, None)
                 if answer.ty is VOID or answer.ty is ERROR:
-                    builder.ret(None, stmt.span)
+                    self._returning(builder, None, stmt.span)
                     return
             self._diags.emit(D.LANG_FUNCDEF_RETURN_VALUE_IN_VOID, stmt.span, name=func.name)
-            builder.ret(None, stmt.span)
+            self._returning(builder, None, stmt.span)
             return
-        builder.ret(self._lower_into(builder, stmt.value, func.ty.ret, stmt.span),
-                    stmt.span)
+        self._returning(
+            builder, self._lower_into(builder, stmt.value, func.ty.ret, stmt.span),
+            stmt.span)
 
     def _lower_expr(self, builder: IRBuilder, expr: ast.Expr,
                     expected: Type | None) -> Value:
@@ -9298,7 +9908,7 @@ class Checker:
         # value that forbids reading it -- and, where the error carries
         # something, that something, taken from the failure being propagated.
         # The two error types agree: it is what was checked above.
-        builder.ret(builder.wrap(
+        self._returning(builder, builder.wrap(
             UndefConst(answering.ok), builder.bool_const(True), answering,
             expr.span,
             None if answering.err is None

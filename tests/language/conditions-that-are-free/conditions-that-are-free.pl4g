@@ -1,0 +1,14 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=1 diag=none
+
+※ A condition the compiler settles costs nothing: nothing of it reaches the
+※ binary, and the report log is where a reader is told so.  This one is a
+※ question about types, which is settled and lowered nowhere -- a lift is not a
+※ value, so a condition holding one has to be answered before anything tries to
+※ lower it.
+
+fn step(a: u8) → u8 pre(⌜u8⌝ ≠ ⌜u16⌝):
+    a
+
+@[startup]
+fn main() → u6:
+    ⎕narrow(step(1u8), ⌜u6⌝) ?? 1u6

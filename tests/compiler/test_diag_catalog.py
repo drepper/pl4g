@@ -156,8 +156,8 @@ def test_a_number_outside_every_block_is_refused() -> None:
     """
     catalog = load_catalog()
     entry = next(iter(catalog.by_number.values()))
-    stray = replace(entry, number=4900)
-    broken = replace(catalog, by_number={4900: stray})
+    stray = replace(entry, number=5900)
+    broken = replace(catalog, by_number={5900: stray})
     with pytest.raises(UnblockedNumber, match="between two blocks"):
         generate_ids_source(broken)
 

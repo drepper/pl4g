@@ -30,6 +30,10 @@
   "unit" @context
   name: (identifier) @name) @item
 
+(bundle_definition
+  "bundle" @context
+  name: (identifier) @name) @item
+
 (module_import
   "let" @context
   name: (identifier) @name) @item

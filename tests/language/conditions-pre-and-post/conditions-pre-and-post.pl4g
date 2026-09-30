@@ -1,0 +1,17 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=20 diag=none
+
+※ A clause whose expression is over values is a **condition**: it is evaluated,
+※ it must answer a `bool`, and the program stops where it does not hold.
+※
+※ `pre` is checked once at the top of the body and `post` before every return,
+※ where `⎕answer` stands for what the function answered.  Both are in the
+※ callee, which is where one copy of the code says what a copy at every call
+※ site would -- the stack walk already names who called.
+
+@[inline(never)]
+fn twice(a: u8) → u8 pre(a > 0u8) post(⎕answer > a):
+    a ⊞ a
+
+@[startup]
+fn main() → u6:
+    ⎕narrow(twice(10u8), ⌜u6⌝) ?? 1u6

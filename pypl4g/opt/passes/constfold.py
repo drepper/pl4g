@@ -8,11 +8,22 @@ A comparison of constants folds too, and its answer is a truth value rather
 than a number, so it needs no range check: there is no truth value that does
 not fit in a `bool`.  The logical operators are the bitwise instructions asked
 of values that are one or zero, so the same folders answer them.
+
+A check whose condition folded to a truth goes away with it.  That is what makes
+a condition written in a signature free where the compiler can see it holds: the
+inliner puts the callee where it was called, the arguments become constants
+there, and what is left is a check on a constant.  A check that folded to a
+falsehood is *not* removed -- the program stops when it runs, which is what it
+should do, and a compilation error from here would be a diagnostic the optimizer
+has no channel for.
 """
 
 from __future__ import annotations
 
-from ...ir.inst import BinaryInst, BinOp, CmpInst, CmpPred, Instruction
+from typing import Sequence
+
+from ...ir.inst import (AssertInst, BinaryInst, BinOp, CmpInst, CmpPred,
+                        Instruction)
 from ...ir.module import Module
 from ...ir.types import BOOL, IntType
 from ...ir.value import BoolConst, IntConst, Value
@@ -110,14 +121,20 @@ class ConstantFolding:
         collapses one level of it.
         """
         replacements: dict[int, Value] = {}
+        settled: list[int] = []
         for block in getattr(func, "blocks"):
             for inst in block.insts:
+                if isinstance(inst, AssertInst):
+                    condition = inst.operands[0]
+                    if isinstance(condition, BoolConst) and condition.value:
+                        settled.append(id(inst))
+                    continue
                 folded = self._fold(module, inst)
                 if folded is not None:
                     replacements[id(inst)] = folded
-        if not replacements:
+        if not replacements and not settled:
             return False
-        self._apply(func, replacements)
+        self._apply(func, replacements, settled)
         return True
 
     def _fold(self, module: Module, inst: Instruction) -> Value | None:
@@ -174,8 +191,13 @@ class ConstantFolding:
             return None
         return module.bool_const(BOOL, asking(numbers[0], numbers[1]))
 
-    def _apply(self, func: object, replacements: dict[int, Value]) -> None:
-        """Rewrite every use of a folded instruction and drop the instruction."""
+    def _apply(self, func: object, replacements: dict[int, Value],
+               settled: Sequence[int] = ()) -> None:
+        """Rewrite every use of a folded instruction and drop the instruction.
+
+        A check that folded to a truth is dropped too: it computes nothing, so
+        nothing uses it, and what it was there for is known to hold.
+        """
         blocks = getattr(func, "blocks")
         for block in blocks:
             for inst in block.insts:
@@ -188,7 +210,9 @@ class ConstantFolding:
                         found = replacements.get(id(arg))
                         if found is not None:
                             target.args[index] = found
-            block.insts = [i for i in block.insts if id(i) not in replacements]
+            gone = set(settled)
+            block.insts = [i for i in block.insts
+                           if id(i) not in replacements and id(i) not in gone]
 
 
 def _as_number(value: Value) -> int | None:

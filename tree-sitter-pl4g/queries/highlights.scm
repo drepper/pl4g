@@ -68,7 +68,9 @@
 "return" @keyword.return
 ["if" "elif" "else" "match"] @keyword.conditional
 ["while" "unless" "foreach" "break" "continue"] @keyword.repeat
-["type" "enum" "unit"] @keyword.type
+["type" "enum" "unit" "bundle"] @keyword.type
+; What a signature requires of its types and demands of its values.
+["pre" "post"] @keyword
 "comptime" @keyword.modifier
 ; `static` is the whole of what one node is, and `mut` of another.
 (lasting) @keyword.modifier

@@ -1,0 +1,21 @@
+※ pl4g-test: compile=error diag=6001
+
+※ A condition is pure whatever the function it belongs to may do.  One whose
+※ checking changed something could not be compiled out, and a build that
+※ compiled it out would run a different program -- so the purity rules are
+※ asked of the clause on its own, and the note says why.
+
+let counter: mut u8 = 0u8
+
+@[impure]
+fn step(a: u8) → u8 pre(bump(a) > 0u8):
+    a
+
+@[impure]
+fn bump(a: u8) → u8:
+    counter ← a
+    a
+
+@[startup, impure]
+fn main() → u6:
+    ⎕narrow(step(1u8), ⌜u6⌝) ?? 1u6

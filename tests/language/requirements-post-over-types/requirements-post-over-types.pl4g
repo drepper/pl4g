@@ -1,0 +1,11 @@
+※ pl4g-test: compile=error diag=4903
+
+※ A requirement is a fact about types and does not happen at a point in the
+※ call, so it belongs to `pre`.  A `post` is always a condition.
+
+fn total(a: T') → T' post(T' ⊞ T' → T'):
+    a
+
+@[startup]
+fn main() → u6:
+    ⎕narrow(total(3u8), ⌜u6⌝) ?? 1u6

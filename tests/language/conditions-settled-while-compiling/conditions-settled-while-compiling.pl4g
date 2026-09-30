@@ -1,0 +1,17 @@
+※ pl4g-test: compile=error diag=4918
+
+※ What the compiler can see is an error and what it cannot is a fault, which is
+※ the rule arithmetic already follows here.  A condition that comes to a
+※ constant falsehood would stop every call of the function, so the program is
+※ wrong where it is written rather than where it runs.
+※
+※ Two types compared is a question the compiler settles, and it keeps that
+※ reading inside a clause: a clause over values is what it is, and `⌜u8⌝` there
+※ is the type itself rather than a value standing in for one.
+
+fn step(a: u8) → u8 pre(⌜u8⌝ = ⌜u16⌝):
+    a
+
+@[startup]
+fn main() → u6:
+    ⎕narrow(step(1u8), ⌜u6⌝) ?? 1u6

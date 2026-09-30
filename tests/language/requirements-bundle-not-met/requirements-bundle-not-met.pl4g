@@ -1,0 +1,14 @@
+※ pl4g-test: compile=error diag=4900
+
+※ A bundle whose line the types do not meet reports three places: the line, in
+※ the bundle's own definition; the clause that applied the bundle; and the call
+※ whose types were asked about.
+
+bundle number(T'):  T' ⊞ T' → T'
+
+fn total(a: T', b: T') → T' pre(number(T')):
+    a ⊞ b
+
+@[startup]
+fn main() → u6:
+    ⎕narrow(total(true, false), ⌜u6⌝) ?? 1u6

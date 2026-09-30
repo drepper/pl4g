@@ -1020,6 +1020,7 @@ that diagnostics of one family stay numerically adjacent as they grow while unre
 | 4600-4699 | documentation comments |
 | 4700-4799 | collections, and what is taken out of them |
 | 4800-4899 | products and sums |
+| 4900-4999 | conditions on functions, and bundles |
 | 5000-5299 | control flow and returns |
 | 6000-6999 | purity, effects, aliasing and parallelization |
 | 7000-7499 | compile-time evaluation and reflection |

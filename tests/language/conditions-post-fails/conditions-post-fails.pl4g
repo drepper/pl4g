@@ -1,0 +1,14 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=90 diag=none
+
+※ A post-condition that does not hold is the **callee's** fault, whatever it
+※ was called with, which is why it has a number of its own.
+
+let one: u8 = 1u8
+
+@[inline(never)]
+fn same(a: u8) → u8 post(⎕answer > a):
+    a
+
+@[startup, impure]
+fn main() → u6:
+    ⎕narrow(same(one), ⌜u6⌝) ?? 1u6

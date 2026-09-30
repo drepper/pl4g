@@ -1,0 +1,16 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=6 diag=none
+
+※ A clause whose expression is over **types** is a requirement: nothing is
+※ evaluated, and what is asked is that the expression can be written.  A type
+※ parameter standing where a value would means "some value of this type", which
+※ the apostrophe is what marks.
+※
+※ The arrow says what the requirement answers, and a name nothing has settled
+※ is settled by it.
+
+fn total(a: T', b: T') → T' pre(T' ⊞ T' → T'):
+    a ⊞ b
+
+@[startup]
+fn main() → u6:
+    ⎕narrow(total(5u8, 1u8), ⌜u6⌝) ?? 1u6

@@ -316,6 +316,8 @@ class Parser:
             return self._parse_enum_definition(attrs, doc, doc_lines)
         if self._check(TokKind.KW_UNIT):
             return self._parse_unit_definition(doc, doc_lines)
+        if self._check(TokKind.KW_BUNDLE):
+            return self._parse_bundle(attrs, doc, doc_lines)
         self._diags.emit(D.LANG_FILESTRUCT_UNEXPECTED_TOPLEVEL, self._current.span,
                          construct=self._current.describe())
         raise _Bail()
@@ -520,21 +522,140 @@ class Parser:
             # what comes back is a collection whose entries may be written.
             writable = self._accept(TokKind.KW_MUT) is not None
             ret_type = _writable(self._parse_type_ref(), writable)
+        # What the function requires of its types and demands of its values, in
+        # the order written.  They stand between the header and the body because
+        # that is what they are about: a caller reads them off the signature.
+        clauses = self._parse_clauses()
         # A function with no body is the declaration of one defined somewhere
         # else.  What says there is none is that the *line ends* here: a body
         # begins with a colon or a brace, and anything else after the header is
         # neither a body nor the end of one -- which is the error it already
         # was and stays.
         if self._check(TokKind.NEWLINE) or self._check(TokKind.EOF):
-            end = ret_type.span if ret_type is not None else name_token.span
+            end = clauses[-1].span if clauses \
+                else ret_type.span if ret_type is not None else name_token.span
             return ast.FuncDef(span=start.to(end), name=name_token.text,
                                name_span=name_token.span, params=params,
-                               ret_type=ret_type, body=None, attrs=attrs,
-                               doc=doc, doc_lines=doc_lines)
+                               ret_type=ret_type, body=None, clauses=clauses,
+                               attrs=attrs, doc=doc, doc_lines=doc_lines)
         body = self._parse_body()
         return ast.FuncDef(span=start.to(body.span), name=name_token.text,
                            name_span=name_token.span, params=params,
-                           ret_type=ret_type, body=body, attrs=attrs, doc=doc, doc_lines=doc_lines)
+                           ret_type=ret_type, body=body, clauses=clauses,
+                           attrs=attrs, doc=doc, doc_lines=doc_lines)
+
+    #: The two words that begin a clause, and which of the two places in a call
+    #: each speaks about.
+    _CLAUSE_WORDS: Final[dict[TokKind, ast.ClauseKind]] = {
+        TokKind.KW_PRE: ast.ClauseKind.PRE,
+        TokKind.KW_POST: ast.ClauseKind.POST,
+    }
+
+    def _parse_clauses(self) -> tuple[ast.Clause, ...]:
+        """Parse the `pre` and `post` clauses of a signature, however many.
+
+        One expression per clause and as many clauses as are written: a function
+        with several things to say says them separately, so that a failure points
+        at the clause that failed rather than at a list holding it.  They are on
+        the header's line, a newline there being what says a function has no
+        body.
+        """
+        found: list[ast.Clause] = []
+        while (kind := self._CLAUSE_WORDS.get(self._current.kind)) is not None:
+            found.append(self._parse_clause(kind))
+        return tuple(found)
+
+    def _parse_clause(self, kind: ast.ClauseKind) -> ast.Clause:
+        """Parse one `pre(EXPR)` or `post(EXPR)`, with the arrow if it has one."""
+        start = self._advance().span
+        self._expect(TokKind.LPAREN)
+        expr, answers = self._parse_requirement()
+        end = self._expect(TokKind.RPAREN, D.LANG_SYNTAX_EXPECTED_CLOSING_PAREN)
+        return ast.Clause(span=start.to(end.span), kind=kind, expr=expr,
+                          answers=answers)
+
+    def _parse_requirement(self) -> tuple[ast.Expr, ast.TypeExpr | None]:
+        """Parse an expression and the type an arrow after it names.
+
+        The arrow's right-hand side is a *type* and not an expression -- what a
+        requirement answers is written the way every other type in the language
+        is -- so `→ E' ?` says a result of `E'` and needs nothing new to say it.
+        """
+        expr = self._parse_expression()
+        if self._accept(TokKind.ARROW) is None:
+            return expr, None
+        return expr, self._parse_type_ref()
+
+    def _parse_bundle(self, attrs: tuple[ast.Attribute, ...],
+                      doc: str | None,
+                      doc_lines: tuple[Span, ...] = ()) -> ast.BundleDef:
+        """Parse ``bundle NAME(T', ...)`` and the requirements it stands for."""
+        start = self._expect(TokKind.KW_BUNDLE).span
+        name_token = self._expect(TokKind.IDENT)
+        self._expect(TokKind.LPAREN)
+        names: list[str] = []
+        places: list[Span] = []
+        while True:
+            written = self._expect(TokKind.IDENT)
+            names.append(written.text)
+            places.append(written.span)
+            if self._accept(TokKind.COMMA) is None:
+                break
+        self._expect(TokKind.RPAREN, D.LANG_SYNTAX_EXPECTED_CLOSING_PAREN)
+        clauses, end = self._parse_bundle_body()
+        return ast.BundleDef(span=start.to(end), name=name_token.text,
+                             name_span=name_token.span, params=tuple(names),
+                             param_spans=tuple(places), clauses=clauses,
+                             attrs=attrs, doc=doc, doc_lines=doc_lines)
+
+    def _parse_bundle_body(self) -> tuple[tuple[ast.Clause, ...], Span]:
+        """Parse the requirements of a bundle, in either notation.
+
+        Everything in a bundle is a requirement, so no line carries a keyword
+        saying so; what separates the lines is what separates statements
+        everywhere -- a line, a `;`, or braces -- which is why a bundle's body
+        needs no notation of its own.
+        """
+        if self._check(TokKind.LBRACE):
+            start = self._advance().span
+            found = self._parse_bundle_run()
+            end = self._current.span
+            self._expect(TokKind.RBRACE)
+            return tuple(found), start.to(end)
+        start = self._expect(TokKind.COLON, D.LANG_FUNCDEF_EXPECTED_BLOCK).span
+        if not self._check(TokKind.NEWLINE):
+            found = self._parse_bundle_run()
+            return tuple(found), start.to(self._current.span)
+        self._expect(TokKind.NEWLINE)
+        self._expect(TokKind.INDENT)
+        found = []
+        while not self._check(TokKind.DEDENT) and not self._check(TokKind.EOF):
+            self._skip_newlines()
+            if self._check(TokKind.DEDENT) or self._check(TokKind.EOF):
+                break
+            found.extend(self._parse_bundle_run())
+            if self._check(TokKind.DEDENT) or self._check(TokKind.EOF):
+                continue
+            self._expect(TokKind.NEWLINE)
+        end = self._current.span
+        self._accept(TokKind.DEDENT)
+        return tuple(found), start.to(end)
+
+    def _parse_bundle_run(self) -> list[ast.Clause]:
+        """Parse the requirements a run of semicolons separates."""
+        found = [self._parse_bundle_clause()]
+        while self._accept(TokKind.SEMICOLON) is not None:
+            if self._check_any(self._ENDS_A_RUN):
+                break
+            found.append(self._parse_bundle_clause())
+        return found
+
+    def _parse_bundle_clause(self) -> ast.Clause:
+        """Parse one line of a bundle, which is a requirement with no keyword."""
+        expr, answers = self._parse_requirement()
+        end = answers.span if answers is not None else expr.span
+        return ast.Clause(span=expr.span.to(end), kind=ast.ClauseKind.PRE,
+                          expr=expr, answers=answers)
 
     def _parse_type_ref(self) -> ast.TypeExpr:
         """Parse a type, which may be a collection written the way a value is.

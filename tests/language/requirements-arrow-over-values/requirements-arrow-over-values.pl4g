@@ -1,0 +1,13 @@
+※ pl4g-test: compile=error diag=4902
+
+※ The arrow says what an expression *would* answer, which is a question about a
+※ requirement.  A clause over values is a condition: the call in it happens,
+※ and the type a value has is read off the parameter list, so there is nothing
+※ here for the arrow to name.
+
+fn total(a: u8) → u8 pre(a ⊞ a → u8):
+    a
+
+@[startup]
+fn main() → u6:
+    ⎕narrow(total(3u8), ⌜u6⌝) ?? 1u6
