@@ -1,0 +1,21 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+※ pl4g-test: args --conditions=ignore
+
+※ `--conditions=ignore` emits no check at all, so the same program that exits 89
+※ with the default semantic runs through and answers.
+※
+※ What a build turns off is the check and not the checking: the clause is still
+※ read, still has to be a `bool`, still has to be pure, and its names still have
+※ to mean something.  So a build with conditions off accepts exactly the
+※ programs a build with them on accepts, which is the one property that makes
+※ the switch safe to have -- nothing compiles only because the checks were off.
+
+let zero: u8 = 0u8
+
+@[inline(never)]
+fn twice(a: u8) → u8 pre(a > 0u8) post(⎕answer > a):
+    a ⊞ a
+
+@[startup, impure]
+fn main() → u6:
+    ⎕narrow(twice(zero), ⌜u6⌝) ?? 1u6

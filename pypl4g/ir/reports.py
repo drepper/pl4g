@@ -50,6 +50,10 @@ class ReportKind(StrEnum):
     #: A condition the compiler settled, so that nothing of it reaches the
     #: binary.  A reader who wrote one wants to know it was free.
     CONDITION_HOLDS = "condition-holds"
+    #: A condition this build asked not to emit.  One entry per clause, so that
+    #: "which checks are in this binary" is a question the log answers rather
+    #: than one a reader works out from the command line.
+    CONDITION_DROPPED = "condition-dropped"
     #: A name a lambda brought in that its capture list did not write down,
     #: which is what `[=]` and `[&]` leave to the compiler.  One entry per
     #: name, so that "which variables were brought in" is a question the log

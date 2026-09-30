@@ -1,4 +1,5 @@
-※ pl4g-test: compile=error diag=4902
+※ pl4g-test: compile=error
+※ pl4g-test: expect-diag 4902 LANG_CLAUSE_ARROW_OVER_VALUES
 
 ※ The arrow says what an expression *would* answer, which is a question about a
 ※ requirement.  A clause over values is a condition: the call in it happens,

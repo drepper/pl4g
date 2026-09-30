@@ -1,0 +1,14 @@
+※ pl4g-test: compile=error
+※ pl4g-test: expect-diag 4920 LANG_ENTRY_TAKES_A_PARAMETER
+
+※ One name and nothing else.  An expression would have to be worked out at
+※ entry and its answer carried through the body, which is the cost an `old` has
+※ and this does not -- so what may be written is the thing that is already
+※ there.
+
+fn step(a: u8) → u8 post(⎕entry(a ⊞ a) > 0u8):
+    a
+
+@[startup]
+fn main() → u6:
+    ⎕narrow(step(1u8), ⌜u6⌝) ?? 1u6

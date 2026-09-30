@@ -70,6 +70,20 @@
       "help": "the microarchitecture level the generated program may use; x86-64 has v1 to v4 and uses v4 unless this says otherwise"
     },
     {
+      "short": null,
+      "long": "--conditions",
+      "arg": "joined_equals",
+      "metavar": "SEMANTIC",
+      "values": [
+        "check",
+        "ignore",
+        "observe"
+      ],
+      "default": "check",
+      "since": "0.1",
+      "help": "what a condition written in a signature does: stop the program where it does not hold, emit nothing at all, or say so and go on"
+    },
+    {
       "short": "-O",
       "long": null,
       "arg": "joined",

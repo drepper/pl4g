@@ -7753,6 +7753,63 @@
       "option": null
     },
     {
+      "number": 4919,
+      "name": "LANG_ENTRY_OUTSIDE_POST",
+      "severity": "error",
+      "message": "'⎕entry' outside a 'post' clause",
+      "cause": "What a parameter held at entry is worth naming only where it might since have changed, which is after the body has run.  A 'pre' is checked before any of it has, so there the name and the value at entry are the same thing and there is nothing for this to say; anywhere else in the program a parameter is what it is.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition / Conditions",
+        "requirement": "'⎕entry' may be written only in a 'post' clause."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4920,
+      "name": "LANG_ENTRY_TAKES_A_PARAMETER",
+      "severity": "error",
+      "message": "'⎕entry' takes the name of a parameter",
+      "cause": "One name and nothing else: not an expression, and not a local of the body.  A parameter's value at entry is already there to be named -- it is what arrived -- so naming one costs nothing but keeping it alive, where an expression would have to be worked out at entry and its answer carried through the body.  That is the cost an 'old' over an arbitrary expression has and this does not.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition / Conditions",
+        "requirement": "'⎕entry' takes one argument, which is the name of a parameter."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4921,
+      "name": "LANG_ENTRY_NOT_A_PARAMETER",
+      "severity": "error",
+      "message": "'{name}' is not a parameter of '{function}'",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the name that was written"
+        },
+        {
+          "name": "function",
+          "type": "string",
+          "description": "the function"
+        }
+      ],
+      "cause": "What is written between the brackets has to be one of the function's own parameters.  A local of the body has no value at entry -- the body had not run -- and a variable at the top level is not the call's to speak about.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition / Conditions",
+        "requirement": "'⎕entry' names a parameter of the function it is written in."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 5001,
       "name": "LANG_STMT_UNREACHABLE",
       "severity": "warning",

@@ -50,7 +50,7 @@ from ..saturate import (DIVISION, EXTREMA, NAMES, SATURATING, TRAPPING,
 from . import ops as rvops
 from ...ir.function import DEFAULT_CCONV, SYSTEM_CCONV
 from .abi import lookup as lookup_cconv
-from .startup import ABORT_SYMBOL, SYSCALLS
+from .startup import ABORT_SYMBOL, REPORT_SYMBOL, SYSCALLS
 from .opcodes import IMM12_MAX, IMM12_MIN, RISCV_INSTRS
 from .regs import FPR, GPR, INFO, RA, SP, ZERO
 
@@ -1046,6 +1046,33 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
             #: it to a person; the number is what a caller reads.
             self.status = status
 
+        def observed(self, asm: Assembler, span: Span) -> None:
+            """Report the fault and come back, for a build that observes.
+
+            The same message through the same write, and then a return: a
+            condition a build chose to observe is something to say and not
+            something to stop for, there being the rest of the run to see.  It is
+            the helper a failing test says so through, which wants exactly this.
+
+            The call is given everything the convention lets it destroy, unlike
+            the one below: that one does not come back, so what it destroys never
+            matters, and this one does.  A build that observes therefore pays for
+            spilling around every observed check, which is the right way round --
+            it is the semantic a reader asked for and not the one a program
+            ships with.
+            """
+            if messages is None:
+                raise UnsupportedOperation(
+                    "an operation that can fault, with nowhere to report it", None)
+            symbol = messages.symbol(self.text)
+            first, second = lookup_cconv(SYSTEM_CCONV).int_arg_regs[:2]
+            asm.address(first, symbol, span)
+            asm.loadreg(second, asm.imm(len(self.text.encode("utf-8")), 32,
+                                        signed=False), span)
+            asm.call(REPORT_SYMBOL, span,
+                     destroyed_by(None, lookup_cconv(SYSTEM_CCONV), registers,
+                                  None))
+
         def out_of_range(self, asm: Assembler, span: Span) -> None:
             """Report the fault and stop; this does not come back."""
             if messages is None:
@@ -1140,7 +1167,11 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                     asm.branch(Condition.NE,
                                operands.in_register(inst.operands[0], inst.span),
                                ZERO_IMMEDIATE, holds, inst.span)
-                    _Fault(inst.what, inst.span, inst.status).out_of_range(asm, span)
+                    told = _Fault(inst.what, inst.span, inst.status)
+                    if inst.observing:
+                        told.observed(asm, span)
+                    else:
+                        told.out_of_range(asm, span)
                     asm.block(holds)
                 case MemStartInst():
                     # Memory is not held in a register; the token exists to

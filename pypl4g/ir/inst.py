@@ -593,27 +593,36 @@ class AssertInst(Instruction):
     part of the read it belongs to.
     """
 
-    __slots__ = ("what", "status")
+    __slots__ = ("what", "status", "observing")
 
     def __init__(self, condition: Value, what: str, status: int,
-                 span: Span = INVALID_SPAN) -> None:
+                 span: Span = INVALID_SPAN, observing: bool = False) -> None:
         super().__init__(VOID, (condition,), span)
         self.what = what
         #: Which kind of stop this is, as the number the program exits with.
         #: The message says it better, and a message is for a person: the
         #: number is what a caller reads.
         self.status = status
+        #: Whether the program goes on afterwards.  It does not, for everything
+        #: the language itself checks: an index outside its array has no answer
+        #: to carry on with.  A condition written in a signature may be built to
+        #: *observe* instead -- say so and go on -- which is a build that wants
+        #: every violation of a run rather than the first, exactly as the run of
+        #: a binary's tests does.  The status is then what the program would have
+        #: exited with and is carried for the message's sake.
+        self.observing = observing
 
     @property
     def has_effects(self) -> bool:
         """Whether the program goes on is what it decides, so it is never
-        dropped for having no result."""
+        dropped for having no result.  An observing one writes, which is an
+        effect of its own."""
         return True
 
     @property
     def opcode(self) -> str:
         """The mnemonic used in the textual form."""
-        return "assert"
+        return "observe" if self.observing else "assert"
 
 
 class MemStartInst(Instruction):

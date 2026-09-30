@@ -1,0 +1,17 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=90 diag=none
+
+※ The same function with `a` written for `⎕entry(a)`, which is a different
+※ question and a false one: the name stands for what the parameter is at the
+※ return, so `⎕answer > a` asks whether six is more than six.
+※
+※ That the two differ is the whole reason `⎕entry` exists, and it is what this
+※ pair of tests is for.
+
+@[inline(never)]
+fn bump(a: mut u8) → u8 post(⎕answer > a):
+    a ← a ⊞ 1u8
+    a
+
+@[startup]
+fn main() → u6:
+    ⎕narrow(bump(5u8), ⌜u6⌝) ?? 1u6

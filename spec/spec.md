@@ -4623,6 +4623,32 @@ fn twice(a: u8) → u8 pre(a > 0u8) post(⎕answer > a):
     a ⊞ a
 ```
 
+**`⎕entry(NAME)` is what a parameter held when the function was entered**, which a post-condition needs where the body has
+bound the name to something else since:
+
+```
+fn bump(a: mut u8) → u8 post(⎕answer > ⎕entry(a)):
+    a ← a ⊞ 1u8
+    a
+```
+
+Written `a` instead, that post-condition asks whether six is more than six and does not hold: the name stands for what the
+parameter is at the return.
+
+**Nothing is copied for it.**  A parameter arrives in the entry block, and a name bound to something else does not disturb the
+value that arrived -- so `⎕entry` names a value the function already has.  What it costs is keeping that value alive to the
+return, which the register allocator prices like any other live range.
+
+**It takes the name of a parameter and nothing else** (4920, 4921): not an expression, not a local of the body, not a variable at
+the top level.  An expression would have to be worked out at entry and its answer carried through the body, which is the cost
+Eiffel's `old` has and this does not -- so what may be written is the thing that is already there.  **It may be written only in a
+`post`** (4919): a `pre` is checked before any of the body has run, so there the name and the value at entry are the same thing.
+
+Compare: **Eiffel**'s `old`, which takes an expression and copies what it answers; **D**'s `out` blocks, which have no `old` at
+all and so cannot say this; **C++**'s contracts proposals, whose `@pre` and `old` have been through several spellings for the same
+reason this one is restricted -- what to copy and who pays for it is the whole of the question.  Restricting it to a parameter is
+what makes the answer "nobody".
+
 **In the callee and not at the call.**  A check there that fails already names the function and, through the stack walk, who
 called it -- so what a check at every call site would buy is had for nothing, and there is one copy of the code.  `⎕answer` may be
 written only in a `post` (4908): there is nothing yet for it to stand for when a `pre` is checked.
@@ -4639,6 +4665,46 @@ a written-out condition free wherever the compiler can see it holds -- but it is
 a diagnostic about the language.
 
 **A `pre` that does not hold exits 89 and a `post` 90**, two numbers because they have two culprits.
+
+###### What a build does about a condition
+
+**`--conditions=SEMANTIC` says what a condition does in this build**, and a clause says what must be true.  Three semantics:
+
+| Written | What a condition does |
+|---|---|
+| `--conditions=check` | evaluate it and stop the program where it does not hold.  The default, and what a program ships with |
+| `--conditions=ignore` | evaluate nothing and emit nothing |
+| `--conditions=observe` | evaluate it, say so where it does not hold, and go on |
+
+**A requirement is not among them.**  It is what makes the program type-check, so it is never evaluated and never removable, and
+a build that could turn one off would be a build in which a different program compiles.  The switch is the condition half only.
+
+**Nothing compiles only because the checks are off.**  Every semantic asks the same questions of the clause -- that it is a
+`bool`, that it is pure, that its names mean something, that only a `post` may write `⎕answer` -- and what differs is what
+reaches the binary.  That is the one property that makes the switch safe to have, and it is where **Python**'s `assert` went
+wrong: removable enough that nobody could rely on it, so everybody wrote `if not x: raise` instead and the feature died.
+
+**`observe` is for a run that reports everything**, which is what the run of a binary's own tests already does and for the same
+reason: a run that ended at the first failure would make a reader fix one thing and run again to be told the next.  It costs more
+than the write.  The helper it calls comes back, so the call destroys what the convention lets it destroy and the register
+allocator keeps nothing live across it -- where the stopping path calls something that never returns and so costs nothing to call.
+A build that observes is a build that asked for that.
+
+**Which conditions this build left out is in the report log** (`condition-dropped`), one entry per clause, so that "which checks
+are in this binary" is a question the log answers rather than one a reader works out from the command line that made it.  A
+condition the compiler settled is there too (`condition-holds`).
+
+**There is no `assume`.**  The C++ papers have a fourth semantic: evaluate nothing and let the compiler act as though the
+condition held.  It is the only one of the four that can make a program go wrong silently, and this language has no undefined
+behaviour anywhere else -- a program that cannot answer stops and says so.  Adding a build flag that introduces it is a larger
+decision than choosing what to do about a check, and nothing about the three above forecloses it.
+
+Compare: **g++**'s `-fcontract-evaluation-semantic`, which this is, with the same three of its four semantics and without the
+levels -- `default`, `audit` and `axiom` are a second axis, and a clause here has no way to say which level it is on.  **Eiffel**
+has assertion monitoring levels set per class in the configuration file rather than on the compiler's command line.  **D** compiles
+`in` and `out` blocks out with `-release`, which is one switch for contracts, bounds checks and asserts together -- three things a
+build may want to decide separately.  **Rust** asks per call site instead, `assert!` against `debug_assert!`, which puts the
+decision in the program where a build cannot revisit it.
 
 ###### A requirement
 

@@ -44,6 +44,22 @@ def run_by(module: Module) -> list[Function]:
             if one.attrs.special is SpecialKind.TEST_ALWAYS]
 
 
+def observes(module: Module) -> bool:
+    """Whether anything in the module reports and goes on.
+
+    The helper that writes and returns is emitted where something uses it, and
+    two things do: a test that did not pass, and a condition a build chose to
+    observe rather than stop for.  Asked of the instructions rather than of the
+    options, so that a module reaching the backend from anywhere carries what it
+    needs.
+    """
+    from ..ir.inst import AssertInst
+
+    return any(isinstance(inst, AssertInst) and inst.observing
+               for func in module.functions.values()
+               for block in func.blocks for inst in block.insts)
+
+
 def failures_of(module: Module, messages: Messages) -> dict[int, Failure]:
     """The message each test reports if it fails, by the test's identity.
 

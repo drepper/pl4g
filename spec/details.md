@@ -1202,6 +1202,37 @@ session:
   is `add x22, sp, #0`.  Written as a move it assembled cleanly and set the
   register to nought.
 
+What a build does about a condition
+----------------------------------
+
+`--conditions=check|ignore|observe`, which is g++'s `-fcontract-evaluation-semantic` and is where the implementation of it is
+worth writing down.  The three are decided in the **checker** and not in the backend: `ignore` emits no `AssertInst`, `observe`
+emits one with a flag on it, and `check` emits the same one every other check of the language uses.  So nothing downstream has to
+know what the command line said -- a module reaching a backend from anywhere carries what it needs, and `observes(module)` asks the
+instructions rather than the options.
+
+**The observing path reuses the helper a failing test says so through.**  `__pl4g_report` writes and returns, which is what
+`observe` needs and is why nothing new had to be written for it.  Two things had to change around it:
+
+- **It is emitted where anything observes** and not only where a test runs, which is one condition in three `target.py` files.
+- **The call is given a clobber list.**  The stopping path calls `__pl4g_abort` with none, which is correct because that call never
+  comes back: what it destroys can never be read.  An observing call *does* come back, so it is given everything the convention
+  lets a call destroy -- through the same `destroyed_by` the ordinary call path uses -- and the register allocator keeps nothing
+  live across it.  A build that observes therefore spills around every observed check.  That is the right way round: it is the
+  semantic a reader asked for and not the one a program ships with.  Getting it wrong would be a silent miscompile, which is what
+  one of the language tests exists to catch -- a value live across an observed check, read twice after it, on all three targets.
+
+**`⎕entry` needed nothing at the machine level.**  A parameter's value at entry is the entry block's parameter, which SSA already
+keeps: a body that binds the name to something else does not disturb it, and a body that takes a reference to the parameter gets
+storage for the *name* while the value that arrived stays what it was.  So the checker records what arrived, `⎕entry(a)` answers
+that value, and what it costs is one live range the allocator prices like any other.  Nothing is copied and nothing is stored,
+which is what restricting it to a parameter's name buys.
+
+**The purity note had to learn a family.**  A condition is lowered with the purity rules in force whatever the function may do,
+and the note saying why was hung on every error raised while that lasted -- so a misspelled `⎕entry` in a clause was told that it
+was a condition and might be compiled out, which answers a question nobody asked.  `DiagEngine.because` now takes the errors the
+note belongs to, and the note is hung on those four and no others.
+
 What a program is built for
 ---------------------------
 

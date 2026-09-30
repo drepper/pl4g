@@ -236,10 +236,13 @@ class IRBuilder:
             FrameInst(held, self._module.types.ptr_type(held, mutable=True), span))
 
     def check(self, condition: Value, what: str, status: int,
-              span: Span = INVALID_SPAN) -> Value:
+              span: Span = INVALID_SPAN, observing: bool = False) -> Value:
         """Append a check that stops the program where it does not hold, with
-        *status* saying which kind of stop it is."""
-        return self._append(AssertInst(condition, what, status, span))
+        *status* saying which kind of stop it is.
+
+        An observing one says so and goes on instead, which is what a build that
+        wants every violation of a run asks for."""
+        return self._append(AssertInst(condition, what, status, span, observing))
 
     def address(self, var: Value, span: Span = INVALID_SPAN) -> Value:
         """Append the taking of a variable's address into a register."""

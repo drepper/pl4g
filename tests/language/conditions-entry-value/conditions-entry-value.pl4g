@@ -1,0 +1,20 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=6 diag=none
+
+※ `⎕entry(NAME)` in a post-condition is what a parameter held when the function
+※ was entered, which is what a post-condition about a parameter the body has
+※ since bound to something else needs.
+※
+※ Nothing is copied for it: a parameter arrives in the entry block, and a name
+※ bound to something else does not disturb the value that arrived.  What it
+※ costs is keeping that value alive to the return, which the register allocator
+※ prices like any other live range -- and which is the whole difference between
+※ this and an `old` over an arbitrary expression.
+
+@[inline(never)]
+fn bump(a: mut u8) → u8 post(⎕answer > ⎕entry(a)):
+    a ← a ⊞ 1u8
+    a
+
+@[startup]
+fn main() → u6:
+    ⎕narrow(bump(5u8), ⌜u6⌝) ?? 1u6

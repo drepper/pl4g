@@ -370,7 +370,8 @@ is precisely the distinction the numbers exist for.
 
 ### The typing half is not removable
 
-A build may want conditions compiled out; every language that has them offers it.
+A build may want conditions compiled out; every language that has them offers it,
+and `--conditions=ignore` is how this one does.
 The two readings come apart exactly here: **a requirement is not there to remove**,
 being what makes the program type-check and lowering to nothing anyway, and **a
 condition always is**, being what makes it stop.  That the one notation separates
@@ -670,9 +671,12 @@ reading of the same clause -- which is the same shape of argument as layer 3.
 What it does not decide
 -----------------------
 
-- **Old values.**  `post(count = ⎕old(count) + 1u8)` wants the state at entry,
-  which is a copy the caller cannot see the cost of.  Nothing here proposes it,
-  and a post-condition on an impure function is correspondingly weak.
+- **Old values.**  *Half of this is now decided.*  `⎕entry(NAME)` is a parameter's
+  value at entry, which costs nothing -- a parameter arrives in the entry block
+  and SSA keeps it, so nothing is copied.  What is still open is `⎕old` over an
+  arbitrary *expression*, which does want a copy the caller cannot see the cost
+  of; and a post-condition on an impure function is correspondingly weak whatever
+  it can name.
 - **Quantifiers.**  `pre(every i: xs⟦i⟧ > 0u8)` is what a condition over a
   collection wants and is a loop in a signature.  It is where this feature stops
   being cheap.
@@ -723,7 +727,10 @@ top of the function, by convention, and nothing a caller can read.
 **Rust** has `debug_assert!` and traits, which is again the two halves apart; its
 contracts remain a proposal and its `where` clauses are C3 only.  What Rust has
 that bears on this is the removability question: `debug_assert!` is compiled out
-and `assert!` is not, and the language asks the programmer which every time.
+and `assert!` is not, and the language asks the programmer which every time.  This
+language asks the *build* instead, with `--conditions=`, which is g++'s
+`-fcontract-evaluation-semantic` and is what a decision per build rather than per
+call site looks like.
 
 **Odin** has no contracts and a `when` clause on polymorphic procedures, which is
 C3 as a compile-time predicate -- D's answer without D's contracts.

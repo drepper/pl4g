@@ -28,6 +28,11 @@ ASSIGN = "\N{LEFTWARDS ARROW}"
 NE = "\N{NOT EQUAL TO}"
 OR = "\N{LOGICAL OR}"
 LIFETIME = "\N{WHITE HOURGLASS}"
+ANSWER = "\N{APL FUNCTIONAL SYMBOL QUAD}answer"
+SAT_ADD = "\N{SQUARED PLUS}"
+NARROW = "\N{APL FUNCTIONAL SYMBOL QUAD}narrow"
+LIFT_OPEN = "\N{TOP LEFT CORNER}"
+LIFT_CLOSE = "\N{TOP RIGHT CORNER}"
 
 
 #: The kinds that are something the compiler said rather than something it
@@ -231,3 +236,82 @@ def test_every_report_says_why() -> None:
         "    if f(1u8) ", NE, " 2u8:\n        1u6\n    else:\n        0u6\n")))
     assert module.reports.entries != []
     assert all(d.reason for d in module.reports.entries)
+
+
+def _with_conditions(source: str, semantic: object) -> Module:
+    """Check *source* whole under one condition semantic, and answer the module."""
+    from pypl4g.sema.clauses import Conditions
+
+    assert isinstance(semantic, Conditions)
+    sources = SourceManager()
+    unit_source = sources.add(Path("t.pl4g"), source)
+    engine, collected = collecting_engine(None)
+    unit = parse(tokenize(unit_source, engine), "t.pl4g", engine)
+    module = Module("t")
+    check(module, [unit], engine, ModuleRegistry(), sources, conditions=semantic)
+    assert [d.info.name for d in collected if d.info.severity == "error"] == []
+    return module
+
+
+#: A function with one condition of each kind, and a call of it.
+_TWO_CONDITIONS: Final[str] = "".join((
+    "fn twice(a: u8) ", ARROW, " u8 pre(a > 0u8) post(", ANSWER, " > a):\n",
+    "    a ", SAT_ADD, " a\n\n",
+    "@[startup]\nfn main() ", ARROW, " u6:\n",
+    "    ", NARROW, "(twice(1u8), ", LIFT_OPEN, "u6", LIFT_CLOSE, ") ?? 1u6\n"))
+
+
+def test_which_conditions_this_build_left_out_is_recorded() -> None:
+    """One entry per clause, so that "which checks are in this binary" is a
+    question the log answers rather than one a reader works out from the command
+    line that made it."""
+    from pypl4g.ir.inst import AssertInst
+    from pypl4g.sema.clauses import Conditions
+
+    module = _with_conditions(_TWO_CONDITIONS, Conditions.IGNORE)
+    dropped = module.reports.of_kind(ReportKind.CONDITION_DROPPED)
+    assert [d.subject for d in dropped] == ["twice", "twice"]
+    assert all(d.span.is_valid for d in dropped), \
+        "a reader has to be able to be pointed at the clause"
+    assert not any(isinstance(inst, AssertInst)
+                   for func in module.functions.values()
+                   for block in func.blocks for inst in block.insts), \
+        "what a build turns off is the check, so none of them is emitted"
+
+
+def test_an_observed_condition_is_a_check_that_comes_back() -> None:
+    """The same clauses, emitted, with the flag that says the program goes on.
+
+    Which of the two it is belongs to the instruction and not to the backend: a
+    module reaching a backend from anywhere carries what it needs, and the helper
+    that writes and returns is emitted where something uses it.
+    """
+    from pypl4g.ir.inst import AssertInst
+    from pypl4g.sema.clauses import Conditions
+    from pypl4g.target.tests import observes
+
+    module = _with_conditions(_TWO_CONDITIONS, Conditions.OBSERVE)
+    checks = [inst for func in module.functions.values()
+              for block in func.blocks for inst in block.insts
+              if isinstance(inst, AssertInst)]
+    assert len(checks) == 2 and all(one.observing for one in checks)
+    assert [one.opcode for one in checks] == ["observe", "observe"], \
+        "the textual form says which it is"
+    assert observes(module), "the backend asks the instructions, not the options"
+    assert not module.reports.of_kind(ReportKind.CONDITION_DROPPED)
+
+
+def test_the_default_build_stops_the_program() -> None:
+    """Nothing said means the checks are there and they stop, which is what a
+    program ships with."""
+    from pypl4g.ir.inst import AssertInst
+    from pypl4g.target.tests import observes
+
+    from pypl4g.sema.clauses import Conditions
+
+    module = _with_conditions(_TWO_CONDITIONS, Conditions.CHECK)
+    checks = [inst for func in module.functions.values()
+              for block in func.blocks for inst in block.insts
+              if isinstance(inst, AssertInst)]
+    assert len(checks) == 2 and not any(one.observing for one in checks)
+    assert not observes(module)

@@ -108,6 +108,14 @@ To Do List for the PL4g language
     will emit.  A bundle names a set of requirements and is asked for by applying it in a clause; `needs` does not exist.  A
     condition the checker settles is an error where it cannot hold and free where it must, and the folder drops a check that folded
     to a truth.  Eight refusals, seventeen language tests, two optimizer tests.
+    `⎕entry(NAME)` in a `post` is what a parameter held at entry, for a condition about a parameter the body has since bound to
+    something else.  It takes a parameter's name and nothing else, which is what makes it free: a parameter arrives in the entry
+    block and SSA keeps it, so nothing is copied and what it costs is one live range.  `--conditions=check|ignore|observe` is what
+    a build does about a condition, which is g++'s `-fcontract-evaluation-semantic`; a requirement is not among the choices, and
+    every semantic asks the same questions of the clause, so nothing compiles only because the checks are off.
+    Left over: `⎕old` over an arbitrary expression, which wants a copy and a decision about who sees its cost; `assume` as a fourth
+    semantic, which is the only one that can make a program go wrong silently and which this language has nothing like anywhere
+    else; levels on a clause, g++'s `default`/`audit`/`axiom`, which are a second axis and want an attribute on a clause.
     Left over: a compilation error for a condition the *optimizer* sees cannot hold -- the optimizer has no channel for a
     diagnostic about the language, so only what the checker settles is reported, which is a literal falsehood, a question about
     types, and what the checker folds.  That wants a diagnostics channel in the pass manager and is a compiler entry, not a

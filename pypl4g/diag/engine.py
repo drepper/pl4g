@@ -127,7 +127,8 @@ class DiagEngine:
         #: Notes to hang on every error raised just now, innermost last.  What
         #: it is for is a thing compiled because something else asked for it:
         #: the message points at what is wrong and this says what asked.
-        self._because: list[tuple[DiagID, Span, dict[str, object]]] = []
+        self._because: list[tuple[DiagID, Span, dict[str, object],
+                                  frozenset[DiagID] | None]] = []
         self.warning_count: int = 0
         #: The expectations in force, innermost last.
         self._expectations: list[Expectation] = []
@@ -205,7 +206,13 @@ class DiagEngine:
             # and what is wrong with it is only wrong for what was asked.  The
             # note says what asked, which is the thing a reader cannot see from
             # where the message points.
-            for ident_of, span_of, args_of in self._because:
+            for ident_of, span_of, args_of, family in self._because:
+                if family is not None and ident not in family:
+                    # A note for one family of errors and not for every error
+                    # raised while it is in force.  What it says is true of that
+                    # family, and hanging it on an unrelated message would be
+                    # explaining something the reader did not ask about.
+                    continue
                 note = self.make(ident_of, span_of, **args_of)
                 diag.notes.append(note)
         if info.severity == "warning" and not self._control.is_enabled(info):
@@ -241,6 +248,7 @@ class DiagEngine:
                        diag.text, diag.info.number, diag.span)
 
     def because(self, ident: DiagID, span: Span,
+                family: frozenset[DiagID] | None = None,
                 **args: object) -> object:
         """Hang a note on every error raised until this is given back.
 
@@ -248,8 +256,14 @@ class DiagEngine:
         a generic function instantiated by a call -- so that what is wrong with
         it says what asked, which is the one thing a reader cannot see from
         where the message points.
+
+        *family* narrows it to the errors it names, for a note that explains one
+        family of mistakes rather than the context of all of them: a rule that
+        holds of a condition's purity says nothing useful about a condition's
+        spelling, and a note is only worth having where it answers the question
+        the message raises.
         """
-        self._because.append((ident, span, dict(args)))
+        self._because.append((ident, span, dict(args), family))
         return len(self._because)
 
     def and_no_longer(self, mark: object) -> None:

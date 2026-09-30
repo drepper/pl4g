@@ -1,4 +1,5 @@
-※ pl4g-test: compile=error diag=4913
+※ pl4g-test: compile=error
+※ pl4g-test: expect-diag 4913 LANG_BUNDLE_CYCLE
 
 ※ A bundle may apply another, which is how one is written in terms of another.
 ※ A cycle among them has no meaning -- expanding it would not end -- and it is

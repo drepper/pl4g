@@ -1,0 +1,21 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=14 diag=none
+※ pl4g-test: args --conditions=observe
+
+※ An observing check calls a helper that comes *back*, unlike the stopping one,
+※ so the call destroys what the convention lets it destroy and the register
+※ allocator has to keep nothing live across it.
+※
+※ `b` is live across the check and is read twice after it, so a build that got
+※ the clobber list wrong would answer something other than fourteen.  That is
+※ what this test is for, and it is why it runs on all three targets.
+
+let zero: u8 = 0u8
+let seven: u8 = 7u8
+
+@[inline(never)]
+fn twice(a: u8, b: u8) → u8 pre(a > 0u8):
+    a ⊞ b ⊞ b
+
+@[startup, impure]
+fn main() → u6:
+    ⎕narrow(twice(zero, seven), ⌜u6⌝) ?? 1u6

@@ -1,0 +1,15 @@
+※ pl4g-test: compile=error
+※ pl4g-test: expect-diag 4921 LANG_ENTRY_NOT_A_PARAMETER
+
+※ What is written between the brackets has to be one of the function's own
+※ parameters.  A local of the body has no value at entry -- the body had not
+※ run -- and a variable at the top level is not the call's to speak about.
+
+let counter: u8 = 1u8
+
+fn step(a: u8) → u8 post(⎕entry(counter) > 0u8):
+    a
+
+@[startup]
+fn main() → u6:
+    ⎕narrow(step(1u8), ⌜u6⌝) ?? 1u6

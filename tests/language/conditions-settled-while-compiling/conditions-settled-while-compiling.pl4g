@@ -1,4 +1,5 @@
-※ pl4g-test: compile=error diag=4918
+※ pl4g-test: compile=error
+※ pl4g-test: expect-diag 4918 LANG_CLAUSE_CANNOT_HOLD
 
 ※ What the compiler can see is an error and what it cannot is a fault, which is
 ※ the rule arithmetic already follows here.  A condition that comes to a

@@ -32,7 +32,8 @@ from ..diag import ids as D
 from ..diag.engine import DiagEngine
 from ..diag.style import ColourWhen
 from ..sema.modules import parse_search_path
-from .options import (DiagFormat, EmitKind, Options, SOURCE_SUFFIX)
+from .options import (Conditions, DiagFormat, EmitKind, Options,
+                     SOURCE_SUFFIX)
 
 EnumT = TypeVar("EnumT", bound=Enum)
 
@@ -176,6 +177,7 @@ class CommandLine:
         parser.add_argument("--emit")
         parser.add_argument("--target")
         parser.add_argument("--mclevel")
+        parser.add_argument("--conditions")
         parser.add_argument("-O", dest="opt_level")
         parser.add_argument("-g", dest="debug_info", action="store_true")
         parser.add_argument("-W", dest="warnings", action="append", default=[])
@@ -237,6 +239,9 @@ class CommandLine:
             options.triple = found.target
         if found.mclevel is not None:
             options.mclevel = found.mclevel
+        if found.conditions is not None:
+            options.conditions = self._choice("--conditions", found.conditions,
+                                              Conditions, options.conditions)
         if found.opt_level is not None:
             options.opt_level = self._level(found.opt_level)
         options.debug_info = found.debug_info

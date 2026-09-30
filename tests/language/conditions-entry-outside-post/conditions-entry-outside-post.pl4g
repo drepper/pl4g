@@ -1,0 +1,12 @@
+※ pl4g-test: compile=error
+※ pl4g-test: expect-diag 4919 LANG_ENTRY_OUTSIDE_POST
+
+※ A `pre` is checked before any of the body has run, so there the name and the
+※ value at entry are the same thing and there is nothing for this to say.
+
+fn step(a: u8) → u8 pre(⎕entry(a) > 0u8):
+    a
+
+@[startup]
+fn main() → u6:
+    ⎕narrow(step(1u8), ⌜u6⌝) ?? 1u6

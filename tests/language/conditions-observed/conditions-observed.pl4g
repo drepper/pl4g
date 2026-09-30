@@ -1,0 +1,21 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+※ pl4g-test: args --conditions=observe
+
+※ `--conditions=observe` evaluates the condition, says so where it does not
+※ hold, and goes on.  For a build that wants every violation of a run rather
+※ than the first -- which is what the run of a binary's own tests already does,
+※ and for the same reason.
+※
+※ Both clauses are violated here and both are reported: `twice(0)` breaks the
+※ pre-condition, and the answer 0 is not more than 0, so it breaks the
+※ post-condition too.  The program still exits with what it worked out.
+
+let zero: u8 = 0u8
+
+@[inline(never)]
+fn twice(a: u8) → u8 pre(a > 0u8) post(⎕answer > a):
+    a ⊞ a
+
+@[startup, impure]
+fn main() → u6:
+    ⎕narrow(twice(zero), ⌜u6⌝) ?? 1u6

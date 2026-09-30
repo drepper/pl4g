@@ -7546,6 +7546,59 @@ for anywhere but a function, and a compilation error for a condition the
 and has no channel for a diagnostic about the language, so only what the checker
 settles is an error today.
 
+---
+
+## 2026-09-30T15:30+02:00 — language and compiler
+
+**What a build does about a condition, and a post-condition's view of entry**
+
+Two things the user asked for after the conditions landed.
+
+**`--conditions=check|ignore|observe`**, which is g++'s
+`-fcontract-evaluation-semantic`.  A clause says what must be true and a build
+says what to do about it.  `check` evaluates and stops, and is the default;
+`ignore` emits nothing; `observe` evaluates, says so, and goes on.
+
+Two rules make the switch safe to have.  **A requirement is not among them** --
+it is what makes the program type-check, so a build that could turn one off would
+be a build in which a different program compiles.  And **nothing compiles only
+because the checks are off**: every semantic asks the same questions of the clause,
+and what differs is what reaches the binary.  Python's `assert` is the cautionary
+case for the second -- removable enough that nobody could rely on it, so everybody
+wrote something else.
+
+Turned down: **`assume`**, the fourth semantic of the C++ papers.  It is the only
+one that can make a program go wrong silently, and this language has no undefined
+behaviour anywhere else: a program that cannot answer stops and says so.  Adding a
+build flag that introduces it is a larger decision than choosing what to do about
+a check, and nothing forecloses it.  Also turned down: **levels**, g++'s
+`default`/`audit`/`axiom`, which are a second axis -- a clause here has no way to
+say which level it is on, and giving it one is an attribute on a clause and a
+decision of its own.
+
+**`⎕entry(NAME)`**, which is what a parameter held when the function was entered,
+for a post-condition about a parameter the body has since bound to something else.
+It takes **the name of a parameter and nothing else**, and that restriction is the
+whole design: a parameter arrives in the entry block and SSA keeps it, so nothing
+is copied and nothing is stored -- what it costs is one live range.  An expression
+would have to be worked out at entry and its answer carried, which is the cost
+Eiffel's `old` has and this does not.  Restricting it to a parameter is what makes
+the answer to "who pays for the copy" be "nobody".
+
+Compare: **Eiffel**'s `old`, which takes an expression and copies what it answers;
+**C++**'s contracts proposals, whose `@pre` and `old` have been respelled several
+times over exactly this question; **D**, whose `out` blocks have no `old` at all
+and so cannot say it; **Ada 2012**'s `'Old`, which takes an expression and makes
+the copy, and which restricts *where* it may appear instead.  For the build
+switch: **D**'s `-release`, which turns contracts, bounds checks and asserts off
+together -- three things a build may want to decide separately; **Rust**, which
+asks per call site with `assert!` against `debug_assert!`, putting the decision in
+the program where a build cannot revisit it; **Eiffel**, whose monitoring levels
+are per class in a configuration file.
+
+Left open: an `⎕old` over an arbitrary expression, which is a copy and a decision
+about who sees its cost; levels on a clause; and `assume`.
+
 Open questions
 --------------
 

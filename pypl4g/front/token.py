@@ -122,6 +122,13 @@ EMPTY_ARENA_NAME: Final[str] = "\N{APL FUNCTIONAL SYMBOL QUAD}arena"
 #: gives a meaning to -- and it cannot collide, the glyph being the compiler's.
 ANSWER_NAME: Final[str] = "\N{APL FUNCTIONAL SYMBOL QUAD}answer"
 
+#: What a parameter held when the function was entered, which a post-condition
+#: needs where the body has bound the name to something else since.  It takes the
+#: name of a parameter and nothing else: a parameter's value at entry is already
+#: there to be named -- it is what arrived -- so nothing is copied for it, which
+#: is what an `old` over an arbitrary expression could not promise.
+ENTRY_NAME: Final[str] = "\N{APL FUNCTIONAL SYMBOL QUAD}entry"
+
 #: What a `match` arm that takes every alternative left is written with.  It is
 #: a name no definition may have, so nothing a program writes can be mistaken
 #: for it; every language with pattern matching spells it this way.

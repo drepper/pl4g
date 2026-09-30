@@ -17,7 +17,8 @@ from ..target import statuses
 from ..diag.engine import DiagEngine, Expectation
 from ..front import ast
 from ..front.doccomment import Part as DocPart, parse as parse_doc
-from ..front.token import (ACQUIRE_NAME, ANSWER_NAME, RELEASE_NAME,
+from ..front.token import (ACQUIRE_NAME, ANSWER_NAME, ENTRY_NAME,
+                           RELEASE_NAME,
                            AT_NAME, SPAN_NAME,
                            ADDRESS_NAME, BYTES_NAME,
                            WIDEN_NAME,
@@ -44,6 +45,7 @@ from ..target.registry import architecture_of, conventions_of
 from ..target.syscalls import KNOWN as SYSCALL_NAMES, number_of
 from ..runtime import names as runtime_names
 from . import tables
+from .clauses import Conditions
 from ..ir.function import (DEFAULT_CCONV, SYSTEM_CCONV, BasicBlock, FuncAttrs,
                            FuncType, Function,
                            InlineHint,
@@ -590,6 +592,13 @@ class _Bundle:
     #: is found rather than followed.
     opening: bool = False
 
+
+#: What the purity rules report, which is the family the note about a condition's
+#: purity belongs to and no other.  Everything that makes a change outliving the
+#: call goes through one place, so this is that place's list and not a guess.
+_PURITY: Final[frozenset[int]] = frozenset({
+    D.LANG_PURE_CALLS_IMPURE, D.LANG_PURE_CHANGES_A_VARIABLE,
+    D.LANG_PURE_READS_THE_ROUNDING_MODE, D.LANG_PURE_WRITES_ELSEWHERE})
 
 #: What a dummy made for a lifted type is called.  It begins with the lifting
 #: mark, which a program cannot write in a name, so it collides with nothing.
@@ -1393,9 +1402,13 @@ class Checker:
                  path: Path | None = None, prefix: str = "",
                  sources: SourceManager | None = None,
                  top_level: list[_Global] | None = None,
-                 notes: Notes | None = None) -> None:
+                 notes: Notes | None = None,
+                 conditions: Conditions = Conditions.CHECK) -> None:
         self._module = module
         self._diags = diags
+        #: What a condition written in a signature does in this build, which is
+        #: the command line's to say and nothing the program can change.
+        self._conditions = conditions
         #: Where to write down what each name turned out to be, for whoever
         #: wants to be asked about one later -- the language server, and nothing
         #: else.  Nothing where nobody asked, which is every build.
@@ -1424,6 +1437,14 @@ class Checker:
         #: Whose clauses have had their shapes reported on, so that a generic
         #: compiled for five sets of types is refused once and not five times.
         self._shaped: set[int] = set()
+        #: What each parameter of the function being lowered arrived as, which is
+        #: what `⎕entry` names.  Nothing is copied for it: a parameter's value at
+        #: entry is a value the function already has, and naming it here keeps it
+        #: alive to the return rather than making a second one.
+        self._at_entry: dict[str, Value] = {}
+        #: Whether a `post` clause is being lowered just now, which is the one
+        #: place `⎕answer` and `⎕entry` mean anything.
+        self._after: bool = False
         #: The definitions this file owns, which carry its module's name once
         #: that name is settled.
         self._owned: list[object] = []
@@ -1857,7 +1878,8 @@ class Checker:
                 return None
             prefix = found_name(self._prefix, base_name(path))
             inner = Checker(self._module, self._diags, self._registry, path, prefix,
-                            self._sources, self._top_level)
+                            self._sources, self._top_level,
+                            conditions=self._conditions)
             inner.run([unit], whole_program=False)
             loaded.exports = {name: what for name, what in inner._top.items()
                               if _is_exported(what)}
@@ -4141,6 +4163,40 @@ class Checker:
                            "a pre-condition that does not hold",
                            statuses.PRE_CONDITION)
 
+    def _lower_at_entry(self, builder: IRBuilder, expr: ast.Call,
+                        expected: Type | None) -> Value:
+        """Lower `⎕entry(NAME)`: what a parameter held when the function began.
+
+        A post-condition about a parameter the body has since bound to something
+        else needs the value the call brought in, and that value is already
+        there: a parameter arrives in the entry block and a name bound to
+        something else does not disturb it.  So nothing is copied and nothing is
+        stored -- what this costs is keeping the value alive to the return, which
+        the register allocator prices like any other live range.  That is the
+        whole difference between this and an `old` over an arbitrary expression,
+        which would have to be worked out at entry and its answer carried.
+        """
+        if not self._after:
+            self._diags.emit(D.LANG_ENTRY_OUTSIDE_POST, expr.span)
+            return UndefConst(ERROR)
+        if len(expr.args) != 1 or not isinstance(expr.args[0], ast.NameRef):
+            self._diags.emit(D.LANG_ENTRY_TAKES_A_PARAMETER, expr.span)
+            return UndefConst(ERROR)
+        written = expr.args[0]
+        assert isinstance(written, ast.NameRef)
+        found = self._at_entry.get(written.name)
+        if found is None:
+            node, _ = self._demanding
+            self._diags.emit(D.LANG_ENTRY_NOT_A_PARAMETER, written.span,
+                             name=written.name,
+                             function=node.name if node is not None else "")
+            return UndefConst(ERROR)
+        answer = self._value_type_of(found)
+        if not self._accepts(expected, answer):
+            self._report_mismatch(expr.span, answer, expected)
+            return UndefConst(ERROR)
+        return found
+
     def _returning(self, builder: IRBuilder, value: Value | None,
                    span: Span) -> None:
         """Check what a `post` clause demands, and then return.
@@ -4159,11 +4215,13 @@ class Checker:
                 self._push_scope()
                 if value is not None:
                     self._bind_local(ANSWER_NAME, value, clause.span)
+                outer, self._after = self._after, True
                 try:
                     self._demanded(builder, clause, func,
                                    "a post-condition that does not hold",
                                    statuses.POST_CONDITION)
                 finally:
+                    self._after = outer
                     self._scopes.pop()
                     self._unit_scopes.pop()
         builder.ret(value, span)
@@ -4185,7 +4243,8 @@ class Checker:
         # the existing purity rules report.
         outer = self._impure
         self._impure = False
-        mark = self._diags.because(D.LANG_CLAUSE_IMPURE, clause.span)
+        mark = self._diags.because(D.LANG_CLAUSE_IMPURE, clause.span,
+                                   family=_PURITY)
         try:
             value = self._lower_expr(builder, clause.expr, None)
         finally:
@@ -4201,7 +4260,18 @@ class Checker:
         if isinstance(value, BoolConst):
             self._already(clause, func, value.value)
             return
-        builder.check(value, what, status, clause.span)
+        if self._conditions is Conditions.IGNORE:
+            # Everything above still happened: what a build turns off is the
+            # check and not the checking, so a build with conditions off accepts
+            # exactly the programs a build with them on accepts.
+            self._module.reports.record(
+                ReportKind.CONDITION_DROPPED, func.name,
+                "".join(("'", self._as_written(clause),
+                         "' was not emitted, this build having asked for none")),
+                clause.span)
+            return
+        builder.check(value, what, status, clause.span,
+                      observing=self._conditions is Conditions.OBSERVE)
 
     def _already(self, clause: ast.Clause, func: Function, holds: bool) -> None:
         """What becomes of a condition the compiler settled.
@@ -4286,7 +4356,12 @@ class Checker:
         # written by instructions that follow them.
         arriving = [block.add_param(func.ty.params[index], param.name)
                     for index, param in enumerate(node.params)]
+        outer_entry, self._at_entry = self._at_entry, {}
         for param, value in zip(node.params, arriving):
+            # What arrived, before anything is done about storage: a parameter a
+            # reference was taken of stands for its storage from here on, and
+            # what `⎕entry` is for is the value rather than the place.
+            self._at_entry[param.name] = value
             self._bind_local(param.name, value, param.span,
                              param.mutable, is_parameter=True, builder=builder)
         assert node.body is not None
@@ -4321,6 +4396,7 @@ class Checker:
                                  name=func.name, type=func.ty.ret.written())
                 builder.unreachable()
         self._demanding = outer_demanding
+        self._at_entry = outer_entry
 
     def _lower_block(self, builder: IRBuilder, block: ast.Block, func: Function,
                      as_result: bool = True, wanted: Type | None = None,
@@ -12159,6 +12235,9 @@ class Checker:
                 and expr.callee.name in (DROP_NAME, UNIT_NAME):
             return self._lower_unit_call(builder, expr, expected)
         if isinstance(expr.callee, ast.NameRef) \
+                and expr.callee.name == ENTRY_NAME:
+            return self._lower_at_entry(builder, expr, expected)
+        if isinstance(expr.callee, ast.NameRef) \
                 and expr.callee.name == NARROW_NAME:
             return self._lower_narrow(builder, expr, expected)
         if isinstance(expr.callee, ast.NameRef) \
@@ -14119,7 +14198,8 @@ class Checker:
 def check(module: Module, units: Sequence[ast.SourceUnit], diags: DiagEngine,
           registry: ModuleRegistry | None = None,
           sources: SourceManager | None = None,
-          notes: Notes | None = None) -> Module:
+          notes: Notes | None = None,
+          conditions: Conditions = Conditions.CHECK) -> Module:
     """Check *units* and lower them into *module*.
 
     The units are the files named on the command line, which share one
@@ -14129,6 +14209,6 @@ def check(module: Module, units: Sequence[ast.SourceUnit], diags: DiagEngine,
     found = registry if registry is not None else ModuleRegistry()
     path = Path(units[0].path) if units else None
     result = Checker(module, diags, found, path, "", sources,
-                     notes=notes).run(units)
+                     notes=notes, conditions=conditions).run(units)
     found.settle_names()
     return result

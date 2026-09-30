@@ -25,7 +25,7 @@ from ..allocator import OUT_OF_MEMORY, emit_allocator, wanted_by
 from ..backtrace import emit_backtrace
 from ..faults import Messages
 from ..frames import END_SYMBOL as FRAMES_END, Frames
-from ..tests import failures_of
+from ..tests import failures_of, observes
 from ..pool import Constants
 from ..registry import architecture_of
 from .. import started
@@ -250,9 +250,9 @@ class X86_64Target:
             # And the walk it calls, which is written once for the three of
             # them: what differs is the record above.
             emit_backtrace(asm, WALK_ABI, lookup_cconv(SYSTEM_CCONV).int_arg_regs)
-        if failures:
-            # Only where a test runs: what says a test failed is a write that
-            # comes back, which nothing else has any use for.
+        if failures or observes(module):
+            # Only where something reports and goes on, which is a test that did
+            # not pass and a condition a build chose to observe.
             emit_report(asm, lookup_cconv(SYSTEM_CCONV))
         if module.stack_size > 0:
             # What the kernel calls where the program follows a bad address,

@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any, Final, Mapping
 
 from ..diag.style import ColourWhen
+from ..sema.clauses import Conditions
 from ..paths import share_file
 
 OPTIONS_FILE: Final[str] = "options.json"
@@ -63,6 +64,11 @@ class Options:
     #: that will not run says so at once and one built down to the oldest
     #: machine is a thing to ask for.
     mclevel: str | None = None
+    #: What a condition written in a signature does in this build.  A build-time
+    #: choice and not a per-clause one: a clause says what must be true and a
+    #: build says what to do about it, which is the division g++'s
+    #: `-fcontract-evaluation-semantic` draws and the one this follows.
+    conditions: Conditions = Conditions.CHECK
     warnings: dict[str, bool] = field(default_factory=dict)
     warnings_are_errors: bool = False
     debug_info: bool = False
