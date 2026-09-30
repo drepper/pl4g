@@ -46,6 +46,9 @@ The I/O runtime is C, in `runtime/`, compiled ahead of time for every architectu
 code and relocations.  Run `bin/pl4g-runtime` when the C changes; a test recompiles and compares, so a stale package fails the
 suite.  Building a pl4g program needs no C compiler -- only changing the runtime does.
 
-Every change that lands is timed.  Run `bin/pl4g-timing` after committing it, which appends a column for that commit to
+A change that touches the compiler is timed.  Run `bin/pl4g-timing` after committing it, which appends a column for that commit to
 `spec/timings.md`, and report what it shows.  Add a sample to the list in the script whenever a feature lands that could plausibly
 cost time; samples are never removed, so that an older column stays meaningful.
+
+A commit that touches no compiler source runs neither the conformance suite nor the timing.  Documentation is such a commit: a
+column for one with no code in it is noise, and reporting it as noise is a lot of words to say nothing.
