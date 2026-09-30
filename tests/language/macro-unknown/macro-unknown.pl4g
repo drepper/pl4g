@@ -1,0 +1,13 @@
+※ pl4g-test: compile=error
+※ pl4g-test: expect-diag 7011 LANG_MACRO_UNKNOWN
+
+※ The lifting marks after a name invoke a macro, and where none of that name is
+※ defined there is nothing to hand what is between them to.  A function is called
+※ with parentheses, since what a function is handed is worked out first.
+
+macro twice:
+    ⌜$x⌝ → ⌜$x + $x⌝
+
+@[startup]
+fn main() → u6:
+    ⎕narrow(thrice⌜1u8⌝, ⌜u6⌝) ?? 1u6

@@ -77,6 +77,9 @@
 ["if" "elif" "else" "match"] @keyword.conditional
 ["while" "unless" "foreach" "break" "continue"] @keyword.repeat
 ["type" "enum" "unit" "bundle"] @keyword.type
+; A macro is a definition, and a hole is what stands where an argument will.
+"macro" @keyword
+(hole) @variable.parameter
 ; What a signature requires of its types and demands of its values.
 ["pre" "post"] @keyword
 "comptime" @keyword.modifier

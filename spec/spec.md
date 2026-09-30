@@ -4586,6 +4586,137 @@ semicolon after it turns the block into one that has none.  C, C++, Go and Java 
 there terminating a statement rather than separating two.
 
 
+##### Macros
+
+**A macro is written where a function is called and is not a function call**: what stands between its marks is handed over as it is
+written and not as what it evaluates to.
+
+```
+macro twice:
+    ⌜$x⌝ → ⌜$x + $x⌝
+
+twice⌜3u8⌝                       ※ 3u8 + 3u8
+```
+
+That is the whole of what a macro is for.  A function receives a number; a macro receives the multiplication that would have
+produced it, and can rewrite it.
+
+**The marks are the language's own.**  `⌜…⌝` lifts what is written between the brackets out of the program and into the compiler,
+which is the same sentence -- so an invocation is a name applied to a quote rather than a notation of its own, and a reader who
+knows `⌜u8⌝` knows what `f⌜x⌝` does to `x`.  `(…)` calls a function and `⌜…⌝` invokes a macro; a macro and a function are not in
+one namespace, so a name may be both and neither is a mistake.
+
+**A macro is a list of rewrite rules.**  Each states what the arguments have to look like and what the invocation is replaced by.
+Rules are tried in order and the first that matches decides, so a rule whose pattern is holes goes last; where none matches, the
+invocation is refused (7012).
+
+```
+macro pick:
+    ⌜$x, $x⌝ → ⌜1u8⌝           ※ written alike
+    ⌜$x, $y⌝ → ⌜0u8⌝           ※ anything else
+```
+
+Within a pattern, **`$a` is a hole**: it matches anything and remembers what it matched.  A name, a literal or an operator matches
+only itself, structurally.  **A hole written twice matches only where the two are written alike**, which is how a rule says its
+arguments agree -- and two pieces of a program are alike where the same thing is written in both, wherever each was written, so the
+positions are not compared.
+
+**A pattern holds one expression per argument**, and how many there are is part of the shape: a rule for two does not match an
+invocation with one.  Nothing between the marks is a macro of no arguments, which is a thing to write.
+
+**A template holds one expression** (7019), **or a run of statements** where its contents are indented under the opening mark.  The
+marks do not hide the ends of lines the way the other brackets do, so the indented form is the layout every block in the language
+already has with the mark in place of a colon.
+
+```
+macro swap:
+    ⌜$a, $b⌝ → ⌜
+        let t: u8 = $a
+        $a ← $b
+        $b ← t
+    ⌝
+```
+
+**A macro that writes statements is invoked on a line of its own** (7014), and what it writes replaces that line.  The statements go
+into the run around them rather than into a block of their own, which would be a scope the macro did not ask for.  **A template may
+assign to a hole**, and which kind of place that is, is settled once the hole is filled; one filled with something nothing can be
+assigned to is refused (7018), pointing at the argument rather than at the template.
+
+###### When expansion happens
+
+**After parsing and before any check.**  What the checker, the type rules and the code generator see is a program with no macro left
+in it, so a macro cannot produce a program that would not otherwise be legal, and every diagnostic the language gives is given about
+what the macro wrote.  `--emit=expanded` writes the tree at exactly that point.
+
+**It cannot run earlier.**  A macro is handed the parse tree of its arguments and there is none before parsing.  The C preprocessor
+works on characters because it has to: C's grammar is not context-free, and `a * b;` needs to know whether `a` is a type.  This
+grammar is context-free and an invocation is marked, so the text around a macro can be read without knowing what the macro is.
+
+**An invocation is expanded before what is written inside it**, so a macro is handed its argument as the caller wrote it, including
+any invocation nested in it.  What comes out is expanded in turn, so a macro may write another one -- and one that writes something
+reaching itself again is stopped after 64 rewrites (7015).  That is a limit and not an analysis: whether expansion ends is the
+halting problem.
+
+**Nothing is checked after an expansion that failed.**  What the checker would be handed is the program the macro could not write,
+and every message about it would be about something nobody wrote.  What *parsing* reported does not stop it, the parser recovering
+and the checker having things to say about what it did parse.
+
+###### Positions
+
+**Every piece of an expansion keeps the position it was written at.**  What came from the caller points at the caller's text and what
+came from the macro points into the macro's definition, so an error in an expanded program names the place the offending text was
+actually written -- which is either the invocation or the macro, and those are the only two answers that can be right.
+
+That falls out of substituting trees rather than text: a tree from the caller carries the caller's spans and one from the template
+carries the macro's, because those are the spans the parser gave them.
+
+###### Hygiene
+
+**A name a template binds is renamed to something no source file can spell**: the name with a `#` and a number after it.  `#` is an
+operator glyph, so no identifier can hold one and the renamed name collides with nothing a program writes.
+
+In `swap` above the caller's variable may be called `t` and so is the macro's temporary.  Without the renaming the macro's `t` would
+shadow the caller's and the swap would leave both where they were.
+
+**A name a macro *reads* resolves where the macro was written**, not where it was invoked: a macro may write a call to something its
+own file can see and the caller cannot, and a caller with a function of the same name does not change what the macro means.  That is
+the rule a bundle's lines already follow and for the same reason -- substituting *into* a line is not the same as substituting the
+line into the place that applied it -- so a macro means one thing everywhere it is invoked.
+
+###### What is not there yet
+
+**The other form of macro**, a function over the program's text: handed the parse trees of its arguments and answering the tree that
+replaces the invocation.  It needs an interpreter that runs at expansion, and the compiler has a constant folder and a `comptime if`
+that compares two types.  A macro written with a parameter list is refused with that as the reason (3053), which says the form is
+absent rather than the program wrong.
+
+With it would come `syntax` as a type, the questions that take a piece of the program apart, and `comptime fn`.
+[spec/macros.md](macros.md) has the design and the estimate.
+
+###### Comparisons
+
+| Language | A macro sees | Written as | Invoked as | Hygienic |
+|---|---|---|---|---|
+| **C** | characters | `#define` | `f(x)`, indistinguishable | no |
+| **Rust** | tokens | `macro_rules!`, proc macros | `f!(x)` | mostly |
+| **Scheme** | a parse tree | `syntax-rules`, `syntax-case` | `(f x)`, indistinguishable | yes |
+| **Common Lisp** | a parse tree | `defmacro` | `(f x)`, indistinguishable | no, `gensym` by hand |
+| **Julia** | a parse tree | `macro` | `@f x` | mostly |
+| **Nim** | a parse tree | `macro` | `f(x)` | yes |
+| **Wolfram** | an expression | rules with `:>` | `f[x]` | no |
+| **Zig** | nothing | `comptime fn` | `f(x)` | n/a |
+| **pl4g** | a parse tree | `macro`, rules | `f⌜x⌝` | yes |
+
+What pl4g's row says that none of the others does is that **the mark around the arguments is the language's existing mark for "not
+evaluated"**.  Rust and Julia mark the name; Lisp, Scheme and Nim mark nothing.  Marking the arguments says the thing that is
+actually true of them, and marking them with `⌜⌝` says it with a notation already in the language.
+
+Turned down: **text or token substitution**, since there is nothing to take apart and nothing to be hygienic about, and this
+language's tokens are glyphs so a token run is no more structured than a string; **reader macros**, as Common Lisp has, because a
+program that changes how text is scanned cannot be parsed without being run, which would cost the tree-sitter grammar and the test
+that holds it to the compiler; **`f!(…)`**, since `!` is not this language's to spare; and **`@[macro]` on a function**, since an
+attribute says what the compiler is told *about* a definition and which kind of definition it is, is not that.
+
 ##### Operators
 
 **An operator is a function whose name is the glyph**, written between grave accents:

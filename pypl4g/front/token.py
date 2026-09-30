@@ -122,6 +122,11 @@ EMPTY_ARENA_NAME: Final[str] = "\N{APL FUNCTIONAL SYMBOL QUAD}arena"
 #: is what it is, the name of the operator rather than the operator itself.
 OPNAME_GLYPH: Final[str] = "`"
 
+#: What marks a hole in a macro's pattern and fills one in its template.  Unicode
+#: calls it a currency symbol, so it is not a glyph a program could define as an
+#: operator, and the language gave it no other meaning.
+HOLE_GLYPH: Final[str] = "$"
+
 #: Which single glyphs a program may name as an operator.  Unicode decides most of
 #: it: a glyph in the symbol categories is one, `Sm` being the mathematical
 #: symbols -- `+`, `\N{NOT EQUAL TO}`, `\N{SQUARED PLUS}`, `\N{DIVISION SIGN}` -- and `So` the other symbols, which is where
@@ -483,6 +488,8 @@ class TokKind(StrEnum):
     KW_TYPE = "'type'"
     #: A name written between grave accents, which is an operator standing where
     #: a name goes: `` `+` `` is the name of the operator and not the operator.
+    #: What marks a hole in a pattern and what fills one in a template.
+    DOLLAR = "'$'"
     OPNAME = "an operator name"
     #: A glyph the language gives no meaning, standing where an operator stands.
     #: What it means is what a program said it means, and nothing where a program
@@ -497,6 +504,7 @@ class TokKind(StrEnum):
     KW_PRE = "'pre'"
     KW_POST = "'post'"
     KW_BUNDLE = "'bundle'"
+    KW_MACRO = "'macro'"
     KW_MATCH = "'match'"
     KW_ENUM = "'enum'"
     KW_IF = "'if'"
@@ -669,6 +677,7 @@ KEYWORDS: Final[dict[str, TokKind]] = {
     "pre": TokKind.KW_PRE,
     "post": TokKind.KW_POST,
     "bundle": TokKind.KW_BUNDLE,
+    "macro": TokKind.KW_MACRO,
     "match": TokKind.KW_MATCH,
     "enum": TokKind.KW_ENUM,
     "if": TokKind.KW_IF,

@@ -52,6 +52,10 @@
             "named": true
           },
           {
+            "type": "hole",
+            "named": true
+          },
+          {
             "type": "identifier",
             "named": true
           },
@@ -65,6 +69,10 @@
           },
           {
             "type": "integer_literal",
+            "named": true
+          },
+          {
+            "type": "invoke_expression",
             "named": true
           },
           {
@@ -206,6 +214,10 @@
           "named": true
         },
         {
+          "type": "hole",
+          "named": true
+        },
+        {
           "type": "identifier",
           "named": true
         },
@@ -219,6 +231,10 @@
         },
         {
           "type": "integer_literal",
+          "named": true
+        },
+        {
+          "type": "invoke_expression",
           "named": true
         },
         {
@@ -309,6 +325,10 @@
             "named": true
           },
           {
+            "type": "hole",
+            "named": true
+          },
+          {
             "type": "identifier",
             "named": true
           },
@@ -383,6 +403,10 @@
             "named": true
           },
           {
+            "type": "hole",
+            "named": true
+          },
+          {
             "type": "identifier",
             "named": true
           },
@@ -396,6 +420,10 @@
           },
           {
             "type": "integer_literal",
+            "named": true
+          },
+          {
+            "type": "invoke_expression",
             "named": true
           },
           {
@@ -705,6 +733,10 @@
           "named": true
         },
         {
+          "type": "hole",
+          "named": true
+        },
+        {
           "type": "identifier",
           "named": true
         },
@@ -718,6 +750,10 @@
         },
         {
           "type": "integer_literal",
+          "named": true
+        },
+        {
+          "type": "invoke_expression",
           "named": true
         },
         {
@@ -863,6 +899,10 @@
             "named": true
           },
           {
+            "type": "hole",
+            "named": true
+          },
+          {
             "type": "identifier",
             "named": true
           },
@@ -876,6 +916,10 @@
           },
           {
             "type": "integer_literal",
+            "named": true
+          },
+          {
+            "type": "invoke_expression",
             "named": true
           },
           {
@@ -1140,6 +1184,10 @@
             "named": true
           },
           {
+            "type": "hole",
+            "named": true
+          },
+          {
             "type": "identifier",
             "named": true
           },
@@ -1153,6 +1201,10 @@
           },
           {
             "type": "integer_literal",
+            "named": true
+          },
+          {
+            "type": "invoke_expression",
             "named": true
           },
           {
@@ -1282,6 +1334,10 @@
             "named": true
           },
           {
+            "type": "hole",
+            "named": true
+          },
+          {
             "type": "identifier",
             "named": true
           },
@@ -1295,6 +1351,10 @@
           },
           {
             "type": "integer_literal",
+            "named": true
+          },
+          {
+            "type": "invoke_expression",
             "named": true
           },
           {
@@ -1467,6 +1527,10 @@
             "named": true
           },
           {
+            "type": "hole",
+            "named": true
+          },
+          {
             "type": "identifier",
             "named": true
           },
@@ -1480,6 +1544,10 @@
           },
           {
             "type": "integer_literal",
+            "named": true
+          },
+          {
+            "type": "invoke_expression",
             "named": true
           },
           {
@@ -1607,6 +1675,10 @@
             "named": true
           },
           {
+            "type": "hole",
+            "named": true
+          },
+          {
             "type": "identifier",
             "named": true
           },
@@ -1620,6 +1692,10 @@
           },
           {
             "type": "integer_literal",
+            "named": true
+          },
+          {
+            "type": "invoke_expression",
             "named": true
           },
           {
@@ -1807,6 +1883,10 @@
             "named": true
           },
           {
+            "type": "hole",
+            "named": true
+          },
+          {
             "type": "identifier",
             "named": true
           },
@@ -1820,6 +1900,10 @@
           },
           {
             "type": "integer_literal",
+            "named": true
+          },
+          {
+            "type": "invoke_expression",
             "named": true
           },
           {
@@ -1959,6 +2043,10 @@
             "named": true
           },
           {
+            "type": "hole",
+            "named": true
+          },
+          {
             "type": "identifier",
             "named": true
           },
@@ -1972,6 +2060,10 @@
           },
           {
             "type": "integer_literal",
+            "named": true
+          },
+          {
+            "type": "invoke_expression",
             "named": true
           },
           {
@@ -2113,6 +2205,10 @@
             "named": true
           },
           {
+            "type": "hole",
+            "named": true
+          },
+          {
             "type": "identifier",
             "named": true
           },
@@ -2126,6 +2222,10 @@
           },
           {
             "type": "integer_literal",
+            "named": true
+          },
+          {
+            "type": "invoke_expression",
             "named": true
           },
           {
@@ -2255,6 +2355,10 @@
             "named": true
           },
           {
+            "type": "hole",
+            "named": true
+          },
+          {
             "type": "identifier",
             "named": true
           },
@@ -2268,6 +2372,10 @@
           },
           {
             "type": "integer_literal",
+            "named": true
+          },
+          {
+            "type": "invoke_expression",
             "named": true
           },
           {
@@ -2395,6 +2503,10 @@
             "named": true
           },
           {
+            "type": "hole",
+            "named": true
+          },
+          {
             "type": "identifier",
             "named": true
           },
@@ -2408,6 +2520,10 @@
           },
           {
             "type": "integer_literal",
+            "named": true
+          },
+          {
+            "type": "invoke_expression",
             "named": true
           },
           {
@@ -2533,6 +2649,10 @@
             "named": true
           },
           {
+            "type": "hole",
+            "named": true
+          },
+          {
             "type": "identifier",
             "named": true
           },
@@ -2546,6 +2666,10 @@
           },
           {
             "type": "integer_literal",
+            "named": true
+          },
+          {
+            "type": "invoke_expression",
             "named": true
           },
           {
@@ -2817,6 +2941,10 @@
           "named": true
         },
         {
+          "type": "hole",
+          "named": true
+        },
+        {
           "type": "identifier",
           "named": true
         },
@@ -2830,6 +2958,10 @@
         },
         {
           "type": "integer_literal",
+          "named": true
+        },
+        {
+          "type": "invoke_expression",
           "named": true
         },
         {
@@ -2964,6 +3096,10 @@
           "named": true
         },
         {
+          "type": "hole",
+          "named": true
+        },
+        {
           "type": "identifier",
           "named": true
         },
@@ -2977,6 +3113,10 @@
         },
         {
           "type": "integer_literal",
+          "named": true
+        },
+        {
+          "type": "invoke_expression",
           "named": true
         },
         {
@@ -3135,6 +3275,10 @@
             "named": true
           },
           {
+            "type": "hole",
+            "named": true
+          },
+          {
             "type": "identifier",
             "named": true
           },
@@ -3148,6 +3292,10 @@
           },
           {
             "type": "integer_literal",
+            "named": true
+          },
+          {
+            "type": "invoke_expression",
             "named": true
           },
           {
@@ -3305,6 +3453,10 @@
             "named": true
           },
           {
+            "type": "hole",
+            "named": true
+          },
+          {
             "type": "identifier",
             "named": true
           },
@@ -3318,6 +3470,10 @@
           },
           {
             "type": "integer_literal",
+            "named": true
+          },
+          {
+            "type": "invoke_expression",
             "named": true
           },
           {
@@ -3464,6 +3620,10 @@
           "named": true
         },
         {
+          "type": "hole",
+          "named": true
+        },
+        {
           "type": "identifier",
           "named": true
         },
@@ -3477,6 +3637,10 @@
         },
         {
           "type": "integer_literal",
+          "named": true
+        },
+        {
+          "type": "invoke_expression",
           "named": true
         },
         {
@@ -3623,6 +3787,22 @@
     }
   },
   {
+    "type": "hole",
+    "named": true,
+    "fields": {
+      "name": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      }
+    }
+  },
+  {
     "type": "if_expression",
     "named": true,
     "fields": {
@@ -3683,6 +3863,10 @@
             "named": true
           },
           {
+            "type": "hole",
+            "named": true
+          },
+          {
             "type": "identifier",
             "named": true
           },
@@ -3696,6 +3880,10 @@
           },
           {
             "type": "integer_literal",
+            "named": true
+          },
+          {
+            "type": "invoke_expression",
             "named": true
           },
           {
@@ -3866,6 +4054,10 @@
             "named": true
           },
           {
+            "type": "hole",
+            "named": true
+          },
+          {
             "type": "identifier",
             "named": true
           },
@@ -3879,6 +4071,10 @@
           },
           {
             "type": "integer_literal",
+            "named": true
+          },
+          {
+            "type": "invoke_expression",
             "named": true
           },
           {
@@ -4004,6 +4200,10 @@
             "named": true
           },
           {
+            "type": "hole",
+            "named": true
+          },
+          {
             "type": "identifier",
             "named": true
           },
@@ -4017,6 +4217,10 @@
           },
           {
             "type": "integer_literal",
+            "named": true
+          },
+          {
+            "type": "invoke_expression",
             "named": true
           },
           {
@@ -4085,6 +4289,32 @@
           },
           {
             "type": "unary_expression",
+            "named": true
+          }
+        ]
+      }
+    }
+  },
+  {
+    "type": "invoke_expression",
+    "named": true,
+    "fields": {
+      "arguments": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "quote",
+            "named": true
+          }
+        ]
+      },
+      "name": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "identifier",
             "named": true
           }
         ]
@@ -4339,6 +4569,10 @@
           "named": true
         },
         {
+          "type": "hole",
+          "named": true
+        },
+        {
           "type": "identifier",
           "named": true
         },
@@ -4352,6 +4586,10 @@
         },
         {
           "type": "integer_literal",
+          "named": true
+        },
+        {
+          "type": "invoke_expression",
           "named": true
         },
         {
@@ -4490,6 +4728,10 @@
           "named": true
         },
         {
+          "type": "hole",
+          "named": true
+        },
+        {
           "type": "identifier",
           "named": true
         },
@@ -4503,6 +4745,10 @@
         },
         {
           "type": "integer_literal",
+          "named": true
+        },
+        {
+          "type": "invoke_expression",
           "named": true
         },
         {
@@ -4633,6 +4879,10 @@
             "named": true
           },
           {
+            "type": "hole",
+            "named": true
+          },
+          {
             "type": "identifier",
             "named": true
           },
@@ -4646,6 +4896,10 @@
           },
           {
             "type": "integer_literal",
+            "named": true
+          },
+          {
+            "type": "invoke_expression",
             "named": true
           },
           {
@@ -4801,6 +5055,10 @@
             "named": true
           },
           {
+            "type": "hole",
+            "named": true
+          },
+          {
             "type": "identifier",
             "named": true
           },
@@ -4814,6 +5072,10 @@
           },
           {
             "type": "integer_literal",
+            "named": true
+          },
+          {
+            "type": "invoke_expression",
             "named": true
           },
           {
@@ -4940,6 +5202,10 @@
           "named": true
         },
         {
+          "type": "hole",
+          "named": true
+        },
+        {
           "type": "identifier",
           "named": true
         },
@@ -4953,6 +5219,10 @@
         },
         {
           "type": "integer_literal",
+          "named": true
+        },
+        {
+          "type": "invoke_expression",
           "named": true
         },
         {
@@ -5046,6 +5316,121 @@
     }
   },
   {
+    "type": "macro_block",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "macro_rule",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "macro_braces",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "macro_rule",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "macro_definition",
+    "named": true,
+    "fields": {
+      "name": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      },
+      "rules": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "macro_block",
+            "named": true
+          },
+          {
+            "type": "macro_braces",
+            "named": true
+          },
+          {
+            "type": "macro_inline",
+            "named": true
+          }
+        ]
+      }
+    },
+    "children": {
+      "multiple": false,
+      "required": false,
+      "types": [
+        {
+          "type": "attribute_list",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "macro_inline",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": false,
+      "required": true,
+      "types": [
+        {
+          "type": "macro_rule",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "macro_rule",
+    "named": true,
+    "fields": {
+      "pattern": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "quote",
+            "named": true
+          }
+        ]
+      },
+      "template": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "quote",
+            "named": true
+          }
+        ]
+      }
+    }
+  },
+  {
     "type": "match_arm",
     "named": true,
     "fields": {
@@ -5136,6 +5521,10 @@
             "named": true
           },
           {
+            "type": "hole",
+            "named": true
+          },
+          {
             "type": "identifier",
             "named": true
           },
@@ -5149,6 +5538,10 @@
           },
           {
             "type": "integer_literal",
+            "named": true
+          },
+          {
+            "type": "invoke_expression",
             "named": true
           },
           {
@@ -5301,6 +5694,10 @@
             "named": true
           },
           {
+            "type": "hole",
+            "named": true
+          },
+          {
             "type": "identifier",
             "named": true
           },
@@ -5314,6 +5711,10 @@
           },
           {
             "type": "integer_literal",
+            "named": true
+          },
+          {
+            "type": "invoke_expression",
             "named": true
           },
           {
@@ -5501,6 +5902,10 @@
             "named": true
           },
           {
+            "type": "hole",
+            "named": true
+          },
+          {
             "type": "identifier",
             "named": true
           },
@@ -5514,6 +5919,10 @@
           },
           {
             "type": "integer_literal",
+            "named": true
+          },
+          {
+            "type": "invoke_expression",
             "named": true
           },
           {
@@ -5641,6 +6050,10 @@
             "named": true
           },
           {
+            "type": "hole",
+            "named": true
+          },
+          {
             "type": "identifier",
             "named": true
           },
@@ -5654,6 +6067,10 @@
           },
           {
             "type": "integer_literal",
+            "named": true
+          },
+          {
+            "type": "invoke_expression",
             "named": true
           },
           {
@@ -5771,6 +6188,10 @@
             "named": true
           },
           {
+            "type": "hole",
+            "named": true
+          },
+          {
             "type": "identifier",
             "named": true
           },
@@ -5784,6 +6205,10 @@
           },
           {
             "type": "integer_literal",
+            "named": true
+          },
+          {
+            "type": "invoke_expression",
             "named": true
           },
           {
@@ -5915,6 +6340,10 @@
             "named": true
           },
           {
+            "type": "hole",
+            "named": true
+          },
+          {
             "type": "identifier",
             "named": true
           },
@@ -5928,6 +6357,10 @@
           },
           {
             "type": "integer_literal",
+            "named": true
+          },
+          {
+            "type": "invoke_expression",
             "named": true
           },
           {
@@ -6108,6 +6541,10 @@
           "named": true
         },
         {
+          "type": "hole",
+          "named": true
+        },
+        {
           "type": "identifier",
           "named": true
         },
@@ -6121,6 +6558,10 @@
         },
         {
           "type": "integer_literal",
+          "named": true
+        },
+        {
+          "type": "invoke_expression",
           "named": true
         },
         {
@@ -6236,6 +6677,209 @@
     }
   },
   {
+    "type": "quote",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "address_expression",
+          "named": true
+        },
+        {
+          "type": "array_literal",
+          "named": true
+        },
+        {
+          "type": "assignment",
+          "named": true
+        },
+        {
+          "type": "attribute_list",
+          "named": true
+        },
+        {
+          "type": "binary_expression",
+          "named": true
+        },
+        {
+          "type": "boolean_literal",
+          "named": true
+        },
+        {
+          "type": "break_statement",
+          "named": true
+        },
+        {
+          "type": "call_expression",
+          "named": true
+        },
+        {
+          "type": "character_literal",
+          "named": true
+        },
+        {
+          "type": "comparison_expression",
+          "named": true
+        },
+        {
+          "type": "continue_statement",
+          "named": true
+        },
+        {
+          "type": "deref_expression",
+          "named": true
+        },
+        {
+          "type": "dictionary_literal",
+          "named": true
+        },
+        {
+          "type": "element_expression",
+          "named": true
+        },
+        {
+          "type": "expression_statement",
+          "named": true
+        },
+        {
+          "type": "failure_expression",
+          "named": true
+        },
+        {
+          "type": "float_literal",
+          "named": true
+        },
+        {
+          "type": "foreach_statement",
+          "named": true
+        },
+        {
+          "type": "fresh_pair_expression",
+          "named": true
+        },
+        {
+          "type": "hole",
+          "named": true
+        },
+        {
+          "type": "identifier",
+          "named": true
+        },
+        {
+          "type": "if_expression",
+          "named": true
+        },
+        {
+          "type": "if_statement",
+          "named": true
+        },
+        {
+          "type": "index_expression",
+          "named": true
+        },
+        {
+          "type": "integer_literal",
+          "named": true
+        },
+        {
+          "type": "invoke_expression",
+          "named": true
+        },
+        {
+          "type": "lambda_expression",
+          "named": true
+        },
+        {
+          "type": "lifted_expression",
+          "named": true
+        },
+        {
+          "type": "list_literal",
+          "named": true
+        },
+        {
+          "type": "logical_expression",
+          "named": true
+        },
+        {
+          "type": "match_expression",
+          "named": true
+        },
+        {
+          "type": "match_statement",
+          "named": true
+        },
+        {
+          "type": "member_expression",
+          "named": true
+        },
+        {
+          "type": "or_else_expression",
+          "named": true
+        },
+        {
+          "type": "parenthesized_expression",
+          "named": true
+        },
+        {
+          "type": "raised_expression",
+          "named": true
+        },
+        {
+          "type": "range_expression",
+          "named": true
+        },
+        {
+          "type": "return_statement",
+          "named": true
+        },
+        {
+          "type": "set_literal",
+          "named": true
+        },
+        {
+          "type": "step_expression",
+          "named": true
+        },
+        {
+          "type": "string_literal",
+          "named": true
+        },
+        {
+          "type": "take_expression",
+          "named": true
+        },
+        {
+          "type": "try_expression",
+          "named": true
+        },
+        {
+          "type": "tuple_literal",
+          "named": true
+        },
+        {
+          "type": "unary_expression",
+          "named": true
+        },
+        {
+          "type": "unit_definition",
+          "named": true
+        },
+        {
+          "type": "variable_statement",
+          "named": true
+        },
+        {
+          "type": "while_statement",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
     "type": "raised_expression",
     "named": true,
     "fields": {
@@ -6298,6 +6942,10 @@
             "named": true
           },
           {
+            "type": "hole",
+            "named": true
+          },
+          {
             "type": "identifier",
             "named": true
           },
@@ -6311,6 +6959,10 @@
           },
           {
             "type": "integer_literal",
+            "named": true
+          },
+          {
+            "type": "invoke_expression",
             "named": true
           },
           {
@@ -6434,6 +7086,10 @@
             "named": true
           },
           {
+            "type": "hole",
+            "named": true
+          },
+          {
             "type": "identifier",
             "named": true
           },
@@ -6447,6 +7103,10 @@
           },
           {
             "type": "integer_literal",
+            "named": true
+          },
+          {
+            "type": "invoke_expression",
             "named": true
           },
           {
@@ -6560,6 +7220,10 @@
             "named": true
           },
           {
+            "type": "hole",
+            "named": true
+          },
+          {
             "type": "identifier",
             "named": true
           },
@@ -6573,6 +7237,10 @@
           },
           {
             "type": "integer_literal",
+            "named": true
+          },
+          {
+            "type": "invoke_expression",
             "named": true
           },
           {
@@ -6686,6 +7354,10 @@
             "named": true
           },
           {
+            "type": "hole",
+            "named": true
+          },
+          {
             "type": "identifier",
             "named": true
           },
@@ -6699,6 +7371,10 @@
           },
           {
             "type": "integer_literal",
+            "named": true
+          },
+          {
+            "type": "invoke_expression",
             "named": true
           },
           {
@@ -6836,6 +7512,10 @@
             "named": true
           },
           {
+            "type": "hole",
+            "named": true
+          },
+          {
             "type": "identifier",
             "named": true
           },
@@ -6849,6 +7529,10 @@
           },
           {
             "type": "integer_literal",
+            "named": true
+          },
+          {
+            "type": "invoke_expression",
             "named": true
           },
           {
@@ -6988,6 +7672,10 @@
           "named": true
         },
         {
+          "type": "hole",
+          "named": true
+        },
+        {
           "type": "identifier",
           "named": true
         },
@@ -7001,6 +7689,10 @@
         },
         {
           "type": "integer_literal",
+          "named": true
+        },
+        {
+          "type": "invoke_expression",
           "named": true
         },
         {
@@ -7150,6 +7842,10 @@
           "named": true
         },
         {
+          "type": "hole",
+          "named": true
+        },
+        {
           "type": "identifier",
           "named": true
         },
@@ -7163,6 +7859,10 @@
         },
         {
           "type": "integer_literal",
+          "named": true
+        },
+        {
+          "type": "invoke_expression",
           "named": true
         },
         {
@@ -7258,6 +7958,10 @@
           "named": true
         },
         {
+          "type": "macro_definition",
+          "named": true
+        },
+        {
           "type": "module_import",
           "named": true
         },
@@ -7337,6 +8041,10 @@
             "named": true
           },
           {
+            "type": "hole",
+            "named": true
+          },
+          {
             "type": "identifier",
             "named": true
           },
@@ -7350,6 +8058,10 @@
           },
           {
             "type": "integer_literal",
+            "named": true
+          },
+          {
+            "type": "invoke_expression",
             "named": true
           },
           {
@@ -7492,6 +8204,10 @@
           "named": true
         },
         {
+          "type": "hole",
+          "named": true
+        },
+        {
           "type": "identifier",
           "named": true
         },
@@ -7505,6 +8221,10 @@
         },
         {
           "type": "integer_literal",
+          "named": true
+        },
+        {
+          "type": "invoke_expression",
           "named": true
         },
         {
@@ -7642,6 +8362,10 @@
           "named": true
         },
         {
+          "type": "hole",
+          "named": true
+        },
+        {
           "type": "identifier",
           "named": true
         },
@@ -7655,6 +8379,10 @@
         },
         {
           "type": "integer_literal",
+          "named": true
+        },
+        {
+          "type": "invoke_expression",
           "named": true
         },
         {
@@ -7777,6 +8505,10 @@
             "named": true
           },
           {
+            "type": "hole",
+            "named": true
+          },
+          {
             "type": "identifier",
             "named": true
           },
@@ -7790,6 +8522,10 @@
           },
           {
             "type": "integer_literal",
+            "named": true
+          },
+          {
+            "type": "invoke_expression",
             "named": true
           },
           {
@@ -7921,6 +8657,10 @@
           "named": true
         },
         {
+          "type": "hole",
+          "named": true
+        },
+        {
           "type": "identifier",
           "named": true
         },
@@ -7934,6 +8674,10 @@
         },
         {
           "type": "integer_literal",
+          "named": true
+        },
+        {
+          "type": "invoke_expression",
           "named": true
         },
         {
@@ -8082,6 +8826,10 @@
             "named": true
           },
           {
+            "type": "hole",
+            "named": true
+          },
+          {
             "type": "identifier",
             "named": true
           },
@@ -8095,6 +8843,10 @@
           },
           {
             "type": "integer_literal",
+            "named": true
+          },
+          {
+            "type": "invoke_expression",
             "named": true
           },
           {
@@ -8463,6 +9215,10 @@
           "named": true
         },
         {
+          "type": "hole",
+          "named": true
+        },
+        {
           "type": "identifier",
           "named": true
         },
@@ -8476,6 +9232,10 @@
         },
         {
           "type": "integer_literal",
+          "named": true
+        },
+        {
+          "type": "invoke_expression",
           "named": true
         },
         {
@@ -8725,6 +9485,10 @@
             "named": true
           },
           {
+            "type": "hole",
+            "named": true
+          },
+          {
             "type": "identifier",
             "named": true
           },
@@ -8738,6 +9502,10 @@
           },
           {
             "type": "integer_literal",
+            "named": true
+          },
+          {
+            "type": "invoke_expression",
             "named": true
           },
           {
@@ -8911,6 +9679,10 @@
             "named": true
           },
           {
+            "type": "hole",
+            "named": true
+          },
+          {
             "type": "identifier",
             "named": true
           },
@@ -8924,6 +9696,10 @@
           },
           {
             "type": "integer_literal",
+            "named": true
+          },
+          {
+            "type": "invoke_expression",
             "named": true
           },
           {
@@ -9097,6 +9873,10 @@
             "named": true
           },
           {
+            "type": "hole",
+            "named": true
+          },
+          {
             "type": "identifier",
             "named": true
           },
@@ -9110,6 +9890,10 @@
           },
           {
             "type": "integer_literal",
+            "named": true
+          },
+          {
+            "type": "invoke_expression",
             "named": true
           },
           {
@@ -9196,6 +9980,10 @@
   },
   {
     "type": "#",
+    "named": false
+  },
+  {
+    "type": "$",
     "named": false
   },
   {
@@ -9391,6 +10179,10 @@
     "type": "line_comment",
     "named": true,
     "extra": true
+  },
+  {
+    "type": "macro",
+    "named": false
   },
   {
     "type": "match",

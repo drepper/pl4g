@@ -134,7 +134,7 @@ To Do List for the PL4g language
     name, so a body is still checked per instantiation; the requirement is what a caller is told.  That is a tightening of the
     same syntax and wants its own decision about how much it breaks.
 
-[ ] a macro system.  [spec/macros.md](spec/macros.md) is a proposal, taking the design a related language settled on and asking
+[~] a macro system.  **The rules form is done**, on 2026-09-30; the function form is not.  [spec/macros.md](spec/macros.md) took the design a related language settled on and asked
     what it becomes here: two forms -- a list of rewrite rules and a function over the program's text -- a parse tree handed over
     rather than a value, expansion between parsing and checking, hygiene by renaming with `#`, and every piece keeping the position
     it was written at.  Most of it transfers unchanged.
@@ -148,12 +148,17 @@ To Do List for the PL4g language
     `match` is then checked for covering.
     **And pl4g has the answer the original leaves open**: a name a macro *reads* resolves where the macro was written, which is the
     decision already made for a bundle's lines, for the same reason and with the same implementation.
-    The large piece is the function form, which wants a compile-time interpreter the compiler has nothing like -- a constant folder
-    and a `comptime if` that compares two types are not one.  The rules form alone needs the notation, a structural matcher and a
-    stage between parse and check, and it is what answers the "nine operators from one line" case the operator decision left over.
-    Open: whether a macro may write a *definition*, which is what it is most worth and what forces expansion before the definitions
-    are collected rather than merely before they are checked; and whether `⌜⌝` can carry four meanings, the fallback being a free
-    bracket pair.
+    What landed: the notation, a structural matcher, hygiene, a stage between parse and check with `--emit=expanded`, and twelve
+    language tests.  Four things came out differently from the estimate and are written up in that document -- a template assigning
+    to a hole needed a node of its own, a macro of no arguments had to be allowed, the refusal of the function form belongs to the
+    parser and so to the syntax block, and a failed expansion has to stop the compilation before the checker sees what the macro
+    could not write.
+    Left over: **the function form**, which wants a compile-time interpreter the compiler has nothing like -- a constant folder and a
+    `comptime if` that compares two types are not one -- and with it `syntax` as a type, the questions that take a piece of the
+    program apart, and `comptime fn`.  Whether a macro may write a *definition*, which is what the feature is most worth and what
+    would force expansion before the definitions are collected rather than merely before they are checked.  Whether a macro may be
+    exported, which bundles answered with `@[export]`.  And the "nine operators from one line" case wants a macro writing
+    definitions, so it waits on the first of those.
 
 [ ] let a program write an iterator.  The compiler is the only implementor of the protocol, and there are five of its
     implementations now: a range, an array, a list, a string and a table.  What the entry used to say waits on "something to

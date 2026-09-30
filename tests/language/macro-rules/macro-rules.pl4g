@@ -1,0 +1,28 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=18 diag=none
+
+※ A macro is written where a function is called and is not a function call: what
+※ stands between its marks is handed over as it is written and not as what it
+※ evaluates to.  `sum⌜5u8 × two⌝` matches a rule about a *product*, which a
+※ function could not see -- it would receive ten.
+※
+※ The marks are the language's own for "lifted out of the program and into the
+※ compiler", which is the same sentence, so an invocation is a name applied to a
+※ quote rather than a notation of its own.
+※
+※ Rules are tried in order and the first that matches decides, so a rule whose
+※ pattern is holes goes last.
+
+macro pick:
+    ⌜$x, $x⌝ → ⌜1u8⌝
+    ⌜$x, $y⌝ → ⌜0u8⌝
+
+macro sum:
+    ⌜$a × two⌝ → ⌜$a + $a⌝
+    ⌜$x⌝       → ⌜$x⌝
+
+let two: u8 = 2u8
+
+@[startup]
+fn main() → u6:
+    ⎕narrow(pick⌜3u8, 3u8⌝ + pick⌜3u8, 4u8⌝ + sum⌜5u8 × two⌝ + sum⌜7u8⌝,
+            ⌜u6⌝) ?? 1u6

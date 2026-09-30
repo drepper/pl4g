@@ -1,0 +1,14 @@
+※ pl4g-test: compile=error
+※ pl4g-test: expect-diag 7013 LANG_MACRO_HOLE_UNKNOWN
+
+※ A hole in a template is filled with what the hole of that name matched, so one
+※ the pattern does not have can never be filled.  It is reported where the rule is
+※ written rather than at whatever invocation first reaches it, which is the one
+※ thing about a rule that does not wait for a caller.
+
+macro wrong:
+    ⌜$x⌝ → ⌜$y + $y⌝
+
+@[startup]
+fn main() → u6:
+    0u6

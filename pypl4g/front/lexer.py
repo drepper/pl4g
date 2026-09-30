@@ -17,6 +17,7 @@ from ..diag.engine import DiagEngine
 from ..source.location import Span
 from ..source.manager import SourceFile
 from .token import (ABOVE_NOT_ALIKE_GLYPH, ABOVE_OR_ALIKE_GLYPH, ALIKE_GLYPH,
+                    HOLE_GLYPH,
                     OPNAME_GLYPH, OPERATOR_CATEGORIES, OPERATOR_GLYPHS,
                     OPENER_CATEGORY, CLOSER_CATEGORY,
                     OPERATORS_NOT_NAMEABLE,
@@ -56,6 +57,7 @@ _SIMPLE: Final[dict[str, TokKind]] = {
     ",": TokKind.COMMA,
     ":": TokKind.COLON,
     ";": TokKind.SEMICOLON,
+    HOLE_GLYPH: TokKind.DOLLAR,
     "=": TokKind.EQUALS,
     ARROW_GLYPH: TokKind.ARROW,
     ASSIGN_GLYPH: TokKind.ASSIGN,

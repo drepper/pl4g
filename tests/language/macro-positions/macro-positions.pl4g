@@ -1,0 +1,19 @@
+※ pl4g-test: compile=error
+※ pl4g-test: expect-diag 4205 LANG_TYPE_OPERAND_NOT_INTEGER
+
+※ Every piece of an expansion keeps the position it was written at.  That falls out
+※ of substituting trees rather than text: a tree from the caller carries the
+※ caller's spans and one from the template carries the macro's, because those are
+※ the spans the parser gave them.
+※
+※ So an error in an expanded program names the place the offending text was
+※ actually written, which is either the invocation or the macro -- and those are
+※ the only two answers that can be right.  Here it is the *caller*: the macro is
+※ fine and `true` is what was handed to it.
+
+macro twice:
+    ⌜$x⌝ → ⌜$x + $x⌝
+
+@[startup]
+fn main() → u6:
+    ⎕narrow(twice⌜true⌝, ⌜u6⌝) ?? 1u6

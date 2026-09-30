@@ -28,6 +28,9 @@ class EmitKind(Enum):
 
     TOKENS = "tokens"
     AST = "ast"
+    #: The syntax tree after the macros have been expanded and before anything is
+    #: checked, which is the one thing between the two stages above and below.
+    EXPANDED = "expanded"
     IR = "ir"
     ASM = "asm"
     ELF = "elf"

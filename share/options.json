@@ -45,6 +45,7 @@
         "elf",
         "asm",
         "ir",
+        "expanded",
         "ast",
         "tokens"
       ],

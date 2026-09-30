@@ -31,6 +31,7 @@ from ..diag.engine import DiagEngine, InternalError, WarningControl
 from ..diag.render import JSONRenderer, TextRenderer
 from ..front import ast
 from ..front.lexer import tokenize
+from ..front.expand import expand
 from ..front.parser import parse
 from ..ir.reports import Report, ReportLog
 from ..ir.function import Function, SpecialKind
@@ -103,6 +104,24 @@ class Driver:
         units = self._read_and_parse()
         if self.options.emit is EmitKind.TOKENS or self.options.emit is EmitKind.AST:
             return self._emit_frontend(units)
+        # Between parsing and every check: what the checker sees has no macro left
+        # in it, so a macro cannot make a program that would not otherwise be legal
+        # and every diagnostic is about what the macro wrote.
+        start = perf_counter()
+        before = self.diags.error_count
+        units = expand(units, self.diags)
+        self._timed("macro expansion", start)
+        if self.options.emit is EmitKind.EXPANDED:
+            return self._emit_frontend(units)
+        if self.diags.error_count > before:
+            # Nothing is checked after an expansion that failed.  What the checker
+            # would be handed is the program the macro could not write, and every
+            # message about it would be about something nobody wrote.
+            #
+            # What *parsing* reported does not stop it: the parser recovers and the
+            # checker has things to say about what it did parse, which is the
+            # behaviour every other stage already has.
+            return ExitCode.ERRORS
         module = self._analyze(units)
         if module is None or self.diags.failed:
             return ExitCode.ERRORS

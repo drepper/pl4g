@@ -398,6 +398,76 @@ class Member(Expr):
 
 
 @dataclass(frozen=True, slots=True)
+class Hole(Expr):
+    """`$a` in a macro's pattern or template.
+
+    In a pattern it matches anything and remembers what it matched; in a template
+    it is filled with what the pattern's hole of that name matched.  It is an
+    expression node because that is where one stands, and it never survives
+    expansion: a program the checker sees holds none.
+    """
+
+    name: str
+
+
+@dataclass(frozen=True, slots=True)
+class Quote(Node):
+    """What stands between the lifting marks where a macro is what reads them.
+
+    One or more expressions separated by commas, or -- written with its contents
+    indented under the opening mark -- a run of statements.  Which of the two it is
+    decides what a rule may be written for and what an invocation may stand where:
+    a macro whose template holds statements writes a line and not a value.
+    """
+
+    #: The expressions, where it holds expressions.
+    pieces: tuple[Expr, ...] = ()
+    #: The statements, where it holds those instead.
+    body: Block | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class Invoke(Expr):
+    """`f\N{TOP LEFT CORNER}a, b\N{TOP RIGHT CORNER}`: a macro invoked, which is not a call.
+
+    What stands between the marks is handed over as it is written and not as what
+    it evaluates to, which is the whole of what a macro is for -- and the marks are
+    the language's own for exactly that, so the invocation is a name applied to a
+    quote rather than a notation of its own.
+    """
+
+    name: str
+    name_span: Span
+    arguments: Quote
+
+
+@dataclass(frozen=True, slots=True)
+class Rule(Node):
+    """One line of a macro: what the arguments have to look like, and what the
+    invocation is replaced by."""
+
+    pattern: Quote
+    template: Quote
+
+
+@dataclass(frozen=True, slots=True)
+class MacroDef(Node):
+    """`macro NAME:` and the rules it stands for.
+
+    Rules are tried in order and the first that matches decides, so a catch-all is
+    written last.  Nothing of a macro reaches the checker: expansion runs before it
+    and what it wrote is what is checked.
+    """
+
+    name: str
+    name_span: Span
+    rules: tuple[Rule, ...]
+    attrs: tuple[Attribute, ...] = ()
+    doc: str | None = None
+    doc_lines: tuple[Span, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
 class Fresh(Expr):
     """An operator the language gives no meaning, applied to one operand or two.
 
@@ -821,6 +891,22 @@ class ElementAssign(Stmt):
 
 
 @dataclass(frozen=True, slots=True)
+class HoleAssign(Stmt):
+    """`$a \N{LEFTWARDS ARROW} v` in a macro's template: an assignment to whatever the hole
+    matched.
+
+    A node of its own because an assignment says on its face what kind of place it
+    writes -- a name, a field, an entry, an element -- and a hole is not known to be
+    any of them until it is filled.  Expansion turns one of these into whichever
+    assignment the filled target is, which is where a hole that matched something
+    nothing can be assigned to is reported.
+    """
+
+    target: Expr
+    value: Expr
+
+
+@dataclass(frozen=True, slots=True)
 class MemberAssign(Stmt):
     """`p.x ← v`: one field of a record, changed.
 
@@ -1233,7 +1319,7 @@ class EnumDef(Node):
 
 
 type Definition = (FuncDef | VarDef | ModuleImport | TypeDef | EnumDef
-                   | UnitDef | BundleDef)
+                   | UnitDef | BundleDef | MacroDef)
 
 
 @dataclass(frozen=True, slots=True)

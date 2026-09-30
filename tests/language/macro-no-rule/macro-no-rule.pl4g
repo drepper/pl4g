@@ -1,0 +1,13 @@
+※ pl4g-test: compile=error
+※ pl4g-test: expect-diag 7012 LANG_MACRO_NO_RULE
+
+※ A rule matches a shape, and how many arguments were written is part of the shape.
+※ Where no rule matches there is nothing to replace the invocation with: a macro
+※ meant to accept anything ends with a rule whose pattern is holes.
+
+macro pair:
+    ⌜$x, $y⌝ → ⌜$x⌝
+
+@[startup]
+fn main() → u6:
+    ⎕narrow(pair⌜1u8⌝, ⌜u6⌝) ?? 1u6

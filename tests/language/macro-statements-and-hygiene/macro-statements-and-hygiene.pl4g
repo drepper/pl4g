@@ -1,0 +1,26 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=21 diag=none
+
+※ A quote written with its contents indented under the opening mark holds a run of
+※ statements, and what it writes replaces the line the invocation stood on.  The
+※ statements go into the run around them rather than into a block of their own,
+※ which would be a scope the macro did not ask for.
+※
+※ **And the caller's `t` is not the macro's.**  A name a template binds is renamed
+※ to the name with a `#` and a number after it; `#` is an operator glyph, so no
+※ identifier can hold one and the renamed name collides with nothing a program
+※ writes.  Without it the macro's `t` would shadow the caller's and the swap would
+※ leave both where they were.
+
+macro swap:
+    ⌜$a, $b⌝ → ⌜
+        let t: u8 = $a
+        $a ← $b
+        $b ← t
+    ⌝
+
+@[startup]
+fn main() → u6:
+    let t: mut u8 = 1u8
+    let u: mut u8 = 2u8
+    swap⌜t, u⌝
+    ⎕narrow(t × 10u8 + u, ⌜u6⌝) ?? 1u6

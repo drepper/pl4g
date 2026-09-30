@@ -1656,6 +1656,28 @@
       "option": null
     },
     {
+      "number": 3053,
+      "name": "LANG_MACRO_IS_A_FUNCTION",
+      "severity": "error",
+      "message": "'{name}' is written with a parameter list, which is the other form of macro",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the macro"
+        }
+      ],
+      "cause": "A macro written as a function over the program's text is handed the parse trees of its arguments and answers the tree that replaces the invocation.  It needs an interpreter that runs at expansion, which this compiler does not have: a constant folder and a 'comptime if' that compares two types are not one.  So the form is not in the grammar either, and the parser refuses it where a parameter list would begin -- which is what makes the refusal say the form is absent rather than the program wrong.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Macros",
+        "requirement": "A macro is a list of rewrite rules."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 3201,
       "name": "LANG_ATTR_UNKNOWN",
       "severity": "error",
@@ -8193,6 +8215,195 @@
       "spec": {
         "document": "spec/spec.md",
         "section": "The Language / File Structure / The build function"
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 7011,
+      "name": "LANG_MACRO_UNKNOWN",
+      "severity": "error",
+      "message": "nothing defines a macro called '{name}'",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the name that was written"
+        }
+      ],
+      "cause": "The lifting marks after a name invoke a macro, which is what hands over what is written between them rather than what it evaluates to.  Where no macro of that name is defined there is nothing to hand it to -- and a function is called with parentheses, since what a function is handed is worked out first.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Macros",
+        "requirement": "A macro invoked is a macro defined."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 7012,
+      "name": "LANG_MACRO_NO_RULE",
+      "severity": "error",
+      "message": "no rule of '{name}' matches what it was invoked with",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the macro"
+        }
+      ],
+      "cause": "A rule matches a shape, and the rules are tried in order.  Where none matches there is nothing to replace the invocation with: a macro meant to accept anything ends with a rule whose pattern is holes.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Macros",
+        "requirement": "An invocation matches a rule."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 7013,
+      "name": "LANG_MACRO_HOLE_UNKNOWN",
+      "severity": "error",
+      "message": "'${name}' is in the template of '{macro}' and in none of its pattern",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the hole"
+        },
+        {
+          "name": "macro",
+          "type": "string",
+          "description": "the macro"
+        }
+      ],
+      "cause": "A hole in a template is filled with what the hole of that name matched, so a template naming one the pattern does not have has nothing to be filled with.  A hole is written the same way in both, which is what makes the pair readable as one rule.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Macros",
+        "requirement": "Every hole in a template is in the pattern."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 7014,
+      "name": "LANG_MACRO_WRITES_STATEMENTS",
+      "severity": "error",
+      "message": "'{name}' writes statements, and this is where a value stands",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the macro"
+        }
+      ],
+      "cause": "A template whose contents are indented under the opening mark holds a run of statements, and what it writes replaces a line.  Where the invocation stands in an expression there is no line to replace and nothing for the expression to come to.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Macros",
+        "requirement": "A macro whose template holds statements is invoked on a line of its own."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 7015,
+      "name": "LANG_MACRO_TOO_DEEP",
+      "severity": "error",
+      "message": "expanding '{name}' did not come to an end",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the macro"
+        }
+      ],
+      "cause": "What a macro writes is expanded in turn, so a macro may write another -- and one that writes something reaching itself again would never finish.  Expansion is stopped after a fixed number of rewrites and the invocation it was still working on is named.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Macros",
+        "requirement": "Expansion ends."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 7016,
+      "name": "LANG_MACRO_HOLE_OUTSIDE",
+      "severity": "error",
+      "message": "'$' is written where no macro reads it",
+      "cause": "A hole belongs to a macro's pattern, where it matches, and to its template, where it is filled.  Anywhere else there is nothing to match it against and nothing to fill it with.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Macros",
+        "requirement": "A hole is written in a macro's pattern or template."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 7017,
+      "name": "LANG_MACRO_CALLED_AS_A_FUNCTION",
+      "severity": "error",
+      "message": "'{name}' is a macro, so it is invoked as '{name}⌜…⌝' and not called",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the macro"
+        }
+      ],
+      "cause": "What a macro is handed is written rather than worked out, so the marks are around the arguments: they are what is unusual about an invocation, and the name is not.  A macro and a function are not in one namespace, so a name may be both -- and then the parentheses call the function and the marks invoke the macro.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Macros",
+        "requirement": "A macro is invoked with the lifting marks."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 7018,
+      "name": "LANG_MACRO_HOLE_NOT_A_PLACE",
+      "severity": "error",
+      "message": "the macro assigns to this, and nothing can be assigned to what was written here",
+      "cause": "A template may assign to a hole, and what the hole is filled with decides whether that means anything: a name, a field, an entry, an element and what a reference names are places, and everything else is a value the program worked out.  The message points at the argument rather than at the template, since what is wrong is what was handed over.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Macros",
+        "requirement": "A hole a template assigns to is filled with a place."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 7019,
+      "name": "LANG_MACRO_TEMPLATE_NOT_ONE",
+      "severity": "error",
+      "message": "a template of {count} expressions, and an invocation stands where one value does",
+      "args": [
+        {
+          "name": "count",
+          "type": "string",
+          "description": "how many were written"
+        }
+      ],
+      "cause": "What replaces an invocation is one expression, or -- written with its contents indented -- a run of statements.  A pattern may hold any number, that being how many arguments it matches; a template holding several would have nowhere to put the ones after the first.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Macros",
+        "requirement": "A template holds one expression or a run of statements."
       },
       "since": "0.1",
       "default_enabled": true,

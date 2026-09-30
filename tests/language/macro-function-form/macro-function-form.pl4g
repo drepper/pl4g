@@ -1,0 +1,17 @@
+※ pl4g-test: compile=error
+※ pl4g-test: expect-diag 3053 LANG_MACRO_IS_A_FUNCTION
+
+※ The other form of macro -- a function over the program's text, handed the parse
+※ trees of its arguments and answering the tree that replaces the invocation --
+※ needs an interpreter that runs at expansion.  The compiler has a constant folder
+※ and a `comptime if` that compares two types, and neither is one.
+※
+※ So a parameter list here is refused with the reason rather than read, which is
+※ what says the form is not there yet rather than not wanted.
+
+macro doubled(e: syntax) → syntax:
+    e
+
+@[startup]
+fn main() → u6:
+    0u6

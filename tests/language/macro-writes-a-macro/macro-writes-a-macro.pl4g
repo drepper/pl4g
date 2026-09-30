@@ -1,0 +1,21 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=12 diag=none
+
+※ What a macro writes is expanded in turn, so a macro may write another one -- and
+※ an argument is expanded after the invocation holding it, so a macro is handed
+※ what the caller wrote including any invocation nested in it.
+※
+※ Both happen here: `outer` writes an invocation of `twice`, and `twice` is handed
+※ one of `three` that the caller wrote.
+
+macro three:
+    ⌜⌝ → ⌜3u8⌝
+
+macro twice:
+    ⌜$x⌝ → ⌜$x + $x⌝
+
+macro outer:
+    ⌜$x⌝ → ⌜twice⌜$x⌝⌝
+
+@[startup]
+fn main() → u6:
+    ⎕narrow(outer⌜three⌜⌝⌝ × 2u8, ⌜u6⌝) ?? 1u6

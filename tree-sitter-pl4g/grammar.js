@@ -80,7 +80,7 @@ module.exports = grammar({
     _item: $ => seq(
       choice($.function_definition, $.variable_definition, $.module_import,
              $.type_definition, $.enum_definition, $.unit_definition,
-             $.bundle_definition),
+             $.bundle_definition, $.macro_definition),
       repeat($._newline),
     ),
 
@@ -491,7 +491,7 @@ module.exports = grammar({
     _trailing_assignment: $ => seq(
       field('target', choice($.identifier, $.index_expression,
                              $.element_expression, $.deref_expression,
-                             $.member_expression)),
+                             $.member_expression, $.hole)),
       '\u2190', field('value', $._block_expression),
     ),
 
@@ -651,9 +651,11 @@ module.exports = grammar({
     // entry of a dictionary or an element of an array, each written the way one
     // is read.
     assignment: $ => seq(
+      // A hole among them is a macro's template assigning to whatever the hole is
+      // filled with; which kind of place that is, is known once it is filled.
       field('target', choice($.identifier, $.index_expression,
                              $.element_expression, $.deref_expression,
-                             $.member_expression)),
+                             $.member_expression, $.hole)),
       // Targets next to each other take a tuple apart, one name per member.
       repeat(seq(',', field('target', $.identifier))),
       '←', field('value', $._expression),
@@ -739,6 +741,8 @@ module.exports = grammar({
       $.member_expression,
       $.parenthesized_expression,
       $.lifted_expression,
+      $.invoke_expression,
+      $.hole,
       $.float_literal,
       $.integer_literal,
       $.string_literal,
@@ -1044,6 +1048,62 @@ module.exports = grammar({
     // for a bare name they both do, and which it is, is a question about the
     // program and not about its syntax.
     lifted_expression: $ => seq('\u231c', choice($.type, $._expression), '\u231d'),
+
+    // `macro NAME:` and the rules it stands for.  A name and a body of bare lines,
+    // which is a bundle's shape: both are a definition whose body holds neither
+    // statements nor a parameter list.  What a parameter list would say is that this
+    // is the other form of macro, a function over the program's text, which the
+    // compiler refuses with the reason -- so the grammar does not describe one.
+    macro_definition: $ => seq(
+      optional($.attribute_list),
+      'macro',
+      field('name', $.identifier),
+      field('rules', $._macro_body),
+    ),
+
+    _macro_body: $ => choice($.macro_block, $.macro_braces, $.macro_inline),
+
+    macro_block: $ => seq(
+      ':', repeat1($._newline), $._indent,
+      repeat1($._rule_line), $._dedent,
+    ),
+
+    _rule_line: $ => seq($.macro_rule, repeat1($._newline)),
+
+    macro_inline: $ => seq(':', $.macro_rule),
+
+    macro_braces: $ => seq('{', $.macro_rule,
+                           repeat(seq(';', $.macro_rule)), '}'),
+
+    // What the arguments have to look like, and what the invocation is replaced by.
+    macro_rule: $ => seq(field('pattern', $.quote), $._return_arrow,
+                         field('template', $.quote)),
+
+    // What stands between the lifting marks where a macro reads them: expressions
+    // separated by commas, or -- with the contents indented under the opening mark --
+    // a run of statements.  The marks do not hide the ends of lines the way the other
+    // brackets do, so the indented form is the layout every block already has with
+    // the mark in place of a colon.
+    quote: $ => seq(
+      '\u231c',
+      choice(
+        optional(sepBy1(',', $._expression)),
+        seq(repeat1($._newline), $._indent, repeat1($._statement_line),
+            $._dedent, repeat($._newline)),
+      ),
+      '\u231d',
+    ),
+
+    // `$a`: a hole.  In a pattern it matches anything and remembers what it matched;
+    // in a template it is filled with what the pattern's hole of that name matched.
+    hole: $ => seq('$', field('name', $.identifier)),
+
+    // `f\u231c…\u231d`: a macro invoked, which is not a call.  What stands between the
+    // marks is handed over as it is written and not as what it evaluates to, and the
+    // marks are the language's own for exactly that.
+    invoke_expression: $ => prec(15, seq(
+      field('name', $.identifier), field('arguments', $.quote),
+    )),
 
     // -- tokens ------------------------------------------------------------
 

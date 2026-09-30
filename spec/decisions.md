@@ -7784,6 +7784,66 @@ Left open, unchanged: `=` together with a hash, which is what turns a record int
 dictionary key; `≠` following from `=` and the three orderings from `<`; and
 mixed-type operators.
 
+---
+
+## 2026-09-30T21:15+02:00 — language
+
+**Macros: the rules form, invoked with the lifting marks**
+
+    macro twice:
+        ⌜$x⌝ → ⌜$x + $x⌝
+
+    twice⌜3u8⌝
+
+The design in [macros.md](macros.md), which is the one a related language settled
+on, adjusted to what this language has.  The rules form is in; the function form
+waits on a compile-time interpreter and a macro written with a parameter list is
+refused with that as the reason.
+
+**The invocation is `f⌜…⌝`, not `f⟦…⟧`.**  `⟦⟧` is indexing, an array literal and a
+definable bracket pair all three -- and the lifting marks already mean "handed over
+as written rather than as what it evaluates to", which is the original's own
+one-sentence definition of a macro.  So the invocation is a name applied to a quote
+and is not a notation of its own: three of the original's four notations turn out to
+be one notation here, the fourth being `$`.
+
+**One keyword, and the shape says which form.**  Not `@[macro_rules]`: an attribute
+says what the compiler is told *about* a definition, and which kind of definition it
+is, is not that.  A parameter list would say it is the other form, which is the
+device a bundle's body and an operator's arity already are.
+
+**Expansion after parsing and before any check**, with `--emit=expanded` at exactly
+that point.  It cannot run earlier -- a macro is handed a parse tree and there is
+none -- and this grammar being context-free is what makes parsing first possible,
+which is a property the project has paid for and can now spend.
+
+**Hygiene by renaming with `#`**, which works here for the reason it works there:
+`#` is an operator glyph, so no identifier can hold one.  **And the half the original
+leaves open is settled**: a name a macro reads resolves where the macro was written,
+which is the rule a bundle's lines already follow and for the same reason.
+
+Turned down: text or token substitution, there being nothing to take apart and this
+language's tokens being glyphs; reader macros, since a program that changes how text
+is scanned cannot be parsed without being run, which would cost the tree-sitter
+grammar and the test that holds it to the compiler; `f!(…)`, `!` not being this
+language's to spare; and a `comptime fn` instead of macros, which is Zig's answer and
+cannot express the motivating case -- a function receives a number and the
+multiplication that produced it is already gone.
+
+Compare: **Scheme**, whose `syntax-rules` this is and whose hygiene it takes;
+**Rust**, whose `macro_rules!` is the same half and whose `f!(x)` marks the name;
+**Julia**, which marks the name with `@`; **Lisp**, **Scheme** and **Nim**, which mark
+nothing; **C**, which works on characters because its grammar leaves it no choice;
+**Wolfram**, whose rewrite rules are these without hygiene; **Zig**, which has no
+macros on purpose.  What is unusual here is that the mark around the arguments is the
+language's existing mark for "not evaluated".
+
+Left open: the function form and everything with it -- `syntax` as a type, the
+questions that take a piece of the program apart, and `comptime fn`; whether a macro
+may write a *definition*, which is what the feature is most worth and what would
+force expansion before the definitions are collected; and whether a macro may be
+exported, which bundles answered with `@[export]`.
+
 Open questions
 --------------
 

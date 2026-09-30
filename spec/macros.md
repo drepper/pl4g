@@ -1,7 +1,13 @@
 Macros and Reflection
 =====================
 
-A proposal, not a decision.  It takes the design a related language settled on --
+**The rules form is decided and implemented**, on 2026-09-30; see
+[decisions.md](decisions.md) for the entry and [the specification](spec.md) for what
+the language now says.  The function form is not, and waits on the interpreter this
+document's estimate names.  What follows is the reasoning, kept as it was written
+except where the implementation found it wrong, which is marked where it happened.
+
+It takes the design a related language settled on --
 two forms of macro, a parse tree handed over rather than a value, hygiene by
 renaming, expansion between parsing and checking -- and asks what it becomes in
 *this* language.  The answer is smaller than the original in one place and larger
@@ -443,3 +449,43 @@ half that answers the "nine operators" motivation, since writing nine definition
 from a list is substitution rather than computation.  The function form follows the
 `comptime` interpreter, which is a project of its own and has other things waiting
 on it.
+
+
+What the implementation found
+-----------------------------
+
+The rules form landed in that order.  Four things came out differently from the
+estimate, and one of them is a hole in this document.
+
+**A template that assigns to a hole needed a node of its own.**  `$a ← $b` is the
+middle of the swap example, which is this document's own illustration of hygiene --
+and an assignment in pl4g says on its face what kind of place it writes, there being
+a separate statement for a name, a field, an entry, an element and what a reference
+names.  A hole is not known to be any of them until it is filled.  So the parser
+builds one node for "an assignment to whatever this hole turns out to be" and
+expansion turns it into whichever of the five the filled target is; a hole filled
+with something nothing can be assigned to is refused there, pointing at the argument
+rather than at the template.  The document did not notice that its own example needed
+this.
+
+**A macro of no arguments is worth writing**, and `⌜⌝` had to be allowed to hold
+nothing for it.  The document assumed a pattern holds at least one expression.
+
+**The refusal of the function form belongs to the parser**, and so to the syntax
+block of the catalog rather than the compile-time one.  The grammar does not describe
+a parameter list on a macro -- the language does not have the form -- so the grammar
+refuses one too, and a test that holds the two to agreeing is what noticed: a
+refusal numbered outside 2000-3999 would have said the program parsed.
+
+**A failed expansion has to stop the compilation.**  Otherwise the checker is handed
+the program the macro could not write and reports on text nobody wrote -- five
+messages for one mistake, which is what the first run of the refusals showed.  It
+counts the errors expansion itself added rather than asking whether anything failed,
+because a *parse* error must not stop the checker: the parser recovers and the
+checker has things to say about what it did parse, which is the behaviour every other
+stage already has.  A test of the existing suite is what caught that distinction.
+
+**And the positions needed nothing.**  The document says every piece keeps the
+position it was written at, and it does, because substituting trees keeps the spans
+the parser gave them.  Both directions are tested: an error in the template points
+into the macro and an error in an argument points at the invocation.

@@ -1,0 +1,14 @@
+※ pl4g-test: compile=error
+※ pl4g-test: expect-diag 7015 LANG_MACRO_TOO_DEEP
+
+※ What a macro writes is expanded in turn, so a macro may write another -- and one
+※ that writes something reaching itself again would never finish.  Expansion is
+※ stopped after a fixed number of rewrites, which is a limit rather than an
+※ analysis: whether expansion ends is the halting problem.
+
+macro endless:
+    ⌜$x⌝ → ⌜endless⌜$x⌝⌝
+
+@[startup]
+fn main() → u6:
+    ⎕narrow(endless⌜1u8⌝, ⌜u6⌝) ?? 1u6

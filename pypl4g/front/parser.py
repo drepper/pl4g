@@ -330,6 +330,8 @@ class Parser:
             return self._parse_unit_definition(doc, doc_lines)
         if self._check(TokKind.KW_BUNDLE):
             return self._parse_bundle(attrs, doc, doc_lines)
+        if self._check(TokKind.KW_MACRO):
+            return self._parse_macro(attrs, doc, doc_lines)
         self._diags.emit(D.LANG_FILESTRUCT_UNEXPECTED_TOPLEVEL, self._current.span,
                          construct=self._current.describe())
         raise _Bail()
@@ -671,6 +673,111 @@ class Parser:
         end = answers.span if answers is not None else expr.span
         return ast.Clause(span=expr.span.to(end), kind=ast.ClauseKind.PRE,
                           expr=expr, answers=answers)
+
+    # -- macros ----------------------------------------------------------------
+
+    def _parse_macro(self, attrs: tuple[ast.Attribute, ...],
+                     doc: str | None,
+                     doc_lines: tuple[Span, ...] = ()) -> ast.MacroDef:
+        """Parse ``macro NAME:`` and the rules it stands for.
+
+        A name and a body of bare lines, which is a bundle's shape: both are a
+        definition whose body holds neither statements nor a parameter list.  What
+        a parameter list *would* say is that this is the other form of macro, a
+        function over the program's text, and that waits on an interpreter -- so
+        one written here is refused with the reason rather than read.
+        """
+        start = self._expect(TokKind.KW_MACRO).span
+        name_token = self._expect(TokKind.IDENT)
+        if self._check(TokKind.LPAREN):
+            self._diags.emit(D.LANG_MACRO_IS_A_FUNCTION, name_token.span,
+                             name=name_token.text)
+            raise _Bail()
+        rules, end = self._parse_macro_rules()
+        return ast.MacroDef(span=start.to(end), name=name_token.text,
+                            name_span=name_token.span, rules=rules,
+                            attrs=attrs, doc=doc, doc_lines=doc_lines)
+
+    def _parse_macro_rules(self) -> tuple[tuple[ast.Rule, ...], Span]:
+        """Parse the rules of a macro, in either notation."""
+        if self._check(TokKind.LBRACE):
+            start = self._advance().span
+            found = [self._parse_macro_rule()]
+            while self._accept(TokKind.SEMICOLON) is not None:
+                if self._check_any(self._ENDS_A_RUN):
+                    break
+                found.append(self._parse_macro_rule())
+            end = self._current.span
+            self._expect(TokKind.RBRACE)
+            return tuple(found), start.to(end)
+        start = self._expect(TokKind.COLON, D.LANG_FUNCDEF_EXPECTED_BLOCK).span
+        if not self._check(TokKind.NEWLINE):
+            return (self._parse_macro_rule(),), start.to(self._current.span)
+        self._expect(TokKind.NEWLINE)
+        self._expect(TokKind.INDENT)
+        found = []
+        while not self._check(TokKind.DEDENT) and not self._check(TokKind.EOF):
+            self._skip_newlines()
+            if self._check(TokKind.DEDENT) or self._check(TokKind.EOF):
+                break
+            found.append(self._parse_macro_rule())
+            if self._check(TokKind.DEDENT) or self._check(TokKind.EOF):
+                continue
+            self._expect(TokKind.NEWLINE)
+        end = self._current.span
+        self._accept(TokKind.DEDENT)
+        return tuple(found), start.to(end)
+
+    def _parse_macro_rule(self) -> ast.Rule:
+        """Parse ``\N{TOP LEFT CORNER}pattern\N{TOP RIGHT CORNER} \N{RIGHTWARDS ARROW} \N{TOP LEFT CORNER}template\N{TOP RIGHT CORNER}``."""
+        pattern = self._parse_quote()
+        self._expect(TokKind.ARROW)
+        template = self._parse_quote()
+        return ast.Rule(span=pattern.span.to(template.span), pattern=pattern,
+                        template=template)
+
+    def _parse_quote(self) -> ast.Quote:
+        """Parse what stands between the lifting marks where a macro reads them.
+
+        Expressions separated by commas, or a run of statements where the contents
+        are indented under the opening mark.  The marks do not hide the ends of
+        lines the way the other brackets do, so the indented form is the layout
+        every block in the language already has, with the mark in place of a colon.
+        """
+        start = self._expect(TokKind.LIFT_OPEN).span
+        if self._check(TokKind.NEWLINE):
+            self._expect(TokKind.NEWLINE)
+            self._expect(TokKind.INDENT)
+            stmts: list[ast.Stmt] = []
+            while not self._check(TokKind.DEDENT) and not self._check(TokKind.EOF):
+                self._skip_newlines()
+                if self._check(TokKind.DEDENT) or self._check(TokKind.EOF):
+                    break
+                stmts.extend(self._parse_separated())
+                if self._check(TokKind.DEDENT) or self._check(TokKind.EOF):
+                    continue
+                if self._accept(TokKind.NEWLINE) is None \
+                        and not _ends_with_a_block(stmts[-1]):
+                    self._expect(TokKind.NEWLINE)
+            inner = self._current.span
+            self._accept(TokKind.DEDENT)
+            self._skip_newlines()
+            end = self._expect(TokKind.LIFT_CLOSE,
+                               D.LANG_SYNTAX_EXPECTED_CLOSING_LIFT)
+            return ast.Quote(span=start.to(end.span),
+                             body=ast.Block(span=start.to(inner),
+                                            style=ast.BlockStyle.LAYOUT,
+                                            stmts=tuple(stmts)))
+        pieces: list[ast.Expr] = []
+        if not self._check(TokKind.LIFT_CLOSE):
+            # Nothing between the marks is a macro of no arguments, which is a thing
+            # to write: what it stands for does not depend on anything the caller
+            # said, and the marks are still what says it is a macro.
+            pieces.append(self._parse_expression())
+            while self._accept(TokKind.COMMA) is not None:
+                pieces.append(self._parse_expression())
+        end = self._expect(TokKind.LIFT_CLOSE, D.LANG_SYNTAX_EXPECTED_CLOSING_LIFT)
+        return ast.Quote(span=start.to(end.span), pieces=tuple(pieces))
 
     def _parse_type_ref(self) -> ast.TypeExpr:
         """Parse a type, which may be a collection written the way a value is.
@@ -1722,6 +1829,12 @@ class Parser:
             return ast.MemberAssign(span=target.span.to(value.span),
                                     base=target.base, name=target.name,
                                     name_span=target.name_span, value=value)
+        if isinstance(target, ast.Hole):
+            # In a macro's template, where what it writes to is not known until the
+            # hole is filled.  Which assignment it turns out to be is settled by
+            # expansion, and a hole that matched a value is reported there.
+            return ast.HoleAssign(span=target.span.to(value.span), target=target,
+                                  value=value)
         self._diags.emit(D.LANG_ASSIGN_NOT_A_PLACE, target.span)
         raise _Bail()
 
@@ -1874,6 +1987,15 @@ class Parser:
                                    D.LANG_SYNTAX_EXPECTED_CLOSING_ARRAY).span
                 found = ast.Element(span=found.span.to(end), base=found,
                                     indices=tuple(indices))
+                continue
+            if self._check(TokKind.LIFT_OPEN) and isinstance(found, ast.NameRef):
+                # A macro invoked.  Only after a bare name, which is the only thing
+                # a macro is ever called by -- and the marks follow nothing else
+                # today, so the position is free.
+                arguments = self._parse_quote()
+                found = ast.Invoke(span=found.span.to(arguments.span),
+                                   name=found.name, name_span=found.span,
+                                   arguments=arguments)
                 continue
             if self._check(TokKind.OPEN_OPERATOR):
                 # A pair of brackets the language gives no meaning, written
@@ -2089,6 +2211,14 @@ class Parser:
     def _parse_atom(self) -> ast.Expr:
         """Parse an expression with nothing binding it to what is around it."""
         token = self._current
+        if token.kind is TokKind.DOLLAR:
+            # A hole, which stands where an expression stands and is written only
+            # inside a macro's pattern or template.  It is read here rather than by
+            # a parser of its own so that a pattern is an ordinary expression with
+            # holes in it, which is what makes a rule read like what it matches.
+            self._advance()
+            name = self._expect(TokKind.IDENT)
+            return ast.Hole(span=token.span.to(name.span), name=name.text)
         if token.kind is TokKind.LAMBDA:
             # A function written where a value is wanted.  It ends with its
             # body, so nothing may follow it on the line -- which is the rule
