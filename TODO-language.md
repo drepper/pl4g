@@ -99,6 +99,17 @@ To Do List for the PL4g language
     meaning, and its `next` is lowered where it is asked rather than called -- a comparison against the end and an addition.
     `_` as the name binds nothing, as it does in a `match` arm.
 
+[ ] pre- and post-conditions on a function, with a constraint as one of them.  [spec/conditions.md](spec/conditions.md) is a
+    proposal: one clause with two readings, told apart by an arrow -- `pre(EXPR)` is a condition, which must be a `bool` and is
+    checked, and `pre(EXPR → T')` is a requirement, which asks only that the expression can be written and binds `T'` to its
+    type.  The expression is written over the function's parameters, which is the one new thing the front end needs and is what
+    makes the notation better than the signature form of the entry below: the expression grammar exists, the operand positions come
+    for nothing, and `pre(i < ⍴xs)` says a value-level thing no bound can.  Checked in the callee, which the stack walk already
+    makes report who called; folded where the arguments are known, which turns a condition the compiler can see into a compilation
+    error by the rule arithmetic already follows; and the two halves come apart exactly at removability -- a condition may be
+    compiled out, a requirement never.  Two more numbers in the table of kinds, a pre-condition being the caller's fault and a
+    post-condition the callee's.
+
 [ ] a language for constraining a generic.  A generic is checked per instantiation and a generic nobody calls is not checked at
     all -- not loosely but not at all: a body naming an identifier no program defined compiles clean.  Two different things a bound
     would buy, and they want different amounts of work: an error reported at the *call* rather than in the definition, which is

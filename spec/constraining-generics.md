@@ -172,6 +172,16 @@ Three layers, each landable on its own and each useful without the next.
 
 ### Layer 1: a bound is a signature, checked at the call
 
+**Superseded in its notation.**  [Conditions on functions](conditions.md) proposes
+writing the requirement as an *expression over the parameters* rather than as a
+signature over types -- `pre(xs⟦i⟧ → E')` where this section writes `needs A'⟦I'⟧
+→ E'` -- which reuses the expression grammar instead of inventing one, gets the
+operand positions for nothing, and says value-level things a signature cannot say
+at all.  Read this section for what a bound *is* and that one for how it should be
+written; everything below about checking, settling and P1 is unchanged by the
+change of notation.
+
+
 A bound is **not** a name.  Writing `needs T' ⌈` would say that `T'` admits `⌈`
 and would quietly assume the other operand is a `T'` too -- which is true of `⌈`
 and false of half the operations a generic body performs.  So a bound is the
@@ -261,6 +271,12 @@ which is a question about `⌈`.
 That a bundle takes parameters is what lets it carry the answer type: `iterator(I',
 E')` says `E'` is settled by the bound, exactly as the written-out form does.  A
 bundle may name another bundle; a cycle among them is refused.
+
+With the expression notation of [conditions](conditions.md) a bundle introduces
+the names it writes the operations over, which is a C++20 concept to within
+punctuation:
+
+    bundle iterator(I', E'):  (it: &mut I') pre(next(it) → E' ?)
 
 That is the whole of what V3's ergonomics are worth, at none of V3's price -- and
 with parameters it reaches what V3 needs an associated type for.
