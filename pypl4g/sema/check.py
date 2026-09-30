@@ -12223,50 +12223,46 @@ class Checker:
         than lowered as an expression: there is nothing for a name that stands
         for a function to become.
         """
-        if isinstance(expr.callee, ast.NameRef) and expr.callee.name == WRAP_NAME:
-            return self._lower_wrap(builder, expr, expected)
-        if isinstance(expr.callee, ast.NameRef) \
-                and expr.callee.name in (ORD_NAME, CHR_NAME):
-            return self._lower_code_point(builder, expr, expected)
-        if isinstance(expr.callee, ast.NameRef) \
-                and expr.callee.name in (ONES_NAME, LEAD_NAME):
-            return self._lower_bit_count(builder, expr, expected)
-        if isinstance(expr.callee, ast.NameRef) \
-                and expr.callee.name in (DROP_NAME, UNIT_NAME):
-            return self._lower_unit_call(builder, expr, expected)
-        if isinstance(expr.callee, ast.NameRef) \
-                and expr.callee.name == ENTRY_NAME:
-            return self._lower_at_entry(builder, expr, expected)
-        if isinstance(expr.callee, ast.NameRef) \
-                and expr.callee.name == NARROW_NAME:
-            return self._lower_narrow(builder, expr, expected)
-        if isinstance(expr.callee, ast.NameRef) \
-                and expr.callee.name == WIDEN_NAME:
-            return self._lower_widen(builder, expr, expected)
-        if isinstance(expr.callee, ast.NameRef) \
-                and expr.callee.name == SYSCALL_NAME:
-            return self._lower_syscall(builder, expr, expected)
-        if isinstance(expr.callee, ast.NameRef) \
-                and expr.callee.name in (ACQUIRE_NAME, RELEASE_NAME):
-            return self._lower_ordered(builder, expr, expected)
-        if isinstance(expr.callee, ast.NameRef) \
-                and expr.callee.name in (AT_NAME, SPAN_NAME):
-            return self._lower_place_at(builder, expr, expected)
-        if isinstance(expr.callee, ast.NameRef) \
-                and expr.callee.name == ADDRESS_NAME:
-            return self._lower_address_of(builder, expr, expected)
-        if isinstance(expr.callee, ast.NameRef) \
-                and expr.callee.name == ITER_NAME:
-            return self._lower_iter(builder, expr, expected)
-        if isinstance(expr.callee, ast.NameRef) \
-                and expr.callee.name == BYTES_NAME:
-            return self._lower_bytes(builder, expr, expected)
-        if isinstance(expr.callee, ast.NameRef) \
-                and expr.callee.name == TYPEOF_NAME:
-            # Reaching here means it stood somewhere a value was wanted, since
-            # a condition the compiler settles never lowers what is in it.
-            self._diags.emit(D.LANG_TYPEOF_OUTSIDE_COMPTIME, expr.span)
-            return UndefConst(ERROR)
+        # Every name the compiler provides begins with the quad and no name a
+        # program may write does, so one character says whether any of these can
+        # match.  A call of something the program wrote is the common case and it
+        # is what the test is here for: it was fifteen comparisons before.
+        called = expr.callee
+        if isinstance(called, ast.NameRef) \
+                and called.name.startswith(BUILTIN_GLYPH):
+            given = called.name
+            if given == WRAP_NAME:
+                return self._lower_wrap(builder, expr, expected)
+            if given in (ORD_NAME, CHR_NAME):
+                return self._lower_code_point(builder, expr, expected)
+            if given in (ONES_NAME, LEAD_NAME):
+                return self._lower_bit_count(builder, expr, expected)
+            if given in (DROP_NAME, UNIT_NAME):
+                return self._lower_unit_call(builder, expr, expected)
+            if given == ENTRY_NAME:
+                return self._lower_at_entry(builder, expr, expected)
+            if given == NARROW_NAME:
+                return self._lower_narrow(builder, expr, expected)
+            if given == WIDEN_NAME:
+                return self._lower_widen(builder, expr, expected)
+            if given == SYSCALL_NAME:
+                return self._lower_syscall(builder, expr, expected)
+            if given in (ACQUIRE_NAME, RELEASE_NAME):
+                return self._lower_ordered(builder, expr, expected)
+            if given in (AT_NAME, SPAN_NAME):
+                return self._lower_place_at(builder, expr, expected)
+            if given == ADDRESS_NAME:
+                return self._lower_address_of(builder, expr, expected)
+            if given == ITER_NAME:
+                return self._lower_iter(builder, expr, expected)
+            if given == BYTES_NAME:
+                return self._lower_bytes(builder, expr, expected)
+            if given == TYPEOF_NAME:
+                # Reaching here means it stood somewhere a value was wanted,
+                # since a condition the compiler settles never lowers what is in
+                # it.
+                self._diags.emit(D.LANG_TYPEOF_OUTSIDE_COMPTIME, expr.span)
+                return UndefConst(ERROR)
         if isinstance(expr.callee, ast.NameRef):
             named = self._top.get(expr.callee.name)
             if isinstance(named, _NamedType) \
