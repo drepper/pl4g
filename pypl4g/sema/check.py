@@ -12160,11 +12160,17 @@ class Checker:
                     found = self._resolved(named)
                     return None if found is ERROR else found
                 return named.ty.ret if isinstance(named, Function) else None
-            case ast.AddressOf():
+            case ast.AddressOf() if self._operators:
                 # A reference to the place a name stands for, which is a pointer
                 # to whatever that holds.  The other direction of the mark below,
                 # and what lets an operator a program wrote for `&mut T` be found
                 # where one written for `T` already was.
+                #
+                # Only where a program defined an operator, because that is the
+                # only thing that reads it and because making the type is not
+                # free: it is interned under a key holding the type it points at,
+                # so asking costs a hash of that type.  Every program takes
+                # references and almost none defines an operator.
                 found = self._hint_of(expr.operand)
                 return None if found is None or found is ERROR \
                     else self._module.types.ptr_type(found, mutable=expr.mutable)
