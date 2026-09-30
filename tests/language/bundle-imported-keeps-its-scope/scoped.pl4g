@@ -1,0 +1,8 @@
+※ pl4g-test: module
+※※ A bundle whose line names this file's own `step`.
+
+fn step(a: u8) → u8:
+    a ⊞ 1u8
+
+@[export]
+bundle steppable(T'):  step(T') → T'

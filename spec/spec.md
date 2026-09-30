@@ -4789,6 +4789,34 @@ fn take(xs: A', i: I') → E' pre(inrange(i, ⍴xs)):
 That is the whole reason a bundle exists: the value level abbreviates with a function, and the type level cannot, there being
 nothing to call there.
 
+**A bundle may be imported.**  `@[export]` on one says a file importing this module may apply it, and it is applied through the
+name that module was bound to, which is how everything else a module holds is reached:
+
+```
+※ shapes.pl4g
+@[export]
+bundle number(T'):
+    addable(T')
+    T' ⌈ T' → T'
+
+bundle addable(T'):  T' ⊞ T' → T'
+```
+
+```
+let shapes := ⎕import("shapes")
+
+fn bigger(a: T', b: T') → T' pre(shapes.number(T')):
+    a ⌈ b
+```
+
+**A bundle's lines are read with the names its own file can see**, and that is the rule that matters.  `number` applies
+`addable`, which `shapes` keeps to itself; a file applying `number` cannot name `addable` and does not need to.  A bundle whose
+line names a function gets *that file's* function, so a file with a function of the same name does not change what the bundle
+asks for -- which is what keeps a bundle meaning one thing everywhere it is applied.
+
+**A bundle without `@[export]` is the file's own** (4104), and that is told apart from a name the module does not have at all: the
+module keeps every bundle it wrote, so "it is not yours to apply" and "there is no such thing" are two different things to be told.
+
 **A bundle may apply another** and a cycle among them is refused (4913) -- once every bundle is known and whether or not anything
 applies one, a cycle being a fact about the bundles rather than about any call.  Nothing conforms to a bundle: it is
 substitution, so there is no coherence rule and no orphan rule, and a type admits `⌈` because `⌈` works on it.

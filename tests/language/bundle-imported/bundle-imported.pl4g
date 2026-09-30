@@ -1,0 +1,19 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=3 diag=none
+
+※ A bundle is reached through the name a module was imported under, which is how
+※ every other thing a module holds is reached -- so this needs no notation of
+※ its own.
+※
+※ `steppable` requires an operation the module keeps to itself.  That is right
+※ and is the point of resolving a bundle's lines where it was written: a
+※ requirement is part of what that file said, and what a file applying it can
+※ name is nobody's business but its own.
+
+let shapes := ⎕import("shapes")
+
+fn bigger(a: T', b: T') → T' pre(shapes.number(T')) pre(shapes.steppable(T')):
+    a ⌈ b
+
+@[startup]
+fn main() → u6:
+    ⎕narrow(bigger(2u8, 3u8), ⌜u6⌝) ?? 1u6

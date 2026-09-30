@@ -1,0 +1,19 @@
+※ pl4g-test: compile=error
+※ pl4g-test: expect-diag 4104 LANG_IMPORT_NOT_EXPORTED
+
+※ A bundle without `@[export]` is the file's own, and applying one is refused
+※ for the reason it is refused of everything else a module keeps.
+※
+※ It is told apart from a name the module does not have at all: the module keeps
+※ every bundle it wrote, and which of the two it is decides what the message
+※ says -- "not yours to apply" and "there is no such thing" being two different
+※ things for a reader to do something about.
+
+let private := ⎕import("private")
+
+fn smaller(a: T', b: T') → T' pre(private.secret(T')):
+    a ⌊ b
+
+@[startup]
+fn main() → u6:
+    ⎕narrow(smaller(2u8, 3u8), ⌜u6⌝) ?? 1u6

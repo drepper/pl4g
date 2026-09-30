@@ -69,6 +69,10 @@ class LoadedModule:
     #: What the file exports, by the name the file gave it.  The values are the
     #: things the representation holds -- a function or a variable.
     exports: dict[str, object] = field(default_factory=dict)
+    #: The bundles this file exports, by name.  Beside the exports above rather
+    #: than among them because a bundle is neither a type nor a value: nothing
+    #: that reaches for a name expecting one of those should find one.
+    bundles: dict[str, object] = field(default_factory=dict)
     #: Every name this module could be known by, one per route that reached it.
     candidates: set[str] = field(default_factory=set)
     #: The name finally chosen, once every route is known.

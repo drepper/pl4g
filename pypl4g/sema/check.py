@@ -588,6 +588,16 @@ class _Bundle:
 
     node: ast.BundleDef
     path: str
+    #: The top-level names of the file that wrote it, and the bundles beside it
+    #: there.  A bundle's lines mean what they mean where it was written: a line
+    #: naming `next` asks for the `next` its own file can see, not for whatever
+    #: the file applying it happens to have, so an application is checked with
+    #: these in force.  Held by reference, the tables still being filled when a
+    #: bundle is collected.
+    scope: dict[str, object] | None = None
+    siblings: dict[str, "_Bundle"] | None = None
+    #: Whether a file importing this one may apply it.
+    exported: bool = False
     #: Whether it is being expanded just now, which is how a cycle among bundles
     #: is found rather than followed.
     opening: bool = False
@@ -1883,6 +1893,11 @@ class Checker:
             inner.run([unit], whole_program=False)
             loaded.exports = {name: what for name, what in inner._top.items()
                               if _is_exported(what)}
+            # Every one of them and not only the exported ones: which it is, is
+            # a question the file applying it is answered rather than a name it
+            # cannot see at all, so that "there is no such bundle" and "it is not
+            # yours to apply" are two different things to be told.
+            loaded.bundles = dict(inner._bundles)
             loaded.owned = inner._owned
         finally:
             self._registry.finish(path)
@@ -3743,6 +3758,7 @@ class Checker:
             self._diags.emit(D.LANG_NAME_ALREADY_DEFINED, node.name_span,
                              name=node.name)
             return
+        bound = self._bind_attributes(node.attrs, AttrTarget.BUNDLE)
         self._check_clause_shapes(node.clauses)
         for clause in node.clauses:
             if self._levels_of(clause.expr) == {False}:
@@ -3752,7 +3768,9 @@ class Checker:
                 # already has.
                 self._diags.emit(D.LANG_BUNDLE_LINE_OVER_VALUES, clause.span,
                                  bundle=node.name)
-        self._bundles[node.name] = _Bundle(node=node, path=path)
+        self._bundles[node.name] = _Bundle(
+            node=node, path=path, scope=self._top, siblings=self._bundles,
+            exported=self._is_export(bound))
 
     def _as_written(self, clause: ast.Clause) -> str:
         """A requirement as the source has it, for a message about it.
@@ -3786,7 +3804,22 @@ class Checker:
                                  bundle=name)
 
     def _reaches(self, bundle: _Bundle, wanted: str, seen: set[str]) -> bool:
-        """Whether *bundle* applies *wanted*, however many bundles apart."""
+        """Whether *bundle* applies *wanted*, however many bundles apart.
+
+        Each bundle's lines are read with its own file's names in force, for the
+        same reason an application is: what a line names is what the file that
+        wrote it could see.
+        """
+        kept = (self._top, self._bundles)
+        if bundle.scope is not None and bundle.siblings is not None:
+            self._top, self._bundles = bundle.scope, bundle.siblings
+        try:
+            return self._reaching(bundle, wanted, seen)
+        finally:
+            self._top, self._bundles = kept
+
+    def _reaching(self, bundle: _Bundle, wanted: str, seen: set[str]) -> bool:
+        """The walk itself, with the bundle's own names already in force."""
         for clause in bundle.node.clauses:
             found = self._bundle_named(clause.expr)
             if found is None:
@@ -3801,11 +3834,24 @@ class Checker:
         return False
 
     def _bundle_named(self, expr: ast.Expr) -> _Bundle | None:
-        """The bundle an expression applies, where it applies one."""
-        if not isinstance(expr, ast.Call) \
-                or not isinstance(expr.callee, ast.NameRef):
+        """The bundle an expression applies, where it applies one.
+
+        Its own file's, named outright, or another file's, named through the name
+        that file was imported under -- which is how every other thing a module
+        holds is reached, and is why a bundle needs no notation of its own for it.
+        """
+        if not isinstance(expr, ast.Call):
             return None
-        return self._bundles.get(expr.callee.name)
+        called = expr.callee
+        if isinstance(called, ast.NameRef):
+            return self._bundles.get(called.name)
+        if isinstance(called, ast.Member) \
+                and isinstance(called.base, ast.NameRef):
+            held = self._top.get(called.base.name)
+            if isinstance(held, LoadedModule):
+                found = held.bundles.get(called.name)
+                return found if isinstance(found, _Bundle) else None
+        return None
 
     def _over_types(self, expr: ast.Expr) -> bool:
         """Whether the operands of *expr* are types, which is what decides
@@ -3994,6 +4040,12 @@ class Checker:
         to write.
         """
         written = bundle.node
+        if isinstance(expr.callee, ast.Member) and not bundle.exported:
+            self._diags.emit(D.LANG_IMPORT_NOT_EXPORTED, expr.callee.name_span,
+                             name=written.name,
+                             module=expr.callee.base.name
+                             if isinstance(expr.callee.base, ast.NameRef) else "")
+            return False
         if len(expr.args) != len(written.params):
             self._diags.emit(D.LANG_BUNDLE_WRONG_ARGUMENT_COUNT, expr.span,
                              bundle=written.name, expected=len(written.params),
@@ -4011,6 +4063,13 @@ class Checker:
                 return False
             inner[param] = given
         bundle.opening = True
+        # Where the bundle was written, for as long as its lines are being read.
+        # A line naming `next` asks for the `next` its own file can see: a
+        # requirement is part of what that file said, and what the file applying
+        # it happens to have is nobody's business but its own.
+        kept = (self._top, self._bundles)
+        if bundle.scope is not None and bundle.siblings is not None:
+            self._top, self._bundles = bundle.scope, bundle.siblings
         try:
             for one in written.clauses:
                 if not self._met(one, inner, written.name, span):
@@ -4018,6 +4077,7 @@ class Checker:
                                      bundle=written.name, name=name)
                     return False
         finally:
+            self._top, self._bundles = kept
             bundle.opening = False
         return True
 

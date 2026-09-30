@@ -126,7 +126,9 @@ To Do List for the PL4g language
     layer 2 of [spec/constraining-generics.md](spec/constraining-generics.md) are in: the error is reported at the *call* rather
     than in the definition, and bundles are pure abbreviations with no conformance rule and no coherence.  A bound is a signature
     and not a name, as that document argued, and the expression notation says it with the operators and positions the expression
-    grammar already has.
+    grammar already has.  A bundle may be imported with `@[export]` and applied through the name the module was bound to, and its
+    lines are read with the names its own file can see -- so it may require an operation the applying file cannot name, and a
+    function of the same name there does not change what it asks for.
     Left over: **layer 3**, the body checked once against what it asked for, which is the valuable half and the one that makes
     programs that compile today stop compiling.  Nothing yet says a generic body may use only the operations its requirements
     name, so a body is still checked per instantiation; the requirement is what a caller is told.  That is a tightening of the

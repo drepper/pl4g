@@ -33,8 +33,12 @@ class AttrTarget(Flag):
     #: there is only what a caller reads off the type, since that is all a
     #: value handed from one name to another still carries.
     CALLABLE = auto()
+    #: A bundle, which is neither a type nor a value: what it stands for is a set
+    #: of requirements.  It has a target of its own for exactly that reason --
+    #: what may be said of a type says nothing about one.
+    BUNDLE = auto()
     ANY = (FUNCTION | TYPE | VARIABLE | MODULE | PARAMETER | STATEMENT
-           | CALLABLE)
+           | CALLABLE | BUNDLE)
 
 
 #: How a target is named in a diagnostic.
@@ -46,6 +50,7 @@ TARGET_NAMES: Final[dict[AttrTarget, str]] = {
     AttrTarget.PARAMETER: "a parameter",
     AttrTarget.STATEMENT: "a statement",
     AttrTarget.CALLABLE: "a lambda or a function type",
+    AttrTarget.BUNDLE: "a bundle",
 }
 
 
@@ -144,7 +149,8 @@ REGISTRY: Final[Mapping[str, AttrSpec]] = {
                  doc="the function is defined somewhere else, under this "
                      "symbol, and the compiler fills it in"),
         AttrSpec("export",
-                 AttrTarget.FUNCTION | AttrTarget.VARIABLE | AttrTarget.TYPE,
+                 AttrTarget.FUNCTION | AttrTarget.VARIABLE | AttrTarget.TYPE
+                 | AttrTarget.BUNDLE,
                  doc="a file importing this module may name the definition"),
         AttrSpec("visible", AttrTarget.FUNCTION | AttrTarget.VARIABLE,
                  doc="the finished image offers the definition's symbol"),

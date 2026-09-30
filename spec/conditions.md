@@ -612,6 +612,13 @@ one language on this list where a type-level one would have nothing to mean.
   that needs no values -- so the rule may want an exception and does not have one.
 - **Whether a bundle may be asked for anywhere but a function** -- on a record, on a
   type definition, on a collection's element type.
+
+*Answered since:* **a bundle may be imported**, with `@[export]`, and its lines are
+read with the names its own file can see.  That last is what "a bundle is
+substitution" did not already settle: substituting into a line is not the same as
+substituting the line into the place that applied it, and it is the difference
+between a bundle meaning one thing everywhere and a bundle meaning whatever the
+applying file happens to hold.
 - **Whether two bundles may overlap**, which is a question only if anything ever
   chooses between them, and nothing here does.
 

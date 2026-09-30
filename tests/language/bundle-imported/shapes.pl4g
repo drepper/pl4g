@@ -1,0 +1,21 @@
+※ pl4g-test: module
+※※ Bundles a program beside this one applies.
+
+※ Exported, so a file importing this one may apply it.  What it applies in turn
+※ is this file's own, which a file applying `number` cannot name and does not
+※ need to: a bundle's lines are read with the names its own file can see.
+@[export]
+bundle number(T'):
+    addable(T')
+    T' ⌈ T' → T'
+
+bundle addable(T'):  T' ⊞ T' → T'
+
+※ Not exported, and what it names is not exported either: a bundle is checked
+※ where it was written, so it may require an operation the file applying it
+※ cannot name at all.
+@[export]
+bundle steppable(T'):  step(T') → T'
+
+fn step(a: u8) → u8:
+    a ⊞ 1u8

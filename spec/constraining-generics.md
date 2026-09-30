@@ -341,8 +341,12 @@ What this does not decide
 - **Whether a bound may say anything about a *shape*** -- `needs iterable(T')`
   versus writing the parameter as `E'⟦⟧`.  The second is already expressible as a
   parameter type and probably answers it.
-- **Whether a bundle may be exported from a module.**  It is a name like any
-  other, so probably yes, and then nothing more.
+- ~~**Whether a bundle may be exported from a module.**~~  *Decided: yes, with
+  `@[export]` and applied through the name the module was bound to.*  "And then
+  nothing more" was wrong by one rule, which is the interesting part: a bundle's
+  lines are read with the names **its own file** can see, so a bundle may require
+  an operation the file applying it cannot name, and a file with a function of the
+  same name does not change what the bundle asks for.
 - **Whether a bound may be satisfied by more than one candidate.**  `needs
   next(&mut I') → E' ?` asks for *a* `next`; the language has no overloading, so
   today at most one can exist and the question does not arise.  It arises the day

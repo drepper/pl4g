@@ -1,0 +1,25 @@
+※ pl4g-test: compile=error
+※ pl4g-test: expect-diag 4900 LANG_CLAUSE_NOT_MET
+
+※ The file applying the bundle has a `step` of its own, over truth values.  It
+※ does not count: `steppable` asks for the `step` *its* file can see, which
+※ takes a `u8`, so applying it to `bool` is not met.
+※
+※ This is the test that tells lexical scoping from dynamic: under the other
+※ reading the program would compile, and a bundle would mean something different
+※ in every file that applied it.
+
+let scoped := ⎕import("scoped")
+
+fn step(a: bool) → bool:
+    a
+
+fn go(a: T') → T' pre(scoped.steppable(T')):
+    a
+
+@[startup]
+fn main() → u6:
+    if go(true):
+        1u6
+    else:
+        0u6

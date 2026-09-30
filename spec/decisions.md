@@ -7599,6 +7599,59 @@ are per class in a configuration file.
 Left open: an `⎕old` over an arbitrary expression, which is a copy and a decision
 about who sees its cost; levels on a clause; and `assume`.
 
+---
+
+## 2026-09-30T16:20+02:00 — language
+
+**A bundle may be imported, and its lines mean what they mean where it was written**
+
+`@[export]` on a bundle says a file importing this module may apply it, and it is
+applied through the name the module was bound to -- `pre(shapes.number(T'))` --
+which is how everything else a module holds is reached, so no notation was added.
+The constraints document listed this as an open question and guessed "probably
+yes, and then nothing more".  The guess was right about the notation and wrong by
+one rule, which is the substance of this entry.
+
+**A bundle's lines are read with the names its own file can see.**  Three things
+follow, and the second is what makes it worth a decision:
+
+- A bundle may require an operation the applying file **cannot name at all**: a
+  requirement is part of what the defining file said, and what the applying file
+  holds is nobody's business but its own.  An exported bundle may apply a private
+  sibling, and does in the test.
+- A file with a function of the same name **does not change what the bundle asks
+  for**.  The test that tells the two readings apart applies a bundle requiring
+  `step(T') → T'` from a file whose `step` takes a `u8`, from a file whose own
+  `step` takes a `bool`: under lexical scoping it is refused, under dynamic
+  scoping it would compile.
+- A bundle therefore means **one thing everywhere it is applied**, which is what
+  "a bundle is substitution" did not already settle -- substituting into a line is
+  not the same as substituting the line into the place that applied it.
+
+Implemented by keeping, on each bundle, the tables of the file that wrote it, and
+putting them in force while its lines are read.  A module keeps *every* bundle it
+wrote and not only the exported ones, so that "it is not yours to apply" (4104)
+and "there is no such thing" are two different things to be told.
+
+Turned down: reading a bundle in the applying file's scope, which is what a macro
+would do and would make a bundle mean something different in every file; and
+requiring that everything a bundle's line names be exported too, which would make
+a bundle's implementation part of its interface for no gain -- what a caller has
+to satisfy is the *operation*, and where the operation is written is the defining
+file's business.
+
+Compare: **C++20**, where a concept's body is looked up where the concept is
+written, modulo argument-dependent lookup -- which is the one place C++ lets the
+call site contribute, and the one thing this does not have to decide, having no
+overloading; **Haskell**, whose class methods are resolved in the defining module
+and whose instances are global, which is the coherence this avoids by having
+nothing conform; **Rust**, where a trait's methods are the trait's and a `where`
+clause names the trait by path; **Zig** and **D**, where the predicate is a
+function and so is scoped like one, which is the same answer arrived at for free.
+
+Left open, unchanged: whether a bundle may be applied anywhere but a function, and
+whether a bound may be satisfied by more than one candidate.
+
 Open questions
 --------------
 
