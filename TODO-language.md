@@ -108,9 +108,8 @@ To Do List for the PL4g language
     protocol is not what is missing; the *loop* is.
     **`foreach` has no rule for it** (4438).  The rule wants to know which function is a type's `next`, and the language has no way
     to attach anything to a type -- no method, no trait, no `impl` -- so this is the first decision about that and not a small one.
-    By name and signature (a function called `next` whose one parameter is a reference to the type) is the cheapest; an attribute
-    on the function says it outright; a trait is what Rust has and what the specification says there is nothing yet to abstract
-    over.
+    [spec/attaching-code.md](spec/attaching-code.md) is a proposal for it: four designs, a recommendation of the smallest one that
+    is not a dead end -- a function named `T.next`, called as the path the parser already reads -- and what each would cost.
     **`foreach` over a cursor is refused** (4438) although a cursor is the compiler's own iterator value and the loop's own shape
     fits it.  That is the same rule asked of a type the compiler already has, and it is worth doing first: it needs no decision
     about methods at all.
