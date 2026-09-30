@@ -174,17 +174,17 @@ Three layers, each landable on its own and each useful without the next.
 
 **Superseded in its notation.**  [Conditions on functions](conditions.md) proposes
 writing the requirement as an *expression over the parameters* rather than as a
-signature over types -- `pre(xs⟦i⟧ → E')` where this section writes `needs A'⟦I'⟧
-→ E'` -- which reuses the expression grammar instead of inventing one, gets the
-operand positions for nothing, and says value-level things a signature cannot say
-at all.  Read this section for what a bound *is* and that one for how it should be
+clause of a `pre` -- `pre(A'⟦I'⟧ → E')` where this section writes
+`needs A'⟦I'⟧ → E'`, which is the same notation under a different keyword.
+What the keyword buys is that the *same* one also carries conditions over values,
+which a signature cannot express, so a reader of a signature finds both in one
+place.  Read this section for what a bound *is* and that one for how it should be
 written; everything below about checking, settling and P1 is unchanged by the
-change of notation.
+change of keyword.
 
-And it loses nothing, which was the one open worry: a clause may hold a **type
-parameter where a value would go**, so `needs A'⟦I'⟧ → E'` is written
-`pre(A'⟦I'⟧ → E')` with the same operators in the same places.  Every bound this
-section can write, that notation writes; the reverse is not true.
+A clause is one level or the other throughout: a bound mentions only types, and a
+clause over values is a condition that is evaluated.  That is the rule that keeps
+the two out of each other's way.
 
 
 A bound is **not** a name.  Writing `needs T' ⌈` would say that `T'` admits `⌈`
@@ -277,11 +277,11 @@ That a bundle takes parameters is what lets it carry the answer type: `iterator(
 E')` says `E'` is settled by the bound, exactly as the written-out form does.  A
 bundle may name another bundle; a cycle among them is refused.
 
-With the expression notation of [conditions](conditions.md) a bundle introduces
-the names it writes the operations over, which is a C++20 concept to within
+With the clause notation of [conditions](conditions.md) a bundle's parameters are
+the types the operations are written over, which is a C++20 concept to within
 punctuation:
 
-    bundle iterator(I', E'):  (it: &mut I') pre(next(it) → E' ?)
+    bundle iterator(I', E'):  pre(next(I') → E' ?)
 
 That is the whole of what V3's ergonomics are worth, at none of V3's price -- and
 with parameters it reaches what V3 needs an associated type for.

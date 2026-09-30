@@ -100,22 +100,23 @@ To Do List for the PL4g language
     `_` as the name binds nothing, as it does in a `match` arm.
 
 [ ] pre- and post-conditions on a function, with a constraint as one of them.  [spec/conditions.md](spec/conditions.md) is a
-    proposal: one clause with two readings, told apart by an arrow -- `pre(EXPR)` is a condition, which must be a `bool` and is
-    checked, and `pre(EXPR → T')` is a requirement, which asks only that the expression can be written and binds `T'` to its
-    type.  A type parameter may stand where a value would -- `pre(somefunc(T'))`, which is no expression -- and that is what lets a
-    clause speak about a type no parameter holds a value of, `pre(zero(E') → E')` being `Default` in Rust and `mempty` in
-    Haskell; the apostrophe is what makes the bare name tellable from a value's, so the lifting rule is untouched and `⌈⌜T'⌝` still
-    means the largest value the type holds where `⌈T'` means the largest in one of them.  With that the expression notation is a
-    strict superset of the signature notation of the entry below.  One expression per clause and as many clauses as a function wants, so that each failure reports the clause that failed;
-    several clauses want several lines, and a header may not span lines outside its parentheses today, which the document measures
-    and answers three ways -- clauses on the header's line needs no change at all and is what should land first.
-    The expression is written over the function's parameters, which is the one new thing the front end needs and is what
-    makes the notation better than the signature form of the entry below: the expression grammar exists, the operand positions come
-    for nothing, and `pre(i < ⍴xs)` says a value-level thing no bound can.  Checked in the callee, which the stack walk already
-    makes report who called; folded where the arguments are known, which turns a condition the compiler can see into a compilation
-    error by the rule arithmetic already follows; and the two halves come apart exactly at removability -- a condition may be
-    compiled out, a requirement never.  Two more numbers in the table of kinds, a pre-condition being the caller's fault and a
-    post-condition the callee's.
+    proposal: one clause, and what decides which of two things it is, is whether the expression is over values or over types.  Over
+    values it is a condition -- evaluated, must be a `bool`, the program stops where it is false.  Over types it is a requirement --
+    nothing is evaluated, and what is asked is that the expression can be written, `pre(somefunc(T'))` and `pre(somefunc(T') → T')`
+    being the two shapes of that.  So **a constraint on a generic mentions only types** and `pre(somefunc(a))` is not one; the arrow
+    only says what a requirement answers.  A type is written as a type parameter, bare because the apostrophe is already the marker
+    and measured to cost the grammar nothing, or between lifting marks where it is not one -- the fourth place that reads a lift.
+    One expression per clause and as many clauses as a function wants, so that each failure reports the clause that failed; several
+    clauses want several lines, and a header may not span lines outside its parentheses today, which the document measures and
+    answers three ways -- clauses on the header's line needs no change at all and is what should land first.  Six refusals are the
+    rule and most of the checking: a clause mixing the two kinds of operand, an arrow on a value-level clause, a type-level `post`,
+    a condition that is not a `bool`, an impure condition, and a type parameter used as an operand before anything settled it.
+    Checked in the callee, which the stack walk already makes report who called; folded where the arguments are known, which turns a
+    condition the compiler can see into a compilation error by the rule arithmetic already follows; and the two halves come apart at
+    removability -- a condition may be compiled out, a requirement lowers to nothing to begin with.  Two more numbers in the table
+    of kinds, a pre-condition being the caller's fault and a post-condition the callee's.  Requirements first: they need no scope of
+    values, and they are what makes the entry below buildable.  With them `needs A'⟦I'⟧ → E'` is `pre(A'⟦I'⟧ → E')` and there is
+    nothing to learn twice.
 
 [ ] a language for constraining a generic.  A generic is checked per instantiation and a generic nobody calls is not checked at
     all -- not loosely but not at all: a body naming an identifier no program defined compiles clean.  Two different things a bound
