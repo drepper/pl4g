@@ -94,6 +94,12 @@ class _Expander:
             for item in unit.items:
                 if isinstance(item, ast.MacroDef):
                     self._collect(item)
+        if not self._macros:
+            # A program with no macro is handed back as it is.  Everything below
+            # rebuilds each node it passes, and rebuilding a whole compilation to
+            # find nothing is what this test is here to avoid: almost every program
+            # defines no macro and none of them should pay for the ones that do.
+            return list(self._units)
         answer: list[ast.SourceUnit] = []
         for unit in self._units:
             items = tuple(self._walked(item) for item in unit.items
@@ -148,10 +154,18 @@ class _Expander:
         if isinstance(node, ast.Block):
             return replace(node, stmts=tuple(self._statements(node.stmts)))
         if isinstance(node, ast.Node):
-            return replace(node, **{one.name: self._walked(getattr(node, one.name))
-                                    for one in fields_of(node)})
+            # Rebuilt only where something below it changed, so a subtree holding no
+            # invocation is the subtree that was there and not a copy of it.
+            changed: dict[str, object] = {}
+            for one in fields_of(node):
+                was = getattr(node, one.name)
+                now = self._walked(was)
+                if now is not was:
+                    changed[one.name] = now
+            return replace(node, **changed) if changed else node
         if isinstance(node, tuple):
-            return tuple(self._walked(one) for one in node)
+            found = tuple(self._walked(one) for one in node)
+            return found if any(a is not b for a, b in zip(found, node)) else node
         return node
 
     def _statements(self, stmts: Sequence[ast.Stmt]) -> list[ast.Stmt]:
