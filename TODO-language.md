@@ -134,6 +134,27 @@ To Do List for the PL4g language
     name, so a body is still checked per instantiation; the requirement is what a caller is told.  That is a tightening of the
     same syntax and wants its own decision about how much it breaks.
 
+[ ] a macro system.  [spec/macros.md](spec/macros.md) is a proposal, taking the design a related language settled on and asking
+    what it becomes here: two forms -- a list of rewrite rules and a function over the program's text -- a parse tree handed over
+    rather than a value, expansion between parsing and checking, hygiene by renaming with `#`, and every piece keeping the position
+    it was written at.  Most of it transfers unchanged.
+    Three of the original's four notations are already here under other names, which is the substance of the adjustment: the
+    invocation is `f⌜…⌝` because `⟦⟧` is indexing, an array literal *and* a definable bracket pair, and because the lifting marks
+    already mean "handed over as written rather than as what it evaluates to" -- which is the definition of a macro.  A quote is the
+    same marks, so the invocation is a name applied to a quote and is not a notation of its own.  A reference is the same marks
+    again, `⌜×⌝` for the operator, because `※` begins a comment here.  One keyword `macro` for both forms, told apart by whether a
+    parameter list follows, which is the device a bundle's body and an operator's arity already are.  No methods yet, so the five
+    questions are `⎕kind`, `⎕name`, `⎕head`, `⎕parts` and `⎕apply`, and `⎕kind` answers an enumeration rather than a string, which a
+    `match` is then checked for covering.
+    **And pl4g has the answer the original leaves open**: a name a macro *reads* resolves where the macro was written, which is the
+    decision already made for a bundle's lines, for the same reason and with the same implementation.
+    The large piece is the function form, which wants a compile-time interpreter the compiler has nothing like -- a constant folder
+    and a `comptime if` that compares two types are not one.  The rules form alone needs the notation, a structural matcher and a
+    stage between parse and check, and it is what answers the "nine operators from one line" case the operator decision left over.
+    Open: whether a macro may write a *definition*, which is what it is most worth and what forces expansion before the definitions
+    are collected rather than merely before they are checked; and whether `⌜⌝` can carry four meanings, the fallback being a free
+    bracket pair.
+
 [ ] let a program write an iterator.  The compiler is the only implementor of the protocol, and there are five of its
     implementations now: a range, an array, a list, a string and a table.  What the entry used to say waits on "something to
     iterate over that is not a range" has arrived, so nothing waits on that any more.  What is actually missing, measured against
