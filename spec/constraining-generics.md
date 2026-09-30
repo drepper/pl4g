@@ -1,7 +1,13 @@
 Constraining Generics
 =====================
 
-A proposal, not a decision.  It comes before
+**Decided and implemented**, on 2026-09-30, in the notation of
+[conditions.md](conditions.md): layer 1 is a `pre` clause over types, layer 2's
+bundles are applied inside one, and layer 3 is not in yet.  See
+[decisions.md](decisions.md) and [the specification](spec.md).  What follows is
+the reasoning, which is what makes the notation the one that was chosen.
+
+It comes before
 [attaching code to objects](attaching-code.md) at the user's direction, and the
 ordering turns out to be the right way round: a constraint that can say "this
 type has a `next`" *is* the protocol that document was looking for, so settling

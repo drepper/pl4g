@@ -7469,6 +7469,83 @@ layers each have a notion of "scalar pairs" and flatten past it; **Go**, which
 does the same for its multiple return values.  Nobody keeps the nesting past the
 point where registers are handed out, because a register holds one value.
 
+---
+
+## 2026-09-30T14:40+02:00 — language
+
+**Conditions on functions, and a constraint on a generic as one of them**
+
+    fn take(xs: A', i: I') → E' pre(A'⟦I'⟧ → E') pre(i < ⍴xs):
+
+One clause form, `pre(EXPR)` and `post(EXPR)`, and **what it means is decided by
+what the expression is over.**  Over values it is a *condition*: evaluated, it
+must answer a `bool`, and the program stops where it does not hold.  Over types
+it is a *requirement*: nothing is evaluated, and what is asked is that the
+expression can be written -- which is what a constraint on a generic is.  The
+arrow says what a requirement answers and may not be written on a condition.
+
+A type is written as a type parameter, bare because the apostrophe already marks
+it, or between the lifting marks where it is not one; the marks keep the three
+readings they have, so `⌈⌜T'⌝` is the largest value the type holds and `⌈T'`
+is the requirement that `⌈` applies to one.  A **bundle** names a set of
+requirements, its lines bare expressions separated by a line, a `;` or braces,
+and is asked for by applying it in a clause: `pre(number(T'))`.
+
+The full reasoning, the alternatives and the comparisons are in
+[conditions.md](conditions.md) and [constraining-generics.md](constraining-generics.md).
+What was decided by the user against this document's first recommendations, and
+matters most:
+
+**The level and not the arrow decides.**  The first draft had the arrow telling a
+requirement from a condition, which made `pre(somefunc(a))` a way to constrain a
+generic.  It is not: `a` is a value, so that clause is a condition and `somefunc`
+is called.  The tightening turned two rules into one and made `pre(A'⟦I'⟧ → E')`
+the same notation as the other document's `needs A'⟦I'⟧ → E'`, so there is
+nothing to learn twice.
+
+**A bundle's lines carry no keyword and `needs` does not exist.**  Everything in
+a bundle is a requirement, so the word would say on every line the only thing a
+line there can say; and once a bundle is *applied* rather than named, a clause
+holding one is a clause over types like any other.  Two clause keywords in the
+whole design.
+
+**A requirement is checked by asking the checker.**  Its expression is lowered
+with one value of each type operand in scope, into a function nothing will emit
+and with what it reports thrown away.  So "can this be written" is answered by
+the rules that already decide what may be written, rather than by a second copy
+of them -- which is the implementation reason the notation is an expression and
+not a signature.
+
+Turned down: a second keyword for requirements (`needs`), which would mark how
+the compiler answers a question rather than which question was asked; `pre`
+inside a bundle; the lifting marks on a type parameter, which would make `⌈⌜T'⌝`
+ambiguous; a named value standing for the type, as C++'s requires-expression has,
+since naming it is what would make the clause value-level; a bundle as a nominal
+type, as a trait or a protocol is, which brings conformance and coherence with
+it; and proof rather than checking, which wants a solver and is a different
+project.
+
+Compare: **Eiffel**, which invented `require`/`ensure`/`old` and whose inheritance
+rules this language does not need, having no subtyping; **C++20**, whose concept
+*is* a bundle and whose `requires Number<T>` is `pre(number(T'))`, the differences
+being that a concept is a `bool` expression and orders overloads by subsumption;
+**D**, which has both halves and did not unify them -- `in`/`out` blocks and
+template constraints are two notations for one requirement; **Rust**, **Haskell**
+and **Swift**, which answer the type half with traits, classes and protocols, all
+of which conflate the abbreviation with a type; **Zig** and **D** again, whose
+functions over types make a bundle unnecessary and which need types to be values;
+**Go**, which has neither and panics; **Odin**, whose `where` clauses are the type
+half unnamed; **Python**, whose `assert` is so removable that nobody relies on it;
+**Wolfram**, whose `PatternTest` is the value half and whose `f[x_Integer]` is the
+type half in the same notation as this.
+
+Left open: quantifiers over a collection, `⎕old` for the state at entry, whether
+a bundle may hold a condition the compiler settles, whether a bundle may be asked
+for anywhere but a function, and a compilation error for a condition the
+*optimizer* can see cannot hold -- the optimizer drops a check it can see holds
+and has no channel for a diagnostic about the language, so only what the checker
+settles is an error today.
+
 Open questions
 --------------
 

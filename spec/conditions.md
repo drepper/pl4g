@@ -1,9 +1,15 @@
 Conditions on Functions, and Constraints as Conditions
 ======================================================
 
-A proposal, not a decision.  It answers a question the user put: the language
-wants pre- and post-conditions, and a constraint on a generic could be one of
-them rather than a thing of its own.
+**Decided and implemented**, on 2026-09-30; see
+[decisions.md](decisions.md) for the entry and
+[the specification](spec.md) for what the language now says.  What follows is the
+reasoning, kept as it was written except where the implementation found the
+document wrong, which is marked where it happened.
+
+It answers a question the user put: the language wants pre- and post-conditions,
+and a constraint on a generic could be one of them rather than a thing of its
+own.
 
 The answer is that one clause does both, and that **what decides which it is, is
 whether the expression is over values or over types.**  A clause over values is a
@@ -338,14 +344,21 @@ function was called and who called it, so the thing a caller-side check was for 
 had for nothing.  One copy of the code, and the message is no worse.
 
 **Folded where the arguments are known.**  A pre-condition on constant arguments
-is a constant expression; the folder already collapses those, and the inliner
-already puts a small callee where it was called, after which the folder sees the
-arguments.  So `f(0u8)` with `pre(x > 0u8)` becomes a call to a function whose
-first act is a check that is known to fail -- which the compiler can then report
-*as a compilation error*, by the rule the language already applies to arithmetic.
+is a constant expression; the folder collapses those, and the inliner puts a
+small callee where it was called, after which the folder sees the arguments.
 
-That is C2's benefit in the cases where nobody needs a solver, and it arrives by
-composition rather than by design.
+*Corrected by the implementation, and half of this is not there.*  A check the
+folder can see **holds** is removed, which is what makes a condition free where
+the compiler can see it: that half is implemented and tested.  A check the folder
+can see **fails** is left alone and the program stops when it runs.  Reporting it
+as a compilation error would need the optimizer to raise a diagnostic about the
+language, and it has no channel for one -- so the rule "what the compiler can see
+is an error" holds only for what the *checker* settles, which is a literal
+falsehood, a question about types, and the operators the checker folds.  The
+inliner-driven error is a to-do and not a property of the design.
+
+That is C2's benefit in the cases where nobody needs a solver, and what arrives by
+composition is the free half.
 
 ### What a failure is
 
@@ -845,3 +858,34 @@ they are what makes the other document buildable -- conditions second, which are
 `AssertInst` and a status, and bundles third, which are substitution over what the
 first two settled.  The first two share the grammar and nothing else, so either
 could come first if the other turns out to want more thought.
+
+
+What the implementation found
+-----------------------------
+
+All three landed together, and four things came out differently from the estimate.
+
+**A requirement is checked by asking the checker.**  Rather than a walk over the
+expression deciding what each operation answers for the given types, the clause is
+*lowered*: a value of each type operand is bound in a scope of its own, inside a
+function nothing will emit, with what it reports thrown away, and what comes back
+is either a type or a refusal.  So "can this be written" is answered by the rules
+that already decide what may be written.  That is why the notation being an
+expression is worth more than the document argued: the saving is not one grammar
+instead of two, it is one *checker* instead of two.
+
+**The parameter scope the estimate worried about is not needed for requirements.**
+It is needed for conditions, exactly as predicted, and there it is the parameters
+already bound by the body.  A requirement binds its own names and reads none of
+the function's.
+
+**The three lift readings had to be reached before lowering, not through it.**  A
+lift is not a value, so a condition holding one -- `pre(⌜u8⌝ ≠ ⌜u16⌝)` -- cannot be
+lowered at all.  The compiler's existing "what does this comptime question come
+to" is asked first and the clause is settled there, which also gives the free and
+the impossible condition their two outcomes for nothing.
+
+**Eight refusals, not six.**  The two the document did not have are a bundle used
+where something with an answer is wanted, which the document states as a rule and
+did not count, and a bundle's line written over values, which the document argues
+for at length and did not list.

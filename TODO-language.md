@@ -99,43 +99,30 @@ To Do List for the PL4g language
     meaning, and its `next` is lowered where it is asked rather than called -- a comparison against the end and an addition.
     `_` as the name binds nothing, as it does in a `match` arm.
 
-[ ] pre- and post-conditions on a function, with a constraint as one of them.  [spec/conditions.md](spec/conditions.md) is a
-    proposal: one clause, and what decides which of two things it is, is whether the expression is over values or over types.  Over
-    values it is a condition -- evaluated, must be a `bool`, the program stops where it is false.  Over types it is a requirement --
-    nothing is evaluated, and what is asked is that the expression can be written, `pre(somefunc(T'))` and `pre(somefunc(T') → T')`
-    being the two shapes of that.  So **a constraint on a generic mentions only types** and `pre(somefunc(a))` is not one; the arrow
-    only says what a requirement answers.  A type is written as a type parameter, bare because the apostrophe is already the marker
-    and measured to cost the grammar nothing, or between lifting marks where it is not one -- the fourth place that reads a lift.
-    One expression per clause and as many clauses as a function wants, so that each failure reports the clause that failed; several
-    clauses want several lines, and a header may not span lines outside its parentheses today, which the document measures and
-    answers three ways -- clauses on the header's line needs no change at all and is what should land first.  Six refusals are the
-    rule and most of the checking: a clause mixing the two kinds of operand, an arrow on a value-level clause, a type-level `post`,
-    a condition that is not a `bool`, an impure condition, and a type parameter used as an operand before anything settled it.
-    Checked in the callee, which the stack walk already makes report who called; folded where the arguments are known, which turns a
-    condition the compiler can see into a compilation error by the rule arithmetic already follows; and the two halves come apart at
-    removability -- a condition may be compiled out, a requirement lowers to nothing to begin with.  Two more numbers in the table
-    of kinds, a pre-condition being the caller's fault and a post-condition the callee's.  Requirements first: they need no scope of
-    values, and they are what makes the entry below buildable.  With them `needs A'⟦I'⟧ → E'` is `pre(A'⟦I'⟧ → E')` and there is
-    nothing to learn twice.  Bundles land last and come out of one observation: a condition needs no abbreviation mechanism because a
-    pure function answering `bool` is one, and a requirement cannot use a function because there is nothing to call at the type
-    level -- so a bundle is what the type level needs and the value level does not.  A bundle's body is bare expressions separated
-    by a line, a `;` or braces, with no `pre` on them, everything in a bundle being a requirement; so the body is an ordinary block
-    and neither the layout question nor the level question touches it.  One is asked for by applying it -- `pre(number(T'))`, no
-    third keyword -- which means what a clause over types always means, that the application can be written, computed for a bundle
-    by substituting into every expression it holds.  It answers nothing, so an arrow on it and any use as an operand are refused.
-    D's `isNumeric!T` and Zig's comptime predicate are the alternative that needs no bundle, and they need types to be values;
-    adopting one later would change what `number` is and not how it is asked for.
+[x] pre- and post-conditions on a function, with a constraint as one of them.  Done on 2026-09-30, together with the entry
+    below, which is the same feature: one clause form, `pre(EXPR)` and `post(EXPR)`, and what it means is decided by whether the
+    expression is over values or over types.  Over values it is a condition -- evaluated, a `bool`, pure whatever the function is,
+    checked at the top of the body for a `pre` and before every return for a `post` with `⎕answer` standing for what was answered,
+    and exiting 89 or 90 where it fails.  Over types it is a requirement -- nothing evaluated, and what is asked is that the
+    expression can be written, which is checked by lowering it with one value of each type operand in scope into a function nothing
+    will emit.  A bundle names a set of requirements and is asked for by applying it in a clause; `needs` does not exist.  A
+    condition the checker settles is an error where it cannot hold and free where it must, and the folder drops a check that folded
+    to a truth.  Eight refusals, seventeen language tests, two optimizer tests.
+    Left over: a compilation error for a condition the *optimizer* sees cannot hold -- the optimizer has no channel for a
+    diagnostic about the language, so only what the checker settles is reported, which is a literal falsehood, a question about
+    types, and what the checker folds.  That wants a diagnostics channel in the pass manager and is a compiler entry, not a
+    language one.
 
-[ ] a language for constraining a generic.  A generic is checked per instantiation and a generic nobody calls is not checked at
-    all -- not loosely but not at all: a body naming an identifier no program defined compiles clean.  Two different things a bound
-    would buy, and they want different amounts of work: an error reported at the *call* rather than in the definition, which is
-    cheap and breaks nothing, and a body checked *once* before any call, which is valuable and makes programs that compile today
-    stop compiling.  [spec/constraining-generics.md](spec/constraining-generics.md) is a proposal: four vocabularies, and a
-    recommendation of three layers -- a bound as the required operation written out with a type in every position it has and `→`
-    for what it answers, checked at the call; bundles as pure abbreviations, parameterised, with no conformance rule and no
-    coherence; and the body-once check as a later tightening of the same syntax.  A bound is a signature and not a name, because a
-    name cannot say which side of `⸨⸩` the container is on, what else a function takes, or where an element type
-    comes from.  It comes before the entry below, which it makes smaller.
+[x] a language for constraining a generic.  Done on 2026-09-30 as the entry above: a bound is a `pre` clause whose expression is
+    over types, so `needs A'⟦I'⟧ → E'` is written `pre(A'⟦I'⟧ → E')` and there is nothing to learn twice.  Layer 1 and
+    layer 2 of [spec/constraining-generics.md](spec/constraining-generics.md) are in: the error is reported at the *call* rather
+    than in the definition, and bundles are pure abbreviations with no conformance rule and no coherence.  A bound is a signature
+    and not a name, as that document argued, and the expression notation says it with the operators and positions the expression
+    grammar already has.
+    Left over: **layer 3**, the body checked once against what it asked for, which is the valuable half and the one that makes
+    programs that compile today stop compiling.  Nothing yet says a generic body may use only the operations its requirements
+    name, so a body is still checked per instantiation; the requirement is what a caller is told.  That is a tightening of the
+    same syntax and wants its own decision about how much it breaks.
 
 [ ] let a program write an iterator.  The compiler is the only implementor of the protocol, and there are five of its
     implementations now: a range, an array, a list, a string and a table.  What the entry used to say waits on "something to

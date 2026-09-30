@@ -4586,6 +4586,165 @@ semicolon after it turns the block into one that has none.  C, C++, Go and Java 
 there terminating a statement rather than separating two.
 
 
+##### Conditions
+
+**A signature may say what a function requires of its types and what it demands of its values**, in as many clauses as it has
+things to say:
+
+```
+fn take(xs: A', i: I') → E' pre(A'⟦I'⟧ → E') pre(i < ⍴xs):
+    xs⟦i⟧
+```
+
+**What a clause means is decided by what its expression is over, and by nothing else.**
+
+| The expression is over | The clause is | What happens |
+|---|---|---|
+| values | a **condition** | it is evaluated, it must be a `bool`, and the program stops where it does not hold |
+| types | a **requirement** | nothing is evaluated; what is asked is that the expression *can be written* |
+
+So `pre(i < ⍴xs)` is a condition and `pre(A'⟦I'⟧ → E')` is a requirement, and `pre(somefunc(a))` is a condition whatever
+`somefunc` does -- `a` is a value, so the call happens and the answer has to be a truth.  A clause whose operands are of both
+kinds is refused (4905) rather than given a reading: the reading that makes the type operand legal is the one that stops checking
+the half that is about values, and a condition quietly becoming a requirement is the one mistake this notation could make.  Two
+clauses say it.
+
+**One expression per clause, and the clauses stand between the header and the body.**  A newline after a header is what says a
+function has no body, so the clauses are written on the header's line; each has a span of its own, which is what lets a failure
+point at the clause that failed rather than at a list holding it.
+
+###### A condition
+
+**A `pre` is checked once at the top of the body and a `post` before every return**, where `⎕answer` stands for what the
+function answered:
+
+```
+fn twice(a: u8) → u8 pre(a > 0u8) post(⎕answer > a):
+    a ⊞ a
+```
+
+**In the callee and not at the call.**  A check there that fails already names the function and, through the stack walk, who
+called it -- so what a check at every call site would buy is had for nothing, and there is one copy of the code.  `⎕answer` may be
+written only in a `post` (4908): there is nothing yet for it to stand for when a `pre` is checked.
+
+**A condition is a `bool`** (4906) and nothing is converted, exactly as in an `if`.  **A condition is pure** whatever the
+function it belongs to may do: one whose checking changed something could not be compiled out, and a build that compiled it out
+would run a different program.  The purity rules are therefore asked of the clause on its own, with a note saying why.
+
+**What the compiler can see is an error and what it cannot is a fault**, which is the rule arithmetic already follows.  A
+condition that comes to a constant falsehood is refused where it is written (4918), since every call of the function would stop;
+one that comes to a constant truth costs nothing, and the report log (`condition-holds`) is where a reader is told it was free.
+A check that only becomes constant after the inliner has put the callee where it was called is removed too -- which is what makes
+a written-out condition free wherever the compiler can see it holds -- but it is not reported, the optimizer having no channel for
+a diagnostic about the language.
+
+**A `pre` that does not hold exits 89 and a `post` 90**, two numbers because they have two culprits.
+
+###### A requirement
+
+**A requirement asks that an expression can be written over the types, and says nothing about any value.**  A type stands where a
+value would, and means "some value of this type":
+
+```
+fn total(a: T', b: T') → T' pre(T' ⊞ T' → T'):
+    a ⊞ b
+```
+
+**A type is written as a type parameter or between the lifting marks.**  `T'` bare, the apostrophe being the marker already -- a
+type parameter cannot be a value's name, which is what the marks exist to settle for every other type; and `⌜u64⌝` or `⌜u8⟦3⟧⌝`
+for one that is not. **This is the fourth place that reads a lift**, and the three that read one for what the type *is* keep
+their meaning inside a clause:
+
+```
+⌈⌜T'⌝      the largest value the type holds, which is a value -- so the clause is a condition
+⌈T'        that ⌈ applies to a T' at all, which is a type -- so the clause is a requirement
+```
+
+**The arrow says what a requirement answers.**  A name nothing has settled is settled by it, which is how a requirement reaches a
+type no argument mentions; a name already settled is compared, and a requirement answering something else is not met (4901).  The
+arrow may be written only on a requirement (4902): on a clause over values the call happens and the parameter list is where a
+type is read off a value, so there is nothing for it to name.
+
+**A type parameter standing in an operand is read and never written** (4904).  It must already be settled -- by an argument or by
+the arrow of an earlier clause -- which is why the clauses are read in the order they are written.
+
+**A requirement is a `pre`** (4903).  It is a fact about types and does not happen at a point in the call, so a `post` is always
+a condition.
+
+**A requirement of a generic is met by the types a call gives it**, checked before the function is made for them; one that cannot
+be written is reported at the requirement, with a note naming the call:
+
+```
+error: 'total' requires 'T' ⊞ T' → T'', and it cannot be written for T' = bool
+    fn total(a: T', b: T') → T' pre(T' ⊞ T' → T'):
+note: 'total' is asked for T' = bool here
+    total(true, false)
+```
+
+That is what a bound buys over checking the body per instantiation: the message is about the signature, which is the part a
+caller can read.  A requirement of a function with no type parameters is settled where it is written, so it is checked there and
+once.
+
+###### A bundle
+
+**A bundle is a name for a set of requirements.**  Its lines carry no keyword, everything in a bundle being a requirement, so a
+word saying so would say on every line the only thing a line there can say -- which makes the body an ordinary block, separated
+by a line, a `;` or braces:
+
+```
+bundle number(T'):
+    T' ⊞ T' → T'
+    T' ⌈ T' → T'
+
+bundle comparable(T'):  T' < T' → bool ; T' = T' → bool
+
+fn bigger(a: T', b: T') → T' pre(number(T')) pre(comparable(T')):
+    a ⌈ b
+```
+
+**One is asked for by applying it**, which is a clause over types like any other and means what one always means: that the
+application can be written.  For a function that is one accepting those types; for a bundle it is every line it holds with the
+arguments put in.  There is no keyword for it -- the clause that applies a bundle is a requirement, and marking how the compiler
+answers a question would not be marking which question was asked.
+
+**A bundle's parameters are type parameters** (4910) and its arguments are types (4912), so `pre(number(⌜u8⌝))` is how a program
+asks whether `u8` is one of whatever the bundle names.  **A bundle answers nothing**, so an arrow after one and any use of one
+inside a larger expression are refused (4915): a bundle is the whole of a clause or it is nowhere.
+
+**A bundle holds no condition** (4917).  Its parameters are types and it can name no value, so a line over values would have
+nothing to be about -- and a condition needs no bundle, a pure function answering `bool` being what abbreviates one:
+
+```
+fn inrange(i: u64, n: u64) → bool:  i < n
+
+fn take(xs: A', i: I') → E' pre(inrange(i, ⍴xs)):
+```
+
+That is the whole reason a bundle exists: the value level abbreviates with a function, and the type level cannot, there being
+nothing to call there.
+
+**A bundle may apply another** and a cycle among them is refused (4913) -- once every bundle is known and whether or not anything
+applies one, a cycle being a fact about the bundles rather than about any call.  Nothing conforms to a bundle: it is
+substitution, so there is no coherence rule and no orphan rule, and a type admits `⌈` because `⌈` works on it.
+
+###### Comparisons
+
+**Eiffel** invented this: `require`, `ensure`, `old`, class invariants, and the rules that weaken a pre-condition and strengthen
+a post-condition down a hierarchy -- a chapter this language does not have to write, having no subtyping.  **D** has both halves
+and did not unify them: `in` and `out` blocks are the value half, `out(r)` names the answer as `⎕answer` does, and template
+constraints are a separate notation for the type half, so a D programmer writes one requirement twice.  **C++** has the type half
+as concepts, where a concept is a bundle and `requires Number<T>` is `pre(number(T'))`; its contracts have been proposed for four
+standards running.  A concept is a `bool` expression, so concepts compose with `&&` and order overloads by subsumption, which a
+bundle gives up and which is what it saves.  **Rust**, **Haskell** and **Swift** answer the type half with traits, classes and
+protocols, each of which is also a type something can be behind, and each of which brings coherence with it.  **Zig** and **D**
+make a bundle unnecessary by having functions over types, which needs types to be values -- the design this is a restricted form
+of, restricted because type parameters here are inferred and not passed.  **Go** has neither and panics.  **Odin**'s `when`
+clauses are the type half unnamed.  **Python**'s `assert` is so removable that nobody relies on it, which is the cautionary case
+for the removable half.  **Wolfram** writes the value half as `PatternTest` -- `f[x_?NumericQ]` -- and the type half as
+`f[x_Integer]`, a type in an argument position, which is this notation in the one language on the list where a type-level
+question would have nothing to mean.
+
+
 ##### Special Functions
 
 Some functions have to be treated special.  The attribute syntax denotes this status of the function alongside the function definition.
@@ -4759,6 +4918,13 @@ allocation that could not be met are three different things.
 | 86 | the program ran off the bottom of its stack |
 | 87 | the processor is not the one the program was built for, or the system has turned off registers it uses |
 | 88 | a test the binary runs did not pass |
+| 89 | a pre-condition written in a signature did not hold, which is the **caller's** fault |
+| 90 | a post-condition written in a signature did not hold, which is the **callee's** |
+
+**89 and 90 are two numbers because they have two culprits.**  A caller acting on
+a status can tell "I called this wrongly" from "the thing I called is broken",
+which is the whole reason the range has a number per kind; and the stack walk
+beside the message already names which caller.
 
 **86 is the one stop a program could not report for itself**: there is no room left to report it in, which is why the handler
 that does report it runs on a stack of its own.  **87 is the one that happens before the program has run at all.**  **88 comes
@@ -4878,12 +5044,18 @@ note: largest was compiled for ⸨u8⸩ because of this call
     let n: ⸨u8⸩ = largest(s, t)
 ```
 
-That is C++'s bargain and not Rust's: there is no language for saying what a type parameter must support, so there is nothing to
-check a body against until a call says what the types are.  What it costs is that a generic function nobody calls is never
-checked at all -- not loosely but not at all, down to a name no program defined -- and that a mistake in one is found by whoever
-calls it.  [spec/constraining-generics.md](constraining-generics.md) proposes a language for it, in three layers of which the
-first changes nothing that compiles today.  What it buys is that nothing has to be said twice --
-a generator emitting a function knows what it will call it with.
+That is C++'s bargain and not Rust's, and it is what a generic without a requirement gets: what it costs is that a generic
+function nobody calls is never checked at all -- not loosely but not at all, down to a name no program defined -- and that a
+mistake in one is found by whoever calls it.  What it buys is that nothing has to be said twice, a generator emitting a function
+knowing what it will call it with.
+
+**A requirement moves the message to the signature.**  `pre(T' ⊞ T' → T')` says what a type parameter must support, and a
+call whose types do not is refused at the requirement with a note naming the call -- so the part a caller can read is the part
+that says what went wrong.  A requirement is checked *before* the function is made for those types, and its arrow may settle a
+type parameter no argument mentions, which is the one thing that reaches past 4555.  Conditions above says what a requirement is
+and how one is written; [constraining-generics.md](constraining-generics.md) is the reasoning that chose the notation.  The body
+is still checked per instantiation: a requirement is what a *caller* is told, and nothing yet says that a body may use only what
+it asked for.
 
 **One function is made per set of types**, not one per call: a second call saying what an earlier one said gets that same
 function.  The two are told apart by their symbols on their own, a symbol being the signature written out.  Which sets of types a
@@ -4894,7 +5066,8 @@ has, and something written once per set of types is none of them.
 
 Compare: **C++** templates, whose instantiation-time checking this is, and whose `template<typename T>` this leaves out -- the
 parameters being named by being used, as C++20's abbreviated `void f(auto x)` does.  **Rust** and **Swift**, which check a
-generic body once against bounds written on it, which is stronger and needs a language for the bounds.  **Go**, whose type
+generic body once against bounds written on it, which is stronger than checking a body per instantiation against requirements a
+caller is held to.  **Go**, whose type
 parameters are written in brackets and constrained by interfaces.  **ML** and **Haskell**, whose `'a` and `a` are inferred rather than
 written, and from whom the mark is borrowed.  **Zig**, where a type is an ordinary value at compile time and a generic function
 is a function taking one -- the most economical answer of the lot, and one that needs types to be values.

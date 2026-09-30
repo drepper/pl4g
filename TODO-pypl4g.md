@@ -486,6 +486,15 @@ To Do List for the pypl4g compiler
     diagnostic that should be reported (4441, a step that is not written down) is replaced by 9901, so the reader is told the
     compiler broke rather than what to fix.  Error recovery leaves the arm's block without a terminator.
 
+[ ] a condition the optimizer settles is not reported.  The folder drops a check whose condition folded to a truth, which is what
+    makes a condition written in a signature free once the inliner has put the callee where it was called; a check that folded to a
+    *falsehood* is left alone and the program stops when it runs.  It should be a compilation error -- what the compiler can see is
+    an error and what it cannot is a fault, which is the rule arithmetic follows and which
+    [spec/conditions.md](spec/conditions.md) claims for a condition.  What is missing is a channel: the pass manager hands a module
+    to each pass and no diagnostics engine, so nothing in `pypl4g/opt/` can say anything about the language.  The smallest form is a
+    list of "things to report" that the driver drains after the pipeline, which is also what value range propagation will want when
+    it proves a check cannot hold.
+
 Optimizations
 -------------
 
