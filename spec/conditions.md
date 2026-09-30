@@ -604,6 +604,27 @@ not arise.
 *function* used as a constraint, and so is the value-level abbreviation again, in the
 one language on this list where a type-level one would have nothing to mean.
 
+### What a bundle cannot yet be satisfied by
+
+**A type a program defined.**  A requirement may ask for `T' ⊞ T' → T'` and only a
+built-in type can answer, because an operator on a program's own type is something
+the language has no way to provide: measured, `a = b` over a record is refused
+(4207), and a record cannot be a dictionary key because it "answers neither" a
+hash nor a comparison (4429).
+
+So `pre(number(T'))` is a bound nothing a program writes can meet, which is a hole
+in this feature and not in that one -- and it is why
+[attaching code to objects](attaching-code.md) matters to this document.  That
+document now works the operator question out: the operator where the name goes,
+`fn Colour.⊞(a: Colour, b: Colour)`, with the arity deciding prefix from infix and a
+bracket pair as a name so that `fn Table.⟦⟧` is what `A'⟦I'⟧ → E'` asks for.
+
+**And nothing here has to change for it.**  A requirement is checked by lowering
+its expression, so an operator the lowering accepts is an operator a requirement
+accepts: `pre(number(T'))` over a program's own type starts working the day the
+operators do, with no seam between the two features.  That is worth stating because
+the two were designed apart.
+
 ### What the bundle does not decide
 
 - **Whether a bundle may hold a comptime condition** -- something over lifted types

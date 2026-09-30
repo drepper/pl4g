@@ -14,7 +14,7 @@ ground, four designs, a recommendation, and what each of them costs.
 What wants it
 -------------
 
-Three things, in the order they asked.
+Four things, in the order they asked.
 
 **A program writing an iterator.**  `foreach` walks five things and the compiler
 is every one of them.  For a program's own type to be walked, the loop has to
@@ -31,6 +31,27 @@ field or a function on `std.Build`".
 builtin, `⎕narrow` is a builtin.  Each of them is a thing the compiler does to a
 value because the language has no way for a *program* to do things to values by
 name.  Every one of those builtins is a decision that could not be deferred.
+
+**A bundle that requires an operator** -- which arrived after this document was
+written, and is the sharpest of the four because it is a hole in something that
+already works.  A requirement may ask for `T' ⊞ T' → T'`, and the bundle
+`number(T')` asks for four such things; but **only a built-in type can ever
+satisfy one**, because an operator on a type a program defined is an operator the
+language has no way to provide.  Measured, both of these:
+
+    let a: Point = Point(.x ← 1u8, .y ← 2u8)
+    if a = b: …
+    error: '=' compares numbers and truth values, not 'Point' [4207]
+
+    let s: mut ⸨Point⸩ = ⸨Point(.x ← 1u8, .y ← 2u8)⸩
+    error: 'Point' cannot be a key: it is hashed and compared, and this type
+           answers neither exactly [4429]
+
+The second message is worth reading twice: *answers neither*.  The language
+already frames a key as a type that **answers** a hash and a comparison, which is
+a type with code attached to it and nothing else.  So this document is what stands
+between a record and a dictionary key, and the operator question is most of what
+stands there.
 
 
 What the language already has
@@ -178,12 +199,14 @@ What B decides, concretely:
 
 1. A definition's name may be a path of two parts, `T.name`, where `T` is a type
    defined in the same file.  Not a type from another module, not three parts:
-   both are questions nobody has asked.
+   both are questions nobody has asked.  The second part may be an operator
+   instead of a name, which the section on operators below is about.
 2. The first parameter is written out.  No implicit receiver, no `self`.  The
    reason is that the language has nothing else implicit, and a receiver would be
    the first thing a reader has to know is there without seeing it.
 3. `T.name(args)` is how it is called.  `value.name(args)` is **not** part of
-   this proposal.
+   this proposal, and an operator is not called by either: `a ⊞ b` is how one is
+   written, which is the whole reason for attaching it.
 4. A protocol is a *name*: the `next` of a type `T` is the function `T.next`, and
    `foreach` over a value of `T` calls it.  Nothing declares that `T` is an
    iterator; having a `T.next` of the right shape is what being one is.
@@ -204,6 +227,213 @@ What it does **not** decide, and should not:
 - **Whether the same rule applies to an enumeration, a tuple, a unit, or a
   built-in type.**  A `u8.next` is a question this does not ask; the proposal covers
   a type a program defined with `type`.
+
+
+Operators
+---------
+
+Design B says a function may be named `T.name`.  An operator is not a name, so
+this is a question of its own -- and it is the question the fourth thing above
+turns on, since what a bundle asks for is almost always an operator.
+
+### What a program has to be able to say
+
+Three shapes, and the requirement notation is where to read them off, since a
+requirement is exactly what a program will have to satisfy:
+
+    T' ⊞ T' → T'        an infix operator on two values of the type
+    ⍴T' → u64            a prefix operator on one
+    A'⟦I'⟧ → E'       a bracket pair, which is neither
+
+The third is the one a design that thinks only about `+` and `-` forgets.  A
+program's own collection is the thing most likely to want code attached to it, and
+`⟦⟧` and `⸨⸩` are how a program would reach into one.
+
+### Four notations
+
+**O1.  The operator stands where the name does** (recommended).
+
+    fn Colour.⊞(a: Colour, b: Colour) → Colour:   …
+    fn Bag.⍴(b: Bag) → u64:                       …
+    fn Table.⟦⟧(t: Table, i: u64) → u8:      …
+
+The second part of the path is an operator token instead of an identifier.  It
+reads as the thing it defines, and the language is already comfortable with a
+glyph where a name goes -- `⎕narrow` is a name whose first character is a glyph a
+program may not write, and the lifting marks put a *type* where an expression
+goes.  The cost is one alternative in one grammar rule, on top of the alternative
+design B needs anyway.
+
+**O2.  A word, with the operator declared beside it.**
+
+    fn Colour.largest(a: Colour, b: Colour) → Colour alias ⌈:  …
+    @[operator("⌈")] fn Colour.largest(…):                …
+
+Eiffel's, which writes `plus alias "+"`, and the attribute form costs no grammar
+at all -- attributes exist, and one taking a string needs nothing new.  What it
+buys is a name for the operation, which a reader of the definition may prefer and
+which gives something to put in a diagnostic.  What it costs is that the operator
+and the name can disagree, and that there are then two ways to call one thing.
+
+**O3.  A fixed set of names.**
+
+    fn Colour.plus(a: Colour, b: Colour) → Colour:  …
+
+D's old `opAdd` and Python's `__add__`: the compiler knows which name means which
+operator.  No grammar change at all and no new token anywhere.  It is turned down
+because the table is a second language to learn -- `⊞` would need a name, and so
+would `⊟`, `⊠`, `⍴`, `⌈` and the rest, and none of those names exists yet.  A
+language whose operators are glyphs has already decided that the glyph is the
+name.
+
+**O4.  One function, taking the operator.**
+
+    fn Colour.infix(op: ⌜operator⌝, a: Colour, b: Colour) → Colour:
+        comptime if op = ⌜⊞⌝: …
+
+D's `opBinary!"+"`, and the one alternative with a real argument in this
+language's favour: **pl4g is a language for generators**, and a generator emitting
+a vector type wants to say "every arithmetic operator is elementwise" once rather
+than nine times.  `comptime if` and the lifting marks are most of what it needs.
+
+It is turned down *for now* rather than refuted, and the reason is that it is not
+an alternative to O1 but a layer over it: something still has to say what an
+operator on a type *is*, and O4 is a way of writing several of them together.  The
+ordering is O1 first, and O4 when a program is written that wants it.
+
+### What O1 decides
+
+1. **The arity says which operator is meant.**  `⌈` is both prefix and infix --
+   `⌈xs` is the largest of several values and `a ⌈ b` is the larger of two -- and
+   `fn Bag.⌈(b: Bag)` defines the first while `fn Colour.⌈(a: Colour, b: Colour)`
+   defines the second.  One parameter is the prefix reading and two is the infix
+   one, which needs nothing written to say so.
+2. **Both operands are the type.**  `fn Colour.⊞(a: Colour, b: Colour)`, and no
+   mixed-type operator.  That is a real restriction and it is deliberate: it is
+   the shape a requirement asks for -- `T' ⊞ T' → T'` names one type twice -- so
+   the restriction and the thing it exists to satisfy are the same shape.  What it
+   answers for nothing is the question every language with mixed operands has to
+   answer, which is *which side decides*.
+3. **What it answers is the definition's business.**  `fn Point.⊞` answering a
+   `Point` is the ordinary case, and one answering a `u64` is not refused: a
+   requirement that wanted a `Point` back says so with its arrow.
+4. **It is not called as a path.**  `a ⊞ b` is how it is written, which is the whole
+   point; `Colour.⊞(a, b)` is not part of this and should probably be refused
+   rather than given a meaning, since two spellings of one thing is what O2 was
+   turned down for.
+5. **Precedence and associativity are not the program's.**  The glyph set is fixed
+   and so is its table: `a ⊞ b ⌈ c` groups the way it groups whatever `Colour`
+   defines.  Swift lets a program declare precedence groups and new operators; that
+   is a much larger language and this proposal does not approach it.
+6. **A bracket pair is a name of two characters.**  `fn Table.⟦⟧` and
+   `fn Table.⸨⸩`, with the index as a second parameter.  Writing the pair with
+   nothing between it is what says the operator rather than an empty literal.
+
+### What may not be attached, and why
+
+**`←`**, which is not an operator on values: it binds a name, and a function
+that ran when a name was bound would make a program's assignments into calls.
+
+**`∧`, `∨`, `and`, `or`**, which decide *whether* to evaluate.  A function
+takes its arguments already worked out, so a program attaching one of these would
+be changing when things happen and not what they mean -- which is the trap C++
+left open in overloading `&&`, and every style guide since has said not to.
+
+**`?` and `??`**, which are about a result and not about what a result holds.
+
+**The lifting marks**, which are the grammar saying that a type follows.
+
+**`=` and `≠`: attachable, and only together with a hash.**  A type whose `=` a
+program wrote and whose hash it did not is a type that can be a dictionary key and
+answer wrongly, which is the one failure here that is silent.  4429 already says
+what the pair is -- *hashed and compared* -- so the rule is that a type providing
+one provides both, and a type providing neither is refused as a key exactly as it
+is today.  This is the one place where attaching code is not purely additive, and
+it is why `=` is worth naming here rather than leaving to the general rule.
+
+### What follows from one definition
+
+**`≠` follows from `=`**, and the three other orderings follow from `<`.  A type
+writes `fn T.=` and `fn T.<` and has six operators; letting a program write all
+six is letting it write four that disagree with the other two, which is C++'s
+experience before `operator<=>` and the reason that operator exists.  A type that
+wants an ordering no negation of `<` describes is a type wanting something this
+language should probably not offer.
+
+That is a rule about what a *definition* gives, not about what a requirement may
+ask: `pre(T' ≤ T' → bool)` is met by a type that wrote only `fn T.<`, because
+the operator works on it.
+
+### Operators in other languages
+
+**Ada** writes `function "+" (Left, Right : Vector) return Vector` -- the operator
+as a name in quotes, which is O1 with the quoting Ada needs because `+` is not a
+legal identifier there.  A language whose operators are already glyphs does not
+need the quotes.
+
+**C++** has `operator+` as a member or a free function, chosen per operator, with
+the free form there to answer the mixed-operand question O1 refuses to have.  Its
+lesson is `operator<=>`: twenty-eight years of types whose four orderings did not
+agree, fixed by making one definition give all of them.
+
+**Rust** has one trait per operator -- `Add`, `Neg`, `Index` -- with the
+right-hand type as a trait parameter, which answers mixed operands at the cost of
+a trait system and orphan rules.  `PartialOrd` gives the four orderings from one
+method, which is the rule above.
+
+**D** has `opBinary!"+"`, one function over all binary operators, which is O4 and
+which D reached after `opAdd`, which is O3.  That progression is the argument
+against O3.
+
+**Python** has `__add__` and `__radd__`, the second existing only to answer which
+side decides -- and `NotImplemented` as a value meaning "ask the other one",
+which is a protocol a language without it does not have to explain.
+
+**Eiffel** writes `plus alias "+"`, which is O2, and is the language that shows
+what a name beside the operator is worth: its own library reads `a.plus (b)` and
+`a + b` interchangeably.
+
+**Haskell** has no operator attachment at all, because an operator is an ordinary
+function whose name happens to be symbols, and `instance Num Vector` is how a type
+gets one.  That is the cleanest answer available and it needs classes.
+
+**Swift** goes furthest: operators are functions, a program may declare *new*
+ones, and precedence is declared in named groups.  It is the demonstration that
+point 5 above is a real fork in the road and not a detail.
+
+**Go**, **Odin** and **Zig** have no operator overloading, on purpose and with the
+same reason: an operator whose meaning a reader cannot see is a cost paid on every
+line to save characters on a few.  That argument is weaker here than in those
+languages, and the reason is the fourth thing this document is for: without
+attachable operators a bundle cannot be satisfied by anything a program defines,
+so the feature is not sugar but the difference between generics that work over the
+language's types and generics that work.
+
+**APL**, **BQN** and **UIUA** are the other end: the glyph *is* the language, and
+what a glyph means on a value is the interpreter's and not a program's.  BQN lets
+a program name a function with a symbol of its own, which is Swift's answer in an
+array language.
+
+**Wolfram** answers "which side decides" with up-values: `f /: Plus[f[x], y] := …`
+attaches a rule for `Plus` to `f` rather than to `Plus`.  It is the most general
+answer on this list and it needs a term rewriter.
+
+### What the operator question does not decide
+
+- **Mixed-type operators.**  `Point ⊠ u8` is what a vector wants and O1 cannot
+  say.  The answers are Rust's (the right type is a parameter of the bound),
+  Python's (ask the other side) and Wolfram's (attach to either), and none of them
+  is small.
+- **Whether a program may attach an operator to a type it did not define.**  The
+  same question design B leaves open, with the same answer available: no is
+  smaller and can be relaxed.
+- **A new operator.**  Swift's, and not this: the glyph set is the language's.
+- **What a hash looks like.**  The `=`-and-hash pair needs a name for the hash and
+  a shape for what it answers, and that is the decision that turns a record into a
+  dictionary key.  It belongs with this and is not in it.
+- **Whether an attached operator may be generic.**  `fn Vec.⊞` where `Vec` holds a
+  `T'` is what a container wants, and a generic definition attached to a generic
+  type is a second instantiation question.
 
 
 Comparisons
@@ -289,19 +519,41 @@ What it would take
 
 An estimate, so that the decision is not made without one.
 
-- **The parser**: a definition's name may be `IDENT . IDENT`.  One rule, and the
-  same rule in `tree-sitter-pl4g/grammar.js`, in the same commit.
+- **The parser**: a definition's name may be `IDENT . IDENT`, and for an operator
+  `IDENT . OPERATOR` and `IDENT . BRACKET-PAIR`.  One rule with three
+  alternatives, and the same in `tree-sitter-pl4g/grammar.js` in the same commit.
+  The operator alternatives are where the grammar is least certain: every operator
+  token is otherwise only ever seen between or before operands, so a generalized
+  parse may find a second reading of `fn T.⌈(` that an LR one would not.
 - **The resolver**: a two-part path whose first part names a type in this file
   resolves to that type's function.  Beside the module-path rule that is there.
 - **Mangling**: the symbol is the path.  Nothing new; a name with a dot is a name.
 - **`foreach`**: one arm in `_iteration_of` -- a type with a `T.next` of the
   right shape is walked by calling it -- and the loop machinery already carries
   state across turns and tests a result, which is what it needs.
+- **The operators**: where an operator is lowered, one arm before the refusal, for
+  each of the three shapes: a binary operator on two values of one program-defined
+  type, a prefix one on one, and a bracket pair.  Each of them is a place that
+  today reports 4207 or its neighbours, so the arm goes where the refusal is and
+  the refusal stays for a type that attached nothing.  Then `≠` from `=` and the
+  three orderings from `<`, which is the same arm reading one definition and
+  negating what it answered.
+- **A requirement over an attached operator**: nothing.  A requirement is checked
+  by lowering its expression, so an operator the lowering now accepts is an
+  operator a requirement now accepts, and `pre(number(T'))` over a program's own
+  type starts working the day the arms above do.  That is worth saying because it
+  is the whole point and it costs nothing: the two features were not designed
+  together and meet without a seam.
 - **The specification**: a section under Definitions, and an entry in
   `decisions.md`.
 - **Tests**: a type with two functions, two types each with a `next`, a call
   through the path, a `foreach` over a program's iterator, and the refusals -- a
-  path naming something that is not a type, a `T.next` of the wrong shape.
+  path naming something that is not a type, a `T.next` of the wrong shape.  For the
+  operators: an infix one, a prefix one sharing its glyph with an infix one, a
+  bracket pair, `≠` answered by a type that wrote only `=`, an ordering answered by
+  a type that wrote only `<`, a bundle requiring an operator and met by a program's
+  own type, and the refusals -- `∧` attached, `←` attached, a mixed-type operator,
+  and `=` without a hash used as a key.
 
 The `foreach` arm is the only part that touches anything delicate, and the piece
 worth doing *before* any of it is smaller still: **`foreach` over a cursor**,
