@@ -4880,7 +4880,9 @@ note: largest was compiled for ⸨u8⸩ because of this call
 
 That is C++'s bargain and not Rust's: there is no language for saying what a type parameter must support, so there is nothing to
 check a body against until a call says what the types are.  What it costs is that a generic function nobody calls is never
-checked at all, and that a mistake in one is found by whoever calls it.  What it buys is that nothing has to be said twice --
+checked at all -- not loosely but not at all, down to a name no program defined -- and that a mistake in one is found by whoever
+calls it.  [spec/constraining-generics.md](constraining-generics.md) proposes a language for it, in three layers of which the
+first changes nothing that compiles today.  What it buys is that nothing has to be said twice --
 a generator emitting a function knows what it will call it with.
 
 **One function is made per set of types**, not one per call: a second call saying what an earlier one said gets that same

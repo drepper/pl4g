@@ -99,6 +99,15 @@ To Do List for the PL4g language
     meaning, and its `next` is lowered where it is asked rather than called -- a comparison against the end and an addition.
     `_` as the name binds nothing, as it does in a `match` arm.
 
+[ ] a language for constraining a generic.  A generic is checked per instantiation and a generic nobody calls is not checked at
+    all -- not loosely but not at all: a body naming an identifier no program defined compiles clean.  Two different things a bound
+    would buy, and they want different amounts of work: an error reported at the *call* rather than in the definition, which is
+    cheap and breaks nothing, and a body checked *once* before any call, which is valuable and makes programs that compile today
+    stop compiling.  [spec/constraining-generics.md](spec/constraining-generics.md) is a proposal: four vocabularies, and a
+    recommendation of three layers -- a bound as a list of admitted names checked at the call, bundles as pure abbreviations with
+    no conformance rule and no coherence, and the body-once check as a later tightening of the same syntax.  It comes before the
+    entry below, which it makes smaller.
+
 [ ] let a program write an iterator.  The compiler is the only implementor of the protocol, and there are five of its
     implementations now: a range, an array, a list, a string and a table.  What the entry used to say waits on "something to
     iterate over that is not a range" has arrived, so nothing waits on that any more.  What is actually missing, measured against

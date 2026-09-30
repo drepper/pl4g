@@ -1,8 +1,12 @@
 Attaching Code to Objects
 =========================
 
-A proposal, not a decision.  What it is for is the question the language cannot
-answer today: **how does a program say that a piece of code belongs to a type?**
+A proposal, not a decision.  It is now the second half of a pair:
+[constraining generics](constraining-generics.md) comes first, and what that one
+calls a bound over a function's name is what this one calls a protocol -- so read
+that first, and read the last section of it for what it does to this.
+
+What this is for is the question the language cannot answer today: **how does a program say that a piece of code belongs to a type?**
 Nothing decided here is settled until the user says so; what is here is the
 ground, four designs, a recommendation, and what each of them costs.
 
