@@ -183,10 +183,164 @@ checked, not a way to attach code, and doing it to get an iterator would be
 answering a small question with the largest available answer.
 
 
+What the step operators change
+------------------------------
+
+Asked after the operators landed: the language has `⇧` and `⇩` for the next and
+the previous of a walk, and an operator is now a function a program may write.  So
+what does the iterator -- the first and largest of the four things this document is
+for -- look like now?
+
+### The example, and it compiles today
+
+    type Walk = at : u8 ; last : u8
+
+    fn `⇧`(it: Walk) → Walk:
+        Walk(.at ← it.at ⊞ 1u8, .last ← it.last)
+
+    fn `⇩`(it: Walk) → Walk:
+        Walk(.at ← it.at ⊟ 1u8, .last ← it.last)
+
+    ⎕narrow((⇩⇧⇧w).at, ⌜u6⌝) ?? 1u6            ※ two forward, one back: 2
+
+Measured: that compiles and runs.  **Part of what this document is for is already
+available and the document did not say so** -- which is the first thing the
+question changes.
+
+### The protocol is four operations, and the cursor is where to read them off
+
+The compiler's own cursor is the specification of what an iterator is in this
+language, so what a program's own iterator has to be able to do is what a cursor
+does.  Four things, and each was measured against the compiler as it stands:
+
+| What | The cursor spells it | Can a program define it? |
+|---|---|---|
+| on to the next, or back one | `⇧it`, `⇩it` | **Yes**, today |
+| what the walk is at | `it⌖` | No: `⌖` is reserved (3052) |
+| take it out and move on | `†it` | No: `†` is punctuation, not a symbol (3052) |
+| whether the walk is over | the cursor where a truth is wanted | No: there is no operator for it (4437) |
+
+**That reframes the whole document.**  "A program writes an iterator" is not one
+decision about attaching code; it is four questions, three of which are about
+whether a particular glyph or reading may be a program's.  None of the four
+designs above asks any of them.
+
+### E.  The protocol is operators
+
+The three glyphs and the truth reading, and no name anywhere:
+
+    fn `⇧`(it: Walk) → Walk:   …        ※ works now
+    fn `⌖`(it: Walk) → u8:      …        ※ wants `⌖` to be nameable
+    fn `†`(it: Walk) → 〈u8, Walk〉:  …   ※ wants `†` to be nameable
+
+    foreach x := w:  …                 ※ finds them
+
+*What it buys.*  **Uniformity with the compiler's own cursor.**  `foreach` over a
+cursor is refused today (4438) although a cursor is the compiler's own iterator,
+and this document's estimate already names that as the piece worth doing first.
+Under E the two are *one* rule -- a thing with the step operators is walkable,
+whoever wrote it -- where under B they are two, since a cursor has no `T.next` and
+never will.
+
+And it needs **none of design B**.  The central decision of this document is not a
+prerequisite for its central motivation, which is the sharpest thing the question
+changes.
+
+*What it costs.*  Three decisions, each smaller than B and each on its own:
+
+- **`⌖` is reserved**, on the ground that dereference is about references.  That
+  now looks premature: `it⌖` on a cursor is not a reference at all, it is what the
+  walk is at, and the specification says so in those words.  It is the smallest of
+  the three and probably right to undo.
+- **`†` is not a symbol**, so the Unicode rule keeps it out.  It is a prefix operator
+  of the language all the same, so adding it to the list of glyphs that qualify
+  because the language already uses them is one entry -- the same clause `-`, `^`
+  and `⌈` are in.
+- **The truth reading has no operator at all.**  "Whether the walk is over" is a
+  cursor standing where a `bool` is wanted, which is a *conversion* and not an
+  operator, and nothing in the language lets a program define one.  This is the one
+  question of the four that is genuinely about attaching code, and the answers are
+  a glyph for it (`∽it`, say), a named protocol (design B), or a bundle (design F).
+
+### F.  The protocol is a bundle
+
+Not available when this document was written, because bundles were not:
+
+    bundle walkable(I', E'):
+        ⇧I' → I'
+        ⌖I' → E'
+
+    fn sum(it: I') → E' pre(walkable(I', E')):  …
+
+*What it buys.*  **The protocol is written down in the language** rather than being
+a rule in the compiler.  `foreach` could *require* the bundle, so a type that fails
+to be walkable is told which line of the bundle it failed and where -- which is
+what a bound buys over a lookup, and it is the whole argument of
+[constraining generics](constraining-generics.md) applied here.  A program may also
+write its own bundles over the same operators, which a compiler-known protocol
+cannot be.
+
+*What it costs.*  Nothing new: bundles are in, requirements are in, and the
+operators are the ones E needs.  F is not an alternative to E but the thing that
+*says* what E means -- so the two go together, and neither needs design B.
+
+### H.  The protocol is a function
+
+Worth naming because a language shipped it while this document sat: **Go 1.23**
+walks anything that is a function taking a `yield`.  Here that would be
+
+    foreach x := λ …
+
+and nothing is attached to any type at all.  It is turned down rather than
+explored, and the reason is the one this language keeps coming back to: a lambda is
+two words and a call through a pointer, where a cursor is a value and a step is an
+addition.  A generated program that walks a list a million times should not pay for
+an indirect call each time, and that is exactly the case this language is for.  It
+is the right answer for a language with closures and a garbage collector, and the
+wrong one here.
+
+### How the evaluation changes
+
+**B is still right for what it was right for, and is no longer the first step.**
+
+The four things that want this document split cleanly now.  `std.Build`'s
+`add_executable` is a *named* operation on a value, which is B and nothing else.
+"Everything a reader would call a method" is B too.  A bundle requiring an operator
+is answered already -- operators landed.  And the **iterator**, which is the first
+and largest, is answered by E and F together, neither of which needs B.
+
+So the ordering in *What it would take* is wrong in its first line.  The smallest
+step towards a program writing an iterator is not design B; it is, in order:
+
+1. `foreach` over a cursor, which needs no decision from anywhere and which the
+   estimate already calls out.
+2. **`⌖` nameable**, which is one entry removed from a list and which makes E's second
+   row work.
+3. A way to ask **whether a walk is over** -- the one real decision, and the one to
+   put to the user.
+4. `foreach` over anything with the operators, which is then one rule covering the
+   compiler's cursor and a program's own walk alike.
+
+Comparisons for a protocol made of operators: **C++**, whose iterators are exactly
+this -- `*it`, `++it`, `it != end` and not one named method -- and whose
+`std::input_iterator` concept is design F over them; C++ is the language that
+answers this question the way E and F do, and it does so because it also has the
+operators.  **Rust** answers it with a name and a trait, `next` and `Iterator`,
+which is B and D; **Python** likewise with `__next__`.  **Go** has all three answers
+in its history: an interface, then a channel, then a function.  **APL**, **BQN** and
+**UIUA** have no iterators at all, whole-array operations being the point, which is
+the reminder that a language may earn its way out of the question.
+
+
 Recommendation
 --------------
 
 **B, and nothing else yet.**
+
+*Written before the operators landed.  See "What the step operators change" above:
+B is still the answer for a protocol that is a name, and it is no longer the first
+step towards the iterator, which the step operators and a bundle answer between
+them without it.*
 
 The reasoning is that B is the only one of the four that is *small* and *not a
 dead end*.  It needs no overloading (A does), no per-value cost (C does), and no
@@ -617,3 +771,7 @@ which is refused today (4438) although a cursor is the compiler's own iterator
 value and the loop's shape already fits it.  That needs no decision from this
 document at all, and it is the half of the iterator entry that is not blocked on
 anything.
+
+*And under E it is more than a first step: a rule that walks a cursor is the rule
+that walks a program's own type, since what a cursor offers is the step operators.
+See "How the evaluation changes" above for the order the work goes in now.*

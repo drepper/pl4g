@@ -153,6 +153,13 @@ To Do List for the PL4g language
     is met by a program's own collection and `g⟦i, j⟧` is sayable -- which C++ took until C++23 to allow.
     Left over from the operator half: `=` together with a hash, which is what turns a record into a dictionary key (4429 already
     calls a key a type that "answers" both); `≠` following from `=` and the three orderings from `<`; and mixed-type operators.
+    **And the operators change what the iterator needs**, which that document now works out: the protocol is four operations and the
+    cursor is where to read them off -- on to the next (`⇧`, definable today and measured), what the walk is at (`⌖`, reserved),
+    taking it out (`†`, punctuation and so not a symbol), and whether the walk is over (a cursor where a truth is wanted, which has
+    no operator at all).  So attaching code to a type is *not* a prerequisite for a program writing an iterator: the order is
+    `foreach` over a cursor, then `⌖` nameable, then a way to ask whether a walk is over -- the one real decision, and the one to
+    put to the user -- and then one `foreach` rule covering the compiler's cursor and a program's own walk alike.  A bundle can say
+    what the protocol *is*, which is the possibility that did not exist before bundles did.
     **`foreach` over a cursor is refused** (4438) although a cursor is the compiler's own iterator value and the loop's own shape
     fits it.  That is the same rule asked of a type the compiler already has, and it is worth doing first: it needs no decision
     about methods at all.
