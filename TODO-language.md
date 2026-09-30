@@ -116,7 +116,12 @@ To Do List for the PL4g language
     removability -- a condition may be compiled out, a requirement lowers to nothing to begin with.  Two more numbers in the table
     of kinds, a pre-condition being the caller's fault and a post-condition the callee's.  Requirements first: they need no scope of
     values, and they are what makes the entry below buildable.  With them `needs A'⟦I'⟧ → E'` is `pre(A'⟦I'⟧ → E')` and there is
-    nothing to learn twice.
+    nothing to learn twice.  Bundles land last and come out of one observation: a condition needs no abbreviation mechanism because a
+    pure function answering `bool` is one, and a requirement cannot use a function because there is nothing to call at the type
+    level -- so a bundle is what the type level needs and the value level does not.  It holds `pre` clauses only, no `post`, and
+    `needs number(T')` asks for one; `needs` survives as a third clause kind rather than a second spelling of `pre`, because it
+    stands for however many clauses the bundle holds where every `pre` is one.  D's `isNumeric!T` and Zig's comptime predicate are
+    the alternative that needs no bundle, and they need types to be values.
 
 [ ] a language for constraining a generic.  A generic is checked per instantiation and a generic nobody calls is not checked at
     all -- not loosely but not at all: a body naming an identifier no program defined compiles clean.  Two different things a bound
