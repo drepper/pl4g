@@ -2555,12 +2555,19 @@ class Checker:
         if placed:
             assert builder is not None
             # A variable the program wrote as an ordinary name and the compiler
-            # put in memory: the program did not ask for that, so the log says
-            # so and says why.
+            # put in memory: the program did not ask for that, so the log says so
+            # and says which of the two reasons it was.  They are different things
+            # for a reader to do something about -- one is in the program and one
+            # is in the type -- and saying "something takes its address" of a
+            # record nothing takes the address of sends a reader looking for a
+            # reference that is not there.
             self._module.reports.record(
                 ReportKind.PLACE_LOCAL, name,
                 "something takes its address, so it is kept in storage of its "
-                "own rather than in a register",
+                "own rather than in a register"
+                if name in self._addressed else
+                "it is a record, and a field is read at an offset, so it is kept "
+                "in storage of its own for there to be an offset from",
                 span)
             place = builder.frame(held, span)
             if isinstance(held, ProductType):

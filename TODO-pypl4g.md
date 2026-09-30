@@ -498,6 +498,41 @@ To Do List for the pypl4g compiler
 Optimizations
 -------------
 
+[ ] a record nothing takes the address of still gets a frame slot, and every read of a field goes through it.
+    Measured on a two-field record stepped twice:
+
+        fn `⇧`(t: Test) → Test:
+          if t.a < t.b:
+            Test(.a ← t.a + 1i32, .b ← t.b)
+          else:
+            t
+
+    At -O1 on x86-64 the callee opens with `sub rsp, 16`, stores both fields out of the registers they arrived in, and reads them
+    straight back:
+
+        sub rsp, 16
+        mov [rsi], eax          ※ the two fields, stored
+        mov [rax], edx
+        mov eax, [rax]          ※ and loaded again to compare them
+        mov edx, [rdx]
+
+    The reason is one line in `_bind_local`: **a record is given storage whether or not anything takes its address**, because "a
+    field is read at an offset, so the record has to be somewhere for there to be an offset from".  That is true of a record in
+    memory and not of one that arrived in registers: `extract` reads a part of a value and the compiler already emits it -- the same
+    function uses `extract.0.i32` on the incoming parameter to *fill* the slot it then reads back.
+
+    What it costs, per call of the shape above: a 16-byte frame, two stores and four loads in the callee, and two loads and two
+    stores in the caller to hand the record over and put the answer back.  Nothing in the optimizer removes any of it, the stores
+    and loads being through a pointer the passes do not follow.
+
+    The fix is to place a record local only where something takes its address -- which is what the rule already says for every other
+    type -- and to read a field with `extract` where the record is a value.  A record whose field is *assigned* still wants storage,
+    or wants the field rewritten as a new value with one part replaced; which of the two is the decision inside this entry.
+
+    Two smaller things follow from it.  `i ← ⇧i` becomes register traffic with no frame at all, which is the case that
+    prompted this.  And the `place-local` entry in the report log stops being written for a record nobody references, which is what
+    it is for: the log says what the compiler chose that the program did not ask for.
+
 [ ] Implement value range propagation.  Needs the arithmetic entry in TODO-language.md, which is what produces the checks this
     would remove.  The result is obviously usable in many situations, including:
     [ ] skip overflow/underflow checking of arithmetic operations
