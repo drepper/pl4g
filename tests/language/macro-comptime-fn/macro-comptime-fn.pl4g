@@ -1,0 +1,24 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=3 diag=none
+
+※ A macro is one function and cannot be two, so a walk that has to descend calls
+※ something that recurses; `comptime fn` is how that is spelled.  It is installed
+※ before expansion for the macros to call, and again in the ordinary way for the
+※ program -- unless what it takes or answers is a piece of the program, which
+※ nothing at run time may hold, and then it is the macros' alone.
+※
+※ `$(…)` puts what an expression answers into the tree: a piece of the program as
+※ itself, and a number as what a program would have written to mean it -- which is
+※ what lets a macro work something out and write the answer.
+
+comptime fn deepest(e: syntax) → u64:
+    if ⎕parts(e) = 0u64:
+        1u64
+    else:
+        1u64 + deepest(⎕part(e, 0u64))
+
+macro depth(e: syntax) → syntax:
+    ⌜$(deepest(e))⌝
+
+@[startup]
+fn main() → u6:
+    ⎕narrow(⎕narrow(depth⌜1u8 + 2u8 + 3u8⌝, ⌜u6⌝) ?? 1u6, ⌜u6⌝) ?? 1u6

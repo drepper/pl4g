@@ -1,11 +1,11 @@
 Macros and Reflection
 =====================
 
-**The rules form is decided and implemented**, on 2026-09-30; see
-[decisions.md](decisions.md) for the entry and [the specification](spec.md) for what
-the language now says.  The function form is not, and waits on the interpreter this
-document's estimate names.  What follows is the reasoning, kept as it was written
-except where the implementation found it wrong, which is marked where it happened.
+**Both forms are decided and implemented**, the rules form and then the function
+form, on 2026-09-30; see [decisions.md](decisions.md) for the entries and [the
+specification](spec.md) for what the language now says.  What follows is the
+reasoning, kept as it was written except where the implementation found it wrong,
+which is marked where it happened.
 
 It takes the design a related language settled on --
 two forms of macro, a parse tree handed over rather than a value, hygiene by
@@ -454,8 +454,11 @@ on it.
 What the implementation found
 -----------------------------
 
-The rules form landed in that order.  Four things came out differently from the
-estimate, and one of them is a hole in this document.
+Both forms landed in that order.  Four things came out differently from the estimate
+for the rules form, and one of them is a hole in this document; the function form's are
+under a heading of their own at the end.
+
+### The rules form
 
 **A template that assigns to a hole needed a node of its own.**  `$a ← $b` is the
 middle of the swap example, which is this document's own illustration of hygiene --
@@ -489,3 +492,45 @@ stage already has.  A test of the existing suite is what caught that distinction
 position it was written at, and it does, because substituting trees keeps the spans
 the parser gave them.  Both directions are tested: an error in the template points
 into the macro and an error in an argument points at the invocation.
+
+### The function form
+
+It landed next, and the estimate's one big item turned out to be the wrong shape.
+
+**"A `comptime` interpreter over the AST" is not what it needed.**  The estimate calls
+the evaluator *the large piece* and describes an interpreter over the parse tree.  What
+was written instead is a stage that **checks and lowers the macros into a module of
+their own, with the same checker and the same lowering the program gets, and then
+interprets the IR**.  The interpreter is 400 lines and holds no language knowledge at
+all: numbers and tuples, a `bytearray` for memory, and one arm per opcode.  Every rule
+the language has -- the types, the purity, the diagnostics -- applies to a macro
+because the same code applied them, rather than because a second implementation of the
+language was written to agree with the first.  That is also the reason a macro's
+mistake reads like any other mistake: it *is* any other mistake.
+
+The estimate was not wrong that the piece is large.  It was wrong about *where*: the
+work is in getting the macros through the front end as a program (which module they
+belong to, which of them the program may also have, what a `syntax` valued parameter
+does to the unit the program is built from) and not in running them.
+
+**`syntax` being compile-time only is a property of definitions and not only of
+values.**  A `comptime fn` whose parameter or result is a piece of the program is the
+macros' alone and must be kept out of the program's unit -- otherwise the back end is
+handed a function taking a type it has no size for.  The refusal a program gets for
+naming `syntax` (7022) is the same rule stated at the surface.
+
+**`=` on two pieces goes in the comparison lowering and not the binary one**, which
+cost a wrong first attempt: a comparison never reaches the arm that lowers `+`.  The
+document's "and `=`" hid a small fact about where the compiler puts what.
+
+**Hygiene has to be applied where a quote is turned into a piece**, not where a macro
+answers one.  A macro may write the same quote twice in one run and a `comptime fn` may
+be called many times; the renaming is per quote taken, which is what makes two turns
+of a loop bind two different names.
+
+**And three of the questions are still not callable.**  `⎕kind`, `⎕name` and `⎕apply`
+have a type in the compiler and no lowering: `⎕head`, `⎕parts`, `⎕part` and `=` were
+what the tests needed, and what the rest should answer is better settled by a macro
+that wants them than by guessing here.  An array of `syntax` is absent for the reason
+the design gives -- `⎕part` exists so that a macro need not hold the parts at once --
+and that is the one place where what is missing is a decision rather than work.

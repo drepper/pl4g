@@ -536,3 +536,23 @@ Optimizations
 [ ] Implement value range propagation.  Needs the arithmetic entry in TODO-language.md, which is what produces the checks this
     would remove.  The result is obviously usable in many situations, including:
     [ ] skip overflow/underflow checking of arithmetic operations
+
+[ ] The compiler has two compile-time interpreters and should have one.  `pypl4g/comptime/evaluate.py` runs the **syntax tree**, for
+    the build function, and `spec/details.md` gives the reason: over the representation a string joined to another is an arena, a
+    call into an allocator that exists only as assembly, and a model of the heap.  `pypl4g/front/interpret.py` runs the
+    **representation**, for a macro written as a function, and the reason there is the opposite one: a macro is part of the program
+    and has to be held to every rule the program is held to, so it is checked and lowered by the same code the program goes through
+    and what runs the result holds no knowledge of the language at all.
+
+    Both reasons are good and neither machine is the other's superset: the build machine has strings, collections and a heap that a
+    macro has no need of; the macro machine has the property the build machine gave up.  Two interpreters mean two answers to every
+    question about what a compile-time evaluation may do, and the second of them is the one that will be wrong.
+
+    The end state is one machine over the representation, which means the build function's values have somewhere to live -- so this
+    entry waits on the allocator being something the compiler can call rather than something each target emits. Until then the two
+    are kept apart deliberately and `details.md` says so.
+
+[ ] `⎕kind`, `⎕name` and `⎕apply` have a type in the compiler (`_SYNTAX_ANSWERS` in `sema/check.py`) and no lowering, so a macro
+    that calls one is refused as asking about a piece of the program where nothing has one.  `⎕head`, `⎕parts`, `⎕part` and `=` are
+    what the tests needed.  What `⎕kind` should answer for a clause, a bundle or an operator definition is the open part, and
+    `⎕apply` wants a decision about whether a macro may build a piece the parser could not have produced.

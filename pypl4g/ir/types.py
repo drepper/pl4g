@@ -97,6 +97,34 @@ class CharType(Type):
 
 
 @dataclass(frozen=True, slots=True)
+class SyntaxType(Type):
+    """A piece of the program, which is what a macro is handed and what it answers.
+
+    **A value of one never reaches the run time.**  It exists while the compiler
+    runs, where a macro takes a program apart and puts one back together, and there
+    is nothing for it to be afterwards: the program a macro wrote is the program,
+    and a tree of it in the binary would be a second copy of what the binary already
+    is.  So the checker refuses one anywhere a value has to outlive the compilation
+    -- a parameter or a result of a function the program calls, a field of a type, a
+    variable at the top level -- and what is left is the macros and the functions
+    they call.
+
+    It is a machine word wide because it is a handle: what it points at is a table
+    the compiler holds, and the interpreter that runs a macro is the only thing that
+    looks inside.
+    """
+
+    def render(self) -> str:
+        """The name of this type in the textual form of the IR."""
+        return "syntax"
+
+    @property
+    def holder(self) -> IntType:
+        """The integer a handle is held as."""
+        return U64
+
+
+@dataclass(frozen=True, slots=True)
 class Unit:
     """What a number counts, as base units with exponents and a scale.
 
@@ -911,6 +939,12 @@ F32: Final[FloatType] = FloatType(32)
 F64: Final[FloatType] = FloatType(64)
 
 CHAR: Final[CharType] = CharType()
+SYNTAX: Final[SyntaxType] = SyntaxType()
+
+#: What a program writes for a piece of the program.  An ordinary word rather than
+#: one of the compiler's `⎕` names, because a macro's parameter is written with it and a
+#: parameter's type is a type like any other.
+SYNTAX_NAME: Final[str] = "syntax"
 STR: Final[StrType] = StrType()
 
 #: The last code point there is.  Unicode says so and will not say otherwise:
@@ -967,6 +1001,7 @@ BUILTIN_TYPES: Final[dict[str, Type]] = {
     "bool": BOOL, "char": CHAR, "str": STR, "void": VOID,
     ARENA_NAME: ARENA,
     NARROWING_NAME: NARROWING,
+    SYNTAX_NAME: SYNTAX,
 }
 
 

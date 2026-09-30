@@ -170,7 +170,10 @@ GROUPS: tuple[Group, ...] = (
            "operator-fresh": "two operators the language has no meaning for at all",
            "operator-pair": "brackets a program defined, one of them with two indices",
            "macro-rules": "four invocations of two macros, one matching a product",
-           "macro-statements-and-hygiene": "a macro writing statements, with a name renamed"}),
+           "macro-statements-and-hygiene": "a macro writing statements, with a name renamed",
+           "macro-function-form": "a macro written as a function, compiled and then run",
+           "macro-reflection": "a macro asking what a piece of the program is made by",
+           "macro-comptime-fn": "a function the macros call, which recurses over a tree"}),
     Group("Loops",
           "A branch backwards, which is what makes liveness a question about "
           "the graph rather than about the layout.  These move when the "

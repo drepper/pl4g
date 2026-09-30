@@ -13,6 +13,7 @@ from dataclasses import dataclass, replace
 from typing import Final
 
 from .types import (ArrayType, BoolType, CharType, DictType, EnumType,
+                    SyntaxType,
                     FloatType,
                     IntType, MemType,
                     FuncType, ProductType, PtrType, SetType, TupleType,
@@ -82,10 +83,11 @@ def size_of(ty: Type, layout: DataLayout) -> int:
             return ty.bits // 8
         case BoolType():
             return 1
-        case CharType() | EnumType():
+        case CharType() | EnumType() | SyntaxType():
             # Each is held as an integer type and takes what that takes: a code
             # point as the thirty-two bits every one of them fits in, a value of
-            # an enumeration as whatever holds its values.
+            # an enumeration as whatever holds its values, and a piece of the
+            # program as the handle it is.
             return size_of(ty.holder, layout)
         case FuncType():
             # Where the code is and where what it brought in is: two addresses.
@@ -172,7 +174,7 @@ def align_of(ty: Type, layout: DataLayout) -> int:
             return ty.bits // 8
         case BoolType():
             return 1
-        case CharType() | EnumType():
+        case CharType() | EnumType() | SyntaxType():
             return align_of(ty.holder, layout)
         case FuncType():
             return layout.pointer_size

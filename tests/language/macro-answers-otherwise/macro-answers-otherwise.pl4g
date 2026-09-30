@@ -1,0 +1,13 @@
+※ pl4g-test: compile=error
+※ pl4g-test: expect-diag 7025 LANG_MACRO_ANSWERS_OTHERWISE
+
+※ What replaces the invocation is a piece of the program, so that is what a macro
+※ answers.  One that worked a number out puts it into a tree with `$(…)`, which is
+※ what says where in the program the number goes.
+
+macro counted(e: syntax) → u8:
+    1u8
+
+@[startup]
+fn main() → u6:
+    0u6

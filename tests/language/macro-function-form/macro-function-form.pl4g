@@ -1,17 +1,21 @@
-※ pl4g-test: compile=error
-※ pl4g-test: expect-diag 3053 LANG_MACRO_IS_A_FUNCTION
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=6 diag=none
 
-※ The other form of macro -- a function over the program's text, handed the parse
-※ trees of its arguments and answering the tree that replaces the invocation --
-※ needs an interpreter that runs at expansion.  The compiler has a constant folder
-※ and a `comptime if` that compares two types, and neither is one.
+※ The other form of macro: a function over the program's text.  It is handed the
+※ pieces written between the marks and answers the piece that replaces the
+※ invocation, and it runs while the compiler runs.
 ※
-※ So a parameter list here is refused with the reason rather than read, which is
-※ what says the form is not there yet rather than not wanted.
+※ **It is run by interpreting the intermediate representation** the ordinary checker
+※ lowered its body to, not by walking the tree.  That keeps one statement of what an
+※ expression means -- the same bargain a requirement makes, which is checked by
+※ asking the checker rather than by a walk of its own.
+※
+※ Inside the body the marks hold a piece of the program where they hold no type, and
+※ `$e` puts what `e` holds into it.  So `⌜$e + $e⌝` is the tree `_ + _` with both
+※ holes filled with what the caller wrote.
 
-macro doubled(e: syntax) → syntax:
-    e
+macro twice(e: syntax) → syntax:
+    ⌜$e + $e⌝
 
 @[startup]
 fn main() → u6:
-    0u6
+    ⎕narrow(twice⌜3u8⌝, ⌜u6⌝) ?? 1u6

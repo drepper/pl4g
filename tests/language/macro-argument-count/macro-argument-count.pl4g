@@ -1,0 +1,13 @@
+※ pl4g-test: compile=error
+※ pl4g-test: expect-diag 7026 LANG_MACRO_ARGUMENT_COUNT
+
+※ A macro written as a function takes the pieces written between the marks, one per
+※ parameter.  A macro written as rules says how many by what its patterns match, and
+※ answers a different message where none of them does.
+
+macro pair(a: syntax, b: syntax) → syntax:
+    ⌜$a⌝
+
+@[startup]
+fn main() → u6:
+    ⎕narrow(pair⌜1u8⌝, ⌜u6⌝) ?? 1u6

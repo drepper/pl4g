@@ -171,6 +171,11 @@ module.exports = grammar({
     // there being nothing here to run.
     function_definition: $ => seq(
       optional($.attribute_list),
+      // `comptime` before the keyword says when the function exists rather than
+      // what it computes: it is installed before the macros run, for them to
+      // call, and again in the ordinary way for the program.  It stands here and
+      // not in the body, a function being either kind as a whole.
+      optional('comptime'),
       'fn',
       field('name', choice($.identifier, $.operator_name)),
       field('parameters', $.parameter_list),
@@ -742,6 +747,7 @@ module.exports = grammar({
       $.parenthesized_expression,
       $.lifted_expression,
       $.invoke_expression,
+      $.quote,
       $.hole,
       $.float_literal,
       $.integer_literal,
@@ -1051,14 +1057,22 @@ module.exports = grammar({
 
     // `macro NAME:` and the rules it stands for.  A name and a body of bare lines,
     // which is a bundle's shape: both are a definition whose body holds neither
-    // statements nor a parameter list.  What a parameter list would say is that this
-    // is the other form of macro, a function over the program's text, which the
-    // compiler refuses with the reason -- so the grammar does not describe one.
+    // statements nor a parameter list.  A parameter list instead says that this is
+    // the other form, a function over the program's text: from the parameters on it
+    // is written exactly as a function is, the keyword being the whole difference.
     macro_definition: $ => seq(
       optional($.attribute_list),
       'macro',
       field('name', $.identifier),
-      field('rules', $._macro_body),
+      choice(
+        field('rules', $._macro_body),
+        // The other form: a function over the program's text, which is a function
+        // definition apart from the keyword and is written as one.
+        seq(field('parameters', $.parameter_list),
+            optional(seq($._return_arrow, field('return_type', $.type))),
+            repeat($.clause),
+            field('body', $._block)),
+      ),
     ),
 
     _macro_body: $ => choice($.macro_block, $.macro_braces, $.macro_inline),
@@ -1076,33 +1090,64 @@ module.exports = grammar({
                            repeat(seq(';', $.macro_rule)), '}'),
 
     // What the arguments have to look like, and what the invocation is replaced by.
-    macro_rule: $ => seq(field('pattern', $.quote), $._return_arrow,
-                         field('template', $.quote)),
+    macro_rule: $ => seq(field('pattern', $._quoted), $._return_arrow,
+                         field('template', $._quoted)),
 
-    // What stands between the lifting marks where a macro reads them: expressions
+    // Everything the lifting marks may hold.  One expression between them is the
+    // lifted expression the language already had -- what it is lifted *for* is a
+    // question about the program and not about its syntax, exactly as it is for a
+    // bare name that could be a type or a value.  What only a macro writes is the
+    // rest: nothing at all, several expressions, a run of statements, or an
+    // operator by itself.
+    _quoted: $ => choice($.quote, $.lifted_expression),
+
+    // What stands between the lifting marks and is not one expression: expressions
     // separated by commas, or -- with the contents indented under the opening mark --
     // a run of statements.  The marks do not hide the ends of lines the way the other
     // brackets do, so the indented form is the layout every block already has with
     // the mark in place of a colon.
     quote: $ => seq(
       '\u231c',
-      choice(
-        optional(sepBy1(',', $._expression)),
+      optional(choice(
+        seq($._expression, repeat1(seq(',', $._expression))),
+        $.quoted_operator,
         seq(repeat1($._newline), $._indent, repeat1($._statement_line),
             $._dedent, repeat($._newline)),
-      ),
+      )),
       '\u231d',
+    ),
+
+    // An operator alone between the marks, which is the operator itself rather than
+    // an expression using it: what `\u2395head` of a sum answers and what a macro
+    // compares that against.  Every operator written between or before its operands
+    // is one, the accepted ASCII substitutes included, and nothing else is -- a
+    // glyph the language gives no meaning has no name of its own to quote.  A test
+    // checks the list against the compiler's.
+    quoted_operator: _ => choice(
+      '#', '%', '&', '+', '-', '<', '=', '>', '??', '^', 'and', 'or', '|', '~',
+      '<=', '>=', '++',
+      '\u00ab', '\u00ac', '\u00bb', '\u00d7', '\u00f7', '\u207f', '\u2191',
+      '\u2193', '\u2195', '\u21ba', '\u21bb', '\u21d5', '\u21e7', '\u21e9',
+      '\u2223', '\u2224', '\u2227', '\u2228', '\u2245', '\u2247', '\u2260',
+      '\u2264', '\u2265', '\u2295', '\u229e', '\u229f', '\u22a0', '\u22bc',
+      '\u22bd', '\u2308', '\u230a', '\u2374', '\u29fa', '\u2a85', '\u2a86',
+      '\u2a89', '\u2a8a',
     ),
 
     // `$a`: a hole.  In a pattern it matches anything and remembers what it matched;
     // in a template it is filled with what the pattern's hole of that name matched.
-    hole: $ => seq('$', field('name', $.identifier)),
+    // `$(EXPR)` instead puts what the expression answers into the tree, which is how
+    // a macro written as a function writes something it worked out.
+    hole: $ => seq('$', choice(
+      field('name', $.identifier),
+      seq('(', field('value', $._expression), ')'),
+    )),
 
     // `f\u231c…\u231d`: a macro invoked, which is not a call.  What stands between the
     // marks is handed over as it is written and not as what it evaluates to, and the
     // marks are the language's own for exactly that.
     invoke_expression: $ => prec(15, seq(
-      field('name', $.identifier), field('arguments', $.quote),
+      field('name', $.identifier), field('arguments', $._quoted),
     )),
 
     // -- tokens ------------------------------------------------------------

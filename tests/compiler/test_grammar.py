@@ -269,3 +269,31 @@ def test_which_glyphs_may_be_an_operator_is_one_rule() -> None:
         elif kind == "Pe":
             assert _named_in_pattern(glyph, closes), \
                 "".join(("the grammar reads ", glyph, " as a pair's closer"))
+
+
+def test_which_operators_may_stand_alone_between_the_marks_is_one_rule() -> None:
+    """The grammar's list of quotable operators is the compiler's.
+
+    An operator by itself between the lifting marks is a macro's way of asking
+    what something is made by, so the two have to agree about which ones there
+    are: one the grammar left out is a macro an editor cannot read, and one it
+    added is a program the compiler refuses.  The compiler builds its list from
+    the tables that give each operator its level, so an operator gained there is
+    quotable without anything being told -- and this is what says so.
+    """
+    from pypl4g.front.parser import _OPERATOR_SPELLINGS
+    from pypl4g.front.token import ASCII_SUBSTITUTES
+
+    source = (GRAMMAR / "grammar.js").read_text(encoding="utf-8")
+    rule = source[source.index("quoted_operator:"):]
+    rule = rule[:rule.index("),\n")]
+    # The file spells a glyph the way JavaScript does, which is how every other
+    # glyph in it is spelled and what keeps it readable in any editor.
+    listed = {found.encode("ascii").decode("unicode_escape")
+              for found in re.findall(r"'([^']+)'", rule)}
+    spelled = set(_OPERATOR_SPELLINGS.values())
+    # Each accepted substitute lexes to the same token as the glyph it stands
+    # for, so the compiler takes it between the marks and the grammar must too.
+    spelled |= {form for form, glyph in ASCII_SUBSTITUTES.items()
+                if glyph in spelled}
+    assert listed == spelled

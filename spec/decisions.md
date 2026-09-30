@@ -7844,6 +7844,88 @@ may write a *definition*, which is what the feature is most worth and what would
 force expansion before the definitions are collected; and whether a macro may be
 exported, which bundles answered with `@[export]`.
 
+---
+
+## 2026-09-30T23:32+02:00 — language
+
+**Macros: the function form, which is compiled and then interpreted**
+
+    macro sum(e: syntax) → syntax:
+        if ⎕head(e) = ⌜+⌝:
+            ⌜$(⎕part(e, 0u64)) × 10u8⌝
+        else:
+            ⌜$e⌝
+
+    comptime fn deepest(e: syntax) → u64:
+        if ⎕parts(e) = 0u64:
+            1u64
+        else:
+            1u64 + deepest(⎕part(e, 0u64))
+
+The other half of [macros.md](macros.md).  A `macro` with a parameter list is a
+function over the program's text: it is handed pieces of the program, works something
+out, and answers the piece that replaces the invocation.  From the parameters on it is
+written exactly as a function is, and which form a `macro` is, is said by its shape
+rather than by a second keyword.
+
+**`syntax` is the type of a piece of the program, and only the compiler has one.** A
+definition naming it exists for the macros and is not in the program (7022), there
+being nothing at run time for a handle into the program to be a handle into.
+`⎕head(e)`, `⎕parts(e)` and `⎕part(e, n)` take a piece apart and `=` asks whether the
+same thing is written in two, wherever each was written.  `⌜…⌝` in the body of
+something that runs while the compiler does holds a piece of the program, `$a` puts a
+piece into it and `$(EXPR)` puts what an expression answers -- a piece as itself, a
+number as what a program would have written to mean it.
+
+**`comptime fn` is an ordinary function the macros may call.**  A macro is one function
+and cannot be two, so a walk that has to descend calls something that recurses.  Such a
+function is installed before expansion for the macros and again in the ordinary way for
+the program, unless what it takes or answers is a piece of the program, in which case it
+is the macros' alone.  So `comptime` says when a function exists and not what it
+computes.
+
+**How it runs was the decision.**  Four ways were weighed and the third was taken:
+
+- **A tree walker over the AST**, which is what the proposal's estimate describes and
+  what **Nim** and **Julia** do.  Cheapest to start and it is a second implementation of
+  the language: its own idea of what a type is, its own arithmetic, its own diagnostics,
+  and every rule the checker enforces either restated or quietly absent.
+- **Extend the constant folder**, which the compiler has.  It folds an expression and
+  cannot run a loop or build a value, and making it able to would turn a peephole pass
+  into an interpreter without ever deciding to.
+- **Check and lower the macros into a module of their own, then interpret the IR** --
+  taken.  The same checker and the same lowering the program gets, so a macro is subject
+  to every rule the language has because the same code applied them; the interpreter
+  holds no language knowledge, being numbers, tuples, a byte array for memory and one
+  arm per opcode.  This is **Zig**'s shape (its `comptime` runs the same semantic
+  analysis the program gets) and **C++**'s (`constexpr` evaluation runs over the typed
+  AST the rest of the compiler produced), and it is what **Rust**'s Miri is for const
+  evaluation.
+- **Compile the macros to machine code and run them**, which is what a **Lisp** does and
+  what **Rust**'s procedural macros do as a dynamic library.  It is the fastest and it
+  needs the host to be a target, a loader, and an answer to what a macro may do to the
+  machine it runs on.  This compiler emits ELF for three architectures and running one of
+  them on the host is a bigger commitment than a macro is worth.
+
+A macro that cannot be lowered is refused with the reason (7024); one whose run stopped
+is refused with that (7023), the step limit being a limit and not an analysis.  It takes
+as many pieces as its parameters say (7026) and must answer one (7025).
+
+**The compiler now has two compile-time interpreters**, which is a cost this decision
+accepted knowingly: the build function is run over the syntax tree, and
+[details.md](details.md) gives the reason -- over the representation a string joined to
+another is an arena, a call into an allocator that exists only as assembly, and a model of
+the heap.  A macro has none of that and has a requirement the build function does not, so
+the two answers are both right and the second machine is 400 lines.  The end state is one
+machine over the representation, which waits on the allocator being something the compiler
+can call; `TODO-pypl4g.md` has the entry.
+
+Left open: `⎕kind`, `⎕name` and `⎕apply`, which have a type in the compiler and no
+lowering -- what they should answer is better settled by a macro that wants them; an
+array of `syntax`, which the design leaves out on purpose since `⎕part` exists so that a
+macro need not hold the parts at once; a macro writing a *definition*; and following a
+reference to what it names.
+
 Open questions
 --------------
 

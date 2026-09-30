@@ -39,12 +39,46 @@ on a caller's `t` -- would quietly do nothing.
 from __future__ import annotations
 
 from dataclasses import fields as fields_of, replace
-from typing import Final, Sequence
+from typing import Callable, Final, Sequence
 
 from ..diag import ids as D
 from ..diag.engine import DiagEngine
-from ..source.location import Span
+from ..ir.module import Module
+from ..source.location import INVALID_SPAN, Span
 from . import ast
+from .interpret import Machine, Refused, Stopped
+
+#: The names of what a macro may call, which the machine gives a meaning to.  They
+#: are the checker's, because the checker is what writes the calls; they are repeated
+#: here rather than imported, the checker importing this.
+QUOTE_NAME: Final[str] = "\N{APL FUNCTIONAL SYMBOL QUAD}quote"
+FILL_NAME: Final[str] = "\N{APL FUNCTIONAL SYMBOL QUAD}fill"
+FILL_NUMBER_NAME: Final[str] = "\N{APL FUNCTIONAL SYMBOL QUAD}fillnumber"
+HEAD_NAME: Final[str] = "\N{APL FUNCTIONAL SYMBOL QUAD}head"
+KIND_NAME: Final[str] = "\N{APL FUNCTIONAL SYMBOL QUAD}kind"
+PARTS_NAME: Final[str] = "\N{APL FUNCTIONAL SYMBOL QUAD}parts"
+PART_NAME: Final[str] = "\N{APL FUNCTIONAL SYMBOL QUAD}part"
+ALIKE_PIECES_NAME: Final[str] = "\N{APL FUNCTIONAL SYMBOL QUAD}alike"
+
+#: Which shape each piece of the program is, as the number `\N{APL FUNCTIONAL SYMBOL QUAD}kind` answers.  A
+#: number rather than a name because the machine holds numbers; the language gives it
+#: an enumeration to compare against, which is what a program writes.
+_KINDS: Final[dict[str, int]] = {
+    "IntLit": 1, "FloatLit": 2, "StringLit": 3, "CharLit": 4, "BoolLit": 5,
+    "NameRef": 6, "Binary": 7, "Unary": 8, "Call": 9, "ArrayLit": 10,
+    "TupleLit": 11, "Lambda": 12, "Block": 13, "Member": 14, "Element": 15,
+    "Index": 16, "Fresh": 17,
+}
+
+
+class _Checked:
+    """The macros, checked and lowered: the module and the trees they quoted."""
+
+    __slots__ = ("module", "quoted")
+
+    def __init__(self, module: Module, quoted: Sequence[ast.Quote]) -> None:
+        self.module = module
+        self.quoted = list(quoted)
 
 #: How many rewrites one invocation may take before it is refused.  A macro that
 #: writes an invocation of itself is the shape this catches, and the number is a
@@ -57,31 +91,55 @@ ROUNDS: Final[int] = 64
 HYGIENE_MARK: Final[str] = "#"
 
 
-def expand(units: Sequence[ast.SourceUnit],
-           diags: DiagEngine) -> list[ast.SourceUnit]:
+def expand(units: Sequence[ast.SourceUnit], diags: DiagEngine,
+           checked: Callable[[Sequence[ast.SourceUnit]], _Checked] | None = None
+           ) -> list[ast.SourceUnit]:
     """Expand every macro in *units*, answering the units with none left.
 
     The macros of every unit are collected first, so that a file may invoke one
     written below the invocation and -- since the units of one compilation share a
     namespace -- one written in another of them.
+
+    *checked* is how the macros written as functions are made runnable: handed a unit
+    holding them and the functions they may call, it answers the module the ordinary
+    checker lowered them to.  It is a parameter rather than an import because the
+    checker imports this: expansion comes first in the pipeline and last in the
+    dependencies.
     """
-    return _Expander(units, diags).run()
+    return _Expander(units, diags, checked).run()
 
 
 class _Expander:
     """One expansion of one compilation."""
 
-    def __init__(self, units: Sequence[ast.SourceUnit],
-                 diags: DiagEngine) -> None:
+    def __init__(self, units: Sequence[ast.SourceUnit], diags: DiagEngine,
+                 checked: Callable[[Sequence[ast.SourceUnit]],
+                                   _Checked] | None = None) -> None:
         self._units = units
         self._diags = diags
+        self._checked = checked
+        #: The macros written as functions, by name, and the module they were
+        #: lowered into once anything has asked for one.
+        self._written: dict[str, ast.FuncDef] = {}
+        self._made: _Checked | None = None
+        self._machine: Machine | None = None
+        #: Every piece of the program a handle stands for, and the handle each tree
+        #: has where it has one.  A handle is an index here and nothing else, which
+        #: is what lets the machine hold one in a register.
+        self._trees: list[object] = []
+        self._handles: dict[int, int] = {}
+        #: The holes of the quote a handle came from, in the order they were
+        #: written.  Filling one makes a new tree and the rest are the *same* nodes,
+        #: so a hole is found by which object it is rather than by counting again --
+        #: which would renumber what is left every time one went.
+        self._holes: dict[int, list[ast.Hole]] = {}
         #: The macros, by name.  Not beside the program's own names: a macro and a
         #: function are not in one namespace, so a name may be both, and then the
         #: parentheses call the function and the marks invoke the macro.
         self._macros: dict[str, ast.MacroDef] = {}
         #: How many names hygiene has renamed, which is what makes each new one
         #: different from the last.
-        self._renamed = 0
+        self._renames = 0
         #: How many rewrites deep this is.  On the expander and not passed along,
         #: because what a macro wrote is walked whole and an invocation inside it is
         #: reached by the ordinary walk rather than by a call from here -- so a
@@ -94,7 +152,9 @@ class _Expander:
             for item in unit.items:
                 if isinstance(item, ast.MacroDef):
                     self._collect(item)
-        if not self._macros:
+                elif isinstance(item, ast.FuncDef) and item.is_macro:
+                    self._collect_written(item)
+        if not self._macros and not self._written:
             # A program with no macro is handed back as it is.  Everything below
             # rebuilds each node it passes, and rebuilding a whole compilation to
             # find nothing is what this test is here to avoid: almost every program
@@ -103,9 +163,30 @@ class _Expander:
         answer: list[ast.SourceUnit] = []
         for unit in self._units:
             items = tuple(self._walked(item) for item in unit.items
-                          if not isinstance(item, ast.MacroDef))
+                          if not isinstance(item, ast.MacroDef)
+                          and not _only_for_macros(item))
             answer.append(replace(unit, items=items))
         return answer
+
+    def _collect_written(self, node: ast.FuncDef) -> None:
+        """Write down a macro written as a function."""
+        previous = self._macros.get(node.name) or self._written.get(node.name)
+        if previous is not None:
+            self._diags.emit(D.LANG_FILESTRUCT_DUPLICATE_DEFINITION,
+                             node.name_span, name=node.name).note(
+                D.LANG_FILESTRUCT_PREVIOUS_DEFINITION, previous.name_span,
+                name=node.name)
+            return
+        if node.ret_type is None or not _names_syntax(node.ret_type):
+            # What replaces the invocation is a piece of the program, so that is what
+            # a macro answers.  One that worked a number out puts it into a tree with
+            # `$(…)`, which is what says where in the program the number goes.
+            self._diags.emit(D.LANG_MACRO_ANSWERS_OTHERWISE, node.name_span,
+                             name=node.name,
+                             found="nothing" if node.ret_type is None
+                             else "something else")
+            return
+        self._written[node.name] = node
 
     def _collect(self, node: ast.MacroDef) -> None:
         """Write a macro down, reporting a second of one name."""
@@ -194,6 +275,8 @@ class _Expander:
             return ast.NameRef(span=node.span, name=node.name)
         macro = self._macros.get(node.name)
         if macro is None:
+            if node.name in self._written:
+                return self._ran(node, as_statement)
             self._diags.emit(D.LANG_MACRO_UNKNOWN, node.name_span, name=node.name)
             return ast.NameRef(span=node.span, name=node.name)
         for rule in macro.rules:
@@ -215,6 +298,186 @@ class _Expander:
             return again
         self._diags.emit(D.LANG_MACRO_NO_RULE, node.span, name=node.name)
         return ast.NameRef(span=node.span, name=node.name)
+
+    # -- running a macro written as a function ---------------------------------
+
+    def _ran(self, node: ast.Invoke,
+             as_statement: bool) -> ast.Expr | ast.Block:
+        """What a macro written as a function comes to, by running it."""
+        written = self._written[node.name]
+        made = self._prepared()
+        if made is None:
+            return ast.NameRef(span=node.span, name=node.name)
+        func = made.module.functions.get(_macro_symbol(written, made))
+        if func is None:  # pragma: no cover - the checker reported why
+            return ast.NameRef(span=node.span, name=node.name)
+        if len(node.arguments.pieces) != len(written.params) \
+                or node.arguments.body is not None:
+            self._diags.emit(D.LANG_MACRO_ARGUMENT_COUNT, node.span,
+                             name=node.name, expected=str(len(written.params)),
+                             found=str(len(node.arguments.pieces)))
+            return ast.NameRef(span=node.span, name=node.name)
+        assert self._machine is not None
+        try:
+            answer = self._machine.call(
+                func, [self._handle(one) for one in node.arguments.pieces])
+        except Stopped as stopped:
+            self._diags.emit(D.LANG_MACRO_RAN_BADLY, node.span, name=node.name,
+                             detail=stopped.detail)
+            return ast.NameRef(span=node.span, name=node.name)
+        except Refused as refused:
+            self._diags.emit(D.LANG_MACRO_CANNOT_RUN, node.span, name=node.name,
+                             detail=refused.detail)
+            return ast.NameRef(span=node.span, name=node.name)
+        if not isinstance(answer, int) or not 0 <= answer < len(self._trees):
+            self._diags.emit(D.LANG_MACRO_ANSWERS_OTHERWISE, node.span,
+                             name=node.name, found="something that is not one")
+            return ast.NameRef(span=node.span, name=node.name)
+        found = self._trees[answer]
+        if isinstance(found, ast.Block) and not as_statement:
+            self._diags.emit(D.LANG_MACRO_WRITES_STATEMENTS, node.span,
+                             name=node.name)
+            return ast.NameRef(span=node.span, name=node.name)
+        assert isinstance(found, (ast.Expr, ast.Block))
+        self._deep += 1
+        try:
+            again = self._walked(found)
+        finally:
+            self._deep -= 1
+        assert isinstance(again, (ast.Expr, ast.Block))
+        return again
+
+    def _prepared(self) -> _Checked | None:
+        """The macros, checked and lowered, made on first ask.
+
+        Once per compilation: every macro and every function they may call is in one
+        module, so a macro calling another needs nothing more than the call.
+        """
+        if self._made is not None:
+            return self._made
+        if self._checked is None:  # pragma: no cover - always given in a build
+            return None
+        wanted: list[ast.SourceUnit] = []
+        for unit in self._units:
+            kept = tuple(item for item in unit.items
+                         if _belongs_to_the_macros(item))
+            wanted.append(replace(unit, items=kept))
+        found = self._checked(wanted)
+        if found is None:
+            return None
+        self._made = found
+        self._machine = Machine(self._builtins())
+        return found
+
+    def _builtins(self) -> dict[str, Callable[..., object]]:
+        """What each of the compiler-provided functions a macro may call does.
+
+        They are the only things in the machine that know what a handle stands for:
+        everything else holds one as the number it is.
+        """
+        return {
+            QUOTE_NAME: self._quoted,
+            FILL_NAME: self._put_piece,
+            FILL_NUMBER_NAME: self._put_number,
+            HEAD_NAME: self._head,
+            KIND_NAME: self._kind,
+            PARTS_NAME: self._parts,
+            PART_NAME: self._part,
+            ALIKE_PIECES_NAME: self._pieces_alike,
+        }
+
+    # -- handles ---------------------------------------------------------------
+
+    def _handle(self, tree: object) -> int:
+        """The handle *tree* goes by, giving it one where it has none."""
+        found = self._handles.get(id(tree))
+        if found is not None:
+            return found
+        self._trees.append(tree)
+        self._handles[id(tree)] = len(self._trees) - 1
+        return len(self._trees) - 1
+
+    def _tree(self, handle: object) -> object:
+        """What a handle stands for."""
+        if not isinstance(handle, int) or not 0 <= handle < len(self._trees):
+            raise Refused("a piece of the program that is not one")
+        return self._trees[handle]
+
+    # -- what the builtins do --------------------------------------------------
+
+    def _quoted(self, at: object) -> int:
+        """`\N{APL FUNCTIONAL SYMBOL QUAD}quote(n)`: the tree the macro wrote down, holes and all."""
+        assert self._made is not None
+        if not isinstance(at, int) or not 0 <= at < len(self._made.quoted):
+            raise Refused("a quote that was never written")
+        quote = self._made.quoted[at]
+        if quote.body is None and len(quote.pieces) != 1:
+            raise Refused("a quote of more than one expression")
+        tree = quote.body if quote.body is not None else quote.pieces[0]
+        # What the quote binds is renamed, once per time the macro asks for it, so
+        # that a temporary a macro writes is not the caller's variable of that name.
+        # The holes come through the rename as the same objects, which is what lets
+        # the calls that fill them find them afterwards.
+        tree = self._renamed(tree)
+        holes: list[ast.Hole] = []
+        _holes_of(tree, holes)
+        found = self._handle(tree)
+        self._holes[found] = holes
+        return found
+
+    def _renamed(self, tree: object) -> object:
+        """*tree* with every name it binds renamed to one no source file can spell."""
+        wanted = {name: self._fresh(name) for name in _bound_in(tree)}
+        return _with_names(tree, wanted) if wanted else tree
+
+    def _put_piece(self, tree: object, at: object, with_: object) -> int:
+        """`\N{APL FUNCTIONAL SYMBOL QUAD}fill(t, n, v)`: the tree with hole number *n* replaced by *v*."""
+        return self._put_into(tree, at, self._tree(with_))
+
+    def _put_number(self, tree: object, at: object, number: object) -> int:
+        """The same, with the number a program would have written to mean it."""
+        if not isinstance(number, int):
+            raise Refused("a number wanted")
+        written = ast.IntLit(span=INVALID_SPAN, value=abs(number),
+                             type_name="i64")
+        return self._put_into(tree, at, written if number >= 0 else ast.Unary(
+            span=INVALID_SPAN, op=ast.UnaryOp.NEGATE, operand=written))
+
+    def _put_into(self, tree: object, at: object, put: object) -> int:
+        """The tree with one hole replaced, and the rest still findable."""
+        handle = _counted(tree)
+        holes = self._holes.get(handle)
+        number = _counted(at)
+        if holes is None or number >= len(holes):
+            raise Refused("a hole that the quote does not have")
+        found = self._handle(_without_hole(self._tree(tree), holes[number], put))
+        self._holes[found] = holes
+        return found
+
+    def _head(self, tree: object) -> int:
+        """`\N{APL FUNCTIONAL SYMBOL QUAD}head(e)`: what the piece is made by."""
+        found = _head_of(self._tree(tree))
+        return self._handle(found)
+
+    def _kind(self, tree: object) -> int:
+        """`\N{APL FUNCTIONAL SYMBOL QUAD}kind(e)`: which of the shapes it is, as a number."""
+        return _KINDS.get(type(self._tree(tree)).__name__, 0)
+
+    def _parts(self, tree: object) -> int:
+        """`\N{APL FUNCTIONAL SYMBOL QUAD}parts(e)`: how many pieces it applies its head to."""
+        return len(_parts_of(self._tree(tree)))
+
+    def _part(self, tree: object, at: object) -> int:
+        """`\N{APL FUNCTIONAL SYMBOL QUAD}part(e, n)`: the piece it applies its head to, by which one."""
+        parts = _parts_of(self._tree(tree))
+        number = _counted(at)
+        if number >= len(parts):
+            raise Refused("a part that is not there")
+        return self._handle(parts[number])
+
+    def _pieces_alike(self, one: object, other: object) -> bool:
+        """Whether two pieces are the same thing written."""
+        return _written_alike(self._tree(one), self._tree(other))
 
     # -- matching --------------------------------------------------------------
 
@@ -278,8 +541,8 @@ class _Expander:
 
     def _fresh(self, name: str) -> str:
         """A name like *name* that no source file can spell."""
-        self._renamed += 1
-        return "".join((name, HYGIENE_MARK, str(self._renamed)))
+        self._renames += 1
+        return "".join((name, HYGIENE_MARK, str(self._renames)))
 
     def _put(self, node: object, bound: dict[str, ast.Expr],
              renamed: dict[str, str]) -> object:
@@ -350,6 +613,176 @@ def _assignment(target: ast.Expr, value: object,
 
 
 # -- walks over a tree ---------------------------------------------------------
+
+
+def _only_for_macros(item: object) -> bool:
+    """Whether a definition belongs to the macros and not to the program.
+
+    A macro, plainly.  And a `comptime` function whose signature names a piece of the
+    program, because nothing at run time holds one: such a function is one the macros
+    may call and the program may not, where one that mentions no piece is installed
+    on both sides and is the same function either way.
+    """
+    if not isinstance(item, ast.FuncDef):
+        return False
+    return item.is_macro or (item.at_compile_time and _about_a_piece(item))
+
+
+def _about_a_piece(node: ast.FuncDef) -> bool:
+    """Whether a signature names a piece of the program anywhere."""
+    written = [one.type for one in node.params]
+    if node.ret_type is not None:
+        written.append(node.ret_type)
+    return any(_names_syntax(one) for one in written)
+
+
+def _names_syntax(node: object) -> bool:
+    """Whether a type as written names a piece of the program."""
+    if isinstance(node, ast.TypeRef) and node.module is None \
+            and node.name == "syntax":
+        return True
+    if isinstance(node, ast.Node):
+        return any(_names_syntax(getattr(node, one.name))
+                   for one in fields_of(node))
+    if isinstance(node, (list, tuple)):
+        return any(_names_syntax(one) for one in node)
+    return False
+
+
+def _belongs_to_the_macros(item: object) -> bool:
+    """Whether a definition goes into the unit the macros are checked in.
+
+    The macros written as functions, the `comptime` functions they may call, and the
+    definitions a signature may name -- a type, an enumeration, a unit.  Not the
+    program's own functions: a macro runs before they are installed, which is what
+    `comptime` moves a function to the other side of.
+    """
+    if isinstance(item, ast.FuncDef):
+        return item.at_compile_time
+    return isinstance(item, (ast.TypeDef, ast.EnumDef, ast.UnitDef))
+
+
+def _macro_symbol(node: ast.FuncDef, made: _Checked) -> str:
+    """The name the macro's function goes by in the module it was lowered into."""
+    for name, func in made.module.functions.items():
+        if func.name == node.name:
+            return name
+    return node.name
+
+
+def _counted(at: object) -> int:
+    """A hole's number, as the machine handed it over."""
+    if not isinstance(at, int) or at < 0:
+        raise Refused("a hole that is not one")
+    return at
+
+
+def _with_names(node: object, wanted: dict[str, str]) -> object:
+    """*node* with the names in *wanted* replaced by what they map to.
+
+    A hole comes through as the same object, which is what lets the calls that fill
+    the holes find them after the renaming.
+    """
+    if isinstance(node, ast.Hole):
+        return node
+    if isinstance(node, ast.NameRef) and node.name in wanted:
+        return replace(node, name=wanted[node.name])
+    if isinstance(node, ast.VarDef) and node.name in wanted:
+        node = replace(node, name=wanted[node.name])
+    if isinstance(node, ast.AssignStmt) and node.name in wanted:
+        node = replace(node, name=wanted[node.name])
+    if isinstance(node, ast.Node):
+        return replace(node, **{one.name: _with_names(getattr(node, one.name),
+                                                     wanted)
+                                for one in fields_of(node)})
+    if isinstance(node, tuple):
+        return tuple(_with_names(one, wanted) for one in node)
+    return node
+
+
+def _without_hole(tree: object, hole: ast.Hole, put: object) -> object:
+    """*tree* with that one hole replaced by *put*.
+
+    Which hole it is, is which object it is: filling one makes a new tree and leaves
+    the others the same nodes, so counting again would renumber what is left.
+    """
+    return _fill_counting(tree, hole, put, [0])
+
+
+def _fill_counting(node: object, at: ast.Hole, put: object,
+                   seen: list[int]) -> object:
+    """The walk that fills one hole."""
+    if isinstance(node, ast.Hole):
+        return put if node is at else node
+    if isinstance(node, ast.HoleAssign):
+        target = _fill_counting(node.target, at, put, seen)
+        value = _fill_counting(node.value, at, put, seen)
+        if isinstance(target, ast.Expr) and not isinstance(target, ast.Hole):
+            found = _assignment(target, value, node.span)
+            if found is not None:
+                return found
+        assert isinstance(target, ast.Expr) and isinstance(value, ast.Expr)
+        return replace(node, target=target, value=value)
+    if isinstance(node, ast.Node):
+        return replace(node, **{one.name: _fill_counting(getattr(node, one.name),
+                                                        at, put, seen)
+                                for one in fields_of(node)})
+    if isinstance(node, tuple):
+        return tuple(_fill_counting(one, at, put, seen) for one in node)
+    return node
+
+
+def _head_of(node: object) -> object:
+    """What a piece of the program is made by.
+
+    Every piece answers, so there is never a question of whether there is one: an
+    expression that applies something answers what it applies, and one that applies
+    nothing answers the most particular name the language has for what it is.
+    """
+    if isinstance(node, ast.Binary):
+        return ast.NameRef(span=node.span, name=node.op.value)
+    if isinstance(node, ast.Unary):
+        return ast.NameRef(span=node.span, name=node.op.value)
+    if isinstance(node, ast.Fresh):
+        return ast.NameRef(span=node.span, name=node.glyph)
+    if isinstance(node, ast.Call):
+        return node.callee
+    if isinstance(node, ast.IntLit):
+        return ast.NameRef(span=node.span, name=node.type_name or "int")
+    if isinstance(node, ast.NameRef):
+        return node
+    return ast.NameRef(span=getattr(node, "span", INVALID_SPAN),
+                       name=type(node).__name__)
+
+
+def _parts_of(node: object) -> tuple[object, ...]:
+    """What a piece applies its head to, which is empty where it applies nothing."""
+    if isinstance(node, ast.Binary):
+        return (node.left, node.right)
+    if isinstance(node, ast.Unary):
+        return (node.operand,)
+    if isinstance(node, ast.Fresh):
+        return tuple(node.operands)
+    if isinstance(node, ast.Call):
+        return tuple(node.args)
+    return ()
+
+
+def _holes_of(node: object, into: list[ast.Hole]) -> None:
+    """Every hole below *node*, in the order they are written.
+
+    The same walk the checker makes when it writes the calls that fill them, which is
+    what makes the numbers agree: a hole is a place and the place is its order.
+    """
+    if isinstance(node, ast.Hole):
+        into.append(node)
+        return
+    if isinstance(node, ast.Node):
+        for one in fields_of(node):
+            _holes_of(getattr(node, one.name), into)
+    elif isinstance(node, (list, tuple)):
+        for one in node:
+            _holes_of(one, into)
 
 
 def _holes_in(node: object, found: list[str] | None = None) -> list[str]:

@@ -405,9 +405,16 @@ class Hole(Expr):
     it is filled with what the pattern's hole of that name matched.  It is an
     expression node because that is where one stands, and it never survives
     expansion: a program the checker sees holds none.
+
+    In the body of a macro written as a function it means the third thing, which is
+    the same thing said of a value rather than of a match: `$a` puts what `a` holds
+    into the tree, and `$(expr)` does it for something more than a name.
     """
 
     name: str
+    #: What goes in, where it is more than a name.  Nothing in a pattern, where a
+    #: hole is a name and matches.
+    value: Expr | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -1240,6 +1247,18 @@ class FuncDef(Node):
     body: Block | None
     #: The `pre` and `post` clauses, in the order written.
     clauses: tuple[Clause, ...] = ()
+    #: Whether `comptime` stands before the `fn`, which says *when* the function
+    #: exists and nothing about what it computes: one marked so is installed before
+    #: expansion, for the macros to call, and again in the ordinary way for the
+    #: program -- unless what it takes or answers is a piece of the program, which
+    #: nothing at run time may hold.
+    at_compile_time: bool = False
+    #: Whether it is a macro rather than a function: invoked with the lifting marks,
+    #: handed the pieces of the program written between them, and answering the piece
+    #: that replaces the invocation.  A macro is a `comptime` function that also
+    #: rewrites, so this says which of the two a definition is and `at_compile_time`
+    #: says when it exists -- which is the same answer for both.
+    is_macro: bool = False
     attrs: tuple[Attribute, ...] = ()
     doc: str | None = None
     #: Where each line of that comment is, so that something reading the

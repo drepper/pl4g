@@ -71,6 +71,11 @@ class _Operator:
 #: binary operator, taking two ends or three.  It sits between the comparisons
 #: and the bitwise operators, so that the arithmetic in `1…n-1` binds to the end
 #: and the whole range is something a comparison could be asked about.
+#: How each operator is spelled, which is the name its head goes by.  Built from the
+#: tables below so that an operator added to one of them is quotable without anything
+#: here being told.
+_OPERATOR_SPELLINGS: Final[dict[TokKind, str]] = {}
+
 _RANGE_PRECEDENCE: Final[int] = 7
 
 #: Where an operator the language gives no meaning binds: as tightly as
@@ -220,6 +225,13 @@ class _Bail(Exception):
     """Unwinds to the top-level recovery point after an unrecoverable error."""
 
 
+
+_OPERATOR_SPELLINGS.update({kind: found.op.value
+                            for kind, found in _BINARY_OPERATORS.items()})
+_OPERATOR_SPELLINGS.update({kind: op.value
+                            for kind, op in _UNARY_OPERATORS.items()
+                            if kind not in _OPERATOR_SPELLINGS})
+
 class Parser:
     """Parses the tokens of one source file."""
 
@@ -232,6 +244,9 @@ class Parser:
         #: a block is the end of the line, so a second one opened inside it
         #: would end where the first does and there would be no saying which.
         self._inline = False
+        #: Whether the marks holding no type hold a piece of the program, which they
+        #: do in the body of something that runs while the compiler does.
+        self._quoting = False
 
     # -- token access ----------------------------------------------------------
 
@@ -320,6 +335,14 @@ class Parser:
         self._skip_newlines()
         if self._check(TokKind.KW_FN):
             return self._parse_function(attrs, doc, doc_lines)
+        if self._check(TokKind.KW_COMPTIME) \
+                and self._peek().kind is TokKind.KW_FN:
+            # `comptime` before a definition says when the function exists rather
+            # than what it computes, which is what a macro needs of something it
+            # calls: installed before expansion, and again in the ordinary way.
+            self._advance()
+            return self._parse_function(attrs, doc, doc_lines,
+                                        at_compile_time=True)
         if self._check(TokKind.KW_LET):
             return self._parse_variable(attrs, doc, doc_lines)
         if self._check(TokKind.KW_TYPE):
@@ -519,13 +542,29 @@ class Parser:
 
     def _parse_function(self, attrs: tuple[ast.Attribute, ...],
                         doc: str | None,
-                        doc_lines: tuple[Span, ...] = ()) -> ast.FuncDef:
+                        doc_lines: tuple[Span, ...] = (),
+                        at_compile_time: bool = False) -> ast.FuncDef:
         """Parse a function definition."""
         start = self._expect(TokKind.KW_FN).span
         # An operator standing where a name goes, which is how a program says
         # what one means for its own types: the glyph is the name.
         name_token = self._advance() if self._check(TokKind.OPNAME) \
             else self._expect(TokKind.IDENT)
+        return self._parse_function_body(start, name_token, attrs, doc, doc_lines,
+                                        at_compile_time=at_compile_time)
+
+    def _parse_function_body(self, start: Span, name_token: Token,
+                             attrs: tuple[ast.Attribute, ...],
+                             doc: str | None,
+                             doc_lines: tuple[Span, ...] = (),
+                             at_compile_time: bool = False,
+                             is_macro: bool = False) -> ast.FuncDef:
+        """Parse the parameters, the answer, the clauses and the body.
+
+        Apart from the keyword and the name, which a macro written as a function
+        spells differently and which is the whole of the difference: what follows is
+        a function definition, so it is read as one.
+        """
         self._expect(TokKind.LPAREN)
         params = self._parse_params()
         self._expect(TokKind.RPAREN)
@@ -554,12 +593,26 @@ class Parser:
             return ast.FuncDef(span=start.to(end), name=name_token.text,
                                name_span=name_token.span, params=params,
                                ret_type=ret_type, body=None, clauses=clauses,
-                               attrs=attrs, doc=doc, doc_lines=doc_lines)
-        body = self._parse_body()
+                               attrs=attrs, doc=doc, doc_lines=doc_lines,
+                               at_compile_time=at_compile_time,
+                               is_macro=is_macro)
+        # A body that runs while the compiler does may quote, which is what the marks
+        # mean there where they hold no type.
+        outer, self._quoting = self._quoting, at_compile_time
+        try:
+            body = self._parse_body()
+        finally:
+            self._quoting = outer
         return ast.FuncDef(span=start.to(body.span), name=name_token.text,
                            name_span=name_token.span, params=params,
                            ret_type=ret_type, body=body, clauses=clauses,
-                           attrs=attrs, doc=doc, doc_lines=doc_lines)
+                           attrs=attrs, doc=doc, doc_lines=doc_lines,
+                           at_compile_time=at_compile_time, is_macro=is_macro)
+
+    #: What may stand alone between the lifting marks as the operator itself: every
+    #: operator the language has, which is what `⎕head` answers for an expression
+    #: that applies one.
+    _QUOTED_OPERATORS: Final[tuple[TokKind, ...]] = tuple(_OPERATOR_SPELLINGS)
 
     #: The two words that begin a clause, and which of the two places in a call
     #: each speaks about.
@@ -690,9 +743,14 @@ class Parser:
         start = self._expect(TokKind.KW_MACRO).span
         name_token = self._expect(TokKind.IDENT)
         if self._check(TokKind.LPAREN):
-            self._diags.emit(D.LANG_MACRO_IS_A_FUNCTION, name_token.span,
-                             name=name_token.text)
-            raise _Bail()
+            # The other form: a function over the program's text, handed the pieces
+            # written between the marks and answering the piece that replaces the
+            # invocation.  It is a function definition and is read as one -- what the
+            # keyword says is that it rewrites, and running while the compiler does
+            # follows from that rather than being written again.
+            return self._parse_function_body(start, name_token, attrs, doc,
+                                             doc_lines, at_compile_time=True,
+                                             is_macro=True)
         rules, end = self._parse_macro_rules()
         return ast.MacroDef(span=start.to(end), name=name_token.text,
                             name_span=name_token.span, rules=rules,
@@ -769,6 +827,18 @@ class Parser:
                                             style=ast.BlockStyle.LAYOUT,
                                             stmts=tuple(stmts)))
         pieces: list[ast.Expr] = []
+        if self._check_any(self._QUOTED_OPERATORS) \
+                and self._peek().kind is TokKind.LIFT_CLOSE:
+            # An operator alone between the marks, which is the operator itself
+            # rather than an expression using it -- what `⎕head` of a sum answers and
+            # what a macro compares that against.  It is a name whose spelling is the
+            # glyph, which is what the operator's head is.
+            written = self._advance()
+            pieces.append(ast.NameRef(span=written.span,
+                                      name=_OPERATOR_SPELLINGS[written.kind]))
+            end = self._expect(TokKind.LIFT_CLOSE,
+                               D.LANG_SYNTAX_EXPECTED_CLOSING_LIFT)
+            return ast.Quote(span=start.to(end.span), pieces=tuple(pieces))
         if not self._check(TokKind.LIFT_CLOSE):
             # Nothing between the marks is a macro of no arguments, which is a thing
             # to write: what it stands for does not depend on anything the caller
@@ -2196,14 +2266,21 @@ class Parser:
         having: what is between them may be a type this parser cannot tell from
         an expression, and the one thing it does not have to do is guess.
         """
-        start = self._expect(TokKind.LIFT_OPEN).span
         mark = self._pos
+        start = self._expect(TokKind.LIFT_OPEN).span
+        after = self._pos
         written: ast.TypeRef | None = None
         if self._begins_a_type():
             written = self._parse_type_ref()
             if not self._check(TokKind.LIFT_CLOSE):
                 written = None
-                self._pos = mark
+                self._pos = after
+        if written is None and self._quoting:
+            # In the body of something that runs while the compiler does, marks
+            # holding no type hold a piece of the program: that is what a macro
+            # writes with, and it is the same reading the invocation has.
+            self._pos = mark
+            return self._parse_quote()
         value = None if written is not None else self._parse_expression()
         end = self._expect(TokKind.LIFT_CLOSE, D.LANG_SYNTAX_EXPECTED_CLOSING_LIFT)
         return ast.Lifted(span=start.to(end.span), written=written, value=value)
@@ -2217,8 +2294,17 @@ class Parser:
             # a parser of its own so that a pattern is an ordinary expression with
             # holes in it, which is what makes a rule read like what it matches.
             self._advance()
+            if self._check(TokKind.LPAREN):
+                # `$(expr)` in a macro's body, for something more than a name.
+                self._advance()
+                written = self._parse_expression()
+                end = self._expect(TokKind.RPAREN,
+                                   D.LANG_SYNTAX_EXPECTED_CLOSING_PAREN)
+                return ast.Hole(span=token.span.to(end.span), name="",
+                                value=written)
             name = self._expect(TokKind.IDENT)
-            return ast.Hole(span=token.span.to(name.span), name=name.text)
+            return ast.Hole(span=token.span.to(name.span), name=name.text,
+                            value=ast.NameRef(span=name.span, name=name.text))
         if token.kind is TokKind.LAMBDA:
             # A function written where a value is wanted.  It ends with its
             # body, so nothing may follow it on the line -- which is the rule

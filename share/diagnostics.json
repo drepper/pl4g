@@ -1656,28 +1656,6 @@
       "option": null
     },
     {
-      "number": 3053,
-      "name": "LANG_MACRO_IS_A_FUNCTION",
-      "severity": "error",
-      "message": "'{name}' is written with a parameter list, which is the other form of macro",
-      "args": [
-        {
-          "name": "name",
-          "type": "string",
-          "description": "the macro"
-        }
-      ],
-      "cause": "A macro written as a function over the program's text is handed the parse trees of its arguments and answers the tree that replaces the invocation.  It needs an interpreter that runs at expansion, which this compiler does not have: a constant folder and a 'comptime if' that compares two types are not one.  So the form is not in the grammar either, and the parser refuses it where a parameter list would begin -- which is what makes the refusal say the form is absent rather than the program wrong.",
-      "spec": {
-        "document": "spec/spec.md",
-        "section": "The Language / File Structure / Macros",
-        "requirement": "A macro is a list of rewrite rules."
-      },
-      "since": "0.1",
-      "default_enabled": true,
-      "option": null
-    },
-    {
       "number": 3201,
       "name": "LANG_ATTR_UNKNOWN",
       "severity": "error",
@@ -8404,6 +8382,232 @@
         "document": "spec/spec.md",
         "section": "The Language / File Structure / Macros",
         "requirement": "A template holds one expression or a run of statements."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 7020,
+      "name": "LANG_MACRO_QUOTE_OUTSIDE",
+      "severity": "error",
+      "message": "a piece of the program held where nothing runs while the compiler does",
+      "cause": "The lifting marks holding a piece of the program are read in the body of a macro or of a function it may call, which run while the compiler runs and have something to do with a parse tree.  Elsewhere the marks hold a type or a name, which is what the three other places that read them are for.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Macros",
+        "requirement": "A quote holding a piece of the program is written in a macro or in a comptime function."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 7021,
+      "name": "LANG_MACRO_HOLE_NOT_A_PIECE",
+      "severity": "error",
+      "message": "'{found}' put into a tree, and what goes in is a piece of the program or a number",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "what was written"
+        }
+      ],
+      "cause": "A piece of the program goes in as itself.  A number goes in as what a program would have written to mean it, which is what lets a macro work something out and write the answer.  Anything else has no written form for the tree to hold.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Macros",
+        "requirement": "What fills a hole is a piece of the program or a number."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 7022,
+      "name": "LANG_SYNTAX_AT_RUN_TIME",
+      "severity": "error",
+      "message": "'{name}' holds a piece of the program, which nothing at run time may",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the function, parameter or variable"
+        }
+      ],
+      "cause": "A piece of the program exists while the compiler runs, where a macro takes one apart and puts one together.  There is nothing for it to be afterwards: the program a macro wrote *is* the program, and a tree of it in the binary would be a second copy of what the binary already is.  So a macro and a `comptime fn` may hold one and a function the program calls may not.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Macros",
+        "requirement": "A value of 'syntax' does not reach the run time."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 7023,
+      "name": "LANG_MACRO_RAN_BADLY",
+      "severity": "error",
+      "message": "running '{name}' stopped: {detail}",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the macro"
+        },
+        {
+          "name": "detail",
+          "type": "string",
+          "description": "what stopped it"
+        }
+      ],
+      "cause": "A macro is a program and stops the way one does -- an answer that will not fit, a division with no answer, a check that did not hold.  What it was doing when it stopped is what the message says; the invocation is what it is reported at, since that is the call that asked for it.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Macros",
+        "requirement": "A macro that stops is reported at the invocation."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 7024,
+      "name": "LANG_MACRO_CANNOT_RUN",
+      "severity": "error",
+      "message": "'{name}' cannot be run while the compiler runs: {detail}",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the macro"
+        },
+        {
+          "name": "detail",
+          "type": "string",
+          "description": "what it reached"
+        }
+      ],
+      "cause": "The machine that runs a macro runs the intermediate representation the checker lowered its body to, which is a smaller language than the one the program is written in.  What it will not run it names rather than guessing at, and a macro reaching one of those is a message about the compiler and says so.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Macros",
+        "requirement": "A macro's body is within what the compiler can run."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 7025,
+      "name": "LANG_MACRO_ANSWERS_OTHERWISE",
+      "severity": "error",
+      "message": "'{name}' answers '{found}', and a macro answers a piece of the program",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the macro"
+        },
+        {
+          "name": "found",
+          "type": "string",
+          "description": "what it answers"
+        }
+      ],
+      "cause": "What replaces the invocation is a piece of the program, so that is what a macro answers.  A macro that worked a number out puts it into a tree with `$(…)`, which is what says where in the program the number goes.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Macros",
+        "requirement": "A macro answers a piece of the program."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 7026,
+      "name": "LANG_MACRO_ARGUMENT_COUNT",
+      "severity": "error",
+      "message": "'{name}' takes {expected} and is invoked with {found}",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the macro"
+        },
+        {
+          "name": "expected",
+          "type": "string",
+          "description": "how many it takes"
+        },
+        {
+          "name": "found",
+          "type": "string",
+          "description": "how many were written"
+        }
+      ],
+      "cause": "A macro written as a function takes the pieces of the program written between the marks, one per parameter.  A macro written as rules says how many by what its patterns match, and answers a different message where none of them does.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Macros",
+        "requirement": "A macro written as a function is invoked with as many arguments as it takes."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 7027,
+      "name": "LANG_ASK_OUTSIDE_A_MACRO",
+      "severity": "error",
+      "message": "'{name}' asks about a piece of the program, and nothing here has one",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the question"
+        }
+      ],
+      "cause": "The questions about a piece of the program are asked while the compiler runs, where a macro has one to ask about.  Elsewhere there is no parse tree: the program a macro wrote is the program.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Macros",
+        "requirement": "The questions about a piece of the program are asked in a macro."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 7028,
+      "name": "LANG_ASK_ARGUMENT_COUNT",
+      "severity": "error",
+      "message": "'{name}' takes {expected} and is given {found}",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the question"
+        },
+        {
+          "name": "expected",
+          "type": "string",
+          "description": "how many it takes"
+        },
+        {
+          "name": "found",
+          "type": "string",
+          "description": "how many were written"
+        }
+      ],
+      "cause": "Each question about a piece of the program takes what it needs and nothing more: the piece, and for one that names a part, which part.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Macros",
+        "requirement": "The questions about a piece of the program are asked in a macro."
       },
       "since": "0.1",
       "default_enabled": true,

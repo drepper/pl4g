@@ -1,0 +1,16 @@
+※ pl4g-test: compile=error
+※ pl4g-test: expect-diag 7022 LANG_SYNTAX_AT_RUN_TIME
+
+※ A piece of the program exists while the compiler runs.  There is nothing for it to
+※ be afterwards: the program a macro wrote *is* the program, and a tree of it in the
+※ binary would be a second copy of what the binary already is.
+※
+※ So a macro and a `comptime fn` may hold one and a function the program calls may
+※ not -- which is asked of the signature, since a signature is what a caller reads.
+
+fn takes(e: syntax) → u8:
+    1u8
+
+@[startup]
+fn main() → u6:
+    0u6

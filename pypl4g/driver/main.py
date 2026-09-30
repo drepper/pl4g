@@ -42,7 +42,7 @@ from ..mc.asmbuilder import RegisterAssignmentError
 from ..mc.dump import dump_sections
 from ..mc.streamer import MCStreamer
 from ..opt.pass_ import build_manager
-from ..sema.check import check
+from ..sema.check import check, check_macros
 from ..sema.modules import (ModuleRegistry, SearchPath,
                             system_modules)
 from ..sema.notes import Notes
@@ -109,7 +109,7 @@ class Driver:
         # and every diagnostic is about what the macro wrote.
         start = perf_counter()
         before = self.diags.error_count
-        units = expand(units, self.diags)
+        units = expand(units, self.diags, self._macro_module)
         self._timed("macro expansion", start)
         if self.options.emit is EmitKind.EXPANDED:
             return self._emit_frontend(units)
@@ -133,6 +133,15 @@ class Driver:
         if self.options.emit is EmitKind.IR:
             return self._write_text(render_module(module))
         return self._generate(module)
+
+    def _macro_module(self, units: Sequence[ast.SourceUnit]) -> object:
+        """Check and lower the macros, for the expander to run.
+
+        Handed to expansion rather than called by it: the checker imports the
+        expander, expansion coming first in the pipeline and last in what depends on
+        what.
+        """
+        return check_macros(units, self.diags, self.sources)
 
     def _run_build(self, units: Sequence[ast.SourceUnit]) -> int:
         """Run the build function and build what it asked for.

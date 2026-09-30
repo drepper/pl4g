@@ -1,0 +1,21 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=46 diag=none
+
+※ A macro written as a function may write statements, by answering a quote whose
+※ contents are indented, and what it writes replaces the line it was invoked on.
+※
+※ **And it is hygienic.**  The caller has a `step` of its own and so does the macro;
+※ the macro's is renamed to a name no source file can spell, once per time the macro
+※ runs.  Without it the caller's 40 would be the macro's 1 and the answer would be 7.
+
+macro bump(a: syntax) → syntax:
+    ⌜
+        let step: u8 = 1u8
+        $a ← $a + step
+    ⌝
+
+@[startup]
+fn main() → u6:
+    let n: mut u8 = 5u8
+    let step: mut u8 = 40u8
+    bump⌜n⌝
+    ⎕narrow(n + step, ⌜u6⌝) ?? 1u6

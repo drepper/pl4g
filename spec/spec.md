@@ -3667,6 +3667,10 @@ question about the program.
 | `⌜A⌝ = ⌜B⌝`, `⎕typeof(⌜a⌝) ≠ ⌜B⌝` | whether two types are the one type, in a question the compiler settles |
 | `⌈⌜T⌝`, `⌊⌜T⌝` | the largest and the smallest value the type `T` has |
 
+A fourth reading is the same sentence said of a program rather than of a type: in the body of a `macro` or a `comptime fn`, marks
+holding something that is not a type hold **a piece of the program**, which is what a macro is handed and what it writes.  See
+[Macros](#macros).
+
 **`⌈⌜T⌝` and `⌊⌜T⌝` are the same operators and the same word** they have everywhere else, asked of a type rather than of
 something holding several values.  `⌈⌜u8⌝` is 255, `⌊⌜i8⌝` is −128, `⌈⌜u3⌝` is 7, `⌈⌜char⌝` is U+10FFFF.
 
@@ -4606,6 +4610,9 @@ which is the same sentence -- so an invocation is a name applied to a quote rath
 knows `⌜u8⌝` knows what `f⌜x⌝` does to `x`.  `(…)` calls a function and `⌜…⌝` invokes a macro; a macro and a function are not in
 one namespace, so a name may be both and neither is a mistake.
 
+**A macro is written in one of two forms**: a list of rewrite rules, which is below, or a function over the program's text, which is
+further down.  Both are `macro`, and which one it is, is said by the shape of what follows the name.
+
 **A macro is a list of rewrite rules.**  Each states what the arguments have to look like and what the invocation is replaced by.
 Rules are tried in order and the first that matches decides, so a rule whose pattern is holes goes last; where none matches, the
 invocation is refused (7012).
@@ -4683,15 +4690,96 @@ own file can see and the caller cannot, and a caller with a function of the same
 the rule a bundle's lines already follow and for the same reason -- substituting *into* a line is not the same as substituting the
 line into the place that applied it -- so a macro means one thing everywhere it is invoked.
 
+###### A macro written as a function
+
+**The other form of macro is a function over the program's text**: it is handed pieces of the program, works something out, and
+answers the piece that replaces the invocation.  From the parameter list on it is written exactly as a function is -- the keyword is
+the whole difference.
+
+```
+macro sum(e: syntax) → syntax:
+    if ⎕head(e) = ⌜+⌝:
+        ⌜$(⎕part(e, 0u64)) × 10u8⌝
+    else:
+        ⌜$e⌝
+
+sum⌜3u8 + 4u8⌝                   ※ 3u8 × 10u8
+sum⌜5u8⌝                         ※ 5u8
+```
+
+Which form a `macro` is, is said by its shape and not by a second keyword: a parameter list says it is this one, and rule lines say
+it is the other.  A macro takes as many pieces as its parameters say (7026) and must answer one (7025).
+
+**`syntax` is the type of a piece of the program**, and it is a type only while the compiler runs.  A parameter, a local or a
+function that names it exists for the macros and is not in the program: nothing at run time may hold a piece of the program (7022),
+there being nothing at run time for it to be a handle into.  It is one value wide and compares with `=`, which asks whether the same
+thing is written in both, wherever each was written.
+
+**Three questions take a piece apart.**  `⎕head(e)` is what it is made by, `⎕parts(e)` how many pieces it applies its head to, and
+`⎕part(e, n)` which one.  An operator alone between the marks is the operator itself rather than an expression using it, which is
+what `⎕head` of a sum answers -- so nothing about any particular operator is built in, and finding a sum is a macro asking whether
+the head is `⌜+⌝`.  `⎕part` names which part it wants rather than answering them all, which is what keeps an array out of the
+machine that runs a macro: how many there are is its own question and a walk over them is a loop the macro writes.  Asking one of
+the three where nothing has a piece of the program is refused (7027), as is giving it the wrong number of arguments (7028).
+
+**`⌜…⌝` in the body of something that runs while the compiler does holds a piece of the program**, which is the same reading the
+invocation has and the reason the marks are the right ones.  `$a` puts the piece a name holds into the tree, and **`$(EXPR)` puts
+what an expression answers**: a piece of the program as itself, and a number as what a program would have written to mean it -- which
+is what lets a macro work something out and write the answer.  Anything else is refused (7021), and marks holding a piece where
+nothing runs while the compiler does are refused too (7020).
+
+**A body may write statements** by answering a quote whose contents are indented, exactly as a template may, and what it writes
+replaces the line the macro was invoked on.  Hygiene is the same in both forms: a name the macro binds is renamed once per time the
+macro runs.
+
+```
+macro bump(a: syntax) → syntax:
+    ⌜
+        let step: u8 = 1u8
+        $a ← $a + step
+    ⌝
+```
+
+**`comptime fn` is an ordinary function the macros may call.**  A macro is one function and cannot be two, so a walk that has to
+descend calls something that recurses:
+
+```
+comptime fn deepest(e: syntax) → u64:
+    if ⎕parts(e) = 0u64:
+        1u64
+    else:
+        1u64 + deepest(⎕part(e, 0u64))
+
+macro depth(e: syntax) → syntax:
+    ⌜$(deepest(e))⌝
+```
+
+`comptime` stands before the keyword, a function being of one kind as a whole.  Such a function is installed before expansion for
+the macros to call, **and again in the ordinary way for the program** -- unless what it takes or answers is a piece of the program,
+and then it is the macros' alone.  So `comptime` says when a function exists rather than what it computes, and a helper worth having
+in both places is written once.
+
+###### How a macro is run
+
+**The macros are compiled and the compiler runs what it compiled.**  Every `macro` and every `comptime fn` is checked and lowered
+into a module of its own, at the same time as the program and by the same code, and the resulting IR is interpreted.
+
+That is what makes a macro subject to every rule the language has rather than to a second and weaker set: its types are checked, its
+purity is checked, and a mistake in it is reported by the same diagnostic a mistake anywhere else would get.  A macro the compiler
+cannot lower is refused with the reason (7024), and one whose run stopped -- a step limit, a division by zero, a `⊥` -- is refused
+with that (7023).  The limit is a limit and not an analysis, for the same reason the expansion limit is.
+
 ###### What is not there yet
 
-**The other form of macro**, a function over the program's text: handed the parse trees of its arguments and answering the tree that
-replaces the invocation.  It needs an interpreter that runs at expansion, and the compiler has a constant folder and a `comptime if`
-that compares two types.  A macro written with a parameter list is refused with that as the reason (3053), which says the form is
-absent rather than the program wrong.
-
-With it would come `syntax` as a type, the questions that take a piece of the program apart, and `comptime fn`.
-[spec/macros.md](macros.md) has the design and the estimate.
+- **`⎕kind`**, which would say what sort of thing a piece is without comparing its head against something; **`⎕name`**, the name a
+  piece reads as; and **`⎕apply`**, building a piece from a head and its parts rather than from a template.  All three are in the
+  design and none is callable.
+- **An array of `syntax`.**  `⎕parts` and `⎕part` are what a macro walks with, and a macro cannot hold the parts of something all at
+  once.
+- **A macro that writes a definition**, which is what would make the feature worth most and what would have expansion run before the
+  definitions are collected rather than before they are checked.
+- **Following a reference to what it names**: asking a piece that reads `foo` for the definition of `foo`.  Expansion runs before the
+  definitions are installed, so there is nothing yet to ask.
 
 ###### Comparisons
 
@@ -4705,7 +4793,7 @@ With it would come `syntax` as a type, the questions that take a piece of the pr
 | **Nim** | a parse tree | `macro` | `f(x)` | yes |
 | **Wolfram** | an expression | rules with `:>` | `f[x]` | no |
 | **Zig** | nothing | `comptime fn` | `f(x)` | n/a |
-| **pl4g** | a parse tree | `macro`, rules | `f⌜x⌝` | yes |
+| **pl4g** | a parse tree | `macro`, rules or a function | `f⌜x⌝` | yes |
 
 What pl4g's row says that none of the others does is that **the mark around the arguments is the language's existing mark for "not
 evaluated"**.  Rust and Julia mark the name; Lisp, Scheme and Nim mark nothing.  Marking the arguments says the thing that is

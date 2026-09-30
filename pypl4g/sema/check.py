@@ -55,6 +55,7 @@ from ..ir.function import (DEFAULT_CCONV, SYSTEM_CCONV, BasicBlock, FuncAttrs,
                            Linkage, SpecialKind)
 from ..ir.module import GlobalVar, Module
 from ..ir.types import (ARENA, ArrayType, BOOL, BoolType, BUILTIN_TYPES,
+                        SYNTAX, SyntaxType, I64,
                         CursorType,
                         DictType,
                         ERROR, EnumType,
@@ -613,6 +614,56 @@ _PURITY: Final[frozenset[int]] = frozenset({
     D.LANG_PURE_CALLS_IMPURE, D.LANG_PURE_CHANGES_A_VARIABLE,
     D.LANG_PURE_READS_THE_ROUNDING_MODE, D.LANG_PURE_WRITES_ELSEWHERE})
 
+#: The names of the functions a macro is given, and what each answers.  They are
+#: the questions about a piece of the program and the two that build one; the machine
+#: that runs a macro is what gives them a meaning, and nothing here does.
+QUOTE_NAME: Final[str] = "".join((BUILTIN_GLYPH, "quote"))
+FILL_NAME: Final[str] = "".join((BUILTIN_GLYPH, "fill"))
+FILL_NUMBER_NAME: Final[str] = "".join((BUILTIN_GLYPH, "fillnumber"))
+HEAD_NAME: Final[str] = "".join((BUILTIN_GLYPH, "head"))
+KIND_NAME: Final[str] = "".join((BUILTIN_GLYPH, "kind"))
+PIECE_NAME: Final[str] = "".join((BUILTIN_GLYPH, "name"))
+PARTS_NAME: Final[str] = "".join((BUILTIN_GLYPH, "parts"))
+PART_NAME: Final[str] = "".join((BUILTIN_GLYPH, "part"))
+APPLY_NAME: Final[str] = "".join((BUILTIN_GLYPH, "apply"))
+ALIKE_PIECES_NAME: Final[str] = "".join((BUILTIN_GLYPH, "alike"))
+
+#: What each question about a piece of the program takes.  `⎕part` takes which one
+#: it wants rather than answering them all together, which is what keeps an array out
+#: of the machine that runs a macro: how many there are is a separate question, and a
+#: walk over them is a loop the macro writes.
+_ASKS_ABOUT_A_PIECE: Final[dict[str, tuple[Type, ...]]] = {
+    HEAD_NAME: (SYNTAX,),
+    PARTS_NAME: (SYNTAX,),
+    PART_NAME: (SYNTAX, U64),
+}
+
+_SYNTAX_ANSWERS: Final[dict[str, Type]] = {
+    QUOTE_NAME: SYNTAX, FILL_NAME: SYNTAX, FILL_NUMBER_NAME: SYNTAX,
+    HEAD_NAME: SYNTAX, KIND_NAME: U64, PIECE_NAME: SYNTAX,
+    PARTS_NAME: U64, PART_NAME: SYNTAX, APPLY_NAME: SYNTAX,
+    ALIKE_PIECES_NAME: BOOL,
+}
+
+
+def _holes_of(node: object, into: list[ast.Hole]) -> None:
+    """Every hole below *node*, in the order they are written.
+
+    In the order written and not by name, because that is what the call that fills
+    them counts by: a hole is a place and two holes of one name in a macro's body are
+    two places, each filled with what the expression beside it answers.
+    """
+    if isinstance(node, ast.Hole):
+        into.append(node)
+        return
+    if isinstance(node, ast.Node):
+        for one in fields_of(node):
+            _holes_of(getattr(node, one.name), into)
+    elif isinstance(node, (list, tuple)):
+        for one in node:
+            _holes_of(one, into)
+
+
 #: The two pairs of brackets the language uses as an operator, named so that a
 #: definition of one and a use of one agree on what it is called.  The lifting
 #: marks are not among them: they are the grammar saying that a type follows.
@@ -636,6 +687,29 @@ def _declared_as(node: ast.FuncDef) -> str:
     if not is_operator_name(node.name):
         return node.name
     return "".join((node.name, "/", str(len(node.params))))
+
+
+def _holds_a_piece(ty: Type, seen: frozenset[int] = frozenset()) -> bool:
+    """Whether a value of *ty* holds a piece of the program anywhere inside it."""
+    if isinstance(ty, SyntaxType):
+        return True
+    if id(ty) in seen:
+        return False
+    deeper = seen | {id(ty)}
+    match ty:
+        case TupleType():
+            return any(_holds_a_piece(m, deeper) for m in ty.members)
+        case ResultType():
+            return (_holds_a_piece(ty.ok, deeper)
+                    or (ty.err is not None and _holds_a_piece(ty.err, deeper)))
+        case ProductType():
+            return any(_holds_a_piece(one, deeper) for _, one in ty.fields)
+        case ArrayType() | ListType() | SetType() | VecType():
+            return _holds_a_piece(ty.element, deeper)
+        case PtrType():
+            return _holds_a_piece(ty.pointee, deeper)
+        case _:
+            return False
 
 
 def _of_its_own(ty: Type | None) -> bool:
@@ -1454,12 +1528,24 @@ class Checker:
                  sources: SourceManager | None = None,
                  top_level: list[_Global] | None = None,
                  notes: Notes | None = None,
-                 conditions: Conditions = Conditions.CHECK) -> None:
+                 conditions: Conditions = Conditions.CHECK,
+                 for_macros: bool = False) -> None:
         self._module = module
         self._diags = diags
         #: What a condition written in a signature does in this build, which is
         #: the command line's to say and nothing the program can change.
         self._conditions = conditions
+        #: Whether what is being checked is the macros rather than the program.  A
+        #: macro runs while the compiler does, so a piece of the program is a value
+        #: it may hold and the questions about one are functions it may call --
+        #: neither of which is true of the program, where a value has to outlive the
+        #: compilation and there is nothing for a parse tree to be.
+        self._for_macros = for_macros
+        #: The trees quoted in the macros, in the order they were written, and the
+        #: holes each has.  The expander reads them: a quote lowers to a call that
+        #: names one by its place here and fills its holes with what the macro
+        #: worked out.
+        self.quoted: list[ast.Quote] = []
         #: Where to write down what each name turned out to be, for whoever
         #: wants to be asked about one later -- the language server, and nothing
         #: else.  Nothing where nobody asked, which is every build.
@@ -2765,6 +2851,9 @@ class Checker:
             # that one type is not passed two ways.
             for at, one in enumerate(params):
                 self._not_by_value(one, node.params[at].type.span)
+                self._not_a_piece(one, node.params[at].type.span, node.name)
+            self._not_a_piece(ret, node.ret_type.span if node.ret_type is not None
+                              else node.name_span, node.name)
             if node.ret_type is not None:
                 self._not_by_value(ret, node.ret_type.span)
             self._module.add_function(func, key=self._key(node.name))
@@ -3794,6 +3883,134 @@ class Checker:
             self._diags.emit(D.LANG_TYPE_RESULT_OF_NOTHING, ref.span)
             return ERROR
         return self._module.types.result_type(found, carried)
+
+    # -- what a macro is made of -----------------------------------------------
+
+    def _lower_quote(self, builder: IRBuilder, expr: ast.Quote,
+                     expected: Type | None) -> Value:
+        """Lower `⌜…⌝` in the body of a macro: the tree it holds, as a value.
+
+        The tree is written down here and the *call* names it by where it stands in
+        that list, so nothing of the syntax has to be built with instructions.  What
+        the instructions do is fill the holes: one call per hole, each handing over
+        what the macro worked out for it, which is what makes `⌜$a + $b⌝` a pair of
+        calls rather than a variadic one.
+        """
+        if not self._for_macros:
+            self._diags.emit(D.LANG_MACRO_QUOTE_OUTSIDE, expr.span)
+            return UndefConst(ERROR)
+        at = len(self.quoted)
+        self.quoted.append(expr)
+        found = builder.call(self._syntax_builtin(QUOTE_NAME, (U64,)),
+                             [builder.int_const(U64, at)], SYNTAX, expr.span)
+        holes: list[ast.Hole] = []
+        _holes_of(expr, holes)
+        for number, hole in enumerate(holes):
+            if hole.value is None:
+                self._diags.emit(D.LANG_MACRO_HOLE_OUTSIDE, hole.span)
+                return UndefConst(ERROR)
+            given = self._lower_expr(builder, hole.value, None)
+            ty = self._value_type_of(given)
+            if ty is ERROR:
+                return UndefConst(ERROR)
+            if ty is SYNTAX:
+                name, wanted = FILL_NAME, SYNTAX
+            elif isinstance(ty, IntType):
+                # A number goes in as what a program would have written to mean it,
+                # which is what lets a macro work something out and write the answer.
+                name, wanted = FILL_NUMBER_NAME, I64
+                given = self._as_a_number(builder, given, ty, hole.span)
+            else:
+                self._diags.emit(D.LANG_MACRO_HOLE_NOT_A_PIECE, hole.span,
+                                 found=ty.written())
+                return UndefConst(ERROR)
+            found = builder.call(
+                self._syntax_builtin(name, (SYNTAX, U64, wanted)),
+                [found, builder.int_const(U64, number), given], SYNTAX, expr.span)
+        if not self._accepts(expected, SYNTAX):
+            self._report_mismatch(expr.span, SYNTAX, expected)
+            return UndefConst(ERROR)
+        return found
+
+    def _as_a_number(self, builder: IRBuilder, value: Value, ty: IntType,
+                     span: Span) -> Value:
+        """A number of any width as the one the tree builder takes."""
+        if ty is I64:
+            return value
+        return builder.cast(CastKind.SEXT if ty.signed else CastKind.ZEXT,
+                            value, I64, span)
+
+    def _not_a_piece(self, ty: Type, span: Span, name: str) -> None:
+        """Refuse a piece of the program where a value has to outlive the compilation.
+
+        A macro and a function it may call hold one; a function the program calls
+        does not, there being nothing for a parse tree to be once the program is the
+        program.  Asked of what a signature says rather than of what a body does,
+        because a signature is what a caller reads.
+        """
+        if self._for_macros or not _holds_a_piece(ty):
+            return
+        self._diags.emit(D.LANG_SYNTAX_AT_RUN_TIME, span, name=name)
+
+    def _lower_asked(self, builder: IRBuilder, expr: ast.Call, name: str,
+                     expected: Type | None) -> Value:
+        """Lower a question about a piece of the program.
+
+        They are the whole of what is available for looking at one, and they are the
+        same mechanism a macro writes with seen from the other end: `\N{APL FUNCTIONAL SYMBOL QUAD}head` and
+        `\N{APL FUNCTIONAL SYMBOL QUAD}part` take an expression apart and `\N{APL FUNCTIONAL SYMBOL QUAD}apply` -- when there is one -- puts it back.
+        """
+        if not self._for_macros:
+            self._diags.emit(D.LANG_ASK_OUTSIDE_A_MACRO, expr.span, name=name)
+            return UndefConst(ERROR)
+        wanted = _ASKS_ABOUT_A_PIECE[name]
+        if len(expr.args) != len(wanted):
+            self._diags.emit(D.LANG_ASK_ARGUMENT_COUNT, expr.span, name=name,
+                             expected=str(len(wanted)), found=str(len(expr.args)))
+            return UndefConst(ERROR)
+        given: list[Value] = []
+        for one, ty in zip(expr.args, wanted):
+            value = self._lower_into(builder, one, ty, one.span)
+            if self._value_type_of(value) is ERROR:
+                return UndefConst(ERROR)
+            given.append(value)
+        answer = _SYNTAX_ANSWERS[name]
+        found = builder.call(self._syntax_builtin(name, wanted), given, answer,
+                             expr.span)
+        if not self._accepts(expected, answer):
+            self._report_mismatch(expr.span, answer, expected)
+            return UndefConst(ERROR)
+        return found
+
+    def _pieces_alike(self, builder: IRBuilder, expr: ast.Binary,
+                      left: Value, right: Value) -> Value:
+        """Lower `a = b` and `a ≠ b` over two pieces of the program.
+
+        Two pieces are alike where the same thing is written in both, wherever each
+        was written -- so the positions are not compared, which is what makes a piece
+        the caller wrote match one the macro did.
+        """
+        found = builder.call(
+            self._syntax_builtin(ALIKE_PIECES_NAME, (SYNTAX, SYNTAX)),
+            [left, right], BOOL, expr.span)
+        if expr.op is ast.BinaryOp.NOT_EQUAL:
+            return builder.binary(BinOp.XOR, found,
+                                  builder.bool_const(True), BOOL, expr.span)
+        return found
+
+    def _syntax_builtin(self, name: str, params: tuple[Type, ...]) -> Function:
+        """The compiler-provided function of that name, made on first ask.
+
+        Bodyless, and the machine that runs a macro is what gives each one a
+        meaning: they are the questions about a piece of the program and the two
+        that build one, and none of them is anything a program could write.
+        """
+        found = self._module.functions.get(name)
+        if found is None:
+            found = self._module.add_function(Function(
+                name, self._module.types.func_type(params, _SYNTAX_ANSWERS[name]),
+                FuncAttrs(), linkage=Linkage.INTERNAL))
+        return found
 
     # -- operators a program defines -------------------------------------------
 
@@ -9944,6 +10161,13 @@ class Checker:
                 return self._lower_deref(builder, expr, expected)
             case ast.Failure():
                 return self._lower_failure(builder, expr, expected)
+            case ast.Quote():
+                return self._lower_quote(builder, expr, expected)
+            case ast.Hole():
+                # Outside a quote there is nothing for one to go into.  Inside one
+                # it is read by the quote itself and never reaches here.
+                self._diags.emit(D.LANG_MACRO_HOLE_OUTSIDE, expr.span)
+                return UndefConst(ERROR)
             case ast.Fresh():
                 return self._lower_fresh(builder, expr, expected)
             case ast.Lifted():
@@ -10003,6 +10227,16 @@ class Checker:
             self._report_mismatch(expr.span, BOOL, expected)
             return UndefConst(ERROR)
         context = self._hint_of(expr.left) or self._hint_of(expr.right)
+        if context is SYNTAX and expr.op in (ast.BinaryOp.EQUAL,
+                                             ast.BinaryOp.NOT_EQUAL):
+            # Two pieces of the program compared, which asks whether the same thing
+            # is written in both wherever each was written.  It is a question about
+            # trees and not about numbers, so it is not the comparison below.
+            left = self._lower_into(builder, expr.left, SYNTAX, expr.left.span)
+            right = self._lower_into(builder, expr.right, SYNTAX, expr.right.span)
+            if ERROR in (self._value_type_of(left), self._value_type_of(right)):
+                return UndefConst(ERROR)
+            return self._pieces_alike(builder, expr, left, right)
         outer, self._operand_of = self._operand_of, expr.op.value
         was_listing, self._listing = self._listing, True
         try:
@@ -12158,6 +12392,11 @@ class Checker:
                 # What the operator answers with, not what it was given: the
                 # answer is what whatever reads the expression will get.
                 return BOOL
+            case ast.Quote():
+                return SYNTAX
+            case ast.Call() if isinstance(expr.callee, ast.NameRef) \
+                    and expr.callee.name in _SYNTAX_ANSWERS:
+                return _SYNTAX_ANSWERS[expr.callee.name]
             case ast.Call() if isinstance(expr.callee, ast.NameRef):
                 # What a call answers with, which its callee says.  A record
                 # written out is a call of the type's name, so this is what lets a
@@ -12592,6 +12831,8 @@ class Checker:
                 return self._lower_iter(builder, expr, expected)
             if given == BYTES_NAME:
                 return self._lower_bytes(builder, expr, expected)
+            if given in _ASKS_ABOUT_A_PIECE:
+                return self._lower_asked(builder, expr, given, expected)
             if given == TYPEOF_NAME:
                 # Reaching here means it stood somewhere a value was wanted,
                 # since a condition the compiler settles never lowers what is in
@@ -14534,6 +14775,24 @@ class Checker:
                             writes[id(place)] = writes.get(id(place), 0) + 1
         return reads, writes
 
+
+
+def check_macros(units: Sequence[ast.SourceUnit], diags: DiagEngine,
+                 sources: SourceManager | None = None) -> object:
+    """Check and lower the macros, answering the module and the trees they quoted.
+
+    A run of its own over a unit holding the macros, the `comptime` functions and the
+    definitions their signatures name -- and not the program's functions, which a
+    macro runs before.  So a macro calling one is told the name is not defined, which
+    is the truth of it: at expansion there is no such function yet.
+    """
+    from ..front.expand import _Checked
+
+    module = Module(name="macros", triple="")
+    found = Checker(module, diags, ModuleRegistry(), None, "", sources,
+                    for_macros=True)
+    found.run(units, whole_program=False)
+    return _Checked(module, found.quoted)
 
 
 def check(module: Module, units: Sequence[ast.SourceUnit], diags: DiagEngine,

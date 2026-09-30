@@ -2954,6 +2954,41 @@ and twenty-eight frames: past either, the evaluation is given up on and reported
 (7001).  A compiler that hung on a loop with no end would say nothing at all,
 which is the one outcome worse than refusing.
 
+Running a macro at compile time
+-------------------------------
+
+**And there is a second interpreter, over the representation.**  `pypl4g/front/expand.py`
+is the stage between parsing and checking, and where a macro is written as a function it
+hands the work to `pypl4g/front/interpret.py`, which runs the **representation** and not
+the tree.  So the compiler has two compile-time machines with two answers to the question
+above, which is worth explaining and worth fixing.
+
+**Why the representation here.**  The argument that settled the build function the other
+way is memory, and a macro has none: what it computes with is pieces of the program,
+whole numbers and truth values, and it never joins one string to another.  What decides
+it instead is that a macro *is part of the program* and must be held to every rule the
+program is held to.  So `check_macros()` puts the macros and the `comptime fn`s through
+the same checker and the same lowering the program goes through -- one `Module` of their
+own -- and what runs the result holds no knowledge of the language at all: values are
+Python integers and tuples, memory is one growing `bytearray`, and there is one arm per
+opcode.  A macro's types are checked because the checker checked them, not because a
+second implementation of the language was written to agree with the first.
+
+**What it does.**  Every opcode the front end emits for a function of this shape:
+arithmetic and comparisons over integers, casts, calls, branches and block parameters,
+records and tuples read and written, results wrapped and unwrapped, and a frame slot for
+anything the lowering put in memory.  A piece of the program is a handle, which is what
+makes `syntax` one value wide.
+
+**It has a ceiling too**, of a million steps, reported as the macro not coming to an end
+(7023).  A macro the checker or the lowering refused is reported as one that cannot be run
+(7024), with the reason.
+
+**The two should be one.**  Neither is the other's superset today: the build machine has
+strings, collections and a heap the macro machine has no need of, and the macro machine
+has the property the build machine gave up -- that what it runs was checked and lowered
+by the compiler rather than read a second time.  `TODO-pypl4g.md` has the entry.
+
 The build function
 ------------------
 

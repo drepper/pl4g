@@ -1,0 +1,25 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=35 diag=none
+
+※ The questions about a piece of the program.  `⎕head` is what it is made by,
+※ `⎕parts` how many pieces it applies its head to, and `⎕part` which one -- and a
+※ piece compared with `=` asks whether the same thing is written in both, wherever
+※ each was written.
+※
+※ An operator alone between the marks is the operator itself rather than an
+※ expression using it, which is what `⎕head` of a sum answers.  Nothing about any
+※ particular operator is built in: finding a sum is a macro asking whether the head
+※ is `+`.
+※
+※ `⎕part` names which part it wants instead of answering them all at once, which is
+※ what keeps an array out of the machine that runs a macro -- how many there are is
+※ its own question and a walk over them is a loop the macro writes.
+
+macro sum(e: syntax) → syntax:
+    if ⎕head(e) = ⌜+⌝:
+        ⌜$(⎕part(e, 0u64)) × 10u8⌝
+    else:
+        ⌜$e⌝
+
+@[startup]
+fn main() → u6:
+    ⎕narrow(sum⌜3u8 + 4u8⌝ + sum⌜5u8⌝, ⌜u6⌝) ?? 1u6
