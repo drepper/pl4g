@@ -3825,7 +3825,16 @@ class Checker:
         definition exists, and where the definition is generic -- what a generic
         one answers is what an instantiation settles, and a hint is read off the
         syntax or not at all.
+
+        The glyph is looked up before anything else is asked, because everything
+        else is a walk: whether the language's meaning covers the operands is a
+        question about their hints, and hinting a hint is how a deep expression
+        turns into a deep walk.  A program that defined no operator of this glyph
+        stops here.
         """
+        if self._operator_written(
+                expr.op.value, 1 if isinstance(expr, ast.Unary) else 2) is None:
+            return None
         if isinstance(expr, ast.Unary):
             glyph, ours = expr.op.value, self._operator_stands_alone(expr)
         else:
@@ -11317,8 +11326,8 @@ class Checker:
         # language's own meaning is not looked up and cannot be replaced -- a
         # definition answers only where the operator had no meaning to begin
         # with, which is what keeps `1u8 + 2u8` the same in every program.
-        written = self._operator_written(expr.op.value, 2)
-        if written is not None and not self._operator_stands(expr, context):
+        written = self._operators and self._operator_written(expr.op.value, 2)
+        if written and not self._operator_stands(expr, context):
             found = self._operator_call(builder, expr.op.value,
                                         (expr.left, expr.right), expr.span,
                                         expected)
@@ -11555,7 +11564,8 @@ class Checker:
         # type.  Each of the language's own is lowered by a method of its own
         # below, and none of them works on such a type, so this is asked first and
         # answers only where there was nothing to answer.
-        if self._operator_written(expr.op.value, 1) is not None \
+        if self._operators \
+                and self._operator_written(expr.op.value, 1) is not None \
                 and not self._operator_stands_alone(expr):
             found = self._operator_call(builder, expr.op.value, (expr.operand,),
                                         expr.span, expected)
@@ -12062,6 +12072,18 @@ class Checker:
         an answer -- the answer comes from lowering -- but it is what lets both
         `count & 1` and `1 & count` mean the same thing.
         """
+        # An operator a program defined for a type of its own answers what the
+        # definition answers, and asking the language what one of its operators
+        # answers would be asking the wrong question: `⍴p` over a record is a
+        # `u64` because the definition says so.
+        #
+        # Before the match and not a case in it: a case would be two tests on
+        # every hint of every program, and a program that defined no operator
+        # should pay one -- which is the empty table.
+        if self._operators and isinstance(expr, (ast.Unary, ast.Binary)):
+            found = self._answers_written(expr)
+            if found is not None:
+                return found
         match expr:
             case ast.Fresh():
                 # It has no meaning but the definition's, so what it answers is
@@ -12072,13 +12094,6 @@ class Checker:
                 if not isinstance(written, Function):
                     return None
                 return None if written.ty.ret is VOID else written.ty.ret
-            case ast.Unary() | ast.Binary() if (found := self._answers_written(
-                    expr)) is not None:
-                # An operator a program defined for a type of its own answers
-                # what the definition answers, and asking the language what one
-                # of its operators answers would be asking the wrong question:
-                # `⍴p` over a record is a `u64` because the definition says so.
-                return found
             case ast.IntLit() if expr.type_name is not None:
                 return BUILTIN_TYPES.get(expr.type_name)
             case ast.BoolLit():
