@@ -1,0 +1,16 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=3 diag=none
+
+※ The language's own meaning of an operator cannot be replaced.  A definition is
+※ consulted only where the operator had no meaning for those operands to begin
+※ with, so `1u8 + 2u8` is three in every program -- and a definition over `u8`
+※ is simply never reached.
+※
+※ That is what makes the feature purely additive: no program can change what
+※ another program's arithmetic means by being linked with it.
+
+fn `+`(a: u8, b: u8) → u8:
+    99u8
+
+@[startup]
+fn main() → u6:
+    ⎕narrow(1u8 + 2u8, ⌜u6⌝) ?? 1u6

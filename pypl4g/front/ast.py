@@ -398,6 +398,24 @@ class Member(Expr):
 
 
 @dataclass(frozen=True, slots=True)
+class Fresh(Expr):
+    """An operator the language gives no meaning, applied to one operand or two.
+
+    A glyph a program defined for itself.  It is a node of its own rather than a
+    `Binary` with an unusual operator because the two have nothing in common past
+    the shape: everything the language does with an operator of its own -- the
+    unit it works out, the array it walks over, the width it demands -- is about
+    an operator it knows, and there is none of it to do here.  What this means is
+    the definition and nothing else.
+    """
+
+    glyph: str
+    left: Expr
+    #: Nothing where the operator was written before one operand.
+    right: Expr | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class Binary(Expr):
     """An operator applied to two operands."""
 

@@ -1597,6 +1597,65 @@
       "option": null
     },
     {
+      "number": 3050,
+      "name": "LANG_OPNAME_UNTERMINATED",
+      "severity": "error",
+      "message": "an operator name with no closing '`'",
+      "cause": "An operator name is one glyph between two grave accents, and the closing one is missing.  It is written on one line: a name is not a place a line may be broken.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition / Operators",
+        "requirement": "An operator name is closed on the line it is opened."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 3051,
+      "name": "LANG_OPNAME_NOT_ONE_GLYPH",
+      "severity": "error",
+      "message": "an operator name of {count} glyphs rather than one",
+      "args": [
+        {
+          "name": "count",
+          "type": "string",
+          "description": "how many were written"
+        }
+      ],
+      "cause": "An operator is a single glyph.  Two glyphs beside each other are two operators, which is what makes an expression readable without a table of which pairs mean something -- so there is nothing for a name of two to name.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition / Operators",
+        "requirement": "An operator is one glyph."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 3052,
+      "name": "LANG_OPNAME_NOT_AN_OPERATOR",
+      "severity": "error",
+      "message": "'{glyph}' is not a glyph an operator may be",
+      "args": [
+        {
+          "name": "glyph",
+          "type": "string",
+          "description": "what was written"
+        }
+      ],
+      "cause": "Unicode decides: a glyph in the symbol categories may be an operator -- Sm for the mathematical symbols and So for the others -- and so may a glyph the language already uses as one.  Everything else is either a letter, a digit, or punctuation the grammar needs for itself.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition / Operators",
+        "requirement": "An operator glyph is a symbol, or one the language already uses."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 3201,
       "name": "LANG_ATTR_UNKNOWN",
       "severity": "error",
@@ -7804,6 +7863,60 @@
         "document": "spec/spec.md",
         "section": "The Language / File Structure / Function Definition / Conditions",
         "requirement": "'⎕entry' names a parameter of the function it is written in."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4922,
+      "name": "LANG_OPERATOR_ARITY",
+      "severity": "error",
+      "message": "'{glyph}' takes one operand or two, and this takes {count}",
+      "args": [
+        {
+          "name": "glyph",
+          "type": "string",
+          "description": "the operator"
+        },
+        {
+          "name": "count",
+          "type": "string",
+          "description": "how many parameters were written"
+        }
+      ],
+      "cause": "An operator is written before one operand or between two, so a definition of one takes one parameter or two.  Which of the two it is, is what tells a prefix reading from an infix one where a glyph has both, so the number is not something the definition may leave for a reader to work out.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition / Operators",
+        "requirement": "A definition of an operator takes one parameter or two."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4923,
+      "name": "LANG_OPERATOR_NOT_DEFINED",
+      "severity": "error",
+      "message": "nothing says what '{glyph}' means for {found}",
+      "args": [
+        {
+          "name": "glyph",
+          "type": "string",
+          "description": "the operator"
+        },
+        {
+          "name": "found",
+          "type": "string",
+          "description": "what its operands are"
+        }
+      ],
+      "cause": "The glyph is a symbol, so it may be an operator, and the language gives it no meaning of its own -- which leaves the program to say what it means.  A definition is a function whose name is the glyph written between grave accents, taking one operand or two.  Where the operands are types the language does give the operator a meaning for, the language's meaning is what applies and a definition is never consulted.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition / Operators",
+        "requirement": "An operator the language gives no meaning means what a definition says."
       },
       "since": "0.1",
       "default_enabled": true,

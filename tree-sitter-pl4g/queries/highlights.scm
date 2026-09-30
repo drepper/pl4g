@@ -64,6 +64,11 @@
 ; -- words --------------------------------------------------------------------
 
 ["fn" "λ"] @keyword.function
+; An operator standing where a name goes, and one the language gives no meaning.
+; The first is a name and reads as one; the second is an operator and reads as
+; one, which is what tells a reader which of the two a line is doing.
+(operator_name) @function
+(fresh_operator) @operator
 "let" @keyword
 "return" @keyword.return
 ["if" "elif" "else" "match"] @keyword.conditional

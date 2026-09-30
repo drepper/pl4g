@@ -1,0 +1,13 @@
+※ pl4g-test: compile=error
+※ pl4g-test: expect-diag 4923 LANG_OPERATOR_NOT_DEFINED
+
+※ A symbol the language gives no meaning and nothing defined.  The glyph is a
+※ legal operator -- Unicode calls it one -- so what is missing is the definition,
+※ which is what the message says rather than "unexpected character".
+
+type Point = x : u8 ; y : u8
+
+@[startup]
+fn main() → u6:
+    let p: Point = Point(.x ← 1u8, .y ← 2u8) ⊛ Point(.x ← 1u8, .y ← 2u8)
+    0u6

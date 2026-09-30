@@ -493,8 +493,17 @@
           "type": "FIELD",
           "name": "name",
           "content": {
-            "type": "SYMBOL",
-            "name": "identifier"
+            "type": "CHOICE",
+            "members": [
+              {
+                "type": "SYMBOL",
+                "name": "identifier"
+              },
+              {
+                "type": "SYMBOL",
+                "name": "operator_name"
+              }
+            ]
           }
         },
         {
@@ -3932,6 +3941,10 @@
                     {
                       "type": "STRING",
                       "value": "↻"
+                    },
+                    {
+                      "type": "SYMBOL",
+                      "name": "fresh_operator"
                     }
                   ]
                 }
@@ -4261,6 +4274,10 @@
                 {
                   "type": "STRING",
                   "value": "∤"
+                },
+                {
+                  "type": "SYMBOL",
+                  "name": "fresh_operator"
                 }
               ]
             }
@@ -5405,6 +5422,33 @@
     "identifier": {
       "type": "PATTERN",
       "value": "[A-Za-z_][A-Za-z0-9_']*|\\u2395[A-Za-z_][A-Za-z0-9_'@]*"
+    },
+    "operator_name": {
+      "type": "TOKEN",
+      "content": {
+        "type": "SEQ",
+        "members": [
+          {
+            "type": "STRING",
+            "value": "`"
+          },
+          {
+            "type": "PATTERN",
+            "value": "[[\\p{Sm}\\p{So}\\-^&%#\\u2308\\u230a\\u00ab\\u00bb\\u207f]--[?\\u207b\\u2190\\u2192\\u2227\\u2228\\u22a5\\u2316\\u231c\\u231d\\u2395\\u29d6]]"
+          },
+          {
+            "type": "STRING",
+            "value": "`"
+          }
+        ]
+      }
+    },
+    "fresh_operator": {
+      "type": "TOKEN",
+      "content": {
+        "type": "PATTERN",
+        "value": "[[\\p{Sm}\\p{So}]--[+<=>|~\\u00ac\\u00d7\\u00f7\\u207b\\u2190-\\u2193\\u2195\\u21ba\\u21bb\\u21d5\\u21e7\\u21e9\\u2223\\u2224\\u2227\\u2228\\u2245\\u2247\\u2260\\u2264\\u2265\\u2295\\u229e-\\u22a0\\u22a5\\u22bc\\u22bd\\u2316\\u231c\\u231d\\u2374\\u2395\\u29d6\\u29fa\\u2a85\\u2a86\\u2a89\\u2a8a]]"
+      }
     },
     "doc_comment": {
       "type": "TOKEN",

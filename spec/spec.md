@@ -4586,6 +4586,131 @@ semicolon after it turns the block into one that has none.  C, C++, Go and Java 
 there terminating a statement rather than separating two.
 
 
+##### Operators
+
+**An operator is a function whose name is the glyph**, written between grave accents:
+
+```
+type Point = x : u8 ; y : u8
+
+fn `+`(a: Point, b: Point) → Point:
+    Point(.x ← a.x ⊞ b.x, .y ← a.y ⊞ b.y)
+
+Point(.x ← 1u8, .y ← 2u8) + Point(.x ← 3u8, .y ← 4u8)
+```
+
+The accent is the one character of ASCII the language gave no meaning, and it reads as a quotation of the glyph -- which is what it
+is: the *name* of the operator rather than the operator.  Nothing else about the definition is special.  It may be generic, it may
+have conditions, its symbol is the signature written out (`+(Point,Point)Point`), and it is called by writing the operator.
+
+**One parameter is the prefix reading of a glyph and two is the infix one** (4922).  Several glyphs are both -- `⌈xs` is the largest
+of what `xs` holds and `a ⌈ b` is the larger of two -- and the number of operands is what says which of them a definition is
+of.  Nothing is written to say so, and a glyph may have both: they are two definitions and neither is a repeat of the other.
+
+**The language's own meaning cannot be replaced.**  A definition is consulted only where the operator had no meaning for those
+operands to begin with, so `1u8 + 2u8` is three in every program and a definition over `u8` is never reached.  That is what makes
+the feature purely additive: no program can change what another's arithmetic means by being linked with it.
+
+###### Which glyphs
+
+**Unicode decides.**  A glyph may be an operator if it is a symbol -- the `Sm` category, which is the mathematical symbols, and
+`So`, which is the rest -- so what is left out is the ASCII punctuation the grammar needs for itself.  Asking Unicode rather than
+writing a list is what makes the rule one sentence and what lets a program use a glyph nobody thought of.
+
+Two clauses qualify it.  **A glyph the language already uses as an operator is one** whatever Unicode calls it, since not all of
+them are symbols there: `-` is a dash, `^` a modifier symbol, `⌈` and `⌊` are brackets, `«` and `»` quotation marks, and `ⁿ` a
+raised letter.  **And a glyph the language has given a meaning that is not an operator is not one** (3052), whatever Unicode calls
+it: the arrow of a signature, the arrow that binds a name, the failure value, the quad that begins a name the compiler provides, a
+lifetime, the two lifting marks, and the raised minus of a negative literal.
+
+**`∧`, `∨`, `?` and `⌖` may not be named either.**  The first two decide *whether* to work something out, and a function takes
+its arguments already worked out -- so one written for them would change when things happen and not what they mean, which is the
+trap C++ left open on `&&`.  `?` and its pair are about a result rather than about what a result holds, and `⌖` is about a
+reference.
+
+**An operator is one glyph** (3051).  Two beside each other are two operators, which is what makes an expression readable without a
+table of which pairs mean something.
+
+###### An operator the language does not have
+
+A symbol the language gives no meaning may be defined all the same, and then written:
+
+```
+fn `⊛`(a: Point, b: Point) → Point:  …
+fn `♯`(p: Point) → u8:               …
+
+♯(p ⊛ q)
+```
+
+Such an operator has no meaning but the definition's, so a use with nothing defined is a mistake about the *definition* (4923) and
+not about the character.
+
+**It binds as tightly as multiplying, and to the left.**  One level for all of them: a program cannot declare a level and should
+not be able to, the glyph set being the language's and so being its table.  Tight rather than loose so that a reader who does not
+know the glyph still knows how the line groups -- `a ⊛ b + c` is `(a ⊛ b) + c` -- and stated against something a reader
+knows rather than given a level of its own.  Written before one operand it binds as every operator written there does.
+
+Compare: **Swift**, which lets a program declare new operators *and* their precedence, in named groups.  That is the larger
+language this stops short of, and the thing it gives up is the ability to write a glyph that binds loosely.  **Haskell** lets a
+program name an operator and declare its fixity per operator.  **APL**, **BQN** and **UIUA** have no precedence at all -- every
+function binds the same way and the reading is right to left -- which is the other way to make a novel glyph safe to read.
+
+###### The builtin operators, written out
+
+Every operator the language has, as the definition it would be if a program wrote it.  They are not definitions a program can see or
+replace; this is what the language means, said in the notation a program uses to say the same kind of thing.  `N'` stands for a
+number, `I'` for an integer, `C'` for a collection and `T'` for anything.
+
+```
+fn `+`(a: N', b: N') → N'              fn `-`(a: N', b: N') → N'
+fn `×`(a: N', b: N') → N'              fn `÷`(a: N', b: N') → N' ?
+fn `%`(a: N', b: N') → N' ?            fn `ⁿ`(a: N', b: I') → N'
+
+fn `⊞`(a: N', b: N') → N'              fn `⊟`(a: N', b: N') → N'
+fn `⊠`(a: N', b: N') → N'
+
+fn `=`(a: T', b: T') → bool            fn `≠`(a: T', b: T') → bool
+fn `<`(a: N', b: N') → bool            fn `>`(a: N', b: N') → bool
+fn `≤`(a: N', b: N') → bool            fn `≥`(a: N', b: N') → bool
+fn `≅`(a: F', b: F') → bool            fn `≇`(a: F', b: F') → bool
+fn `⪅`(a: F', b: F') → bool            fn `⪆`(a: F', b: F') → bool
+fn `⪇`(a: F', b: F') → bool            fn `⪈`(a: F', b: F') → bool
+fn `∣`(a: I', b: I') → bool            fn `∤`(a: I', b: I') → bool
+fn `∣`(a: I') → bool                  fn `∤`(a: I') → bool
+
+fn `&`(a: I', b: I') → I'              fn `|`(a: I', b: I') → I'
+fn `^`(a: I', b: I') → I'              fn `~`(a: I') → I'
+fn `«`(a: I', b: I') → I'              fn `»`(a: I', b: I') → I'
+fn `↺`(a: I', b: I') → I'              fn `↻`(a: I', b: I') → I'
+
+fn `⊻`(a: bool, b: bool) → bool         fn `⊼`(a: bool, b: bool) → bool
+fn `⊽`(a: bool, b: bool) → bool         fn `¬`(a: bool) → bool
+
+fn `⌈`(a: N', b: N') → N'              fn `⌊`(a: N', b: N') → N'
+fn `⌈`(c: C') → E'                     fn `⌊`(c: C') → E'
+fn `↓`(a: F') → F'                    fn `↑`(a: F') → F'
+fn `↕`(a: F') → F'                    fn `⇕`(a: F') → F'
+
+fn `#`(c: C') → u64 ¤size              fn `⍴`(c: C') → u64 ¤size
+fn `⍴`(shape: I', c: C') → C'           fn `⫽`(a: C', b: C') → C'
+fn `⇧`(c: cursor) → cursor             fn `⇩`(c: cursor) → cursor
+```
+
+**What the table leaves out is what a function cannot say.**  `∧`, `∨`, `and` and `or` decide whether to work their right
+side out, so no signature describes them; `?` and `??` are about a result; `⌖` is about a reference; and `⟦⟧`, `⸨⸩` and
+`⌜⌝` are brackets rather than operators.  That the rest fit is the argument for the notation: what the language does to values and
+what a program may do to its own are the same kind of thing, said the same way.
+
+Compare: **Ada**, which writes `function "+" (Left, Right : Vector) return Vector` -- this with quotation marks, which Ada needs
+because `+` is not a legal identifier there and a language whose operators are glyphs does not.  **Haskell**, where an operator *is*
+a function whose name happens to be symbols and `(+)` names it.  **C++**, which spells the name `operator+` and chooses per
+operator between a member and a free function; the free form is there to answer which side decides, which a definition over both
+parameters answers by writing both down.  **Rust** has a trait per operator, which answers the same question at the cost of a trait
+system.  **D** reached `opBinary!"+"` -- one function over all binary operators -- after `opAdd`, and both are names rather than the
+glyph.  **Python**'s `__add__` is that too, with `__radd__` beside it for the side that did not decide.  **Go**, **Odin** and
+**Zig** have no operator definitions at all, on purpose; the argument that answers them here is that a requirement
+(`pre(T' ⊞ T' → T')`) cannot otherwise be met by anything a program defines, so this is not sugar.
+
 ##### Conditions
 
 **A signature may say what a function requires of its types and what it demands of its values**, in as many clauses as it has

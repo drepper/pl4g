@@ -1,0 +1,19 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=10 diag=none
+
+※ An operator standing where a name goes is how a program says what one means
+※ for its own types.  The glyph is the name, written between grave accents --
+※ the one character of ASCII the language gave no meaning -- so it reads as a
+※ quotation of the operator rather than as the operator itself.
+※
+※ The symbol in the image is the signature written out, as every other
+※ function's is: `+(Point,Point)Point`.
+
+type Point = x : u8 ; y : u8
+
+fn `+`(a: Point, b: Point) → Point:
+    Point(.x ← a.x ⊞ b.x, .y ← a.y ⊞ b.y)
+
+@[startup]
+fn main() → u6:
+    let p: Point = Point(.x ← 1u8, .y ← 2u8) + Point(.x ← 3u8, .y ← 4u8)
+    ⎕narrow(p.x ⊞ p.y, ⌜u6⌝) ?? 1u6

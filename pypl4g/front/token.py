@@ -116,6 +116,25 @@ RANGE_GLYPH: Final[str] = "\N{HORIZONTAL ELLIPSIS}"
 HEAP_NAME: Final[str] = "\N{APL FUNCTIONAL SYMBOL QUAD}heap"
 EMPTY_ARENA_NAME: Final[str] = "\N{APL FUNCTIONAL SYMBOL QUAD}arena"
 
+#: What encloses an operator where the operator stands as a *name*: a definition
+#: of one, and nothing else so far.  The grave accent is the one character of ASCII
+#: the language gave no meaning, and it reads as a quotation of the glyph -- which
+#: is what it is, the name of the operator rather than the operator itself.
+OPNAME_GLYPH: Final[str] = "`"
+
+#: Which single glyphs a program may name as an operator.  Unicode decides most of
+#: it: a glyph in the symbol categories is one, `Sm` being the mathematical
+#: symbols -- `+`, `\N{NOT EQUAL TO}`, `\N{SQUARED PLUS}`, `\N{DIVISION SIGN}` -- and `So` the other symbols, which is where
+#: `\N{APL FUNCTIONAL SYMBOL RHO}` and the arrows live.  What the categories leave out is the ASCII
+#: punctuation the grammar needs for itself, which is the point of asking them.
+#:
+#: The language's own operators are not all in those two categories -- `-` is a
+#: dash, `^` a modifier symbol, `\N{LEFT CEILING}` and `\N{LEFT FLOOR}` are brackets as far as Unicode is
+#: concerned -- so a glyph the language already uses as an operator qualifies too.
+#: That second clause is what makes every builtin operator writable in this
+#: notation, which is what the specification needs to define them with it.
+OPERATOR_CATEGORIES: Final[frozenset[str]] = frozenset({"Sm", "So"})
+
 #: What a function answered, which is the one thing a post-condition is about
 #: and which there is nothing else to call.  A name the compiler provides rather
 #: than a keyword, because that is what the language already does for a name it
@@ -455,6 +474,14 @@ class TokKind(StrEnum):
     KW_MUT = "'mut'"
     KW_UNIT = "'unit'"
     KW_TYPE = "'type'"
+    #: A name written between grave accents, which is an operator standing where
+    #: a name goes: `` `+` `` is the name of the operator and not the operator.
+    OPNAME = "an operator name"
+    #: A glyph the language gives no meaning, standing where an operator stands.
+    #: What it means is what a program said it means, and nothing where a program
+    #: said nothing.
+    OPERATOR = "an operator"
+
     KW_PRE = "'pre'"
     KW_POST = "'post'"
     KW_BUNDLE = "'bundle'"
@@ -585,6 +612,34 @@ FLOAT_TYPE_NAMES: Final[frozenset[str]] = frozenset(("f32", "f64"))
 INTEGER_TYPE_NAMES: Final[frozenset[str]] = frozenset(
     name for name, ty in BUILTIN_TYPES.items() if isinstance(ty, IntType))
 
+
+#: The glyphs the language itself uses as an operator and that Unicode does not
+#: call a symbol: a dash, a modifier symbol, two brackets, two quotation marks and
+#: a raised letter.  They qualify because the language already treats them as
+#: operators, which is what makes every builtin operator writable in the notation.
+#: A test checks this against the parser's own tables, so it cannot go stale.
+OPERATOR_GLYPHS: Final[frozenset[str]] = frozenset({
+    "-", "^", "&", "%", "#",
+    MAX_GLYPH, MIN_GLYPH, SHIFT_LEFT_GLYPH, SHIFT_RIGHT_GLYPH, POWER_GLYPH,
+})
+
+#: The glyphs a program may not name, whatever Unicode calls them.  Two groups.
+#:
+#: **Operators a function cannot stand for.**  `\N{LOGICAL AND}` and `\N{LOGICAL OR}` decide *whether* to work
+#: something out, and a function takes its arguments already worked out -- so one
+#: written for them would change when things happen and not what they mean, which
+#: is the trap C++ left open on `&&`.  `?` and its pair are about a result rather
+#: than about what a result holds, and `\N{POSITION INDICATOR}` is about a reference.
+#:
+#: **Glyphs with a meaning that is not an operator**, which Unicode calls symbols
+#: all the same: the arrow of a signature, the arrow that binds a name, the failure
+#: value, the quad that begins a name the compiler provides, a lifetime, the two
+#: lifting marks, and the raised minus of a negative literal.
+OPERATORS_NOT_NAMEABLE: Final[frozenset[str]] = frozenset({
+    AND_GLYPH, OR_GLYPH, QUESTION_GLYPH, DEREF_GLYPH,
+    ARROW_GLYPH, ASSIGN_GLYPH, BOTTOM_GLYPH, BUILTIN_GLYPH, LIFETIME_GLYPH,
+    LIFT_OPEN_GLYPH, LIFT_CLOSE_GLYPH, NEGATIVE_GLYPH,
+})
 
 KEYWORDS: Final[dict[str, TokKind]] = {
     "fn": TokKind.KW_FN,

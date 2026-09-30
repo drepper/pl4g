@@ -8,6 +8,8 @@ tokens are not produced.
 
 from __future__ import annotations
 
+import unicodedata
+
 from typing import Final
 
 from ..diag import ids as D
@@ -15,6 +17,8 @@ from ..diag.engine import DiagEngine
 from ..source.location import Span
 from ..source.manager import SourceFile
 from .token import (ABOVE_NOT_ALIKE_GLYPH, ABOVE_OR_ALIKE_GLYPH, ALIKE_GLYPH,
+                    OPNAME_GLYPH, OPERATOR_CATEGORIES, OPERATOR_GLYPHS,
+                    OPERATORS_NOT_NAMEABLE,
                     BOTTOM_GLYPH, BUILTIN_GLYPH,
                     AND_GLYPH, ARROW_GLYPH, ASCII_SUBSTITUTES, ASSIGN_GLYPH,
                     BELOW_NOT_ALIKE_GLYPH, BELOW_OR_ALIKE_GLYPH,
@@ -141,6 +145,25 @@ _DIGITS: Final[dict[str, str]] = {
 }
 
 _RADIX: Final[dict[str, int]] = {"x": 16, "o": 8, "b": 2}
+
+
+def is_operator_glyph(ch: str) -> bool:
+    """Whether one character may be an operator.
+
+    Unicode decides most of it: a glyph in the symbol categories is one.  What
+    the categories leave out is the ASCII punctuation the grammar needs for
+    itself, which is the point of asking them rather than writing a list.
+
+    A glyph the language already uses as an operator qualifies whatever Unicode
+    calls it, because not all of them are symbols there: `-` is a dash, `^` a
+    modifier symbol, `\N{LEFT CEILING}` and `\N{LEFT FLOOR}` are brackets.  That clause is what makes every
+    builtin operator writable in the notation, which is what the specification
+    needs in order to define them with it.
+    """
+    if len(ch) != 1 or ch in OPERATORS_NOT_NAMEABLE:
+        return False
+    return (unicodedata.category(ch) in OPERATOR_CATEGORIES
+            or ch in OPERATOR_GLYPHS)
 
 
 def _is_ident_start(ch: str) -> bool:
@@ -346,16 +369,60 @@ class Lexer:
             else:
                 self._lex_number(start)
             return True
+        if ch == OPNAME_GLYPH:
+            self._lex_operator_name(start)
+            return True
         if ch == '"':
             self._lex_string(start)
             return True
         if ch == "'":
             self._lex_character(start)
             return True
+        if is_operator_glyph(ch):
+            # A symbol the language gives no meaning, which is an operator a
+            # program may have defined.  It is a token here and a question for the
+            # checker: whether anything defined it is not something the lexer can
+            # know, and a glyph that turns out to be nobody's is reported there
+            # with the one thing worth saying about it.
+            self._pos += 1
+            self._tokens.append(Token(TokKind.OPERATOR,
+                                      self._span(start, self._pos), text=ch))
+            return True
         self._pos += 1
         self._diags.emit(D.LANG_SYNTAX_UNEXPECTED_CHAR, self._span(start, self._pos),
                          char="".join(("'", ch, "' (U+", format(ord(ch), "04X"), ")")))
         return True
+
+    def _lex_operator_name(self, start: int) -> None:
+        """Lex `` `+` ``: an operator standing where a name goes.
+
+        One glyph between two grave accents.  The accent is not an operator and
+        cannot begin one, so what closes the name is the next accent and the name
+        cannot run past the end of its line -- which is what makes an unclosed one
+        a mistake reported here rather than a file read to its end looking for a
+        partner.
+        """
+        self._pos += 1
+        end = self._text.find(OPNAME_GLYPH, self._pos)
+        line = self._text.find("\n", self._pos)
+        if end < 0 or (0 <= line < end):
+            stop = len(self._text) if line < 0 else line
+            self._pos = stop
+            self._diags.emit(D.LANG_OPNAME_UNTERMINATED,
+                             self._span(start, self._pos))
+            return
+        written = self._text[self._pos:end]
+        self._pos = end + 1
+        if len(written) != 1:
+            self._diags.emit(D.LANG_OPNAME_NOT_ONE_GLYPH,
+                             self._span(start, self._pos), count=str(len(written)))
+            return
+        if not is_operator_glyph(written):
+            self._diags.emit(D.LANG_OPNAME_NOT_AN_OPERATOR,
+                             self._span(start, self._pos), glyph=written)
+            return
+        self._tokens.append(Token(TokKind.OPNAME, self._span(start, self._pos),
+                                 text=written))
 
     def _lex_comment(self) -> None:
         """Lex a comment.  Documentation comments become tokens; others do not."""

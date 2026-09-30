@@ -172,7 +172,7 @@ module.exports = grammar({
     function_definition: $ => seq(
       optional($.attribute_list),
       'fn',
-      field('name', $.identifier),
+      field('name', choice($.identifier, $.operator_name)),
       field('parameters', $.parameter_list),
       optional(seq($._return_arrow, optional($.mutable),
                    field('return_type', $.type))),
@@ -806,9 +806,15 @@ module.exports = grammar({
       prec.left(10, seq($._non_comparison,
                        field('operator', choice('+', '-', '\u229e', '\u229f')),
                        $._non_comparison)),
+      // A glyph the language gives no meaning binds as tightly as multiplying,
+      // and to the left.  One level for all of them, a program having no way to
+      // declare one; and stated against something a reader knows rather than
+      // given a level of its own, so that a line holding a glyph the reader has
+      // never seen still groups the way it looks.
       prec.left(11, seq($._non_comparison,
                        field('operator', choice('\u00d7', '\u00f7', '%', '\u22a0',
-                                                '\u00ab', '\u00bb', '\u21ba', '\u21bb')),
+                                                '\u00ab', '\u00bb', '\u21ba', '\u21bb',
+                                                $.fresh_operator)),
                        $._non_comparison)),
       // Raising to a power binds tighter than multiplying, as it does on paper
       // and in every language that has it, and is right associative for the
@@ -858,7 +864,11 @@ module.exports = grammar({
     unary_expression: $ => prec(13, seq(
       field('operator', choice('~', '\u00ac', '#', '\u2374', '\u2308', '\u230a',
                                '\u2193', '\u2191', '\u2195', '\u21d5',
-                               '\u2223', '\u2224')),
+                               '\u2223', '\u2224',
+                               // And a glyph the language gives no meaning, which
+                               // binds where the others do: as tightly as an
+                               // operator written before its operand can.
+                               $.fresh_operator)),
       $._non_comparison,
     )),
 
@@ -1091,6 +1101,28 @@ module.exports = grammar({
     // is a name immediately followed by a character literal with nothing
     // between them, which nothing readable writes.
     identifier: _ => /[A-Za-z_][A-Za-z0-9_']*|\u2395[A-Za-z_][A-Za-z0-9_'@]*/,
+
+    // An operator standing where a name goes, which is how a program says what
+    // one means for its own types.  One glyph between two grave accents: the
+    // accent is the one character of ASCII the language gave no meaning, and it
+    // reads as a quotation of the glyph -- which is what it is, the name of the
+    // operator rather than the operator itself.
+    //
+    // What may stand between the accents is a symbol, which is what Unicode's
+    // `Sm` and `So` categories are, together with the glyphs the language itself
+    // uses as an operator and that Unicode calls something else: a dash, a
+    // modifier symbol, two brackets, two quotation marks and a raised letter.
+    // The pattern is the compiler's rule written as a character class; a test
+    // checks the two against each other.
+    operator_name: _ => token(seq(
+      '`',
+      /[[\p{Sm}\p{So}\-^&%#\u2308\u230a\u00ab\u00bb\u207f]--[?\u207b\u2190\u2192\u2227\u2228\u22a5\u2316\u231c\u231d\u2395\u29d6]]/,
+      '`')),
+
+    // A glyph the language gives no meaning, standing where an operator stands.
+    // What it means is what a program said it means; the grammar only says where
+    // one may be written and how tightly it binds.
+    fresh_operator: _ => token(/[[\p{Sm}\p{So}]--[+<=>|~\u00ac\u00d7\u00f7\u207b\u2190-\u2193\u2195\u21ba\u21bb\u21d5\u21e7\u21e9\u2223\u2224\u2227\u2228\u2245\u2247\u2260\u2264\u2265\u2295\u229e-\u22a0\u22a5\u22bc\u22bd\u2316\u231c\u231d\u2374\u2395\u29d6\u29fa\u2a85\u2a86\u2a89\u2a8a]]/),
 
     // Neither kind swallows the newline after it: the layout depends on that
     // newline, and a comment that took it would end a block.

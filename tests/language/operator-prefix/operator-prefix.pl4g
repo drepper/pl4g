@@ -1,0 +1,20 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=7 diag=none
+
+※ One parameter is the prefix reading of a glyph and two is the infix one, which
+※ is what tells the two definitions of `⌈` here apart: the largest of what a
+※ `Bag` holds, and the larger of two `Bag`s.  Nothing is written to say which --
+※ the number of operands an operator takes is what the glyph means.
+
+type Bag = one : u8 ; two : u8
+
+fn `⌈`(b: Bag) → u8:
+    b.one ⌈ b.two
+
+fn `⌈`(a: Bag, b: Bag) → Bag:
+    Bag(.one ← a.one ⌈ b.one, .two ← a.two ⌈ b.two)
+
+@[startup]
+fn main() → u6:
+    let a: Bag = Bag(.one ← 1u8, .two ← 7u8)
+    let b: Bag = Bag(.one ← 4u8, .two ← 2u8)
+    ⎕narrow(⌈(a ⌈ b), ⌜u6⌝) ?? 1u6

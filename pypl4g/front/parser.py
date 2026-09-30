@@ -73,6 +73,18 @@ class _Operator:
 #: and the whole range is something a comparison could be asked about.
 _RANGE_PRECEDENCE: Final[int] = 7
 
+#: Where an operator the language gives no meaning binds: as tightly as
+#: multiplying, and to the left.
+#:
+#: One level for all of them, because a program cannot declare a level and should
+#: not be able to -- the glyph set is the language's and so is its table.  Tight
+#: rather than loose so that a reader who does not know the glyph still knows how
+#: the line groups: `a \N{CIRCLED ASTERISK OPERATOR} b + c` is `(a \N{CIRCLED ASTERISK OPERATOR} b) + c`, which is what a novel glyph
+#: between two things looks like it means.  Stated against something a reader
+#: knows rather than given a level of its own, and looser than `\N{SUPERSCRIPT LATIN SMALL LETTER N}`, because a
+#: raised number is written flush against what it raises.
+_FRESH_PRECEDENCE: Final[int] = 50
+
 _BINARY_OPERATORS: Final[dict[TokKind, _Operator]] = {
     TokKind.LOGIC_OR: _Operator(ast.BinaryOp.LOGIC_OR, 1),
     TokKind.KW_OR: _Operator(ast.BinaryOp.SHORT_OR, 1),
@@ -508,7 +520,10 @@ class Parser:
                         doc_lines: tuple[Span, ...] = ()) -> ast.FuncDef:
         """Parse a function definition."""
         start = self._expect(TokKind.KW_FN).span
-        name_token = self._expect(TokKind.IDENT)
+        # An operator standing where a name goes, which is how a program says
+        # what one means for its own types: the glyph is the name.
+        name_token = self._advance() if self._check(TokKind.OPNAME) \
+            else self._expect(TokKind.IDENT)
         self._expect(TokKind.LPAREN)
         params = self._parse_params()
         self._expect(TokKind.RPAREN)
@@ -1727,6 +1742,14 @@ class Parser:
             if self._check(TokKind.RANGE) and _RANGE_PRECEDENCE >= minimum:
                 left = self._parse_range(left)
                 continue
+            if self._check(TokKind.OPERATOR):
+                if _FRESH_PRECEDENCE < minimum:
+                    return left
+                token = self._advance()
+                right = self._parse_expression(_FRESH_PRECEDENCE + 1)
+                left = ast.Fresh(span=left.span.to(right.span),
+                                 glyph=token.text, left=left, right=right)
+                continue
             operator = _BINARY_OPERATORS.get(self._current.kind)
             if operator is None or operator.precedence < minimum:
                 return left
@@ -1765,6 +1788,14 @@ class Parser:
 
     def _parse_unary(self) -> ast.Expr:
         """Parse an operand, with any operators written before it."""
+        if self._check(TokKind.OPERATOR):
+            # A glyph the language gives no meaning, before one operand.  It binds
+            # as tightly as every operator written before its operand does, which
+            # is tighter than any written between two.
+            token = self._advance()
+            operand = self._parse_unary()
+            return ast.Fresh(span=token.span.to(operand.span), glyph=token.text,
+                             left=operand)
         if self._check(TokKind.AMPERSAND):
             # `&` before an operand asks for a reference to the place it names;
             # `&` between two asks for their bits in common.  Which it is, is

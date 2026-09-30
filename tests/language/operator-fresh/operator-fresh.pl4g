@@ -1,0 +1,23 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=33 diag=none
+
+※ A glyph the language gives no meaning at all may be an operator, and what
+※ qualifies is what Unicode says: a symbol, which is the `Sm` and `So`
+※ categories.  `⊛` and `♯` are two the language has never heard of.
+※
+※ Such an operator has no meaning but the definition's, so there is nothing to
+※ fall back on -- and it binds as tightly as multiplying, and to the left, which
+※ is one rule for every one of them: a program cannot declare a level, the glyph
+※ set being the language's and so being its table.
+
+type Point = x : u8 ; y : u8
+
+fn `⊛`(a: Point, b: Point) → Point:
+    Point(.x ← a.x ⊞ b.y, .y ← a.y ⊞ b.x)
+
+fn `♯`(p: Point) → u8:
+    p.x ⊞ p.y
+
+@[startup]
+fn main() → u6:
+    let p: Point = Point(.x ← 1u8, .y ← 2u8) ⊛ Point(.x ← 10u8, .y ← 20u8)
+    ⎕narrow(♯p, ⌜u6⌝) ?? 1u6

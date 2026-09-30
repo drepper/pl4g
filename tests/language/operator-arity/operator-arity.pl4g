@@ -1,0 +1,16 @@
+※ pl4g-test: compile=error
+※ pl4g-test: expect-diag 4922 LANG_OPERATOR_ARITY
+
+※ An operator is written before one operand or between two, so a definition of
+※ one takes one parameter or two.  Which of the two it is, is what tells a
+※ prefix reading from an infix one where a glyph has both, so the number is not
+※ something a definition may leave for a reader to work out.
+
+type Point = x : u8 ; y : u8
+
+fn `⊛`(a: Point, b: Point, c: Point) → Point:
+    a
+
+@[startup]
+fn main() → u6:
+    0u6

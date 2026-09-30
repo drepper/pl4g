@@ -145,14 +145,14 @@ To Do List for the PL4g language
     to attach anything to a type -- no method, no trait, no `impl` -- so this is the first decision about that and not a small one.
     [spec/attaching-code.md](spec/attaching-code.md) is a proposal for it: four designs, a recommendation of the smallest one that
     is not a dead end -- a function named `T.next`, called as the path the parser already reads -- and what each would cost.
-    It now also answers **operators**, which is what a bundle almost always asks for and what nothing a program defines can
-    satisfy today: measured, `a = b` over a record is refused (4207) and a record cannot be a key because it "answers neither" a
-    hash nor a comparison (4429).  The recommendation is the operator where the name goes -- `fn Colour.⊞(a: Colour, b: Colour)`,
-    with the arity saying whether a glyph that is both prefix and infix is being defined as which, both operands the type, and a
-    bracket pair as a two-character name so that `fn Table.⟦⟧` is what `A'⟦I'⟧ → E'` asks for.  `∧`, `∨` and
-    `←` may not be attached, `≠` follows from `=` and the three orderings from `<`, and `=` is attachable only together with a
-    hash -- the one place where attaching code is not purely additive.  Nothing about a requirement has to change for any of it:
-    a requirement is checked by lowering its expression, so an operator the lowering accepts is one a requirement accepts.
+    **Operators are done** and not by attaching them to a type: an operator is a free function whose name is the glyph,
+    `fn `+`(a: Point, b: Point) → Point`, which needs nothing from this entry and is generic for nothing -- `fn `+`(a: T', b: T')` is
+    one definition for every type whose body works, which a receiver form cannot express.  So a bundle requiring `T' ⊞ T' → T'`
+    can now be met by a type a program defined, which was the sharpest of the four things this entry is for.
+    Left over from the operator half: a **bracket pair** as a definable operator, so that `A'⟦I'⟧ → E'` can be met -- a program's own
+    collection is the thing most likely to want code attached to it, and a bracket pair is not a glyph; `=` together with a hash,
+    which is what turns a record into a dictionary key (4429 already calls a key a type that "answers" both); `≠` following from `=`
+    and the three orderings from `<`; and mixed-type operators.
     **`foreach` over a cursor is refused** (4438) although a cursor is the compiler's own iterator value and the loop's own shape
     fits it.  That is the same rule asked of a type the compiler already has, and it is worth doing first: it needs no decision
     about methods at all.

@@ -1,0 +1,26 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=9 diag=none
+
+※ A definition of an operator is a function definition, so it may be generic:
+※ one definition for every type a call gives it, made once per set of types like
+※ any other.  Two types go through the one definition here.
+※
+※ And a requirement asks for exactly this.  `pre(T' ⊞ T' → T')` over a type a
+※ program defined was unsatisfiable before an operator could be attached to one,
+※ because only a built-in type could answer.
+
+type Point = x : u8 ; y : u8
+type Pair = a : u8 ; b : u8
+
+fn `+`(p: T', q: T') → T':
+    p
+
+fn `⍴`(p: Point) → u64:
+    ⎕widen(p.x, ⌜u64⌝) + ⎕widen(p.y, ⌜u64⌝)
+
+@[startup]
+fn main() → u6:
+    let p: Point = Point(.x ← 1u8, .y ← 2u8)
+    let q: Pair = Pair(.a ← 5u8, .b ← 6u8)
+    let r: Point = p + p
+    let s: Pair = q + q
+    ⎕narrow(⍴p ⊞ ⎕widen(r.x ⊞ s.a, ⌜u64⌝), ⌜u6⌝) ?? 1u6

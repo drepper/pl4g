@@ -1,0 +1,14 @@
+※ pl4g-test: compile=error
+※ pl4g-test: expect-diag 3052 LANG_OPNAME_NOT_AN_OPERATOR
+
+※ `←` binds a name rather than working on values, so a function that ran when a
+※ name was bound would make a program's assignments into calls.  Unicode calls
+※ it a symbol all the same, which is why the rule has a second half: a glyph the
+※ language has given a meaning that is not an operator is not one either.
+
+fn `←`(a: u8, b: u8) → u8:
+    a
+
+@[startup]
+fn main() → u6:
+    0u6

@@ -232,8 +232,47 @@ What it does **not** decide, and should not:
 Operators
 ---------
 
+**Decided and implemented, and not as recommended here.**  What landed is a
+*fifth* notation nobody in this section proposed: an operator is a **free
+function whose name is the glyph**, written between grave accents.
+
+    fn `+`(a: Point, b: Point) → Point:  …
+    fn `⍴`(p: Point) → u64:             …
+
+See [the specification](spec.md) for what it says and
+[decisions.md](decisions.md) for the entry.  **Why it beats O1**, which is worth
+writing down because this section argued for O1 at length:
+
+**It needs nothing from this document.**  O1 -- `fn Colour.⊞(…)` -- is design B
+plus an alternative in B's rule, so it cannot land until B does.  A free function
+needs a *name*, which the language already has a place for; nothing about
+attaching code to a type had to be decided first, and none of it was.
+
+**It is generic for nothing.**  `fn `+`(a: T', b: T') → T'` is one definition for
+every type whose body works, made once per set of types like any other generic.
+O1 cannot express that at all: the type before the dot is one type.  That is the
+larger of the two gains and it was not noticed while O1 was being recommended.
+
+**Which side decides is answered by writing both sides down.**  O1 answers it by
+not having the question -- both operands are the type before the dot -- and this
+answers it the same way for the same reason, except that the reason is now the
+parameter list rather than a rule.  A mixed-type operator is still not
+expressible, and still for a decision of its own.
+
+**And the arity rule survives unchanged**: one parameter is the prefix reading of
+a glyph and two the infix one.  That was the best part of O1 and it needed no
+receiver.
+
+What is left of this section is the reasoning that chose *what may be a glyph* and
+*what may not be attached*, which the implementation took as it stands: Unicode's
+symbol categories decide, with the language's own operator glyphs added and the
+glyphs it has given another meaning removed; `∧` and `∨` cannot be functions; a
+bracket pair is not an operator.  The rest of the section is the road not taken,
+kept because the comparison is what makes the notation that landed look inevitable
+rather than arbitrary.
+
 Design B says a function may be named `T.name`.  An operator is not a name, so
-this is a question of its own -- and it is the question the fourth thing above
+this was a question of its own -- and it is the question the fourth thing above
 turns on, since what a bundle asks for is almost always an operator.
 
 ### What a program has to be able to say
@@ -251,7 +290,8 @@ program's own collection is the thing most likely to want code attached to it, a
 
 ### Four notations
 
-**O1.  The operator stands where the name does** (recommended).
+**O1.  The operator stands where the name does** (recommended at the time; see
+above for why the notation that landed is better).
 
     fn Colour.⊞(a: Colour, b: Colour) → Colour:   …
     fn Bag.⍴(b: Bag) → u64:                       …
@@ -302,6 +342,10 @@ operator on a type *is*, and O4 is a way of writing several of them together.  T
 ordering is O1 first, and O4 when a program is written that wants it.
 
 ### What O1 decides
+
+*Points 1, 2, 5 and 6 are what the notation that landed decides too; points 3 and
+4 read differently for a free function, which is called by writing the operator
+and has no path to be called by.*
 
 1. **The arity says which operator is meant.**  `⌈` is both prefix and infix --
    `⌈xs` is the largest of several values and `a ⌈ b` is the larger of two -- and
@@ -420,8 +464,8 @@ answer on this list and it needs a term rewriter.
 
 ### What the operator question does not decide
 
-- **Mixed-type operators.**  `Point ⊠ u8` is what a vector wants and O1 cannot
-  say.  The answers are Rust's (the right type is a parameter of the bound),
+- **Mixed-type operators.**  `Point ⊠ u8` is what a vector wants and neither O1 nor
+  the notation that landed can say.  The answers are Rust's (the right type is a parameter of the bound),
   Python's (ask the other side) and Wolfram's (attach to either), and none of them
   is small.
 - **Whether a program may attach an operator to a type it did not define.**  The

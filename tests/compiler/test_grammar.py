@@ -10,7 +10,9 @@ editor.
 
 from __future__ import annotations
 
+import re
 import shutil
+import unicodedata
 import subprocess
 from pathlib import Path
 
@@ -197,3 +199,56 @@ def test_every_highlight_query_is_valid() -> None:
             break
     assert proc.returncode == 0, proc.stdout + proc.stderr
     assert "@comment" not in proc.stderr
+
+
+def _named_in_pattern(glyph: str, pattern: str) -> bool:
+    """Whether a pattern names a code point, outright or inside a range."""
+    if ord(glyph) <= 0x7E:
+        return glyph in pattern
+    spelled = "".join(("\\u", format(ord(glyph), "04x")))
+    if spelled in pattern:
+        return True
+    for first, last in re.findall(r"\\u([0-9a-f]{4})-\\u([0-9a-f]{4})", pattern):
+        if int(first, 16) <= ord(glyph) <= int(last, 16):
+            return True
+    return False
+
+
+def test_which_glyphs_may_be_an_operator_is_one_rule() -> None:
+    """The grammar's two patterns and the compiler's predicate say one thing.
+
+    Two statements of what an operator glyph is would drift, and the drift would
+    show up as an editor colouring a program the compiler refuses or refusing one
+    it accepts.  So the sets the compiler holds are checked against the code
+    points the patterns name: the grammar is generated from a file a person
+    edits, and this is what makes editing it and editing the compiler one change.
+    """
+    from pypl4g.front import lexer
+    from pypl4g.front.lexer import is_operator_glyph
+    from pypl4g.front.token import OPERATORS_NOT_NAMEABLE
+
+    source = (GRAMMAR / "grammar.js").read_text(encoding="utf-8")
+    fresh = source[source.index("fresh_operator:"):]
+    fresh = fresh[:fresh.index("\n")]
+    named = source[source.index("operator_name:"):]
+    named = named[:named.index("'`')),")]
+    for glyph in sorted(OPERATORS_NOT_NAMEABLE):
+        assert not is_operator_glyph(glyph), glyph
+        if unicodedata.category(glyph) not in ("Sm", "So"):
+            # The pattern asks Unicode, so a glyph Unicode does not call a symbol
+            # is outside it already and needs no naming.
+            continue
+        assert _named_in_pattern(glyph, named), \
+            "".join(("the grammar lets ", glyph, " be an operator's name"))
+        assert _named_in_pattern(glyph, fresh), \
+            "".join(("the grammar reads ", glyph, " as a fresh operator"))
+    # And every glyph the language itself uses is kept out of the fresh pattern:
+    # one the grammar read as fresh could be reinterpreted to escape a rule the
+    # compiler enforces, which is how a chained comparison got past it once.
+    for glyph in sorted(lexer._SIMPLE):
+        if len(glyph) != 1 or not is_operator_glyph(glyph) \
+                or unicodedata.category(glyph) not in ("Sm", "So"):
+            continue
+        assert _named_in_pattern(glyph, fresh), \
+            "".join(("the grammar reads ", glyph, ", which the language uses,",
+                     " as an operator of a program's own"))

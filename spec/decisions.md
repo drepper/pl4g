@@ -7652,6 +7652,82 @@ function and so is scoped like one, which is the same answer arrived at for free
 Left open, unchanged: whether a bundle may be applied anywhere but a function, and
 whether a bound may be satisfied by more than one candidate.
 
+---
+
+## 2026-09-30T17:10+02:00 — language
+
+**An operator is a function whose name is the glyph**
+
+    fn `+`(a: Point, b: Point) → Point:  …
+    fn `⍴`(p: Point) → u64:             …
+
+The user's notation, and the user's question first: **the grave accent conflicts
+with nothing.**  Measured -- it is the one character of ASCII the language gave no
+meaning, it appears in the tree only inside comments as prose markup, and in code
+it was "unexpected character".
+
+A *free function*, not a function attached to a type, which is what
+[attaching-code.md](attaching-code.md) had recommended.  Three reasons the free
+form is better, and the second was not noticed while the other was being
+recommended:
+
+- **It needs nothing from that document.**  `fn Colour.⊞(…)` is that document's
+  design B plus an alternative in B's rule, so it could not land until B did.  A
+  free function needs a name, which the language already has a place for.
+- **It is generic for nothing.**  `fn `+`(a: T', b: T') → T'` is one definition for
+  every type whose body works.  A receiver form cannot express that: the type
+  before the dot is one type.
+- **The symbol is the signature**, as every other function's is:
+  `+(Point,Point)Point` in the image, which needed nothing added to the mangler.
+
+**One parameter is the prefix reading and two the infix one.**  Several glyphs are
+both, and the arity is what says which a definition is of -- so the duplicate rule
+keys on the glyph *and* the count, two definitions of `⌈` being two definitions and
+not a repeat.
+
+**The language's own meaning cannot be replaced.**  A definition is consulted only
+where the operator had no meaning for those operands, so `1u8 + 2u8` is three in
+every program.  Purely additive: no program changes another's arithmetic by being
+linked with it.
+
+**Which glyphs: Unicode decides**, at the user's direction.  A symbol -- `Sm` or
+`So` -- may be an operator, which leaves out the ASCII punctuation the grammar
+needs.  Two clauses qualify it: a glyph the language already uses as an operator is
+one whatever Unicode calls it (`-` is a dash, `^` a modifier symbol, `⌈⌊` brackets,
+`«»` quotation marks, `ⁿ` a raised letter), and a glyph the language has given
+another meaning is not (the two arrows, the failure value, the quad, a lifetime,
+the lifting marks, the raised minus).  `∧`, `∨`, `?` and `⌖` are refused for the
+reasons the other document gives.
+
+**A glyph the language does not have may be defined**, and then written.  It binds
+as tightly as multiplying, and to the left -- one level for all of them, a program
+having no way to declare one, stated against something a reader knows so that a
+line holding an unfamiliar glyph still groups the way it looks.
+
+**The builtin operators are written out in the specification in this notation.**
+That is what the notation is worth: what the language does to values and what a
+program may do to its own are the same kind of thing, said the same way.  What the
+table leaves out is what a function cannot say -- the short-circuit operators,
+the result operators, the dereference, and the bracket pairs.
+
+Turned down: Swift's declarable precedence groups, which are the larger language
+this stops short of; a table of names (`plus`, `opAdd`, `__add__`), since a
+language whose operators are glyphs has decided the glyph is the name; Eiffel's
+`alias`, which lets the name and the operator disagree; and D's one function over
+all operators, which is a layer over this and not an alternative to it.
+
+Compare: **Ada**'s `function "+"`, which is this with quotation marks it needs
+because `+` is not an identifier there; **Haskell**, where an operator is a
+function and `(+)` names it; **C++**'s `operator+`, chosen per operator between a
+member and a free function; **Rust**'s trait per operator; **D**'s `opBinary`;
+**Python**'s `__add__` and `__radd__`; **Go**, **Odin** and **Zig**, which refuse
+operator definitions outright -- answered here by the requirement half of
+conditions, which nothing a program defines could otherwise satisfy.
+
+Left open: mixed-type operators, a bracket pair as a definable operator, `=` with
+a hash so that a record may be a dictionary key, and attaching an operator to a
+type from outside the file that defined it.
+
 Open questions
 --------------
 

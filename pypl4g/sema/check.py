@@ -17,6 +17,7 @@ from ..target import statuses
 from ..diag.engine import DiagEngine, Expectation
 from ..front import ast
 from ..front.doccomment import Part as DocPart, parse as parse_doc
+from ..front.lexer import is_operator_glyph
 from ..front.token import (ACQUIRE_NAME, ANSWER_NAME, ENTRY_NAME,
                            RELEASE_NAME,
                            AT_NAME, SPAN_NAME,
@@ -613,6 +614,31 @@ _PURITY: Final[frozenset[int]] = frozenset({
 #: What a dummy made for a lifted type is called.  It begins with the lifting
 #: mark, which a program cannot write in a name, so it collides with nothing.
 DUMMY_PREFIX: Final[str] = LIFT_OPEN_GLYPH
+
+
+def _declared_as(node: ast.FuncDef) -> str:
+    """The name a definition is written down under, for reporting a second one.
+
+    A function's own name, and for an operator the glyph with the number of
+    operands after it: the prefix reading and the infix one are two definitions of
+    one glyph and neither is a repeat of the other.  It is what the *duplicate*
+    rule keys on and nothing else reads it, a program never writing a glyph where
+    a name goes except between the accents.
+    """
+    if not is_operator_glyph(node.name):
+        return node.name
+    return "".join((node.name, "/", str(len(node.params))))
+
+
+def _of_its_own(ty: Type | None) -> bool:
+    """Whether a type is one a program defined rather than one the language has.
+
+    A record, a choice between records, and an enumeration.  Not an array or a
+    collection of them: what those are is the language's, and the operators it
+    gives them are the language's too.
+    """
+    return (isinstance(ty, (ProductType, SumType, EnumType))
+            and bool(getattr(ty, "name", "")))
 
 
 def _can_be_referred_to(ty: Type) -> bool:
@@ -1452,6 +1478,11 @@ class Checker:
         #: entry is a value the function already has, and naming it here keeps it
         #: alive to the return rather than making a second one.
         self._at_entry: dict[str, Value] = {}
+        #: What a program's own operators are, by the glyph and how many operands
+        #: it takes.  Two entries where one glyph is both prefix and infix, which
+        #: `⌈` is: the arity is what tells the two definitions apart, so it is part
+        #: of the key rather than something looked at afterwards.
+        self._operators: dict[tuple[str, int], object] = {}
         #: Whether a `post` clause is being lowered just now, which is the one
         #: place `⎕answer` and `⎕entry` mean anything.
         self._after: bool = False
@@ -2656,7 +2687,7 @@ class Checker:
     def _collect_function(self, node: ast.FuncDef, path: str) -> _Collected | None:
         """Register one function definition without looking at its body."""
         self._check_doc(node)
-        if not self._declare(node.name, node.name_span, path):
+        if not self._declare(_declared_as(node), node.name_span, path):
             return None
         attrs = self._bind_attributes(node.attrs, AttrTarget.FUNCTION)
         written: list[str] = []
@@ -2716,6 +2747,7 @@ class Checker:
                 self._not_by_value(ret, node.ret_type.span)
             self._module.add_function(func, key=self._key(node.name))
             self._top[node.name] = func
+            self._an_operator(node, func)
             self._owned.append(func)
             self._register_special(func, node)
         finally:
@@ -2867,8 +2899,9 @@ class Checker:
                              name=node.name, attribute=str(kind))
             return None
         self._check_clause_shapes(node.clauses)
-        self._top[node.name] = _Generic(node=node, path=path, attrs=attrs,
-                                        parameters=written)
+        made = _Generic(node=node, path=path, attrs=attrs, parameters=written)
+        self._top[node.name] = made
+        self._an_operator(node, made)
         return None
 
     def _register_special(self, func: Function, node: ast.FuncDef) -> None:
@@ -3739,6 +3772,116 @@ class Checker:
             self._diags.emit(D.LANG_TYPE_RESULT_OF_NOTHING, ref.span)
             return ERROR
         return self._module.types.result_type(found, carried)
+
+    # -- operators a program defines -------------------------------------------
+
+    def _an_operator(self, node: ast.FuncDef, what: object) -> None:
+        """Write a definition down as an operator, where its name is one.
+
+        A function whose name is a glyph rather than a word is what a program
+        writes to say what an operator means for its own types.  It is registered
+        by the glyph and by how many operands it takes, one being the prefix
+        reading and two the infix one -- which is what tells `fn \N{GRAVE ACCENT}\N{LEFT CEILING}\N{GRAVE ACCENT}(b: Bag)`, the
+        largest of what a `Bag` holds, from `fn \N{GRAVE ACCENT}\N{LEFT CEILING}\N{GRAVE ACCENT}(a: C, b: C)`, the larger of two.
+        """
+        if not is_operator_glyph(node.name):
+            return
+        if len(node.params) not in (1, 2):
+            self._diags.emit(D.LANG_OPERATOR_ARITY, node.name_span,
+                             glyph=node.name, count=str(len(node.params)))
+            return
+        self._operators[(node.name, len(node.params))] = what
+
+    def _operator_stands(self, expr: ast.Binary, context: Type | None) -> bool:
+        """Whether the language's own meaning of this operator covers the operands.
+
+        Asked of a *hint* and not of a lowered value, because the answer decides
+        which way the operands are lowered: a program's operator wants them lowered
+        into its parameters, and the language's wants them lowered into each
+        other's types.  Where nothing can be read off the syntax the answer is yes,
+        which leaves a program that wrote none exactly as it was.
+        """
+        found = self._hint_of(expr.left) or self._hint_of(expr.right) or context
+        if found is None or found is ERROR:
+            return True
+        return self._operand_type_stands(expr.op, found)
+
+    def _operator_stands_alone(self, expr: ast.Unary) -> bool:
+        """The same question of an operator written before one operand.
+
+        The operators written before one operand are each lowered by a method of
+        its own, so there is no one place that says which types the language takes
+        -- and the question this has to answer is narrower than that anyway.  None
+        of them works on a type a program defined, so a hint naming one is the
+        whole of what says the language has nothing to say here.
+        """
+        found = self._hint_of(expr.operand)
+        return not _of_its_own(found)
+
+    def _answers_written(self, expr: ast.Unary | ast.Binary) -> Type | None:
+        """What a program's own operator answers, where this expression is one.
+
+        Nothing where the language's own meaning covers the operands, where no
+        definition exists, and where the definition is generic -- what a generic
+        one answers is what an instantiation settles, and a hint is read off the
+        syntax or not at all.
+        """
+        if isinstance(expr, ast.Unary):
+            glyph, ours = expr.op.value, self._operator_stands_alone(expr)
+        else:
+            glyph, ours = expr.op.value, self._operator_stands(expr, None)
+        if ours:
+            return None
+        found = self._operator_written(glyph, 1 if isinstance(expr, ast.Unary)
+                                       else 2)
+        if not isinstance(found, Function):
+            return None
+        return None if found.ty.ret is VOID else found.ty.ret
+
+    def _lower_fresh(self, builder: IRBuilder, expr: ast.Fresh,
+                     expected: Type | None) -> Value:
+        """Lower an operator the language gives no meaning to.
+
+        There is nothing to fall back on: the glyph is a symbol and the language
+        has never heard of it, so what it means is the definition or it is a
+        mistake.  That makes this the one operator path with no native half.
+        """
+        operands = (expr.left,) if expr.right is None \
+            else (expr.left, expr.right)
+        found = self._operator_call(builder, expr.glyph, operands, expr.span,
+                                    expected)
+        if found is not None:
+            return found
+        self._diags.emit(D.LANG_OPERATOR_NOT_DEFINED, expr.span,
+                         glyph=expr.glyph,
+                         found="one operand" if expr.right is None
+                         else "two operands")
+        return UndefConst(ERROR)
+
+    def _operator_written(self, glyph: str, arity: int) -> object | None:
+        """What a program said an operator of this arity means, if it said."""
+        return self._operators.get((glyph, arity))
+
+    def _operator_call(self, builder: IRBuilder, glyph: str,
+                       operands: Sequence[ast.Expr], span: Span,
+                       expected: Type | None) -> Value | None:
+        """Lower an operator a program defined, or nothing where it defined none.
+
+        The operands are lowered by the call rather than beforehand: which
+        parameter each goes to is then known while it is lowered, which is what an
+        unsuffixed literal beside a program's own type needs, and it is the one
+        thing that would be lost by handing over values already worked out.
+        """
+        found = self._operator_written(glyph, len(operands))
+        if found is None:
+            return None
+        call = ast.Call(span=span,
+                        callee=ast.NameRef(span=span, name=glyph),
+                        args=tuple(operands))
+        if isinstance(found, _Generic):
+            return self._lower_generic(builder, call, found, expected)
+        assert isinstance(found, Function)
+        return self._through(builder, call, found, expected)
 
     # -- what a signature requires and demands ---------------------------------
 
@@ -9739,6 +9882,8 @@ class Checker:
                 return self._lower_deref(builder, expr, expected)
             case ast.Failure():
                 return self._lower_failure(builder, expr, expected)
+            case ast.Fresh():
+                return self._lower_fresh(builder, expr, expected)
             case ast.Lifted():
                 # Every place one may stand looks at it before it gets here:
                 # `\N{APL FUNCTIONAL SYMBOL QUAD}typeof`, a comparison the compiler settles, and the two
@@ -11166,6 +11311,19 @@ class Checker:
         # demand one, so while their operands are lowered any unit stands where
         # any other does -- and a literal among them takes no unit at all, `d \N{MULTIPLICATION SIGN} 3`
         # being three of whatever `d` is and not three metres times a metre.
+        # What a program said this operator means, where it said anything: asked
+        # before either side is lowered, so that the operands go to the
+        # definition's parameters and are lowered knowing what those are.  The
+        # language's own meaning is not looked up and cannot be replaced -- a
+        # definition answers only where the operator had no meaning to begin
+        # with, which is what keeps `1u8 + 2u8` the same in every program.
+        written = self._operator_written(expr.op.value, 2)
+        if written is not None and not self._operator_stands(expr, context):
+            found = self._operator_call(builder, expr.op.value,
+                                        (expr.left, expr.right), expr.span,
+                                        expected)
+            if found is not None:
+                return found
         was_deriving, self._deriving = self._deriving, expr.op in _DERIVES
         outer, self._operand_of = self._operand_of, expr.op.value
         was_listing, self._listing = self._listing, True
@@ -11393,6 +11551,16 @@ class Checker:
     def _lower_unary(self, builder: IRBuilder, expr: ast.Unary,
                      expected: Type | None) -> Value:
         """Lower an operator written before its operand."""
+        # What a program said this operator means before one operand of its own
+        # type.  Each of the language's own is lowered by a method of its own
+        # below, and none of them works on such a type, so this is asked first and
+        # answers only where there was nothing to answer.
+        if self._operator_written(expr.op.value, 1) is not None \
+                and not self._operator_stands_alone(expr):
+            found = self._operator_call(builder, expr.op.value, (expr.operand,),
+                                        expr.span, expected)
+            if found is not None:
+                return found
         if expr.op is ast.UnaryOp.LOGIC_NOT:
             return self._lower_not(builder, expr, expected)
         if expr.op is ast.UnaryOp.LENGTH:
@@ -11895,6 +12063,22 @@ class Checker:
         `count & 1` and `1 & count` mean the same thing.
         """
         match expr:
+            case ast.Fresh():
+                # It has no meaning but the definition's, so what it answers is
+                # what the definition answers -- and nothing where the definition
+                # is generic, an instantiation being what settles that.
+                written = self._operator_written(
+                    expr.glyph, 1 if expr.right is None else 2)
+                if not isinstance(written, Function):
+                    return None
+                return None if written.ty.ret is VOID else written.ty.ret
+            case ast.Unary() | ast.Binary() if (found := self._answers_written(
+                    expr)) is not None:
+                # An operator a program defined for a type of its own answers
+                # what the definition answers, and asking the language what one
+                # of its operators answers would be asking the wrong question:
+                # `⍴p` over a record is a `u64` because the definition says so.
+                return found
             case ast.IntLit() if expr.type_name is not None:
                 return BUILTIN_TYPES.get(expr.type_name)
             case ast.BoolLit():
@@ -11906,6 +12090,15 @@ class Checker:
                 # What the operator answers with, not what it was given: the
                 # answer is what whatever reads the expression will get.
                 return BOOL
+            case ast.Call() if isinstance(expr.callee, ast.NameRef):
+                # What a call answers with, which its callee says.  A record
+                # written out is a call of the type's name, so this is what lets a
+                # program's own operator be written between two of them.
+                named = self._top.get(expr.callee.name)
+                if isinstance(named, _NamedType):
+                    found = self._resolved(named)
+                    return None if found is ERROR else found
+                return named.ty.ret if isinstance(named, Function) else None
             case ast.Deref():
                 # What is at the place a reference names, which its type says
                 # without anything being read.  It is what lets `0 = r⌖` mean
@@ -12353,6 +12546,16 @@ class Checker:
         func = self._callee(expr.callee)
         if func is None:
             return UndefConst(ERROR)
+        return self._through(builder, expr, func, expected)
+
+    def _through(self, builder: IRBuilder, expr: ast.Call, func: Function,
+                 expected: Type | None) -> Value:
+        """Lower a call whose callee is already known to be *func*.
+
+        Apart from the ordinary path because an operator reaches it by another
+        route: what a program's `+` is, is looked up by the glyph and the number
+        of operands rather than by a name a call wrote.
+        """
         wanted = func.ty.params
         # Left to right, one argument at a time, a tuple handed over as several
         # becoming them where it stands.  Which parameter an argument goes to is
