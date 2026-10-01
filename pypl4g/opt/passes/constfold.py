@@ -23,7 +23,7 @@ from __future__ import annotations
 from typing import Sequence
 
 from ...ir.inst import (AssertInst, BinaryInst, BinOp, CastInst, CastKind,
-                        CmpInst, CmpPred, Instruction)
+                        CmpInst, CmpPred, ExtractInst, Instruction, TupleInst)
 from ...ir.module import Module
 from ...ir.types import BOOL, CHAR, IntType
 from ...ir.value import BoolConst, CharConst, IntConst, Value
@@ -161,6 +161,16 @@ class ConstantFolding:
             # register, and a constant is in no register -- so one folded into this
             # is a value the backend has nowhere to find.
             return self._reread(module, inst)
+        if isinstance(inst, ExtractInst):
+            # One part of a value put together from its parts is that part: a
+            # string rebuilt after a call that answered two words, and taken
+            # apart again by whatever reads it, is the two words it was.
+            whole = inst.operands[0]
+            if isinstance(whole, TupleInst) and inst.index < len(whole.operands):
+                part = whole.operands[inst.index]
+                if part.ty is inst.ty:
+                    return part
+            return None
         if not isinstance(inst, BinaryInst):
             return None
         folder = _FOLDERS.get(inst.op)
@@ -219,6 +229,12 @@ class ConstantFolding:
         nothing uses it, and what it was there for is known to hold.
         """
         blocks = getattr(func, "blocks")
+        # What an instruction folded to may itself have folded, a part of a part:
+        # every use is pointed at the end of the chain, nothing in it surviving.
+        for key, found in list(replacements.items()):
+            while id(found) in replacements:
+                found = replacements[id(found)]
+            replacements[key] = found
         for block in blocks:
             for inst in block.insts:
                 for index, operand in enumerate(inst.operands):

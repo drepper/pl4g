@@ -70,7 +70,17 @@ class LargeAnswers:
     name = "largeanswers"
 
     def run(self, module: Module) -> bool:
-        """Rewrite those functions and every call to them."""
+        """Rewrite those functions and every call to them.
+
+        An answer that travels without its allocator first (`thinanswers`): what
+        is left of it is what this pass asks how many words it is of.
+        """
+        from .thinanswers import ThinAnswers  # noqa: PLC0415 -- one question
+        thinned = ThinAnswers().run(module)
+        return self._through_storage(module) or thinned
+
+    def _through_storage(self, module: Module) -> bool:
+        """Rewrite the functions answering through storage, and the calls."""
         reports = module.reports
         # By identity, since a module may name one function more than once and
         # widening it twice would give it two places to put the answer.

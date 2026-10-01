@@ -32,6 +32,22 @@ def stands_for(func: Function, gone: Value, instead: Value) -> None:
                                    for arg in target.args]
 
 
+def all_stand_for(func: Function, instead: dict[int, Value]) -> None:
+    """`stands_for` for many values at once, by identity: one walk of *func*."""
+    if not instead:
+        return
+    for block in func.blocks:
+        for one in block.insts:
+            if any(id(operand) in instead for operand in one.operands):
+                one.operands = [instead.get(id(operand), operand)
+                                for operand in one.operands]
+            if isinstance(one, Terminator):
+                for target in one.successors():
+                    if any(id(arg) in instead for arg in target.args):
+                        target.args = [instead.get(id(arg), arg)
+                                       for arg in target.args]
+
+
 def incoming_edges(func: Function) -> dict[int, list[tuple[BasicBlock,
                                                            BlockTarget]]]:
     """For each block, every branch that arrives at it and where it is from.

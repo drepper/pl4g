@@ -10,7 +10,8 @@ the two words, and every call puts the third back on.
 Which functions those are is written on them while they are checked
 (`Function.answer_from`): by the signature, `→ str in ⎕heap` or `→ str in a`, or by
 the body, where every way out answers something the heap just made.  This pass only
-carries it out, the way `largeanswers` carries out answering through storage: the
+carries it out, as the first half of `largeanswers`, which then carries out
+answering through storage: the
 function's answer type becomes two words, its `ret`s drop the third, and every call
 rebuilds the value with the allocator it knows.
 
@@ -26,7 +27,7 @@ from ...ir.inst import (AddressInst, CallInst, ExtractInst, Instruction,
                         RetInst, TupleInst)
 from ...ir.module import Module
 from ...ir.reports import ReportKind
-from ...ir.rewrite import stands_for
+from ...ir.rewrite import all_stand_for
 from ...ir.types import ListType, StrType, Type, parts_of
 from ...sema.tables import heap_global
 
@@ -45,10 +46,10 @@ class ThinAnswers:
         for func in every.values():
             for block in func.blocks:
                 for inst in block.insts:
+                    if isinstance(inst, CallInst) and inst.callee is not None:
+                        continue
                     for named in inst.references():
-                        if id(named) in wanted and not (
-                                isinstance(inst, CallInst) and inst.callee is named):
-                            del wanted[id(named)]
+                        wanted.pop(id(named), None)
         if not wanted:
             return False
         fat = {at: func.ty.ret for at, func in wanted.items()}
@@ -58,8 +59,10 @@ class ThinAnswers:
                                              func.ty.listable)
             self._answer_thin(func, thin)
         for func in every.values():
+            instead: dict[int, object] = {}
             for block in func.blocks:
-                self._rewrite_calls(module, block, wanted, fat)
+                self._rewrite_calls(module, block, wanted, fat, instead)
+            all_stand_for(func, instead)
         for at, func in wanted.items():
             where = "\N{APL FUNCTIONAL SYMBOL QUAD}heap" \
                 if func.answer_from[0] == "heap" else "".join(
@@ -94,7 +97,8 @@ class ThinAnswers:
                 index += len(made)
 
     def _rewrite_calls(self, module: Module, block, wanted: dict[int, Function],
-                       fat: dict[int, Type]) -> None:  # noqa: ANN001
+                       fat: dict[int, Type],
+                       instead: dict[int, object]) -> None:  # noqa: ANN001
         """Put the allocator back on what each call to such a function answers."""
         index = 0
         while index < len(block.insts):
@@ -124,7 +128,7 @@ class ThinAnswers:
             for one in made:
                 one.parent = block
             block.insts[index:index + 1] = made
-            stands_for(block.parent, inst, whole)
+            instead[id(inst)] = whole
             index += len(made)
 
 

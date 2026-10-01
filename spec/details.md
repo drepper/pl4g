@@ -1860,7 +1860,8 @@ back what it replaces through `__pl4g_disown.T`, which asks each element for its
 two kinds of key besides allocators: one naming a heap container, and one naming "read out of that container", which is what an
 element replacement kills.
 
-**An answer whose allocator is fixed travels as two words** (`opt/passes/thinanswers.py`, before `largeanswers` at every level).
+**An answer whose allocator is fixed travels as two words** (`opt/passes/thinanswers.py`, run as the first half of `largeanswers` at
+every level, so the module is verified once for both).
 The checker writes `Function.answer_from` -- `("heap", -1)` or `("param", i)` -- from `→ T in ⎕heap` or `→ T in a`, or from the body
 where every answer was a fresh heap object; it checks bodies callees first (`_callees_first`, a depth-first walk over the names a
 body calls) so a caller sees what its callees showed.  The pass changes the answer type to `〈ptr, u64〉`, drops the third part at

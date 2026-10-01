@@ -84,9 +84,9 @@ def pipeline_for(level: int) -> Sequence[str]:
     # something the compiler noticed but something the program said, so a reader
     # who wrote `_ \N{LEFTWARDS ARROW}` is told the same thing at every level.  It goes before the
     # rest so that it is what reports the call, whatever else runs afterwards.
-    # Answering a string without its allocator, where the function fixed it, is
-    # an ABI the checker decided on and not an optimization: it runs at every
-    # level, before `largeanswers` asks how many words an answer is.
+    # `largeanswers` first answers a string without its allocator where the
+    # function fixed it, which is the same question -- how an answer travels --
+    # and is no optimization either: it is the ABI the checker decided on.
     # It runs before `largeanswers`, which is what asks the question about the
     # program as written: after that pass a call of the wrong shape writes the
     # caller's storage and is not droppable at all.
@@ -96,8 +96,7 @@ def pipeline_for(level: int) -> Sequence[str]:
     # that could make such an edge and after everything that might otherwise
     # take the block it puts there straight back out again.
     if level <= 0:
-        return ("dropignored", "thinanswers", "largeanswers", "dropunreached",
-                "splitedges")
+        return ("dropignored", "largeanswers", "dropunreached", "splitedges")
     # Inlining goes after the two that are not optimizations and before the
     # rest: what it leaves behind is a call gone and a body in its place, which
     # is what folding, simplifying and sweeping are for -- and a function
@@ -108,8 +107,7 @@ def pipeline_for(level: int) -> Sequence[str]:
     # carries, so a body inlined with a constant argument only *becomes* constant
     # after that pass -- and a bitcast of a constant is a value the back end has
     # nowhere to read, a bitcast emitting no instruction of its own.
-    return ("dropignored", "thinanswers", "largeanswers", "inline", "constfold",
-            "simplifycfg",
+    return ("dropignored", "largeanswers", "inline", "constfold", "simplifycfg",
             "constfold", "dce", "dropunreached", "splitedges")
 
 
@@ -123,7 +121,6 @@ def build_manager(level: int) -> PassManager:
     from .passes.largeanswers import LargeAnswers
     from .passes.simplifycfg import SimplifyCFG
     from .passes.splitedges import SplitEdges
-    from .passes.thinanswers import ThinAnswers
 
     available: dict[str, Pass] = {
         "constfold": ConstantFolding(),
@@ -134,7 +131,6 @@ def build_manager(level: int) -> PassManager:
         "largeanswers": LargeAnswers(),
         "simplifycfg": SimplifyCFG(),
         "splitedges": SplitEdges(),
-        "thinanswers": ThinAnswers(),
     }
     manager = PassManager()
     for name in pipeline_for(level):
