@@ -1851,6 +1851,15 @@ says nothing and what it does not say is assumed.  That one line is the whole of
 drops an instruction that nothing uses and that has no effects, so a pure call whose answer nothing reads goes with no pass
 knowing what purity is.
 
+**A string and a list are three words**: where, how many, and the allocator -- a pointer to the allocator's state, nothing for
+text in the image or the kernel's.  Every function answering one goes through the caller's storage (`largeanswers`), the style
+answering two words in registers.  **`⎕heap` is in the runtime** (`pl4g_heap_alloc`, `pl4g_heap_free`); `__pl4g_allocate` and
+`__pl4g_dispose` pick the kind by comparing the allocator with `⎕heap`'s address, and where the compiler knows the allocator it
+calls the heap straight away (`__pl4g_heap_new`, `__pl4g_str_join.heap`) or, for a pool, emits nothing.  A heap container gives
+back what it replaces through `__pl4g_disown.T`, which asks each element for its allocator.  What a value was made in carries
+two kinds of key besides allocators: one naming a heap container, and one naming "read out of that container", which is what an
+element replacement kills.
+
 **What a container owns is copied by a generated function**, `__pl4g_own.T(arena, v)`, one per element type and built on
 first ask in `sema/owned.py` the way the table functions are: text is a join of its bytes with nothing, a list is a join of its
 run with nothing followed by a loop copying every element that points somewhere, and a list of lists calls the function for its

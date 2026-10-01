@@ -8861,6 +8861,55 @@ resource, decided at run time; **Rust**'s refusal of a store that does not live 
 Left: sets and dictionaries, which go in as they are; copying records, tuples and nested
 arrays (4623); and the cost of a literal copied into every container it is written into.
 
+## 2026-10-01T23:30+02:00 — language
+
+**Every object knows how it is given back**
+
+Asked for by the user in these words: a container stores the allocator it was made with, as
+a C++ `std::allocator` or a Zig managed container does; it must be known at all times how a
+dynamically allocated object is deallocated, and if necessary the object itself carries the
+reference; the compiler rejects code where the allocator cannot be determined; `⎕heap` is
+optimized, and a container and its elements in a pool give nothing back one at a time.
+Decided with the user:
+
+- **By default every allocated object behaves as fat**: `str` and `[T]` are three words --
+  where, how many, and the allocator (none for text in the image).  Stack objects carry
+  none, a container of plain values has one for itself, a fixed array none for itself and
+  one per element.  Whether a word is ever read is the compiler's decision, made per name and
+  written to the report log (`allocator`); it does not surface in the language.
+- **`⎕heap` gives back one object at a time**, with the *sized* interface (C23 `free_sized`,
+  C++ sized `delete`, Rust `dealloc` with a layout): size classes with free lists in the
+  runtime, no header.  Known while compiling, it is called straight away -- a string join
+  into it has a variant without the allocator -- and otherwise one compare picks the kind.
+- **A missing `in` means `⎕heap`.**  An answer made anywhere but where the signature says is
+  copied there before the function leaves, and refused where it cannot be copied (4624);
+  `@[unique]` is what makes a type uncopyable.  This retires 4613 and 4619.
+- **Passing an allocator out with what it made is proposed, not implemented**:
+  [scoped-arenas.md](scoped-arenas.md).
+
+What follows from it, decided here: a pool's container keeps what lasts as long as it does
+as it is and never gives back an element; a heap container owns what it holds of the heap's
+-- a temporary is moved in, anything else copied -- and gives back what it replaces, asking
+the element; a value read out of a heap container dies when an element is replaced or the
+container is handed to a call (4626); a container handed to a parameter keeps its elements
+where the parameter says (4625); an array of text goes into another container or a field only
+as a temporary, or each element would have two owners.
+
+Found on the way: two definitions of one operator, for one operand and for two, instantiated
+for one type were filed under one key; a record whose field has several parts was built from
+fewer leaves than its type has; a bitcast of a constant had no register in any selector; a
+check in generated code broke the encoders.
+
+Compare: **C++** containers with allocators, copying on assignment and destroying what they
+replace, `pmr` deciding the copy at run time; **Zig**'s managed containers, which store the
+allocator, and its unmanaged ones, which are handed it; **Rust**'s `Vec<T, A>`, whose
+allocator is a type parameter, and whose borrow checker refuses a read of what was replaced;
+**Swift** and **Objective-C**, whose objects carry what frees them in the reference count.
+
+Left: sets and dictionaries are not held to the element rules; nothing is given back when a
+name goes out of scope -- a value of the heap's that no container owns lives until the program
+ends; a lambda's answer and a call through a function value say nothing of `in`.
+
 Open questions
 --------------
 

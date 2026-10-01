@@ -1,0 +1,14 @@
+※ pl4g-test: compile=error
+※ pl4g-test: expect-diag 4626 LANG_ELEMENT_REPLACED
+
+※ A container of `⎕heap`'s owns what it holds and gives back what it replaces, so a value read out
+※ of it is the same object and not a copy.  After an element is replaced -- any element: which one
+※ is arithmetic -- what was read out before may be gone.  A pool's container never gives anything
+※ back one at a time, so reading out of one is not touched.
+
+@[startup]
+fn main() → u6:
+    let v: mut str⟦2⟧ = ⟦"a" ⧺ "b", "c"⟧
+    let x: str = v⟦0⟧
+    v⟦0⟧ ← "d" ⧺ "e"
+    if x = "ab": 0u6 else: 1u6

@@ -1,0 +1,20 @@
+※ pl4g-test: compile=error
+※ pl4g-test: expect-diag 4623 LANG_CONTAINER_CANNOT_COPY
+※ pl4g-test: expect-diag 4625 LANG_CONTAINER_ALLOCATOR_MISMATCH
+
+※ An array of text put in a field of a record is its elements, copied by value: one another name
+※ still holds would give each element two owners, and the one that replaced an element would free
+※ what the other still reads.  So only an array nobody else names may go in.  And a field says
+※ nothing of where its elements are kept, which is `⎕heap`: a pool's array does not fit.
+
+type Holder = names: str⟦2⟧
+
+@[startup]
+fn main() → u6:
+    let a: mut arena = ⎕arena
+    defer ⎕empty(a)
+    let v: str⟦2⟧ = ⟦"a" ⧺ "b", "c"⟧
+    let shared: Holder = Holder(.names ← v)
+    let pooled: Holder = Holder(.names ← ⟦"x", "y"⟧ in a)
+    let ok: Holder = Holder(.names ← ⟦"x", "y" ⧺ "z"⟧)
+    if ok.names⟦1⟧ = "yz": 0u6 else: 1u6

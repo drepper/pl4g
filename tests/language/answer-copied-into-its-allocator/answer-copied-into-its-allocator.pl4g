@@ -1,0 +1,48 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ **A function answers in the allocator its signature names**: `→ T in a`, or `⎕heap` where it
+※ names none.  An answer made anywhere else is copied there before the function leaves -- before
+※ what it put off runs, so an arena given back on the way out has been copied out of first.  That
+※ is how a value made in a scope's own arena reaches past the scope: as a copy, in an allocator
+※ that lasts.
+※
+※ Text in the image is answered as it is, nothing ever giving it back.  And a value of the heap's
+※ is the caller's alone, so only a temporary is answered as it is; a name holding one is copied.
+※
+※ Compare: **C++**, whose return of a container allocated with a local `pmr` resource is a copy
+※ into the caller's (or a dangling one, if it is moved); **Rust**, which refuses to return what
+※ borrows a local arena; **Zig**, where the caller passes the allocator and nothing checks it.
+
+let std := ⎕import("std")
+
+※ made in an arena of the call's own: copied into ⎕heap
+fn local(first: str) → str:
+    let scratch: mut arena = ⎕arena
+    defer ⎕empty(scratch)
+    let both: str = first ⧺ "<-" in scratch
+    both
+
+※ made in the other arena it was handed: copied into the one the signature names
+fn other(a: &mut arena, b: &mut arena, v: u16) → str in a:
+    ⍕v in b
+
+※ handed over and saying nothing of where it was made: copied
+fn kept(s: str) → str:
+    s
+
+※ text in the image: as it is
+fn literal() → str:
+    "lit"
+
+@[startup]
+fn main() → u6:
+    let x: mut arena = ⎕arena
+    defer ⎕empty(x)
+    let y: mut arena = ⎕arena
+    let s: str = local("hello")
+    let t: str = other(&mut x, &mut y, 42u16)
+    ⎕empty(y)
+    let u: str = kept(t)
+    if s ≠ "hello<-" ∨ t ≠ "42" ∨ u ≠ "42" ∨ literal() ≠ "lit":
+        return 1u6
+    0u6

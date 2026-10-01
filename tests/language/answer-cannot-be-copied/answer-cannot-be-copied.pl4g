@@ -1,0 +1,17 @@
+※ pl4g-test: compile=error
+※ pl4g-test: expect-diag 4624 LANG_ANSWER_CANNOT_BE_COPIED
+
+※ An answer made somewhere its signature does not name is copied, and some values cannot be
+※ copied yet: a record holding text is one, what its fields point into wanting a walk of its own.
+※ A value holding something marked `@[unique]` never can.
+
+type Named = name: str
+
+fn made(first: str) → Named:
+    let scratch: mut arena = ⎕arena
+    defer ⎕empty(scratch)
+    Named(.name ← first ⧺ "!" in scratch)
+
+@[startup]
+fn main() → u6:
+    if made("a").name = "a!": 0u6 else: 1u6

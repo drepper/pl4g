@@ -42,6 +42,13 @@ class ReportKind(StrEnum):
     WARNING = "warning"
     NOTE = "note"
 
+    #: How a value's allocator is known: while compiling, so that the word it
+    #: carries is never read, or only by asking the value.  One entry per name
+    #: that holds something that points somewhere.
+    ALLOCATOR = "allocator"
+    #: A value copied into another allocator, because the one it was made in is
+    #: not provably the one wanted, or not provably long enough lived.
+    COPY_INTO_ALLOCATOR = "copy-into-allocator"
     DROP_FUNCTION = "drop-function"
     DROP_VARIABLE = "drop-variable"
     DROP_LOCAL = "drop-local"

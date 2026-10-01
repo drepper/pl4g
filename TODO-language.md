@@ -243,8 +243,17 @@ To Do List for the PL4g language
         maker empties an arena (4616); a pure function gives back all it made (4617).
     [x] **a signature saying which arena its answer was made in.**  Done: `→ T in a, b`
         and `s: T in a` (4618-4621); `std.text` and two-operand `⍕` say it.
-    [ ] **sets and dictionaries holding text** are not yet held to "an element points into its
-        container's allocator": their keys and values go in as they are.
+    [x] **every object knows how it is given back.**  Done: `str` and lists carry their
+        allocator, `⎕heap` frees one object by size, answers are copied into the allocator
+        their signature names (default `⎕heap`), pool containers never free elements, heap
+        containers own what they hold (4622-4626).
+    [ ] **handing an arena out with what it made**: proposed in `spec/scoped-arenas.md`,
+        waiting for a decision.
+    [ ] **giving back what a name held when the name goes**: a value of the heap's no
+        container owns lives until the program ends.  Wants ownership of locals -- a move
+        out of a name, and a drop where the last one goes.
+    [ ] **sets and dictionaries holding text** are not yet held to the element rules: their
+        keys and values go in as they are, and nothing is given back.
     [ ] **copying records, tuples and nested arrays into an allocator** (4623), which a container
         of them needs.
     [ ] **a top-level array of text** is refused (9902), which is what a table of literal text

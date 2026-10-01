@@ -3238,13 +3238,17 @@ let scratch: mut arena = ⎕arena
 the allocator keeps its state in, not a value a program computes, and what is written says only that the place starts out holding
 an arena that has asked the system for nothing yet.
 
-**`⎕heap` is the arena the compiler provides**, which everything that allocates and says no other one comes out of.
+**There are two kinds of allocator.**  An **arena** -- a *pool* -- is a bump pointer over a list of chunks: an allocation out of
+one is an addition and a comparison, where the current chunk has no room it asks the system for another, nothing is given back
+on its own, and the whole of it is given back at once.  That is what makes one safe for storage with a known lifetime, and wrong
+for a program that runs for a long time.
 
-**An arena is a bump pointer over a list of chunks.**  An allocation out of one is an addition and a comparison; where the current
-chunk has no room, the arena asks the system for another and links it on.  Nothing is given back on its own, and a whole arena is
-given back at once -- which is the whole of what makes an arena safe for storage with a known lifetime, and the whole of what makes
-it wrong for a program that runs for a long time.  A second allocator will implement the same three operations, and the language
-will name it the same way.
+**`⎕heap` gives back one object at a time.**  It is the allocator everything that allocates and names no other one comes out of,
+and it is in the runtime: sizes are rounded to a *class* -- sixteen bytes apart up to 256, then powers of two up to 64 KiB --
+each class keeps what was given back to it, and anything larger is mapped on its own.  **Giving back takes the size**, which the
+compiler always knows, so no object carries a header saying it -- C23's `free_sized`, C++'s sized `delete` and Rust's `dealloc`
+are the same interface.  Where the compiler knows an allocation is `⎕heap`'s it calls the heap straight away; elsewhere one
+compare picks the kind.
 
 **`EXPR in NAME` says which arena an expression takes its room from**, and `⎕empty(NAME)` gives the whole of one back:
 
@@ -3346,45 +3350,77 @@ arenas and none of the checking: freeing one and reading what was in it is the p
 arise and neither does the control.  This sits with Rust in what it refuses and with Zig in what it costs: nothing at run time,
 and a rule a reader can apply by looking at where a name's value was made.
 
+##### Knowing the allocator
+
+**How every object that points somewhere is given back is known.**  A string and a list carry, beside where they are and how many,
+the allocator they came from -- none for text in the image, which nothing gives back -- so whatever holds one can give it back
+without being told.  That is the default, and it is safe: no object's allocator is ever unknown.  **The compiler reads the word
+only where it has to.**  Where it knows the allocator while compiling it calls that allocator straight away, or nothing at all for
+a pool, and the word is never read; which of the two it chose for each name is written to the report log (`allocator`), and every
+copy it made is there too (`copy-into-allocator`).  Nothing of it surfaces in the language: a program says where a value is made
+with `in`, and the rest is the compiler's.
+
+**What saying nothing means is `⎕heap`.**  A join, a list or a collection written with no `in` is made there, and so is what a
+function answers whose signature names no arena.  A parameter that says nothing may have been made anywhere: it carries its
+allocator, and lasts as long as the call.
+
+**An answer is kept in the allocator the signature names**: `→ T in a`, or `⎕heap`.  One made anywhere else is copied there before
+the function leaves -- before what it put off runs, so an arena given back on the way out has been copied out of first.  That is
+how a value made in a scope's own arena reaches past the scope.  Text in the image goes as it is; a value of the heap's is the
+caller's alone, so only a temporary of the heap's is answered as it is, and a name holding one is copied.  **What cannot be copied
+is refused** (4624): a record or a tuple holding text, a result, and anything holding a value marked `@[unique]`, which is what
+`@[unique]` is for.
+
+**Allocators are not handed out of the scope they are made in.**  A value made in a local arena reaches past it only as a copy;
+passing the arena out along with the value wants a syntax of its own, which is proposed in [scoped-arenas.md](scoped-arenas.md)
+and not yet part of the language.
+
 ##### What a container holds
 
-**An element that points somewhere points into its container's allocator.**  A container whose elements are text, lists, or
-anything else that points into room -- `str⟦4⟧`, `[str]`, `[[u8]]` -- is made with an allocator: the one `in` names, or `⎕heap`
-where nothing does.  An array is room in the frame like any other, and `in` after one says where what its elements point into
-comes from:
+**Every element carries its allocator**, so the elements of one container need not share one.  A container of text or lists is
+made with an allocator -- the one `in` names, or `⎕heap` -- and an array, which is room in the frame, carries none of its own: `in`
+after one says where its elements are kept.  A container of values that point nowhere needs no allocator at all, and `in` after
+one says nothing (4568).
 
 ```
-let v: mut str⟦3⟧ = ⟦"x", t, u⟧ in a     ※ the text of all three is in a
-let l: [str] = ["k", t] in a              ※ the list and its text are in a
+let v: mut str⟦3⟧ = ⟦"x", t, u⟧ in a     ※ elements kept in a
+let l: [str] = ["k", t]                   ※ the list and its elements in ⎕heap
 let n: u8⟦2⟧ = ⟦1u8, 2u8⟧                 ※ numbers point nowhere: no allocator
 ```
 
-**What is put in is copied there unless it was provably made there.**  That holds wherever an element goes in: written in a
-literal, written over one with `v⟦i⟧ ← x`, and brought along by a join of two lists.  "Provably" is what the compiler knows of
-where a value was made: made in that arena, or in `⎕heap` for a container made with `⎕heap`, and nothing else -- a literal, text
-from another arena and the answer of a call whose signature says nothing are all copied.  The copy goes all the way down: a list
-of lists of text is copied list by list and text by text.
+**What is put in goes in as it is wherever that is safe, and is copied into the container's allocator otherwise** -- in a literal,
+over an element with `v⟦i⟧ ← x`, and in a join of two lists:
 
-**What is replaced is given back to the container's allocator, and so is a temporary that was copied in**, nothing else naming
-it.  What is given back is an element's own storage -- the bytes of a string, the run of a list -- and not what that points at
-in turn: something made in the container's own allocator goes in as it is, so two elements, or an element and a name, may share
-what lies below.  **Giving back one object is `__pl4g_free`**, which every allocator has; an arena gives back only all at once,
-so for an arena it does nothing, and an allocator that can give back one object at a time takes its place with nothing else
-changing.
+- **Text in the image** goes in as it is: nothing gives it back.
+- **A pool's container** never gives back one element.  What it holds may come from anything that lasts as long as it does: its
+  own arena, an arena the caller handed over, an arena bound further out, and `⎕heap`.  **Replacing an element calls nothing at
+  all.**  An arena bound beside the container is not provably long enough -- it may be given back while the container is read --
+  so what it made is copied.
+- **A heap container** gives back what it replaces, asking the element which allocator it came from.  So what it holds of the
+  heap's is its alone: a temporary of the heap's is moved in, anything else of the heap's is copied, and what a long enough lived
+  pool made goes in as it is, giving that back being nothing.
 
-**A container whose allocator nothing says is not written** (4622): there is nowhere to copy into.  A parameter says it with
-`in` -- `v: mut str⟦⟧ in a` is an array whose text is in what `a` names -- and a container made in more than one arena, or
-handed over by something that does not say, has none the compiler can name.  **Some elements cannot be copied yet** (4623): a
-record or a tuple holding text, an array held inside a container, a set or a dictionary.  `in` after an array of values that
-point nowhere says nothing (4568).
+The copy goes all the way down: a list of lists of text is copied list by list and text by text, and a temporary that was copied
+is given back.  **Some values cannot be copied yet** (4623): a record or a tuple holding text, a set or a dictionary -- and an array
+of text held by another name, which is its elements, so copying it by value would give each element two owners.
+
+**A value read out of a heap container is the same object, not a copy**, and lives until an element is replaced: after `v⟦i⟧ ←`,
+or after `v` is handed to a call that may replace one, what was read out of it before is dead (4626).  Which element is not asked:
+telling one index from another is arithmetic.  A pool's container is not touched by this, giving nothing back one at a time.
+
+**Which allocator a container keeps its elements in has to be known to write one** (4622), and the compiler knows it of a container
+this body made or was handed by name.  A parameter says it with `in` -- `v: mut str⟦⟧ in a` -- and keeps them in `⎕heap` where it
+says nothing; a container handed to it has to keep them where it says (4625), a pool's and the heap's being given back from by
+different rules.  A field of a record keeps them in `⎕heap`, and only an array nobody else names may be put in one.
 
 Sets and dictionaries are not held to this yet: their keys and values go in as they are.
 
-Compare: **C++**, whose containers copy what is assigned into them and destroy what they replace, a `pmr` container copying
-into its own memory resource -- which is this, with the copy decided at run time by the resource's identity rather than proven
-while compiling.  **Rust** refuses a store whose lifetime is too short instead of copying, and an arena crate's `clone_in` is
-the copy written out.  **Zig**'s `ArrayList` holds what it is handed, and which allocator made an element is the program's to
-know.  **Go** and **Java** collect garbage and share.
+Compare: **C++**, whose containers copy what is assigned into them and destroy what they replace, a `pmr` container copying into
+its own memory resource -- this, with the copy decided at run time by the resource's identity rather than proven while compiling,
+and with a dangling reference to a replaced element left for the program to avoid.  **Rust** refuses a store whose lifetime is too
+short instead of copying, and the borrow checker refuses the read of a replaced element as this does.  **Zig**'s `ArrayList` holds
+what it is handed, and which allocator made an element is the program's to know; its "managed" containers store the allocator as
+these do.  **Go** and **Java** collect garbage and share.
 
 ##### Where an answer was made
 
@@ -3401,12 +3437,10 @@ let name: str = label(&mut long, &mut short, 7u16)
 ```
 
 **A caller** takes the answer to be made in exactly what it handed the named parameters: emptying `short` leaves `name` alive, and
-emptying `long` kills it.  Without the annotation the answer is taken to be made in every arena handed over, which is safe and
-refuses the program above.
+emptying `long` kills it.  Without the annotation the answer is made in `⎕heap`.
 
-**The body is held to it** (4619): an answer made in an arena the signature did not name breaks the promise, since the caller may
-give that arena back and keep the answer.  So does answering a parameter that says nothing about where it was made -- the caller
-knows and the body does not.  Copying it into the arena makes it true: `"" ⧺ s in a`.
+**The body is held to it**: an answer made anywhere the signature does not name is copied into the arena it does name, before the
+function leaves (above), and refused where it cannot be copied (4624).
 
 **`→ T in a, b`** says the answer may come from either, so it lives as long as the shorter of the two -- the rule a lifetime name on
 several parameters has.

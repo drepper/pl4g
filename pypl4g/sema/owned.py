@@ -160,10 +160,79 @@ def _build_own(module: Module, func: Function, ty: Type) -> None:
     builder.ret(builder.make_tuple((copied, count, arena), ty))
 
 
-def free_storage(builder: IRBuilder, arena: Value, value: Value,
-                 ty: Type) -> None:
-    """Give a string's bytes or a list's run back to the allocator they came from.
+DISOWN_SYMBOL: Final[str] = "__pl4g_disown"
 
-    Nothing yet: until every value carries its allocator, one given back to the
-    heap could still be named somewhere else.
+
+def disown_function(module: Module, ty: Type) -> Function:
+    """``__pl4g_disown.T(v)``: *v* given back, all the way down.
+
+    Every value carries its allocator, so this asks the value: what each element
+    points into is given back to the allocator that element names, and then the
+    value's own storage to its own.  For a pool that is nothing and for the image it
+    is nothing; for the heap it is the object, by its size.
     """
+    func, fresh = tables.generated(module, ".".join((DISOWN_SYMBOL, ty.mangled())),
+                                   (ty,), VOID)
+    if not fresh:
+        return func
+    entry = func.add_block()
+    builder = IRBuilder(module, func)
+    builder.position_at(entry)
+    value = entry.add_param(ty, "v")
+    start, count = _parts(builder, value, ty)
+    if isinstance(ty, ListType) and points(ty.element):
+        inner = disown_function(module, ty.element)
+        element = ty.element
+
+        def turn(at: Value) -> None:
+            builder.call(inner, (builder.load(_element(builder, start, element,
+                                                       at)),), VOID)
+
+        _each(builder, func, count, "disown", turn)
+    builder.call(tables.dispose_function(module),
+                 (builder.extract(value, 2, parts_of(ty)[2]),
+                  builder.cast(CastKind.BITCAST, start, _bytes(module)),
+                  _size(builder, ty, count)), VOID)
+    builder.ret()
+    return func
+
+
+def give_back(builder: IRBuilder, value: Value, ty: Type,
+              known: str | None) -> None:
+    """Give *value* back, using what the compiler knows of its allocator.
+
+    *known* is ``"pool"`` where every allocator it can name is a pool or the image,
+    and then nothing is emitted at all; ``"heap"`` where it is the heap and nothing
+    it holds points anywhere, and then the heap is called straight away; and nothing
+    where it has to be asked of the value, which is the dispatch.
+    """
+    if known == "pool" or not points(ty):
+        return
+    module = builder.module
+    if known == "heap" and not (isinstance(ty, ListType) and points(ty.element)):
+        start, count = _parts(builder, value, ty)
+        builder.call(tables.heap_free_function(module),
+                     (builder.cast(CastKind.BITCAST, start, _bytes(module)),
+                      _size(builder, ty, count)), VOID)
+        return
+    builder.call(disown_function(module, ty), (value,), VOID)
+
+
+def give_back_storage(builder: IRBuilder, value: Value, ty: Type,
+                      known: str | None) -> None:
+    """Give back a string's bytes or a list's run, and nothing they point at.
+
+    What a join of two lists copied out of a temporary: the elements went into the
+    answer, so only the run they were in is the temporary's to give back.
+    """
+    if known == "pool":
+        return
+    module = builder.module
+    start, count = _parts(builder, value, ty)
+    where = builder.cast(CastKind.BITCAST, start, _bytes(module))
+    size = _size(builder, ty, count)
+    if known == "heap":
+        builder.call(tables.heap_free_function(module), (where, size), VOID)
+        return
+    builder.call(tables.dispose_function(module),
+                 (builder.extract(value, 2, parts_of(ty)[2]), where, size), VOID)

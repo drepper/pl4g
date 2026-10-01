@@ -1,8 +1,9 @@
 ※ pl4g-test: compile=error
 ※ pl4g-test: expect-diag 4623 LANG_CONTAINER_CANNOT_COPY
 
-※ An element not provably made in its container's allocator is copied into it, and a record
-※ holding text cannot be copied yet: what its fields point into would want a walk of its own.
+※ An element whose allocator does not last as long as its container is copied into the
+※ container's, and a record holding text cannot be copied yet: what its fields point into would
+※ want a walk of its own.  Text in the image would have gone in as it is.
 
 type R = f: str
 
@@ -10,5 +11,7 @@ type R = f: str
 fn main() → u6:
     let a: mut arena = ⎕arena
     defer ⎕empty(a)
-    let l: [R] = [R(.f ← "x")] in a
+    let b: mut arena = ⎕arena
+    defer ⎕empty(b)
+    let l: [R] = [R(.f ← "x" ⧺ "y" in b)] in a
     if #l = 1: 0u6 else: 1u6

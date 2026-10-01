@@ -1,0 +1,36 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ **Every element carries its allocator**, so the elements of one container need not share one:
+※ what is put in goes in as it is wherever that is safe, and is copied otherwise.
+※
+※ - A **pool** container never gives back one element: what it holds may come from anything that
+※   lasts as long as it does, `⎕heap` included, and replacing an element calls nothing at all.
+※ - A **heap** container gives back what it replaces, asking the element which allocator it came
+※   from: a temporary of the heap's is moved in, anything else of the heap's is copied so that the
+※   container's is its alone, and text in the image goes in as it is.
+※
+※ A value read out of a pool's container lives as long as the pool; one read out of the heap's
+※ lives until an element of it is replaced.
+
+@[impure]
+fn put(a: &mut arena, v: mut str⟦⟧ in a, s: str):
+    v⟦0⟧ ← s
+
+@[startup, impure]
+fn main() → u6:
+    let a: mut arena = ⎕arena
+    defer ⎕empty(a)
+    let pool: mut str⟦3⟧ = ⟦"a" ⧺ "b" in a, "lit", "h" ⧺ "eap"⟧ in a
+    let read: str = pool⟦0⟧
+    pool⟦0⟧ ← "x" ⧺ "y"
+    pool⟦1⟧ ← "z" ⧺ "w" in a
+    put(&mut a, pool, "q")
+    if read ≠ "ab" ∨ pool⟦0⟧ ≠ "q" ∨ pool⟦1⟧ ≠ "zw" ∨ pool⟦2⟧ ≠ "heap":
+        return 1u6
+    let heap: mut str⟦3⟧ = ⟦"a" ⧺ "b", "lit", "in" ⧺ "a" in a⟧
+    heap⟦0⟧ ← "c" ⧺ "d"
+    heap⟦1⟧ ← heap⟦0⟧
+    heap⟦2⟧ ← "e"
+    if heap⟦0⟧ ≠ "cd" ∨ heap⟦1⟧ ≠ "cd" ∨ heap⟦2⟧ ≠ "e":
+        return 2u6
+    0u6

@@ -4626,33 +4626,6 @@
       "option": null
     },
     {
-      "number": 4613,
-      "name": "LANG_ARENA_VALUE_ANSWERED",
-      "severity": "error",
-      "message": "what '{name}' answers was made in '{arena}', which is gone when '{name}' returns",
-      "args": [
-        {
-          "name": "name",
-          "type": "string",
-          "description": "the function"
-        },
-        {
-          "name": "arena",
-          "type": "string",
-          "description": "the arena it made"
-        }
-      ],
-      "cause": "An arena a function makes belongs to that call: it is given back before the call ends, and what was made in it goes with it.  So an answer made in one would be handed to a caller pointing at room that is no longer there.  What a function answers comes from an arena its caller handed it -- which lasts as long as the caller says -- or from `⎕heap`, which lasts as long as the program.",
-      "spec": {
-        "document": "spec/spec.md",
-        "section": "The Language / Types / Arenas / What an arena holds",
-        "requirement": "A value made in an arena does not outlive it."
-      },
-      "since": "0.1",
-      "default_enabled": true,
-      "option": null
-    },
-    {
       "number": 4614,
       "name": "LANG_ARENA_VALUE_OUTLIVES",
       "severity": "error",
@@ -4783,38 +4756,6 @@
       "option": null
     },
     {
-      "number": 4619,
-      "name": "LANG_MADE_IN_ANSWER_ELSEWHERE",
-      "severity": "error",
-      "message": "what '{name}' answers may be made in {found}, and its signature says it is made in {said}",
-      "args": [
-        {
-          "name": "name",
-          "type": "string",
-          "description": "the function"
-        },
-        {
-          "name": "found",
-          "type": "string",
-          "description": "where the answer may have been made"
-        },
-        {
-          "name": "said",
-          "type": "string",
-          "description": "what the signature names"
-        }
-      ],
-      "cause": "A signature saying `→ T in a` promises every caller that the answer was made in what `a` names, or in something lasting longer, so the caller may give back every other arena it handed over and keep the answer.  An answer made in another arena parameter breaks that promise, and so does one taken from a parameter that does not say where it was made: the body cannot know, so it cannot promise.",
-      "spec": {
-        "document": "spec/spec.md",
-        "section": "The Language / Types / Arenas / Where an answer was made",
-        "requirement": "A signature saying where a value was made is kept by the body and by every call."
-      },
-      "since": "0.1",
-      "default_enabled": true,
-      "option": null
-    },
-    {
       "number": 4620,
       "name": "LANG_MADE_IN_ARGUMENT_ELSEWHERE",
       "severity": "error",
@@ -4877,7 +4818,7 @@
       "number": 4622,
       "name": "LANG_CONTAINER_OWNER_UNKNOWN",
       "severity": "error",
-      "message": "nothing says which allocator this '{type}' was made with, so nothing can be put in it",
+      "message": "which allocator this '{type}' keeps its elements in cannot be determined, so nothing can be put in it",
       "args": [
         {
           "name": "type",
@@ -4885,7 +4826,7 @@
           "description": "the container's type"
         }
       ],
-      "cause": "An element that points somewhere -- text, a list -- points into the allocator its container was made with, so what is put in is copied there unless it was provably made there.  Where the container came from somewhere that does not say -- a parameter with no `in`, something made in more than one arena -- there is no allocator to copy into.  `v: str⟦⟧ in a` on a parameter says it.",
+      "cause": "An element that points somewhere is kept in its container's allocator, as it is or copied there, and a container of `⎕heap`'s gives back what it replaces.  So writing an element needs to know which allocator that is, and the compiler knows it of a container this body made or was handed by name -- not of one reached through a field or an element.",
       "spec": {
         "document": "spec/spec.md",
         "section": "The Language / Types / Arenas / What a container holds",
@@ -4912,6 +4853,107 @@
         "document": "spec/spec.md",
         "section": "The Language / Types / Arenas / What a container holds",
         "requirement": "An element that points somewhere points into its container's allocator."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4624,
+      "name": "LANG_ANSWER_CANNOT_BE_COPIED",
+      "severity": "error",
+      "message": "what '{name}' answers may be made in {found}, not in {said} as its signature says, and a value of type '{type}' cannot be copied there",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the function"
+        },
+        {
+          "name": "found",
+          "type": "string",
+          "description": "where it may be made"
+        },
+        {
+          "name": "said",
+          "type": "string",
+          "description": "what the signature names"
+        },
+        {
+          "name": "type",
+          "type": "string",
+          "description": "the answer's type"
+        }
+      ],
+      "cause": "A function answers in the allocator its signature names -- `→ T in a`, or `⎕heap` where it names none -- and an answer made anywhere else is copied there before the function leaves.  Text, and lists of text or of plain values, can be copied; a record or a tuple holding text, a result, and anything holding a value marked `@[unique]` cannot.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Arenas / Knowing the allocator",
+        "requirement": "How every object that points somewhere is given back is known."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4625,
+      "name": "LANG_CONTAINER_ALLOCATOR_MISMATCH",
+      "severity": "error",
+      "message": "'{param}' of '{func}' keeps its elements in {wanted}, and this container keeps them in {found}",
+      "args": [
+        {
+          "name": "param",
+          "type": "string",
+          "description": "the parameter"
+        },
+        {
+          "name": "func",
+          "type": "string",
+          "description": "the function"
+        },
+        {
+          "name": "wanted",
+          "type": "string",
+          "description": "the allocator the parameter says"
+        },
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the container's"
+        }
+      ],
+      "cause": "A container of `⎕heap`'s gives back what it replaces and a pool's never does, so the two are given back from by different rules: handing one where the other is expected would free what a pool shares, or never free what the heap owns.  A parameter says which with `in`, and `⎕heap` where it says nothing.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Arenas / Knowing the allocator",
+        "requirement": "How every object that points somewhere is given back is known."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4626,
+      "name": "LANG_ELEMENT_REPLACED",
+      "severity": "error",
+      "message": "'{name}' was read out of '{container}', and an element of it may have been given back since",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the name read"
+        },
+        {
+          "name": "container",
+          "type": "string",
+          "description": "the container"
+        }
+      ],
+      "cause": "A container of `⎕heap`'s owns what it holds and gives back what it replaces, so a value read out of it is the same object and not a copy: after an element is replaced, or the container is handed to a call that may replace one, what was read out before may be gone.  Which element is not asked.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Arenas / Knowing the allocator",
+        "requirement": "How every object that points somewhere is given back is known."
       },
       "since": "0.1",
       "default_enabled": true,

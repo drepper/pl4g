@@ -1,16 +1,15 @@
 ※ pl4g-test: compile=error
 ※ pl4g-test: expect-diag 4622 LANG_CONTAINER_OWNER_UNKNOWN
 
-※ Text put into an array is copied into the array's allocator unless it was provably made there,
-※ so an array whose allocator nothing says has nowhere to copy into: a parameter with no `in`.
-※ `v: mut str⟦⟧ in a` says it.
+※ Writing an element needs to know which allocator the container keeps its elements in: what goes
+※ in is kept there, as it is or copied, and a container of `⎕heap`'s gives back what it replaces.
+※ The compiler knows that of a container this body made, or was handed by name -- not of one
+※ reached through a field.
 
-@[impure]
-fn put(v: mut str⟦⟧, s: str):
-    v⟦0⟧ ← s
+type Holder = names: str⟦2⟧
 
 @[startup, impure]
 fn main() → u6:
-    let w: mut str⟦2⟧ = ⟦"a", "b"⟧
-    put(w, "c")
+    let h: mut Holder = Holder(.names ← ⟦"a", "b"⟧)
+    h.names⟦0⟧ ← "c"
     0u6
