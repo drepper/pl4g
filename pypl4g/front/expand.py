@@ -174,13 +174,23 @@ class _Expander:
 
     def run(self) -> list[ast.SourceUnit]:
         """Collect the macros, then rewrite every unit without them."""
+        # Which modules are invoked through at all, found before any is read: reading
+        # one costs a parse of a file this compilation would otherwise parse once, and
+        # having any macro at all costs a rebuild of every unit.  A program that
+        # imports a module full of macros and invokes none of them should pay neither,
+        # which almost every program does.
+        wanted: set[str] = set()
+        for unit in self._units:
+            for item in unit.items:
+                _invoked_through(item, wanted)
         for unit in self._units:
             for item in unit.items:
                 if isinstance(item, ast.MacroDef):
                     self._collect(item)
                 elif isinstance(item, ast.FuncDef) and item.is_macro:
                     self._collect_written(item)
-                elif isinstance(item, ast.ModuleImport):
+                elif isinstance(item, ast.ModuleImport) \
+                        and item.name in wanted:
                     self._collect_imported(item)
         if not self._macros and not self._written and not self._through:
             # A program with no macro is handed back as it is.  Everything below
@@ -1007,6 +1017,25 @@ def _handed_over(arguments: ast.Quote,
     rest = pieces[fixed:]
     return (*pieces[:fixed],
             ast.Quote(span=arguments.span, pieces=tuple(rest)))
+
+
+def _invoked_through(node: object, into: set[str]) -> None:
+    """Every module a macro is invoked through below *node*.
+
+    A walk that builds nothing: what it is for is deciding whether anything has to be
+    read or rebuilt at all, so it has to be cheaper than the thing it is avoiding.
+    """
+    if isinstance(node, ast.Invoke) and node.through is not None:
+        into.add(node.through)
+    if isinstance(node, ast.Node):
+        for one in fields_of(node):
+            held = getattr(node, one.name)
+            if isinstance(held, ast.Node):
+                _invoked_through(held, into)
+            elif isinstance(held, tuple):
+                for each in held:
+                    if isinstance(each, ast.Node):
+                        _invoked_through(each, into)
 
 
 def _parts_of(node: object) -> tuple[object, ...]:
