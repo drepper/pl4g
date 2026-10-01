@@ -1,0 +1,13 @@
+※ pl4g-test: compile=error
+※ pl4g-test: expect-diag 4618 LANG_MADE_IN_NOT_AN_ARENA
+
+※ What follows `in` in a signature is a parameter holding an arena, `&mut arena` or `&arena`.
+※ A local arena is given back before the call ends and cannot be named, and `⎕heap` is what
+※ saying nothing already allows.
+
+fn named(v: u16) → str in v:
+    "x"
+
+@[startup]
+fn main() → u6:
+    if named(1u16) = "x": 0u6 else: 1u6

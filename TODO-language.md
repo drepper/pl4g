@@ -241,9 +241,10 @@ To Do List for the PL4g language
         And what an arena holds dies with it: read after `⎕empty`, answered by the function
         that made the arena, or put where it outlives it, is refused (4613-4615); only the
         maker empties an arena (4616); a pure function gives back all it made (4617).
-    [ ] **a call that answers something lasting while handed an arena** is taken to answer
-        something made in it, which refuses correct programs.  A signature saying which
-        arenas the answer can come from (Rust's lifetime parameters, in short) would settle it.
+    [x] **a signature saying which arena its answer was made in.**  Done: `→ T in a, b`
+        and `s: T in a` (4618-4621); `std.text` and two-operand `⍕` say it.
+    [ ] **`in` per component** -- `(str in a, str in b)`, or a record field holding text made
+        in an arena -- which wants `⧖` names on types that are not references.
     [ ] **a type `T⟦3,⟧` that states some dimensions and not others** is accepted, though
         the spec says every dimension says how many or none does; nothing refuses it yet.
     [ ] **`errdefer`**, Zig's defer that runs only on the way out with a failure, once

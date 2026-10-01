@@ -1,0 +1,14 @@
+※ pl4g-test: compile=ok run=native,qemu exit=0 diag=4621
+
+※ Only a value that points into room is made anywhere: a string, a list, a collection, an
+※ array of no stated length, a reference, or something holding one.  A number is what it is,
+※ wherever it was computed, so saying where it was made says nothing.
+
+fn count(a: &mut arena) → u8 in a:
+    0u8
+
+@[startup]
+fn main() → u6:
+    let x: mut arena = ⎕arena
+    defer ⎕empty(x)
+    if count(&mut x) = 0u8: 0u6 else: 1u6

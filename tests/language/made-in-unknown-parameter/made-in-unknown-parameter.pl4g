@@ -1,0 +1,15 @@
+※ pl4g-test: compile=error
+※ pl4g-test: expect-diag 4619 LANG_MADE_IN_ANSWER_ELSEWHERE
+
+※ A parameter that says nothing about where it was made may have been made anywhere: the
+※ caller knows and the body does not.  So a body saying `→ T in a` may not answer it as it is.
+※ Writing `s: str in a` says it, and copying it into `a` makes it true whatever it was.
+
+fn kept(a: &mut arena, s: str) → str in a:
+    s
+
+@[startup]
+fn main() → u6:
+    let x: mut arena = ⎕arena
+    defer ⎕empty(x)
+    if kept(&mut x, "s") = "s": 0u6 else: 1u6

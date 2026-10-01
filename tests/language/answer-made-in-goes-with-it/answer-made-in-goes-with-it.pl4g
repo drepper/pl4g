@@ -1,0 +1,20 @@
+※ pl4g-test: compile=error
+※ pl4g-test: expect-diag 4615 LANG_ARENA_VALUE_GIVEN_BACK
+
+※ What `→ T in a` gives a caller is exactness both ways: the answer outlives every other arena
+※ it handed over, and goes with the one it handed to `a`.
+
+let std := ⎕import("std")
+
+fn label(a: &mut arena, b: &mut arena, v: u16) → str in a:
+    let scratch: str = ⍕v in b
+    "#" ⧺ scratch in a
+
+@[startup]
+fn main() → u6:
+    let long: mut arena = ⎕arena
+    let short: mut arena = ⎕arena
+    defer ⎕empty(short)
+    let name: str = label(&mut long, &mut short, 7u16)
+    ⎕empty(long)
+    if name = "#7": 0u6 else: 1u6

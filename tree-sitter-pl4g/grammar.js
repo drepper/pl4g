@@ -191,7 +191,9 @@ module.exports = grammar({
       field('name', choice($.member_name, $.identifier, $.operator_name)),
       field('parameters', $.parameter_list),
       optional(seq($._return_arrow, optional($.mutable),
-                   field('return_type', $.type))),
+                   field('return_type', $.type),
+                   // `in a, b`: which arena parameters the answer was made in.
+                   optional(seq('in', sepBy1(',', field('made_in', $.identifier)))))),
       repeat($.clause),
       optional(field('body', $._block)),
     ),
@@ -271,6 +273,8 @@ module.exports = grammar({
       optional('⁂'),
       field('name', $.identifier), ':', optional($.mutable),
       field('type', $.type),
+      // `in a`: the arena parameter what is handed over was made in.
+      optional(seq('in', field('made_in', $.identifier))),
       optional(seq('\u2190', field('default', $._expression))),
     ),
 

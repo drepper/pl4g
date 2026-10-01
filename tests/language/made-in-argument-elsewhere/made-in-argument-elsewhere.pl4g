@@ -1,0 +1,18 @@
+※ pl4g-test: compile=error
+※ pl4g-test: expect-diag 4620 LANG_MADE_IN_ARGUMENT_ELSEWHERE
+
+※ `s: T in a` is a parameter the body may answer under `→ T in a`, so what a caller hands it
+※ has to have been made in the arena it hands `a`, or in something lasting longer.  Text made
+※ in another arena would come back looking as if it lasted as long as `a`.
+
+fn either(c: bool, a: &mut arena, s: str in a) → str in a:
+    if c: s else: "-" ⧺ s in a
+
+@[startup]
+fn main() → u6:
+    let long: mut arena = ⎕arena
+    defer ⎕empty(long)
+    let short: mut arena = ⎕arena
+    defer ⎕empty(short)
+    let t: str = "a" ⧺ "b" in short
+    if either(true, &mut long, t) = "ab": 0u6 else: 1u6

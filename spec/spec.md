@@ -3306,10 +3306,11 @@ in, and refuses every way a program could read memory an arena has given back:
   block comes to when the arena was made inside the block.  It is the rule a reference follows, asked of what an arena holds.
 
 **What a value was made in is read off what is written.**  An arena is named where room is taken from it -- after `in`, or handed to
-a call -- and a name carries the arenas of what it was given.  A call is taken to answer something made in any arena it was handed,
-which is the only thing a caller can know without seeing into the function; an answer that came from somewhere that lasts is then a
-cautious guess and never a wrong one.  A value of a type that points nowhere -- a number, a `bool`, a fixed array of those -- was
-made in nothing, whatever it was computed from.
+a call -- and a name carries the arenas of what it was given.  **A join of two strings is made in its arena and nowhere else**, its
+bytes being copied, so what the halves were made in stays theirs.  A call whose signature says nothing is taken to answer something
+made in any arena it was handed, which is the only thing a caller can know without seeing into the function; an answer that came
+from somewhere that lasts is then a cautious guess and never a wrong one -- and a signature can say exactly (below).  A value of a
+type that points nowhere -- a number, a `bool`, a fixed array of those -- was made in nothing, whatever it was computed from.
 
 **Only what made an arena gives it back** (4616).  One handed over by reference is its maker's, who may be holding things made in
 it; `⎕heap` and an arena at the top level last as long as the program, and anything anywhere may be holding things made in those.
@@ -3326,6 +3327,50 @@ arenas and none of the checking: freeing one and reading what was in it is the p
 `std::pmr::monotonic_buffer_resource` is an arena with the same lack.  **Go** and **D** collect garbage, so the question does not
 arise and neither does the control.  This sits with Rust in what it refuses and with Zig in what it costs: nothing at run time,
 and a rule a reader can apply by looking at where a name's value was made.
+
+##### Where an answer was made
+
+**`→ T in a` says the answer was made in the arena parameter `a` names**, or in something that lasts at least as long -- `⎕heap`, a
+literal, a variable at the top level.  It is the `in` an expression is written with, said of what the call comes to:
+
+```
+fn label(a: &mut arena, b: &mut arena, v: u16) → str in a:
+    let scratch: str = ⍕v in b          ※ working space
+    "#" ⧺ scratch in a                  ※ the answer
+
+let name: str = label(&mut long, &mut short, 7u16)
+⎕empty(short)                           ※ name lives on: it was made in long
+```
+
+**A caller** takes the answer to be made in exactly what it handed the named parameters: emptying `short` leaves `name` alive, and
+emptying `long` kills it.  Without the annotation the answer is taken to be made in every arena handed over, which is safe and
+refuses the program above.
+
+**The body is held to it** (4619): an answer made in an arena the signature did not name breaks the promise, since the caller may
+give that arena back and keep the answer.  So does answering a parameter that says nothing about where it was made -- the caller
+knows and the body does not.  Copying it into the arena makes it true: `"" ⧺ s in a`.
+
+**`→ T in a, b`** says the answer may come from either, so it lives as long as the shorter of the two -- the rule a lifetime name on
+several parameters has.
+
+**`s: T in a` says a parameter was made in what `a` names**, which is what lets a body answer it under `→ T in a`.  A caller is held
+to it (4620): what it hands `s` was made in the arena it hands `a`, or in something lasting longer.
+
+**What follows `in` is a parameter holding an arena**, `&mut arena` or `&arena` (4618).  A local arena is given back before the call
+ends and cannot be named, and `⎕heap` is what saying nothing already allows.  Said of a type that points nowhere it says nothing
+(4621, a warning).  It is said of the whole answer; `(str, str) in a` says it of both.
+
+**It is a lifetime, spelled as the arena.**  An arena-made value is a reference in all but spelling -- `str` is a pointer and a
+length -- and "made in `a`" is "lives as long as what `a` names".  So `in a` is what `⧖x` shared by the arena parameter and the answer
+would say, with nothing to declare and no name to keep in step.  `std.text` and two-operand `⍕` say `→ str in a`.
+
+Compare: **Rust** with an arena crate such as `bumpalo`, `fn label<'b>(a: &'b Bump, …) -> &'b str`, which is this with the lifetime
+written out -- Rust has to, a reference and its arena being two things there.  **Cyclone**'s regions, `char *ρ label(region_t<ρ>
+r)`, are the closest ancestor: a region handle as a parameter and the region on the answer's pointer type.  The **ML Kit**'s regions
+infer all of it, so what a reader sees is the compiler's output.  **D**'s `return scope` marks the parameter rather than the
+answer.  **Zig** and **Odin** say it in a comment -- "caller owns the returned memory, allocated with `allocator`" -- and nothing
+checks it; **C++**'s `pmr` containers remember their resource and a signature says nothing about which.  The alternatives are in
+[answer-arenas.md](answer-arenas.md).
 
 #### Sets and dictionaries
 

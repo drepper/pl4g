@@ -316,9 +316,11 @@ fn Io.println(to: &mut Writer, what: u8⟦⟧) → u64 ¤size ? i32:
 ※※ \param v what to write
 ※※ \return what a program would have written to mean it
 @[export]
-fn text(v: T', a: &mut arena) → str:
+fn text(v: T', a: &mut arena) → str in a:
     comptime if ⎕typeof(⌜v⌝) = ⌜str⌝:
-        v
+        ※ Copied, so that what comes back is made in `a` as the signature says:
+        ※ the text handed over may be made in an arena that goes first.
+        "" ⧺ v in a
     comptime elif ⎕typeof(⌜v⌝) = ⌜bool⌝:
         if v: "true" else: "false"
     comptime elif ⎕typeof(⌜v⌝) = ⌜char⌝:
@@ -371,7 +373,7 @@ fn text(v: T', a: &mut arena) → str:
 ※※ \param v what to write
 ※※ \return what a program would have written to mean it
 @[export]
-fn `⍕`(v: T', a: &mut arena) → str:
+fn `⍕`(v: T', a: &mut arena) → str in a:
     text(v, a)
 
 ※※ The same with no arena named, which is the one the compiler provides.

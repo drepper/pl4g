@@ -1175,6 +1175,9 @@ class Param(Node):
     #: is handed is the rest of the pieces as one piece, and how many that is, is a
     #: question the compiler answers.
     several: bool = False
+    #: `s: str in a`: the arena parameter what the caller hands over was made in,
+    #: and where that name is written.  Nothing where the parameter says nothing.
+    made_in: tuple[str, Span] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -1301,6 +1304,9 @@ class FuncDef(Node):
     body: Block | None
     #: The `pre` and `post` clauses, in the order written.
     clauses: tuple[Clause, ...] = ()
+    #: `→ T in a, b`: the arena parameters what the function answers was made in,
+    #: each with where it is written.  Empty where the signature says nothing.
+    made_in: tuple[tuple[str, Span], ...] = ()
     #: Whether `comptime` stands before the `fn`, which says *when* the function
     #: exists and nothing about what it computes: one marked so is installed before
     #: expansion, for the macros to call, and again in the ordinary way for the

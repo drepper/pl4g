@@ -919,6 +919,14 @@ def _and_then(names: Sequence[str]) -> str:
     return " and ".join((", ".join(quoted[:-1]), quoted[-1]))
 
 
+def _one_of(names: Sequence[str]) -> str:
+    """Several names, written as the alternatives they are: `'a' or 'b'`."""
+    quoted = ["".join(("\'", one, "\'")) for one in names]
+    if len(quoted) < 2:
+        return "".join(quoted) or "no arena"
+    return " or ".join((", ".join(quoted[:-1]), quoted[-1]))
+
+
 def _field_index(ty: ProductType, name: str) -> int | None:
     """Where *name* stands among the fields of *ty*, if it is one of them."""
     for at, (written, _) in enumerate(ty.fields):
@@ -1947,6 +1955,26 @@ class Checker:
         #: Every arena a name is bound to, by that name's identity, so that what a
         #: value records about where it was made can be asked about again.
         self._arena_by_id: dict[int, _Local] = {}
+        #: Parameters whose provenance the body cannot know, by the marker they carry
+        #: as their arenas: a function saying where its answer was made may not
+        #: answer one of these, there being no saying where it was made.
+        self._unknown_by_id: dict[int, _Local] = {}
+        #: The definitions whose `in` has been checked, so a generic one says what
+        #: is wrong with it once and not once per instantiation.
+        self._made_in_told: set[int] = set()
+        #: Where an expression's answer was made, where lowering it said exactly: a
+        #: join of two strings is made in its arena and nowhere else, and a call to
+        #: a function saying `→ T in a` is made in what `a` was given.  The node is
+        #: kept beside what it says, so an id is never taken for another node's.
+        self._made_from: dict[int, tuple[ast.Expr, frozenset[int]]] = {}
+        #: What the call lowered last said of its answer, for the operator form of
+        #: `in`, whose call is one the checker wrote and no node holds.
+        self._last_made_in: frozenset[int] | None = None
+        #: The arenas `in` named around what is being lowered: none for `⎕heap`.
+        self._out_of_arenas: frozenset[int] = frozenset()
+        #: What the body being checked said its answer was made in: the arena
+        #: parameters' markers and how the signature named them.
+        self._answer_made_in: tuple[frozenset[int], str] | None = None
         #: The arenas already reported as never given back: there is one arena and
         #: one mistake, however many ways out there are.
         self._told_kept: set[int] = set()
@@ -3240,6 +3268,7 @@ class Checker:
                                  node.ret_type.span if node.ret_type is not None
                                  else node.name_span)
             borrows = self._borrowed_from(node, ret)
+            made_in, param_made_in = self._made_in_of(node, params, ret)
             func_attrs, linkage = self._function_attrs(attrs)
             func = Function(name=whole,
                             ty=self._module.types.func_type(
@@ -3248,6 +3277,7 @@ class Checker:
                             param_names=tuple(p.name for p in node.params),
                             defaults=self._defaults_of(node, params),
                             borrows_from=borrows,
+                            made_in=made_in, param_made_in=param_made_in,
                             exported=self._is_export(attrs),
                             cconv=(func_attrs.abi if func_attrs.abi is not None
                                    else DEFAULT_CCONV),
@@ -3360,6 +3390,134 @@ class Checker:
                            name_span=param.span, type=param.type, value=written)
         value = self._constant_value(stood, ty)
         return value if isinstance(value, Const) else None
+
+    def _made_in_of(self, node: ast.FuncDef, params: Sequence[Type],
+                    ret: Type) -> tuple[tuple[int, ...] | None,
+                                        tuple[int | None, ...]]:
+        """Which arena parameters the answer and each parameter were made in.
+
+        `→ T in a, b` and `s: T in a` name parameters, and only one holding an arena
+        can be named (4618): a local arena is given back before the call ends, and
+        `⎕heap` is what saying nothing already allows.  Said of something that
+        points nowhere -- a number, a truth value -- it says nothing (4621).
+        """
+        told = id(node) in self._made_in_told
+        self._made_in_told.add(id(node))
+        names = [one.name for one in node.params]
+
+        def arena(name: str, span: Span) -> int | None:
+            at = names.index(name) if name in names else None
+            if at is None or not (isinstance(params[at], PtrType)
+                                  and params[at].pointee is ARENA):
+                if not told:
+                    self._diags.emit(D.LANG_MADE_IN_NOT_AN_ARENA, span,
+                                     name=name)
+                return None
+            return at
+
+        def pointless(ty: Type, span: Span) -> None:
+            if not told and ty is not ERROR and not _points_somewhere(ty):
+                self._diags.emit(D.LANG_MADE_IN_POINTS_NOWHERE, span,
+                                 type=ty.written())
+
+        made: tuple[int, ...] | None = None
+        if node.made_in:
+            pointless(ret, node.made_in[0][1])
+            found = (arena(name, span) for name, span in node.made_in)
+            made = tuple(sorted({at for at in found if at is not None}))
+        given: list[int | None] = []
+        for param, ty in zip(node.params, params):
+            if param.made_in is None:
+                given.append(None)
+                continue
+            pointless(ty, param.made_in[1])
+            given.append(arena(*param.made_in))
+        return made, tuple(given)
+
+    def _params_made_in(self, node: ast.FuncDef, func: Function) -> None:
+        """Give the parameters of a body the provenance the signature says.
+
+        `s: str in a` was made in what `a` names.  Where the answer says where it was
+        made, a parameter that points somewhere and says nothing carries a marker of
+        its own -- what it was made in is the caller's to know -- so answering it is
+        refused rather than taken on trust.
+        """
+        self._answer_made_in = None
+        if func.made_in is None and not any(
+                one is not None for one in func.param_made_in):
+            return
+        def local_of(at: int) -> _Local | None:
+            return self._find_local(node.params[at].name)
+        for at, param in enumerate(node.params):
+            local = local_of(at)
+            if local is None or self._is_arena(local) \
+                    or not _points_somewhere(func.ty.params[at]):
+                continue
+            arena_at = (func.param_made_in[at]
+                        if at < len(func.param_made_in) else None)
+            arena = local_of(arena_at) if arena_at is not None else None
+            if arena is not None and self._is_arena(arena):
+                local.arenas = frozenset({id(arena)})
+            elif func.made_in is not None:
+                local.arenas = frozenset({id(local)})
+                self._unknown_by_id[id(local)] = local
+        if func.made_in is not None:
+            allowed: set[int] = set()
+            for at in func.made_in:
+                arena = local_of(at)
+                if arena is not None and self._is_arena(arena):
+                    allowed.add(id(arena))
+            self._answer_made_in = (
+                frozenset(allowed),
+                _one_of([node.params[at].name for at in func.made_in]))
+
+    def _written_for(self, expr: ast.Call, func: Function) -> dict[int, ast.Expr]:
+        """What a call wrote for each parameter, by the parameter's place."""
+        found: dict[int, ast.Expr] = {}
+        place = 0
+        for one in expr.args:
+            if isinstance(one, ast.Named):
+                if one.name in func.param_names:
+                    found[func.param_names.index(one.name)] = one.value
+            else:
+                found[place] = one
+                place += 1
+        return found
+
+    def _where_made(self, expr: ast.Call, func: Function) -> None:
+        """Hold a call to what its callee's signature says about arenas.
+
+        What a parameter was said to be made in, it has to have been made in (4620),
+        or in something lasting longer.  And where the answer says, the call's answer
+        was made in what the named parameters were given -- written down for the walk
+        that follows a value to where it was made.
+        """
+        self._last_made_in = None
+        if func.made_in is None and not any(
+                one is not None for one in func.param_made_in):
+            return
+        written = self._written_for(expr, func)
+        for at, arena_at in enumerate(func.param_made_in):
+            if arena_at is None or at not in written or arena_at not in written:
+                continue
+            stray = self._arenas_in(written[at]) - self._arenas_in(written[arena_at])
+            for one in stray:
+                where = self._arena_by_id.get(one) or self._unknown_by_id.get(one)
+                if where is None:
+                    continue
+                self._diags.emit(D.LANG_MADE_IN_ARGUMENT_ELSEWHERE,
+                                 written[at].span, param=func.param_names[at],
+                                 found=where.name, func=func.name,
+                                 arena=func.param_names[arena_at])
+                break
+        if func.made_in is None:
+            return
+        made: set[int] = set()
+        for at in func.made_in:
+            if at in written:
+                made.update(self._arenas_in(written[at]))
+        self._last_made_in = frozenset(made)
+        self._made_from[id(expr)] = (expr, self._last_made_in)
 
     def _borrowed_from(self, node: ast.FuncDef, ret: Type) -> tuple[int, ...]:
         """Which parameters the answer names what was named by, where it says.
@@ -5137,6 +5295,10 @@ class Checker:
 
     def _collect_arenas(self, node: object, into: set[int]) -> None:
         """The walk `_arenas_in` makes."""
+        exact = self._made_from.get(id(node))
+        if exact is not None and exact[0] is node:
+            into.update(exact[1])
+            return
         match node:
             case ast.Allocated():
                 self._collect_arenas(node.value, into)
@@ -5206,13 +5368,30 @@ class Checker:
         Leaving a call: an arena the call made is given back before it ends (4613),
         while one its caller handed it is the caller's and lasts as the caller says.
         Leaving a block: an arena made in the block is given back on the way out.
+
+        And where the signature says `→ T in a`, what leaves the call was made in
+        what `a` names or in something lasting longer (4619): another arena it was
+        handed is not that, and neither is a parameter it cannot know the making of.
         """
         if func is not None:
             ty = func.ty.ret
         if ty is not None and not _points_somewhere(ty):
             return
+        said = self._answer_made_in if func is not None else None
         for one in self._arenas_in(value):
+            if said is not None and one in said[0]:
+                continue
             arena = self._arena_by_id.get(one)
+            stray = self._unknown_by_id.get(one) if arena is None else (
+                arena if arena.is_parameter else None)
+            if said is not None and stray is not None and func is not None:
+                self._diags.emit(
+                    D.LANG_MADE_IN_ANSWER_ELSEWHERE, span, name=func.name,
+                    found=("".join(("\'", stray.name, "\'")) if arena is not None
+                           else "".join(("whatever \'", stray.name,
+                                         "\' was handed"))),
+                    said=said[1])
+                return
             if arena is None or arena.is_parameter:
                 continue
             if func is not None:
@@ -5570,6 +5749,9 @@ class Checker:
             self._bind_local(param.name, value, param.span,
                              param.mutable, is_parameter=True, builder=builder)
         assert node.body is not None
+        outer_made_in = self._answer_made_in
+        outer_made_from, self._made_from = self._made_from, {}
+        self._params_made_in(node, func)
         # A function with no type parameters has requirements that are settled
         # where it is written, so they are checked once and here rather than at
         # every call.
@@ -5610,6 +5792,8 @@ class Checker:
                 builder.unreachable()
         self._demanding = outer_demanding
         self._at_entry = outer_entry
+        self._answer_made_in = outer_made_in
+        self._made_from = outer_made_from
 
     def _lower_block(self, builder: IRBuilder, block: ast.Block, func: Function,
                      as_result: bool = True, wanted: Type | None = None,
@@ -5737,9 +5921,11 @@ class Checker:
                 agrees = (stmt.value is None) == (func.ty.ret is VOID)
                 if stmt.explicit and is_last and agrees:
                     self._diags.emit(D.LANG_FUNCDEF_RETURN_REDUNDANT, stmt.span)
-                if stmt.value is not None:
-                    self._leaves_no_arena_behind(stmt.value, 0, func, stmt.span)
                 self._lower_return(builder, stmt, func)
+                if stmt.value is not None:
+                    # After the value is lowered: what a call in it was made in is
+                    # known once the call has been.
+                    self._leaves_no_arena_behind(stmt.value, 0, func, stmt.span)
             case ast.VarDef():
                 self._lower_local(builder, stmt)
                 self._made_in(stmt.name, stmt.value, stmt.span)
@@ -5747,9 +5933,9 @@ class Checker:
                 # An assignment stands for the variable it changed, so it can be
                 # a function's result the way any other last statement can.
                 wants_value = is_last and func.ty.ret is not VOID
+                result = self._lower_assignment(builder, stmt, wants_value)
                 if wants_value:
                     self._leaves_no_arena_behind(stmt.value, 0, func, stmt.span)
-                result = self._lower_assignment(builder, stmt, wants_value)
                 if not stmt.more:
                     self._made_in(stmt.name, stmt.value, stmt.span,
                                   assigning=True)
@@ -5787,9 +5973,9 @@ class Checker:
                 # The value of the last statement is the function's result, which
                 # is why the canonical form of the language omits the keyword.
                 if is_last and func.ty.ret is not VOID:
-                    self._leaves_no_arena_behind(stmt.value, 0, func, stmt.span)
                     value = self._lower_into(builder, stmt.value, func.ty.ret,
                                              stmt.span)
+                    self._leaves_no_arena_behind(stmt.value, 0, func, stmt.span)
                     self._returning(builder, value, stmt.span)
                 elif isinstance(stmt.value, ast.If):
                     # An `if` written as a statement of its own produces no
@@ -6932,6 +7118,7 @@ class Checker:
             if answer is ERROR or any(one is ERROR for one in params):
                 return None
             attrs, linkage = self._function_attrs(written.attrs)
+            made_in, param_made_in = self._made_in_of(node, params, answer)
             func = Function(
                 name=node.name,
                 ty=self._module.types.func_type(params, answer,
@@ -6942,7 +7129,8 @@ class Checker:
                 source_path=written.path,
                 param_names=tuple(one.name for one in node.params),
                 defaults=self._defaults_of(node, params),
-                borrows_from=self._borrowed_from(node, answer))
+                borrows_from=self._borrowed_from(node, answer),
+                made_in=made_in, param_made_in=param_made_in)
             self._module.add_function(
                 func, key=self._key("".join((node.name, "\N{TOP LEFT CORNER}",
                                              ",".join(one.mangled() for one in key),
@@ -6981,8 +7169,15 @@ class Checker:
         outer = (self._scopes, self._addressed, self._answering, self._impure,
                  self._carried, self._loops, self._outside, self._initializing,
                  self._assigning, self._operand_of, self._handing_over,
-                 self._deferred, self._emptied)
+                 self._deferred, self._emptied, self._answer_made_in,
+                 self._out_of_arena, self._out_of_arenas, self._made_from)
         self._scopes, self._addressed = [], set()
+        # What was worked out about where an expression was made belongs to the
+        # body it was lowered in: this one lowers the same nodes for other types.
+        self._made_from = {}
+        # Where `in` said room comes from is the expression's around the call, and
+        # this body is a function of its own.
+        self._out_of_arena, self._out_of_arenas = None, frozenset()
         # What the body this call stands in put off is that body's: a `return` in
         # here leaves this function and runs only what this one put off.
         self._deferred, self._emptied = [], []
@@ -6999,6 +7194,7 @@ class Checker:
             for param, value in zip(node.params, arriving):
                 self._bind_local(param.name, value, param.span, param.mutable,
                                  is_parameter=True, builder=inner)
+            self._params_made_in(node, func)
             self._lower_block(inner, node.body, func)
             if not inner.is_terminated:
                 if func.ty.ret is VOID:
@@ -7013,7 +7209,8 @@ class Checker:
             (self._scopes, self._addressed, self._answering, self._impure,
              self._carried, self._loops, self._outside, self._initializing,
              self._assigning, self._operand_of, self._handing_over,
-             self._deferred, self._emptied) = outer
+             self._deferred, self._emptied, self._answer_made_in,
+             self._out_of_arena, self._out_of_arenas, self._made_from) = outer
 
     def _lower_generic(self, builder: IRBuilder, expr: ast.Call,
                        written: _Generic, expected: Type | None) -> Value:
@@ -7227,6 +7424,7 @@ class Checker:
         self._what_it_changes(func, expr.span)
         answer = builder.call(func, list(args), func.ty.ret, expr.span)
         answer = self._as_long_as_given(builder, func, args, answer, expr.span)
+        self._where_made(expr, func)
         if func.ty.ret is VOID and expected is not None:
             self._diags.emit(D.LANG_CALL_HAS_NO_VALUE, expr.span, name=func.name)
             return UndefConst(ERROR)
@@ -7596,8 +7794,11 @@ class Checker:
                     for one in (_ENVIRONMENT, *params)]
         outer = (self._scopes, self._addressed, self._answering, self._impure,
                  self._carried, self._loops, self._outside, self._deferred,
-                 self._emptied)
-        self._deferred, self._emptied = [], []
+                 self._emptied, self._out_of_arena, self._out_of_arenas,
+                 self._answer_made_in, self._made_from)
+        self._deferred, self._emptied, self._made_from = [], [], {}
+        self._out_of_arena, self._out_of_arenas = None, frozenset()
+        self._answer_made_in = None
         # A lambda's body binds its own names, so a reference out in the body
         # around it says nothing about a name of the same spelling in here.
         outer_borrows, self._borrows = self._borrows, []
@@ -7646,7 +7847,8 @@ class Checker:
         finally:
             (self._scopes, self._addressed, self._answering, self._impure,
              self._carried, self._loops, self._outside, self._deferred,
-             self._emptied) = outer
+             self._emptied, self._out_of_arena, self._out_of_arenas,
+             self._answer_made_in, self._made_from) = outer
             self._borrows = outer_borrows
         return func
 
@@ -9115,12 +9317,22 @@ class Checker:
                 # Every arm the compiler settled was false and there was no
                 # `else`: the `if` does nothing, which is a thing to do.
                 return UndefConst(VOID) if not produces else UndefConst(ERROR)
+            written = stmt
             if len(arms) == 1 and arms[0].condition is None:
                 found = self._lower_block(builder, arms[0].body, func,
                                           as_result=produces, wanted=wanted,
                                           produces=produces)
+                # What the `if` comes to is what the arm taken comes to: an arm
+                # not taken was never this type's, and what it names may be
+                # another instantiation's.
+                chosen = arms[0].body.stmts
+                self._made_from[id(written)] = (written, (
+                    self._arenas_in(chosen[-1].value)
+                    if chosen and isinstance(chosen[-1], ast.ExprStmt)
+                    else frozenset()))
                 return found if found is not None else UndefConst(VOID)
             stmt = replace(stmt, arms=arms)
+            self._made_from[id(written)] = (written, self._arenas_in(stmt))
         last = stmt.arms[-1]
         has_else = last.condition is None
         if produces and not has_else:
@@ -12442,6 +12654,9 @@ class Checker:
         if self._value_type_of(left) is ERROR \
                 or self._value_type_of(right) is ERROR:
             return UndefConst(ERROR)
+        # The bytes of both are copied, so the answer is made in its arena and
+        # nowhere else: what the two halves were made in stays theirs.
+        self._made_from[id(expr)] = (expr, self._out_of_arenas)
         pointer = parts_of(STR)[0]
         first = builder.extract(left, 0, pointer, expr.span)
         first_len = builder.extract(left, 1, U64, expr.span)
@@ -13863,6 +14078,7 @@ class Checker:
                 args, expr, expected)
         answer = builder.call(func, args, func.ty.ret, expr.span)
         answer = self._as_long_as_given(builder, func, args, answer, expr.span)
+        self._where_made(expr, func)
         if func.ty.ret is VOID and expected is not None:
             # Somewhere wants a value and there is none.  The two places a call
             # like this may stand are a statement of its own and after `return`
@@ -14644,6 +14860,16 @@ class Checker:
         assert isinstance(heap, GlobalVar)
         return builder.address(heap, span)
 
+    def _held_by_reference(self, written: ast.Expr) -> bool:
+        """Whether a name stands for a reference to an arena rather than for one."""
+        if not isinstance(written, ast.NameRef):
+            return False
+        local = self._find_local(written.name)
+        if local is None:
+            return False
+        held = self._held_by(local)
+        return isinstance(held, PtrType) and held.pointee is ARENA
+
     def _lower_allocated(self, builder: IRBuilder, expr: ast.Allocated,
                          expected: Type | None) -> Value:
         """Lower `EXPR in NAME`: which arena the expression takes its room from.
@@ -14663,20 +14889,32 @@ class Checker:
             # definition asked for one, and `in` is how a caller writes it.
             # The place and not the name: the definition asked for a reference to
             # an arena, which is how an arena is handed over at all.
-            handed = ast.AddressOf(span=expr.arena.span, operand=expr.arena,
-                                   mutable=True)
-            return self._operator_call(
+            # An arena already held by reference -- a parameter `a: &mut arena`
+            # -- is handed on as the reference it is.
+            handed: ast.Expr = expr.arena
+            if not self._held_by_reference(expr.arena):
+                handed = ast.AddressOf(span=expr.arena.span, operand=expr.arena,
+                                       mutable=True)
+            self._last_made_in = None
+            found = self._operator_call(
                 builder, _glyph_of(inside), (*_operands_of(inside), handed),
                 expr.span, expected)
+            if self._last_made_in is not None:
+                # The operator says its answer is made in the arena it is handed,
+                # which is the one `in` names and nothing its operands were made in.
+                self._made_from[id(expr)] = (expr, self._last_made_in)
+            return found
         if not _takes_room(inside):
             self._diags.emit(D.LANG_ALLOCATED_NOT_A_PLACE, expr.span,
                              found=_about_the_shape(inside))
             return UndefConst(ERROR)
-        outer, self._out_of_arena = self._out_of_arena, place
+        outer = (self._out_of_arena, self._out_of_arenas)
+        self._out_of_arena = place
+        self._out_of_arenas = self._arenas_in(expr.arena)
         try:
             return self._lower_expr(builder, inside, expected)
         finally:
-            self._out_of_arena = outer
+            self._out_of_arena, self._out_of_arenas = outer
 
     def _lower_address_of(self, builder: IRBuilder, expr: ast.Call,
                           expected: Type | None) -> Value:

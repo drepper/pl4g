@@ -4761,6 +4761,119 @@
       "option": null
     },
     {
+      "number": 4618,
+      "name": "LANG_MADE_IN_NOT_AN_ARENA",
+      "severity": "error",
+      "message": "'{name}' is not a parameter holding an arena, and only one can say where something was made",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the name after 'in'"
+        }
+      ],
+      "cause": "`→ T in a` and `s: T in a` name the arena parameter a value was made in, so what follows `in` is a parameter of type `&mut arena` or `&arena`.  A local arena is given back before the call ends and cannot be named, and `⎕heap` is what saying nothing already allows.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Arenas / Where an answer was made",
+        "requirement": "A signature saying where a value was made is kept by the body and by every call."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4619,
+      "name": "LANG_MADE_IN_ANSWER_ELSEWHERE",
+      "severity": "error",
+      "message": "what '{name}' answers may be made in {found}, and its signature says it is made in {said}",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the function"
+        },
+        {
+          "name": "found",
+          "type": "string",
+          "description": "where the answer may have been made"
+        },
+        {
+          "name": "said",
+          "type": "string",
+          "description": "what the signature names"
+        }
+      ],
+      "cause": "A signature saying `→ T in a` promises every caller that the answer was made in what `a` names, or in something lasting longer, so the caller may give back every other arena it handed over and keep the answer.  An answer made in another arena parameter breaks that promise, and so does one taken from a parameter that does not say where it was made: the body cannot know, so it cannot promise.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Arenas / Where an answer was made",
+        "requirement": "A signature saying where a value was made is kept by the body and by every call."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4620,
+      "name": "LANG_MADE_IN_ARGUMENT_ELSEWHERE",
+      "severity": "error",
+      "message": "what is handed to '{param}' may be made in '{found}', and '{func}' says it is made in what '{arena}' is given",
+      "args": [
+        {
+          "name": "param",
+          "type": "string",
+          "description": "the parameter"
+        },
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the arena it may have been made in"
+        },
+        {
+          "name": "func",
+          "type": "string",
+          "description": "the function"
+        },
+        {
+          "name": "arena",
+          "type": "string",
+          "description": "the arena parameter it names"
+        }
+      ],
+      "cause": "A parameter written `s: T in a` is one the body may answer under `→ T in a`, so what the caller hands over has to have been made in the arena the caller hands to `a`, or in something lasting longer -- `⎕heap`, a literal, a variable at the top level.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Arenas / Where an answer was made",
+        "requirement": "A signature saying where a value was made is kept by the body and by every call."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4621,
+      "name": "LANG_MADE_IN_POINTS_NOWHERE",
+      "severity": "warning",
+      "message": "a value of type '{type}' is made in no arena, so saying where it was made says nothing",
+      "args": [
+        {
+          "name": "type",
+          "type": "string",
+          "description": "the type"
+        }
+      ],
+      "cause": "Only a value that points into room -- a string, a list, a collection, an array of no stated length, a reference, or something holding one -- is made anywhere.  A number or a truth value is what it is, wherever it was computed.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Arenas / Where an answer was made",
+        "requirement": "A signature saying where a value was made is kept by the body and by every call."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 4511,
       "name": "LANG_PURE_FUNCTION_HERE",
       "severity": "note",

@@ -588,6 +588,14 @@ class Parser:
             # what comes back is a collection whose entries may be written.
             writable = self._accept(TokKind.KW_MUT) is not None
             ret_type = _writable(self._parse_type_ref(), writable)
+        # `in a, b` after the answer says which arenas it was made in: the `in` an
+        # expression is written with, said of what the call comes to.
+        made_in: tuple[tuple[str, Span], ...] = ()
+        if ret_type is not None and self._accept(TokKind.KW_IN) is not None:
+            names = [self._expect(TokKind.IDENT)]
+            while self._accept(TokKind.COMMA) is not None:
+                names.append(self._expect(TokKind.IDENT))
+            made_in = tuple((one.text, one.span) for one in names)
         # What the function requires of its types and demands of its values, in
         # the order written.  They stand between the header and the body because
         # that is what they are about: a caller reads them off the signature.
@@ -603,7 +611,7 @@ class Parser:
             return ast.FuncDef(span=start.to(end), name=name_token.text,
                                name_span=name_token.span, params=params,
                                ret_type=ret_type, body=None, clauses=clauses,
-                               attrs=attrs, doc=doc, doc_lines=doc_lines,
+                               made_in=made_in, attrs=attrs, doc=doc, doc_lines=doc_lines,
                                at_compile_time=at_compile_time,
                                is_macro=is_macro,
                                held=None if held is None else held.text,
@@ -618,7 +626,8 @@ class Parser:
         return ast.FuncDef(span=start.to(body.span), name=name_token.text,
                            name_span=name_token.span, params=params,
                            ret_type=ret_type, body=body, clauses=clauses,
-                           attrs=attrs, doc=doc, doc_lines=doc_lines,
+                           made_in=made_in, attrs=attrs, doc=doc,
+                           doc_lines=doc_lines,
                            at_compile_time=at_compile_time, is_macro=is_macro,
                            held=None if held is None else held.text,
                            held_span=None if held is None else held.span)
@@ -1428,11 +1437,17 @@ class Parser:
             # else later on.
             mutable = self._accept(TokKind.KW_MUT) is not None
             written = _writable(self._parse_type_ref(), mutable)
+            # `in a` after the type says which arena parameter what is handed over
+            # was made in.  One name: a comma here ends the parameter.
+            made_in: tuple[str, Span] | None = None
+            if self._accept(TokKind.KW_IN) is not None:
+                arena = self._expect(TokKind.IDENT)
+                made_in = (arena.text, arena.span)
             # `\N{LEFTWARDS ARROW} VALUE` says what a caller that says nothing about this
             # parameter gets.  The glyph is the one an assignment is written
             # with, which is what this is: the name is bound to that value.
             default = None
-            end = written.span
+            end = written.span if made_in is None else made_in[1]
             if self._accept(TokKind.ASSIGN) is not None:
                 default = self._parse_expression()
                 end = default.span
@@ -1444,7 +1459,7 @@ class Parser:
             params.append(ast.Param(
                 span=name_token.span.to(end), name=name_token.text,
                 type=written, mutable=mutable, default=default,
-                several=several))
+                several=several, made_in=made_in))
             if self._accept(TokKind.COMMA) is None:
                 break
         return tuple(params)

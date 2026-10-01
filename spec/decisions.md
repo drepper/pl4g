@@ -8764,6 +8764,37 @@ where allocating is no effect and borrows of an argument end with the call.
 Turned down: keeping allocation as an effect with `in` as the accounting, which made a pure
 function unable to hand back text without its caller lending an arena.
 
+## 2026-10-01T19:00+02:00 — language
+
+**`→ T in a`: a signature says which arena its answer was made in**
+
+    fn label(a: &mut arena, b: &mut arena, v: u16) → str in a:
+        let scratch: str = ⍕v in b
+        "#" ⧺ scratch in a
+
+Alternative 1 of [answer-arenas.md](answer-arenas.md), decided: the `in` an expression is
+written with, said of the answer; `→ T in a, b` for either of two; `s: T in a` for a
+parameter.  A caller takes the answer to be made in exactly what it handed the named
+parameters; the body is held to it (4619), a caller to a parameter's (4620); what follows
+`in` is an arena parameter (4618); said of a type that points nowhere it warns (4621).  A
+signature saying nothing keeps the cautious meaning, with no warning for now.
+
+Three things came with it.  **A string join is made in its arena and nowhere else**, its bytes
+being copied -- without that, `"#" ⧺ scratch in a` would carry `b`.  **What is worked out about
+where an expression was made is kept per body**, since a generic body is lowered once per
+type and an arm of `comptime if` not taken may name another instantiation's arena; and a
+`comptime if` comes to what its chosen arm does.  **`⍕v in b` with `b` already a `&mut arena`
+parameter** handed on a reference to the reference (4536); it hands on the reference now.
+And `std.text` of a `str` now copies it into `a`, its answer otherwise not being made where
+the signature says.
+
+Also fixed: where `in` named the arena was not reset for a generic instance or a lambda
+lowered in the middle of an expression, so a join with no `in` in such a body would have
+allocated through the caller's arena value.
+
+Compare: in the proposal -- Rust with `bumpalo`, Cyclone's regions, the ML Kit, D's
+`return scope`, Zig's and Odin's comments.
+
 Open questions
 --------------
 

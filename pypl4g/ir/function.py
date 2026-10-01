@@ -236,6 +236,13 @@ class Function:
     #: shorter of what they named, which is the only promise that holds
     #: whichever one the body picked.
     borrows_from: tuple[int, ...] = ()
+    #: Which arena parameters the answer was made in, where `→ T in a, b` said so,
+    #: and nothing where the signature said nothing -- in which case a caller takes
+    #: the answer to be made in any arena it handed over.
+    made_in: tuple[int, ...] | None = None
+    #: For each parameter, the arena parameter what it is handed was made in, where
+    #: `s: str in a` said so.
+    param_made_in: tuple[int | None, ...] = ()
 
     #: How this function hands back an answer that is more than one value.  A
     #: property of the function that answers, as the convention it is called by

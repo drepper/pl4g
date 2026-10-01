@@ -1,0 +1,55 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ `→ T in a` says the answer was made in the arena parameter `a` names, or in something that
+※ lasts at least as long -- `⎕heap`, a literal, a variable at the top level.  A caller then
+※ knows the answer lives as long as what it handed to `a`, and may give back every other arena
+※ it handed over and keep the answer.  Without it a caller can only take the answer to be made
+※ in any arena it handed over, which never lets freed memory be read but refuses programs like
+※ this one.
+※
+※ `→ T in a, b` says it may be either, so it lives as long as the shorter.  `s: T in a` says a
+※ parameter was made in what `a` names, which is what lets a body answer it under `in a`.
+※
+※ Compare: **Rust** with an arena crate, `fn label<'b>(a: &'b Bump) -> &'b str`, which is this
+※ with the lifetime written out; **Cyclone**'s regions, `char *ρ label(region_t<ρ> r)`.
+
+let std := ⎕import("std")
+
+※ Working space in one arena, the answer in the other.  The join copies the bytes, so the
+※ answer is made in `a` and nothing of `b` is in it.
+fn label(a: &mut arena, b: &mut arena, v: u16) → str in a:
+    let scratch: str = ⍕v in b
+    "#" ⧺ scratch in a
+
+※ A parameter made in the arena the answer is made in may be the answer.
+fn either(c: bool, a: &mut arena, s: str in a) → str in a:
+    if c: s else: "-" ⧺ s in a
+
+※ Either of two, so what the caller gets lasts as long as the shorter.
+fn one_of(c: bool, a: &mut arena, b: &mut arena) → str in a, b:
+    if c: "x" ⧺ "y" in a else: "z" ⧺ "w" in b
+
+@[startup]
+fn main() → u6:
+    let long: mut arena = ⎕arena
+    defer ⎕empty(long)
+    let short: mut arena = ⎕arena
+    let name: str = label(&mut long, &mut short, 7u16)
+    ⎕empty(short)
+    if name ≠ "#7":
+        return 1u6
+    ※ `std.text` says it too: its answer outlives an arena it was not made in.
+    let said: str = std.text(42u16, &mut long)
+    ⎕empty(short)
+    if said ≠ "42":
+        return 2u6
+    let held: str = "ab" ⧺ "c" in long
+    if either(false, &mut long, held) ≠ "-abc":
+        return 3u6
+    ※ Text from ⎕heap lasts longer than any arena, so it may stand for one made in `a`.
+    if either(true, &mut long, "lit") ≠ "lit":
+        return 4u6
+    let both: str = one_of(true, &mut long, &mut short)
+    if both ≠ "xy":
+        return 5u6
+    0u6
