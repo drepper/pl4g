@@ -188,7 +188,8 @@ GROUPS: tuple[Group, ...] = (
            "format-in-a-pool": "a formatted line built in a pool and the pool emptied",
            "defer-every-way-out": "statements put off and run at every way out of five blocks",
            "macro-statements-as-a-value": "statements a macro wrote, standing as three values",
-           "answer-made-in": "answers said to be made in one arena of two, and kept past the other"}),
+           "answer-made-in": "answers said to be made in one arena of two, and kept past the other",
+           "container-owns-its-elements": "text and lists of text copied into the allocator of what holds them"}),
     Group("Loops",
           "A branch backwards, which is what makes liveness a question about "
           "the graph rather than about the layout.  These move when the "
