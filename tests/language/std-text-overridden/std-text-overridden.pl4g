@@ -1,0 +1,33 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ How a program says what its own type's text is, with no overloading anywhere.
+※
+※ A glyph has one meaning per number of operands, so a program does not add a second
+※ definition of `⍕` -- it writes *the* one for this file, which wins over the imported one
+※ silently, tests for the types it cares about while the compiler runs, and hands everything
+※ else back to `std.text`.
+※
+※ That is why `std` exports the same body twice: once as the operator and once under a name,
+※ for the delegation to have something to call.
+
+let std := ⎕import("std")
+
+type Secret = held: u8
+
+@[impure]
+fn `⍕`(v: T') → str:
+    comptime if ⎕typeof(⌜v⌝) = ⌜Secret⌝:
+        "hidden"
+    else:
+        std.text(v)
+
+@[startup, impure]
+fn main() → u6:
+    if ⍕Secret(.held ← 3u8) ≠ "hidden":
+        return 1u6
+    ※ Everything else still reads as it would have, including a record of its own.
+    if ⍕1234u16 ≠ "1234":
+        return 2u6
+    if ⍕⁻7i8 ≠ "⁻7":
+        return 3u6
+    0u6

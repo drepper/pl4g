@@ -8271,6 +8271,62 @@ whether the same rule reaches an enumeration, a tuple, a unit or a built-in type
 being a question nobody has asked; and the purity of a `next` that advances through `&mut`,
 which that document discusses and which is unchanged by this.
 
+---
+
+## 2026-10-01T04:15+02:00 — language
+
+**`std.text` and `std.⍕`: a value's text, in one definition for every type**
+
+    std.text(1234u32)                ※ "1234"
+    ⍕⁻128i8                          ※ "⁻128"
+    ⍕Line(.from ← Point(.x ← 1u8, .y ← ⁻234i16), …)
+                                     ※ "Line(.from ← Point(.x ← 1, .y ← ⁻234), …)"
+
+The first layer of the formatting decision, now that everything it waited on exists: an
+exported operator crosses a module, a generic function may be exported, and a record can
+be reflected over.  Written in the language, in `modules/std.pl4g`, with no compiler
+change of its own.
+
+**One definition and not one per type**, which the language forces: a glyph has one
+meaning per number of operands, so the arms of a `comptime if` are what say a different
+thing for each type.  `str` answers itself, `bool` answers a word, a record is written by
+reflection, and everything else is a number.
+
+**Nothing in the number arm names a width.**  The type it is compiled for settles what the
+arithmetic is, so one body is every integer type the language has -- which is the thing a
+receiver form could not express and the reason the operators decision went the way it did.
+
+**And nothing is ever negated.**  The digit of a negative number is taken from a negative
+remainder and measured away from nought: `⁻128i8 % 10i8` is `⁻8i8` and `0i8 - ⁻8i8` is
+`8i8`, where negating the value itself would fault, the smallest value a signed type has
+having no positive.  Measured, and it is the arm a test covers first.
+
+**What comes out reads back as what went in.**  The raised minus is the one a negative
+literal is written with and a record is written in the notation a program writes one in, so
+`⍕` of a value is a program that means it.  That is a property worth having on purpose: it
+makes the output of a generated program readable by the next one.
+
+**A program says what its own type's text is by writing the definition for its own file**,
+which wins over the imported one silently, testing for the types it cares about and handing
+the rest back to `std.text`.  That is why the same body is exported twice, once as the
+operator and once under a name: the delegation has to have something to call.
+
+Compare: **Rust**'s `Display` and `Debug`, two traits because the human form and the
+round-tripping form differ -- here there is one and it round-trips, and a second could be a
+second name later; **Go**'s `String()`; **Zig**'s `std.fmt`, which is this exactly,
+`comptime` branching on the type with a struct printed from its fields; **Haskell**'s `Show`,
+whose law is that `read . show` is the identity, which is the property above written down as
+a law; **Python**'s `repr` against `str`, the same split Rust makes; **APL**, where `⍕` is a
+primitive and total.
+
+Left open: a `char`, there being no way to make a string of one -- a string is made by a
+literal or a join and nothing else, which is the invariant that makes a `str` well-formed by
+construction; a floating-point number, whose shortest text that reads back as the same
+number is an algorithm of its own and the one large piece left in formatting; and an
+enumeration, whose names do not reach run time.  A program asking for one of the three gets
+the error inside the definition with a note naming the call, which is the bargain generics
+already make.
+
 Open questions
 --------------
 

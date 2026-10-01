@@ -195,12 +195,15 @@ To Do List for the PL4g language
         overloading** -- one generic definition tests the type with `comptime if`, and a
         program overrides by writing the definition for its own file and handing the rest
         back to the module's under its name.
-    [ ] **`⍕` for the built-in types**, in `std`: the integers, `bool`, `char`, `str`.
-        Measured as writable in the language today, in one generic definition covering
-        `bool`, `str` and every integer width -- except that a top-level array of string
-        literals is not implemented (9902), so the digit table is filled per call until
-        that is.  What is missing for a type the list does not name is reflection over a
-        record's fields.
+    [x] **`⍕` for the built-in types**, in `std`.  Done: `std.text` and `std.⍕`, one body
+        under two names, covering `str`, `bool`, every integer type and -- by reflection
+        over its fields -- any record, recursively, in the notation a program writes one
+        in.  Nothing in the number arm names a width, and nothing is ever negated, so the
+        smallest value a signed type has comes out right.
+        Left over: a `char`, there being no way to make a string of one; a floating-point
+        number, whose shortest round-trip text is an algorithm of its own; and an
+        enumeration, whose names do not reach run time.  The digit table is a local filled
+        per call, a top-level array of string literals not being implemented (9902).
     [x] **reflection over a record.**  Done: `⎕isrecord(⌜T⌝)`, a truth the compiler
         settles and so the first predicate a compile-time condition admits;
         `⎕typename(⌜T⌝)`, the type written out; and `⎕fields(v)`, the fields as a tuple of

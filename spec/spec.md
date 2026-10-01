@@ -278,6 +278,41 @@ them needs.
 **Every write is one request and nothing is held back.**  A program that wants fewer, larger writes makes them itself; there is
 nothing between it and the device.
 
+**`text` and `⍕` are the text of a value**, and `std` has one definition of each for every type:
+
+```
+std.text(1234u32)                ※ "1234"
+⍕⁻128i8                          ※ "⁻128"
+⍕Point(.x ← 1u8, .y ← 2i16)      ※ "Point(.x ← 1, .y ← 2)"
+```
+
+`⍕` is APL's own glyph for this -- monadic format -- and the two are one body under two names: the operator for writing, and the
+name for a program that delegates to it.  **What comes out reads back as what went in.**  The raised minus is the one a negative
+literal is written with, and a record is written in the notation a program writes one in.
+
+**It is one definition and not one per type.**  The language has no overloading, so a glyph has one meaning per number of operands
+and a generic body with `comptime if` says a different thing for each type inside that one meaning.  **Nothing in the number arm
+names a width**: the type it is compiled for settles what the arithmetic is, so one body is every integer type there is.  And
+nothing is ever negated -- the remainder of a negative number is negative and its digit is what that is away from nought, which is
+the only way to write the smallest value a type has, there being no positive of it.
+
+**A record is written by reflection over its fields** (see [Asking what a type is](#asking-what-a-type-is)), so a type `std` was
+never told about is written without being told, and a field that is a record is written the same way.
+
+**A program says what its own type's text is by writing the definition for its file**, which wins over the imported one, and
+handing every other type back to `std.text`:
+
+```
+fn `⍕`(v: T') → str:
+    comptime if ⎕typeof(⌜v⌝) = ⌜Secret⌝:
+        "hidden"
+    else:
+        std.text(v)
+```
+
+What is not there yet: a `char`, there being no way to make a string of one; a floating-point number, whose shortest text that reads
+back as the same number is an algorithm of its own; and an enumeration, whose names do not reach run time.
+
 **`print` and `println` write every byte they were given.**
 
 ```

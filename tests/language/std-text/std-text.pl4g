@@ -1,0 +1,48 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ `std.text` and `std.⍕` are the text of a value, in one definition for every type.
+※
+※ One definition and not one per type: the language has no overloading, so a glyph has one
+※ meaning per number of operands, and a generic body with `comptime if` is what says a
+※ different thing for each type inside that one meaning.  An arm not taken is not checked,
+※ which is what lets the arms differ in shape.
+※
+※ **Nothing in the number arm names a width.**  The type it is compiled for settles what the
+※ arithmetic is, so one body is every integer type the language has.  And nothing is ever
+※ negated: the remainder of a negative number is negative and its digit is what that is away
+※ from nought, which is the only way to write the smallest value a type has -- there being no
+※ positive of it.
+※
+※ **What comes out reads back as what went in.**  The raised minus is the one a negative
+※ literal is written with, and a record is written in the notation a program writes one in.
+
+let std := ⎕import("std")
+
+type Point = x: u8 ; y: i16
+type Line = from: Point ; to: Point
+
+@[startup, impure]
+fn main() → u6:
+    if ⍕0u8 ≠ "0":
+        return 1u6
+    if ⍕1234u32 ≠ "1234":
+        return 2u6
+    ※ The smallest value a signed type has, which has no positive.
+    if ⍕⁻128i8 ≠ "⁻128":
+        return 3u6
+    if ⍕⁻1i64 ≠ "⁻1":
+        return 4u6
+    if ⍕true ≠ "true" ∨ ⍕false ≠ "false":
+        return 5u6
+    if ⍕"already text" ≠ "already text":
+        return 6u6
+    ※ A record this module was never told about, written by reflection over its fields.
+    let l: Line = Line(.from ← Point(.x ← 1u8, .y ← ⁻234i16),
+                       .to ← Point(.x ← 56u8, .y ← 7i16))
+    let want: str = "Line(.from ← Point(.x ← 1, .y ← ⁻234), .to ← Point(.x ← 56, .y ← 7))"
+    if ⍕l ≠ want:
+        return 7u6
+    ※ And the same thing under its name, which is what a program delegates to.
+    if std.text(42u16) ≠ "42":
+        return 8u6
+    0u6

@@ -280,6 +280,80 @@ fn Io.println(to: &mut Writer, what: u8⟦⟧) → u64 ¤size ? i32:
         else:
             Io.all_of(to, after + (went - text), total - went)
 
+※ -- the text of a value -----------------------------------------------------
+
+※※ The text of a value, in one definition for every type.
+※※
+※※ \details One definition and not one per type: the language has no overloading,
+※※ so a glyph has one meaning per number of operands -- and a generic body with
+※※ `comptime if` is what says a different thing for each type inside that one
+※※ meaning.  An arm not taken is not checked, which is what lets the arms be of
+※※ different shapes.
+※※
+※※ A record is written by reflection over its fields, so a type this module was
+※※ never told about is written without being told: `⎕isrecord` picks the arm,
+※※ `⎕typename` is the name in front, and `⎕fields` is the fields as a tuple of
+※※ pairs, which `comptime foreach` walks.  It recurses, so a field that is a
+※※ record is written the same way.
+※※
+※※ \param v what to write
+※※ \return what a program would have written to mean it
+@[export, impure]
+fn text(v: T') → str:
+    comptime if ⎕typeof(⌜v⌝) = ⌜str⌝:
+        v
+    comptime elif ⎕typeof(⌜v⌝) = ⌜bool⌝:
+        if v: "true" else: "false"
+    comptime elif ⎕isrecord(⌜T'⌝):
+        ※ The notation the language itself uses for a record, which is also what
+        ※ reads back as the same value.
+        let opened: str = ⎕typename(⌜T'⌝) ⧺ "("
+        let out: mut str = opened
+        comptime foreach f := ⎕fields(v):
+            if out ≠ opened:
+                out ← out ⧺ ", "
+            out ← out ⧺ "." ⧺ f⟦0⟧ ⧺ " ← " ⧺ text(f⟦1⟧)
+        out ⧺ ")"
+    else:
+        ※ A number, one place at a time and least significant first, so nothing
+        ※ has to know how many places there are.
+        ※
+        ※ Nothing here names a width: the type it is compiled for settles what the
+        ※ arithmetic is, so this one body is every integer type the language has.
+        ※ And nothing is ever negated -- the remainder of a negative number is
+        ※ negative and its digit is what that is away from nought, which is the one
+        ※ way to write the smallest value a type has, there being no positive of it.
+        let digits: str⟦10⟧ = ⟦"0", "1", "2", "3", "4", "5", "6", "7", "8", "9"⟧
+        let zero: T' = ⎕narrow(0u8, ⌜T'⌝) ?? v
+        let ten: T' = ⎕narrow(10u8, ⌜T'⌝) ?? v
+        let below: bool = v < zero
+        let out: mut str = ""
+        let rest: mut T' = v
+        while §places true:
+            let d: T' = rest % ten ?? zero
+            let away: T' = if below: zero - d else: d
+            let place: u64 = ⎕narrow(away, ⌜u64⌝) ?? 0u64
+            out ← digits⟦⎕unit(place, ⌜idx⌝)⟧ ⧺ out
+            rest ← rest ÷ ten ?? zero
+            if rest = zero:
+                break §places
+        ※ The raised minus the language writes a negative literal with, so that what
+        ※ comes out reads back as what went in.
+        if below: "⁻" ⧺ out else: out
+
+※※ The same, written where a reader expects an operator.
+※※
+※※ \details APL's own glyph for this: monadic `⍕` formats a value.  A program that
+※※ wants something else for a type of its own writes the definition for its own
+※※ file, which wins over this one, tests for the types it cares about, and hands
+※※ the rest back to `text` -- which is why both are here.
+※※
+※※ \param v what to write
+※※ \return what a program would have written to mean it
+@[export, impure]
+fn `⍕`(v: T') → str:
+    text(v)
+
 ※ -- describing a build --------------------------------------------------------
 
 ※※ What a build function is handed, and what it writes into to say what to build.
