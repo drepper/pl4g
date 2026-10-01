@@ -8483,6 +8483,78 @@ program may write two `Handle(.fd ← 1i32)` and get two, since what the attribu
 is copying one and not constructing one.  For `Init` it does not arise, the compiler being
 the only thing that makes one; for a program's own type it is a hole worth naming.
 
+---
+
+## 2026-10-01T08:30+02:00 — language
+
+**I/O is a capability a device carries, not an attribute a function claims**
+
+    ※ No attribute of any kind: the `&mut Writer` is the permission.
+    fn quiet(to: &mut std.Writer) → u64 ¤size ? i32:
+        std.Io.print(to, ⎕bytes(""))
+
+    @[startup]
+    fn main(init: mut std.Init) → u6:
+        ⎕drop(std.Io.println(&mut init.io.output, ⎕bytes("hello world")) ?? 0)
+        0u6
+
+Writing a line no longer makes a function `@[impure]`.  That attribute is left meaning
+what it should mean -- the function changes something *global* -- and a write to a device
+somebody handed over is not that: it is the one effect the program's own structure accounts
+for, which is what passing the device around is for.
+
+**Measured first, which is what settled the shape.**  Stripping `@[impure]` from every I/O
+function in `std` reported exactly one kind of thing, eight times: a call to an impure
+function, bottoming out at the three `@[external]` ring calls.  The module-global `ring` was
+never reported -- passing `&mut ring` is not itself an effect, only the call is.  So the
+whole of I/O's impurity was three external declarations, and splitting *those* off was the
+whole change.
+
+**Two attributes, each saying one thing.**  `@[device]` on a type: a value of it is
+permission to do input or output.  `@[io]` on a function: it does so.  A function may call
+an `@[io]` function if it holds a device -- a parameter whose type is marked, or holds one
+*anywhere* inside it, which is how `std.Init` carries three -- or if it says `@[io]`
+outright, which is what the drain before a program ends has to do, having nothing handed to
+it.
+
+**Reaching a device through a variable is not being handed one.**  `std.io` is ambient, so
+writing through it is an effect the signature does not account for and is declared.  That
+one word is the whole difference between the two ways of reaching the same three devices,
+and it is what makes the other way mean anything.  It would have been easy to let a `&mut`
+of a device grant the permission wherever it was taken; that would have made the capability
+decoration.
+
+**Doing it marks the function; holding the device does not.**  A function handed a
+`&mut Writer` that never touches it is one a caller may still drop.  So `@[io]` written is a
+declaration and the flag everything below the checker reads -- the one that says a call may
+not be dropped, moved or repeated -- is a fact about the body, written down after it has
+been checked.
+
+**And `format` stopped joining when it has nothing to join.**  A template with no holes was
+coming out as `"" ⧺ "hello world"`, so printing plain text asked its caller for permission
+to *allocate* in order to write something it already had.  It now answers the literal, and
+adjacent runs are merged, so `println⌜"text"⌝` needs no permission beyond the device.
+Printing a *number* still needs `@[impure]`, the digits being built by joining: memory is
+still global, and the pool allocator that would change that is the open entry.
+
+Compare: **Haskell**, where `IO` is a type constructor and the world is threaded invisibly
+-- the same idea with the token hidden rather than written as a parameter; **Clean**, whose
+unique `*World` is this exactly, a value passed along that cannot be copied; **Austral** and
+the capability languages, where a capability is an ordinary linear value and this is the
+whole design; **Rust**, where `&mut Stdout` is a capability in effect and nothing says that
+writing needs one; **Zig**, **Go** and **C**, where any function may write to any descriptor
+it can name.  What is left for `@[impure]` is what none of those has a word for: a change to
+something the program did not pass in.
+
+`std.Init` being `@[unique]` is what makes this a *linear* capability rather than a copyable
+one -- the permission is lent and never duplicated -- which is why the two decisions landed
+in that order.
+
+Left open: **memory is not a capability yet.**  Allocation still asks for `@[impure]`, so
+formatting a number does.  The pool allocator the formatting instruction asks for is where
+that gets decided, and the shape is already visible: an arena is a value, so a function
+handed one could allocate the way a function handed a device can write.
+
 Open questions
 --------------
 

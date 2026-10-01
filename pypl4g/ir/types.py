@@ -491,6 +491,11 @@ class ProductType(Type):
     #: representation: such a record travels and is laid out like any other, and
     #: what changes is which places it may be written into.
     unique: bool = False
+    #: Whether a value of this type is permission to do input or output, which
+    #: `@[device]` says.  A function handed one may do it, which is what makes
+    #: `@[impure]` mean "changes something global" rather than "touches a device
+    #: somebody handed over".
+    device: bool = False
 
     def __eq__(self, other: object) -> bool:
         """Nominal, so one of these is the same type only as itself.

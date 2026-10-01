@@ -236,6 +236,12 @@ To Do List for the PL4g language
         reaching an expression the way it reaches a collection literal, and an operation
         that gives a whole arena back at once, which the specification describes as a
         property and which nothing performs.
+    [ ] **memory as a capability**, which is the other half of what I/O became on
+        2026-10-01: a device carries permission to write it, and nothing carries permission
+        to allocate, so formatting a *number* still asks for `@[impure]` although printing
+        plain text no longer does.  An arena is already a value, so the shape is the one
+        `@[device]` has: a function handed one may allocate.  It wants deciding together
+        with the pool above, since both are about which arena a join comes out of.
     Left over and named in the proposal: float text, which is the large piece; whether an
     enumeration's names reach run time; the dyadic `⍕`, which is APL's
     format-by-specification and which nothing yet needs; and a chain of joins folded into

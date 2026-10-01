@@ -10,16 +10,16 @@
 ※ sometimes not one, is not something a program can see.
 
 ※※ A device that can be read.
-@[export]
+@[export, device]
 type Reader = fd : i32
 
 ※※ A device that can be written.
-@[export]
+@[export, device]
 type Writer = fd : i32
 
 ※※ A device that can be both, which is what a socket and a file opened either
 ※※ way are.
-@[export]
+@[export, device]
 type ReadWriter = fd : i32
 
 ※※ The devices a program starts with open.
@@ -130,13 +130,13 @@ let ring: mut Ring = Ring(
 let READING: i32 = 0i32
 let WRITING: i32 = 1i32
 
-@[external("pl4g_io_submit")]
+@[external("pl4g_io_submit"), io]
 fn io_submit(r: &mut Ring, which: i32, fd: i32, at: u64, len: u64) → i64
 
-@[external("pl4g_io_wait")]
+@[external("pl4g_io_wait"), io]
 fn io_wait(r: &mut Ring, slot: i64) → i64
 
-@[external("pl4g_io_drain")]
+@[external("pl4g_io_drain"), io]
 fn io_drain(r: &mut Ring)
 
 ※※ A request that has been started, and may not have been answered yet.
@@ -146,7 +146,7 @@ fn io_drain(r: &mut Ring)
 ※ and one that was done on the spot are the same handle read the same way.  A
 ※ program that never flushes one loses nothing -- the drain before it ends reads
 ※ every one that is left.
-@[export]
+@[export, device]
 type Pending = slot : i64
 
 ※※ What the kernel said, where it refused, as it says it: a positive number,
@@ -156,13 +156,13 @@ fn refusal(of: i64) → i32:
 
 ※※ Wait for everything outstanding.  A program does this before it ends, and
 ※※ the compiler arranges for it; nothing stops a program doing it itself.
-@[export, impure]
+@[export, io]
 fn drain():
     io_drain(&mut ring)
 
 ※※ And what makes every program do it.  A destructor runs when the startup
 ※※ function returns, which is what "exits normally" means.
-@[destructor, impure]
+@[destructor, io]
 fn finish():
     drain()
 
@@ -172,7 +172,7 @@ fn finish():
 ※ for it, which is `flush` or the drain a program does before it ends.  So
 ※ several writes may be in flight at once, and a program that wants to know one
 ※ of them happened says so.
-@[export, impure]
+@[export, io]
 fn write(to: &mut Writer, what: u8⟦⟧) → Pending ? i32:
     let at: u64 = if #what = 0: 0u64 else: ⎕address(&what⟦0⟧)
     let slot: i64 = io_submit(&mut ring, WRITING, to⌖.fd, at, ⎕drop(#what))
@@ -184,7 +184,7 @@ fn write(to: &mut Writer, what: u8⟦⟧) → Pending ? i32:
         Pending(.slot ← slot)
 
 ※※ Wait for a request and answer how many bytes went, or what the kernel said.
-@[export, impure]
+@[export, io]
 fn flush(of: Pending) → u64 ¤size ? i32:
     let got: i64 = io_wait(&mut ring, of.slot)
     if got < 0i64:
@@ -196,7 +196,7 @@ fn flush(of: Pending) → u64 ¤size ? i32:
 ※
 ※ `write` and `flush` in one, which is what a program that has nothing else to
 ※ do while it waits should say.
-@[export, impure]
+@[export, io]
 fn write_sync(to: &mut Writer, what: u8⟦⟧) → u64 ¤size ? i32:
     flush(write(to, what)?)
 
@@ -210,7 +210,7 @@ fn write_sync(to: &mut Writer, what: u8⟦⟧) → u64 ¤size ? i32:
 ※
 ※ There is no form of this that does not wait: what a read is for is the bytes,
 ※ and a program that has not waited does not have them.
-@[export, impure]
+@[export, io]
 fn read(from: &mut Reader, into: u8⟦⟧) → u64 ¤size ? i32:
     let at: u64 = if #into = 0: 0u64 else: ⎕address(&into⟦0⟧)
     let slot: i64 = io_submit(&mut ring, READING, from⌖.fd, at, ⎕drop(#into))
@@ -230,7 +230,7 @@ let WRITING_SEVERAL: i32 = 2i32
 ※ some of them, a signal part way -- and a program that printed a line wants the
 ※ line printed.  So this is the loop `write_sync` does not do, and it is here
 ※ rather than in each caller because both of the two want it.
-@[impure]
+@[io]
 fn Io.all_of(to: &mut Writer, at: u64, total: u64) → u64 ¤size ? i32:
     let done: mut u64 = 0u64
     while done < total:
@@ -252,7 +252,7 @@ fn Io.all_of(to: &mut Writer, at: u64, total: u64) → u64 ¤size ? i32:
 ※※ \param what the bytes to write
 ※※ \return how many bytes went, which is all of them
 ※※ \raises the number the kernel gave
-@[export, impure]
+@[export, io]
 fn Io.print(to: &mut Writer, what: u8⟦⟧) → u64 ¤size ? i32:
     let total: u64 = ⎕drop(#what)
     if total = 0u64:
@@ -272,7 +272,7 @@ fn Io.print(to: &mut Writer, what: u8⟦⟧) → u64 ¤size ? i32:
 ※※ \param what the bytes to write before the newline
 ※※ \return how many bytes went, which is `#what` and one more
 ※※ \raises the number the kernel gave
-@[export, impure]
+@[export, io]
 fn Io.println(to: &mut Writer, what: u8⟦⟧) → u64 ¤size ? i32:
     let newline: u8⟦⟧ = ⎕bytes("\n")
     let text: u64 = ⎕drop(#what)
@@ -375,6 +375,25 @@ fn `⍕`(v: T') → str:
 
 ※ -- formatting ---------------------------------------------------------------
 
+※※ The pieces so far with one more after them, joining no more than it has to.
+※
+※ What this is for is that a template with no holes should come out as the literal it
+※ is, and not as a join of that literal with nothing: a join takes room that outlives
+※ the call, so a `print` of plain text would otherwise ask its caller for permission to
+※ allocate in order to write something it already had.
+@[impure]
+comptime fn after(answer: syntax, started: bool, run: str,
+                  piece: syntax) → syntax:
+    if ¬started:
+        if #run = 0:
+            piece
+        else:
+            ⌜$(run) ⧺ $piece⌝
+    elif #run = 0:
+        ⌜$answer ⧺ $piece⌝
+    else:
+        ⌜$answer ⧺ $(run) ⧺ $piece⌝
+
 ※※ The piece of the program a template and its arguments come to.
 ※※
 ※※ \details A `comptime fn` and not a macro, because more than one macro wants it: a
@@ -390,6 +409,7 @@ comptime fn formatted(template: syntax, args: syntax) → syntax:
     let said: str = ⎕name(template)
     let holes: u64 = ⎕parts(args)
     let answer: mut syntax = ⌜""⌝
+    let started: mut bool = false
     let run: mut str = ""
     let taken: mut u64 = 0u64
     ※ What the last character left behind: nothing, an opening brace, or a closing one.
@@ -404,7 +424,8 @@ comptime fn formatted(template: syntax, args: syntax) → syntax:
                 if taken ≥ holes:
                     return ⎕refuse("the template has more holes than there are arguments")
                 let next: syntax = ⎕part(args, taken)
-                answer ← ⌜$answer ⧺ $(run) ⧺ ⍕$next⌝
+                answer ← after(answer, started, run, ⌜⍕$next⌝)
+                started ← true
                 run ← ""
                 taken ← taken + 1u64
             else:
@@ -425,7 +446,14 @@ comptime fn formatted(template: syntax, args: syntax) → syntax:
         return ⎕refuse("the template ends in the middle of a brace")
     if taken < holes:
         return ⎕refuse("the template has fewer holes than there are arguments")
-    ⌜$answer ⧺ $(run)⌝
+    if ¬started:
+        ※ No holes at all: the template is the literal, and a join of it with nothing
+        ※ would be a request for room that nothing needs.
+        ⌜$(run)⌝
+    elif #run = 0:
+        answer
+    else:
+        ⌜$answer ⧺ $(run)⌝
 
 ※※ The text a template and its arguments come to.
 ※※

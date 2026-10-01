@@ -4560,6 +4560,33 @@
       "option": null
     },
     {
+      "number": 4538,
+      "name": "LANG_IO_WITHOUT_A_DEVICE",
+      "severity": "error",
+      "message": "'{name}' reads or writes a device, and '{caller}' was handed none",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the function being called"
+        },
+        {
+          "name": "caller",
+          "type": "string",
+          "description": "the function that may not do it"
+        }
+      ],
+      "cause": "Permission to do input or output travels with a device: a function handed one -- a parameter whose type is marked `@[device]`, or holds one anywhere inside it -- may read or write it, and says nothing.  A function handed none says `@[io]`, which is what the drain a program does before it ends has to say, having nothing handed to it.\n\nWhat this is *not* is `@[impure]`.  That says the function changes something global, and a write to a device somebody handed over is not that: it is the one effect the program's own structure accounts for, which is what passing the device around is for.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition",
+        "requirement": "A function that does input or output holds a device or says '@[io]'."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 4511,
       "name": "LANG_PURE_FUNCTION_HERE",
       "severity": "note",
@@ -4576,6 +4603,28 @@
         "document": "spec/spec.md",
         "section": "The Language / File Structure / Function Definition",
         "requirement": "A function calling one marked '@[impure]' is itself marked '@[impure]'."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4560,
+      "name": "LANG_IO_FUNCTION_HERE",
+      "severity": "note",
+      "message": "'{name}' holds no device, and would have to say '@[io]'",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the function"
+        }
+      ],
+      "cause": "Said beside a call that reads or writes a device from a function that was handed none, and pointing at the function: what has to change is either the signature, so that a device is handed over, or one attribute saying the function does input or output without holding one.  `@[impure]` is not the answer and saying so is the point of a separate note.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition",
+        "requirement": "A function that does input or output holds a device or says '@[io]'."
       },
       "since": "0.1",
       "default_enabled": true,

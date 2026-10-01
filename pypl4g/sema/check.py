@@ -253,6 +253,9 @@ class _NamedType:
     #: Whether the definition said `@[unique]`: there is one of a value of this
     #: type and it is never copied.
     unique: bool = False
+    #: Whether it said `@[device]`: a value of it is permission to do input or
+    #: output.
+    device: bool = False
     ty: Type | None = None
     resolving: bool = False
     shell: Type | None = None
@@ -393,7 +396,8 @@ def _shell_for(defined: _NamedType) -> Type | None:
     if defined.node.kind is ast.TypeKind.SUM:
         return SumType((), name=defined.name, origin=defined.origin)
     return ProductType((), name=defined.name, origin=defined.origin,
-                       abi=defined.abi, unique=defined.unique)
+                       abi=defined.abi, unique=defined.unique,
+                       device=defined.device)
 
 
 def _filled_in(shell: Type | None, made: Type) -> Type:
@@ -629,6 +633,7 @@ class _Bundle:
 #: call goes through one place, so this is that place's list and not a guess.
 _PURITY: Final[frozenset[int]] = frozenset({
     D.LANG_PURE_CALLS_IMPURE, D.LANG_PURE_CHANGES_A_VARIABLE, D.LANG_PURE_TAKES_ROOM,
+    D.LANG_IO_WITHOUT_A_DEVICE,
     D.LANG_PURE_READS_THE_ROUNDING_MODE, D.LANG_PURE_WRITES_ELSEWHERE})
 
 #: The names of the functions a macro is given, and what each answers.  They are
@@ -1175,6 +1180,30 @@ def _held_by_the_startup(func: Function, index: int,
     if not isinstance(held, PtrType):
         return None
     return held.pointee if isinstance(held.pointee, ProductType) else None
+
+
+def _reaches_a_device(ty: Type, seen: frozenset[int] = frozenset()) -> bool:
+    """Whether a value of *ty* holds a device anywhere inside it.
+
+    Anywhere, because `Init` holds an `Io` which holds three of them: a program
+    handed the record the process started with has the devices in it, and saying so
+    is what lets the startup function write without declaring anything.  A reference
+    counts, a reference being how such a value is passed along at all.
+    """
+    if id(ty) in seen:
+        return False
+    deeper = seen | {id(ty)}
+    match ty:
+        case ProductType():
+            return ty.device or any(_reaches_a_device(one, deeper)
+                                    for _, one in ty.fields)
+        case PtrType():
+            return _reaches_a_device(ty.pointee, deeper)
+        case TupleType():
+            return any(_reaches_a_device(one, deeper) for one in ty.members)
+        case ArrayType():
+            return _reaches_a_device(ty.element, deeper)
+    return False
 
 
 def _is_build_object(ty: Type) -> bool:
@@ -1737,6 +1766,12 @@ class Checker:
         #: outlive the call.  Where it did not, the places that would make such
         #: a change report one instead.
         self._impure: bool = False
+        #: Whether what is being checked may touch a device.  A function handed one
+        #: may, which is what makes `@[impure]` mean "changes something global".
+        self._may_do_io: bool = False
+        #: Whether what is being checked has actually done it, which is what makes
+        #: the function one a caller may not drop.
+        self._did_io: bool = False
         #: Whether what is being lowered is what a loop comes to, which is
         #: what a `break` hands over and what an `else` arm gives.  A mismatch
         #: there is about the loop rather than about whatever the loop stands
@@ -3511,6 +3546,7 @@ class Checker:
         external: str | None = None
         can_ignore = False
         impure = False
+        io = False
         listable = False
         builtin = False
         linkage = self._linkage_of(bound)
@@ -3541,6 +3577,12 @@ class Checker:
                 case "listable":
                     listable = True
                 case "impure":
+                    impure = True
+                case "io":
+                    # What it changes is a device.  Impure to everything below the
+                    # checker -- nothing may drop or repeat a write -- and to a
+                    # *caller* it asks only for the permission a device carries.
+                    io = True
                     impure = True
                 case "can_ignore":
                     can_ignore = True
@@ -3580,6 +3622,7 @@ class Checker:
                 case _:
                     pass
         return FuncAttrs(special=special, priority=priority, inline=inline, abi=abi,
+                         io=io,
                          external=external, can_ignore=can_ignore, impure=impure,
                          listable=listable, builtin=builtin, extra=extra), linkage
 
@@ -3612,7 +3655,8 @@ class Checker:
         defined = _NamedType(name=node.name, node=node, origin=path,
                              exported=self._is_export(attrs),
                              abi=any(one.name == "abi" for one in attrs),
-                             unique=any(one.name == "unique" for one in attrs))
+                             unique=any(one.name == "unique" for one in attrs),
+                             device=any(one.name == "device" for one in attrs))
         self._top[node.name] = defined
         self._named_types.append(defined)
 
@@ -3806,7 +3850,8 @@ class Checker:
         if node.kind is ast.TypeKind.SUM:
             return SumType(made, name=defined.name, origin=defined.origin)
         return ProductType(made, name=defined.name, origin=defined.origin,
-                           abi=defined.abi, unique=defined.unique)
+                           abi=defined.abi, unique=defined.unique,
+                           device=defined.device)
 
     def _defined_type(self, ref: ast.TypeRef) -> Type | None:
         """The type a name stands for, where a definition gave it one."""
@@ -5050,6 +5095,14 @@ class Checker:
         builder = IRBuilder(self._module, func)
         outer_answer, self._answering = self._answering, func.ty.ret
         outer_impure, self._impure = self._impure, func.attrs.impure
+        # What a device travels with: a function handed one may read or write it
+        # without saying anything, which is the whole of the arrangement.  Written
+        # `@[io]` where there is no parameter to carry it -- the drain a program does
+        # before it ends has nothing handed to it and still does I/O.
+        outer_io, self._may_do_io = self._may_do_io, (
+            func.attrs.io or func.attrs.impure
+            or any(_reaches_a_device(one) for one in func.ty.params))
+        outer_did, self._did_io = self._did_io, False
         outer_demanding = self._demanding
         self._demanding = (node, func)
         self._push_scope()
@@ -5106,6 +5159,14 @@ class Checker:
         self._addressed = outer_addressed
         self._answering = outer_answer
         self._impure = outer_impure
+        self._may_do_io = outer_io
+        if self._did_io and not func.attrs.io:
+            # Written down now that the body has said so: everything below the
+            # checker reads one flag to know a call may not be dropped, and an
+            # effect the *signature* carried the permission for still has to reach
+            # that flag.
+            func.attrs = replace(func.attrs, io=True, impure=True)
+        self._did_io = outer_did
         if not builder.is_terminated:
             if func.ty.ret is VOID:
                 self._returning(builder, None, node.span)
@@ -6691,8 +6752,7 @@ class Checker:
                 return UndefConst(ERROR)
             made.append(given)
         args = made
-        if func.attrs.impure:
-            self._an_effect(D.LANG_PURE_CALLS_IMPURE, expr.span, name=func.name)
+        self._what_it_changes(func, expr.span)
         answer = builder.call(func, list(args), func.ty.ret, expr.span)
         answer = self._as_long_as_given(builder, func, args, answer, expr.span)
         if func.ty.ret is VOID and expected is not None:
@@ -13215,11 +13275,9 @@ class Checker:
             return UndefConst(ERROR)
         if any(value.ty is ERROR for value in args):
             return UndefConst(ERROR)
-        if func.attrs.impure:
-            # Asked before the walk and not after, a walked call being as much
-            # a call as any other: what the callee does, it does once for every
-            # element.
-            self._an_effect(D.LANG_PURE_CALLS_IMPURE, expr.span, name=func.name)
+        # Asked before the walk and not after, a walked call being as much a call as
+        # any other: what the callee does, it does once for every element.
+        self._what_it_changes(func, expr.span)
         if func.attrs.listable \
                 and any(value.ty is not ty for value, ty in zip(args, wanted)):
             return self._walked(
@@ -15159,6 +15217,28 @@ class Checker:
             return True
         return isinstance(expected, ResultType) and found is expected.ok
 
+    def _what_it_changes(self, func: Function, span: Span) -> None:
+        """Report a call whose callee changes more than this function may.
+
+        **Two permissions and not one.**  A callee that reads or writes a *device*
+        asks for the permission a device travels with, which a function holding one
+        has and which `@[io]` says outright.  A callee that changes anything else asks
+        for `@[impure]`, which is what that attribute is left meaning: something
+        global, rather than the device somebody handed over.
+        """
+        if not func.attrs.impure:
+            return
+        if func.attrs.io:
+            if not self._may_do_io:
+                self._an_effect(D.LANG_IO_WITHOUT_A_DEVICE, span, name=func.name)
+            # It did it, so this function does it: what a caller may not drop or
+            # repeat is a write, and whether this one writes is what its body just
+            # said rather than what its attributes did.  A function that holds a
+            # device and never touches it stays a function a caller may drop.
+            self._did_io = True
+            return
+        self._an_effect(D.LANG_PURE_CALLS_IMPURE, span, name=func.name)
+
     def _an_effect(self, which: int, span: Span, **args: object) -> None:
         """Report a change that outlives the call, where the function is pure.
 
@@ -15178,10 +15258,16 @@ class Checker:
         name = getattr(held, "name", "")
         told = self._diags.emit(which, span, caller=name, **args) \
             if name and which in (D.LANG_PURE_CALLS_IMPURE,
-                                  D.LANG_PURE_TAKES_ROOM) \
+                                  D.LANG_PURE_TAKES_ROOM,
+                                  D.LANG_IO_WITHOUT_A_DEVICE) \
             else self._diags.emit(which, span, **args)
         if held is not None and name:
-            told.note(D.LANG_PURE_FUNCTION_HERE,
+            # Which attribute would answer it, which is not the same question: a
+            # device asks for `@[io]` or for a parameter carrying one, and saying
+            # `@[impure]` there would be the wrong advice.
+            told.note(D.LANG_IO_FUNCTION_HERE
+                      if which == D.LANG_IO_WITHOUT_A_DEVICE
+                      else D.LANG_PURE_FUNCTION_HERE,
                       getattr(held, "name_span", span), name=name)
 
     def _made_here(self, place: Value) -> bool:

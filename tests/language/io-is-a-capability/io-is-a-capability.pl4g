@@ -1,0 +1,36 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ **Permission to do input or output travels with a device.**
+※
+※ A function handed one -- a parameter whose type is marked `@[device]`, or holds one
+※ anywhere inside it, which is how `std.Init` carries three -- may read or write it and says
+※ nothing.  `@[impure]` is left meaning what it should mean: the function changes something
+※ *global*.  A write to a device somebody handed over is not that; it is the one effect the
+※ program's own structure accounts for, which is what passing the device around is for.
+※
+※ That is the monad written as a parameter rather than as a type constructor: what sequences
+※ the effects is the value being passed along, and a function with no such value cannot
+※ perform them.  `std.Init` being `@[unique]` makes it a *linear* one -- the permission cannot
+※ be duplicated, only lent.
+※
+※ Nothing here writes any bytes: no bytes is no request, which answers nought.  What the test
+※ is about is which functions the compiler let say nothing.
+
+let std := ⎕import("std")
+
+※ No attribute of any kind: the `&mut Writer` is the permission.
+fn quiet(to: &mut std.Writer) → u64 ¤size ? i32:
+    std.Io.print(to, ⎕bytes(""))
+
+※ And one handed the whole record, which carries three of them: the permission is found
+※ by looking inside, which is what makes the startup function's signature enough.
+fn through(held: &mut std.Init) → u64 ¤size ? i32:
+    quiet(&mut held⌖.io.error)
+
+@[startup]
+fn main(init: mut std.Init) → u6:
+    if ⎕drop(quiet(&mut init.io.output) ?? 1) ≠ 0u64:
+        return 1u6
+    if ⎕drop(through(&mut init) ?? 1) ≠ 0u64:
+        return 2u6
+    0u6

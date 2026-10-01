@@ -1,0 +1,19 @@
+※ pl4g-test: compile=error diag=4538
+
+※ A function that was handed no device may not read or write one.
+※
+※ Reaching a device through a *variable* is not being handed one: `std.io` is ambient, so a
+※ function that writes through it is doing something its signature does not account for and
+※ says so with `@[io]`.  That one word is the whole difference between the two ways of
+※ reaching the same three devices, and it is what makes the other way mean anything.
+※
+※ What it is *not* is `@[impure]`, and the note says which attribute would answer it.
+
+※ expect-diag 4560 would have to say
+
+let std := ⎕import("std")
+
+@[startup]
+fn main() → u6:
+    ⎕drop(std.Io.println(&mut std.io.output, ⎕bytes("ambient")) ?? 0)
+    0u6

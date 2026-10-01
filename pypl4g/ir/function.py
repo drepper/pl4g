@@ -94,6 +94,12 @@ class FuncAttrs:
     #: may move, repeat or drop, and that is worth having by default rather than
     #: on request.
     impure: bool = False
+    #: Whether what it changes is a *device* -- input or output -- rather than
+    #: anything of the program's own.  Such a function is impure as far as
+    #: everything below the checker is concerned: nothing may drop, move or repeat
+    #: a write.  What this says is only what a *caller* needs in order to make the
+    #: call: the permission that a device travels with, rather than `@[impure]`.
+    io: bool = False
     #: Whether the function's answer is written into a place the caller hands
     #: it rather than answered in registers, which is what a function answering
     #: with more values than the style carries does after the pass that rewrites

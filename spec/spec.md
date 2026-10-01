@@ -2400,6 +2400,10 @@ refused as well (4579): a record's fields have names and a tuple is the shape fo
 **A field is read with the same mark**: `p.x`.  That mark does three things -- a module's name, an enumeration's value, and a
 record's field -- told apart by what stands on its left, which is what Go, Rust and Zig all do.
 
+**`@[device]` says a value of the type is permission to do input or output.**  A function handed one may read or write it without
+being marked `@[impure]`; see [the purity rules](#function-definition).  `std`'s three descriptors are marked so, and so is the
+handle a request in flight goes by.
+
 **`@[unique]` says there is one of a value and it is never copied** (4400):
 
 ```
@@ -4675,6 +4679,39 @@ the call or is there after it:
 | writing memory it did not make -- an array it was handed, a set or a dictionary | 4479 |
 | calling a function marked `@[impure]` | 4480 |
 | taking room that outlives the call -- joining two strings or two lists, making a collection | 4456 |
+
+**Reading or writing a device is not on that list.**  `@[impure]` means the function changes something *global*, and a write to a
+device somebody handed over is not that: it is the one effect the program's own structure accounts for.  **Permission to do it
+travels with the device** (4538):
+
+```
+※ No attribute of any kind: the `&mut Writer` is the permission.
+fn quiet(to: &mut std.Writer) → u64 ¤size ? i32:
+    std.Io.print(to, ⎕bytes(""))
+```
+
+**A parameter whose type is marked `@[device]` carries it**, and so does one that holds such a type *anywhere* inside it -- which is
+how the startup function's `std.Init` carries three and why writing through it needs nothing said.  **A function handed none says
+`@[io]`**, which is what the drain a program does before it ends has to say, having nothing handed to it.
+
+**Reaching a device through a variable is not being handed one.**  `std.io` is ambient, so a function that writes through it is
+doing something its signature does not account for and declares it.  That one word is the whole difference between the two ways of
+reaching the same three devices, and it is what makes the other way mean anything.
+
+**Doing it is what marks the function**, not holding the device: a function handed a `&mut Writer` that never touches it is a
+function a caller may still drop, and one that writes is one nothing may drop, move or repeat.  So the attribute a program writes is
+a declaration and the flag the rest of the compiler reads is a fact about the body.
+
+That makes **I/O a capability and not an attribute**, which is this language's answer to what a monad is for: what sequences the
+effects is the value being passed along, and a function with no such value cannot perform them.  `std.Init` is `@[unique]`, so the
+permission cannot be duplicated -- only lent -- which makes it a *linear* capability.
+
+Compare: **Haskell**, where `IO` is a type constructor and the world is threaded through it invisibly -- the same idea with the
+token hidden rather than written as a parameter; **Clean**, whose unique `*World` is this exactly, a value passed along that cannot
+be copied; **Austral** and the capability-based languages, where a capability is an ordinary linear value and this is the whole
+design; **Rust**, where `&mut Stdout` is a capability in effect and nothing in the type system says that writing needs one;
+**Zig** and **Go**, where any function may write to any descriptor it can name.  What is left for `@[impure]` here is what those
+languages have no word for at all: a change to something the program did not pass in.
 
 **Making a set or a dictionary is a change**, since it takes room out of an arena and the next call gets what this one left of
 it.  So a function that builds one is `@[impure]`, whatever it does with it afterwards.  The last row is named as the *operation*

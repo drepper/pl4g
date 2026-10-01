@@ -144,6 +144,16 @@ REGISTRY: Final[Mapping[str, AttrSpec]] = {
                  doc="the definition follows the system's ABI: a function is "
                      "called the way the named convention says, and a record is "
                      "laid out the way one compiled by something else is"),
+        AttrSpec("device", AttrTarget.TYPE, (),
+                 doc="a value of this type is permission to do input or "
+                     "output: a function handed one may do it without being "
+                     "marked '@[impure]', which is then what says a function "
+                     "changes something global rather than merely reading or "
+                     "writing a device somebody gave it"),
+        AttrSpec("io", AttrTarget.FUNCTION, (),
+                 doc="the function does input or output.  A caller needs the "
+                     "same permission, which it has by holding a device or by "
+                     "saying this; what it does not need is '@[impure]'"),
         AttrSpec("unique", AttrTarget.TYPE, (),
                  doc="there is one of a value of this type and it is never "
                      "copied: binding it to a second name, handing it to a call "
