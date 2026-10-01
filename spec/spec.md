@@ -4894,6 +4894,60 @@ program that changes how text is scanned cannot be parsed without being run, whi
 that holds it to the compiler; **`f!(…)`**, since `!` is not this language's to spare; and **`@[macro]` on a function**, since an
 attribute says what the compiler is told *about* a definition and which kind of definition it is, is not that.
 
+##### Named inside a type
+
+**A definition's name may be a path, and that is the whole of what attaches it to a type.**
+
+```
+type Walk = at : u8 ; last : u8
+
+@[impure]
+fn Walk.next(it: &mut Walk) → u8:
+    it⌖.at ← it⌖.at + 1u8
+    it⌖.at
+
+Walk.next(&mut w)
+```
+
+**The first parameter is written out.**  There is no receiver and no `self`: the language has nothing else implicit, and a
+receiver would be the first thing a reader has to know is there without seeing it.  So what the path gives is **namespacing**, and
+namespacing is what it is for -- two types may each have a `next`, neither reserves the word, and a free function may be called
+`next` as well.
+
+**It is called as a path**, which is the notation a module's member already uses.  `value.name(args)` is **not** part of this: what
+a path names is found by the path, and nothing is looked up on a value.  Nothing is implicit about which function a call names.
+
+**The first part must be a type this file defines** (4608).  A type's own file is where what belongs to it is written; a type from
+another module is deliberately out, since saying yes brings with it the question of who may add what to whose type.  That is a
+larger decision and this does not foreclose it.
+
+**What belongs to a type is reached through the type**, so a path from another module has three parts:
+
+```
+let m := ⎕import("bag")
+m.Bag.doubled(&b)
+```
+
+and that is the only three-part path the language has -- there is never a fourth, a type's own file being where its definitions
+are.  Only an exported one is a name an importing file can write (4609); one that is there and not exported is a different thing
+from one that does not exist, and is reported as it.
+
+**Nothing declares what a type has.**  Having a definition of that name is the whole of what it means to have one, which is what
+lets a protocol be a name: the `next` of a type `T` is the function `T.next`.
+
+**The symbol in the generated program is the path**, mangled as any other name is, so nothing about the back end changes.
+
+Compare: **Go**, whose methods are declared this way round -- a receiver before the name -- and whose interfaces are satisfied by
+having the methods; **Rust**'s `impl` blocks, which group what belongs to a type and introduce a receiver; **Zig**, where a
+function inside a struct is reached as `T.f(x)` and `x.f()` is sugar for exactly that; **Python**, where the receiver is written
+out as `self` and the sugar is the only way to call; **C++** and **Java**, where a method is part of the type's definition and the
+receiver is implicit.  This is Zig's answer without the sugar: the path is the call, and whether `value.name(args)` is ever added
+is a separate question that this leaves open.
+
+What this does **not** decide: whether a type may be extended from outside its file; whether the same rule applies to an
+enumeration, a tuple, a unit or a built-in type (`u8.next` is a question nobody has asked); and whether `value.name(args)` is
+sugar worth having.
+
 ##### Operators
 
 **An operator is a function whose name is the glyph**, written between grave accents:

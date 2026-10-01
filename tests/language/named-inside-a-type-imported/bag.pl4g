@@ -1,0 +1,19 @@
+※ pl4g-test: module
+※※ A type with code of its own, for a program beside this one.
+
+※※ What a bag holds.
+@[export]
+type Bag = held: u8
+
+※※ Twice what it holds, reached as `m.Bag.doubled`.
+※
+※ The only three-part path the language has: a module, a type it exports, and a
+※ name belonging to that type.  There is never a fourth -- a type's own file is
+※ where what belongs to it is written.
+@[export]
+fn Bag.doubled(b: &Bag) → u8:
+    b⌖.held + b⌖.held
+
+※※ And one that is not exported, which a file importing this cannot write at all.
+fn Bag.hidden(b: &Bag) → u8:
+    b⌖.held

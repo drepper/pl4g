@@ -1,0 +1,14 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=6 diag=none
+
+※ What belongs to a type another module defines, reached through the module and the type.
+※
+※ A name inside a type is reached only through the type, so only an exported one is a name
+※ this file can write: `Bag.hidden` is in that module and is not here, which is a different
+※ thing from there being no such name and is reported as it.
+
+let m := ⎕import("bag")
+
+@[startup]
+fn main() → u6:
+    let b: m.Bag = m.Bag(.held ← 3u8)
+    ⎕narrow(m.Bag.doubled(&b), ⌜u6⌝) ?? 1u6

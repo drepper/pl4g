@@ -236,6 +236,10 @@ To Do List for the PL4g language
     to attach anything to a type -- no method, no trait, no `impl` -- so this is the first decision about that and not a small one.
     [spec/attaching-code.md](spec/attaching-code.md) is a proposal for it: four designs, a recommendation of the smallest one that
     is not a dead end -- a function named `T.next`, called as the path the parser already reads -- and what each would cost.
+    **Design B is done**, on 2026-10-01: a definition's name may be a path, the first parameter is written out, and a path through
+    a module (`m.T.name`) reaches what an exported type exports.  So the thing `foreach` needs in order to know which function is a
+    type's `next` now exists -- what is left for the loop is the rule itself, which is the entry below about a cursor.  No
+    `value.name(args)` sugar, and a type from another module may not be written to.
     **Operators are done** and not by attaching them to a type: an operator is a free function whose name is the glyph,
     `fn `+`(a: Point, b: Point) → Point`, which needs nothing from this entry and is generic for nothing -- `fn `+`(a: T', b: T')` is
     one definition for every type whose body works, which a receiver form cannot express.  So a bundle requiring `T' ⊞ T' → T'`

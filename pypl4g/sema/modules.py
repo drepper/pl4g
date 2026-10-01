@@ -80,6 +80,11 @@ class LoadedModule:
     #: cannot be told apart from one that was never written, there being no name
     #: to ask about.
     operators: dict[tuple[str, int], object] = field(default_factory=dict)
+    #: What this file exports from inside a type, by the type's name and the name
+    #: after the dot.  Reached as `m.T.name`, which is the only three-part path the
+    #: language has: a type's own file is where what belongs to it is written, so
+    #: there is never a fourth part to read.
+    members: dict[tuple[str, str], object] = field(default_factory=dict)
     #: Every name this module could be known by, one per route that reached it.
     candidates: set[str] = field(default_factory=set)
     #: The name finally chosen, once every route is known.

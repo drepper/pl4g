@@ -214,7 +214,7 @@ let WRITING_SEVERAL: i32 = 2i32
 ※ line printed.  So this is the loop `write_sync` does not do, and it is here
 ※ rather than in each caller because both of the two want it.
 @[impure]
-fn all_of(to: &mut Writer, at: u64, total: u64) → u64 ¤size ? i32:
+fn Io.all_of(to: &mut Writer, at: u64, total: u64) → u64 ¤size ? i32:
     let done: mut u64 = 0u64
     while done < total:
         let slot: i64 = io_submit(&mut ring, WRITING, to⌖.fd, at + done,
@@ -236,12 +236,12 @@ fn all_of(to: &mut Writer, at: u64, total: u64) → u64 ¤size ? i32:
 ※※ \return how many bytes went, which is all of them
 ※※ \raises the number the kernel gave
 @[export, impure]
-fn print(to: &mut Writer, what: u8⟦⟧) → u64 ¤size ? i32:
+fn Io.print(to: &mut Writer, what: u8⟦⟧) → u64 ¤size ? i32:
     let total: u64 = ⎕drop(#what)
     if total = 0u64:
         ⎕unit(0u64, ⌜size⌝)
     else:
-        all_of(to, ⎕address(&what⟦0⟧), total)
+        Io.all_of(to, ⎕address(&what⟦0⟧), total)
 
 ※※ The same, with a newline after it, written as one request.
 ※※
@@ -256,12 +256,12 @@ fn print(to: &mut Writer, what: u8⟦⟧) → u64 ¤size ? i32:
 ※※ \return how many bytes went, which is `#what` and one more
 ※※ \raises the number the kernel gave
 @[export, impure]
-fn println(to: &mut Writer, what: u8⟦⟧) → u64 ¤size ? i32:
+fn Io.println(to: &mut Writer, what: u8⟦⟧) → u64 ¤size ? i32:
     let newline: u8⟦⟧ = ⎕bytes("\n")
     let text: u64 = ⎕drop(#what)
     let after: u64 = ⎕address(&newline⟦0⟧)
     if text = 0u64:
-        all_of(to, after, 1u64)
+        Io.all_of(to, after, 1u64)
     else:
         let before: u64 = ⎕address(&what⟦0⟧)
         ※ The kernel's `iovec` twice over: where the bytes are and how many.
@@ -275,10 +275,10 @@ fn println(to: &mut Writer, what: u8⟦⟧) → u64 ¤size ? i32:
         if went = total:
             ⎕unit(total, ⌜size⌝)
         elif went < text:
-            ⎕drop(all_of(to, before + went, text - went)?)
-            all_of(to, after, 1u64)
+            ⎕drop(Io.all_of(to, before + went, text - went)?)
+            Io.all_of(to, after, 1u64)
         else:
-            all_of(to, after + (went - text), total - went)
+            Io.all_of(to, after + (went - text), total - went)
 
 ※ -- describing a build --------------------------------------------------------
 

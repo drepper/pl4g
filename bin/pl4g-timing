@@ -176,7 +176,8 @@ GROUPS: tuple[Group, ...] = (
            "macro-comptime-fn": "a function the macros call, which recurses over a tree",
            "generic-imported": "a generic function from a module, as an operator and by name",
            "reflect-record": "a nested record's text, written by reflection over its fields",
-           "print-and-println": "a line written as one request, and bytes written in full"}),
+           "print-and-println": "a line written as one request, and bytes written in full",
+           "named-inside-a-type": "three definitions of one name, two of them a type's"}),
     Group("Loops",
           "A branch backwards, which is what makes liveness a question about "
           "the graph rather than about the layout.  These move when the "

@@ -5293,6 +5293,60 @@
       "option": null
     },
     {
+      "number": 4608,
+      "name": "LANG_MEMBER_NOT_A_TYPE_HERE",
+      "severity": "error",
+      "message": "'{name}' is {found}, so nothing can be named inside it",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the first part of the name"
+        },
+        {
+          "name": "found",
+          "type": "string",
+          "description": "what it turned out to be"
+        }
+      ],
+      "cause": "A definition whose name is a path belongs to the type the first part names, and a type's own file is where what belongs to it is written.  A type from another module is deliberately not allowed: saying yes brings with it the question of who may add what to whose type, which is a larger decision and is not foreclosed by this.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition / Named inside a type",
+        "requirement": "A definition's name may be a path whose first part is a type this file defines."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4609,
+      "name": "LANG_MEMBER_UNKNOWN",
+      "severity": "error",
+      "message": "nothing named '{name}' belongs to '{held}'",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "what was asked for"
+        },
+        {
+          "name": "held",
+          "type": "string",
+          "description": "the type it was asked of"
+        }
+      ],
+      "cause": "What belongs to a type is what is written as `T.name` in the file that defines `T`.  Nothing declares what a type has, so having a definition of that name is the whole of what it means to have one -- and a name reached through a type from another module has to be exported as well.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition / Named inside a type",
+        "requirement": "A definition's name may be a path whose first part is a type this file defines."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 4516,
       "name": "LANG_ENUMERATE_TAKES_ONE_OR_TWO",
       "severity": "error",

@@ -1,7 +1,12 @@
 ※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
 
-※ `std.print` and `std.println` write bytes to a device through the ring, wait for the
-※ write to finish, and answer how many bytes went.
+※ `std.Io.print` and `std.Io.println` write bytes to a device through the ring, wait for
+※ the write to finish, and answer how many bytes went.
+※
+※ They are named inside `Io`, which is what a definition's name being a path means: the
+※ type is the namespace and the first parameter is still written out, there being no
+※ receiver anywhere in this language.  So `Io` does not reserve `print` for anything else
+※ and nothing else reserves it for `Io`.
 ※
 ※ **What they add over `write_sync` is that they do not stop short.**  The kernel may take
 ※ fewer bytes than it was offered -- a pipe with room for some of them, a signal part way
@@ -27,14 +32,14 @@ fn main(init: &std.Init) → u6:
     let out: mut std.Writer = std.Writer(.fd ← ends⟦1⟧)
     let back: mut std.Reader = std.Reader(.fd ← ends⟦0⟧)
 
-    let wrote: u64 ¤size = std.println(&mut out, ⎕bytes("ab")) ?? 0
+    let wrote: u64 ¤size = std.Io.println(&mut out, ⎕bytes("ab")) ?? 0
     if ⎕drop(wrote) ≠ 3u64:
         return 2u6
-    let again: u64 ¤size = std.print(&mut out, ⎕bytes("cd")) ?? 0
+    let again: u64 ¤size = std.Io.print(&mut out, ⎕bytes("cd")) ?? 0
     if ⎕drop(again) ≠ 2u64:
         return 3u6
     ※ A newline on its own, which is the one place `println` writes a single run.
-    if ⎕drop(std.println(&mut out, ⎕bytes("")) ?? 0) ≠ 1u64:
+    if ⎕drop(std.Io.println(&mut out, ⎕bytes("")) ?? 0) ≠ 1u64:
         return 4u6
 
     let seen: mut u8⟦8⟧ = ⟦0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8⟧

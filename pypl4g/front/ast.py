@@ -1259,6 +1259,14 @@ class FuncDef(Node):
     #: rewrites, so this says which of the two a definition is and `at_compile_time`
     #: says when it exists -- which is the same answer for both.
     is_macro: bool = False
+    #: The type the definition is named inside, where its name is a path: `held`
+    #: for `fn Walk.next`, and nothing for an ordinary definition.  The name
+    #: itself is the part after the dot, so everything that reads a name reads the
+    #: same thing whichever this is.
+    held: str | None = None
+    #: And where that part of the name is, for a message about the type rather
+    #: than about the function.
+    held_span: Span | None = None
     attrs: tuple[Attribute, ...] = ()
     doc: str | None = None
     #: Where each line of that comment is, so that something reading the

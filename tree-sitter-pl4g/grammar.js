@@ -177,7 +177,13 @@ module.exports = grammar({
       // not in the body, a function being either kind as a whole.
       optional('comptime'),
       'fn',
-      field('name', choice($.identifier, $.operator_name)),
+      // A name of two parts says the definition belongs to the type the first
+      // part names, and that is the whole of what attaches it.  The path is the
+      // one already read for a module's member, written where a name goes -- so
+      // a name that was always a path is being allowed to be one, and nothing
+      // new is spelled.  The first parameter is still written out: there is no
+      // receiver anywhere in this language.
+      field('name', choice($.member_name, $.identifier, $.operator_name)),
       field('parameters', $.parameter_list),
       optional(seq($._return_arrow, optional($.mutable),
                    field('return_type', $.type))),
@@ -1232,6 +1238,9 @@ module.exports = grammar({
     // modifier symbol, two brackets, two quotation marks and a raised letter.
     // The pattern is the compiler's rule written as a character class; a test
     // checks the two against each other.
+    member_name: $ => seq(field('held', $.identifier), '.',
+                          field('name', $.identifier)),
+
     operator_name: _ => token(seq(
       '`',
       choice(

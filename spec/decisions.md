@@ -8211,6 +8211,66 @@ way to make room appear in a pipe from one thread; the other operations the ring
 carry, which wait for something in the language to reach them, there being no way to
 open anything yet; and `print` taking text rather than bytes, which waits for `⍕`.
 
+---
+
+## 2026-10-01T03:30+02:00 — language
+
+**Attaching code to a type: design B, a definition named inside it**
+
+    type Walk = at : u8 ; last : u8
+
+    @[impure]
+    fn Walk.next(it: &mut Walk) → u8:
+        …
+
+    Walk.next(&mut w)
+    m.Bag.doubled(&b)              ※ and through the module that defines the type
+
+Design B of [attaching-code.md](attaching-code.md), which that document recommended and
+which the operators decision went around rather than through.  A definition's name may be
+a path, and the path is the whole of what attaches it.
+
+**The first parameter is written out.**  No receiver, no `self`.  The language has nothing
+else implicit and a receiver would be the first thing a reader has to know is there without
+seeing it -- so what the path gives is namespacing, which is what it was wanted for: two
+types may each have a `next`, neither reserves the word, and a free function may be called
+`next` beside them.  `value.name(args)` is not part of this and is not foreclosed by it.
+
+**Two things the document left out had to come in**, because they are what the second half
+of the request needed: **a type from another module**, reached as `m.T.name`, and therefore
+**a three-part path**.  That is the only three-part path the language has and there is never
+a fourth, a type's own file being where its definitions are.  What did *not* come in is
+writing `T.name` for a type this file did not define (4608): a type's own file is where what
+belongs to it is written, which is the smaller rule and the one that can be relaxed.  Saying
+yes brings the question of who may add what to whose type, and nobody has asked it.
+
+**A name inside a type is reached only through the type**, so only an exported one is a name
+an importing file can write (4609) -- and one that is there but not exported is a different
+thing from one that does not exist, reported as such.  The symbol in the image is the path,
+mangled as any other name, so the back end knows nothing about this.
+
+**`std.print` and `std.println` moved into `Io`** and are now `std.Io.print` and
+`std.Io.println`, with `Io.all_of` beside them unexported.  The first parameter is still the
+`Writer`, so the type is a namespace here and not a receiver -- which is exactly what design
+B says a path is, and the reason moving them cost nothing but the name.
+
+Compare: **Go**, whose methods are declared the other way round -- a receiver before the
+name -- and whose interfaces are satisfied by having them; **Zig**, where a function in a
+struct is reached as `T.f(x)` and `x.f()` is sugar for that, which is this without the
+sugar; **Rust**'s `impl`, which groups and introduces a receiver; **Python**, whose receiver
+is written out and whose sugar is the only way to call; **C++** and **Java**, where a method
+is part of the type and the receiver is implicit.
+
+Turned down, as that document argued: **A**, by name and first parameter, which needs
+overloading; **C**, a field holding a function, which costs a word in every value and still
+cannot *find* a type's `next`; **D**, a trait with bounds, which is a change to how generics
+are checked rather than a way to attach code.
+
+Left open: `value.name(args)` sugar; whether a type may be extended from outside its file;
+whether the same rule reaches an enumeration, a tuple, a unit or a built-in type, `u8.next`
+being a question nobody has asked; and the purity of a `next` that advances through `&mut`,
+which that document discusses and which is unchanged by this.
+
 Open questions
 --------------
 

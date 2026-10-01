@@ -550,15 +550,25 @@ class Parser:
         # what one means for its own types: the glyph is the name.
         name_token = self._advance() if self._check(TokKind.OPNAME) \
             else self._expect(TokKind.IDENT)
+        # A name of two parts says the definition belongs to the type the first
+        # part names, which is the whole of what attaches it.  The path is the
+        # one the language already reads for a module's member, written where a
+        # definition's name goes -- so nothing new is being spelled, only a name
+        # that was always a path being allowed to be one.
+        held: Token | None = None
+        if name_token.kind is TokKind.IDENT and self._check(TokKind.DOT):
+            self._advance()
+            held, name_token = name_token, self._expect(TokKind.IDENT)
         return self._parse_function_body(start, name_token, attrs, doc, doc_lines,
-                                        at_compile_time=at_compile_time)
+                                        at_compile_time=at_compile_time, held=held)
 
     def _parse_function_body(self, start: Span, name_token: Token,
                              attrs: tuple[ast.Attribute, ...],
                              doc: str | None,
                              doc_lines: tuple[Span, ...] = (),
                              at_compile_time: bool = False,
-                             is_macro: bool = False) -> ast.FuncDef:
+                             is_macro: bool = False,
+                             held: Token | None = None) -> ast.FuncDef:
         """Parse the parameters, the answer, the clauses and the body.
 
         Apart from the keyword and the name, which a macro written as a function
@@ -595,7 +605,9 @@ class Parser:
                                ret_type=ret_type, body=None, clauses=clauses,
                                attrs=attrs, doc=doc, doc_lines=doc_lines,
                                at_compile_time=at_compile_time,
-                               is_macro=is_macro)
+                               is_macro=is_macro,
+                               held=None if held is None else held.text,
+                               held_span=None if held is None else held.span)
         # A body that runs while the compiler does may quote, which is what the marks
         # mean there where they hold no type.
         outer, self._quoting = self._quoting, at_compile_time
@@ -607,7 +619,9 @@ class Parser:
                            name_span=name_token.span, params=params,
                            ret_type=ret_type, body=body, clauses=clauses,
                            attrs=attrs, doc=doc, doc_lines=doc_lines,
-                           at_compile_time=at_compile_time, is_macro=is_macro)
+                           at_compile_time=at_compile_time, is_macro=is_macro,
+                           held=None if held is None else held.text,
+                           held_span=None if held is None else held.span)
 
     #: What may stand alone between the lifting marks as the operator itself: every
     #: operator the language has, which is what `⎕head` answers for an expression

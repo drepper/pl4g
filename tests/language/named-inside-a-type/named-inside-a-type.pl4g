@@ -1,0 +1,36 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=6 diag=none
+
+※ A definition's name may be a path, and that is the whole of what attaches it to a type.
+※
+※ **The first parameter is written out.**  There is no receiver and no `self`: the language
+※ has nothing else implicit, and a receiver would be the first thing a reader has to know
+※ is there without seeing it.  So this is namespacing, and namespacing is what it is for --
+※ two types may each have a `next` and neither reserves the word.
+※
+※ It is called as a path, which is the notation a module's member already uses.  There is no
+※ `value.name(args)`: what a path names is found by the path and nothing is looked up on a
+※ value.
+
+type Walk = at: u8 ; last: u8
+type Count = seen: u8
+
+@[impure]
+fn Walk.next(it: &mut Walk) → u8:
+    it⌖.at ← it⌖.at + 1u8
+    it⌖.at
+
+※ The same name, belonging to another type, which is the point.
+@[impure]
+fn Count.next(c: &mut Count) → u8:
+    c⌖.seen ← c⌖.seen + 2u8
+    c⌖.seen
+
+※ And a name that is not a path, beside them, which neither reserves.
+fn next() → u8:
+    0u8
+
+@[startup, impure]
+fn main() → u6:
+    let w: mut Walk = Walk(.at ← 3u8, .last ← 9u8)
+    let c: mut Count = Count(.seen ← 0u8)
+    ⎕narrow(Walk.next(&mut w) + Count.next(&mut c) + next(), ⌜u6⌝) ?? 1u6

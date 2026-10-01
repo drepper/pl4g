@@ -1,0 +1,17 @@
+※ pl4g-test: compile=error diag=4608
+
+※ A definition whose name is a path belongs to the type the first part names, and a type's
+※ own file is where what belongs to it is written.
+※
+※ A type from another module is deliberately not allowed, and neither is a name that is no
+※ type at all: saying yes to the first brings with it the question of who may add what to
+※ whose type, which is a larger decision and is not foreclosed by this one.
+
+let count: u8 = 3u8
+
+fn count.doubled(n: u8) → u8:
+    n + n
+
+@[startup]
+fn main() → u6:
+    ⎕narrow(count, ⌜u6⌝) ?? 1u6

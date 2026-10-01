@@ -1,6 +1,13 @@
 Attaching Code to Objects
 =========================
 
+**Design B is decided and implemented**, on 2026-10-01; see
+[decisions.md](decisions.md) for the entry and [the specification](spec.md) for what the
+language now says.  Two things B deliberately left out came in with it, because moving
+`std.print` into `std.Io` needed them: a type from another module, and therefore a
+three-part path.  What stayed out is writing `T.name` for a type the file does not define.
+The Operators section below is already marked as settled another way.
+
 A proposal, not a decision.  It is now the second half of a pair:
 [constraining generics](constraining-generics.md) comes first, and what that one
 calls a bound over a function's name is what this one calls a protocol -- so read
@@ -353,7 +360,10 @@ What B decides, concretely:
 
 1. A definition's name may be a path of two parts, `T.name`, where `T` is a type
    defined in the same file.  Not a type from another module, not three parts:
-   both are questions nobody has asked.  The second part may be an operator
+   both are questions nobody has asked.  *Both were asked within the day, by
+   `std.print` wanting to live in `std.Io`: a path through a module reads
+   `m.T.name` and is the only three-part path the language has.  A definition for
+   a type the file does not define stayed out.*  The second part may be an operator
    instead of a name, which the section on operators below is about.
 2. The first parameter is written out.  No implicit receiver, no `self`.  The
    reason is that the language has nothing else implicit, and a receiver would be

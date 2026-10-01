@@ -687,6 +687,18 @@ TABLE_PAIR: Final[str] = "".join((SET_OPEN_GLYPH, SET_CLOSE_GLYPH))
 DUMMY_PREFIX: Final[str] = LIFT_OPEN_GLYPH
 
 
+def _written_name(node: ast.FuncDef) -> str:
+    """The whole of a definition's name, which is a path where it has one.
+
+    `Walk.next` rather than `next`, so that the name a reader wrote is the name a
+    message gives back, the name the symbol is made from, and the name two
+    definitions have to agree on to be a repeat of each other.  Two types may each
+    have a `next` and neither reserves the word.
+    """
+    return node.name if node.held is None \
+        else ".".join((node.held, node.name))
+
+
 def _declared_as(node: ast.FuncDef) -> str:
     """The name a definition is written down under, for reporting a second one.
 
@@ -697,8 +709,8 @@ def _declared_as(node: ast.FuncDef) -> str:
     a name goes except between the accents.
     """
     if not is_operator_name(node.name):
-        return node.name
-    return "".join((node.name, "/", str(len(node.params))))
+        return _written_name(node)
+    return "".join((_written_name(node), "/", str(len(node.params))))
 
 
 def _holds_a_piece(ty: Type, seen: frozenset[int] = frozenset()) -> bool:
@@ -1599,6 +1611,11 @@ class Checker:
         #: Where each of them came from, for the one message that has to name two
         #: places: a module's name, or nothing for one written in this file.
         self._operators_from: dict[tuple[str, int], str] = {}
+        #: What is named inside a type, by the type's name and the name after the
+        #: dot.  Beside the top-level names rather than among them, since a name
+        #: inside a type is reached only through the type: two types may each have
+        #: a `next` and neither reserves the word.
+        self._members: dict[tuple[str, str], object] = {}
         #: Whether a `post` clause is being lowered just now, which is the one
         #: place `⎕answer` and `⎕entry` mean anything.
         self._after: bool = False
@@ -2076,6 +2093,12 @@ class Checker:
             loaded.operators = {key: what
                                 for key, what in inner._operators.items()
                                 if _is_exported(what)}
+            # A name inside a type is reached through the type, so only the
+            # exported ones: one not exported is not a name this file can write
+            # at all, the type being somebody else's.
+            loaded.members = {key: what
+                              for key, what in inner._members.items()
+                              if _is_exported(what)}
             loaded.owned = inner._owned
         finally:
             self._registry.finish(path)
@@ -2838,10 +2861,31 @@ class Checker:
                 self._diags.emit(D.LANG_DOC_RETURN_OF_NOTHING, where,
                                  command=written, owner=node.name)
 
+    def _a_type_here(self, node: ast.FuncDef) -> bool:
+        """Whether the first part of a definition's name is a type this file defines.
+
+        This file and not another's: a type's own file is where what belongs to it
+        is written, which is the smaller rule and the one that can be relaxed.
+        Saying yes to a type from elsewhere brings with it the question of who may
+        add what to whose type, and nobody has asked it.
+        """
+        assert node.held is not None
+        found = self._top.get(node.held)
+        if isinstance(found, _NamedType):
+            return True
+        self._diags.emit(D.LANG_MEMBER_NOT_A_TYPE_HERE,
+                         node.held_span or node.name_span, name=node.held,
+                         found="nothing here" if found is None
+                         else "not a type this file defines")
+        return False
+
     def _collect_function(self, node: ast.FuncDef, path: str) -> _Collected | None:
         """Register one function definition without looking at its body."""
         self._check_doc(node)
         if not self._declare(_declared_as(node), node.name_span, path):
+            return None
+        whole = _written_name(node)
+        if node.held is not None and not self._a_type_here(node):
             return None
         attrs = self._bind_attributes(node.attrs, AttrTarget.FUNCTION)
         written: list[str] = []
@@ -2876,7 +2920,7 @@ class Checker:
                                  else node.name_span)
             borrows = self._borrowed_from(node, ret)
             func_attrs, linkage = self._function_attrs(attrs)
-            func = Function(name=node.name,
+            func = Function(name=whole,
                             ty=self._module.types.func_type(
                                 params, ret, func_attrs.listable),
                             attrs=func_attrs, linkage=linkage,
@@ -2902,8 +2946,11 @@ class Checker:
                               else node.name_span, node.name)
             if node.ret_type is not None:
                 self._not_by_value(ret, node.ret_type.span)
-            self._module.add_function(func, key=self._key(node.name))
-            self._top[node.name] = func
+            self._module.add_function(func, key=self._key(whole))
+            if node.held is None:
+                self._top[node.name] = func
+            else:
+                self._members[(node.held, node.name)] = func
             self._an_operator(node, func)
             self._owned.append(func)
             self._register_special(func, node)
@@ -14534,6 +14581,9 @@ class Checker:
         Asked quietly: a callee that names something else is not this, and what it
         is, is decided by whatever is asked next.
         """
+        inside = self._member_named(callee)
+        if isinstance(inside, _Generic):
+            return inside
         match callee:
             case ast.NameRef():
                 found = self._top.get(callee.name)
@@ -14546,8 +14596,57 @@ class Checker:
                 return None
         return found if isinstance(found, _Generic) else None
 
+    def _member_named(self, callee: ast.Expr) -> object | None:
+        """What a path naming something inside a type stands for, or nothing.
+
+        Two paths reach one: `T.name`, where `T` is a type this file defines, and
+        `m.T.name`, where `m` is a module and `T` a type it exports.  Asked quietly,
+        a callee that names something else being somebody else's to report.
+        """
+        if not isinstance(callee, ast.Member):
+            return None
+        match callee.base:
+            case ast.NameRef() as base if isinstance(self._top.get(base.name),
+                                                     _NamedType):
+                return self._members.get((base.name, callee.name))
+            case ast.Member() as through if isinstance(through.base, ast.NameRef):
+                held = self._top.get(through.base.name)
+                if not isinstance(held, LoadedModule):
+                    return None
+                return held.members.get((through.name, callee.name))
+        return None
+
+    def _a_member_path(self, callee: ast.Expr) -> tuple[str, str] | None:
+        """The type and the name a path names, where it is one of those two shapes.
+
+        What this is for is the message: a path that *looks* like a member and finds
+        nothing should be told that the type has no such name, rather than that a
+        type is not a module.
+        """
+        if not isinstance(callee, ast.Member):
+            return None
+        match callee.base:
+            case ast.NameRef() as base if isinstance(self._top.get(base.name),
+                                                     _NamedType):
+                return (base.name, callee.name)
+            case ast.Member() as through if isinstance(through.base, ast.NameRef) \
+                    and isinstance(self._top.get(through.base.name), LoadedModule):
+                if self._type_exported(through) is None:
+                    return None
+                return (through.name, callee.name)
+        return None
+
     def _callee_of_module(self, expr: ast.Member) -> Function | None:
         """The function another module exports under this name."""
+        found = self._member_named(expr)
+        if isinstance(found, Function):
+            self._only_at_build(found, expr.span)
+            return found
+        named = self._a_member_path(expr)
+        if named is not None:
+            self._diags.emit(D.LANG_MEMBER_UNKNOWN, expr.name_span,
+                             name=named[1], held=named[0])
+            return None
         base = expr.base
         if not isinstance(base, ast.NameRef):
             self._diags.emit(D.LANG_IMPORT_NOT_A_MODULE, expr.span,
