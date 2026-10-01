@@ -1870,6 +1870,13 @@ other than as a direct callee, or not internal, is left alone.  "Fresh" is a joi
 function whose answer is fixed: never what an unannotated call answers, which may be text in the image -- so the compiler gives
 back directly to the heap only what it knows is fresh, and asks the value otherwise.
 
+**A value is kept two words wide where its allocator is known** (`opt/passes/leanvalues.py`, after `largeanswers` at every level).
+It folds an `extract` of a `tuple`, narrows every block parameter of a string or a list by a lattice -- not yet known, one
+allocator, carried -- over what every branch hands it, and makes the parameters with one allocator `〈ptr, u64〉`, rebuilding the
+value at the block's head from `⎕heap`'s address, a null, or the function's parameter; then it drops the pure instructions nothing
+reads, so a value only compared or joined never has its third word made at all.  A join's parameter takes the name of the local
+it is bound to, so the report says which.
+
 **What a container owns is copied by a generated function**, `__pl4g_own.T(arena, v)`, one per element type and built on
 first ask in `sema/owned.py` the way the table functions are: text is a join of its bytes with nothing, a list is a join of its
 run with nothing followed by a loop copying every element that points somewhere, and a list of lists calls the function for its

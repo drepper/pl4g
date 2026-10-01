@@ -35,7 +35,8 @@ fn main() \N{RIGHTWARDS ARROW} u6:
     let two: str = sometimes(true)
     let three: str = fixed(false)
     let four: str = into(&mut p, "q")
-    if one = "ab" \N{LOGICAL AND} two = "x" \N{LOGICAL AND} three = "yz" \N{LOGICAL AND} four = "q!": 0u6 else: 1u6
+    let kept: str\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}1\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET} = \N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}into(&mut p, "w")\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET} in p
+    if one = "ab" \N{LOGICAL AND} two = "x" \N{LOGICAL AND} three = "yz" \N{LOGICAL AND} four = "q!" \N{LOGICAL AND} kept\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}0\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET} = "w!": 0u6 else: 1u6
 """
 
 #: What a function answering two words says it answers.
@@ -89,16 +90,16 @@ def test_the_caller_puts_the_allocator_back(compile_source) -> None:  # noqa: AN
     """The heap's address for one, and the arena handed over for the other."""
     text = _ir(compile_source)
     main = text.split("fn @main(")[1].split("\n}")[0]
-    assert "address.ptr<mut arena> @__pl4g_heap" in main, main
+    # The answers of the heap's are only compared, which reads where and how
+    # many: none is needed whole, so the heap's address is never put back.
+    assert "address.ptr<mut arena> @__pl4g_heap" not in main, main
     assert THIN in _signature(text, "into")
-    # The call to `into` hands over the arena first, and the string rebuilt from
-    # what it answers names that same value as its allocator.
+    # The call to `into` hands over the arena first, and where what it answers is
+    # needed whole -- stored in an array -- the string rebuilt from it names that
+    # same value as its allocator.  Where it is only compared it stays two words.
     lines = main.splitlines()
     arena = next(line for line in lines
                  if "frame.ptr<mut arena>" in line).split("=")[0].strip()
-    called = next(line for line in lines
-                  if "call.\N{LEFT ANGLE BRACKET}" in line
-                  and "".join(("\N{RIGHT ANGLE BRACKET} ", arena, ",")) in line)
-    after = lines[lines.index(called):]
-    rebuilt = next(line for line in after if "tuple.str" in line)
-    assert rebuilt.rstrip().endswith("".join((", ", arena))), (called, rebuilt)
+    rebuilt = [line for line in lines if "tuple.str" in line
+               and line.rstrip().endswith("".join((", ", arena)))]
+    assert rebuilt, main

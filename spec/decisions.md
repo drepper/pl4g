@@ -8948,6 +8948,32 @@ resource; **Rust**, where a zero-sized allocator type costs nothing at run time;
 unmanaged containers, handed the allocator at every call; **MLton** and other whole-program
 compilers, which specialise representations from what the whole program shows.
 
+## 2026-10-02T11:00+02:00 — compiler
+
+**A value stays two words for as long as its allocator is known**
+
+Asked for by the user: an object of a type like `str` need not carry its allocator while
+the code in a scope names no other one; the compiler holds it and adds it where the value
+is needed whole, the lean representation kept as long as possible at the cost of what the
+compiler carries; and the report log says so for every such optimization, the two-word
+answer included.
+
+Done as a pass (`leanvalues`, every level): inside a block a value taken apart after being
+put together is its parts; where values join, a parameter is two words if every value it is
+given has the same allocator the compiler can name again -- `⎕heap`, none, a function
+parameter -- decided by a lattice so that a loop settles; the value is rebuilt at the join
+only for the uses that need it whole, and what nothing reads is dropped.  `lean-value` and
+`fat-value` say it per join, with the local's name; `answer-thin` already says it per
+function, and `allocator` per local.
+
+Decided here: the representation of a value across a call stays three words for a
+parameter, the callers not all naming one allocator; a value in memory -- a local whose
+address is taken, an element -- is three words too, a place having one layout.
+
+Compare: **Rust**, whose allocator lives in the type and costs nothing where it is the
+global one; **C++** `pmr`, which always carries it; scalar replacement of aggregates in
+**LLVM** and **GCC**, which is what this is, told which part need not exist.
+
 Open questions
 --------------
 

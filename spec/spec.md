@@ -3380,6 +3380,13 @@ tree being walked callees first, rely on it.  Text in the image answered as it i
 naming `⎕heap` is what says no answer ever is.  Which functions answer thin is in the report log (`answer-thin`).
 A function called through a function value, or seen from outside the image, keeps the word.
 
+**A value stays two words for as long as its allocator is known.**  Inside a scope the compiler holds the allocator of every
+value whose allocator it knows, and puts the third word back only where the value is needed whole -- handed to a call, stored,
+answered.  Where values join -- the arms of an `if`, the turns of a loop -- they stay two words if every one is made in the same
+allocator the compiler can name again: `⎕heap`, none, or what a parameter is given.  Values from two allocators, or from one
+known only at run time, carry it.  Every such decision is in the report log: `lean-value` where a value stays two words,
+`fat-value` where it carries its allocator and why, `answer-thin` for an answer that travels without it.
+
 **Allocators are not handed out of the scope they are made in.**  A value made in a local arena reaches past it only as a copy;
 passing the arena out along with the value wants a syntax of its own, which is proposed in [scoped-arenas.md](scoped-arenas.md)
 and not yet part of the language.

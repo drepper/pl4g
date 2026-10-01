@@ -52,6 +52,11 @@ class ReportKind(StrEnum):
     #: A string or a list answered without its allocator, because every answer
     #: is made in one the caller names and adds back.
     ANSWER_THIN = "answer-thin"
+    #: A string or a list kept two words wide where values of it join, its
+    #: allocator held by the compiler; and one that carries its own there, with
+    #: why.  One entry per block parameter of either kind.
+    LEAN_VALUE = "lean-value"
+    FAT_VALUE = "fat-value"
     DROP_FUNCTION = "drop-function"
     DROP_VARIABLE = "drop-variable"
     DROP_LOCAL = "drop-local"

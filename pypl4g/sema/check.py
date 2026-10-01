@@ -5720,8 +5720,8 @@ class Checker:
             said = "is in the image, which nothing gives back: its allocator is none"
         elif len(allocators) == 1 and not unknown:
             said = "".join(("is made in ", self._owner_written(allocators[0]),
-                            ", known while compiling: the allocator it carries is "
-                            "never read"))
+                            ", known while compiling: the compiler holds the "
+                            "allocator, and the value need not carry it"))
         else:
             where = [self._owner_written(one) for one in allocators]
             if any(one in self._unknown_by_id for one in made):
@@ -11830,6 +11830,11 @@ class Checker:
         somewhere else on the line and sometimes on another line entirely.
         """
         if isinstance(value, Instruction) and value.name_hint is None:
+            value.name_hint = name
+            value.name_span = where
+        elif isinstance(value, BlockParam) and value.name_hint == "answer":
+            # What an `if` or a `match` comes to, joined: the name it is bound to
+            # is a better one than the word the join was made with.
             value.name_hint = name
             value.name_span = where
 
