@@ -14681,9 +14681,10 @@ class Checker:
         Asked quietly: a callee that names something else is not this, and what it
         is, is decided by whatever is asked next.
         """
-        inside = self._member_named(callee)
-        if isinstance(inside, _Generic):
-            return inside
+        # The bare name first, which is what almost every callee is: a name inside a
+        # type is reached through the type, so it is a path, and asking about a path
+        # before asking about a name would put two dictionary lookups on every call in
+        # every program for the sake of the few that write one.
         match callee:
             case ast.NameRef():
                 found = self._top.get(callee.name)
@@ -14694,20 +14695,25 @@ class Checker:
                 found = held.exports.get(callee.name)
             case _:
                 return None
-        return found if isinstance(found, _Generic) else None
+        if isinstance(found, _Generic):
+            return found
+        inside = self._member_named(callee)
+        return inside if isinstance(inside, _Generic) else None
 
-    def _member_named(self, callee: ast.Expr) -> object | None:
+    def _member_named(self, callee: ast.Expr) -> object | None:  # noqa: D401
         """What a path naming something inside a type stands for, or nothing.
 
         Two paths reach one: `T.name`, where `T` is a type this file defines, and
         `m.T.name`, where `m` is a module and `T` a type it exports.  Asked quietly,
         a callee that names something else being somebody else's to report.
         """
+        if not self._members and not isinstance(callee, ast.Member):
+            return None
         if not isinstance(callee, ast.Member):
             return None
         match callee.base:
-            case ast.NameRef() as base if isinstance(self._top.get(base.name),
-                                                     _NamedType):
+            case ast.NameRef() as base if self._members and isinstance(
+                    self._top.get(base.name), _NamedType):
                 return self._members.get((base.name, callee.name))
             case ast.Member() as through if isinstance(through.base, ast.NameRef):
                 held = self._top.get(through.base.name)

@@ -569,3 +569,15 @@ Optimizations
     ratio to it, so that a column is normalized against the machine as it was at that moment; or run the A/B interleave the
     discipline already relies on, for every sample, as the recording itself -- accurate and twice the work per column.  The first
     is the one to do: one extra checkout per run and one extra column, and it makes the table answer the question it is for.
+
+[ ] A program pays for the whole of `std` whether it names any of it or not.  Measured on 2026-10-01: parsing `modules/std.pl4g`
+    costs 4.2 ms at 348 lines and 6.2 ms at 528, and the format macros landing took every program that imports `std` from 33.2 ms
+    to 36.2 -- the 2 ms being the parse and nothing else, since the parse of an imported module happens inside what the report calls
+    semantic analysis.
+
+    Nothing is wrong with the code; the cost is that a module is read whole.  What would fix it, in rising order of cost: parse a
+    module lazily, definition by definition, which needs the parser to be able to skip a body it is not asked for; cache the parsed
+    tree of a module between compilations, which the incremental entry wants anyway; or split `std` so that a program importing it
+    for one thing does not read the rest, which is the answer that needs no compiler work and the one that gives the least.
+
+    It is worth doing before `std` is much bigger: every feature that lands in `std` from here is paid for by every program.
