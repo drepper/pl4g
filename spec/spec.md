@@ -5116,6 +5116,51 @@ semicolon after it turns the block into one that has none.  C, C++, Go and Java 
 there terminating a statement rather than separating two.
 
 
+##### Calling itself last
+
+**A call of a function to itself in tail position is guaranteed to be a loop, and takes no additional stack.**  It is a jump back to
+the start of the function with the arguments as the new parameters, whatever optimization level a build asks for: a guarantee of the
+language and not a choice of the compiler's, so a program may recur as deep as it likes in tail position and rely on it.
+
+```
+fn count(n: u64, acc: u64) → u64:
+    if n = 0u64:
+        acc
+    else:
+        count(n - 1u64, acc + 1u64)      ※ a jump: ten million turns, one frame
+```
+
+**A call is in tail position** where what it answers is what the function answers and nothing is left to do after it: the last
+expression of the body, a `return` of the call, or the last expression of an arm of an `if` or a `match` that is itself in tail
+position, however deep.  A call whose function answers nothing is in tail position where the function returns right after it.  A
+function answering `T ? E` that answers the call's result as it came is in tail position too; `f(x)?` is not, the `?` being work
+done on the answer.
+
+**What is not in tail position**, and takes a frame like any call:
+
+- an answer something is done with -- `n + f(n - 1)`, a conversion, a `?`;
+- a call in a block with a `defer` the call is inside of, what is put off running after it;
+- a call in a function with a `post` condition, which is checked after it;
+- a call handing over a reference into the calling function's own storage -- `f(&mut mine)` for a local `mine` -- which the next turn
+  of the loop would reuse while the reference still names it.
+
+**Where an answer is made is kept arm by arm.**  An answer made somewhere the signature does not name is copied there before the
+function leaves (Knowing the allocator), and for an `if` or a `match` that is the answer, that copy is made at the end of each arm and
+not after they join -- so an arm ending in a call of the function to itself still ends in that call, and an accumulator of text
+recurs as a loop.  The call's own answer is made by the same rule one call down and needs no copy.
+
+**Calls between two functions are not covered**: `f` calling `g` calling `f` takes stack.  Turning those into jumps needs every
+function of the cycle to keep its frame the same size and its arguments in the same places, which a call in general does not.
+
+Every call of a function to itself is in the report log: `tail-call` where it became a jump, `self-call` with why where it did not.
+
+Compare: **Scheme**'s standard requires proper tail calls of every call in tail position, between functions too, and **Lua** has
+them; **ML** and **Haskell** implementations make them, the languages leaving it unsaid.  **C**, **C++**, **Go** and **Rust** leave
+it an optimization a compiler may or may not make -- Rust reserves `become` for asking -- and **Clang**'s `[[clang::musttail]]` and
+**Zig**'s `@call(.always_tail, …)` ask for it call by call and refuse to compile where it cannot be done.  **Python** and **Java**
+never do it.  This takes the guarantee Scheme gives, for the case that needs nothing of any other function: a function calling
+itself, where the frame being reused is its own.
+
 ##### Macros
 
 **A macro is written where a function is called and is not a function call**: what stands between its marks is handed over as it is

@@ -2114,10 +2114,18 @@ class Checker:
         #: Calls whose answer is certainly an object of the heap's, and not text in
         #: the image the heap would be told to give back.
         self._fresh_heap: set[int] = set()
+        #: Which function each call lowered named, for an answer that is a call of
+        #: the function to itself.
+        self._callee_of: dict[int, Function] = {}
         #: What each answer of the body being checked turned out to be, and the
         #: allocator the signature fixed for all of them, where it fixed one.
         self._answer_kinds: list[str] = []
         self._thin_to: int | None = None
+        #: The function an `if` or a `match` being lowered is the answer of, so
+        #: that its arms answer for themselves; and the same handed to the last
+        #: statement of an arm, for an `if` that ends one.
+        self._answer_arms: Function | None = None
+        self._yield_answer: Function | None = None
         #: The definitions whose `in` has been checked, so a generic one says what
         #: is wrong with it once and not once per instantiation.
         self._made_in_told: set[int] = set()
@@ -3732,8 +3740,10 @@ class Checker:
         self._made_from[id(expr)] = (expr, self._last_made_in)
         # An answer whose allocator the callee fixed is in it, never text in the
         # image: where that is the heap, it is fresh, and what holds it owns it.
-        if func.answer_from is not None and self._last_made_in == {_HEAP}:
+        if (func.answer_from is not None or func.made_in == (HEAP_AT,)) \
+                and self._last_made_in == {_HEAP}:
             self._fresh_heap.add(id(expr))
+        self._callee_of[id(expr)] = func
 
     def _container_handed(self, expr: ast.Call, func: Function,
                           written: dict[int, ast.Expr], at: int,
@@ -6053,6 +6063,12 @@ class Checker:
         made = self._arenas_in(written)
         allowed, named = said
         thin = self._thin_to
+        if isinstance(written, ast.Call) and self._callee_of.get(id(written)) is func \
+                and (made <= allowed or allowed == {_HEAP}):
+            # The function answering what it answers itself: by the same rule, one
+            # call down, so nothing is copied -- and nothing comes after the call.
+            # It says nothing of where the answers are made either way.
+            return value
         if not made and thin is None:
             self._answer_kinds.append("static")
             return value
@@ -6597,6 +6613,13 @@ class Checker:
         pairs = self._expected_numbers(
             self._bind_attributes(stmt.attrs, AttrTarget.STATEMENT))
         expectation = self._begin_expecting(pairs)
+        # An arm of what the function answers ending in another `if` or `match`
+        # hands the answering down to that one's arms.
+        answering, self._yield_answer = self._yield_answer, None
+        outer_arms = self._answer_arms
+        if answering is not None and isinstance(stmt, ast.ExprStmt) \
+                and isinstance(stmt.value, (ast.If, ast.Match)):
+            self._answer_arms = answering
         try:
             match stmt:
                 case ast.ExprStmt():
@@ -6619,6 +6642,7 @@ class Checker:
                     self._diags.emit(D.LANG_MATCH_ARM_HAS_NO_VALUE, stmt.span)
                     return None
         finally:
+            self._answer_arms = outer_arms
             self._end_expecting(expectation)
             if self._settle_expecting(expectation, pairs):
                 self._discard_function = True
@@ -6714,10 +6738,21 @@ class Checker:
                 # The value of the last statement is the function's result, which
                 # is why the canonical form of the language omits the keyword.
                 if is_last and func.ty.ret is not VOID:
-                    value = self._lower_into(builder, stmt.value, func.ty.ret,
-                                             stmt.span)
-                    value = self._answered(builder, stmt.value, value, func,
-                                           stmt.span)
+                    # An `if` or a `match` answered is answered arm by arm, the
+                    # copy into the signature's allocator made where each arm
+                    # ends rather than after they join -- so an arm that ends in
+                    # a call of the function to itself still ends in that call.
+                    by_arm = isinstance(stmt.value, (ast.If, ast.Match))
+                    outer_arms, self._answer_arms = (
+                        self._answer_arms, func if by_arm else None)
+                    try:
+                        value = self._lower_into(builder, stmt.value,
+                                                 func.ty.ret, stmt.span)
+                    finally:
+                        self._answer_arms = outer_arms
+                    if not by_arm:
+                        value = self._answered(builder, stmt.value, value, func,
+                                               stmt.span)
                     self._returning(builder, value, stmt.span)
                 elif isinstance(stmt.value, ast.If):
                     # An `if` written as a statement of its own produces no
@@ -7973,8 +8008,10 @@ class Checker:
                  self._assigning, self._operand_of, self._handing_over,
                  self._deferred, self._emptied, self._answer_made_in,
                  self._out_of_arena, self._out_of_arenas, self._made_from,
-                 self._answer_kinds, self._thin_to)
+                 self._answer_kinds, self._thin_to, self._answer_arms,
+                 self._yield_answer)
         self._scopes, self._addressed = [], set()
+        self._answer_arms = self._yield_answer = None
         # What was worked out about where an expression was made belongs to the
         # body it was lowered in: this one lowers the same nodes for other types.
         self._made_from = {}
@@ -8015,7 +8052,8 @@ class Checker:
              self._assigning, self._operand_of, self._handing_over,
              self._deferred, self._emptied, self._answer_made_in,
              self._out_of_arena, self._out_of_arenas, self._made_from,
-             self._answer_kinds, self._thin_to) = outer
+             self._answer_kinds, self._thin_to, self._answer_arms,
+             self._yield_answer) = outer
 
     def _lower_generic(self, builder: IRBuilder, expr: ast.Call,
                        written: _Generic, expected: Type | None) -> Value:
@@ -8601,9 +8639,10 @@ class Checker:
                  self._carried, self._loops, self._outside, self._deferred,
                  self._emptied, self._out_of_arena, self._out_of_arenas,
                  self._answer_made_in, self._made_from, self._answer_kinds,
-                 self._thin_to)
+                 self._thin_to, self._answer_arms, self._yield_answer)
         self._deferred, self._emptied, self._made_from = [], [], {}
         self._answer_kinds, self._thin_to = [], None
+        self._answer_arms = self._yield_answer = None
         self._out_of_arena, self._out_of_arenas = None, frozenset({_HEAP})
         # A lambda answers in `⎕heap`, saying nothing else, as a function does.
         self._answer_made_in = (frozenset({_HEAP}), HEAP_NAME)
@@ -8665,7 +8704,7 @@ class Checker:
              self._carried, self._loops, self._outside, self._deferred,
              self._emptied, self._out_of_arena, self._out_of_arenas,
              self._answer_made_in, self._made_from, self._answer_kinds,
-             self._thin_to) = outer
+             self._thin_to, self._answer_arms, self._yield_answer) = outer
             self._borrows = outer_borrows
         return func
 
@@ -11514,6 +11553,8 @@ class Checker:
         # so each arm starts from what held before the arms and the join gets what
         # the arms that reach it leave.
         provenance = self._provenance()
+        # Where this is what the function answers, each arm answers for itself.
+        answering, self._answer_arms = self._answer_arms, None
         reaching: list[_Provenance] = []
         given_back: list[set[int]] = []
         yielded: set[int] = set()
@@ -11545,8 +11586,20 @@ class Checker:
                 if isinstance(stmt, ast.Match):
                     self._taken_out_of(stmt.subject, (name,))
             self._put_back(provenance)
-            given = self._lower_block(builder, arm.body, func, as_result=False,
-                                      wanted=answer, produces=produces)
+            outer_yield, self._yield_answer = self._yield_answer, answering
+            try:
+                given = self._lower_block(builder, arm.body, func,
+                                          as_result=False, wanted=answer,
+                                          produces=produces)
+            finally:
+                self._yield_answer = outer_yield
+            last = arm.body.stmts[-1] if arm.body.stmts else None
+            if answering is not None and given is not None \
+                    and not builder.is_terminated \
+                    and isinstance(last, ast.ExprStmt) \
+                    and not isinstance(last.value, (ast.If, ast.Match)):
+                given = self._answered(builder, last.value, given, answering,
+                                       last.span)
             emptied_here = self._last_emptied
             if produces and given is not None and not builder.is_terminated:
                 # What this arm comes to, asked while the names it bound are still

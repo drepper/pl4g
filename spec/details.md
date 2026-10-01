@@ -1860,6 +1860,15 @@ back what it replaces through `__pl4g_disown.T`, which asks each element for its
 two kinds of key besides allocators: one naming a heap container, and one naming "read out of that container", which is what an
 element replacement kills.
 
+**A call of a function to itself in tail position is a jump** (`opt/passes/tailcalls.py`, the first pass after `dropignored` at
+every level, before `largeanswers` could put the answer in the caller's storage).  Tail position is read off the IR the checker
+writes: the call and then the `ret` of its answer, or the call and then a branch to blocks that do nothing but hand on and return
+it.  The function gets a new entry block that only branches to the old one, whose parameters -- and a memory token, where the
+function touches memory -- become the loop's; each tail call becomes a branch to it with its arguments and the token in force at
+the call.  A call handing over anything made from a `frame` instruction is left alone.  The checker keeps the copy an answer may
+need into its allocator inside each arm of an `if` or a `match` that is the answer (`_answer_arms`), and answers a call of the
+function to itself as it is, so that the call stays last.
+
 **An answer whose allocator is fixed travels as two words** (`opt/passes/thinanswers.py`, run as the first half of `largeanswers` at
 every level, so the module is verified once for both).
 The checker writes `Function.answer_from` -- `("heap", -1)` or `("param", i)` -- from `→ T in ⎕heap` or `→ T in a`, or from the body

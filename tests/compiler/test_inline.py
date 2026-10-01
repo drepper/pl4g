@@ -192,7 +192,24 @@ fn main() \N{RIGHTWARDS ARROW} u6:
 
 
 def test_a_function_that_calls_itself_is_left_alone(compile_source) -> None:  # noqa: ANN001
-    """Inlining round a ring does not finish, so nothing of one is inlined."""
+    """Inlining round a ring does not finish, so nothing of one is inlined.
+
+    The call is not in tail position -- a tail call to itself is a loop, and a
+    loop is inlined like anything else (below)."""
+    text = emitted(compile_source, """\
+fn down(n: u8) \N{RIGHTWARDS ARROW} u8:
+    if n = 0u8: 0u8 else: n + down(n - 1u8)
+
+@[startup]
+fn main() \N{RIGHTWARDS ARROW} u6:
+    \N{APL FUNCTIONAL SYMBOL QUAD}narrow(down(3u8), \N{TOP LEFT CORNER}u6\N{TOP RIGHT CORNER}) ?? 1u6
+""", "-O1")
+    assert "fn @down" in text
+
+
+def test_a_function_calling_itself_last_is_a_loop_and_is_inlined(
+        compile_source) -> None:  # noqa: ANN001
+    """Calling itself in tail position makes it a loop, and no ring is left."""
     text = emitted(compile_source, """\
 fn down(n: u8) \N{RIGHTWARDS ARROW} u8:
     if n = 0u8: 0u8 else: down(n - 1u8)
@@ -201,7 +218,7 @@ fn down(n: u8) \N{RIGHTWARDS ARROW} u8:
 fn main() \N{RIGHTWARDS ARROW} u6:
     \N{APL FUNCTIONAL SYMBOL QUAD}narrow(down(3u8), \N{TOP LEFT CORNER}u6\N{TOP RIGHT CORNER}) ?? 1u6
 """, "-O1")
-    assert "fn @down" in text
+    assert "fn @down" not in text, text
 
 
 def test_what_was_inlined_is_in_the_log(compile_source, tmp_path) -> None:  # noqa: ANN001

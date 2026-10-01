@@ -96,8 +96,8 @@ def pipeline_for(level: int) -> Sequence[str]:
     # that could make such an edge and after everything that might otherwise
     # take the block it puts there straight back out again.
     if level <= 0:
-        return ("dropignored", "largeanswers", "leanvalues", "dropunreached",
-                "splitedges")
+        return ("dropignored", "tailcalls", "largeanswers", "leanvalues",
+                "dropunreached", "splitedges")
     # Inlining goes after the two that are not optimizations and before the
     # rest: what it leaves behind is a call gone and a body in its place, which
     # is what folding, simplifying and sweeping are for -- and a function
@@ -108,7 +108,8 @@ def pipeline_for(level: int) -> Sequence[str]:
     # carries, so a body inlined with a constant argument only *becomes* constant
     # after that pass -- and a bitcast of a constant is a value the back end has
     # nowhere to read, a bitcast emitting no instruction of its own.
-    return ("dropignored", "largeanswers", "inline", "leanvalues", "constfold",
+    return ("dropignored", "tailcalls", "largeanswers", "inline", "leanvalues",
+            "constfold",
             "simplifycfg",
             "constfold", "dce", "dropunreached", "splitedges")
 
@@ -124,6 +125,7 @@ def build_manager(level: int) -> PassManager:
     from .passes.leanvalues import LeanValues
     from .passes.simplifycfg import SimplifyCFG
     from .passes.splitedges import SplitEdges
+    from .passes.tailcalls import TailCalls
 
     available: dict[str, Pass] = {
         "constfold": ConstantFolding(),
@@ -135,6 +137,7 @@ def build_manager(level: int) -> PassManager:
         "leanvalues": LeanValues(),
         "simplifycfg": SimplifyCFG(),
         "splitedges": SplitEdges(),
+        "tailcalls": TailCalls(),
     }
     manager = PassManager()
     for name in pipeline_for(level):

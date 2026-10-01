@@ -258,6 +258,9 @@ To Do List for the PL4g language
         of them needs.
     [ ] **a top-level array of text** is refused (9902), which is what a table of literal text
         such as `std.text`'s digits would want.
+    [ ] **tail calls between functions**: a cycle `f` → `g` → `f` takes stack; the guarantee
+        covers a function calling itself.  Wants frames and arguments arranged alike across
+        the cycle.
     [ ] **`in` per component** -- `(str in a, str in b)`, or a record field holding text made
         in an arena -- which wants `⧖` names on types that are not references.
     [ ] **a type `T⟦3,⟧` that states some dimensions and not others** is accepted, though

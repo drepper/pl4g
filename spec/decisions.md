@@ -8974,6 +8974,33 @@ Compare: **Rust**, whose allocator lives in the type and costs nothing where it 
 global one; **C++** `pmr`, which always carries it; scalar replacement of aggregates in
 **LLVM** and **GCC**, which is what this is, told which part need not exist.
 
+## 2026-10-02T15:00+02:00 — language
+
+**A function calling itself last is guaranteed to be a loop**
+
+Asked for by the user: tail recursion optimized, and a guarantee in the specification
+that it results in a loop and needs no additional stack.
+
+- **Guaranteed, at every level**: a pass runs at `-O0` as well, before anything could
+  move the call; a program may rely on depth.
+- **Self-recursion only.**  Calls between functions in a cycle keep their frames; making
+  them jumps needs every function of the cycle to agree on frame and argument layout,
+  which Scheme gets from its implementation and this compiler would have to arrange.
+- **Tail position** is the last expression, a `return` of the call, or the last
+  expression of an arm of an `if` or `match` in tail position.  Not tail: an answer worked
+  on (`n + f(…)`, `f(…)?`), a call inside a `defer`'s block or under a `post` condition,
+  and a call handing over a reference into the caller's own frame, which the loop reuses.
+- **Answers are kept in their allocator arm by arm** where the `if` is the answer, and a
+  call of the function to itself is answered as it is -- otherwise the copy into
+  `⎕heap` after the join would put work after every text-accumulating recursion.
+- **No attribute asks for it**, unlike Clang's `musttail` or Zig's `always_tail`: the
+  guarantee holds wherever the shape does, and the report log says per call which it was
+  (`tail-call`, `self-call` with why).
+
+Compare: Scheme (required, every tail call), Lua, ML and Haskell implementations; C, C++,
+Go, Rust (an optimization, Rust reserving `become`); Clang `musttail`, Zig `always_tail`
+(asked per call, refused where impossible); Python and Java (never).
+
 Open questions
 --------------
 

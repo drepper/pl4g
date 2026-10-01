@@ -1,0 +1,59 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ **A function calling itself last is a loop, and takes no stack.**  The language promises it: a
+※ call of a function to itself whose answer is what the function answers, with nothing left to do
+※ after it, is a jump back to the start with the arguments as the new parameters.  So ten million
+※ turns run in the stack one call takes -- far past what the stack holds of real calls.
+※
+※ An arm of an `if` or a `match` that ends in the call is in tail position when the `if` is what the
+※ function answers, and the rules of where an answer is made are kept arm by arm so that the call
+※ stays last: an accumulator of text recurs as a loop too.
+※
+※ Compare: **Scheme**, whose standard requires proper tail calls, and **Lua**, which has them for
+※ every call; **C**, **C++** and **Rust**, where it is an optimization a compiler may or may not
+※ make; **Zig**'s `@call(.always_tail, …)` and **Clang**'s `[[clang::musttail]]`, which ask for it per
+※ call; **Python** and **Java**, which never do it.
+
+fn count(n: u64, acc: u64) → u64:
+    if n = 0u64:
+        acc
+    else:
+        count(n - 1u64, acc + 1u64)
+
+fn down(n: u64) → u64:
+    if n = 0u64:
+        return 7u64
+    down(n - 1u64)
+
+@[impure]
+fn fill(v: &mut u64, n: u64):
+    if n = 0u64:
+        return
+    v⌖ ← v⌖ + 1u64
+    fill(v, n - 1u64)
+
+fn found(n: u64) → u64 ? i32:
+    if n = 0u64: 5u64 else: found(n - 1u64)
+
+fn joined(n: u64, acc: str) → str:
+    if n = 0u64:
+        acc
+    else:
+        joined(n - 1u64, acc ⧺ "x")
+
+@[startup, impure]
+fn main() → u6:
+    if count(10000000u64, 0u64) ≠ 10000000u64:
+        return 1u6
+    if down(10000000u64) ≠ 7u64:
+        return 2u6
+    let x: mut u64 = 0u64
+    fill(&mut x, 10000000u64)
+    if x ≠ 10000000u64:
+        return 3u6
+    if (found(10000000u64) ?? 0u64) ≠ 5u64:
+        return 4u6
+    ※ few turns: every join keeps the string before it
+    if #joined(500u64, "") ≠ 500:
+        return 5u6
+    0u6

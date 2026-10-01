@@ -56,6 +56,10 @@ class ReportKind(StrEnum):
     #: allocator held by the compiler; and one that carries its own there, with
     #: why.  One entry per block parameter of either kind.
     LEAN_VALUE = "lean-value"
+    #: A call of a function to itself in tail position, turned into a jump back
+    #: to its start; and one that is not, with why, the stack growing by a frame.
+    TAIL_CALL = "tail-call"
+    SELF_CALL = "self-call"
     FAT_VALUE = "fat-value"
     DROP_FUNCTION = "drop-function"
     DROP_VARIABLE = "drop-variable"
