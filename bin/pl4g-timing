@@ -189,7 +189,10 @@ GROUPS: tuple[Group, ...] = (
            "defer-every-way-out": "statements put off and run at every way out of five blocks",
            "macro-statements-as-a-value": "statements a macro wrote, standing as three values",
            "answer-made-in": "answers said to be made in one arena of two, and kept past the other",
-           "container-owns-its-elements": "text and lists of text copied into the allocator of what holds them"}),
+           "container-owns-its-elements": "text and lists of text copied into the allocator of what holds them",
+           "heap-allocates": "one string grown past every size class, and many small ones",
+           "container-pool-and-heap": "elements kept as they are, moved and copied, in a pool and the heap",
+           "answer-copied-into-its-allocator": "answers copied out of a local arena, another arena and a parameter"}),
     Group("Loops",
           "A branch backwards, which is what makes liveness a question about "
           "the graph rather than about the layout.  These move when the "
