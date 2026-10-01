@@ -1,0 +1,17 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ An arena given back in every arm that reaches the join is given back, so a pure function that
+※ empties its arena in both arms of an `if` has given it back on every way out.
+
+fn both(c: bool) → bool:
+    let s: mut arena = ⎕arena
+    let t: str = "a" ⧺ "b" in s
+    let r: bool = t = "ab"
+    if c:
+        ⎕empty(s)
+    else:
+        ⎕empty(s)
+    r
+@[startup]
+fn main() → u6:
+    if both(true): 0u6 else: 1u6

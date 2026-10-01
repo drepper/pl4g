@@ -1,0 +1,17 @@
+※ pl4g-test: compile=error
+※ pl4g-test: expect-diag 4615 LANG_ARENA_VALUE_GIVEN_BACK
+
+※ What a `foreach` takes out of what it walks points where the whole did: an element of a
+※ list made in an arena is in the arena.
+
+@[startup]
+fn main() → u6:
+    let s: mut arena = ⎕arena
+    defer ⎕empty(s)
+    let l: [str] = [("a" ⧺ "b" in s), ("c" ⧺ "d" in s)] in s
+    let n: mut u8 = 0u8
+    foreach one: str = l:
+        ⎕empty(s)
+        if one = "ab":
+            n ← n + 1u8
+    if n = 1u8: 0u6 else: 1u6

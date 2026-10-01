@@ -1,0 +1,42 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ `defer ⎕empty(s)` runs on every way out of its block, and what it kills it kills along that
+※ way only.  The way past an early `return`, a `?` or a `break` still holds what was made in
+※ `s`: the arena has not been given back there yet.
+
+fn early(c: bool) → u6:
+    let s: mut arena = ⎕arena
+    defer ⎕empty(s)
+    let x: str = "a" ⧺ "b" in s
+    if c:
+        return 2u6
+    if x = "ab": 0u6 else: 1u6
+
+fn handed_on(v: u8 ? i32) → u8 ? i32:
+    let s: mut arena = ⎕arena
+    defer ⎕empty(s)
+    let x: str = "a" ⧺ "b" in s
+    let n: u8 = v?
+    if x = "ab": n else: 0u8
+
+fn turns() → u8:
+    let n: mut u8 = 0u8
+    while §l n < 3u8:
+        let s: mut arena = ⎕arena
+        defer ⎕empty(s)
+        let x: str = "a" ⧺ "b" in s
+        if n = 5u8:
+            break §l
+        if x = "ab":
+            n ← n + 1u8
+    n
+
+@[startup]
+fn main() → u6:
+    if early(false) ≠ 0u6:
+        return 1u6
+    if (handed_on(4u8) ?? 0u8) ≠ 4u8:
+        return 2u6
+    if turns() ≠ 3u8:
+        return 3u6
+    0u6

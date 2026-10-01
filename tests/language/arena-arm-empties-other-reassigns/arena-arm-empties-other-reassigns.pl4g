@@ -1,0 +1,18 @@
+※ pl4g-test: compile=error
+※ pl4g-test: expect-diag 4615 LANG_ARENA_VALUE_GIVEN_BACK
+
+※ One arm gives the arena back and the other gives `x` something new.  After the `if`, `x` is
+※ dead along one of the two ways that reach the join, so it is dead: a name read later cannot
+※ tell which way it came.
+
+@[startup]
+fn main() → u6:
+    let s: mut arena = ⎕arena
+    defer ⎕empty(s)
+    let c: bool = true
+    let x: mut str = "a" ⧺ "b" in s
+    if c:
+        ⎕empty(s)
+    else:
+        x ← "new"
+    if x = "ab": 0u6 else: 1u6

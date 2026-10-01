@@ -8795,6 +8795,37 @@ allocated through the caller's arena value.
 Compare: in the proposal -- Rust with `bumpalo`, Cyclone's regions, the ML Kit, D's
 `return scope`, Zig's and Odin's comments.
 
+## 2026-10-01T20:30+02:00 — compiler
+
+**Where a value was made follows every way through a body**
+
+What a name was made in, and whether it is dead, was kept on the name and changed in place as
+the checker went through the body top to bottom -- while the name's *value* was already taken
+and put back at every arm and merged where the arms join.  So the last arm, and every way
+out, leaked into what followed.  Fourteen programs showed it:
+
+- refused though correct: an early `return`, `?` or `break` under `defer ⎕empty(s)` killed
+  everything made in `s` for the code past it (the pattern `defer` exists for); a
+  temporary inside an arm counted as what the arm yields; an arena emptied in both arms
+  was "not given back" (4617);
+- accepted though wrong: two arms assigning from two arenas kept only the last; an `if`
+  with no `else` forgot the old value's arena; one arm's reassignment revived a name the
+  other arm killed; a name assigned in a loop kept only the last assignment; a field or an
+  element written with arena text was not tracked at all; a `match` payload and a
+  `foreach` variable were made in nothing.
+
+Now provenance is taken and put back where values are: per arm, merged at the join (union of
+arenas, dead if dead on any arm reaching it); around the deferred statements of every way
+out; across a loop as the union of before, the body's end and every `break`, with assigned
+names widened to anything the body names; a part write adds to the whole; a payload or a
+loop variable takes the arenas of what it was taken out of.  An arena emptied in every arm
+reaching a join is emptied after it.  Reading part of a dead name is refused as reading it.
+
+Still a walk over the source rather than a data flow over the control-flow graph, which would
+be exact and is a much larger change; what is above is what that walk can do soundly.  A
+name assigned in a loop is taken to be made in everything the body names, which may refuse
+a correct program that assigns from one arena and empties another in the same loop.
+
 Open questions
 --------------
 

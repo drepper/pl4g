@@ -919,6 +919,28 @@ def _and_then(names: Sequence[str]) -> str:
     return " and ".join((", ".join(quoted[:-1]), quoted[-1]))
 
 
+def _written_in(node: object, into: set[str]) -> None:
+    """Every name a body gives something new: assigned, or a part of it written."""
+    match node:
+        case ast.AssignStmt():
+            into.add(node.name)
+            into.update(name for name, _ in node.more)
+        case ast.MemberAssign() | ast.ElementAssign() | ast.EntryAssign():
+            root = node.base
+            while isinstance(root, (ast.Member, ast.Element, ast.Index)):
+                root = root.base
+            if isinstance(root, ast.NameRef):
+                into.add(root.name)
+        case ast.Lambda():
+            return
+    if isinstance(node, ast.Node):
+        for one in fields_of(node):
+            _written_in(getattr(node, one.name), into)
+    elif isinstance(node, tuple):
+        for one in node:
+            _written_in(one, into)
+
+
 def _one_of(names: Sequence[str]) -> str:
     """Several names, written as the alternatives they are: `'a' or 'b'`."""
     quoted = ["".join(("\'", one, "\'")) for one in names]
@@ -1681,6 +1703,11 @@ class _Deferred:
     depth: int
 
 
+#: Every name's provenance at one point of a body: the name, the arenas what it holds
+#: was made in, and where and by which arena it was killed, if it was.
+_Provenance = dict[int, tuple["_Local", frozenset[int], "Span | None", str]]
+
+
 @dataclass(slots=True)
 class _Loop:
     """A loop being lowered that has a name, and the two places a jump goes.
@@ -1717,6 +1744,9 @@ class _Loop:
     #: out of the body or back to its head leaves every block opened since, and
     #: runs what they put off.
     frame: int = 0
+    #: What every name was made in, and whether it was dead, at each `break`:
+    #: what holds after the loop is what holds along every way that leaves it.
+    left_with: list[_Provenance] = field(default_factory=list)
     #: Where the first `break` that handed something over was written, for
     #: pointing at it beside one that did not.
     handed_at: Span | None = None
@@ -1959,6 +1989,9 @@ class Checker:
         #: as their arenas: a function saying where its answer was made may not
         #: answer one of these, there being no saying where it was made.
         self._unknown_by_id: dict[int, _Local] = {}
+        #: What the block lowered last gave back on its way off the end, which is
+        #: how an `if` learns what every arm reaching the join gave back.
+        self._last_emptied: set[int] = set()
         #: The definitions whose `in` has been checked, so a generic one says what
         #: is wrong with it once and not once per instantiation.
         self._made_in_told: set[int] = set()
@@ -1970,6 +2003,9 @@ class Checker:
         #: What the call lowered last said of its answer, for the operator form of
         #: `in`, whose call is one the checker wrote and no node holds.
         self._last_made_in: frozenset[int] | None = None
+        #: An `if` some of whose arms were settled while compiling, and the `if` of
+        #: the rest that was lowered in its place.
+        self._made_alias: dict[int, tuple[ast.Expr, ast.Expr]] = {}
         #: The arenas `in` named around what is being lowered: none for `⎕heap`.
         self._out_of_arenas: frozenset[int] = frozenset()
         #: What the body being checked said its answer was made in: the arena
@@ -5299,6 +5335,10 @@ class Checker:
         if exact is not None and exact[0] is node:
             into.update(exact[1])
             return
+        alias = self._made_alias.get(id(node))
+        if alias is not None and alias[0] is node:
+            self._collect_arenas(alias[1], into)
+            return
         match node:
             case ast.Allocated():
                 self._collect_arenas(node.value, into)
@@ -5418,6 +5458,131 @@ class Checker:
                 if id(arena) in local.arenas and local.gone_at is None:
                     local.gone_at = span
                     local.gone_with = arena.name
+
+    def _provenance(self) -> _Provenance:
+        """What every name in reach was made in and whether it is dead, as it stands.
+
+        The part of a name's state that differs from one way through a body to
+        another, as its value does -- so it is taken and put back where the value is:
+        at every arm, and around every way out that runs what a block put off.
+        """
+        return {id(local): (local, local.arenas, local.gone_at, local.gone_with)
+                for scope in self._scopes for local in scope.values()}
+
+    def _put_back(self, state: _Provenance) -> None:
+        """Make what *state* says of every name in it true again."""
+        for local, arenas, gone_at, gone_with in state.values():
+            local.arenas, local.gone_at, local.gone_with = arenas, gone_at, gone_with
+
+    def _joined(self, before: _Provenance,
+                ways: Sequence[_Provenance]) -> _Provenance:
+        """What holds where several ways through meet: the union of what a name was
+        made in, and dead where it is dead along any of them."""
+        found: _Provenance = {}
+        for key, (local, arenas, gone_at, gone_with) in before.items():
+            made: set[int] = set()
+            dead: tuple[Span | None, str] = (None, "")
+            for way in ways:
+                _, there, gone, why = way.get(key, (local, arenas, gone_at,
+                                                    gone_with))
+                made.update(there)
+                if gone is not None and dead[0] is None:
+                    dead = (gone, why)
+            found[key] = (local, frozenset(made), *dead)
+        return found
+
+    def _on_the_way_out(self) -> tuple[_Provenance, list[set[int]]]:
+        """What a way out may change and the way that goes on must not see.
+
+        What a block put off runs on every way out of it, and an `⎕empty` there
+        kills what was made in the arena -- along that way, which ends, and not along
+        the one that carries on past the `return` or the `break`.
+        """
+        return self._provenance(), [set(one) for one in self._emptied]
+
+    def _left(self, kept: tuple[_Provenance, list[set[int]]]) -> None:
+        """Put back what `_on_the_way_out` took."""
+        self._put_back(kept[0])
+        for one, was in zip(self._emptied, kept[1]):
+            one.clear()
+            one.update(was)
+
+    def _taken_out_of(self, whole: ast.Expr, names: Sequence[str]) -> None:
+        """Names bound to a part of something were made where the whole was.
+
+        What a `match` takes out of a value, and what a `foreach` takes out of what
+        it walks, point where the whole pointed: an entry of a list made in an arena
+        is in the arena, and so is the text a result carried.
+        """
+        made = self._arenas_in(whole)
+        if not made:
+            return
+        for name in names:
+            local = self._find_local(name)
+            if local is not None and not self._is_arena(local) \
+                    and _points_somewhere(self._held_by(local)):
+                local.arenas = local.arenas | made
+
+    def _a_turn_begins(self, body: ast.Block) -> _Provenance:
+        """What a turn of a loop may begin with, which is what any turn may end with.
+
+        A name the body assigns may hold, at the top of a turn, what an earlier turn
+        gave it -- so it is taken to be made in anything the body names, which a
+        walk of the body says before any of it is lowered: the turn after is behind
+        it in the text and ahead of it in time.  Then what the body gives back is
+        dead for the whole of the loop (`_before_a_turn`).
+        """
+        assigned: set[str] = set()
+        _written_in(body, assigned)
+        if assigned:
+            anything = self._arenas_in(body)
+            for name in assigned:
+                local = self._find_local(name)
+                if local is not None and not self._is_arena(local) \
+                        and _points_somewhere(self._held_by(local)):
+                    local.arenas = local.arenas | anything
+        self._before_a_turn(body)
+        return self._provenance()
+
+    def _after_the_turns(self, head: _Provenance, end: _Provenance | None,
+                         loop: _Loop | None) -> None:
+        """What holds after a loop: what holds where it may be left.
+
+        At the top of a turn, where the condition or the iterator may end it; at the
+        end of the body, which goes back there; and at every `break`.
+        """
+        ways = [head]
+        if end is not None:
+            ways.append(end)
+        if loop is not None:
+            ways.extend(loop.left_with)
+        self._put_back(self._joined(head, ways))
+
+    def _made_in_part(self, base: ast.Expr, value: ast.Expr, span: Span) -> None:
+        """What a field, an element or an entry was given, added to the whole.
+
+        The whole holds what it held and now this as well, so what it was made in
+        grows and is never replaced -- the other parts still hold what they did.
+        Put further out than an arena, something made in the arena outlives it, as
+        it would in a name of its own (4614).
+        """
+        root = base
+        while isinstance(root, (ast.Member, ast.Element, ast.Index)):
+            root = root.base
+        if not isinstance(root, ast.NameRef):
+            return
+        local = self._find_local(root.name)
+        if local is None or self._is_arena(local) \
+                or not _points_somewhere(self._held_by(local)):
+            return
+        made = self._arenas_in(value)
+        for one in made:
+            arena = self._arena_by_id.get(one)
+            if arena is not None and arena.depth > local.depth:
+                self._diags.emit(D.LANG_ARENA_VALUE_OUTLIVES, span,
+                                 name=root.name, arena=arena.name)
+                return
+        local.arenas = local.arenas | made
 
     def _before_a_turn(self, body: ast.Block) -> None:
         """Kill what an arena given back inside a loop held from before the loop.
@@ -5566,11 +5731,16 @@ class Checker:
         node, func = self._demanding
         if func is not None:
             # What every open block put off, innermost first, after the answer was
-            # worked out and before anything is said about it.
-            self._run_deferred(builder, func, 0)
-            if builder.is_terminated:
-                return
-            self._all_given_back(0, span)
+            # worked out and before anything is said about it.  What it kills, it
+            # kills along this way out and not along the way past it.
+            kept = self._on_the_way_out()
+            try:
+                self._run_deferred(builder, func, 0)
+                if builder.is_terminated:
+                    return
+                self._all_given_back(0, span)
+            finally:
+                self._left(kept)
         if node is not None and func is not None:
             for clause in node.clauses:
                 if clause.kind is not ast.ClauseKind.POST \
@@ -5842,7 +6012,7 @@ class Checker:
         finally:
             self._unrun_deferred(func, frame)
             self._deferred.pop()
-            self._emptied.pop()
+            self._last_emptied = self._emptied.pop()
 
     def _lower_yielding(self, builder: IRBuilder, stmt: ast.Stmt, func: Function,
                         wanted: Type | None) -> Value | None:
@@ -5948,6 +6118,7 @@ class Checker:
                     self._returning(builder, result, stmt.span)
             case ast.EntryAssign():
                 self._lower_entry_assign(builder, stmt)
+                self._made_in_part(stmt.base, stmt.value, stmt.span)
             case ast.UnitDef():
                 # Nothing is lowered: a unit is part of a type and a type is
                 # nothing the program runs.  What it does is exist from here to
@@ -5955,8 +6126,10 @@ class Checker:
                 self._define_unit(stmt)
             case ast.ElementAssign():
                 self._lower_element_assign(builder, stmt)
+                self._made_in_part(stmt.base, stmt.value, stmt.span)
             case ast.MemberAssign():
                 self._lower_member_assign(builder, stmt)
+                self._made_in_part(stmt.base, stmt.value, stmt.span)
             case ast.DerefAssign():
                 self._lower_deref_assign(builder, stmt)
             case ast.Defer():
@@ -9332,7 +9505,9 @@ class Checker:
                     else frozenset()))
                 return found if found is not None else UndefConst(VOID)
             stmt = replace(stmt, arms=arms)
-            self._made_from[id(written)] = (written, self._arenas_in(stmt))
+            # What the arms left come to, which the lowering below records for the
+            # `if` it lowers -- the narrowed one, which no other node is.
+            self._made_alias[id(written)] = (written, stmt)
         last = stmt.arms[-1]
         has_else = last.condition is None
         if produces and not has_else:
@@ -9469,10 +9644,12 @@ class Checker:
         one = self._begin_loop(label, header, after, carried, (), None,
                                produces, produces and stmt.alternative is None,
                                handing)
-        self._before_a_turn(stmt.body)
+        head = self._a_turn_begins(stmt.body)
         self._lower_block(builder, stmt.body, func, as_result=False)
+        end = self._provenance() if not builder.is_terminated else None
         self._end_loop(label)
         self._pop_scope()
+        self._after_the_turns(head, end, one)
         self._carried = outer_carried
         if not builder.is_terminated and builder.block is not None:
             builder.br(header,
@@ -9569,13 +9746,16 @@ class Checker:
         builder.position_at(body)
         self._push_scope()
         self._bind_turn(builder, stmt, found.take(builder, state))
+        self._taken_out_of(stmt.iterable, (stmt.name, *(n for n, _ in stmt.more)))
         one = self._begin_loop(label, header, after, carried, state, found.step,
                                produces, produces and stmt.alternative is None,
                                handing)
-        self._before_a_turn(stmt.body)
+        head = self._a_turn_begins(stmt.body)
         self._lower_block(builder, stmt.body, func, as_result=False)
+        end = self._provenance() if not builder.is_terminated else None
         self._end_loop(label)
         self._pop_scope()
+        self._after_the_turns(head, end, one)
         self._carried = outer_carried
         if not builder.is_terminated and builder.block is not None:
             builder.br(header,
@@ -9680,7 +9860,11 @@ class Checker:
         handed = self._handed_over(builder, stmt, found)
         # Leaving every block opened since the loop began, so what they put off is
         # done now -- after what is handed over was worked out, as a return's is.
+        kept = self._on_the_way_out()
         self._run_deferred(builder, self._demanding[1], found.frame)
+        # What holds here holds after the loop, which this way reaches.
+        found.left_with.append(self._provenance())
+        self._left(kept)
         if builder.is_terminated:
             return
         carried = tuple(local.value for local in found.carried)
@@ -9748,7 +9932,9 @@ class Checker:
         if found is None or builder.block is None:
             return
         # The next turn begins with the body left, which runs what it put off.
+        kept = self._on_the_way_out()
         self._run_deferred(builder, self._demanding[1], found.frame)
+        self._left(kept)
         if builder.is_terminated:
             return
         moved = found.step(builder, found.state) if found.step is not None \
@@ -10678,6 +10864,13 @@ class Checker:
         joined = builder.new_block("matched")
         before = [(local, local.value, local.value_span)
                   for scope in self._scopes for local in scope.values()]
+        # What a name was made in differs from arm to arm the way its value does,
+        # so each arm starts from what held before the arms and the join gets what
+        # the arms that reach it leave.
+        provenance = self._provenance()
+        reaching: list[_Provenance] = []
+        given_back: list[set[int]] = []
+        yielded: set[int] = set()
         outer_carried = self._carried
         self._carried = outer_carried | {id(local) for local, _, _ in before}
         before_memory = builder.memory()
@@ -10703,8 +10896,20 @@ class Checker:
                 self._name_value(bound, name, name_span)
                 self._bind_local(name, bound, name_span, value_span=where_span,
                                  builder=builder)
+                if isinstance(stmt, ast.Match):
+                    self._taken_out_of(stmt.subject, (name,))
+            self._put_back(provenance)
             given = self._lower_block(builder, arm.body, func, as_result=False,
                                       wanted=answer, produces=produces)
+            emptied_here = self._last_emptied
+            if produces and given is not None and not builder.is_terminated:
+                # What this arm comes to, asked while the names it bound are still
+                # in reach: what the arm did along the way is not what it yields.
+                last = arm.body.stmts[-1] if arm.body.stmts else None
+                if isinstance(last, ast.ExprStmt):
+                    yielded.update(self._arenas_in(last.value))
+                elif last is not None:
+                    yielded.update(self._arenas_in(arm.body))
             if produces and given is not None and answer is None:
                 # Nothing said what the arms answer with, so the first one that
                 # does say.  The rest are checked against it.
@@ -10719,13 +10924,24 @@ class Checker:
             if not builder.is_terminated and builder.block is not None:
                 outcomes.append((builder.block, moved, builder.memory(), given))
                 touched = touched or builder.memory() is not before_memory
+                reaching.append(self._provenance())
+                given_back.append(emptied_here)
             for local, held, where in before:
                 local.value, local.value_span = held, where
         if otherwise is not None:
             # A way through that runs no arm at all, which is what an `if` with
             # no `else` has.  Nothing changed along it and nothing was written.
             outcomes.append((otherwise, {}, otherwise_memory, None))
+            reaching.append(provenance)
+            given_back.append(set())
         self._carried = outer_carried
+        self._put_back(self._joined(provenance, reaching) if reaching
+                       else provenance)
+        if given_back and self._emptied:
+            # Given back along every way that reaches the join is given back.
+            self._emptied[-1].update(set.intersection(*given_back))
+        if produces:
+            self._made_from[id(stmt)] = (stmt, frozenset(yielded))
         if not outcomes:
             # Every arm left the function, so nothing arrives at the join and a
             # block with no way in is a block that should not be there.
@@ -11198,6 +11414,9 @@ class Checker:
         not twice at once.  An answer that may hold a reference keeps what it was
         handed until the statement ends, or until the name it is bound to goes.
         """
+        if isinstance(expr, (ast.Member, ast.Element, ast.Index)) \
+                and self._read_through_the_dead(expr):
+            return UndefConst(ERROR)
         if not isinstance(expr, _CALLING):
             return self._lower_written(builder, expr, expected)
         before = len(self._borrows)
@@ -11208,6 +11427,25 @@ class Checker:
                 one for one in self._borrows[before:]
                 if one.depth != _UNTIL_THE_STATEMENT_ENDS]
         return found
+
+    def _read_through_the_dead(self, expr: ast.Expr) -> bool:
+        """Refuse reading part of a name whose arena was given back (4615).
+
+        A field, an element and an entry are the whole's, and the whole is dead
+        when anything it holds may be: the name says what it holds as one set.
+        """
+        root = expr
+        while isinstance(root, (ast.Member, ast.Element, ast.Index)):
+            root = root.base
+        if not isinstance(root, ast.NameRef):
+            return False
+        local = self._find_local(root.name)
+        if local is None or local.gone_at is None:
+            return False
+        local.read = True
+        self._diags.emit(D.LANG_ARENA_VALUE_GIVEN_BACK, root.span,
+                         name=root.name, arena=local.gone_with)
+        return True
 
     def _lower_written(self, builder: IRBuilder, expr: ast.Expr,
                        expected: Type | None) -> Value:

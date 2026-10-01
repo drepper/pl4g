@@ -1,0 +1,17 @@
+※ pl4g-test: compile=error
+※ pl4g-test: expect-diag 4615 LANG_ARENA_VALUE_GIVEN_BACK
+
+※ An `if` with no `else` has a way through that runs no arm, and along it a name keeps what it
+※ had -- so the old value's arena is still one the name may be made in.
+
+@[startup]
+fn main() → u6:
+    let s0: mut arena = ⎕arena
+    let s1: mut arena = ⎕arena
+    defer ⎕empty(s1)
+    let c: bool = false
+    let x: mut str = "a" ⧺ "b" in s0
+    if c:
+        x ← "c" ⧺ "d" in s1
+    ⎕empty(s0)
+    if x = "ab": 0u6 else: 1u6

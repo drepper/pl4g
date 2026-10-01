@@ -1,0 +1,13 @@
+※ pl4g-test: compile=error
+※ pl4g-test: expect-diag 4615 LANG_ARENA_VALUE_GIVEN_BACK
+
+※ An element is part of its array, so an element given something made in an arena makes the
+※ array hold it, as a field does its record.
+
+@[startup]
+fn main() → u6:
+    let s: mut arena = ⎕arena
+    let v: mut str⟦2⟧ = ⟦"-", "-"⟧
+    v⟦0⟧ ← "a" ⧺ "b" in s
+    ⎕empty(s)
+    if v⟦0⟧ = "ab": 0u6 else: 1u6

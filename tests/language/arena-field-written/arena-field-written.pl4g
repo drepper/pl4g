@@ -1,0 +1,15 @@
+※ pl4g-test: compile=error
+※ pl4g-test: expect-diag 4615 LANG_ARENA_VALUE_GIVEN_BACK
+
+※ A field given something made in an arena makes the record hold it: what the record was made
+※ in grows by that arena, and is never replaced, the other fields still holding what they did.
+※ Reading a field of a record whose arena was given back is reading what is gone.
+
+type R = f: str
+@[startup]
+fn main() → u6:
+    let s: mut arena = ⎕arena
+    let r: mut R = R(.f ← "-")
+    r.f ← "a" ⧺ "b" in s
+    ⎕empty(s)
+    if r.f = "ab": 0u6 else: 1u6

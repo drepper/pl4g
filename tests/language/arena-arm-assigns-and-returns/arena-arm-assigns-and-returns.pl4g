@@ -1,0 +1,19 @@
+※ pl4g-test: compile=error
+※ pl4g-test: expect-diag 4615 LANG_ARENA_VALUE_GIVEN_BACK
+
+※ An arm that leaves the function reaches no join, so what it did to a name is not what holds
+※ after the `if`: there `x` still holds what it was given first, made in `s0`.
+
+@[startup]
+fn main() → u6:
+    let s0: mut arena = ⎕arena
+    let s1: mut arena = ⎕arena
+    defer ⎕empty(s1)
+    let c: bool = false
+    let x: mut str = "a" ⧺ "b" in s0
+    if c:
+        x ← "c" ⧺ "d" in s1
+        ⎕empty(s0)
+        return 2u6
+    ⎕empty(s0)
+    if x = "ab": 0u6 else: 1u6

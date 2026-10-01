@@ -1,0 +1,21 @@
+※ pl4g-test: compile=error
+※ pl4g-test: expect-diag 4615 LANG_ARENA_VALUE_GIVEN_BACK
+
+※ The arms of a `match` join as an `if`'s do: a name each arm gives something from another
+※ arena may hold either afterwards.
+
+enum Pick { one ; two }
+@[startup]
+fn main() → u6:
+    let s1: mut arena = ⎕arena
+    let s2: mut arena = ⎕arena
+    defer ⎕empty(s2)
+    let p: Pick = Pick.one
+    let x: mut str = "-"
+    match p:
+        one:
+            x ← "a" ⧺ "b" in s1
+        two:
+            x ← "c" ⧺ "d" in s2
+    ⎕empty(s1)
+    if x = "ab": 0u6 else: 1u6

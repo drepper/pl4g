@@ -1,0 +1,13 @@
+※ pl4g-test: compile=error
+※ pl4g-test: expect-diag 4615 LANG_ARENA_VALUE_GIVEN_BACK
+
+※ Names a tuple is taken apart into were made where the tuple was.
+
+fn both(a: &mut arena) → 〈str, u8〉 in a:
+    〈"a" ⧺ "b" in a, 1u8〉
+@[startup]
+fn main() → u6:
+    let s: mut arena = ⎕arena
+    let x, y := both(&mut s)
+    ⎕empty(s)
+    if x = "ab" ∧ y = 1u8: 0u6 else: 1u6

@@ -1,0 +1,17 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ What an `if` comes to is what its arms yield -- the last expression of each -- and not
+※ everything the arms did on the way there.  A temporary made in an arena and used up inside
+※ the arm leaves nothing in what the arm yields, so emptying the arena afterwards kills nothing.
+
+let std := ⎕import("std")
+@[startup]
+fn main() → u6:
+    let s: mut arena = ⎕arena
+    let got: str = if true:
+        let tmp: str = ⍕7u8 in s
+        if tmp = "7": "yes" else: "no"
+    else:
+        "z"
+    ⎕empty(s)
+    if got = "yes": 0u6 else: 1u6

@@ -3312,6 +3312,24 @@ made in any arena it was handed, which is the only thing a caller can know witho
 from somewhere that lasts is then a cautious guess and never a wrong one -- and a signature can say exactly (below).  A value of a
 type that points nowhere -- a number, a `bool`, a fixed array of those -- was made in nothing, whatever it was computed from.
 
+**It follows every way through a body, as a name's value does.**  Each arm of an `if` or a `match` starts from what held before
+it, and where the arms join a name was made in anything it was made in along any arm that reaches the join -- and is dead if it is
+dead along any of them.  An `if` with no `else` has a way through that runs no arm, and an arm that leaves the function reaches no
+join at all.  What an `if` comes to is what its arms *yield*, the last expression of each, and not the temporaries they used on the
+way.  An arena given back in every arm that reaches the join is given back after it.
+
+**What a way out runs, it runs along that way only.**  A `defer ⎕empty(s)` lowered at a `return`, a `?`, a `break` or a `continue`
+kills what was made in `s` along the way that leaves, and the way past it still holds what it held -- the arena has not been given
+back there yet.
+
+**A loop's turns are one way after another.**  A name the body assigns may hold, at the top of a turn and after the loop, what any
+turn gave it, so it is taken to be made in anything the body names as well as in what it held before.  The way out of the loop is
+the top of a turn, the end of the body, and every `break`.
+
+**A part is the whole's.**  A field, an element or an entry given something made in an arena makes the whole hold it: what the
+whole was made in grows, and is never replaced.  Reading a part of a dead name is reading a dead name.  And what a `match` takes
+out of a value, what a `foreach` takes out of what it walks, and what a tuple is taken apart into, were made where the whole was.
+
 **Only what made an arena gives it back** (4616).  One handed over by reference is its maker's, who may be holding things made in
 it; `⎕heap` and an arena at the top level last as long as the program, and anything anywhere may be holding things made in those.
 Without this rule none of the above would hold: a function emptying an arena it was handed would kill names in its caller that the
