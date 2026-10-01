@@ -3671,6 +3671,8 @@ class Checker:
             return
         if local is not None and holds == _HEAP:
             self._elements_replaced(local.arenas, local.name, expr.span)
+            # The call may have put the heap's in it.
+            local.arenas = local.arenas | {_HEAP}
 
     def _borrowed_from(self, node: ast.FuncDef, ret: Type) -> tuple[int, ...]:
         """Which parameters the answer names what was named by, where it says.
@@ -5458,18 +5460,39 @@ class Checker:
             return
         match node:
             case ast.Allocated():
-                self._collect_arenas(node.value, into)
+                # The arena named, and what the operands were made in: the room
+                # the expression itself takes is the arena's and not `⎕heap`'s.
                 self._collect_arenas(node.arena, into)
+                exact = self._made_from.get(id(node.value))
+                if exact is not None and exact[0] is node.value:
+                    into.update(exact[1])
+                    return
+                if isinstance(node.value, ast.Node):
+                    for one in fields_of(node.value):
+                        held = getattr(node.value, one.name)
+                        for each in (held if isinstance(held, tuple) else (held,)):
+                            if isinstance(each, ast.Node):
+                                self._collect_arenas(each, into)
                 return
+            case ast.Binary() if node.op is ast.BinaryOp.CONCAT:
+                # Not lowered yet -- a body read ahead of time -- so what it will be
+                # made in is what one naming no arena is made in.
+                into.add(_HEAP)
+            case ast.ListLit() | ast.SetLit() | ast.DictLit():
+                into.add(_HEAP)
             case ast.Element():
                 # An element is read out of a container: it was made where the
                 # container's elements were, and it is the container's -- so it
                 # carries a key saying which, for the moment one is replaced.
+                # Where the container's elements were made, without the keys that
+                # name the container -- an element is not the container -- and, if
+                # any may be the heap's, a key saying it was read out of this one.
                 inner: set[int] = set()
                 self._collect_arenas(node.base, inner)
-                into.update(inner)
-                into.update(_element_key(one) for one in inner
-                            if _is_container_key(one))
+                keys = {one for one in inner if _is_container_key(one)}
+                into.update(inner - keys)
+                if _HEAP in inner:
+                    into.update(_element_key(one) for one in keys)
                 return
             case ast.NameRef():
                 local = self._find_local(node.name)
@@ -5736,10 +5759,8 @@ class Checker:
                 if local is None or self._is_arena(local) \
                         or not _points_somewhere(self._held_by(local)):
                     continue
-                if name not in assigned and _is_owning(self._held_by(local)):
-                    # Only elements written, each copied into the array's own
-                    # allocator: what the array was made in stays what it was.
-                    continue
+                # An array whose elements the body writes may, at the top of a
+                # turn, hold what a later line of the body put in it.
                 local.arenas = local.arenas | anything
         self._before_a_turn(body)
         return self._provenance()
@@ -5877,7 +5898,7 @@ class Checker:
                        for one in made)
         else:
             if made == {_HEAP} and _is_temporary(written):
-                return value, frozenset(), None
+                return value, made, None
             fits = all(self._lasts(one, holder, depth, local) for one in made)
         if fits:
             return value, made, None
@@ -5895,7 +5916,7 @@ class Checker:
                      ", its allocator not being provably the container's or long "
                      "enough lived")), written.span)
         spare = value if made == {_HEAP} and _is_temporary(written) else None
-        return copied, frozenset({holder}) if pool else frozenset(), spare
+        return copied, frozenset({holder}), spare
 
     def _elements_replaced(self, keys: frozenset[int], name: str,
                            span: Span) -> None:
@@ -5940,9 +5961,10 @@ class Checker:
             return value
         target = next(iter(sorted(allowed)))
         if not owned.can_own(ty):
-            found = sorted(self._owner_written(one) for one in made
-                           if one == _HEAP or one in self._arena_by_id) \
-                or ["somewhere it cannot say"]
+            found = (["what another name still holds"] if made <= allowed else
+                     sorted(self._owner_written(one) for one in made
+                            if one == _HEAP or one in self._arena_by_id)
+                     or ["somewhere it cannot say"])
             self._diags.emit(D.LANG_ANSWER_CANNOT_BE_COPIED, span, name=func.name,
                              found=", ".join(found), said=named,
                              type=ty.written())
@@ -6635,9 +6657,9 @@ class Checker:
         finally:
             self._element_made = outer
         if owned.points(ty.element):
-            # Its elements are in the allocator they were put in, and in whatever
-            # lasting one an element was taken from as it was.
-            self._made_from[id(expr)] = (expr, self._out_of_arenas | made)
+            # The array is room in the frame: what it was made in is what its
+            # elements were, in the allocator they were put in or kept from.
+            self._made_from[id(expr)] = (expr, made)
         return builder.cast(CastKind.BITCAST, place, ty, expr.span)
 
     def _array_written(self, builder: IRBuilder, expr: ast.ArrayLit,

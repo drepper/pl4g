@@ -1,0 +1,19 @@
+※ pl4g-test: compile=error
+※ pl4g-test: expect-diag 4626 LANG_ELEMENT_REPLACED
+
+※ At the top of a turn an array holds what a later line of the body put in it on the turn before:
+※ here an element of the heap's, which the replacement on this turn gives back.  So what was read
+※ at the top is dead after the replacement, though nothing of the heap's was in the array before
+※ the loop began.
+
+@[startup]
+fn main() → u6:
+    let v: mut str⟦1⟧ = ⟦"a"⟧
+    let n: mut u8 = 0u8
+    while n < 2u8:
+        let x: str = v⟦0⟧
+        v⟦0⟧ ← "b" ⧺ "c"
+        if x = "bc":
+            n ← n + 1u8
+        n ← n + 1u8
+    0u6

@@ -33,8 +33,8 @@ from ..ir.function import Function
 from ..ir.inst import BinOp, CastKind, CmpPred
 from ..ir.layout import DataLayout, parts_of, stride_of
 from ..ir.module import Module
-from ..ir.types import (ARENA, MEM, ListType, PtrType, StrType, Type, U8, U64,
-                        VOID)
+from ..ir.types import (ARENA, MEM, DictType, ListType, PtrType, SetType,
+                        StrType, Type, U8, U64, VOID)
 from ..ir.value import Value
 from . import strings, tables
 
@@ -64,7 +64,9 @@ def points(ty: Type) -> bool:
     match ty:
         case StrType() | ListType():
             return True
-        case PtrType():
+        case PtrType() | SetType() | DictType():
+            # A reference has lifetimes of its own, and a table is not yet held
+            # to any of this: its keys and values go in as they are.
             return False
     from .check import _points_somewhere  # pylint: disable=import-outside-toplevel
     return _points_somewhere(ty)

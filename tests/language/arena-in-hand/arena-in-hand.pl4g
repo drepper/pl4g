@@ -14,13 +14,14 @@
 ※ function gives back every arena it made on every way out, which `defer` says once where the
 ※ arena is made rather than before every `return`.
 
-※ Handed one, and so saying nothing: the caller gave the arena and owns what is in it.
-fn joined(a: &mut arena, first: str, second: str) → str:
+※ Handed one, and saying the answer is made in it: `→ str in a`.  Saying nothing would mean
+※ `⎕heap`, and the answer would be copied there.
+fn joined(a: &mut arena, first: str, second: str) → str in a:
     first ⧺ second in a
 
 ※ And an operator whose definition asks where to put what it builds, which is what
 ※ `⍕v in scratch` is.
-fn `⍕`(v: bool, a: &mut arena) → str:
+fn `⍕`(v: bool, a: &mut arena) → str in a:
     if v: "yes" ⧺ "!" in a else: "no" ⧺ "!" in a
 
 @[startup]
