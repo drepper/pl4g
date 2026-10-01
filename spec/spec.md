@@ -278,6 +278,30 @@ them needs.
 **Every write is one request and nothing is held back.**  A program that wants fewer, larger writes makes them itself; there is
 nothing between it and the device.
 
+**`print` and `println` write every byte they were given.**
+
+```
+⎕drop(std.println(&mut init.io.output, ⎕bytes("hello")) ?? 0)
+⎕drop(std.print(&mut init.io.output, ⎕bytes("no newline")) ?? 0)
+```
+
+That is what they add over `write_sync`, which answers what the kernel took.  **The kernel may take fewer bytes than it was
+offered** -- a pipe with room for some of them, a signal part way through -- and a program that printed a line wants the line
+printed, so what is left is offered again until none is.  What comes back is the total, which is every byte wherever it answers at
+all.  A device that would have to wait and was told not to says so instead of being asked again in a circle: the refusal is the
+kernel's number, `would_block` among them.
+
+**`println` writes the newline in the same request**, as a second run of bytes rather than a second call.  `writev` takes a list of
+runs, so the text and the newline reach the kernel together and nothing else writing to that device can land between them -- which
+is the thing two calls cannot promise and the reason the newline is not simply joined onto the text first: joining allocates and
+copies, and a line is written to be written rather than to be kept.  Where the kernel takes fewer bytes than the list held, the
+rest is written plainly, which is simpler than walking the list and is the uncommon case.
+
+Compare: **C**, whose `printf` buffers and whose `write` is the thing underneath; **Go**'s `fmt.Println`, which joins the newline
+onto the text and writes once; **Rust**'s `println!`, which writes into a locked buffered writer; **Zig**, whose writer interface
+makes the caller choose whether anything is buffered.  What is unusual here is that nothing is buffered and the line is still one
+request, which is what a list of runs of bytes buys.
+
 **Text is written as its bytes**, which `⎕bytes` answers:
 
 ```

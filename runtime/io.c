@@ -22,6 +22,7 @@ typedef int i32;
 #if defined(__x86_64__)
 # define NR_READ 0
 # define NR_WRITE 1
+# define NR_WRITEV 20
 # define NR_MMAP 9
 # define NR_IO_URING_SETUP 425
 # define NR_IO_URING_ENTER 426
@@ -42,6 +43,7 @@ static inline i64 sys(i64 n, i64 a, i64 b, i64 c, i64 d, i64 e, i64 f)
 #elif defined(__aarch64__)
 # define NR_READ 63
 # define NR_WRITE 64
+# define NR_WRITEV 66
 # define NR_MMAP 222
 # define NR_IO_URING_SETUP 425
 # define NR_IO_URING_ENTER 426
@@ -65,6 +67,7 @@ static inline i64 sys(i64 n, i64 a, i64 b, i64 c, i64 d, i64 e, i64 f)
 #elif defined(__riscv) && __riscv_xlen == 64
 # define NR_READ 63
 # define NR_WRITE 64
+# define NR_WRITEV 66
 # define NR_MMAP 222
 # define NR_IO_URING_SETUP 425
 # define NR_IO_URING_ENTER 426
@@ -183,6 +186,7 @@ const u64 pl4g_io_shape[] = {
 
 #define OP_READ 22
 #define OP_WRITE 23
+#define OP_WRITEV 2
 
 /* Which direction a call goes, and what each of the two ways of going there
  * calls it.  One table rather than two constants at each call site: the ring
@@ -193,13 +197,19 @@ struct way {
   unsigned short nr;            /* what the kernel calls it */
 };
 
-static const struct way ways[2] = {
+static const struct way ways[3] = {
   { OP_READ, NR_READ },
   { OP_WRITE, NR_WRITE },
+  { OP_WRITEV, NR_WRITEV },
 };
 
 #define READING 0
 #define WRITING 1
+/* Several runs of bytes written as one request.  `at` is then where the list of
+ * them is and `len` is how many are in it, which is the shape the ring and the
+ * kernel both take -- so it goes through `submit` with nothing said about it,
+ * and the way without a ring is `writev` with the same two arguments. */
+#define WRITING_SEVERAL 2
 #define ENTER_GETEVENTS 1
 
 /* The one refusal this file makes up rather than passes on. */
@@ -476,6 +486,11 @@ struct run pl4g_env(const u64 *stack)
  * question with one answer. */
 i64 pl4g_io_submit(struct pl4g_ring *r, i32 which, i32 fd, u64 at, u64 len)
 {
+  /* `which` indexes a table and comes from the language, so it is checked here:
+   * this is the one door from a program into an array of function numbers, and
+   * a program cannot be the thing that keeps it shut. */
+  if (which < 0 || which >= (i32) (sizeof ways / sizeof ways[0]))
+    return -EINVAL;
   int ready = started(r);
   long slot = a_slot(r);
   if (slot < 0)

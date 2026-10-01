@@ -202,6 +202,84 @@ fn read(from: &mut Reader, into: u8⟦⟧) → u64 ¤size ? i32:
     else:
         flush(Pending(.slot ← slot))
 
+※ -- writing text ------------------------------------------------------------
+
+※※ Several runs of bytes written as one request, which is what `println` is for.
+let WRITING_SEVERAL: i32 = 2i32
+
+※※ Write `total` bytes from `at` to `to`, offering what is left until none is.
+※
+※ The kernel may take fewer bytes than it was offered -- a pipe with room for
+※ some of them, a signal part way -- and a program that printed a line wants the
+※ line printed.  So this is the loop `write_sync` does not do, and it is here
+※ rather than in each caller because both of the two want it.
+@[impure]
+fn all_of(to: &mut Writer, at: u64, total: u64) → u64 ¤size ? i32:
+    let done: mut u64 = 0u64
+    while done < total:
+        let slot: i64 = io_submit(&mut ring, WRITING, to⌖.fd, at + done,
+                                  total - done)
+        if slot < 0i64:
+            return ⊥ 11i32
+        let went: u64 = ⎕drop(flush(Pending(.slot ← slot))?)
+        if went = 0u64:
+            ※ No progress and no refusal: nothing more will happen, and saying so
+            ※ beats asking for ever.  `EIO` is what the kernel would have said.
+            return ⊥ 5i32
+        done ← done + went
+    ⎕unit(done, ⌜size⌝)
+
+※※ Write every byte of `what` to `to`, answering how many went.
+※※
+※※ \param to the device to write to
+※※ \param what the bytes to write
+※※ \return how many bytes went, which is all of them
+※※ \raises the number the kernel gave
+@[export, impure]
+fn print(to: &mut Writer, what: u8⟦⟧) → u64 ¤size ? i32:
+    let total: u64 = ⎕drop(#what)
+    if total = 0u64:
+        ⎕unit(0u64, ⌜size⌝)
+    else:
+        all_of(to, ⎕address(&what⟦0⟧), total)
+
+※※ The same, with a newline after it, written as one request.
+※※
+※※ \details One request and not two: `writev` takes a list of runs of bytes, so
+※※ the text and the newline reach the kernel together and nothing else writing to
+※※ the same device can land between them.  Where the kernel takes fewer bytes than
+※※ it was offered the rest is written plainly, which is simpler than walking the
+※※ list and is the uncommon case.
+※※
+※※ \param to the device to write to
+※※ \param what the bytes to write before the newline
+※※ \return how many bytes went, which is `#what` and one more
+※※ \raises the number the kernel gave
+@[export, impure]
+fn println(to: &mut Writer, what: u8⟦⟧) → u64 ¤size ? i32:
+    let newline: u8⟦⟧ = ⎕bytes("\n")
+    let text: u64 = ⎕drop(#what)
+    let after: u64 = ⎕address(&newline⟦0⟧)
+    if text = 0u64:
+        all_of(to, after, 1u64)
+    else:
+        let before: u64 = ⎕address(&what⟦0⟧)
+        ※ The kernel's `iovec` twice over: where the bytes are and how many.
+        let parts: mut u64⟦4⟧ = ⟦before, text, after, 1u64⟧
+        let slot: i64 = io_submit(&mut ring, WRITING_SEVERAL, to⌖.fd,
+                                 ⎕address(&parts⟦0⟧), 2u64)
+        if slot < 0i64:
+            return ⊥ 11i32
+        let went: u64 = ⎕drop(flush(Pending(.slot ← slot))?)
+        let total: u64 = text + 1u64
+        if went = total:
+            ⎕unit(total, ⌜size⌝)
+        elif went < text:
+            ⎕drop(all_of(to, before + went, text - went)?)
+            all_of(to, after, 1u64)
+        else:
+            all_of(to, after + (went - text), total - went)
+
 ※ -- describing a build --------------------------------------------------------
 
 ※※ What a build function is handed, and what it writes into to say what to build.

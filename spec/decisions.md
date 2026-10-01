@@ -8149,6 +8149,68 @@ Left open: the general question above; a field whose name is wanted without its 
 and reflection over a sum, which would have to answer which part is held before anything
 else.
 
+---
+
+## 2026-10-01T02:40+02:00 — language
+
+**`std.print` and `std.println`, and `writev` in the ring**
+
+    ⎕drop(std.println(&mut init.io.output, ⎕bytes("hello")) ?? 0)
+    ⎕drop(std.print(&mut init.io.output, ⎕bytes("no newline")) ?? 0)
+
+Both write bytes to a device through the ring, wait, and answer how many went.
+
+**The ring was already there and already invisible.**  `pl4g_io_submit`,
+`pl4g_io_wait` and `pl4g_io_drain` in the runtime make it on the first read or write
+anything does, drive it by hand, and stand in for it with the plain system call where
+the system has none -- and nothing a program names is the ring.  So this entry is
+about the two functions and the one operation they needed, not about building a
+service.
+
+**What `print` adds over `write_sync` is that it does not stop short.**  `write_sync`
+answers what the kernel took, which is the honest number and the wrong behaviour for
+printing: a pipe with room for some of the bytes, or a signal part way, leaves a line
+half written.  So what is left is offered again until none is, and the answer is the
+total.  A device that would have to wait and was told not to is reported rather than
+asked again in a circle, which is where this differs from `/home/drepper/devel/ring`:
+that retries on `EAGAIN` and `EINTR` because its descriptors are the ring's to manage,
+and here a non-blocking device is the program's business.
+
+**`println` writes the newline in the same request, with `writev`.**  Not joined onto
+the text first -- joining allocates and copies, and a line is written to be written
+rather than kept -- and not a second call, which cannot promise that nothing else
+writing to the device lands between the text and its newline.  `writev` takes a list
+of runs of bytes, so `addr` is where the list is and `len` is how many are in it,
+which is the shape the ring and the kernel both take: it goes through the same
+`submit` with nothing said about it, and the way without a ring is `writev` with the
+same two arguments.  Where the kernel takes fewer bytes than the list held, the rest
+is written plainly, which is simpler than walking the list and is the uncommon case.
+
+So the runtime gained one row in the table of operations -- `IORING_OP_WRITEV` beside
+the kernel's `writev` number -- and the index a program passes is now checked against
+that table, it being the one door from a program into an array of call numbers.
+
+Compare: **C**, whose `printf` buffers and whose `write` is underneath; **Go**'s
+`fmt.Println`, which joins the newline on and writes once; **Rust**'s `println!`,
+which writes into a locked buffered writer; **Zig**, whose writer interface makes the
+caller choose what is buffered.  What is unusual here is that nothing is buffered and
+a line is still one request, which is what the list of runs buys.
+
+**And it found a compiler bug**, which has its own commit: the bytes of a string
+literal are a global named out of a pool that was kept per file, so `std`'s newline
+and the program's last literal were both `__pl4g_text.0` and the newline printed as
+the caller's text.  The pool belongs to the image.
+
+Turned down: **retrying on `EAGAIN`**, as the reference does -- a busy loop on a
+device the program asked not to wait for.  And **buffering**, which would make
+`print` and `write` two different ideas about when bytes leave; the specification
+already says every write is one request and nothing is held back.
+
+Left open: a short `writev` is reachable and is not covered by a test, there being no
+way to make room appear in a pipe from one thread; the other operations the ring can
+carry, which wait for something in the language to reach them, there being no way to
+open anything yet; and `print` taking text rather than bytes, which waits for `⍕`.
+
 Open questions
 --------------
 
