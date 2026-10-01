@@ -1,0 +1,24 @@
+※ pl4g-test: compile=error diag=7029
+
+※ A macro that will not write what it was asked for says so in its own words.
+※
+※ What is wrong is the *invocation* -- a template that does not agree with its arguments, a
+※ piece of the program the macro cannot use -- and not the compiler.  So the message is the
+※ macro's and it points where the invocation is, rather than reporting that something
+※ stopped: without this a template with three holes and two arguments would be reported as
+※ the compiler giving up.
+※
+※ `⎕refuse` answers a piece of the program and never answers, so it stands where the macro's
+※ answer stands.
+
+@[impure]
+macro only_short(t: syntax) → syntax:
+    let said: str = ⎕name(t)
+    if #said > 2:
+        return ⎕refuse("'" ⧺ said ⧺ "' is longer than two characters")
+    ⌜$(said)⌝
+
+@[startup, impure]
+fn main() → u6:
+    let s: str = only_short⌜"abcd"⌝
+    ⎕narrow(⎕drop(#s), ⌜u6⌝) ?? 1u6

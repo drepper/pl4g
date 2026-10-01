@@ -46,7 +46,16 @@ from ..diag.engine import DiagEngine
 from ..ir.module import Module
 from ..source.location import INVALID_SPAN, Span
 from . import ast
+from ..target.allocator import ALLOC_SYMBOL, GROW_SYMBOL
 from .interpret import Machine, Refused, Stopped
+
+
+class _Said(Exception):
+    """A macro refusing with its own message, which is about the invocation."""
+
+    def __init__(self, detail: str) -> None:
+        super().__init__(detail)
+        self.detail = detail
 
 #: The names of what a macro may call, which the machine gives a meaning to.  They
 #: are the checker's, because the checker is what writes the calls; they are repeated
@@ -54,6 +63,9 @@ from .interpret import Machine, Refused, Stopped
 QUOTE_NAME: Final[str] = "\N{APL FUNCTIONAL SYMBOL QUAD}quote"
 FILL_NAME: Final[str] = "\N{APL FUNCTIONAL SYMBOL QUAD}fill"
 FILL_NUMBER_NAME: Final[str] = "\N{APL FUNCTIONAL SYMBOL QUAD}fillnumber"
+FILL_TEXT_NAME: Final[str] = "\N{APL FUNCTIONAL SYMBOL QUAD}filltext"
+PIECE_NAME: Final[str] = "\N{APL FUNCTIONAL SYMBOL QUAD}name"
+REFUSE_NAME: Final[str] = "\N{APL FUNCTIONAL SYMBOL QUAD}refuse"
 HEAD_NAME: Final[str] = "\N{APL FUNCTIONAL SYMBOL QUAD}head"
 KIND_NAME: Final[str] = "\N{APL FUNCTIONAL SYMBOL QUAD}kind"
 PARTS_NAME: Final[str] = "\N{APL FUNCTIONAL SYMBOL QUAD}parts"
@@ -321,6 +333,12 @@ class _Expander:
         try:
             answer = self._machine.call(
                 func, [self._handle(one) for one in node.arguments.pieces])
+        except _Said as said:
+            # The macro would not write what it was asked for and said why, which
+            # is a fault in the invocation and not in the compiler -- so it carries
+            # the macro's own words and points where the invocation is.
+            self._diags.emit(D.LANG_MACRO_REFUSED, node.span, detail=said.detail)
+            return ast.NameRef(span=node.span, name=node.name)
         except Stopped as stopped:
             self._diags.emit(D.LANG_MACRO_RAN_BADLY, node.span, name=node.name,
                              detail=stopped.detail)
@@ -366,7 +384,8 @@ class _Expander:
         if found is None:
             return None
         self._made = found
-        self._machine = Machine(self._builtins())
+        self._machine = Machine({})
+        self._machine.knows(self._builtins())
         return found
 
     def _builtins(self) -> dict[str, Callable[..., object]]:
@@ -379,12 +398,42 @@ class _Expander:
             QUOTE_NAME: self._quoted,
             FILL_NAME: self._put_piece,
             FILL_NUMBER_NAME: self._put_number,
+            FILL_TEXT_NAME: self._put_text,
+            PIECE_NAME: self._spelling,
+            REFUSE_NAME: self._refuses,
             HEAD_NAME: self._head,
             KIND_NAME: self._kind,
             PARTS_NAME: self._parts,
             PART_NAME: self._part,
             ALIKE_PIECES_NAME: self._pieces_alike,
+            # And the allocator, which is the one callee with no body that is not
+            # a question about the program: it is per-target assembly, so there is
+            # nothing to run and the machine is the allocator while a macro runs.
+            # That is what lets a macro join two strings -- the join itself is
+            # ordinary code in the module, which the machine does run.
+            ALLOC_SYMBOL: self._machine_allocates,
+            GROW_SYMBOL: self._machine_allocates,
         }
+
+    def _refuses(self, text: object) -> object:
+        """What `⎕refuse` does: stop, carrying what the macro said.
+
+        A macro that will not write what it was asked for is reporting on the
+        *invocation*, so this is not the machine giving up -- it is the one thing a
+        macro can say about a program, and without it a template that disagrees with
+        its arguments would be reported as the compiler stopping.
+        """
+        raise _Said(self._read_text(text))
+
+    def _read_text(self, held: object) -> str:
+        """The text a machine value of type `str` stands for."""
+        if not (isinstance(held, tuple) and len(held) == 2):
+            raise Refused("text wanted")
+        return self._machine.read_text(held)
+
+    def _machine_allocates(self, arena: object, size: object) -> int:
+        """Room for a macro, out of the machine's own memory."""
+        return self._machine.allocate(arena, size)
 
     # -- handles ---------------------------------------------------------------
 
@@ -442,6 +491,35 @@ class _Expander:
                              type_name="i64")
         return self._put_into(tree, at, written if number >= 0 else ast.Unary(
             span=INVALID_SPAN, op=ast.UnaryOp.NEGATE, operand=written))
+
+    def _put_text(self, tree: object, at: object, text: object) -> int:
+        """The same, with the literal a program would have written to mean the text.
+
+        What a macro taking a template apart puts back: the pieces between the holes
+        are text it worked out, and a literal is how text stands in a program.
+        """
+        return self._put_into(tree, at, ast.StringLit(
+            span=INVALID_SPAN, value=self._read_text(text)))
+
+    def _spelling(self, handle: object) -> tuple[int, int]:
+        """What a piece is written as, as text.
+
+        A string literal answers what is between its quotation marks and a name
+        answers itself; anything else is refused, there being no one answer for an
+        expression -- `1u8 + 2u8` is not written as any one word, and a macro that
+        wants to know what it is made of asks `⎕head`.
+
+        This is what lets a macro read a template: the template is a literal, and
+        reading it is asking what it says.
+        """
+        found = self._tree(handle)
+        match found:
+            case ast.StringLit():
+                return self._machine.text(found.value)
+            case ast.NameRef():
+                return self._machine.text(found.name)
+        raise Refused("".join((type(found).__name__.lower(),
+                               " is written as no one word")))
 
     def _put_into(self, tree: object, at: object, put: object) -> int:
         """The tree with one hole replaced, and the rest still findable."""

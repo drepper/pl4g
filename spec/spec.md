@@ -4846,10 +4846,19 @@ the head is `⌜+⌝`.  `⎕part` names which part it wants rather than answerin
 machine that runs a macro: how many there are is its own question and a walk over them is a loop the macro writes.  Asking one of
 the three where nothing has a piece of the program is refused (7027), as is giving it the wrong number of arguments (7028).
 
+**`⎕name(e)` is what a piece is written as, as text.**  A string literal answers what is between its quotation marks and a name
+answers itself; anything else is refused, there being no one word an expression is written as.  That is what lets a macro read a
+template, a template being a literal.
+
+**`⎕refuse(TEXT)` is how a macro says it will not write what it was asked for** (7029).  What is wrong in that case is the
+*invocation* and not the compiler, so the message is the macro's own and it points where the invocation is -- without it a template
+with three holes and two arguments would be reported as the compiler giving up.  It answers a piece of the program and never
+answers, so it stands where the macro's answer stands.
+
 **`⌜…⌝` in the body of something that runs while the compiler does holds a piece of the program**, which is the same reading the
 invocation has and the reason the marks are the right ones.  `$a` puts the piece a name holds into the tree, and **`$(EXPR)` puts
-what an expression answers**: a piece of the program as itself, and a number as what a program would have written to mean it -- which
-is what lets a macro work something out and write the answer.  Anything else is refused (7021), and marks holding a piece where
+what an expression answers**: a piece of the program as itself, a number as what a program would have written to mean it, and text
+as the literal a program would have written -- which is what lets a macro work something out and write the answer.  Anything else is refused (7021), and marks holding a piece where
 nothing runs while the compiler does are refused too (7020).
 
 **A body may write statements** by answering a quote whose contents are indented, exactly as a template may, and what it writes

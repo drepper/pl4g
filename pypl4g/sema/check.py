@@ -632,6 +632,8 @@ _PURITY: Final[frozenset[int]] = frozenset({
 QUOTE_NAME: Final[str] = "".join((BUILTIN_GLYPH, "quote"))
 FILL_NAME: Final[str] = "".join((BUILTIN_GLYPH, "fill"))
 FILL_NUMBER_NAME: Final[str] = "".join((BUILTIN_GLYPH, "fillnumber"))
+FILL_TEXT_NAME: Final[str] = "".join((BUILTIN_GLYPH, "filltext"))
+REFUSE_NAME: Final[str] = "".join((BUILTIN_GLYPH, "refuse"))
 HEAD_NAME: Final[str] = "".join((BUILTIN_GLYPH, "head"))
 KIND_NAME: Final[str] = "".join((BUILTIN_GLYPH, "kind"))
 PIECE_NAME: Final[str] = "".join((BUILTIN_GLYPH, "name"))
@@ -645,6 +647,10 @@ ALIKE_PIECES_NAME: Final[str] = "".join((BUILTIN_GLYPH, "alike"))
 #: of the machine that runs a macro: how many there are is a separate question, and a
 #: walk over them is a loop the macro writes.
 _ASKS_ABOUT_A_PIECE: Final[dict[str, tuple[Type, ...]]] = {
+    # Not about a piece, but asked the same way and only where a macro runs: what
+    # a macro says about the program it was asked to write.
+    REFUSE_NAME: (STR,),
+    PIECE_NAME: (SYNTAX,),
     HEAD_NAME: (SYNTAX,),
     PARTS_NAME: (SYNTAX,),
     PART_NAME: (SYNTAX, U64),
@@ -652,7 +658,8 @@ _ASKS_ABOUT_A_PIECE: Final[dict[str, tuple[Type, ...]]] = {
 
 _SYNTAX_ANSWERS: Final[dict[str, Type]] = {
     QUOTE_NAME: SYNTAX, FILL_NAME: SYNTAX, FILL_NUMBER_NAME: SYNTAX,
-    HEAD_NAME: SYNTAX, KIND_NAME: U64, PIECE_NAME: SYNTAX,
+    FILL_TEXT_NAME: SYNTAX, REFUSE_NAME: SYNTAX,
+    HEAD_NAME: SYNTAX, KIND_NAME: U64, PIECE_NAME: STR,
     PARTS_NAME: U64, PART_NAME: SYNTAX, APPLY_NAME: SYNTAX,
     ALIKE_PIECES_NAME: BOOL,
 }
@@ -4015,6 +4022,10 @@ class Checker:
                 # which is what lets a macro work something out and write the answer.
                 name, wanted = FILL_NUMBER_NAME, I64
                 given = self._as_a_number(builder, given, ty, hole.span)
+            elif ty is STR:
+                # And text as the literal a program would have written, which is
+                # what a macro taking a template apart puts back.
+                name, wanted = FILL_TEXT_NAME, STR
             else:
                 self._diags.emit(D.LANG_MACRO_HOLE_NOT_A_PIECE, hole.span,
                                  found=ty.written())

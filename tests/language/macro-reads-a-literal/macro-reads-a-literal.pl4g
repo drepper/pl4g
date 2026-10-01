@@ -1,0 +1,33 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=6 diag=none
+
+※ What a macro has to be able to do before it can take a template apart.
+※
+※ **`⎕name` is what a piece is written as, as text**: a string literal answers what is
+※ between its quotation marks and a name answers itself.  **`$(EXPR)` where the expression
+※ answers text puts the literal a program would have written**, which is the rule already
+※ there for a number with one more type in it.
+※
+※ And in between, a macro walks text and joins it -- which needs three things of the machine
+※ that runs one.  A string literal is a variable in the image, so the machine has to put
+※ what a variable starts out holding into its own memory and answer an address for it.  A
+※ join calls the allocator, which is per-target assembly with no body to run, so the machine
+※ is the allocator while a macro runs.  And the join itself is ordinary code in the module,
+※ which the machine already ran.
+
+@[impure]
+macro twice(t: syntax) → syntax:
+    let said: str = ⎕name(t)
+    let out: mut str = ""
+    foreach c: char = said:
+        ※ Reading the character as well as counting them, since walking text is the
+        ※ half of this a template needs.
+        if c ≠ 'b':
+            out ← out ⧺ said
+    ⌜$(out)⌝
+
+@[startup, impure]
+fn main() → u6:
+    ※ "abc" once for every character of it that is not a 'b', which is twice -- and the
+    ※ macro read the characters to know that.
+    let s: str = twice⌜"abc"⌝
+    ⎕narrow(⎕drop(#s), ⌜u6⌝) ?? 1u6

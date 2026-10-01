@@ -8759,6 +8759,28 @@
       "option": null
     },
     {
+      "number": 7029,
+      "name": "LANG_MACRO_REFUSED",
+      "severity": "error",
+      "message": "{detail}",
+      "args": [
+        {
+          "name": "detail",
+          "type": "string",
+          "description": "what the macro said"
+        }
+      ],
+      "cause": "The macro would not write what it was asked for and said why.  What is wrong is the invocation -- a template that does not agree with its arguments, a piece of the program the macro cannot use -- and not the compiler, which is why this carries the macro's own words and points at the invocation rather than reporting that something stopped.  A macro says it with `⎕refuse`.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Macros / A macro written as a function",
+        "requirement": "A macro may refuse with its own message."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 8501,
       "name": "IMPL_BACKEND_UNSUPPORTED",
       "severity": "error",

@@ -33,17 +33,19 @@ from __future__ import annotations
 from typing import Callable, Final, Sequence
 
 from ..ir.function import BasicBlock, Function
-from ..ir.inst import (AssertInst, BinaryInst, BinOp, BrInst, CallInst, CastInst,
+from ..ir.inst import (AddressInst, AssertInst, BinaryInst, BinOp, BrInst,
+                       CallInst, CastInst,
                        CastKind, CmpInst, CmpPred, CondBrInst, ErrorInst,
                        ExtractInst, FailedInst, FieldInst, FrameInst, Instruction,
                        LoadInst, MemStartInst, RetInst, StoreInst, SumGetInst,
                        SumMakeInst, SumTagInst, SwitchInst, TupleInst,
                        UnaryInst, UnOp, UnreachableInst, WrapInst)
-from ..ir.layout import DataLayout, align_of, size_of
+from ..ir.layout import DataLayout, align_of, offsets_of, size_of
 from ..ir.types import (BOOL, BoolType, CharType, EnumType, FloatType, IntType,
-                        PtrType, SyntaxType, Type, VOID)
-from ..ir.value import (BlockParam, BoolConst, CharConst, EnumConst, IntConst,
-                        UndefConst, Value)
+                        ProductType, PtrType, SyntaxType, Type, VOID)
+from ..ir.module import GlobalVar
+from ..ir.value import (ArrayConst, BlockParam, BoolConst, CharConst, Const,
+                        EnumConst, IntConst, RecordConst, UndefConst, Value)
 
 #: How many instructions one expansion may run before it is stopped.  A macro that
 #: loops for ever would otherwise hang the compiler, and a limit is the only answer:
@@ -84,6 +86,24 @@ _ARITHMETIC: Final[dict[BinOp, Callable[[int, int], int]]] = {
     BinOp.OR: lambda a, b: a | b,
     BinOp.XOR: lambda a, b: a ^ b,
     BinOp.SHL: lambda a, b: a << b,
+    BinOp.ASHR: lambda a, b: a >> b,
+    BinOp.LSHR: lambda a, b: a >> b,
+    BinOp.SMAX: max,
+    BinOp.UMAX: max,
+    BinOp.SMIN: min,
+    BinOp.UMIN: min,
+    # The wrapping and the saturating forms compute the same thing here, what to do
+    # about a value that does not fit being the business of the arm below that knows
+    # how wide the type is.
+    BinOp.WRAP_ADD: lambda a, b: a + b,
+    BinOp.WRAP_SUB: lambda a, b: a - b,
+    BinOp.WRAP_MUL: lambda a, b: a * b,
+    BinOp.WRAP_SHL: lambda a, b: a << b,
+    BinOp.WRAP_ASHR: lambda a, b: a >> b,
+    BinOp.WRAP_LSHR: lambda a, b: a >> b,
+    BinOp.SAT_ADD: lambda a, b: a + b,
+    BinOp.SAT_SUB: lambda a, b: a - b,
+    BinOp.SAT_MUL: lambda a, b: a * b,
 }
 
 #: What each comparison asks of two numbers.  They arrive already signed or unsigned
@@ -116,7 +136,19 @@ class Machine:
         #: machine knows that a handle is a number and nothing else about one.
         self._builtins = builtins
         self._memory = bytearray(16)
+        #: Where each variable the program wrote has been put, so that a second
+        #: ask answers the same place: a variable is one place and a macro may
+        #: read one twice.
+        self._placed: dict[str, int] = {}
         self._steps = 0
+
+    def knows(self, builtins: dict[str, Callable[..., object]]) -> None:
+        """Say what the functions with no body do.
+
+        Apart from the constructor so that one of them may be the machine's own
+        allocator, which cannot be written down before the machine exists.
+        """
+        self._builtins = builtins
 
     # -- running ---------------------------------------------------------------
 
@@ -228,12 +260,11 @@ class Machine:
                 return held[1]
             case FrameInst():
                 return self._room(inst.held)
+            case AddressInst():
+                return self._at(inst.operands[0])
             case FieldInst():
                 base = self._number(inst.operands[0], values)
-                # A field of a product held in memory is at an offset the
-                # layout gives; the instruction names the field and the
-                # layout is asked for where it is.
-                raise Refused("a field of a record in memory", inst)
+                return base + self._offset(inst)
             case LoadInst():
                 where = self._number(inst.operands[1], values)
                 return self._read(where, inst.ty)
@@ -241,7 +272,12 @@ class Machine:
                 where = self._number(inst.operands[1], values)
                 self._write(where, inst.operands[2].ty,
                             self._operand(inst.operands[2], values))
-                return _NOTHING
+                # A store answers the memory after it, which a later load or a
+                # branch carries.  Memory is the machine's and needs no token to
+                # order it -- the instructions run in the order they are written --
+                # but the token is a value and something reads it, so it has to be
+                # one.
+                return 0
             case AssertInst():
                 if not self._operand(inst.operands[0], values):
                     raise Stopped(inst.what)
@@ -279,6 +315,14 @@ class Machine:
             if found is None:
                 raise Refused("".join(("the operation ", inst.op.value)), inst)
             return bool(found(int(left), int(right)))
+        if isinstance(ty, PtrType):
+            # An address is a whole number here, as it is to the instruction
+            # selectors: what a place computed from another place means is the
+            # arithmetic and nothing about what is at either.
+            found = _ARITHMETIC.get(inst.op)
+            if found is None:
+                raise Refused("".join(("the operation ", inst.op.value)), inst)
+            return int(found(int(left), int(right))) & ((1 << 64) - 1)
         if not isinstance(ty, IntType):
             raise Refused("".join(("arithmetic on ", ty.render())), inst)
         if inst.op in (BinOp.SDIV, BinOp.UDIV, BinOp.SREM, BinOp.UREM):
@@ -339,7 +383,90 @@ class Machine:
             return held if inst.kind is CastKind.SEXT else _as_written(held, source)
         raise Refused("".join(("the cast ", inst.kind.value)), inst)
 
+    def _offset(self, inst: Instruction) -> int:
+        """Where a field lies in the record it belongs to.
+
+        The layout answers it, which is the same layout the back end uses: a
+        machine that worked offsets out for itself would be a second answer to
+        where a field is.
+        """
+        held = inst.operands[0].ty
+        if isinstance(held, PtrType):
+            held = held.pointee
+        if not isinstance(held, ProductType):
+            raise Refused("".join(("a field of ", held.render())), inst)
+        return offsets_of(held, LAYOUT)[inst.index]
+
     # -- memory ----------------------------------------------------------------
+
+    def _at(self, var: Value) -> int:
+        """Where a variable lives, putting what it starts out holding there.
+
+        A variable the program wrote is bytes in the image, and a macro reading one
+        -- the bytes of a string literal, which is what a template is -- has to find
+        those bytes.  So the first ask makes room and writes the initializer in;
+        every later one answers the same address, since a variable is one place.
+        """
+        if not isinstance(var, GlobalVar):
+            raise Refused("".join(("the address of ", var.ty.render())))
+        found = self._placed.get(var.name)
+        if found is not None:
+            return found
+        at = self._room(var.value_type)
+        self._placed[var.name] = at
+        if var.initializer is not None:
+            self._put(at, var.initializer)
+        return at
+
+    def _put(self, at: int, held: Const) -> None:
+        """Write a constant into memory, walking what it is made of."""
+        match held:
+            case ArrayConst():
+                stride = max(1, size_of(held.ty.element, LAYOUT))
+                for which, one in enumerate(held.elements):
+                    self._put(at + which * stride, one)
+            case RecordConst():
+                for which, one in enumerate(held.fields):
+                    self._put(at + offsets_of(held.ty, LAYOUT)[which], one)
+            case UndefConst():
+                # Nothing was written, so nought is what is there -- which is
+                # what the image does for a variable with no initializer.
+                pass
+            case _:
+                self._write(at, held.ty, self._operand(held, {}))
+
+    def text(self, held: str) -> tuple[int, int]:
+        """Text as a value of `str`: where the bytes are, and how many there are.
+
+        The bytes go into the machine's memory, which is where everything a macro
+        builds lives.  What comes back is the pair a `str` is, so the ordinary code
+        that joins two or walks one runs over it with nothing said about where it
+        came from.
+        """
+        raw = held.encode("utf-8")
+        at = self.allocate(None, max(1, len(raw)))
+        self._memory[at:at + len(raw)] = raw
+        return (at, len(raw))
+
+    def read_text(self, held: tuple[int, int]) -> str:
+        """And the way back: what a value of `str` says."""
+        at, length = int(held[0]), int(held[1])
+        return bytes(self._memory[at:at + length]).decode("utf-8", "replace")
+
+    def allocate(self, _arena: object, size: object) -> int:
+        """Room out of the machine's own memory, for a macro that allocates.
+
+        The one callee with no body that is not a question about the program: the
+        allocator is per-target assembly and there is nothing to run, so the machine
+        is the allocator while a macro runs.  Nothing is given back -- a macro runs
+        for one expansion, and the step count is what stops one that allocates
+        without end.
+        """
+        want = max(1, int(size))  # type: ignore[arg-type]
+        at = len(self._memory)
+        at += (-at) % 16
+        self._memory.extend(bytes(at + want - len(self._memory)))
+        return at
 
     def _room(self, held: Type) -> int:
         """An address with room for a value of *held* behind it."""
