@@ -3654,10 +3654,12 @@ class Checker:
             frozenset(allowed),
             _one_of([HEAP_NAME if at == HEAP_AT else node.params[at].name
                      for at in func.made_in]))
-        if len(allowed) == 1 and _thin_able(func.ty.ret):
-            # One allocator, said: every answer is put in it, text in the image
-            # included, so that the caller can add it to what comes back.
-            self._thin_to = next(iter(allowed))
+        if allowed == {_HEAP} and _thin_able(func.ty.ret):
+            # `⎕heap` named: every answer is put in it, text in the image
+            # included, which is what naming it says -- so the caller can add it
+            # to what comes back.  An arena named lets text in the image through
+            # as it is, and travels thin only where the body shows none.
+            self._thin_to = _HEAP
 
     def _written_for(self, expr: ast.Call, func: Function) -> dict[int, ast.Expr]:
         """What a call wrote for each parameter, by the parameter's place."""
@@ -6127,7 +6129,13 @@ class Checker:
             if len(func.made_in) != 1:
                 return
             (at,) = func.made_in
-            func.answer_from = ("heap", -1) if at == HEAP_AT else ("param", at)
+            if at == HEAP_AT:
+                func.answer_from = ("heap", -1)
+            elif self._answer_kinds and all(one == "param"
+                                            for one in self._answer_kinds):
+                func.answer_from = ("param", at)
+            else:
+                return
         elif self._answer_kinds and all(one == "heap"
                                         for one in self._answer_kinds):
             func.answer_from = ("heap", -1)
@@ -6138,7 +6146,8 @@ class Checker:
         self._module.reports.record(
             ReportKind.ALLOCATOR, func.name,
             "".join(("what '", func.name, "' answers is made in ", where,
-                     " on every way out", "" if func.made_in is not None
+                     " on every way out",
+                     "" if func.answer_from[0] == "heap" and func.made_in
                      else ", which its body shows",
                      ": it travels without its allocator, which the caller adds")),
             func.name_span if func.name_span.is_valid else func.span)

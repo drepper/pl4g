@@ -72,6 +72,19 @@ def test_saying_heap_fixes_it(compile_source) -> None:  # noqa: ANN001
     assert "call" in body, body
 
 
+def test_an_arena_with_text_in_the_image_keeps_the_allocator(
+        compile_source) -> None:  # noqa: ANN001
+    """`in a` lets a literal through as it is, so where one is answered the
+    answer carries its allocator rather than copying the literal into `a`."""
+    proc, output = compile_source(PROGRAM.replace(
+        "    s \N{DOUBLE PLUS} \"!\" in a\n",
+        "    if #s = 0:\n        return \"none\"\n    s \N{DOUBLE PLUS} \"!\" in a\n"),
+        "--emit=ir", "-O0")
+    assert proc.returncode == 0, describe(proc)
+    text = output.read_text(encoding="utf-8")
+    assert "\N{RIGHTWARDS ARROW} str " in _signature(text, "into")
+
+
 def test_the_caller_puts_the_allocator_back(compile_source) -> None:  # noqa: ANN001
     """The heap's address for one, and the arena handed over for the other."""
     text = _ir(compile_source)

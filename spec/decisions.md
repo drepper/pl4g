@@ -8923,9 +8923,11 @@ answer is made in; a user can say it with `str in ⎕heap`; where the allocator 
 `⎕heap` or a parameter's, the answer needs no third part.
 
 - **`in ⎕heap` on an answer** is allowed and fixes it: text in the image is copied into
-  the heap, so the answer is the heap's on every way out.  `in a` fixes it to `a` the same
-  way.  Saying nothing still means `⎕heap` but lets text in the image go as it is, which
-  keeps the third word -- the default stays safe.
+  the heap, so the answer is the heap's on every way out.  Saying nothing still means
+  `⎕heap` but lets text in the image go as it is, which keeps the third word -- the default
+  stays safe.  `in a` lets it through too, and is thin only where the body answers none: a
+  first version copied the literal into `a` instead, which cost `std.text` 8-11% in
+  compilation and a copy at every call for one register.
 - **The body can fix it too**: where every way out answers what the heap just made, the
   function is marked so.  Bodies are checked callees first, a depth-first walk over the
   names each calls, so a caller sees what its callees showed.

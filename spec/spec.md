@@ -3372,12 +3372,12 @@ is refused** (4624): a record or a tuple holding text, a result, and anything ho
 `@[unique]` is for.
 
 **An answer whose allocator is fixed travels without it.**  `→ str in ⎕heap` says every answer is made in the heap -- text in the
-image is copied there -- and `→ str in a` says every one is made in what `a` is given.  A caller that knows the allocator learns
-nothing from the third word, so such a function answers a string or a list as two words, and every call puts the third back:
-`⎕heap`'s address, or the arena it handed to `a`.  Where the signature says nothing, the compiler looks at the body: one whose
-every way out answers something the heap just made is fixed in the heap all the same, and its callers -- checked after it, the
-call tree being walked callees first -- rely on it.  Saying nothing still lets an answer be text in the image as it is, which keeps
-the third word; naming `⎕heap` is what says it never is.  Which functions answer thin is in the report log (`answer-thin`).
+image is copied there.  A caller that knows the allocator learns nothing from the third word, so such a function answers a string
+or a list as two words, and every call puts the third back.  Where the signature names an arena, or nothing, the compiler looks at
+the body: one whose every way out answers something made in `a`, or something the heap just made, is fixed there all the same --
+`⎕heap`'s address or the arena the call handed to `a` is what the caller puts back -- and its callers, checked after it, the call
+tree being walked callees first, rely on it.  Text in the image answered as it is keeps the third word, which says it is nobody's;
+naming `⎕heap` is what says no answer ever is.  Which functions answer thin is in the report log (`answer-thin`).
 A function called through a function value, or seen from outside the image, keeps the word.
 
 **Allocators are not handed out of the scope they are made in.**  A value made in a local arena reaches past it only as a copy;
