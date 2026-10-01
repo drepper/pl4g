@@ -35,7 +35,7 @@ from ...ir.inst import (AddressInst, CastInst, CastKind, ExtractInst, Instructio
 from ...ir.module import GlobalVar, Module
 from ...ir.reports import ReportKind
 from ...ir.rewrite import all_stand_for
-from ...ir.types import ListType, StrType, U64, parts_of
+from ...ir.types import ARENA, ListType, PtrType, StrType, U64, parts_of
 from ...ir.value import BlockParam, IntConst, Value
 
 #: Not yet known, and known to be carried: the two ends of what a parameter may be.
@@ -52,7 +52,7 @@ class LeanValues:
         """Fold, narrow every joining parameter, and sweep what is left unread."""
         changed = False
         for func in list(module.functions.values()):
-            if not func.blocks:
+            if not func.blocks or not _holds_text(func):
                 continue
             changed |= _fold(func)
             changed |= self._narrow(module, func)
@@ -245,7 +245,8 @@ def _fold(func: Function) -> bool:
                 whole = inst.operands[0]
                 while id(whole) in instead:
                     whole = instead[id(whole)]
-                if isinstance(whole, TupleInst) and inst.index < len(whole.operands) \
+                if isinstance(whole, TupleInst) and _lean_able(whole.ty) \
+                        and inst.index < len(whole.operands) \
                         and whole.operands[inst.index].ty is inst.ty:
                     instead[id(inst)] = whole.operands[inst.index]
     for key, found in list(instead.items()):
@@ -256,9 +257,41 @@ def _fold(func: Function) -> bool:
     return bool(instead)
 
 
-#: What may go when nothing reads it: making a value, taking one apart, an address,
-#: the same bits read as something else.  None of them does anything else.
-_PURE: Final = (TupleInst, ExtractInst, AddressInst)
+def _lean_able(ty: object) -> bool:
+    """Whether *ty* is a string, a list, or the two words one travels as here."""
+    if isinstance(ty, (StrType, ListType)):
+        return True
+    members = getattr(ty, "members", None)
+    return members is not None and len(members) == 2 \
+        and isinstance(members[0], PtrType) and members[1] is U64
+
+
+def _ours(inst: Instruction) -> bool:
+    """Whether *inst* is one this pass may drop where nothing reads it.
+
+    Making a string or its two words, taking one apart, `⎕heap`'s address, a null
+    allocator: what this pass and the call rewriting make, and nothing else, so that
+    a program with no text is left exactly as it was.
+    """
+    if isinstance(inst, TupleInst):
+        return _lean_able(inst.ty)
+    if isinstance(inst, ExtractInst):
+        return _lean_able(inst.operands[0].ty)
+    if isinstance(inst, (AddressInst, CastInst)):
+        return isinstance(inst.ty, PtrType) and inst.ty.pointee is ARENA and (
+            isinstance(inst, AddressInst) or inst.kind is CastKind.BITCAST)
+    return False
+
+
+def _holds_text(func: Function) -> bool:
+    """Whether anything in *func* is a string or a list, or two words of one."""
+    for block in func.blocks:
+        if any(_lean_able(param.ty) for param in block.params):
+            return True
+        for inst in block.insts:
+            if _lean_able(inst.ty):
+                return True
+    return False
 
 
 def _sweep(func: Function) -> bool:
@@ -275,10 +308,7 @@ def _sweep(func: Function) -> bool:
         gone = False
         for block in func.blocks:
             kept = [inst for inst in block.insts
-                    if id(inst) in used or not (
-                        isinstance(inst, _PURE) or (
-                            isinstance(inst, CastInst)
-                            and inst.kind is CastKind.BITCAST))]
+                    if id(inst) in used or not _ours(inst)]
             if len(kept) != len(block.insts):
                 block.insts = kept
                 gone = True
