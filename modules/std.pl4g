@@ -345,9 +345,6 @@ fn text(v: T', a: &mut arena) → str in a:
         ※ And nothing is ever negated -- the remainder of a negative number is
         ※ negative and its digit is what that is away from nought, which is the one
         ※ way to write the smallest value a type has, there being no positive of it.
-        ※ Characters and not text: an array of text is made with an allocator its
-        ※ text is copied into, and characters point nowhere and need none.
-        let digits: char⟦10⟧ = ⟦'0', '1', '2', '3', '4', '5', '6', '7', '8', '9'⟧
         let zero: T' = ⎕narrow(0u8, ⌜T'⌝) ?? v
         let ten: T' = ⎕narrow(10u8, ⌜T'⌝) ?? v
         let below: bool = v < zero
@@ -357,13 +354,43 @@ fn text(v: T', a: &mut arena) → str in a:
             let d: T' = rest % ten ?? zero
             let away: T' = if below: zero - d else: d
             let place: u64 = ⎕narrow(away, ⌜u64⌝) ?? 0u64
-            out ← ⎕str(digits⟦⎕unit(place, ⌜idx⌝)⟧, a) ⧺ out in a
+            out ← digit(place) ⧺ out in a
             rest ← rest ÷ ten ?? zero
             if rest = zero:
                 break §places
         ※ The raised minus the language writes a negative literal with, so that what
         ※ comes out reads back as what went in.
         if below: "⁻" ⧺ out in a else: out
+
+※※ The text of one digit, as the literal that writes it.
+※※
+※※ \details Not an array of the ten: text put in an array is copied into the
+※※ array's allocator, ten copies a call for a table nothing writes.  One function
+※※ for every integer type, where the table was built in every instantiation.
+※※
+※※ \param d a number below ten
+※※ \return its digit
+fn digit(d: u64) → str:
+    if d = 0u64:
+        "0"
+    elif d = 1u64:
+        "1"
+    elif d = 2u64:
+        "2"
+    elif d = 3u64:
+        "3"
+    elif d = 4u64:
+        "4"
+    elif d = 5u64:
+        "5"
+    elif d = 6u64:
+        "6"
+    elif d = 7u64:
+        "7"
+    elif d = 8u64:
+        "8"
+    else:
+        "9"
 
 ※※ The same, written where a reader expects an operator.
 ※※
