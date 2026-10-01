@@ -24,6 +24,11 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from limits import limit_program, limit_worker, prefix as limited  # noqa: E402
+
+# Every worker, and so everything it starts, is bounded: see `tests/limits.py`.
+limit_worker()
+
 DIRECTIVE = "\N{REFERENCE MARK} pl4g-test:"
 
 #: The user's objdump dispatches on the architecture of its argument, which it
@@ -79,8 +84,8 @@ def runner_for(triple: str) -> list[str]:
     """How to run a binary built for *triple*: directly, or through an emulator."""
     arch = architecture_of(triple)
     if arch == HOST_ARCH:
-        return []
-    return [ARCH_TOOLS.get(arch, {}).get("qemu", "".join(("qemu-", arch)))]
+        return limited()
+    return [*limited(), ARCH_TOOLS.get(arch, {}).get("qemu", "".join(("qemu-", arch)))]
 
 
 def compiler_targets() -> list[str]:
@@ -314,6 +319,7 @@ class PL4GItem(pytest.Item):
         """Run the generated binary and check the status it exits with."""
         proc = subprocess.run([*command, *self.expectations.run_args],
                               capture_output=True, timeout=60,
+                              preexec_fn=limit_program,
                               env={**os.environ, **self.expectations.environment}
                               if self.expectations.environment else None)
         assert proc.returncode == self.expectations.exit_status, "".join((

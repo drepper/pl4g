@@ -11,7 +11,7 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-from conftest import describe, run_compiler
+from conftest import describe, limited, run_compiler
 
 #: A program to build, which answers with the status the tests look for.
 PROGRAM = """\
@@ -57,7 +57,8 @@ fn build(b: &mut std.Build):
     for name, status in (("first", 3), ("second", 4)):
         built = tmp_path / "bin" / name
         assert built.is_file(), describe(proc)
-        ran = subprocess.run([str(built)], capture_output=True, timeout=60)
+        ran = subprocess.run([*limited(), str(built)], capture_output=True,
+                             timeout=60)
         assert ran.returncode == status
 
 

@@ -32,6 +32,11 @@ in the specification document.
 The different architectures can be tested because the QEmu infrastructure available on the host system allows executing binaries
 compiled for all the target architectures as long as they use the Linux kernel interface.
 
+A compiled program is run through `bin/pl4g-run` (natively, or `bin/pl4g-run qemu-ARCH prog`), never directly: nothing in a
+program stops it asking the system for memory, and one that runs away takes the machine with it.  The wrapper puts the limits
+of `tests/limits.py` on it -- data and CPU time -- under which a runaway stops with its own `out of memory`.  The test suite
+applies the same limits to every program it runs, and bounds each worker and everything it starts.
+
 `python -m pytest tests` runs the suite over every core, `pytest-xdist` being a dependency and `-n auto` the default; `-n0` runs
 it in one process where a debugger or a test's own output wants that.
 

@@ -1,0 +1,45 @@
+#!/usr/bin/env python
+"""Run a command under the limits the test suite puts on the programs it runs.
+
+    bin/pl4g-run ./prog args...
+    bin/pl4g-run qemu-aarch64 ./prog args...
+
+A pl4g program that runs away -- a loop that never ends, a join in a loop whose old
+strings nothing gives back -- asks the system for memory until the system says no,
+which on a large machine is a long way off and takes everything else with it.  This
+is what to run a program through by hand: it stops with its own `out of memory`
+instead, or on the CPU limit.  The limits are `tests/limits.py`'s; `PL4G_RUN_DATA`
+(bytes) and `PL4G_RUN_CPU` (seconds) replace them for one run.
+"""
+
+from __future__ import annotations
+
+import os
+import resource
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tests"))
+
+from limits import PROGRAM_CPU_SECONDS, PROGRAM_DATA  # noqa: E402
+
+
+def main(argv: list[str]) -> int:
+    """Limit this process and become the command."""
+    if not argv:
+        print("usage: pl4g-run COMMAND [ARGS...]", file=sys.stderr)
+        return 2
+    data = int(os.environ.get("PL4G_RUN_DATA", PROGRAM_DATA))
+    cpu = int(os.environ.get("PL4G_RUN_CPU", PROGRAM_CPU_SECONDS))
+    resource.setrlimit(resource.RLIMIT_DATA, (data, data))
+    resource.setrlimit(resource.RLIMIT_CPU, (cpu, cpu))
+    try:
+        os.execvp(argv[0], argv)
+    except OSError as failed:
+        print("".join(("pl4g-run: ", argv[0], ": ", failed.strerror or "")),
+              file=sys.stderr)
+        return 127
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

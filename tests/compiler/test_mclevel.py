@@ -33,7 +33,7 @@ from pathlib import Path
 import pytest
 
 from pypl4g.target import statuses
-from conftest import describe, run_compiler, runner_for
+from conftest import describe, limited, run_compiler, runner_for
 
 SOURCE = "".join((
     "@[startup]\nfn main() \N{RIGHTWARDS ARROW} u6:\n    42u6\n"))
@@ -291,7 +291,7 @@ def _emulated(cpu: str, path: Path) -> subprocess.CompletedProcess[bytes]:
     """Run *path* on an emulated processor of the named kind."""
     if not shutil.which("qemu-x86_64"):
         pytest.skip("qemu-x86_64 is not installed")
-    return subprocess.run(["qemu-x86_64", "-cpu", cpu, str(path)],
+    return subprocess.run([*limited(), "qemu-x86_64", "-cpu", cpu, str(path)],
                           capture_output=True, timeout=60)
 
 

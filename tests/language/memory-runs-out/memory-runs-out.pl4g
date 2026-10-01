@@ -1,0 +1,13 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=85 diag=none
+
+※ A program that asks for more memory than the system will give stops with a status of its own
+※ and says where, rather than being killed.  The heap asks the system for room and the system's
+※ refusal is what stops it -- so this test is also what says the suite runs every program under a
+※ limit (`tests/limits.py`): without one, doubling a string forever would take the machine.
+
+@[startup]
+fn main() → u6:
+    let piece: mut str = "0123456789abcdef"
+    while true:
+        piece ← piece ⧺ piece
+    0u6

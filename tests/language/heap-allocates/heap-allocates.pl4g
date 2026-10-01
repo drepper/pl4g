@@ -8,17 +8,25 @@
 ※ This grows one string past every class and well past the largest, and makes enough small
 ※ ones to run through more than one slab.
 
+※ Each turn joins a new string and the old one stays where it was -- nothing gives back
+※ what a local held -- so the turns are few and long: seventy of a thousand bytes come to
+※ 70000, past the largest class, and to about two and a half megabytes in all.
 fn grown(n: u64) → u64:
+    let piece: mut str = ""
+    let j: mut u64 = 0u64
+    while j < 125u64:
+        piece ← piece ⧺ "abcdefgh"
+        j ← j + 1u64
     let s: mut str = ""
     let i: mut u64 = 0u64
     while i < n:
-        s ← s ⧺ "abcdefgh"
+        s ← s ⧺ piece
         i ← i + 1u64
     ⎕drop(#s)
 
 @[startup]
 fn main() → u6:
-    if grown(10000u64) ≠ 80000u64:
+    if grown(70u64) ≠ 70000u64:
         return 1u6
     let k: mut u64 = 0u64
     while k < 20000u64:

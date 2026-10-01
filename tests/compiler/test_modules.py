@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 import elfcheck
-from conftest import compiler_targets, describe, run_compiler, runner_for
+from conftest import compiler_targets, describe, limited, run_compiler, runner_for
 from pypl4g.sema.modules import (SearchPath, base_name, parse_search_path,
                                  path_hash)
 
@@ -34,7 +34,7 @@ def build(tmp_path: Path, main: str, *args: str):  # noqa: ANN201
 
 def ran(output: Path) -> int:
     """Run a compiled program and return its status."""
-    proc = subprocess.run([str(output)], capture_output=True, timeout=60)
+    proc = subprocess.run([*limited(), str(output)], capture_output=True, timeout=60)
     assert proc.returncode >= 0, describe(proc)
     return proc.returncode
 
