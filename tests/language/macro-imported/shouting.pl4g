@@ -1,0 +1,17 @@
+※ pl4g-test: module
+※※ Macros a program beside this one invokes.
+
+※※ What this module calls itself, which the macro below names.
+@[export]
+fn tag() → u8:
+    7u8
+
+※※ Twice over, written as rules.
+@[export]
+macro twice:
+    ⌜$x⌝ → ⌜$x + $x⌝
+
+※※ And one written as a function, which names something of this module.
+@[export, impure]
+macro mine(e: syntax) → syntax:
+    ⌜tag() + $e⌝

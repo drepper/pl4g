@@ -104,7 +104,8 @@ HYGIENE_MARK: Final[str] = "#"
 
 
 def expand(units: Sequence[ast.SourceUnit], diags: DiagEngine,
-           checked: Callable[[Sequence[ast.SourceUnit]], _Checked] | None = None
+           checked: Callable[[Sequence[ast.SourceUnit]], _Checked] | None = None,
+           imported: Callable[[object], object] | None = None
            ) -> list[ast.SourceUnit]:
     """Expand every macro in *units*, answering the units with none left.
 
@@ -118,7 +119,7 @@ def expand(units: Sequence[ast.SourceUnit], diags: DiagEngine,
     checker imports this: expansion comes first in the pipeline and last in the
     dependencies.
     """
-    return _Expander(units, diags, checked).run()
+    return _Expander(units, diags, checked, imported).run()
 
 
 class _Expander:
@@ -126,10 +127,14 @@ class _Expander:
 
     def __init__(self, units: Sequence[ast.SourceUnit], diags: DiagEngine,
                  checked: Callable[[Sequence[ast.SourceUnit]],
-                                   _Checked] | None = None) -> None:
+                                   _Checked] | None = None,
+                 imported: Callable[[object], object] | None = None) -> None:
         self._units = units
         self._diags = diags
         self._checked = checked
+        #: How a module an import names is found and read, which expansion needs
+        #: because it comes before the checker resolves one.
+        self._imported = imported
         #: The macros written as functions, by name, and the module they were
         #: lowered into once anything has asked for one.
         self._written: dict[str, ast.FuncDef] = {}
@@ -149,6 +154,15 @@ class _Expander:
         #: function are not in one namespace, so a name may be both, and then the
         #: parentheses call the function and the marks invoke the macro.
         self._macros: dict[str, ast.MacroDef] = {}
+        #: And the macros of a module this compilation imports, by the name the
+        #: import gave the module and the macro's own name.  A macro reached through
+        #: a module is written `m.f⌜…⌝`, which is the path every other name a module
+        #: exports is reached by: it is the same two-part name, not a third notation.
+        self._through: dict[tuple[str, str], object] = {}
+        #: What each of those modules defines at the top level, and the module a macro
+        #: is being run out of just now.
+        self._defines: dict[str, frozenset[str]] = {}
+        self._invoking: str | None = None
         #: How many names hygiene has renamed, which is what makes each new one
         #: different from the last.
         self._renames = 0
@@ -166,7 +180,9 @@ class _Expander:
                     self._collect(item)
                 elif isinstance(item, ast.FuncDef) and item.is_macro:
                     self._collect_written(item)
-        if not self._macros and not self._written:
+                elif isinstance(item, ast.ModuleImport):
+                    self._collect_imported(item)
+        if not self._macros and not self._written and not self._through:
             # A program with no macro is handed back as it is.  Everything below
             # rebuilds each node it passes, and rebuilding a whole compilation to
             # find nothing is what this test is here to avoid: almost every program
@@ -199,6 +215,36 @@ class _Expander:
                              else "something else")
             return
         self._written[node.name] = node
+
+    def _collect_imported(self, node: ast.ModuleImport) -> None:
+        """Collect the macros of a module, under the name the import gave it.
+
+        Expansion comes before anything is checked, and an import is resolved while
+        checking -- so the module has to be found and read here, before the checker
+        has looked at anything.  What is read is handed to the checker through the
+        same cache it would have filled itself, so the file is parsed once.
+
+        A macro of a module this file does not import is not reachable from here at
+        all, which is the rule every other name a module holds follows.
+        """
+        if self._imported is None:
+            return
+        unit = self._imported(node)
+        if unit is None:
+            return
+        named: set[str] = set()
+        for item in unit.items:
+            if isinstance(item, (ast.MacroDef, ast.FuncDef)) \
+                    and getattr(item, "is_macro", True):
+                self._through[(node.name, item.name)] = item
+            held = getattr(item, "name", None)
+            if isinstance(held, str):
+                named.add(held)
+        # Every name the module writes at the top level, so that a name the macro
+        # *reads* can be found again from here: the macro's body means what it means
+        # in its own file, and the same thing is written at the caller by reaching it
+        # through the module -- which is the path every other name of a module takes.
+        self._defines[node.name] = frozenset(named)
 
     def _collect(self, node: ast.MacroDef) -> None:
         """Write a macro down, reporting a second of one name."""
@@ -279,23 +325,39 @@ class _Expander:
                 found.append(written)
         return found
 
+    def _found(self, node: ast.Invoke) -> object | None:
+        """The macro an invocation names, by a bare name or through a module."""
+        if node.through is not None:
+            return self._through.get((node.through, node.name))
+        return self._macros.get(node.name) or self._written.get(node.name)
+
     def _expanded(self, node: ast.Invoke,
                   as_statement: bool) -> ast.Expr | ast.Block:
         """What one invocation comes to, expanded as far as it goes."""
         if self._deep >= ROUNDS:
             self._diags.emit(D.LANG_MACRO_TOO_DEEP, node.span, name=node.name)
             return ast.NameRef(span=node.span, name=node.name)
-        macro = self._macros.get(node.name)
+        macro = self._found(node)
         if macro is None:
-            if node.name in self._written:
-                return self._ran(node, as_statement)
             self._diags.emit(D.LANG_MACRO_UNKNOWN, node.name_span, name=node.name)
             return ast.NameRef(span=node.span, name=node.name)
+        if isinstance(macro, ast.FuncDef):
+            return self._ran(node, as_statement, macro)
+        assert isinstance(macro, ast.MacroDef)
+        outer, self._invoking = self._invoking, node.through
+        try:
+            return self._by_rule(node, as_statement, macro)
+        finally:
+            self._invoking = outer
+
+    def _by_rule(self, node: ast.Invoke, as_statement: bool,
+                 macro: ast.MacroDef) -> ast.Expr | ast.Block:
+        """What a rules-form macro comes to, by the first rule that matches."""
         for rule in macro.rules:
             bound: dict[str, ast.Expr] = {}
             if not self._matches(rule.pattern, node.arguments, bound):
                 continue
-            written = self._filled(rule.template, bound)
+            written = self._filled(self._template(rule.template), bound)
             if isinstance(written, ast.Block) and not as_statement:
                 self._diags.emit(D.LANG_MACRO_WRITES_STATEMENTS, node.span,
                                  name=node.name)
@@ -313,44 +375,49 @@ class _Expander:
 
     # -- running a macro written as a function ---------------------------------
 
-    def _ran(self, node: ast.Invoke,
-             as_statement: bool) -> ast.Expr | ast.Block:
+    def _ran(self, node: ast.Invoke, as_statement: bool,
+             written: ast.FuncDef) -> ast.Expr | ast.Block:
         """What a macro written as a function comes to, by running it."""
-        written = self._written[node.name]
         made = self._prepared()
         if made is None:
             return ast.NameRef(span=node.span, name=node.name)
         func = made.module.functions.get(_macro_symbol(written, made))
         if func is None:  # pragma: no cover - the checker reported why
             return ast.NameRef(span=node.span, name=node.name)
-        if len(node.arguments.pieces) != len(written.params) \
-                or node.arguments.body is not None:
+        given = _handed_over(node.arguments, written)
+        if given is None:
             self._diags.emit(D.LANG_MACRO_ARGUMENT_COUNT, node.span,
-                             name=node.name, expected=str(len(written.params)),
+                             name=node.name,
+                             expected=_takes(written),
                              found=str(len(node.arguments.pieces)))
             return ast.NameRef(span=node.span, name=node.name)
         assert self._machine is not None
+        outer, self._invoking = self._invoking, node.through
         try:
-            answer = self._machine.call(
-                func, [self._handle(one) for one in node.arguments.pieces])
+            answer = self._ran_it(func, given)
         except _Said as said:
             # The macro would not write what it was asked for and said why, which
             # is a fault in the invocation and not in the compiler -- so it carries
             # the macro's own words and points where the invocation is.
+            self._invoking = outer
             self._diags.emit(D.LANG_MACRO_REFUSED, node.span, detail=said.detail)
             return ast.NameRef(span=node.span, name=node.name)
         except Stopped as stopped:
+            self._invoking = outer
             self._diags.emit(D.LANG_MACRO_RAN_BADLY, node.span, name=node.name,
                              detail=stopped.detail)
             return ast.NameRef(span=node.span, name=node.name)
         except Refused as refused:
+            self._invoking = outer
             self._diags.emit(D.LANG_MACRO_CANNOT_RUN, node.span, name=node.name,
                              detail=refused.detail)
             return ast.NameRef(span=node.span, name=node.name)
         if not isinstance(answer, int) or not 0 <= answer < len(self._trees):
+            self._invoking = outer
             self._diags.emit(D.LANG_MACRO_ANSWERS_OTHERWISE, node.span,
                              name=node.name, found="something that is not one")
             return ast.NameRef(span=node.span, name=node.name)
+        self._invoking = outer
         found = self._trees[answer]
         if isinstance(found, ast.Block) and not as_statement:
             self._diags.emit(D.LANG_MACRO_WRITES_STATEMENTS, node.span,
@@ -454,6 +521,58 @@ class _Expander:
 
     # -- what the builtins do --------------------------------------------------
 
+    def _ran_it(self, func: object, given: Sequence[object]) -> object:
+        """Run the macro, with which module it came from already in force."""
+        assert self._machine is not None
+        return self._machine.call(func, [self._handle(one) for one in given])
+
+    def _reached(self, tree: object) -> object:
+        """Rewrite a name a macro of another module wrote so this file can reach it.
+
+        **A name a macro reads means what it means where the macro was written.**  A
+        macro in a module naming `Io` means that module's `Io`, and the file that
+        invoked it may have no `Io` at all -- so the name is written here the way
+        every other name of a module is written here: through the module.  `Io` becomes
+        `std.Io`, and `Io.println` becomes `std.Io.println`, which is a path design B
+        already reads.
+
+        Only the names the module writes at the top level are touched, and only in a
+        quote the macro itself wrote: what the caller handed over arrives by filling a
+        hole, which happens after this and is not walked by it.  So a name of the
+        caller's is never requalified, however much it looks like one of the module's.
+        """
+        if self._invoking is None:
+            return tree
+        named = self._defines.get(self._invoking)
+        if not named:
+            return tree
+        return self._requalified(tree, self._invoking, named)
+
+    def _requalified(self, node: object, through: str,
+                     named: frozenset[str]) -> object:
+        """The tree with every name the module defines reached through the module."""
+        if isinstance(node, ast.NameRef) and node.name in named:
+            return ast.Member(span=node.span,
+                              base=ast.NameRef(span=node.span, name=through),
+                              name=node.name, name_span=node.span)
+        if isinstance(node, ast.Node):
+            changes: dict[str, object] = {}
+            for one in fields_of(node):
+                held = getattr(node, one.name)
+                if isinstance(held, ast.Node):
+                    found = self._requalified(held, through, named)
+                    if found is not held:
+                        changes[one.name] = found
+                elif isinstance(held, tuple) and held \
+                        and all(isinstance(each, ast.Node) for each in held):
+                    found_all = tuple(self._requalified(each, through, named)
+                                      for each in held)
+                    if any(a is not b for a, b in zip(found_all, held)):
+                        changes[one.name] = found_all
+            if changes:
+                return replace(node, **changes)
+        return node
+
     def _quoted(self, at: object) -> int:
         """`\N{APL FUNCTIONAL SYMBOL QUAD}quote(n)`: the tree the macro wrote down, holes and all."""
         assert self._made is not None
@@ -468,6 +587,7 @@ class _Expander:
         # The holes come through the rename as the same objects, which is what lets
         # the calls that fill them find them afterwards.
         tree = self._renamed(tree)
+        tree = self._reached(tree)
         holes: list[ast.Hole] = []
         _holes_of(tree, holes)
         found = self._handle(tree)
@@ -597,6 +717,12 @@ class _Expander:
 
     # -- filling ---------------------------------------------------------------
 
+    def _template(self, template: ast.Quote) -> ast.Quote:
+        """A template with the names of its own module reached through the module."""
+        found = self._reached(template)
+        assert isinstance(found, ast.Quote)
+        return found
+
     def _filled(self, template: ast.Quote,
                 bound: dict[str, ast.Expr]) -> ast.Expr | ast.Block:
         """The template with its holes filled and what it binds renamed."""
@@ -693,6 +819,16 @@ def _assignment(target: ast.Expr, value: object,
 # -- walks over a tree ---------------------------------------------------------
 
 
+def only_for_macros(item: object) -> bool:
+    """Whether a top-level definition belongs to the macros and not to the program.
+
+    Named without the underscore because the checker asks it too: what a *module*
+    wrote for the macros has to be taken out of the module, exactly as the expander
+    takes what this file wrote out of this file.
+    """
+    return isinstance(item, ast.MacroDef) or _only_for_macros(item)
+
+
 def _only_for_macros(item: object) -> bool:
     """Whether a definition belongs to the macros and not to the program.
 
@@ -737,7 +873,11 @@ def _belongs_to_the_macros(item: object) -> bool:
     """
     if isinstance(item, ast.FuncDef):
         return item.at_compile_time
-    return isinstance(item, (ast.TypeDef, ast.EnumDef, ast.UnitDef))
+    # And the imports, so that a macro of a module this file imports is checked and
+    # lowered with the rest: the module is read again here, by a checker that keeps
+    # what the macros own instead of taking it out.
+    return isinstance(item, (ast.TypeDef, ast.EnumDef, ast.UnitDef,
+                             ast.ModuleImport))
 
 
 def _macro_symbol(node: ast.FuncDef, made: _Checked) -> str:
@@ -833,6 +973,42 @@ def _head_of(node: object) -> object:
                        name=type(node).__name__)
 
 
+def _takes(written: ast.FuncDef) -> str:
+    """How many arguments a macro takes, said in words a message can use."""
+    fixed = len(written.params) - 1 if _has_several(written) else len(written.params)
+    if not _has_several(written):
+        return str(fixed)
+    return "".join((str(fixed), " or more"))
+
+
+def _has_several(written: ast.FuncDef) -> bool:
+    """Whether the last parameter stands for all the arguments from there on."""
+    return bool(written.params) and written.params[-1].several
+
+
+def _handed_over(arguments: ast.Quote,
+                 written: ast.FuncDef) -> tuple[object, ...] | None:
+    """What the macro is handed, or nothing where the count does not fit.
+
+    A parameter written with `⁂` is handed the rest of the arguments as one piece --
+    a quote, which is what several pieces standing where one does already is -- so
+    `⎕parts` of it is how many there are and `⎕part` is each.  That is a variadic
+    call without the language gaining a variadic function: how many there are is a
+    question about a piece and the compiler answers it.
+    """
+    if arguments.body is not None:
+        return None
+    pieces = arguments.pieces
+    if not _has_several(written):
+        return None if len(pieces) != len(written.params) else tuple(pieces)
+    fixed = len(written.params) - 1
+    if len(pieces) < fixed:
+        return None
+    rest = pieces[fixed:]
+    return (*pieces[:fixed],
+            ast.Quote(span=arguments.span, pieces=tuple(rest)))
+
+
 def _parts_of(node: object) -> tuple[object, ...]:
     """What a piece applies its head to, which is empty where it applies nothing."""
     if isinstance(node, ast.Binary):
@@ -843,6 +1019,11 @@ def _parts_of(node: object) -> tuple[object, ...]:
         return tuple(node.operands)
     if isinstance(node, ast.Call):
         return tuple(node.args)
+    if isinstance(node, ast.Quote):
+        # Several pieces standing where one does, which is what a macro's last
+        # parameter is handed where `⁂` is written before its name: the rest of the
+        # arguments, as the one thing a quote already is.
+        return tuple(node.pieces)
     return ()
 
 

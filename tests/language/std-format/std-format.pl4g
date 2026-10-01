@@ -1,0 +1,36 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ `std.format⌜TEMPLATE, …⌝` is the text a template and its arguments come to, worked out
+※ while the compiler runs.
+※
+※ **A macro and not a function**: the template is handed over as it is written, which is
+※ what lets its holes be counted against the arguments before the program runs.  `{}` takes
+※ the next argument; `{{` and `}}` are braces that stand for themselves.
+※
+※ What it answers is a join of the pieces between the holes and `⍕` of each argument, so
+※ nothing happens while the program runs that would not have happened had the join been
+※ written out -- and `⍕` is what a program says its own type's text with, so a type `std`
+※ was never told about formats.
+※
+※ The last parameter is written `⁂args`, which says it stands for all the arguments from
+※ there on: how many there are is `⎕parts` of one piece, a question the compiler answers,
+※ so this is a variadic call without the language gaining a variadic function.
+
+let std := ⎕import("std")
+
+type Point = x: u8 ; y: i16
+
+@[startup, impure]
+fn main() → u6:
+    if std.format⌜"plain"⌝ ≠ "plain":
+        return 1u6
+    if std.format⌜"x = {}", 42u16⌝ ≠ "x = 42":
+        return 2u6
+    if std.format⌜"{} and {}", true, ⁻7i8⌝ ≠ "true and ⁻7":
+        return 3u6
+    if std.format⌜"{{brace}} {}", 1u8⌝ ≠ "{brace} 1":
+        return 4u6
+    ※ A record, by reflection over its fields, in the notation a program writes one in.
+    if std.format⌜"p = {}", Point(.x ← 1u8, .y ← ⁻2i16)⌝ ≠ "p = Point(.x ← 1, .y ← ⁻2)":
+        return 5u6
+    0u6

@@ -259,6 +259,11 @@ module.exports = grammar({
     // it is settled while compiling and every call that leaves the argument out
     // hands over the same value.
     parameter: $ => seq(
+      // `⁂` before the name says the parameter stands for all the arguments from
+      // here on rather than one, which only a macro's last may do.  The glyph already
+      // means "several things stand where one is written", read here from the other
+      // end: it is written where the one is and what arrives is the several.
+      optional('⁂'),
       field('name', $.identifier), ':', optional($.mutable),
       field('type', $.type),
       optional(seq('\u2190', field('default', $._expression))),
@@ -1153,7 +1158,12 @@ module.exports = grammar({
     // marks is handed over as it is written and not as what it evaluates to, and the
     // marks are the language's own for exactly that.
     invoke_expression: $ => prec(15, seq(
-      field('name', $.identifier), field('arguments', $._quoted),
+      // A bare name, or the module that wrote the macro: those are the two ways any
+      // name is reached, and a macro is no exception.
+      // A member expression and not a name of two parts: the two read the same up to
+      // the marks, so sharing the node is what keeps the parse unambiguous.
+      field('name', choice($.identifier, $.member_expression)),
+      field('arguments', $._quoted),
     )),
 
     // -- tokens ------------------------------------------------------------

@@ -1,0 +1,39 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ `std.print` and `std.println` are macros over the same template `std.format` reads, and
+※ they write what it comes to through `Io.print` and `Io.println`.
+※
+※ So a line is formatted while the compiler runs and written in one request, with nothing
+※ buffered: what reaches the device is the join the macro wrote, handed to the write.
+※
+※ **A macro of a module names its own module's things**, which is what `Io.print` is here:
+※ the name means what it means where the macro was written, and the same thing is written at
+※ the caller by reaching it through the module -- so the expansion holds `std.Io.print` even
+※ though the macro says `Io.print`.  A name the module does not export cannot be reached from
+※ here at all, which is the limit of that.
+
+let std := ⎕import("std")
+
+@[startup, impure]
+fn main() → u6:
+    let ends: mut i32⟦2⟧ = ⟦0i32, 0i32⟧
+    if ⎕syscall(⎕sc@pipe2, &mut ends⟦0⟧, 0i64) < 0i64:
+        return 1u6
+    let out: mut std.Writer = std.Writer(.fd ← ends⟦1⟧)
+    let back: mut std.Reader = std.Reader(.fd ← ends⟦0⟧)
+
+    ※ "x=7\n" is four bytes, and "ok" is two.
+    if ⎕drop(std.println⌜&mut out, "x={}", 7u8⌝ ?? 0) ≠ 4u64:
+        return 2u6
+    if ⎕drop(std.print⌜&mut out, "{}", "ok"⌝ ?? 0) ≠ 2u64:
+        return 3u6
+
+    let seen: mut u8⟦8⟧ = ⟦0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8⟧
+    if ⎕drop(std.read(&mut back, seen) ?? 0) ≠ 6u64:
+        return 4u6
+    ※ 'x' '=' '7' newline 'o' 'k'
+    if seen⟦0⟧ ≠ 120u8 ∨ seen⟦1⟧ ≠ 61u8 ∨ seen⟦2⟧ ≠ 55u8:
+        return 5u6
+    if seen⟦3⟧ ≠ 10u8 ∨ seen⟦4⟧ ≠ 111u8 ∨ seen⟦5⟧ ≠ 107u8:
+        return 6u6
+    0u6

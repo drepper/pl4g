@@ -8327,6 +8327,67 @@ enumeration, whose names do not reach run time.  A program asking for one of the
 the error inside the definition with a note naming the call, which is the bargain generics
 already make.
 
+---
+
+## 2026-10-01T05:40+02:00 — language
+
+**`std.format`, `std.print` and `std.println` as macros, and what a macro of a module means**
+
+    std.format⌜"x = {}, y = {}", x, y⌝
+    ⎕drop(std.println⌜&mut init.io.output, "x = {}", x⌝ ?? 0)
+
+A template handed over as it is written, its holes counted against its arguments before
+the program runs, and what it comes to is a join of the pieces between them and `⍕` of
+each argument -- so a type a program defined formats by the definition that program
+wrote, and nothing happens at run time that the join written out would not have done.
+`{}` takes the next argument and `{{`/`}}` are braces standing for themselves.  No
+mini-language: a width is a call in the hole.
+
+Four things had to land under it, and three were gaps rather than new ideas.
+
+**A macro may be exported and is invoked through its module**, `m.f⌜…⌝`, which the
+macros entry left open.  Expansion comes before anything is checked and an import is
+resolved while checking, so the expander finds and reads the module itself -- through the
+source manager the checker fills, so the file is parsed once.  What a module wrote for
+the macros is taken out of the module, the way the expander takes it out of the files it
+was handed.
+
+**A name a macro reads means what it means where the macro was written** -- which
+[macros.md](macros.md) and the macros decision both state and which was **not
+implemented, in either form**.  Measured: a macro in a module naming a function of that
+module was told the name is not defined.  It is now written at the caller the way every
+other name of that module is: `Io.print` becomes `std.Io.print`, a path design B already
+reads.  Only the names the module writes at the top level are touched, and only in a
+quote the macro itself wrote -- what the caller handed over arrives by filling a hole,
+which happens afterwards, so a name of the caller's is never requalified however much it
+looks like one of the module's.  A name the module does not export still cannot be
+reached from the caller, which is the limit of writing it as a path and the same limit
+everything else about a module has.
+
+**`⁂` before a macro's last parameter** makes it stand for all the arguments from there
+on, arriving as the one piece several pieces already are.  So a macro takes any number of
+arguments without the language gaining a variadic function: how many arrived is `⎕parts`
+of a piece, a question about the program.  Only a macro's last may be one (7030).
+
+**And the work is a `comptime fn`, not the macro.**  `format`, `print` and `println` all
+do one thing -- turn a template and its arguments into a piece -- and a macro is one
+function and cannot be three, so `formatted` is a `comptime fn` the three of them call.
+That is what `comptime fn` was for, used for the first time by something real.
+
+Compare: **Rust**'s `format!`, `print!` and `println!`, which are exactly this shape --
+one macro reading the template and the others written over it -- and whose `{}` and
+`{{` this follows; **C++**'s `std::format` and `std::print`, the same pair with the
+checking done by `consteval` rather than by a macro; **Zig**, where the template is a
+`comptime` string a function parses; **Python**'s f-string, which is the grammar's work
+rather than a library's.  What is unusual here is that the macro writes a *join*, so the
+formatting is the program's own `⍕` and the library knows nothing about any type.
+
+Left open: `{name}`, which wants a piece made from text and is the exception to hygiene
+the formatting entry describes; a width, base and precision, which are calls in the hole
+and want the `std.text` siblings written; and the pool allocator the formatting
+instruction asks for -- what a join allocates from is `⎕heap`, and a scratch arena given
+back after each line wants a join that names its arena and an operation to empty one.
+
 Open questions
 --------------
 

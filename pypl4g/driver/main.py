@@ -109,7 +109,7 @@ class Driver:
         # and every diagnostic is about what the macro wrote.
         start = perf_counter()
         before = self.diags.error_count
-        units = expand(units, self.diags, self._macro_module)
+        units = expand(units, self.diags, self._macro_module, self._imported_unit)
         self._timed("macro expansion", start)
         if self.options.emit is EmitKind.EXPANDED:
             return self._emit_frontend(units)
@@ -134,6 +134,38 @@ class Driver:
             return self._write_text(render_module(module))
         return self._generate(module)
 
+    def _registry(self) -> ModuleRegistry:
+        """Where modules are looked for, as every stage that looks has to agree."""
+        return ModuleRegistry(search=SearchPath(
+            given=list(self.options.module_path), system=system_modules()))
+
+    def _imported_unit(self, node: object) -> object:
+        """The parsed file a module import names, for the expander to read macros of.
+
+        Expansion comes before anything is checked and an import is resolved while
+        checking, so a module whose macros this file invokes has to be found and read
+        here.  It goes through the source manager the checker will fill, so the file
+        is parsed once however many stages want it.
+        """
+        from ..front.lexer import tokenize  # noqa: PLC0415
+        from ..front.parser import parse  # noqa: PLC0415
+        from ..sema.modules import ModuleNotFound  # noqa: PLC0415
+
+        source = getattr(node, "source", "")
+        registry = self._registry()
+        try:
+            path = registry.resolve(
+                source, self.options.inputs[0] if self.options.inputs else None)
+        except ModuleNotFound:
+            # Not reported here: the checker resolves imports too and says so with
+            # the span and the places it looked, which is the message worth having.
+            return None
+        try:
+            text = self.sources.read(path)
+        except Exception:  # noqa: BLE001 - the checker reports it
+            return None
+        return parse(tokenize(text, self.diags), path.as_posix(), self.diags)
+
     def _macro_module(self, units: Sequence[ast.SourceUnit]) -> object:
         """Check and lower the macros, for the expander to run.
 
@@ -141,7 +173,9 @@ class Driver:
         expander, expansion coming first in the pipeline and last in what depends on
         what.
         """
-        return check_macros(units, self.diags, self.sources)
+        return check_macros(units, self.diags, self.sources,
+                            self._registry(),
+                            self.options.inputs[0] if self.options.inputs else None)
 
     def _run_build(self, units: Sequence[ast.SourceUnit]) -> int:
         """Run the build function and build what it asked for.
@@ -287,8 +321,7 @@ class Driver:
                         stack_size=self.options.stack_size,
                         guard_size=self.options.guard_size,
                         reports=self.reports)
-        registry = ModuleRegistry(search=SearchPath(
-            given=list(self.options.module_path), system=system_modules()))
+        registry = self._registry()
         check(module, units, self.diags, registry, self.sources, self.notes,
               conditions=self.options.conditions)
         # Before anything is dropped: which tests this binary runs is what

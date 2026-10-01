@@ -356,6 +356,110 @@ fn text(v: T') → str:
 fn `⍕`(v: T') → str:
     text(v)
 
+※ -- formatting ---------------------------------------------------------------
+
+※※ The piece of the program a template and its arguments come to.
+※※
+※※ \details A `comptime fn` and not a macro, because more than one macro wants it: a
+※※ macro is one function and cannot be two, and this is the one thing `format`,
+※※ `print` and `println` all do.  What it answers is a join of the pieces between the
+※※ holes and `⍕` of each argument.
+※※
+※※ \param template the text, with `{}` where an argument goes
+※※ \param args the arguments, as the one piece several of them are
+※※ \return the piece the two come to
+@[impure]
+comptime fn formatted(template: syntax, args: syntax) → syntax:
+    let said: str = ⎕name(template)
+    let holes: u64 = ⎕parts(args)
+    let answer: mut syntax = ⌜""⌝
+    let run: mut str = ""
+    let taken: mut u64 = 0u64
+    ※ What the last character left behind: nothing, an opening brace, or a closing one.
+    let after: mut u8 = 0u8
+    foreach c: char = said:
+        if after = 1u8:
+            after ← 0u8
+            if c = '{':
+                ※ Two braces are one brace, which is how a template says a brace.
+                run ← run ⧺ "{"
+            elif c = '}':
+                if taken ≥ holes:
+                    return ⎕refuse("the template has more holes than there are arguments")
+                let next: syntax = ⎕part(args, taken)
+                answer ← ⌜$answer ⧺ $(run) ⧺ ⍕$next⌝
+                run ← ""
+                taken ← taken + 1u64
+            else:
+                return ⎕refuse("a hole is written '{}' and this brace holds something else")
+        elif after = 2u8:
+            after ← 0u8
+            if c = '}':
+                run ← run ⧺ "}"
+            else:
+                return ⎕refuse("a '}' on its own, which a template writes as '}}'")
+        elif c = '{':
+            after ← 1u8
+        elif c = '}':
+            after ← 2u8
+        else:
+            run ← run ⧺ ⎕str(c)
+    if after ≠ 0u8:
+        return ⎕refuse("the template ends in the middle of a brace")
+    if taken < holes:
+        return ⎕refuse("the template has fewer holes than there are arguments")
+    ⌜$answer ⧺ $(run)⌝
+
+※※ The text a template and its arguments come to.
+※※
+※※ \details A macro and not a function: the template is handed over as it is written,
+※※ which is what lets the holes in it be counted against the arguments before the
+※※ program runs.  `{}` takes the next argument, `{{` and `}}` are braces that stand for
+※※ themselves, and a template that does not agree with its arguments is refused at the
+※※ invocation in words of this macro's own.
+※※
+※※ What it answers is a join of the pieces between the holes and `⍕` of each argument,
+※※ so nothing happens while the program runs that would not have happened had the join
+※※ been written out -- and `⍕` is what a program may say its own type's text with.
+※※
+※※ \param template the text, with `{}` where an argument goes
+※※ \param args what the holes stand for
+※※ \return the text they come to
+@[export, impure]
+macro format(template: syntax, ⁂args: syntax) → syntax:
+    formatted(template, args)
+
+※※ Write a template and its arguments to a device, and answer how many bytes went.
+※※
+※※ \details A macro, because `format` is one: the template is handed over as it is
+※※ written so that its holes can be counted against the arguments before the program
+※※ runs.  What it expands to is the join `format` would have answered, handed to
+※※ `Io.print` -- so nothing is buffered and what reaches the device is one request.
+※※
+※※ \param to the device to write to
+※※ \param template the text, with `{}` where an argument goes
+※※ \param args what the holes stand for
+※※ \return how many bytes went
+@[export, impure]
+macro print(to: syntax, template: syntax, ⁂args: syntax) → syntax:
+    let said: syntax = formatted(template, args)
+    ⌜Io.print($to, ⎕bytes($said))⌝
+
+※※ The same, with a newline after it, written as one request.
+※※
+※※ \details The newline goes to the kernel in the same request as the text, `Io.println`
+※※ being what does that -- so a line cannot be split by something else writing to the
+※※ same device.
+※※
+※※ \param to the device to write to
+※※ \param template the text, with `{}` where an argument goes
+※※ \param args what the holes stand for
+※※ \return how many bytes went, which is one more than the text
+@[export, impure]
+macro println(to: syntax, template: syntax, ⁂args: syntax) → syntax:
+    let said: syntax = formatted(template, args)
+    ⌜Io.println($to, ⎕bytes($said))⌝
+
 ※ -- describing a build --------------------------------------------------------
 
 ※※ What a build function is handed, and what it writes into to say what to build.

@@ -8803,6 +8803,33 @@
       "option": null
     },
     {
+      "number": 7030,
+      "name": "LANG_SEVERAL_NOT_A_MACRO_TAIL",
+      "severity": "error",
+      "message": "'⁂{name}' stands for all the arguments from there on, and {why}",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the parameter"
+        },
+        {
+          "name": "why",
+          "type": "string",
+          "description": "what is wrong with where it is"
+        }
+      ],
+      "cause": "A parameter written with the spread glyph is handed the rest of the arguments as one piece, so there is nothing after it to hand anything to and it has to be the last.  Only a macro may have one: how many arguments arrived is a question about a piece of the program, which the compiler answers while it runs, and a function is called with a count that is written down.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Macros / A macro written as a function",
+        "requirement": "A macro's last parameter may stand for all the remaining arguments."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 8501,
       "name": "IMPL_BACKEND_UNSUPPORTED",
       "severity": "error",

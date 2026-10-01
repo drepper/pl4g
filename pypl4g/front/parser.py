@@ -1416,6 +1416,11 @@ class Parser:
         if self._check(TokKind.RPAREN):
             return ()
         while True:
+            # `⁂` before a name says the parameter stands for all the arguments from
+            # here on rather than one.  The glyph already means "several things stand
+            # where one is written", read here from the other end: it is written where
+            # the one is and what arrives is the several.
+            several = self._accept(TokKind.SPREAD) is not None
             name_token = self._expect(TokKind.IDENT)
             self._expect(TokKind.COLON)
             # `mut` stands where it stands in a definition, before the type,
@@ -1438,7 +1443,8 @@ class Parser:
                 seen[name_token.text] = name_token.span
             params.append(ast.Param(
                 span=name_token.span.to(end), name=name_token.text,
-                type=written, mutable=mutable, default=default))
+                type=written, mutable=mutable, default=default,
+                several=several))
             if self._accept(TokKind.COMMA) is None:
                 break
         return tuple(params)
@@ -2072,14 +2078,26 @@ class Parser:
                 found = ast.Element(span=found.span.to(end), base=found,
                                     indices=tuple(indices))
                 continue
-            if self._check(TokKind.LIFT_OPEN) and isinstance(found, ast.NameRef):
-                # A macro invoked.  Only after a bare name, which is the only thing
-                # a macro is ever called by -- and the marks follow nothing else
-                # today, so the position is free.
+            if self._check(TokKind.LIFT_OPEN) \
+                    and isinstance(found, (ast.NameRef, ast.Member)):
+                # A macro invoked, by a bare name or through the module that wrote
+                # it.  Those are the two ways any name is reached, and the marks
+                # follow nothing else today, so the position is free.
                 arguments = self._parse_quote()
+                through = None
+                if isinstance(found, ast.Member):
+                    if not isinstance(found.base, ast.NameRef):
+                        self._diags.emit(D.LANG_IMPORT_NOT_A_MODULE, found.span,
+                                         name="an expression")
+                        through, named, where = None, found.name, found.name_span
+                    else:
+                        through = found.base.name
+                        named, where = found.name, found.name_span
+                else:
+                    named, where = found.name, found.span
                 found = ast.Invoke(span=found.span.to(arguments.span),
-                                   name=found.name, name_span=found.span,
-                                   arguments=arguments)
+                                   name=named, name_span=where,
+                                   arguments=arguments, through=through)
                 continue
             if self._check(TokKind.OPEN_OPERATOR):
                 # A pair of brackets the language gives no meaning, written

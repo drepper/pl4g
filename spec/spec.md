@@ -313,6 +313,25 @@ fn `⍕`(v: T') → str:
 What is not there yet: a `char`, there being no way to make a string of one; a floating-point number, whose shortest text that reads
 back as the same number is an algorithm of its own; and an enumeration, whose names do not reach run time.
 
+**`format`, `print` and `println` take a template**, and they are macros:
+
+```
+std.format⌜"x = {}, y = {}", x, y⌝
+⎕drop(std.println⌜&mut init.io.output, "x = {}", x⌝ ?? 0)
+```
+
+The template is handed over as it is written, which is what lets its holes be counted against the arguments **before the program
+runs**: a template that does not agree with them is refused at the invocation, in the macro's own words.  `{}` takes the next
+argument, and `{{` and `}}` are braces that stand for themselves.
+
+What a template comes to is **a join of the pieces between the holes and `⍕` of each argument**, so nothing happens while the
+program runs that would not have happened had the join been written out -- and since it is `⍕`, a type a program defined formats by
+the definition that program wrote.  `print` and `println` hand that join to `Io.print` and `Io.println`, so a line is formatted
+while compiling and written in one request with nothing buffered.
+
+There is no mini-language inside the template: a width or a base is asked for by a call in the hole, where a reader and the checker
+can both see it.
+
 **`print` and `println` write every byte they were given.**
 
 ```
@@ -4907,6 +4926,46 @@ macro depth(e: syntax) → syntax:
 the macros to call, **and again in the ordinary way for the program** -- unless what it takes or answers is a piece of the program,
 and then it is the macros' alone.  So `comptime` says when a function exists rather than what it computes, and a helper worth having
 in both places is written once.
+
+###### A macro of a module
+
+**A macro may be exported, and is invoked through the module that wrote it**: `m.f⌜…⌝`, which is the path every other name a module
+holds is reached by.
+
+```
+let std := ⎕import("std")
+std.println⌜&mut init.io.output, "x = {}", x⌝
+```
+
+**Expansion comes before anything is checked and an import is resolved while checking**, so a module whose macro is invoked here is
+found and read by the expander -- through the same cache the checker fills, so the file is parsed once however many stages want it.
+A macro of a module this file does not import cannot be reached at all, which is the rule every other name follows.
+
+**A name the macro reads means what it means where the macro was written.**  A macro in `std` naming `Io.print` means `std`'s, and
+the file that invoked it may have no `Io` at all -- so the name is written at the caller the way every other name of that module is:
+`Io.print` becomes `std.Io.print`, which is a path the language already reads.  Both forms of macro follow the rule, and only the
+names the module writes at the top level are touched -- what the *caller* handed over arrives by filling a hole, and a name of the
+caller's is never requalified however much it looks like one of the module's.
+
+**A name the module does not export cannot be reached from the caller**, so a macro naming one is refused there (4104).  That is the
+limit of writing the name as a path, and it is the same limit everything else about a module has.
+
+###### A parameter that stands for all the rest
+
+**`⁂` before a macro's last parameter says it stands for all the arguments from there on** (7030), which arrive as the one piece
+several pieces already are:
+
+```
+macro format(template: syntax, ⁂args: syntax) → syntax:
+    let holes: u64 = ⎕parts(args)
+    …                            ※ ⎕part(args, n) is each of them
+```
+
+So **a macro takes any number of arguments without the language gaining a variadic function**: how many arrived is `⎕parts` of a
+piece, which is a question about the program and one the compiler answers.  The glyph already means "several things stand where one
+is written", read here from the other end -- it is written where the one is, and what arrives is the several.  Only a macro may
+have one, and only as its last: a function is called with a count that is written down, and there is nothing after such a parameter
+for an argument to reach.
 
 ###### How a macro is run
 

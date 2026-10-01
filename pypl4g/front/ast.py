@@ -446,6 +446,9 @@ class Invoke(Expr):
     name: str
     name_span: Span
     arguments: Quote
+    #: The module it is reached through, where the name is a path: `std` for
+    #: `std.format⌜…⌝`.  Nothing for a macro this file wrote.
+    through: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -1121,6 +1124,11 @@ class Param(Node):
     #: What a caller that says nothing about it gets.  Nothing where the
     #: parameter has none, in which case every caller says something.
     default: Expr | None = None
+    #: Whether it stands for *all* the arguments from here on rather than one, which
+    #: `⁂` before the name says.  Only a macro has one, and only as its last: what it
+    #: is handed is the rest of the pieces as one piece, and how many that is, is a
+    #: question the compiler answers.
+    several: bool = False
 
 
 @dataclass(frozen=True, slots=True)

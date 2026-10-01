@@ -1,0 +1,20 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=13 diag=none
+
+※ A macro a module exports, invoked through the module: `m.f⌜…⌝`, which is the path every
+※ other name a module holds is reached by.
+※
+※ Expansion comes before anything is checked and an import is resolved while checking, so
+※ the module is found and read by the expander -- through the same cache the checker fills,
+※ so the file is parsed once however many stages want it.
+※
+※ **A name the macro reads means what it means where the macro was written.**  `mine` names
+※ `tag`, which is this module's and not this file's, and what the expansion holds is
+※ `m.tag()`: the same thing written the way this file can reach it.  Both forms follow the
+※ rule.
+
+let m := ⎕import("shouting")
+
+@[startup, impure]
+fn main() → u6:
+    ※ 3 + 3 is six, and 7 + 6 is thirteen.
+    ⎕narrow(m.mine⌜m.twice⌜3u8⌝⌝, ⌜u6⌝) ?? 1u6

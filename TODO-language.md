@@ -214,14 +214,28 @@ To Do List for the PL4g language
         Left over: a general question naming *which* kind of type something is, which wants
         a compile-time condition comparing something other than two types; and reflection
         over a sum, which would have to answer which part is held first.
-    [ ] **the five pieces the macro machine needs** to read a template: globals
-        materialized into its memory, `__pl4g_alloc` as a native bump (the one callee
-        with no body -- `__pl4g_str_join` is ordinary IR and so is a walk over a string),
-        `⎕name` of a literal answering its text, `$(EXPR)` where the expression answers a
-        `str`, and **a way for a macro to refuse with its own message**, without which
-        the check the template exists for is reported as the compiler stopping.
-    [ ] **`std.format` and `std.print`**, and then `{name}`, which needs a piece made
-        from text and is the one exception to hygiene the language admits.
+    [x] **the five pieces the macro machine needs** to read a template.  Done: globals
+        materialized into its memory, `__pl4g_alloc` as a native bump, `⎕name` of a
+        literal answering its text, `$(EXPR)` taking text, and `⎕refuse` for a macro's own
+        message.  With them went `⎕str(CHAR)`, a string of one character, which is how a
+        run between two holes is built and which closed one of `⍕`'s three gaps.
+    [x] **`std.format`, `std.print` and `std.println`**, all three macros over one
+        `comptime fn`.  Four things landed under them, three of them gaps: a macro may be
+        exported and invoked as `m.f⌜…⌝`; a name a macro reads now really does mean what
+        it means where the macro was written, which both documents claimed and neither
+        form implemented; and `⁂` before a macro's last parameter makes it stand for all
+        the remaining arguments, so a macro is variadic without the language being.
+    [ ] **`{name}` in a template**, which needs a piece made from text and is the one
+        exception to hygiene the language admits.
+    [ ] **a width, a base and a precision**, which are calls in the hole and want the
+        `std.text` siblings with default arguments written.
+    [ ] **a pool allocator for the formatting**, which the instruction asks for: what a
+        join allocates from is `⎕heap`, so a line formatted and written leaves its bytes
+        there for ever.  A scratch arena given back after each line wants two things the
+        language does not have -- a join that says which arena it comes out of, `in`
+        reaching an expression the way it reaches a collection literal, and an operation
+        that gives a whole arena back at once, which the specification describes as a
+        property and which nothing performs.
     Left over and named in the proposal: float text, which is the large piece; whether an
     enumeration's names reach run time; the dyadic `⍕`, which is APL's
     format-by-specification and which nothing yet needs; and a chain of joins folded into

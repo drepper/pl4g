@@ -16,6 +16,7 @@ from ..diag import ids as D
 from ..target import statuses
 from ..diag.engine import DiagEngine, Expectation
 from ..front import ast
+from ..front.expand import only_for_macros
 from ..front.doccomment import Part as DocPart, parse as parse_doc
 from ..front.lexer import is_operator_glyph, is_operator_name
 from ..front.token import (ACQUIRE_NAME, ANSWER_NAME, ENTRY_NAME,
@@ -1561,7 +1562,8 @@ class Checker:
                  top_level: list[_Global] | None = None,
                  notes: Notes | None = None,
                  conditions: Conditions = Conditions.CHECK,
-                 for_macros: bool = False) -> None:
+                 for_macros: bool = False,
+                 quoted: list[ast.Quote] | None = None) -> None:
         self._module = module
         self._diags = diags
         #: What a condition written in a signature does in this build, which is
@@ -1577,7 +1579,11 @@ class Checker:
         #: holes each has.  The expander reads them: a quote lowers to a call that
         #: names one by its place here and fills its holes with what the macro
         #: worked out.
-        self.quoted: list[ast.Quote] = []
+        #: Every quote a macro's body wrote, in the order the calls that name them
+        #: were written.  Shared with a checker reading a module, the way the
+        #: top-level names are: a macro in a module quotes into the same table, since
+        #: what runs them is one machine with one table of trees.
+        self.quoted: list[ast.Quote] = [] if quoted is None else quoted
         #: Where to write down what each name turned out to be, for whoever
         #: wants to be asked about one later -- the language server, and nothing
         #: else.  Nothing where nobody asked, which is every build.
@@ -1765,6 +1771,16 @@ class Checker:
         answer both wrongly.
         """
         collected: list[_Collected] = []
+        if not self._for_macros:
+            # What was written for the macros is not part of the program.  The
+            # expander takes those out of the files it was handed; this is what
+            # takes them out of everything else -- a module read from here, and a
+            # unit handed straight to the checker by something that is not the
+            # driver.  Nothing at run time may hold a piece of the program, so a
+            # unit that still has them is one that will not compile.
+            units = [replace(unit, items=tuple(
+                one for one in unit.items if not only_for_macros(one)))
+                for unit in units]
         # Three passes over the definitions, because each needs what the one
         # before it settled.  The imports come first, since a type may be one
         # another module defines; then every type name, so that a definition may
@@ -1805,6 +1821,12 @@ class Checker:
                         self._collect_global(item)
                     case (ast.ModuleImport() | ast.TypeDef() | ast.EnumDef()
                           | ast.UnitDef() | ast.BundleDef()):
+                        pass
+                    case ast.MacroDef():
+                        # A macro written as rules is no function and has nothing to
+                        # lower.  One is here only where the macros are being checked
+                        # -- the program's units have had them taken out -- and what
+                        # reads it is the expander, which has it already.
                         pass
                     case _:
                         self._diags.internal("unknown kind of top-level definition")
@@ -2086,7 +2108,9 @@ class Checker:
             prefix = found_name(self._prefix, base_name(path))
             inner = Checker(self._module, self._diags, self._registry, path, prefix,
                             self._sources, self._top_level,
-                            conditions=self._conditions)
+                            conditions=self._conditions,
+                            for_macros=self._for_macros,
+                            quoted=self.quoted)
             inner.run([unit], whole_program=False)
             loaded.exports = {name: what for name, what in inner._top.items()
                               if _is_exported(what)}
@@ -2869,6 +2893,25 @@ class Checker:
                 self._diags.emit(D.LANG_DOC_RETURN_OF_NOTHING, where,
                                  command=written, owner=node.name)
 
+    def _check_several(self, node: ast.FuncDef) -> None:
+        """Check a parameter that stands for all the arguments from there on.
+
+        It has to be a macro's, and it has to be the last: there is nothing after
+        one for an argument to reach, and how many arrived is a question about a
+        piece of the program rather than a count written down.
+        """
+        for at, param in enumerate(node.params):
+            if not param.several:
+                continue
+            why = ""
+            if not node.is_macro:
+                why = "only a macro has one"
+            elif at != len(node.params) - 1:
+                why = "nothing after it could be given anything"
+            if why:
+                self._diags.emit(D.LANG_SEVERAL_NOT_A_MACRO_TAIL, param.span,
+                                 name=param.name, why=why)
+
     def _a_type_here(self, node: ast.FuncDef) -> bool:
         """Whether the first part of a definition's name is a type this file defines.
 
@@ -2895,6 +2938,7 @@ class Checker:
         whole = _written_name(node)
         if node.held is not None and not self._a_type_here(node):
             return None
+        self._check_several(node)
         attrs = self._bind_attributes(node.attrs, AttrTarget.FUNCTION)
         written: list[str] = []
         for param in node.params:
@@ -15125,7 +15169,9 @@ class Checker:
 
 
 def check_macros(units: Sequence[ast.SourceUnit], diags: DiagEngine,
-                 sources: SourceManager | None = None) -> object:
+                 sources: SourceManager | None = None,
+                 registry: ModuleRegistry | None = None,
+                 path: Path | None = None) -> object:
     """Check and lower the macros, answering the module and the trees they quoted.
 
     A run of its own over a unit holding the macros, the `comptime` functions and the
@@ -15136,8 +15182,9 @@ def check_macros(units: Sequence[ast.SourceUnit], diags: DiagEngine,
     from ..front.expand import _Checked
 
     module = Module(name="macros", triple="")
-    found = Checker(module, diags, ModuleRegistry(), None, "", sources,
-                    for_macros=True)
+    found = Checker(module, diags,
+                    registry if registry is not None else ModuleRegistry(),
+                    path, "", sources, for_macros=True)
     found.run(units, whole_program=False)
     return _Checked(module, found.quoted)
 
