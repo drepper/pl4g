@@ -1,0 +1,34 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ `⎕str(CHAR)` is a string of one character, and it is the third way a string is made.
+※
+※ A literal, a join of two, and this.  It is the compiler's name for the reason the other
+※ two are not a program's to write either: a string's bytes being well-formed UTF-8 is an
+※ invariant, and encoding one code point is what keeps it one -- **by construction and not
+※ by inspection**.  There is deliberately no way in from bytes, which would have to be
+※ checked.
+※
+※ It allocates, since how many bytes a code point takes is not known until it is looked at,
+※ so a function using it says `impure` -- as one joining two strings does.
+
+let std := ⎕import("std")
+
+@[startup, impure]
+fn main() → u6:
+    if ⎕str('x') ≠ "x":
+        1u6
+    elif #⎕bytes(⎕str('x')) ≠ 1:
+        2u6
+    elif ⎕str('£') ≠ "£":
+        3u6
+    elif #⎕bytes(⎕str('£')) ≠ 2:
+        4u6
+    elif ⎕str('ω') ≠ "ω":
+        5u6
+    elif #⎕bytes(⎕str('😀')) ≠ 4:
+        6u6
+    ※ And `⍕` of a character, which this is what made possible.
+    elif std.text('q') ≠ "q":
+        7u6
+    else:
+        0u6

@@ -47,6 +47,8 @@ JOIN_SYMBOL: Final[str] = "__pl4g_str_join"
 LENGTH_SYMBOL: Final[str] = "__pl4g_str_length"
 COMPARE_SYMBOL: Final[str] = "__pl4g_str_compare"
 HASH_SYMBOL: Final[str] = "__pl4g_str_hash"
+CHAR_SYMBOL: Final[str] = "__pl4g_str_of_char"
+BYTE_COUNT_SYMBOL: Final[str] = "__pl4g_str_char_bytes"
 
 #: What FNV-1a begins with and multiplies by.  The numbers are the published
 #: ones for sixty-four bits; what recommends this hash here is that it is a
@@ -118,6 +120,116 @@ def join_function(module: Module) -> Function:
         bytes_type(module), impure=True)
     if fresh:
         _build_join(module, func)
+    return func
+
+
+def char_function(module: Module) -> Function:
+    """The one that makes a string of one character, built on first ask.
+
+    It answers where the bytes are; how many there are is worked out beside the
+    call, the two together being what a `str` is.
+    """
+    arena = module.types.ptr_type(ARENA, mutable=True)
+    func, fresh = _generated(module, CHAR_SYMBOL, (arena, CHAR),
+                             bytes_type(module), impure=True)
+    if fresh:
+        _build_char(module, func)
+    return func
+
+
+def _build_char(module: Module, func: Function) -> None:
+    """Build the one that encodes a code point as the bytes of a string.
+
+    UTF-8, written out: the four lengths and nothing clever.  It is here and not
+    in the runtime because it allocates out of an arena, which is the compiler's
+    to name, and because what it answers has to be a `str` -- whose bytes being
+    well formed is an invariant, and encoding them here is what keeps it one by
+    construction rather than by inspection.
+    """
+    entry = func.add_block()
+    builder = IRBuilder(module, func)
+    builder.position_at(entry)
+    arena = entry.add_param(module.types.ptr_type(ARENA, mutable=True), "arena")
+    # The character itself and not its number: a cast at the call would be a cast
+    # of whatever the caller had, and a character written down is a constant -- which
+    # a bitcast has nowhere to read from, emitting no instruction of its own.  Here
+    # the operand is a parameter and never a constant.
+    code = entry.add_param(CHAR, "code")
+    wide = builder.cast(CastKind.ZEXT,
+                        builder.cast(CastKind.BITCAST, code, U32), U64)
+    into = builder.call(_allocator(module),
+                        (arena, builder.int_const(U64, 4)), bytes_type(module))
+    # The memory as the entry block leaves it.  Each arm below writes from here,
+    # which is what dominates all four of them: the token one arm leaves behind is
+    # that arm's and no other arm is reached through it.
+    start = builder.memory()
+    # Which of the four lengths it is, asked largest first so that each test is
+    # about one boundary.
+    one = builder.new_block("one")
+    two = builder.new_block("two")
+    three = builder.new_block("three")
+    four = builder.new_block("four")
+    ask_two = builder.new_block("ask.two")
+    ask_three = builder.new_block("ask.three")
+    builder.condbr(builder.compare(CmpPred.ULT, wide,
+                                   builder.int_const(U64, 0x80)), one, ask_two)
+    builder.position_at(ask_two)
+    builder.condbr(builder.compare(CmpPred.ULT, wide,
+                                   builder.int_const(U64, 0x800)), two,
+                   ask_three)
+    builder.position_at(ask_three)
+    builder.condbr(builder.compare(CmpPred.ULT, wide,
+                                   builder.int_const(U64, 0x10000)), three, four)
+    for block, lengths in ((one, ((0, 0x00, 0),),),
+                           (two, ((0, 0xc0, 6), (1, 0x80, 0))),
+                           (three, ((0, 0xe0, 12), (1, 0x80, 6), (2, 0x80, 0))),
+                           (four, ((0, 0xf0, 18), (1, 0x80, 12), (2, 0x80, 6),
+                                   (3, 0x80, 0)))):
+        builder.position_at(block)
+        builder.set_memory(start)
+        for at, mark, shift in lengths:
+            part = builder.binary(BinOp.LSHR, wide,
+                                  builder.int_const(U64, shift))
+            kept = builder.binary(BinOp.AND, part, builder.int_const(
+                U64, 0x7f if mark == 0x00 else 0x3f if mark == 0x80
+                else 0x1f if mark == 0xc0 else 0x0f if mark == 0xe0 else 0x07))
+            byte = builder.binary(BinOp.OR, kept,
+                                  builder.int_const(U64, mark))
+            place = builder.binary(BinOp.ADD, into,
+                                   builder.int_const(U64, at))
+            builder.store(place, builder.cast(CastKind.TRUNC, byte, U8))
+        builder.ret(into)
+
+
+def length_in_bytes(module: Module) -> Function:
+    """How many bytes a code point takes, built on first ask.
+
+    Beside `char_function` rather than inside it because what a `str` is, is two
+    values and a call answers one: the bytes come from the one and the count from
+    this, and the two are put together where the call is.
+    """
+    func, fresh = _generated(module, BYTE_COUNT_SYMBOL, (CHAR,), U64, impure=False)
+    if fresh:
+        entry = func.add_block()
+        builder = IRBuilder(module, func)
+        builder.position_at(entry)
+        code = entry.add_param(CHAR, "code")
+        wide = builder.cast(CastKind.ZEXT,
+                            builder.cast(CastKind.BITCAST, code, U32), U64)
+        answers = [builder.new_block("".join(("bytes.", str(n))))
+                   for n in (1, 2, 3, 4)]
+        asks = [builder.new_block("".join(("ask.", str(n)))) for n in (2, 3)]
+        for at, (bound, taken) in enumerate(((0x80, answers[0]),
+                                             (0x800, answers[1]),
+                                             (0x10000, answers[2]))):
+            builder.condbr(
+                builder.compare(CmpPred.ULT, wide, builder.int_const(U64, bound)),
+                taken, asks[at] if at < len(asks) else answers[3])
+            if at < len(asks):
+                builder.position_at(asks[at])
+        for n, block in enumerate(answers, start=1):
+            builder.position_at(block)
+            builder.ret(builder.int_const(U64, n))
     return func
 
 

@@ -304,6 +304,8 @@ fn text(v: T') → str:
         v
     comptime elif ⎕typeof(⌜v⌝) = ⌜bool⌝:
         if v: "true" else: "false"
+    comptime elif ⎕typeof(⌜v⌝) = ⌜char⌝:
+        ⎕str(v)
     comptime elif ⎕isrecord(⌜T'⌝):
         ※ The notation the language itself uses for a record, which is also what
         ※ reads back as the same value.

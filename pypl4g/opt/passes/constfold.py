@@ -22,11 +22,11 @@ from __future__ import annotations
 
 from typing import Sequence
 
-from ...ir.inst import (AssertInst, BinaryInst, BinOp, CmpInst, CmpPred,
-                        Instruction)
+from ...ir.inst import (AssertInst, BinaryInst, BinOp, CastInst, CastKind,
+                        CmpInst, CmpPred, Instruction)
 from ...ir.module import Module
-from ...ir.types import BOOL, IntType
-from ...ir.value import BoolConst, IntConst, Value
+from ...ir.types import BOOL, CHAR, IntType
+from ...ir.value import BoolConst, CharConst, IntConst, Value
 
 #: What each comparison asks, as a question about two numbers.  The signed and
 #: the unsigned orderings are separate entries because they are separate
@@ -113,6 +113,19 @@ class ConstantFolding:
                 changed = True
         return changed
 
+    def _reread(self, module: Module, inst: Instruction) -> Value | None:
+        """A constant read as another type, where the operand is one."""
+        held = inst.operands[0]
+        number = _as_number(held)
+        if number is None:
+            return None
+        ty = inst.ty
+        if isinstance(ty, IntType):
+            return module.int_const(ty, number)
+        if ty is CHAR:
+            return module.char_const(number)
+        return None
+
     def _sweep(self, module: Module, func: object) -> bool:
         """Fold once, and say whether anything folded.
 
@@ -141,6 +154,13 @@ class ConstantFolding:
         """Return the constant *inst* computes, if it computes one."""
         if isinstance(inst, CmpInst):
             return self._fold_comparison(module, inst)
+        if isinstance(inst, CastInst) and inst.kind is CastKind.BITCAST:
+            # The same bits read as something else, which for something written
+            # down is the same thing written down.  It matters beyond saving an
+            # instruction: a bitcast emits nothing and reads its operand out of a
+            # register, and a constant is in no register -- so one folded into this
+            # is a value the backend has nowhere to find.
+            return self._reread(module, inst)
         if not isinstance(inst, BinaryInst):
             return None
         folder = _FOLDERS.get(inst.op)
@@ -221,4 +241,6 @@ def _as_number(value: Value) -> int | None:
         return value.value
     if isinstance(value, BoolConst):
         return 1 if value.value else 0
+    if isinstance(value, CharConst):
+        return value.value
     return None

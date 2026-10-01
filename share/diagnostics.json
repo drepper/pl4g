@@ -5347,6 +5347,28 @@
       "option": null
     },
     {
+      "number": 4610,
+      "name": "LANG_STR_OF_NOT_A_CHARACTER",
+      "severity": "error",
+      "message": "'⎕str' makes a string of a character, and this is '{found}'",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "what it was given"
+        }
+      ],
+      "cause": "A string's bytes being well-formed UTF-8 is an invariant, and what keeps it one is that the only ways to make a string are a literal, a join of two, and one code point encoded.  A number is not a code point -- not every number is one -- so `⎕chr` is what turns one into a character first, and it says where that can fail.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Strings",
+        "requirement": "A string is made by a literal, a join, or one character encoded."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 4516,
       "name": "LANG_ENUMERATE_TAKES_ONE_OR_TWO",
       "severity": "error",

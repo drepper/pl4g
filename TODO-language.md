@@ -200,9 +200,9 @@ To Do List for the PL4g language
         over its fields -- any record, recursively, in the notation a program writes one
         in.  Nothing in the number arm names a width, and nothing is ever negated, so the
         smallest value a signed type has comes out right.
-        Left over: a `char`, there being no way to make a string of one; a floating-point
-        number, whose shortest round-trip text is an algorithm of its own; and an
-        enumeration, whose names do not reach run time.  The digit table is a local filled
+        A `char` is covered too, `⎕str` being what makes a string of one.
+        Left over: a floating-point number, whose shortest round-trip text is an algorithm
+        of its own; and an enumeration, whose names do not reach run time.  The digit table is a local filled
         per call, a top-level array of string literals not being implemented (9902).
     [x] **reflection over a record.**  Done: `⎕isrecord(⌜T⌝)`, a truth the compiler
         settles and so the first predicate a compile-time condition admits;

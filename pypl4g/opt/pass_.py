@@ -99,8 +99,13 @@ def pipeline_for(level: int) -> Sequence[str]:
     # is what folding, simplifying and sweeping are for -- and a function
     # nothing calls any more, which the last pass drops.
     # Dead code is swept before that, since both of the others leave some.
+    # Folding runs twice, and the second time is not belt and braces: simplifying
+    # the graph is what turns a block's parameter into the one value every way in
+    # carries, so a body inlined with a constant argument only *becomes* constant
+    # after that pass -- and a bitcast of a constant is a value the back end has
+    # nowhere to read, a bitcast emitting no instruction of its own.
     return ("dropignored", "largeanswers", "inline", "constfold", "simplifycfg",
-            "dce", "dropunreached", "splitedges")
+            "constfold", "dce", "dropunreached", "splitedges")
 
 
 def build_manager(level: int) -> PassManager:

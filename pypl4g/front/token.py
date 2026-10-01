@@ -295,6 +295,14 @@ FIELDS_NAME: Final[str] = "".join((BUILTIN_GLYPH, "fields"))
 #: and a program that wants it for anything else may have it.
 TYPENAME_NAME: Final[str] = "".join((BUILTIN_GLYPH, "typename"))
 
+#: A string of one character.  The compiler's name because it is the third way a
+#: `str` is made -- a literal, a join, and this -- and because a string's bytes
+#: being well-formed UTF-8 is an invariant, which encoding one code point here
+#: keeps true by construction.  `⎕bytes` is the way out of a string and this is
+#: one of the ways in; there is deliberately no way in from bytes, which would
+#: have to be checked.
+STR_OF_NAME: Final[str] = "".join((BUILTIN_GLYPH, "str"))
+
 #: And the way back: a place as the number it is.  The inverse of `⎕at`, and
 #: the compiler's name for the same reason -- what a program does with a number
 #: that was a place is nothing the compiler can check.  It is what a program has

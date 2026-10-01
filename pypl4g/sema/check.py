@@ -23,6 +23,7 @@ from ..front.token import (ACQUIRE_NAME, ANSWER_NAME, ENTRY_NAME,
                            AT_NAME, SPAN_NAME,
                            ADDRESS_NAME, BYTES_NAME,
                            IS_RECORD_NAME, FIELDS_NAME, TYPENAME_NAME,
+                           STR_OF_NAME,
                            WIDEN_NAME,
                            BOTTOM_GLYPH, BUILTIN_GLYPH, CHR_NAME, DEREF_GLYPH,
                            LIFETIME_GLYPH, LIFT_OPEN_GLYPH,
@@ -12981,6 +12982,8 @@ class Checker:
                 return self._lower_iter(builder, expr, expected)
             if given == BYTES_NAME:
                 return self._lower_bytes(builder, expr, expected)
+            if given == STR_OF_NAME:
+                return self._lower_str_of(builder, expr, expected)
             if given == FIELDS_NAME:
                 return self._lower_fields(builder, expr, expected)
             if given == TYPENAME_NAME:
@@ -13682,6 +13685,48 @@ class Checker:
             self._report_mismatch(expr.span, answer, expected)
             return UndefConst(ERROR)
         return builder.make_tuple(tuple(leaves), answer, expr.span)
+
+    def _lower_str_of(self, builder: IRBuilder, expr: ast.Call,
+                      expected: Type | None) -> Value:
+        """Lower `⎕str(CHAR)`: a string of one character.
+
+        The third way a `str` is made, after a literal and a join, and the
+        compiler's name for the reason those two are not a program's to write
+        either: a string's bytes being well-formed UTF-8 is an invariant, and
+        encoding one code point is what keeps it one.  There is deliberately no way
+        in from bytes, which would have to be checked rather than constructed.
+
+        It allocates, since how many bytes a code point takes is not known until it
+        is looked at, so a function using it says `impure` -- as one joining two
+        strings does, and for the same reason.
+        """
+        if len(expr.args) != 1:
+            self._diags.emit(D.LANG_CALL_WRONG_ARGUMENT_COUNT, expr.span,
+                             name=STR_OF_NAME, expected=1, found=len(expr.args))
+            return UndefConst(ERROR)
+        given = self._lower_expr(builder, expr.args[0], CHAR)
+        found = self._value_type_of(given)
+        if found is ERROR:
+            return UndefConst(ERROR)
+        if found is not CHAR:
+            self._diags.emit(D.LANG_STR_OF_NOT_A_CHARACTER, expr.args[0].span,
+                             found=found.written())
+            return UndefConst(ERROR)
+        if not self._accepts(expected, STR):
+            self._report_mismatch(expr.span, STR, expected)
+            return UndefConst(ERROR)
+        heap = self._provided(HEAP_NAME)
+        assert isinstance(heap, GlobalVar)
+        self._an_effect(D.LANG_PURE_WRITES_ELSEWHERE, expr.span)
+        # The character itself goes over, not its number: the two helpers read it as
+        # a number inside themselves, where what they are reading is a parameter.
+        bytes_ = builder.call(strings.char_function(self._module),
+                              (builder.address(heap, expr.span), given),
+                              self._module.types.ptr_type(U8, mutable=True),
+                              expr.span)
+        count = builder.call(strings.length_in_bytes(self._module), (given,),
+                             U64, expr.span)
+        return builder.make_tuple((bytes_, count), STR, expr.span)
 
     def _lower_address_of(self, builder: IRBuilder, expr: ast.Call,
                           expected: Type | None) -> Value:

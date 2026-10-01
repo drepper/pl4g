@@ -1947,6 +1947,22 @@ Compare: **Rust**'s `as_bytes`, which is this exactly and free for the same reas
 Go string is immutable and a slice is not; **Java**'s `getBytes`, which takes a charset because its strings are not UTF-8; **C**,
 where a string *is* its bytes and the question cannot be asked.
 
+**`⎕str(CHAR)` is a string of one character**, and it is the third way a string is made:
+
+```
+⎕str('x')                        ※ "x"
+⎕str('£')                        ※ two bytes
+```
+
+A literal, a join of two, and this.  It is the compiler's name for the reason the other two are not a program's to write either:
+that a string's bytes are well-formed UTF-8 is an invariant, and encoding one code point is what keeps it one **by construction and
+not by inspection**.  There is deliberately no way in from bytes, which would have to be checked rather than constructed, so
+`⎕bytes` is a one-way door.  It takes a character (4610) and not a number: not every number is a code point, and `⎕chr` is what
+says so.
+
+It allocates, how many bytes a code point takes not being known until it is looked at, so a function using it says `@[impure]` --
+as one joining two strings does and for the same reason.
+
 **All six comparisons are defined on strings**, and the order is the order the code points are in -- the first character that
 differs deciding, and a string that is a prefix of another coming first.
 
