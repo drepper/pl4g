@@ -218,7 +218,7 @@ type Reader     ※ a device that can be read
 type Writer     ※ a device that can be written
 type ReadWriter ※ both, which is what a socket and a file opened either way are
 
-type Io   = input : Reader ; output : Writer ; errors : Writer
+type Io   = input : Reader ; output : Writer ; error  : Writer
 type Init = io : Io ; args : str⟦⟧
 
 type Pending ※ a write that has been started
@@ -249,6 +249,21 @@ one of those things.
 **A descriptor is a type and not a number.**  What says a thing may be written is the type of the name standing for it, so there is
 no way to hand a `Reader` to `write` and no way to write to a number a program made up.  The three a process inherits arrive in
 `init.io`, which is what the startup function may take.
+
+**`std.io` is the three of them, named**, so a program need not be handed anything to write:
+
+```
+⎕drop(std.println⌜&mut std.io.output, "x = {}", x⌝ ?? 0)
+⎕drop(std.println⌜&mut std.io.error, "went wrong"⌝ ?? 0)
+```
+
+The same three `Init` carries and the same values: a descriptor a process starts with is a number the kernel fixed long before this
+language existed, so there is nothing to find out and nothing to be handed.  A program that takes `Init` reads them from there, one
+that does not reads them from here, and they are the same devices either way.
+
+**A variable another module exports is a place.**  That is what `std.io` needed and what it says generally: a variable at the top
+level is a place for as long as the program is, and reaching one through the module that wrote it does not change that -- a
+reference may be taken of it, a field of it is read at an offset from it, and the reference lasts as long as the program.
 
 **One mutable reference is the whole of the concurrency rule.**  `&mut init.io.output` is exclusive because a second `&mut` to the
 same place is refused, so two names for one device is a thing the compiler refuses rather than a thing a lock prevents.

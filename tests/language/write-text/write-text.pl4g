@@ -32,11 +32,11 @@ let std := ⎕import("std")
 @[startup, impure]
 fn main(init: &mut std.Init) → u6:
     ※ a literal, written straight out
-    let first: u64 ¤size = std.write_sync(&mut init⌖.io.errors,
+    let first: u64 ¤size = std.write_sync(&mut init⌖.io.error,
                                      ⎕bytes("hello\n")) ?? 0
     ※ text whose characters are wider than a byte
     let text: str = "a£€𐀀\n"
-    let second: u64 ¤size = std.write_sync(&mut init⌖.io.errors, ⎕bytes(text)) ?? 0
+    let second: u64 ¤size = std.write_sync(&mut init⌖.io.error, ⎕bytes(text)) ?? 0
     ※ and the bytes bound to a name, which is an array like any other
     let raw: u8⟦⟧ = ⎕bytes(text)
     if first ≠ 6:

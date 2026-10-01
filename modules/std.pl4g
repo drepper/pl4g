@@ -24,7 +24,24 @@ type ReadWriter = fd : i32
 
 ※※ The devices a program starts with open.
 @[export]
-type Io = input : Reader ; output : Writer ; errors : Writer
+type Io = input : Reader ; output : Writer ; error : Writer
+
+※※ The three devices every process starts with, named so that a program need not be
+※※ handed them.
+※※
+※※ \details The same three `Init` carries, and the same values: a descriptor a process
+※※ starts with is a number the kernel fixed long before this language existed, so there
+※※ is nothing to find out and nothing to be handed.  A program that takes `Init` reads
+※※ them from there; one that does not reads them from here, and they are the same
+※※ devices either way.
+※※
+※※ \note Writing to one takes `&mut`, and a second `&mut` to the same place is refused
+※※ -- so two names for one device is something the compiler refuses rather than
+※※ something a lock prevents, which is the rule `Init`'s own already followed.
+@[export]
+let io: mut Io = Io(.input ← Reader(.fd ← 0i32),
+                    .output ← Writer(.fd ← 1i32),
+                    .error ← Writer(.fd ← 2i32))
 
 ※※ What a program is started with: the devices it inherited and the words it
 ※※ was named with.

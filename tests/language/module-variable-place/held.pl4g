@@ -1,0 +1,14 @@
+※ pl4g-test: module
+※※ A variable another program writes to, and a record among them.
+
+@[export]
+type Counter = seen : u8
+
+※※ A record at the top level, which a path names the place of.
+@[export]
+let count: mut Counter = Counter(.seen ← 3u8)
+
+※※ And one that is not a record, to say that the rule is about a variable and not
+※※ about what it holds.
+@[export]
+let plain: mut u8 = 9u8

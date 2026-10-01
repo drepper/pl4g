@@ -465,7 +465,7 @@ fn total(p: Pair) \N{RIGHTWARDS ARROW} u8:
 fn main(init: &mut std.Init) \N{RIGHTWARDS ARROW} u6:
     let both: Pair = Pair(.first \N{LEFTWARDS ARROW} 1u8, .second \N{LEFTWARDS ARROW} 2u8)
     let sum: u8 = total(both)
-    match std.write_sync(&mut init\N{POSITION INDICATOR}.io.errors,
+    match std.write_sync(&mut init\N{POSITION INDICATOR}.io.error,
                          \N{APL FUNCTIONAL SYMBOL QUAD}bytes("hi\\n")):
         u64 \N{CURRENCY SIGN}size: \N{APL FUNCTIONAL SYMBOL QUAD}narrow(sum, \N{TOP LEFT CORNER}u6\N{TOP RIGHT CORNER}) ?? 0u6
         \N{UP TACK}: 1u6

@@ -8388,6 +8388,50 @@ and want the `std.text` siblings written; and the pool allocator the formatting
 instruction asks for -- what a join allocates from is `⎕heap`, and a scratch arena given
 back after each line wants a join that names its arena and an operation to empty one.
 
+---
+
+## 2026-10-01T06:30+02:00 — language
+
+**`std.io`: the three devices every process starts with, named**
+
+    ⎕drop(std.println⌜&mut std.io.output, "x = {}", x⌝ ?? 0)
+    ⎕drop(std.println⌜&mut std.io.error, "went wrong"⌝ ?? 0)
+    std.io.input                     ※ and the one to read
+
+A variable of `std`, holding exactly what `Init` holds and the same values: a descriptor a
+process starts with is a number the kernel fixed long before this language existed, so
+there is nothing to find out and nothing to be handed.  A program that takes `Init` reads
+them from there; one that does not reads them from here.
+
+So **taking `Init` is no longer the price of writing anything**, which it was: a program
+that wanted to print had to be written `fn main(init: &std.Init)` whether it cared about
+the arguments or not.  What `Init` is still for is the words the program was named with.
+
+**The field is `error` and not `errors`**, renamed here so that one name is used for one
+thing: the three objects are reached as `std.io.error` and `init.io.error` alike.
+
+**What it needed of the language is that a variable another module exports is a place.**
+A variable at the top level is a place for as long as the program is, and reaching one
+through the module that wrote it does not change that -- but nothing had said so, and
+`&mut m.out` was refused as a value rather than a place.  Now a reference may be taken of
+one, a field of it is read at an offset, and the reference lasts as long as the program.
+That is a rule about variables and not about `std`: it holds for a record and for anything
+else a module exports.
+
+The concurrency rule is unchanged and is what makes this safe to have: writing takes
+`&mut`, and a second `&mut` to the same place is refused -- so two names for one device is
+something the compiler refuses rather than something a lock prevents.
+
+Compare: **C**, whose `stdout` and `stderr` are globals anything may write to at any time,
+which is what the `&mut` rule is designed against; **Go**'s `os.Stdout`, the same; **Rust**,
+whose `std::io::stdout()` answers a handle with a lock inside it; **Zig**, which makes the
+caller fetch the writer and pass it, as `Init` does here.  This has both: the devices are
+named, and reaching one exclusively is still the compiler's business.
+
+Left open: nothing new.  `Init` keeps the devices as well, which is two ways to reach one
+thing -- defensible while a program may want them handed to it, and a thing to revisit if
+nobody ever does.
+
 Open questions
 --------------
 

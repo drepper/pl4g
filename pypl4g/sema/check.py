@@ -2336,6 +2336,14 @@ class Checker:
                     return None
                 return (place[0], place[1])
             case ast.Member():
+                # A variable another module exports, which is a place for as long
+                # as the program is, exactly as one of this file's is: reached by a
+                # path rather than a name and the same thing at the end of it.
+                shared = self._exported_variable(expr)
+                if shared is not None \
+                        and isinstance(shared.value_type, ProductType):
+                    return (builder.address(shared, expr.span),
+                            shared.value_type)
                 found = self._record_at(builder, expr.base, writing)
                 if found is None:
                     return None
@@ -7486,9 +7494,32 @@ class Checker:
                          name=expr.name)
         return None
 
+    def _exported_variable(self, expr: ast.Member) -> GlobalVar | None:
+        """The variable another module exports under this path, or nothing.
+
+        Asked quietly: a path naming anything else is somebody else's to report, and
+        what this is for is that such a variable is a *place* -- so a reference may be
+        taken of it and a field of it read at an offset, which is what every variable
+        at the top level already is.
+        """
+        if not isinstance(expr.base, ast.NameRef):
+            return None
+        held = self._top.get(expr.base.name)
+        if not isinstance(held, LoadedModule):
+            return None
+        found = held.exports.get(expr.name)
+        return found if isinstance(found, GlobalVar) else None
+
     def _place_of_a_field(self, builder: IRBuilder, expr: ast.Member
                           ) -> tuple[Value, Type, bool, str, bool] | None:
         """Where one field of a record is, for a reference being taken of it."""
+        shared = self._exported_variable(expr)
+        if shared is not None:
+            # The variable itself and not a field of one: a path whose first part is
+            # a module names the variable, and a reference to it is a reference to
+            # that place.  It lasts as long as the program does.
+            return (builder.address(shared, expr.span), shared.value_type,
+                    shared.mutable, expr.name, True)
         found = self._record_at(builder, expr.base)
         if found is None:
             self._diags.emit(D.LANG_REF_NOT_A_PLACE, expr.span)

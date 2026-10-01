@@ -180,7 +180,8 @@ GROUPS: tuple[Group, ...] = (
            "named-inside-a-type": "three definitions of one name, two of them a type's",
            "std-text": "a value's text, for seven types out of one definition",
            "std-format": "five templates read while compiling, one of them a record",
-           "std-print-macro": "a line formatted while compiling and written in one request"}),
+           "std-print-macro": "a line formatted while compiling and written in one request",
+           "std-io-objects": "the three devices named, and written to without being handed over"}),
     Group("Loops",
           "A branch backwards, which is what makes liveness a question about "
           "the graph rather than about the layout.  These move when the "

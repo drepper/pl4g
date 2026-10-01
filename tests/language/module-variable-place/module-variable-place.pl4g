@@ -1,0 +1,32 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ **A variable another module exports is a place.**
+※
+※ A variable at the top level is a place for as long as the program is, and reaching one
+※ through the module that wrote it does not change that: a reference may be taken of it, a
+※ field of it is read at an offset from it, and the reference lasts as long as the program.
+※
+※ What wanted it is `std.io.output`, which has to be somewhere for a write to be given a
+※ `&mut` to it.
+
+let m := ⎕import("held")
+
+@[impure]
+fn bump(c: &mut m.Counter):
+    c⌖.seen ← c⌖.seen + 1u8
+
+@[startup, impure]
+fn main() → u6:
+    ※ A field, read through the path.
+    if m.count.seen ≠ 3u8:
+        return 1u6
+    ※ A reference to the record, which something else writes through.
+    bump(&mut m.count)
+    if m.count.seen ≠ 4u8:
+        return 2u6
+    ※ And a reference to one that is not a record at all.
+    let n: &mut u8 = &mut m.plain
+    n⌖ ← n⌖ + 1u8
+    if m.plain ≠ 10u8:
+        return 3u6
+    0u6

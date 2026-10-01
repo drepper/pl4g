@@ -35,7 +35,7 @@ let std := ⎕import("std")
 @[startup, impure]
 fn main(init: &mut std.Init) → u6:
     ※ started, waited for, and the count read back
-    match std.write(&mut init⌖.io.errors, ⎕bytes("one\n")):
+    match std.write(&mut init⌖.io.error, ⎕bytes("one\n")):
         std.Pending(h):
             match std.flush(h):
                 u64 ¤size(n):
@@ -51,7 +51,7 @@ fn main(init: &mut std.Init) → u6:
 @[impure]
 fn rest(init: &mut std.Init) → u6:
     ※ the two in one
-    match std.write_sync(&mut init⌖.io.errors, ⎕bytes("two\n")):
+    match std.write_sync(&mut init⌖.io.error, ⎕bytes("two\n")):
         u64 ¤size(n):
             if n ≠ 4:
                 4u6
@@ -75,7 +75,7 @@ fn refused(init: &mut std.Init) → u6:
             else:
                 ※ started and never waited for: the drain before the program
                 ※ ends is what makes it happen
-                match std.write(&mut init⌖.io.errors, ⎕bytes("four\n")):
+                match std.write(&mut init⌖.io.error, ⎕bytes("four\n")):
                     std.Pending:
                         0u6
                     ⊥:

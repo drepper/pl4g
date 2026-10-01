@@ -40,12 +40,12 @@ fn main(init: &mut std.Init) → u6:
         1u6
     elif init⌖.io.output.fd ≠ 1i32:
         2u6
-    elif init⌖.io.errors.fd ≠ 2i32:
+    elif init⌖.io.error.fd ≠ 2i32:
         3u6
     else:
         ※ and one of them written through, which answers how many bytes went or
         ※ why none did
-        match std.write_sync(&mut init⌖.io.errors, message):
+        match std.write_sync(&mut init⌖.io.error, message):
             u64 ¤size(n):
                 if n ≠ 6:
                     4u6
