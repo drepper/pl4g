@@ -486,6 +486,11 @@ class ProductType(Type):
     #: of it never crosses a call: what crosses is a reference, which every
     #: convention agrees about and which this one does not have to classify.
     abi: bool = False
+    #: Whether there is one of a value of this type and it is never copied, which
+    #: `@[unique]` says.  It is a rule about the *program* and nothing about the
+    #: representation: such a record travels and is laid out like any other, and
+    #: what changes is which places it may be written into.
+    unique: bool = False
 
     def __eq__(self, other: object) -> bool:
         """Nominal, so one of these is the same type only as itself.

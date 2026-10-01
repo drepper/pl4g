@@ -8,12 +8,12 @@
 ※ started with -- and so the record may grow, as the arguments and the
 ※ environment will make it grow, without this signature changing.
 ※
-※ **A descriptor and not a number.**  `init⌖.io.output` is a `Writer`, which is a
+※ **A descriptor and not a number.**  `init.io.output` is a `Writer`, which is a
 ※ record around the number the kernel knows; what says a thing may be written is
 ※ its type, and there is no way to hand a `Reader` to `write`.  Three descriptors
 ※ arrive open, in the order every system opens them.
 ※
-※ **One mutable reference and no lock.**  `&mut init⌖.io.output` is exclusive by
+※ **One mutable reference and no lock.**  `&mut init.io.output` is exclusive by
 ※ the rule that already refuses a second `&mut` to a place, so nothing is checked
 ※ while the program runs and nothing is locked.  What it costs is that lending
 ※ one field lends the whole of `init` for as long as the reference lives, the
@@ -33,19 +33,19 @@
 let std := ⎕import("std")
 
 @[startup, impure]
-fn main(init: &mut std.Init) → u6:
+fn main(init: mut std.Init) → u6:
     let message: u8⟦6⟧ = ⟦104u8, 101u8, 108u8, 108u8, 111u8, 10u8⟧
     ※ the numbers the kernel knows them by, in the order they arrive
-    if init⌖.io.input.fd ≠ 0i32:
+    if init.io.input.fd ≠ 0i32:
         1u6
-    elif init⌖.io.output.fd ≠ 1i32:
+    elif init.io.output.fd ≠ 1i32:
         2u6
-    elif init⌖.io.error.fd ≠ 2i32:
+    elif init.io.error.fd ≠ 2i32:
         3u6
     else:
         ※ and one of them written through, which answers how many bytes went or
         ※ why none did
-        match std.write_sync(&mut init⌖.io.error, message):
+        match std.write_sync(&mut init.io.error, message):
             u64 ¤size(n):
                 if n ≠ 6:
                     4u6
@@ -53,7 +53,7 @@ fn main(init: &mut std.Init) → u6:
                     ※ what the program was started with may be changed, it
                     ※ being an object the program holds and not a value it was
                     ※ handed: `output` is made to be where `errors` goes
-                    init⌖.io.output ← std.Writer(.fd ← 2i32)
-                    if init⌖.io.output.fd = 2i32: 0u6 else: 6u6
+                    init.io.output ← std.Writer(.fd ← 2i32)
+                    if init.io.output.fd = 2i32: 0u6 else: 6u6
             ⊥:
                 5u6

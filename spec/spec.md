@@ -248,7 +248,18 @@ one of those things.
 
 **A descriptor is a type and not a number.**  What says a thing may be written is the type of the name standing for it, so there is
 no way to hand a `Reader` to `write` and no way to write to a number a program made up.  The three a process inherits arrive in
-`init.io`, which is what the startup function may take.
+`init.io`, which is what the startup function may take -- **the record itself and not a reference to it**:
+
+```
+@[startup, impure]
+fn main(init: mut std.Init) → u6:
+    …
+```
+
+`Init` is `@[unique]`, so having it is having the thing itself: the devices in it cannot be had twice over, and a program that
+passes it on takes the reference where it passes it.  `mut` before the type says the program may write the record it was handed.
+What the entry point hands over is still *where* the record is -- it is in the image, the entry point filled it, and there is no
+caller to put it in registers -- which is what a record name means everywhere else.
 
 **`std.io` is the three of them, named**, so a program need not be handed anything to write:
 
@@ -2388,6 +2399,25 @@ refused as well (4579): a record's fields have names and a tuple is the shape fo
 
 **A field is read with the same mark**: `p.x`.  That mark does three things -- a module's name, an enumeration's value, and a
 record's field -- told apart by what stands on its left, which is what Go, Rust and Zig all do.
+
+**`@[unique]` says there is one of a value and it is never copied** (4400):
+
+```
+@[unique]
+type Handle = fd : i32
+
+let h: Handle = Handle(.fd ← 1i32)
+let n: i32 = h.fd                ※ a field: not a copy
+peek(&h)                         ※ a reference: not a copy
+let other: Handle = h            ※ refused
+```
+
+What it is for is a value that stands for something outside the program.  Two of those would be two names for one thing, which is
+what the rule about a second `&mut` already refuses for a reference and what nothing refused for the value itself.
+
+**Reading the name as a value is what a copy is**, so that is what is refused: binding it to a second name, handing it to a call by
+value, answering with it, putting it inside something else.  **A field of it and a reference to it are not copies** -- both are read
+from where the value is -- so a program reaches into such a value freely and passes it along by taking `&` or `&mut`.
 
 **A record travels as its fields.**  To everything below the checker it is what a tuple is: several values going together,
 placed by a convention the same way, so a record handed to a call or answered with needs no rule of its own.  What differs

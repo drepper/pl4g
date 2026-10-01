@@ -1,0 +1,27 @@
+※ pl4g-test: compile=error diag=4400
+
+※ `@[unique]` says there is one of a value of this type and it is never copied.
+※
+※ What it is for is a value that stands for something outside the program.  Two of those
+※ would be two names for one thing, which is what the rule about a second `&mut` already
+※ refuses for a reference and what nothing refused for the value itself.
+※
+※ **Reading a name as a value is what a copy is**, and that is the one place the rule has to
+※ be checked: a field of such a value is read from where the value is, and a reference to it
+※ is taken of that place.  Neither is a copy, and both are things a program may do -- so what
+※ is refused is only having the whole of it somewhere else.
+
+@[unique]
+type Handle = fd : i32
+
+fn peek(h: &Handle) → i32:
+    h⌖.fd
+
+@[startup]
+fn main() → u6:
+    let h: Handle = Handle(.fd ← 1i32)
+    ※ A field of it, and a reference to it: neither is a copy.
+    let n: i32 = h.fd + peek(&h)
+    ※ And this is.
+    let other: Handle = h
+    ⎕narrow(n + other.fd, ⌜u6⌝) ?? 1u6

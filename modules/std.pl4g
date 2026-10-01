@@ -56,7 +56,7 @@ let io: mut Io = Io(.input ← Reader(.fd ← 0i32),
 ※ Each is a `str`, which is bytes and a length -- the kernel's own shape is a
 ※ nul at the end, and the length is counted once before the program starts
 ※ rather than by everything that reads one.
-@[export]
+@[export, unique]
 type Init = io : Io ; args : str⟦⟧
 
 ※※ What the kernel said, where it refused.

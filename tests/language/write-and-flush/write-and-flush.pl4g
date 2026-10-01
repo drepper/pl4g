@@ -33,16 +33,16 @@
 let std := ⎕import("std")
 
 @[startup, impure]
-fn main(init: &mut std.Init) → u6:
+fn main(init: mut std.Init) → u6:
     ※ started, waited for, and the count read back
-    match std.write(&mut init⌖.io.error, ⎕bytes("one\n")):
+    match std.write(&mut init.io.error, ⎕bytes("one\n")):
         std.Pending(h):
             match std.flush(h):
                 u64 ¤size(n):
                     if n ≠ 4:
                         1u6
                     else:
-                        rest(init)
+                        rest(&mut init)
                 ⊥:
                     2u6
         ⊥:

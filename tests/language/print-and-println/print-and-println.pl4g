@@ -24,7 +24,7 @@
 let std := ⎕import("std")
 
 @[startup, impure]
-fn main(init: &std.Init) → u6:
+fn main(init: std.Init) → u6:
     ※ Into a pipe, so that what was written can be read back and counted.
     let ends: mut i32⟦2⟧ = ⟦0i32, 0i32⟧
     if ⎕syscall(⎕sc@pipe2, &mut ends⟦0⟧, 0i64) < 0i64:

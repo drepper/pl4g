@@ -250,6 +250,9 @@ class _NamedType:
     #: Whether the definition said `@[abi]`, which is what makes the record one
     #: shared with something compiled by something else.
     abi: bool = False
+    #: Whether the definition said `@[unique]`: there is one of a value of this
+    #: type and it is never copied.
+    unique: bool = False
     ty: Type | None = None
     resolving: bool = False
     shell: Type | None = None
@@ -390,7 +393,7 @@ def _shell_for(defined: _NamedType) -> Type | None:
     if defined.node.kind is ast.TypeKind.SUM:
         return SumType((), name=defined.name, origin=defined.origin)
     return ProductType((), name=defined.name, origin=defined.origin,
-                       abi=defined.abi)
+                       abi=defined.abi, unique=defined.unique)
 
 
 def _filled_in(shell: Type | None, made: Type) -> Type:
@@ -1134,14 +1137,44 @@ def _is_startup_argument(ty: Type) -> bool:
     defined for itself, and the compiler hands the descriptors to nothing but
     the one type it knows.
     """
-    if not isinstance(ty, PtrType):
-        return False
-    held = ty.pointee
+    # The record itself and not a reference to it.  A record is somewhere, and what
+    # the entry point hands over is where -- but what the *program* has is the record
+    # the process was started with, and saying so is what `@[unique]` then makes safe:
+    # there is one of it and it is never copied, so the devices in it cannot be had
+    # twice over.
+    held = ty.pointee if isinstance(ty, PtrType) else ty
     if not isinstance(held, ProductType) \
             or held.name != STARTUP_ARGUMENT_TYPE_NAME or held.origin is None:
         return False
     return any(Path(held.origin) == (where / STD_MODULE_NAME).with_suffix(SUFFIX)
                for where in system_modules())
+
+
+def _held_by_the_startup(func: Function, index: int,
+                         written: ast.Param) -> Type | None:
+    """What the startup function's parameter stands for, where this is it.
+
+    The record itself, while the representation hands over where it is: a program
+    writing `init: std.Init` has the record the process was started with, and that
+    record is in the image rather than in a register, there being no caller to put it
+    in one.  So the signature is a pointer and the name is the record -- which is what
+    a record name means everywhere else, a record being somewhere and a field of it
+    read at an offset from where.
+
+    Safe because the type is `@[unique]`: the program may read the record and lend it
+    out, and may not have a second one.
+    """
+    if func.attrs.special is not SpecialKind.STARTUP or index != 0:
+        return None
+    if isinstance(written.type, ast.RefTypeRef):
+        # A reference was written, which the signature check refuses -- and until it
+        # does, the name holds a reference the way any other would, so that one
+        # message is given rather than a second about reading it.
+        return None
+    held = func.ty.params[0]
+    if not isinstance(held, PtrType):
+        return None
+    return held.pointee if isinstance(held.pointee, ProductType) else None
 
 
 def _is_build_object(ty: Type) -> bool:
@@ -2309,6 +2342,14 @@ class Checker:
                             and self._lent_out(expr.name, expr.span, writing):
                         return None
                     local.read = True
+                    if self._notes is not None:
+                        # What the name is, for whatever asked: a record reached as a
+                        # place is still the name being read, and an editor asking
+                        # about it here should be told the same thing it is told
+                        # where the name stands for a value.
+                        self._note(expr.span,
+                                   PARAMETER if local.is_parameter else VARIABLE,
+                                   expr.name, local.held.written(), local.span)
                     return (local.value, local.held)
                 if local is not None:
                     return None
@@ -2901,6 +2942,28 @@ class Checker:
                 self._diags.emit(D.LANG_DOC_RETURN_OF_NOTHING, where,
                                  command=written, owner=node.name)
 
+    def _as_the_entry_hands_over(self, node: ast.FuncDef,
+                                attrs: Sequence[BoundAttr],
+                                params: tuple[Type, ...]) -> tuple[Type, ...]:
+        """The startup function's parameters as the entry point passes them.
+
+        A program writes `init: std.Init` and has the record; what the entry point
+        hands over is *where* the record is, it being in the image and there being no
+        caller to put it in registers.  So the signature carries a pointer and the
+        body binds the name to that place, which is what a record name means anyway.
+
+        `mut` on the parameter is what says the program may write the record, and it
+        is the pointer that carries it: a reference that may be written is `&mut`.
+        """
+        if not params or self._function_attrs(attrs)[0].special \
+                is not SpecialKind.STARTUP:
+            return params
+        if not isinstance(params[0], ProductType) \
+                or params[0].name != STARTUP_ARGUMENT_TYPE_NAME:
+            return params
+        return (self._module.types.ptr_type(params[0], node.params[0].mutable),
+                *params[1:])
+
     def _check_several(self, node: ast.FuncDef) -> None:
         """Check a parameter that stands for all the arguments from there on.
 
@@ -2969,6 +3032,7 @@ class Checker:
         expectation = self._begin_expecting(pairs)
         try:
             params = tuple(self._resolve_type(p.type) for p in node.params)
+            params = self._as_the_entry_hands_over(node, attrs, params)
             ret = self._return_type(node.ret_type)
             if _holds_a_lambda(ret):
                 # What a lambda kept belongs to the call that wrote it, so
@@ -3239,6 +3303,14 @@ class Checker:
             problem = "takes more than one parameter"
         elif func.ty.params and not _is_startup_argument(func.ty.params[0]):
             problem = "".join(("takes a '", func.ty.params[0].written(), "'"))
+        elif node.params and isinstance(node.params[0].type, ast.RefTypeRef):
+            # The record and not a reference to it.  There is one of it -- the type
+            # says `@[unique]` -- so handing it over is handing over the thing
+            # itself, and a program that wants to pass it on takes the reference
+            # where it passes it.
+            problem = "".join(("takes a reference to '",
+                               STARTUP_ARGUMENT_TYPE_NAME,
+                               "' rather than the record itself"))
         elif func.ty.ret != expected:
             problem = "".join(("returns '", func.ty.ret.written(), "'"))
         if problem is not None:
@@ -3539,7 +3611,8 @@ class Checker:
                                  one.node.span, name=one.as_str("name"))
         defined = _NamedType(name=node.name, node=node, origin=path,
                              exported=self._is_export(attrs),
-                             abi=any(one.name == "abi" for one in attrs))
+                             abi=any(one.name == "abi" for one in attrs),
+                             unique=any(one.name == "unique" for one in attrs))
         self._top[node.name] = defined
         self._named_types.append(defined)
 
@@ -3733,7 +3806,7 @@ class Checker:
         if node.kind is ast.TypeKind.SUM:
             return SumType(made, name=defined.name, origin=defined.origin)
         return ProductType(made, name=defined.name, origin=defined.origin,
-                           abi=defined.abi)
+                           abi=defined.abi, unique=defined.unique)
 
     def _defined_type(self, ref: ast.TypeRef) -> Type | None:
         """The type a name stands for, where a definition gave it one."""
@@ -4990,11 +5063,23 @@ class Checker:
         arriving = [block.add_param(func.ty.params[index], param.name)
                     for index, param in enumerate(node.params)]
         outer_entry, self._at_entry = self._at_entry, {}
-        for param, value in zip(node.params, arriving):
+        for index, (param, value) in enumerate(zip(node.params, arriving)):
             # What arrived, before anything is done about storage: a parameter a
             # reference was taken of stands for its storage from here on, and
             # what `⎕entry` is for is the value rather than the place.
             self._at_entry[param.name] = value
+            held = _held_by_the_startup(func, index, param)
+            if held is not None:
+                # The record the process was started with.  What the entry point
+                # hands over is *where* it is -- it is in the image, and the
+                # entry point filled it -- so the name stands for that storage and
+                # not for a copy of what is in it.  Which is what a record name
+                # already means: a record is somewhere, and a field of it is read
+                # at an offset from where.
+                self._bind_local(param.name, value, param.span, param.mutable,
+                                 is_parameter=True, builder=builder,
+                                 placed_as=held)
+                continue
             self._bind_local(param.name, value, param.span,
                              param.mutable, is_parameter=True, builder=builder)
         assert node.body is not None
@@ -14812,6 +14897,28 @@ class Checker:
         self._only_at_build(found, expr.span)
         return found
 
+    def _would_copy(self, local: _Local, ref: ast.NameRef) -> bool:
+        """Whether reading this name is copying a value that is never copied.
+
+        **Reading a name as a value is what a copy is**, and this is the one place a
+        name becomes one -- so it is the one place this has to be asked.  A field of
+        such a value is read from where the value is and a reference to it is taken of
+        that place, and neither comes through here: both are things that may be done,
+        and only having the whole of it somewhere else is not.
+
+        What it is for is a value that stands for something outside the program.  Two
+        of those would be two names for one thing, which is what the rule about a
+        second `&mut` already refuses for a reference and what nothing refused for the
+        value itself.
+        """
+        held = self._held_by(local)
+        if not isinstance(held, ProductType) or not held.unique:
+            return False
+        self._diags.emit(D.LANG_UNIQUE_COPIED, ref.span, type=held.written(),
+                         what="".join(("reading '", ref.name,
+                                       "' here would be a copy of it")))
+        return True
+
     def _lower_name(self, builder: IRBuilder, ref: ast.NameRef,
                     expected: Type | None) -> Value:
         """Lower a reference to a name.
@@ -14841,6 +14948,8 @@ class Checker:
             # call names its callee and resolves it before ever coming here.
             return self._function_as_a_value(
                 builder, self._provided(ref.name), ref, expected)
+        if local is not None and self._would_copy(local, ref):
+            return UndefConst(ERROR)
         if local is not None and local.placed:
             # The name stands for storage of its own, because somewhere in this
             # body a reference to it is taken.  Reading it is therefore a load,

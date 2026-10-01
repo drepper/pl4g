@@ -2880,7 +2880,7 @@
       "number": 4404,
       "name": "LANG_FUNCDEF_SPECIAL_BAD_SIGNATURE",
       "severity": "error",
-      "message": "the startup function must be written 'fn NAME() → {type}' or 'fn NAME(NAME: &mut std.Init) → {type}', but '{name}' {problem}",
+      "message": "the startup function must be written 'fn NAME() → {type}' or 'fn NAME(NAME: std.Init) → {type}', but '{name}' {problem}",
       "args": [
         {
           "name": "type",
@@ -2898,7 +2898,7 @@
           "description": "how the signature differs"
         }
       ],
-      "cause": "The startup function is entered with what the program was started with and nothing else, and the value it returns becomes the exit status of the process.  It may take one parameter, a reference to the record the 'std' module calls 'Init', which holds the devices the process inherited and is where whatever else arrives with a program will go; the record is an object the image carries and what is handed over is where it is, so it may grow and may be written.  A program that wants none of it writes no parameter at all.  A second parameter, or one of any other type, would leave the argument undefined.  The return type is the width of an exit status and nothing wider: what a program passes to the system is truncated to eight bits before anything can observe it, so a wider type would let a program state a status that cannot arrive.",
+      "cause": "The entry point calls one function and hands it one thing, so what that function may be written as is settled rather than chosen.  The record is handed over *as* the record and not as a reference to it: there is one of it -- `Init` is `@[unique]` -- so having it is having the thing itself, and a program that passes it along takes the reference where it passes it.  `mut` before the type says the program may write the record it was handed.  A program that wants none of it takes nothing.",
       "spec": {
         "document": "spec/spec.md",
         "section": "The Language / File Structure / Function Definition / Special Functions",
@@ -4500,6 +4500,33 @@
         "document": "spec/spec.md",
         "section": "The Language / File Structure / Function Definition",
         "requirement": "A function that allocates is marked '@[impure]'."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4400,
+      "name": "LANG_UNIQUE_COPIED",
+      "severity": "error",
+      "message": "'{type}' is never copied, and {what}",
+      "args": [
+        {
+          "name": "type",
+          "type": "string",
+          "description": "the type marked '@[unique]'"
+        },
+        {
+          "name": "what",
+          "type": "string",
+          "description": "what would have copied it"
+        }
+      ],
+      "cause": "A type marked `@[unique]` is one there is a single value of, so a second name for it would be a second value -- and where the value stands for something outside the program, two of them would be two names for one thing.  What may be done instead is take a reference: `&it` and `&mut it` are how such a value is passed along, and the rule that a second `&mut` to one place is refused is what then keeps it exclusive.  Reading a field of it, and taking a reference to a field, are not copies of it.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Product and sum types",
+        "requirement": "A value of a type marked '@[unique]' is never copied."
       },
       "since": "0.1",
       "default_enabled": true,

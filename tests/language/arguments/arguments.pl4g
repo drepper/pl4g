@@ -24,21 +24,21 @@
 let std := ⎕import("std")
 
 @[startup, impure]
-fn main(init: &mut std.Init) → u6:
+fn main(init: mut std.Init) → u6:
     ※ at least the name the program was run under
-    if #init⌖.args < 1:
+    if #init.args < 1:
         1u6
     else:
         ※ every one of them has bytes, walked as a run of anything else is
         let empty: mut bool = false
-        foreach one: str = init⌖.args:
+        foreach one: str = init.args:
             if #one = 0:
                 empty ← true
         if empty:
             2u6
         else:
             ※ and the run of them may be handed about like any other
-            named(init⌖.args)
+            named(init.args)
 
 fn named(args: str⟦⟧) → u6:
     if #args ≥ 1: 0u6 else: 3u6

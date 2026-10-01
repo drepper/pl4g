@@ -8432,6 +8432,57 @@ Left open: nothing new.  `Init` keeps the devices as well, which is two ways to 
 thing -- defensible while a program may want them handed to it, and a thing to revisit if
 nobody ever does.
 
+---
+
+## 2026-10-01T07:20+02:00 — language
+
+**The startup function takes the record, and `@[unique]` says a value is never copied**
+
+    @[startup, impure]
+    fn main(init: mut std.Init) → u6:
+        …
+
+Two decisions that need each other.  `std.Init` is handed over **as the record** and not
+as a reference to it, which is only safe because there is one of it -- and what says so is
+a new attribute.
+
+**`@[unique]` on a type definition: there is one of a value of it and it is never copied**
+(4400).  What it is for is a value that stands for something outside the program: two of
+those would be two names for one thing, which is what the rule about a second `&mut`
+already refuses for a *reference* and what nothing refused for the value.
+
+**Reading the name as a value is what a copy is**, which is the whole implementation: it
+is checked in the one place a name becomes a value, so binding it to a second name,
+handing it to a call by value, answering with it and putting it inside something else are
+all refused at once.  **A field of it and a reference to it are not copies** -- both are
+read from where the value is and neither goes through that place -- so a program reaches
+into such a value freely and passes it along by taking `&` or `&mut`.  That is the whole
+of the rule and it needed no new machinery.
+
+**And the startup function takes `std.Init` or `mut std.Init`.**  What the entry point
+hands over is still *where* the record is: it is in the image, the entry point filled it,
+and there is no caller to put it in registers.  So the signature in the representation
+carries a pointer and the name stands for that place -- which is what a record name means
+everywhere else, a record being somewhere and a field of it read at an offset from where.
+`mut` before the type says the program may write the record it was handed.  A reference
+written there is now refused, with the shape it should have been.
+
+Compare: **Rust**, where this is a move-only type and `init` would be moved into `main`;
+**C++**, where it is a deleted copy constructor; **Zig** and **Odin**, which have no such
+concept and would rely on a comment; **Go**, the same.  What is unusual here is that there
+is no move: the value stays where it is and what travels is a reference, so there is no
+question of what a moved-from name holds -- it is never moved from.
+
+Turned down: **a move**, which would answer the same question and bring with it what every
+language that has one has to say about the name afterwards.  Nothing in this language needs
+a value to change place, `@[unique]` being about a value that stands for something that
+never moves either.
+
+Left over: a value of a unique type cannot be *made* twice, which nothing checks -- a
+program may write two `Handle(.fd ← 1i32)` and get two, since what the attribute refuses
+is copying one and not constructing one.  For `Init` it does not arise, the compiler being
+the only thing that makes one; for a program's own type it is a hole worth naming.
+
 Open questions
 --------------
 

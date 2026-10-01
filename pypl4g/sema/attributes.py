@@ -144,6 +144,12 @@ REGISTRY: Final[Mapping[str, AttrSpec]] = {
                  doc="the definition follows the system's ABI: a function is "
                      "called the way the named convention says, and a record is "
                      "laid out the way one compiled by something else is"),
+        AttrSpec("unique", AttrTarget.TYPE, (),
+                 doc="there is one of a value of this type and it is never "
+                     "copied: binding it to a second name, handing it to a call "
+                     "by value, answering with it or putting it inside something "
+                     "else are all refused, and a reference to it is how it is "
+                     "passed along"),
         AttrSpec("external", AttrTarget.FUNCTION,
                  (_param("symbol", "string"),),
                  doc="the function is defined somewhere else, under this "

@@ -1,0 +1,38 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ The startup function takes the record the process was started with, not a reference to it.
+※
+※ There is one of it -- `std.Init` is `@[unique]` -- so having it is having the thing itself,
+※ and a program that passes it on takes the reference where it passes it.  `mut` before the
+※ type says the program may write the record it was handed.
+※
+※ What the entry point hands over is still *where* the record is: it is in the image, the
+※ entry point filled it, and there is no caller to put it in registers.  That is what a record
+※ name already means everywhere else -- a record is somewhere and a field of it is read at an
+※ offset from where -- so the signature a program writes says the record and nothing is copied.
+
+let std := ⎕import("std")
+
+@[impure]
+fn said(init: &std.Init) → u64 ¤size:
+    #init⌖.args
+
+@[startup, impure]
+fn main(init: mut std.Init) → u6:
+    ※ A field of the record, read at an offset from where it is.  How many words the
+    ※ program was named with depends on how it was run, so what is checked is that the
+    ※ two ways of asking agree -- and that there is at least the name itself.
+    let count: u64 = ⎕drop(#init.args)
+    if count = 0u64:
+        return 1u6
+    ※ Passed along by reference, which is how a value that is never copied travels.
+    if ⎕drop(said(&init)) ≠ count:
+        return 2u6
+    ※ The devices, read through the record.
+    if init.io.output.fd ≠ 1i32:
+        return 3u6
+    ※ And written, which is what `mut` says may be done.
+    init.io.output ← std.Writer(.fd ← 2i32)
+    if init.io.output.fd ≠ 2i32:
+        return 4u6
+    0u6

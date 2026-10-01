@@ -462,10 +462,10 @@ fn total(p: Pair) \N{RIGHTWARDS ARROW} u8:
     p.first
 
 @[startup, impure]
-fn main(init: &mut std.Init) \N{RIGHTWARDS ARROW} u6:
+fn main(init: mut std.Init) \N{RIGHTWARDS ARROW} u6:
     let both: Pair = Pair(.first \N{LEFTWARDS ARROW} 1u8, .second \N{LEFTWARDS ARROW} 2u8)
     let sum: u8 = total(both)
-    match std.write_sync(&mut init\N{POSITION INDICATOR}.io.error,
+    match std.write_sync(&mut init.io.error,
                          \N{APL FUNCTIONAL SYMBOL QUAD}bytes("hi\\n")):
         u64 \N{CURRENCY SIGN}size: \N{APL FUNCTIONAL SYMBOL QUAD}narrow(sum, \N{TOP LEFT CORNER}u6\N{TOP RIGHT CORNER}) ?? 0u6
         \N{UP TACK}: 1u6
@@ -483,8 +483,8 @@ def test_hover_says_what_a_name_is(session: Session, tmp_path: Path) -> None:
     """The checker's answer, which is the type the compiler gave the name.
 
     Not a guess from the syntax: `sum` is `u8` because the checker worked out
-    that it is, and `init` is a reference to the record the program started with
-    because that is what the signature said.
+    that it is, and `init` is the record the program started with because that is
+    what the signature said.
     """
     source = tmp_path / "names.pl4g"
     source.write_text(NAMES, encoding="utf-8")
@@ -503,7 +503,7 @@ def test_hover_says_what_a_name_is(session: Session, tmp_path: Path) -> None:
     assert "variable sum : u8" in hover(14, "sum")
     # Written the way the program wrote it: a reader of the source has never
     # seen the IR's `ptr<mut Init>` and should not be shown it here.
-    assert "parameter init : &mut Init" in hover(12, "init")
+    assert "parameter init : Init" in hover(12, "init")
     # Said once: the name of a record is what the type is called, so a hover
     # that wrote it twice would be saying `type Pair : Pair`.
     assert "type Pair\n" in hover(10, "Pair")
