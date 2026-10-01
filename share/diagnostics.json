@@ -4479,18 +4479,72 @@
       "option": null
     },
     {
+      "number": 4456,
+      "name": "LANG_PURE_TAKES_ROOM",
+      "severity": "error",
+      "message": "{what} takes room that outlives this call, and '{caller}' is pure",
+      "args": [
+        {
+          "name": "what",
+          "type": "string",
+          "description": "the operation that allocates"
+        },
+        {
+          "name": "caller",
+          "type": "string",
+          "description": "the function whose purity it breaks"
+        }
+      ],
+      "cause": "Room for a value whose size is not known while compiling comes from an arena, and an arena is a place that outlives the call: what was taken from it stays taken.  So an operation that allocates is a change the caller makes, and the caller says so with `@[impure]`.  The message names the operation rather than the function the compiler generated for it, there being no such function in the program a reader wrote.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition",
+        "requirement": "A function that allocates is marked '@[impure]'."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 4480,
       "name": "LANG_PURE_CALLS_IMPURE",
       "severity": "error",
-      "message": "'{name}' may change what outlives it, and this function is pure",
+      "message": "'{name}' may change what outlives it, and '{caller}' is pure",
       "args": [
         {
           "name": "name",
           "type": "string",
           "description": "the function being called"
+        },
+        {
+          "name": "caller",
+          "type": "string",
+          "description": "the function whose purity is broken by the call"
         }
       ],
-      "cause": "Whatever the callee may change, the caller may change by calling it, so purity is a property of everything a call reaches and not of one function's own statements.  A function that calls one marked `@[impure]` is therefore marked `@[impure]` itself -- which is the one line that says where the effects in a program begin.",
+      "cause": "Whatever the callee may change, the caller may change by calling it, so purity is a property of everything a call reaches and not of one function's own statements.  A function that calls one marked `@[impure]` is therefore marked `@[impure]` itself -- which is the one line that says where the effects in a program begin.\n\nWhere the call came from a macro, the message points into the macro, that being where the text was written -- and the note points at the function that has to be marked, which is the caller's and not the macro's.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / File Structure / Function Definition",
+        "requirement": "A function calling one marked '@[impure]' is itself marked '@[impure]'."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4511,
+      "name": "LANG_PURE_FUNCTION_HERE",
+      "severity": "note",
+      "message": "'{name}' is pure, and would have to be marked '@[impure]'",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the function"
+        }
+      ],
+      "cause": "Said beside whatever broke a pure function's purity, pointing at the function itself: what has to change is one attribute on one line, and the line is not always near the thing that reported it -- a call a macro wrote is reported where the macro wrote it, which is in another file.",
       "spec": {
         "document": "spec/spec.md",
         "section": "The Language / File Structure / Function Definition",

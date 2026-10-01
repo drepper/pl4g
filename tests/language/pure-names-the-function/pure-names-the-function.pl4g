@@ -1,0 +1,21 @@
+※ pl4g-test: compile=error diag=4456
+
+※ What a pure function is told when something it reaches is not.
+※
+※ **The message names the function that is pure and points at it**, which is not always the
+※ function the message is about or even in the same file: a call a macro wrote is reported
+※ where the macro wrote it, and what has to change is one attribute on the *caller's* line.
+※ Without the name a reader is told that "this function is pure" about a line in a file they
+※ did not write.
+※
+※ And an operation that allocates is named as the operation.  There is no `__pl4g_str_join`
+※ in the program anybody wrote, so saying that it may change something is a message about
+※ the compiler rather than about the program.
+
+※ expect-diag 4511 would have to be marked
+
+@[startup]
+fn main() → u6:
+    let a: str = "x"
+    let b: str = a ⧺ "y"
+    ⎕narrow(⎕drop(#b), ⌜u6⌝) ?? 1u6

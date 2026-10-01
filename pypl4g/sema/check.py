@@ -625,7 +625,7 @@ class _Bundle:
 #: purity belongs to and no other.  Everything that makes a change outliving the
 #: call goes through one place, so this is that place's list and not a guess.
 _PURITY: Final[frozenset[int]] = frozenset({
-    D.LANG_PURE_CALLS_IMPURE, D.LANG_PURE_CHANGES_A_VARIABLE,
+    D.LANG_PURE_CALLS_IMPURE, D.LANG_PURE_CHANGES_A_VARIABLE, D.LANG_PURE_TAKES_ROOM,
     D.LANG_PURE_READS_THE_ROUNDING_MODE, D.LANG_PURE_WRITES_ELSEWHERE})
 
 #: The names of the functions a macro is given, and what each answers.  They are
@@ -11669,8 +11669,7 @@ class Checker:
         if not self._accepts(expected, answer):
             self._report_mismatch(expr.span, answer, expected)
             return UndefConst(ERROR)
-        self._an_effect(D.LANG_PURE_CALLS_IMPURE, expr.span,
-                        name=strings.JOIN_SYMBOL)
+        self._an_effect(D.LANG_PURE_TAKES_ROOM, expr.span, what="joining two lists")
         stride = builder.int_const(U64, stride_of(holds, _LAYOUT))
         pointer = parts_of(answer)[0]
         bytes_ = self._module.types.ptr_type(U8, mutable=True)
@@ -11718,8 +11717,8 @@ class Checker:
         if self._value_type_of(left) is ERROR \
                 or self._value_type_of(right) is ERROR:
             return UndefConst(ERROR)
-        self._an_effect(D.LANG_PURE_CALLS_IMPURE, expr.span,
-                        name=strings.JOIN_SYMBOL)
+        self._an_effect(D.LANG_PURE_TAKES_ROOM, expr.span,
+                        what="joining two strings")
         pointer = parts_of(STR)[0]
         first = builder.extract(left, 0, pointer, expr.span)
         first_len = builder.extract(left, 1, U64, expr.span)
@@ -12913,8 +12912,8 @@ class Checker:
         if not self._accepts(expected, answer):
             self._report_mismatch(expr.span, answer, expected)
             return UndefConst(ERROR)
-        self._an_effect(D.LANG_PURE_CALLS_IMPURE, expr.span,
-                        name=tables.ALLOC_SYMBOL)
+        self._an_effect(D.LANG_PURE_TAKES_ROOM, expr.span,
+                        what="a collection")
         elements = self._room_for(builder, holds, len(values), expr.span)
         for at, one in enumerate(values):
             builder.store(
@@ -15058,10 +15057,23 @@ class Checker:
         "pure" means is one list rather than a rule each place remembers: a
         variable at the top level written, memory the function did not make
         written, and a function that may do either called.
+
+        **Which function is pure is said, and pointed at.**  It is not always the one
+        the message is about or even in the same file: a call a macro wrote is
+        reported where the macro wrote it, which is wherever that macro lives -- and
+        what has to change is one attribute on the *caller's* line.
         """
         if self._impure:
             return
-        self._diags.emit(which, span, **args)
+        held = self._demanding[0] if self._demanding is not None else None
+        name = getattr(held, "name", "")
+        told = self._diags.emit(which, span, caller=name, **args) \
+            if name and which in (D.LANG_PURE_CALLS_IMPURE,
+                                  D.LANG_PURE_TAKES_ROOM) \
+            else self._diags.emit(which, span, **args)
+        if held is not None and name:
+            told.note(D.LANG_PURE_FUNCTION_HERE,
+                      getattr(held, "name_span", span), name=name)
 
     def _made_here(self, place: Value) -> bool:
         """Whether a place is storage this call made and this call will lose.

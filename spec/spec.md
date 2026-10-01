@@ -4644,9 +4644,16 @@ the call or is there after it:
 | writing a variable at the top level | 4478 |
 | writing memory it did not make -- an array it was handed, a set or a dictionary | 4479 |
 | calling a function marked `@[impure]` | 4480 |
+| taking room that outlives the call -- joining two strings or two lists, making a collection | 4456 |
 
 **Making a set or a dictionary is a change**, since it takes room out of an arena and the next call gets what this one left of
-it.  So a function that builds one is `@[impure]`, whatever it does with it afterwards.
+it.  So a function that builds one is `@[impure]`, whatever it does with it afterwards.  The last row is named as the *operation*
+and not as the function the compiler generated for it: there is no `__pl4g_str_join` in the program anybody wrote, so saying that
+one may change something would be a message about the compiler.
+
+**Every one of them names the function that is pure, and points at it** (4511).  That is not always the function the message is
+about or even in the same file: a call a macro wrote is reported where the macro wrote it, which is wherever that macro lives, and
+what has to change is one attribute on the *caller's* line.
 
 **Purity is a property of everything a call reaches**, not of one function's own statements: whatever the callee may change, the
 caller may change by calling it.  So a function calling an impure one is itself `@[impure]`, and the chain of those attributes is
