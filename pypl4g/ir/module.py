@@ -82,6 +82,13 @@ class Module:
     types: TypeContext = field(default_factory=TypeContext)
     functions: dict[str, Function] = field(default_factory=dict)
     globals: dict[str, GlobalVar] = field(default_factory=dict)
+    #: The bytes of every string written down, by the text.  One per distinct
+    #: text in the whole program, which is why it is here and not on whatever is
+    #: reading a file: a module imported by this one is checked by a checker of
+    #: its own and its literals go in this image, so a pool per checker would
+    #: name two different texts alike and the second would take the first's
+    #: bytes.
+    texts: dict[str, GlobalVar] = field(default_factory=dict)
     #: Caches filled by the semantic analysis and re-checked by the verifier.
     #: The backend reads only these and never scans attributes itself.
     startup: Function | None = None

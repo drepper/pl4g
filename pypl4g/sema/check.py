@@ -1669,7 +1669,6 @@ class Checker:
         self._wrapping: bool = False
         #: The bytes of each distinct string written down, so that two literals
         #: saying the same thing are the one run of bytes in the image.
-        self._texts: dict[str, GlobalVar] = {}
         #: Whether the function being lowered said it may change things that
         #: outlive the call.  Where it did not, the places that would make such
         #: a change report one instead.
@@ -12821,18 +12820,18 @@ class Checker:
         invariant that a `str` is well-formed UTF-8 true by construction rather
         than by inspection.
         """
-        found = self._texts.get(text)
+        found = self._module.texts.get(text)
         if found is None:
             data = text.encode("utf-8")
             held = self._module.types.array_type(U8, (len(data),))
             found = self._module.add_global(GlobalVar(
-                name="".join((TEXT_SYMBOL, str(len(self._texts)))),
+                name="".join((TEXT_SYMBOL, str(len(self._module.texts)))),
                 value_type=held,
                 ptr_type=self._module.types.ptr_type(held, mutable=True),
                 initializer=self._module.array_const(
                     held, [self._module.int_const(U8, byte) for byte in data]),
                 linkage=Linkage.INTERNAL))
-            self._texts[text] = found
+            self._module.texts[text] = found
         bytes_ = builder.cast(
             CastKind.BITCAST, builder.address(found, span),
             self._module.types.ptr_type(U8, mutable=True), span)

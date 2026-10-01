@@ -1,0 +1,12 @@
+※ pl4g-test: module
+※※ A module with string literals of its own.
+
+※※ What this module calls itself.
+@[export]
+fn tag() → str:
+    "mod"
+
+※※ And a second one, so that the numbering has somewhere to go wrong.
+@[export]
+fn other() → str:
+    "second"

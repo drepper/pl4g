@@ -1,0 +1,29 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ The bytes of a string literal are a global in the image, and the image holds one
+※ program: a module this one imports is checked by a checker of its own, and its
+※ literals go in the same image as these.  So the pool they are named out of belongs to
+※ the image and not to whatever is reading a file -- a pool per file named two
+※ different texts alike and the second quietly took the first's bytes.
+※
+※ What found it was `std.println`, whose newline is a literal in `std` and came out as
+※ whatever the program had written last.
+
+let l := ⎕import("labels")
+
+@[startup]
+fn main() → u6:
+    let mine: str = "prog"
+    let also: str = "another"
+    if l.tag() ≠ "mod":
+        1u6
+    elif l.other() ≠ "second":
+        2u6
+    elif mine ≠ "prog":
+        3u6
+    elif also ≠ "another":
+        4u6
+    elif l.tag() = mine:
+        5u6
+    else:
+        0u6

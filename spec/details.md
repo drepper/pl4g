@@ -2954,6 +2954,23 @@ and twenty-eight frames: past either, the evaluation is given up on and reported
 (7001).  A compiler that hung on a loop with no end would say nothing at all,
 which is the one outcome worse than refusing.
 
+One pool of literals for the whole image
+----------------------------------------
+
+**The bytes of a string literal are a global, and the pool they are named out of
+belongs to the module and not to whatever is reading a file.**  `Module.texts` holds
+one entry per distinct text and the name is its index in that pool.
+
+That is not a detail.  A file this program imports is read by a `Checker` of its own,
+and its literals go into **this** image -- the module is shared, the checker is not.
+A pool per checker therefore numbered two different texts alike, `__pl4g_text.0`
+twice, and the second definition took the first's bytes: a module's literal came out
+as whatever the program had written last.  It was found by `std.println`, whose
+newline is a literal in `std` and printed as the caller's text instead.
+
+Nothing else in the compiler numbers symbols per file, which is why this was the only
+one of its kind; a test compares a module's literals with the program's.
+
 Running a macro at compile time
 -------------------------------
 
