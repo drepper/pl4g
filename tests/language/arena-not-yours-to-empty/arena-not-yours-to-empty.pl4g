@@ -1,0 +1,16 @@
+※ pl4g-test: compile=error
+※ pl4g-test: expect-diag 4616 LANG_ARENA_NOT_YOURS_TO_EMPTY
+
+※ Only what made an arena gives it back.  One handed over by reference is its maker's, who
+※ may be holding things made in it; `⎕heap` and an arena at the top level last as long as
+※ the program, and anything may be holding things made in those.
+
+fn cleared(a: &mut arena) → u8:
+    ⎕empty(a)
+    0u8
+
+@[startup]
+fn main() → u6:
+    let scratch: mut arena = ⎕arena
+    defer ⎕empty(scratch)
+    if cleared(&mut scratch) = 0u8: 0u6 else: 1u6

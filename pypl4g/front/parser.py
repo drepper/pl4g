@@ -1604,6 +1604,12 @@ class Parser:
             return ast.ExprStmt(span=walked.span, value=walked)
         if self._check(TokKind.KW_BREAK) or self._check(TokKind.KW_CONTINUE):
             return self._parse_jump()
+        if self._check(TokKind.KW_DEFER):
+            # One statement after it, on the same line: what is deferred is a thing
+            # to do, and anything that takes several lines to say is a function.
+            start = self._advance().span
+            later = self._parse_bare_statement()
+            return ast.Defer(span=start.to(later.span), stmt=later)
         if self._check(TokKind.KW_RETURN):
             start = self._advance().span
             if self._check(TokKind.NEWLINE) or self._check(TokKind.SEMICOLON) \

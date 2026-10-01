@@ -44,6 +44,7 @@ from typing import Callable, Final, Sequence
 from ..diag import ids as D
 from ..diag.engine import DiagEngine
 from ..ir.module import Module
+from ..ir.function import Function
 from ..source.location import INVALID_SPAN, Span
 from . import ast
 from ..target.allocator import ALLOC_SYMBOL, GROW_SYMBOL
@@ -140,6 +141,11 @@ class _Expander:
         self._written: dict[str, ast.FuncDef] = {}
         self._made: _Checked | None = None
         self._machine: Machine | None = None
+        #: Where the macro written as a function that is running was written, as the
+        #: quotes it makes know it, and what the names they bind are called in this
+        #: run of it.
+        self._running: Span | None = None
+        self._run_names: dict[str, str] = {}
         #: Every piece of the program a handle stands for, and the handle each tree
         #: has where it has one.  A handle is an index here and nothing else, which
         #: is what lets the machine hold one in a register.
@@ -369,9 +375,11 @@ class _Expander:
                 continue
             written = self._filled(self._template(rule.template), bound)
             if isinstance(written, ast.Block) and not as_statement:
-                self._diags.emit(D.LANG_MACRO_WRITES_STATEMENTS, node.span,
-                                 name=node.name)
-                return ast.NameRef(span=node.span, name=node.name)
+                if not _comes_to_a_value(written):
+                    self._diags.emit(D.LANG_MACRO_WRITES_STATEMENTS, node.span,
+                                     name=node.name)
+                    return ast.NameRef(span=node.span, name=node.name)
+                written = ast.Scoped(span=node.span, body=written)
             # What came out is expanded in turn, so a macro may write another.
             self._deep += 1
             try:
@@ -404,7 +412,7 @@ class _Expander:
         assert self._machine is not None
         outer, self._invoking = self._invoking, node.through
         try:
-            answer = self._ran_it(func, given)
+            answer = self._ran_named(func, given, written)
         except _Said as said:
             # The macro would not write what it was asked for and said why, which
             # is a fault in the invocation and not in the compiler -- so it carries
@@ -430,9 +438,11 @@ class _Expander:
         self._invoking = outer
         found = self._trees[answer]
         if isinstance(found, ast.Block) and not as_statement:
-            self._diags.emit(D.LANG_MACRO_WRITES_STATEMENTS, node.span,
-                             name=node.name)
-            return ast.NameRef(span=node.span, name=node.name)
+            if not _comes_to_a_value(found):
+                self._diags.emit(D.LANG_MACRO_WRITES_STATEMENTS, node.span,
+                                 name=node.name)
+                return ast.NameRef(span=node.span, name=node.name)
+            found = ast.Scoped(span=node.span, body=found)
         assert isinstance(found, (ast.Expr, ast.Block))
         self._deep += 1
         try:
@@ -583,6 +593,24 @@ class _Expander:
                 return replace(node, **changes)
         return node
 
+    def _ran_named(self, func: Function, given: object,
+                   written: ast.FuncDef) -> object:
+        """Run a macro with the names its quotes bind chosen for this run.
+
+        Named once for the run, so that one quote may read what another binds: a
+        run of statements binding a pool and the expression naming it are two
+        quotes and one variable.  A second run names them afresh, which is what
+        keeps two invocations on one line from meaning one variable.
+        """
+        running, run_names = self._running, self._run_names
+        self._running = func.span
+        self._run_names = {name: self._fresh(name)
+                           for name in sorted(_bound_in_quotes(written))}
+        try:
+            return self._ran_it(func, given)
+        finally:
+            self._running, self._run_names = running, run_names
+
     def _quoted(self, at: object) -> int:
         """`\N{APL FUNCTIONAL SYMBOL QUAD}quote(n)`: the tree the macro wrote down, holes and all."""
         assert self._made is not None
@@ -592,11 +620,12 @@ class _Expander:
         if quote.body is None and len(quote.pieces) != 1:
             raise Refused("a quote of more than one expression")
         tree = quote.body if quote.body is not None else quote.pieces[0]
-        # What the quote binds is renamed, once per time the macro asks for it, so
-        # that a temporary a macro writes is not the caller's variable of that name.
+        # What the quote binds is renamed, once per run of the macro that wrote it,
+        # so that a temporary a macro writes is not the caller's variable of that
+        # name.
         # The holes come through the rename as the same objects, which is what lets
         # the calls that fill them find them afterwards.
-        tree = self._renamed(tree)
+        tree = self._renamed(tree, quote)
         tree = self._reached(tree)
         holes: list[ast.Hole] = []
         _holes_of(tree, holes)
@@ -604,9 +633,16 @@ class _Expander:
         self._holes[found] = holes
         return found
 
-    def _renamed(self, tree: object) -> object:
-        """*tree* with every name it binds renamed to one no source file can spell."""
+    def _renamed(self, tree: object, quote: ast.Quote) -> object:
+        """*tree* with every name it binds renamed to one no source file can spell.
+
+        A quote the running macro wrote takes the names of the run, readings and
+        bindings alike; one a function it called wrote is renamed by itself, once
+        per time it is asked for.
+        """
         wanted = {name: self._fresh(name) for name in _bound_in(tree)}
+        if self._running is not None and _within(quote.span, self._running):
+            wanted = self._run_names
         return _with_names(tree, wanted) if wanted else tree
 
     def _put_piece(self, tree: object, at: object, with_: object) -> int:
@@ -1085,6 +1121,30 @@ def _holes_in(node: object, found: list[str] | None = None) -> list[str]:
         for one in node:
             _holes_in(one, into)
     return into
+
+
+def _comes_to_a_value(block: ast.Block) -> bool:
+    """Whether a run of statements ends in an expression, which is what it comes to."""
+    return bool(block.stmts) and isinstance(block.stmts[-1], ast.ExprStmt)
+
+
+def _bound_in_quotes(node: object, found: set[str] | None = None) -> set[str]:
+    """Every name a quote written below *node* binds."""
+    into = set() if found is None else found
+    if isinstance(node, ast.Quote):
+        _bound_in(node, into)
+    elif isinstance(node, ast.Node):
+        for one in fields_of(node):
+            _bound_in_quotes(getattr(node, one.name), into)
+    elif isinstance(node, tuple):
+        for one in node:
+            _bound_in_quotes(one, into)
+    return into
+
+
+def _within(inner: Span, outer: Span) -> bool:
+    """Whether *inner* is written inside *outer*."""
+    return inner.is_valid and outer.start <= inner.start and inner.end <= outer.end
 
 
 def _bound_in(node: object, found: set[str] | None = None) -> set[str]:

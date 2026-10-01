@@ -4631,6 +4631,163 @@
       "option": null
     },
     {
+      "number": 4612,
+      "name": "LANG_DEFER_NOT_A_THING_TO_DO",
+      "severity": "error",
+      "message": "this cannot be put off: {why}",
+      "args": [
+        {
+          "name": "why",
+          "type": "string",
+          "description": "what is wrong with deferring it"
+        }
+      ],
+      "cause": "What `defer` puts off is something to *do* when the block is left -- an expression or an assignment -- and it runs while the block is already being left.  So a way out of anything (`return`, `break`, `continue`, or a `?`, which is a `return`) would be leaving twice, a `defer` would be putting off what is already put off, and a `let` would name something gone as soon as it was named.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Statements / defer",
+        "requirement": "What 'defer' puts off is an expression or an assignment."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4613,
+      "name": "LANG_ARENA_VALUE_ANSWERED",
+      "severity": "error",
+      "message": "what '{name}' answers was made in '{arena}', which is gone when '{name}' returns",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the function"
+        },
+        {
+          "name": "arena",
+          "type": "string",
+          "description": "the arena it made"
+        }
+      ],
+      "cause": "An arena a function makes belongs to that call: it is given back before the call ends, and what was made in it goes with it.  So an answer made in one would be handed to a caller pointing at room that is no longer there.  What a function answers comes from an arena its caller handed it -- which lasts as long as the caller says -- or from `⎕heap`, which lasts as long as the program.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Arenas / What an arena holds",
+        "requirement": "A value made in an arena does not outlive it."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4614,
+      "name": "LANG_ARENA_VALUE_OUTLIVES",
+      "severity": "error",
+      "message": "'{name}' outlives '{arena}', and this was made in it",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the variable"
+        },
+        {
+          "name": "arena",
+          "type": "string",
+          "description": "the arena"
+        }
+      ],
+      "cause": "A variable bound further out than an arena lasts longer than the arena does, so a value made in the arena and put there would still be in hand after the arena was given back.  It is the rule a reference follows (4570), asked of what an arena holds: the arena is a place, and what was made in it points into that place.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Arenas / What an arena holds",
+        "requirement": "A value made in an arena does not outlive it."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4615,
+      "name": "LANG_ARENA_VALUE_GIVEN_BACK",
+      "severity": "error",
+      "message": "'{name}' was made in '{arena}', which was given back before this",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the variable"
+        },
+        {
+          "name": "arena",
+          "type": "string",
+          "description": "the arena"
+        }
+      ],
+      "cause": "`⎕empty` gives the whole of an arena back, and everything made in it goes with it: what a name made there still holds points into room that may already be something else.  Reading it is refused from the `⎕empty` on, which is where it stopped meaning anything.  A value wanted after that has to be made again, or made somewhere that lasts.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Arenas / What an arena holds",
+        "requirement": "A value made in an arena does not outlive it."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4616,
+      "name": "LANG_ARENA_NOT_YOURS_TO_EMPTY",
+      "severity": "error",
+      "message": "'{arena}' is {whose}, and only what made an arena gives it back",
+      "args": [
+        {
+          "name": "arena",
+          "type": "string",
+          "description": "the arena"
+        },
+        {
+          "name": "whose",
+          "type": "string",
+          "description": "whose it is"
+        }
+      ],
+      "cause": "Giving an arena back takes everything made in it, and whoever made it may still be holding some of that.  A function handed an arena may take room from it, which is what handing it over is for; giving it back is its maker's.  `⎕heap` and an arena at the top level last as long as the program, and anything anywhere may be holding something made in them.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Arenas / What an arena holds",
+        "requirement": "A value made in an arena does not outlive it."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4617,
+      "name": "LANG_ARENA_NEVER_GIVEN_BACK",
+      "severity": "error",
+      "message": "'{arena}' is not given back on every way out of '{name}', and '{name}' is pure",
+      "args": [
+        {
+          "name": "arena",
+          "type": "string",
+          "description": "the arena"
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the function"
+        }
+      ],
+      "cause": "Room an arena took from the system stays taken until the arena is given back, so a function that makes one and leaves without giving it back has changed something that outlives the call -- which a pure function does not.  `defer ⎕empty(NAME)` written where the arena is made gives it back on every way out, which is what `defer` is for.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Arenas / What an arena holds",
+        "requirement": "A value made in an arena does not outlive it."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 4511,
       "name": "LANG_PURE_FUNCTION_HERE",
       "severity": "note",
@@ -8614,7 +8771,7 @@
       "number": 7014,
       "name": "LANG_MACRO_WRITES_STATEMENTS",
       "severity": "error",
-      "message": "'{name}' writes statements, and this is where a value stands",
+      "message": "'{name}' writes statements that come to no value, and this is where a value stands",
       "args": [
         {
           "name": "name",
@@ -8622,11 +8779,11 @@
           "description": "the macro"
         }
       ],
-      "cause": "A template whose contents are indented under the opening mark holds a run of statements, and what it writes replaces a line.  Where the invocation stands in an expression there is no line to replace and nothing for the expression to come to.",
+      "cause": "A template whose contents are indented under the opening mark holds a run of statements.  Written where a value stands, what the statements come to is what their last one does, so the last has to be an expression; one ending in a `let` or an assignment comes to nothing the expression around it could use.",
       "spec": {
         "document": "spec/spec.md",
         "section": "The Language / File Structure / Macros",
-        "requirement": "A macro whose template holds statements is invoked on a line of its own."
+        "requirement": "Statements a macro writes where a value stands end in an expression."
       },
       "since": "0.1",
       "default_enabled": true,

@@ -1,0 +1,74 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ `defer STATEMENT` runs the statement when the block it is written in is left, whichever way
+※ that is: off the end, by `return`, by `break` or `continue` out of a loop around it, and by
+※ a `?` that hands a failure on.  What a block put off runs the last first, and only what was
+※ reached: a `defer` the block never got to puts nothing off.
+※
+※ A deferred statement runs after what the block comes to is worked out, so the value a
+※ `return` answers is the one it had before -- which is why every function here writes its
+※ trail through a reference and the caller reads it afterwards -- and is `@[impure]`, writing
+※ memory it did not make.
+※
+※ Compare: **Go**, whose `defer` runs when the *function* returns and so piles up in a loop;
+※ **Zig**, **Odin**, **Swift** and **D**'s `scope(exit)`, which run at the end of the scope as
+※ this does; **C++** and **Rust**, which say the same with a destructor.
+
+※ Off the end, the last put off first: 1 then 2.
+@[impure]
+fn in_order(trail: &mut u64):
+    defer trail⌖ ← trail⌖ × 10u64 + 1u64
+    defer trail⌖ ← trail⌖ × 10u64 + 2u64
+    trail⌖ ← trail⌖ × 10u64 + 3u64
+
+※ By `return`, which runs what was reached and nothing after it.
+@[impure]
+fn early(trail: &mut u64, leave: bool) → u8:
+    defer trail⌖ ← trail⌖ × 10u64 + 1u64
+    if leave:
+        return 7u8
+    defer trail⌖ ← trail⌖ × 10u64 + 2u64
+    8u8
+
+※ Out of a loop: each turn's block is left by `continue` or by `break`, and runs what it
+※ put off each time.
+@[impure]
+fn turns(trail: &mut u64):
+    foreach §turns i: u64 = 0u64…4u64:
+        defer trail⌖ ← trail⌖ × 10u64 + i
+        if i = 1u64:
+            continue §turns
+        if i = 3u64:
+            break §turns
+        trail⌖ ← trail⌖ × 10u64 + 9u64
+
+※ And by a `?`, which leaves the function with the failure.
+@[impure]
+fn handed_on(trail: &mut u64, v: u8 ? i32) → u8 ? i32:
+    defer trail⌖ ← trail⌖ × 10u64 + 5u64
+    let got: u8 = v?
+    got
+
+@[startup, impure]
+fn main() → u6:
+    let trail: mut u64 = 0u64
+    in_order(&mut trail)
+    if trail ≠ 321u64:
+        return 1u6
+    trail ← 0u64
+    let one: u8 = early(&mut trail, true)
+    if one ≠ 7u8 ∨ trail ≠ 1u64:
+        return 2u6
+    trail ← 0u64
+    let other: u8 = early(&mut trail, false)
+    if other ≠ 8u8 ∨ trail ≠ 21u64:
+        return 3u6
+    trail ← 0u64
+    turns(&mut trail)
+    if trail ≠ 901923u64:
+        return 4u6
+    trail ← 0u64
+    let failed: u8 = handed_on(&mut trail, ⊥(3i32)) ?? 0u8
+    if failed ≠ 0u8 ∨ trail ≠ 5u64:
+        return 5u6
+    0u6

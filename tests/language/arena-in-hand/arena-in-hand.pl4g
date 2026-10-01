@@ -10,7 +10,9 @@
 ※
 ※ An arena a function makes is a pool: room is taken from it for as long as it is wanted and
 ※ the whole of it goes back in one call, which is the only granularity an arena has.  `⎕arena`
-※ is what one starts out holding, inside a function as well as at the top level.
+※ is what one starts out holding, inside a function as well as at the top level.  A pure
+※ function gives back every arena it made on every way out, which `defer` says once where the
+※ arena is made rather than before every `return`.
 
 ※ Handed one, and so saying nothing: the caller gave the arena and owns what is in it.
 fn joined(a: &mut arena, first: str, second: str) → str:
@@ -24,6 +26,7 @@ fn `⍕`(v: bool, a: &mut arena) → str:
 @[startup]
 fn main() → u6:
     let scratch: mut arena = ⎕arena
+    defer ⎕empty(scratch)
     if joined(&mut scratch, "ab", "cd") ≠ "abcd":
         return 1u6
     if ⍕true in scratch ≠ "yes!":
@@ -32,5 +35,4 @@ fn main() → u6:
     ⎕empty(scratch)
     if joined(&mut scratch, "ef", "gh") ≠ "efgh":
         return 3u6
-    ⎕empty(scratch)
     0u6

@@ -1,0 +1,18 @@
+※ pl4g-test: compile=error
+※ pl4g-test: expect-diag 4614 LANG_ARENA_VALUE_OUTLIVES
+
+※ A name bound further out than an arena outlives it, so something made in the arena may
+※ not be put there: it would still be named after the arena was given back.  It is the rule
+※ a reference follows, asked of what an arena holds.
+
+fn kept(c: bool) → bool:
+    let held: mut str = "-"
+    if c:
+        let pool: mut arena = ⎕arena
+        defer ⎕empty(pool)
+        held ← "a" ⧺ "b" in pool
+    held = "ab"
+
+@[startup]
+fn main() → u6:
+    if kept(true): 0u6 else: 1u6

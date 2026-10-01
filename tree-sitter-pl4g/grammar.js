@@ -607,6 +607,7 @@ module.exports = grammar({
       $.return_statement,
       $.break_statement,
       $.continue_statement,
+      $.defer_statement,
       // A loop written with braces ends where the brace does, and the line it
       // stands on ends after it like any other; one written with a colon takes
       // that line ending with it and is read by the rule above instead.
@@ -622,6 +623,12 @@ module.exports = grammar({
                               optional(field('value', $._expression))),
 
     continue_statement: $ => seq('continue', field('label', $.label)),
+
+    // Run when the block it is written in is left, whichever way that is.  What
+    // may be put off is checked rather than parsed out: the statement is any the
+    // block could hold, and the checker says why a `return` or a `let` makes no
+    // sense here.
+    defer_statement: $ => seq('defer', field('statement', $._bare_statement)),
 
     // `match` takes a value apart.  Its arms stand where the statements of a
     // body would, in either notation, and an arm is a pattern and then a body

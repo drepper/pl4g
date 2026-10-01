@@ -221,15 +221,35 @@ class Evaluator:
     # -- statements ------------------------------------------------------------
 
     def _block(self, block: ast.Block) -> object:
-        """Run every statement, answering with what the last one came to."""
+        """Run every statement, answering with what the last one came to.
+
+        What a `defer` puts off runs when the block is left, the last put off first:
+        at its end, and on a `return`, `break` or `continue` going through it.  A
+        statement that cannot be run stops the evaluation, and nothing after it is
+        run at all.
+        """
         self._scopes.append({})
+        later: list[ast.Stmt] = []
         try:
             answer: object = None
             for stmt in block.stmts:
+                if isinstance(stmt, ast.Defer):
+                    self._step(stmt.span)
+                    later.append(stmt.stmt)
+                    continue
                 answer = self._stmt(stmt)
+            self._put_off(later)
             return answer
+        except (_Return, _Break, _Continue):
+            self._put_off(later)
+            raise
         finally:
             self._scopes.pop()
+
+    def _put_off(self, later: list[ast.Stmt]) -> None:
+        """Run what a block put off, the last first."""
+        for stmt in reversed(later):
+            self._stmt(stmt)
 
     def _stmt(self, stmt: ast.Stmt) -> object:
         """Run one statement, answering with its value where it has one."""
@@ -416,6 +436,8 @@ class Evaluator:
                 return self._deref(expr)
             case ast.Named():
                 return self._expr(expr.value)
+            case ast.Scoped():
+                return self._block(expr.body)
             case ast.If():
                 return self._if(expr)
             case ast.While():

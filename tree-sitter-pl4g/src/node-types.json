@@ -2147,6 +2147,58 @@
     }
   },
   {
+    "type": "defer_statement",
+    "named": true,
+    "fields": {
+      "statement": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "assignment",
+            "named": true
+          },
+          {
+            "type": "break_statement",
+            "named": true
+          },
+          {
+            "type": "continue_statement",
+            "named": true
+          },
+          {
+            "type": "defer_statement",
+            "named": true
+          },
+          {
+            "type": "expression_statement",
+            "named": true
+          },
+          {
+            "type": "foreach_statement",
+            "named": true
+          },
+          {
+            "type": "return_statement",
+            "named": true
+          },
+          {
+            "type": "unit_definition",
+            "named": true
+          },
+          {
+            "type": "variable_statement",
+            "named": true
+          },
+          {
+            "type": "while_statement",
+            "named": true
+          }
+        ]
+      }
+    }
+  },
+  {
     "type": "deref_expression",
     "named": true,
     "fields": {
@@ -3037,6 +3089,10 @@
         },
         {
           "type": "continue_statement",
+          "named": true
+        },
+        {
+          "type": "defer_statement",
           "named": true
         },
         {
@@ -4875,6 +4931,10 @@
         },
         {
           "type": "continue_statement",
+          "named": true
+        },
+        {
+          "type": "defer_statement",
           "named": true
         },
         {
@@ -7318,6 +7378,10 @@
         },
         {
           "type": "continue_statement",
+          "named": true
+        },
+        {
+          "type": "defer_statement",
           "named": true
         },
         {
@@ -10830,6 +10894,10 @@
   },
   {
     "type": "continue",
+    "named": false
+  },
+  {
+    "type": "defer",
     "named": false
   },
   {

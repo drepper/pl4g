@@ -1,0 +1,42 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ A macro that writes statements may stand where a value does, when the last of them is an
+※ expression: what they come to is what it does.  The statements are a scope of their own,
+※ so what they bound is gone, and what a `defer` among them put off has run, by the time
+※ the value is used.  That is what lets `std.println` make a pool, put off giving it back,
+※ and still answer how many bytes went.
+※
+※ **What a macro's quotes bind is named once per run of the macro**, in every quote it
+※ writes -- so one quote may name what another binds, as `⌜pool⌝` below names the `pool`
+※ the statements make.  A second run names them afresh, and two invocations in one
+※ expression are two pools.
+※
+※ Compare: **Rust**'s `macro_rules!` and **Scheme**'s `syntax-rules`, whose hygiene is the
+※ same per expansion, and **GNU C**'s statement expressions `({ … })`, which are this
+※ without the macro.
+
+macro twice:
+    ⌜$x⌝ → ⌜
+        let pool: mut arena = ⎕arena
+        defer ⎕empty(pool)
+        $x + $x
+    ⌝
+
+※ Two quotes and one variable: the place to put the text is a quote of its own, as
+※ `std.formatted` is handed one.
+macro joined(a: syntax, b: syntax, want: syntax) → syntax:
+    let made: syntax = ⌜$a ⧺ $b in pool⌝
+    ⌜
+        let pool: mut arena = ⎕arena
+        defer ⎕empty(pool)
+        $made = $want
+    ⌝
+
+@[startup]
+fn main() → u6:
+    let v: u6 = twice⌜2u6⌝ + twice⌜3u6⌝
+    if v ≠ 10u6:
+        return 1u6
+    if ¬joined⌜"ab", "cde", "abcde"⌝:
+        return 2u6
+    0u6

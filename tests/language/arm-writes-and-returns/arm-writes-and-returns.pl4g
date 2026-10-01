@@ -1,0 +1,21 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ An arm that writes memory and then leaves the function: what it wrote is on a way that
+※ never reaches the code after the `if`, so that code reads memory as it was before the arm.
+※ The token the arm left behind is not one anything after the join can see.
+
+@[impure]
+fn early(trail: &mut u64, leave: bool) → u8:
+    if leave:
+        trail⌖ ← 5u64
+        return 7u8
+    trail⌖ ← trail⌖ + 1u64
+    8u8
+
+@[startup, impure]
+fn main() → u6:
+    let trail: mut u64 = 0u64
+    let one: u8 = early(&mut trail, false)
+    if one ≠ 8u8 ∨ trail ≠ 1u64:
+        return 2u6
+    0u6

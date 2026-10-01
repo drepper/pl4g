@@ -1,0 +1,19 @@
+※ pl4g-test: compile=error
+※ pl4g-test: expect-diag 4615 LANG_ARENA_VALUE_GIVEN_BACK
+
+※ A turn of a loop that gives an arena back leaves the next turn reading what was made in it
+※ before the loop began -- behind the emptying in the text and after it in time.  So it is
+※ dead for the whole of the loop.  What a turn makes for itself it makes again each turn,
+※ and that is not touched.
+
+@[startup]
+fn main() → u6:
+    let scratch: mut arena = ⎕arena
+    defer ⎕empty(scratch)
+    let first: str = "a" ⧺ "b" in scratch
+    let count: mut u8 = 0u8
+    while count < 3u8:
+        let turn: str = first ⧺ "c" in scratch
+        count ← count + (if turn = "abc": 1u8 else: 2u8)
+        ⎕empty(scratch)
+    if count = 3u8: 0u6 else: 1u6

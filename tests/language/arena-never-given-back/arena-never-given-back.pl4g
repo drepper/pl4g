@@ -1,0 +1,19 @@
+※ pl4g-test: compile=error
+※ pl4g-test: expect-diag 4617 LANG_ARENA_NEVER_GIVEN_BACK
+
+※ Room an arena took from the system stays taken until it is given back, so a pure function
+※ that leaves with one of its own still holding room has changed something that outlives
+※ the call.  Every way out counts: the early `return` here leaves `scratch` as it is.
+※ `defer ⎕empty(scratch)` where the arena is made is what says it once for all of them.
+
+fn sized(first: str, early: bool) → bool:
+    let scratch: mut arena = ⎕arena
+    let both: str = first ⧺ "!" in scratch
+    if early:
+        return both = "a!"
+    ⎕empty(scratch)
+    true
+
+@[startup]
+fn main() → u6:
+    if sized("a", true): 0u6 else: 1u6

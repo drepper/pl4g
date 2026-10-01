@@ -74,6 +74,7 @@
 [(fresh_open) (fresh_close)] @punctuation.bracket
 "let" @keyword
 "return" @keyword.return
+"defer" @keyword
 ["if" "elif" "else" "match"] @keyword.conditional
 ["while" "unless" "foreach" "break" "continue"] @keyword.repeat
 ["type" "enum" "unit" "bundle"] @keyword.type

@@ -522,6 +522,7 @@ class TokKind(StrEnum):
     KW_RETURN = "'return'"
     KW_BREAK = "'break'"
     KW_CONTINUE = "'continue'"
+    KW_DEFER = "'defer'"
     KW_LET = "'let'"
     KW_MUT = "'mut'"
     KW_UNIT = "'unit'"
@@ -729,6 +730,7 @@ KEYWORDS: Final[dict[str, TokKind]] = {
     "comptime": TokKind.KW_COMPTIME,
     "break": TokKind.KW_BREAK,
     "continue": TokKind.KW_CONTINUE,
+    "defer": TokKind.KW_DEFER,
     "in": TokKind.KW_IN,
     "true": TokKind.KW_TRUE,
     "false": TokKind.KW_FALSE,

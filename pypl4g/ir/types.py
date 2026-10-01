@@ -971,7 +971,10 @@ MAX_CODE_POINT: Final[int] = 0x10FFFF
 ARENA_NAME: Final[str] = "arena"
 
 ARENA: Final[ProductType] = ProductType(
-    (("next", U64), ("limit", U64), ("chunk", U64)), name=ARENA_NAME)
+    (("next", U64), ("limit", U64), ("chunk", U64)), name=ARENA_NAME,
+    # Never copied: two of one arena would be two makers of the same room, and the
+    # second to give it back would give back what the first already had.
+    unique=True)
 
 
 #: Which widths each signedness has a type for.  Unsigned from one bit, signed

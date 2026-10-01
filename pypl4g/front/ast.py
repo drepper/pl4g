@@ -449,6 +449,20 @@ class Allocated(Expr):
 
 
 @dataclass(frozen=True, slots=True)
+class Scoped(Expr):
+    """Statements a macro wrote, standing where a value is wanted.
+
+    Nothing a program writes: an invocation whose expansion is a run of statements
+    comes to this where it stands inside an expression, and what it comes to is
+    what the last statement does.  The statements are a scope of their own, so a
+    name the macro bound -- and whatever a `defer` among them puts off -- is gone
+    by the time the value is used.
+    """
+
+    body: Block
+
+
+@dataclass(frozen=True, slots=True)
 class Invoke(Expr):
     """`f\N{TOP LEFT CORNER}a, b\N{TOP RIGHT CORNER}`: a macro invoked, which is not a call.
 
@@ -1100,6 +1114,23 @@ class Break(Stmt):
 
     label: Label
     value: Expr | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class Defer(Stmt):
+    """`defer STMT`: run the statement when the block it is written in is left.
+
+    However it is left -- by running off the end, by `return`, by `?` handing a
+    failure back, by `break` or `continue` -- and last-written first, so that what
+    was set up last is taken down first.  What it is for is giving back what the
+    block took, written next to where it was taken: `defer ⎕empty(scratch)` one line
+    after the arena was made.
+
+    The statement is not run where it is written.  What it names is what those names
+    meant there, whatever a block inside it later calls by the same names.
+    """
+
+    stmt: Stmt
 
 
 @dataclass(frozen=True, slots=True)

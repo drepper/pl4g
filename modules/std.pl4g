@@ -490,40 +490,6 @@ comptime fn formatted(template: syntax, args: syntax,
 macro format(template: syntax, ⁂args: syntax) → syntax:
     formatted(template, args, ⌜⎕heap⌝)
 
-※※ The arena the print functions build their text in, and empty when they are done.
-※※
-※※ \details A **pool**: room is taken from it for as long as a line is being built and
-※※ the whole of it goes back in one call, which is the only granularity an arena has
-※※ and exactly what formatting wants -- the text of a line is wanted until it has been
-※※ written and never after.
-※※
-※※ \note It is emptied at the end of every `print` and `println`, so **nothing may be
-※※ kept in it**.  A program that wants text to last asks `format` for it, which takes
-※※ room from the arena the caller names and from `⎕heap` where it names none.
-@[export]
-let printing: mut arena = ⎕arena
-
-※※ Write text to a device and give the printing pool back, answering how many bytes went.
-※※
-※※ \details What `print` and `println` expand into.  The write waits, so by the time
-※※ this answers there is nothing left that the text was needed for -- which is the
-※※ moment to empty the pool, and the reason emptying it is in here rather than left to
-※※ whoever wrote the line.
-※※
-※※ \param to the device to write to
-※※ \param what the text, which was built in the pool
-※※ \param line whether a newline goes with it, in the same request
-※※ \return how many bytes went
-※※ \raises the number the kernel gave
-@[export]
-fn Io.said(to: &mut Writer, what: str, line: bool) → u64 ¤size ? i32:
-    let went: u64 ¤size = if line:
-        Io.println(to, ⎕bytes(what))?
-    else:
-        Io.print(to, ⎕bytes(what))?
-    ⎕empty(printing)
-    went
-
 ※※ Write a template and its arguments to a device, and answer how many bytes went.
 ※※
 ※※ \details A macro, because `format` is one: the template is handed over as it is
@@ -531,14 +497,25 @@ fn Io.said(to: &mut Writer, what: str, line: bool) → u64 ¤size ? i32:
 ※※ runs.  What it expands to is the join `format` would have answered, handed to
 ※※ `Io.print` -- so nothing is buffered and what reaches the device is one request.
 ※※
+※※ The text is built in a **pool** of the expansion's own: room is taken from it for as
+※※ long as the line is being built, and the whole of it goes back in one call when the
+※※ write has answered, which `defer` says where the pool is made.  A pool of every
+※※ invocation's own, rather than one the module keeps, is what makes giving it back
+※※ safe: nothing else can be holding text in it, and an argument that itself prints
+※※ builds its line in a pool of its own.
+※※
 ※※ \param to the device to write to
 ※※ \param template the text, with `{}` where an argument goes
 ※※ \param args what the holes stand for
 ※※ \return how many bytes went
 @[export, impure]
 macro print(to: syntax, template: syntax, ⁂args: syntax) → syntax:
-    let said: syntax = formatted(template, args, ⌜printing⌝)
-    ⌜Io.said($to, $said, false)⌝
+    let said: syntax = formatted(template, args, ⌜pool⌝)
+    ⌜
+        let pool: mut arena = ⎕arena
+        defer ⎕empty(pool)
+        Io.print($to, ⎕bytes($said))
+    ⌝
 
 ※※ The same, with a newline after it, written as one request.
 ※※
@@ -552,8 +529,12 @@ macro print(to: syntax, template: syntax, ⁂args: syntax) → syntax:
 ※※ \return how many bytes went, which is one more than the text
 @[export, impure]
 macro println(to: syntax, template: syntax, ⁂args: syntax) → syntax:
-    let said: syntax = formatted(template, args, ⌜printing⌝)
-    ⌜Io.said($to, $said, true)⌝
+    let said: syntax = formatted(template, args, ⌜pool⌝)
+    ⌜
+        let pool: mut arena = ⎕arena
+        defer ⎕empty(pool)
+        Io.println($to, ⎕bytes($said))
+    ⌝
 
 ※ -- describing a build --------------------------------------------------------
 

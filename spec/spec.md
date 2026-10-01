@@ -356,9 +356,18 @@ the definition that program wrote.
 
 **The room comes from an arena the formatting is told about.**  `std.text` takes a reference to one and every join inside it goes
 there; `⍕v in a` is the operator form of the same thing, and it is what `format` writes into the code it generates.  `format` itself
-names `⎕heap`, so what it answers lasts.  **`print` and `println` name `std.printing`**, a pool they empty when the write has
-finished -- so a formatted line takes room for as long as it takes to write it and not a moment longer, and **nothing may be kept in
-that pool**.
+names `⎕heap`, so what it answers lasts.  **`print` and `println` make a pool of their own** at every invocation and give it back
+when the write has finished -- the expansion is
+
+```
+let pool: mut arena = ⎕arena
+defer ⎕empty(pool)
+Io.println(to, ⎕bytes(…the join, in pool…))
+```
+
+standing where the invocation does -- so a formatted line takes room for as long as it takes to write it and not a moment longer.  A
+pool the module kept for every print would not do: an argument that itself prints, or any other function emptying it, would give
+back text a line was still being built from, and that is why only what made an arena may give it back (below).
 
 Putting those two together: a program that prints a formatted line declares *nothing*.  The device carries permission to write and
 the pool carries permission to allocate, and `@[impure]` is left for what neither accounts for.
@@ -3257,7 +3266,13 @@ system for a first chunk.  Emptying `⎕heap` is a change to something global an
 accounted for where it was named.
 
 **`⎕arena` works inside a function as well as at the top level**, where it is three words of nought in the frame -- so a pool of one
-call's own is one line, and giving it back is one more.
+call's own is one line, and giving it back is one more.  With `defer` they are the same line's neighbours, and the giving back
+happens on every way out of the block:
+
+```
+let scratch: mut arena = ⎕arena
+defer ⎕empty(scratch)
+```
 
 **An allocation that cannot be met stops the program.**  Answering with a result would put a `?` on every value a program builds
 rather than computes, and there is nothing a program could usefully do at that point that the system will not do better by
@@ -3267,6 +3282,45 @@ Compare: Zig, where every allocator is a value and every allocation names one, w
 where the allocator is in an implicit `context` and a collection does not say which it uses; Rust, where a collection is
 parameterised by its allocator in its type; C and Go, where there is one heap and nothing says so.  This sits with Zig and Rust:
 a program should be able to read where a value lives off the line that makes it.
+
+##### What an arena holds
+
+**A value made in an arena does not outlive it.**  The compiler keeps track, for every name, of the arenas what it holds was made
+in, and refuses every way a program could read memory an arena has given back:
+
+- **Read after `⎕empty`** (4615).  Every name holding something made in the arena is dead from the `⎕empty` on, and stays dead after
+  the block it was written in ends -- on some way there it was given back, and a name read later cannot tell which way it came.  A
+  name given something new is alive again.
+- **In a loop** the same holds across turns: a turn that empties an arena leaves the next turn reading what was made in it before
+  the loop began, so that is dead for the whole of the loop.  What a turn makes for itself it makes again each turn, and is not
+  touched.
+- **Answered by the function that made the arena** (4613).  A function gives back its own arenas before it returns, so what it
+  answers out of one is gone by the time anybody reads it.  An arena the caller handed over by reference is the caller's, and what
+  is made in it lasts as long as the caller says -- which is how a function returns text it built: it asks to be handed the arena.
+- **Put where it outlives the arena** (4614): a name bound further out than the arena, given something made in it, and the value a
+  block comes to when the arena was made inside the block.  It is the rule a reference follows, asked of what an arena holds.
+
+**What a value was made in is read off what is written.**  An arena is named where room is taken from it -- after `in`, or handed to
+a call -- and a name carries the arenas of what it was given.  A call is taken to answer something made in any arena it was handed,
+which is the only thing a caller can know without seeing into the function; an answer that came from somewhere that lasts is then a
+cautious guess and never a wrong one.  A value of a type that points nowhere -- a number, a `bool`, a fixed array of those -- was
+made in nothing, whatever it was computed from.
+
+**Only what made an arena gives it back** (4616).  One handed over by reference is its maker's, who may be holding things made in
+it; `⎕heap` and an arena at the top level last as long as the program, and anything anywhere may be holding things made in those.
+Without this rule none of the above would hold: a function emptying an arena it was handed would kill names in its caller that the
+caller cannot see die.
+
+**A pure function gives back every arena it made, on every way out** (4617).  Room an arena took from the system stays taken until
+it is given back, so leaving with one still holding room changes something that outlives the call -- which is what `@[impure]` is
+for.  What counts is an `⎕empty` on that way out, written there or put off with `defer`.
+
+Compare: **Rust**, whose lifetimes say the same thing about every reference and check it with a borrow checker; an arena crate such
+as `bumpalo` ties what it hands out to the arena's lifetime, which is this rule written as a type.  **Zig** and **Odin** have the
+arenas and none of the checking: freeing one and reading what was in it is the program's mistake to find.  **C++**'s
+`std::pmr::monotonic_buffer_resource` is an arena with the same lack.  **Go** and **D** collect garbage, so the question does not
+arise and neither does the control.  This sits with Rust in what it refuses and with Zig in what it costs: nothing at run time,
+and a rule a reader can apply by looking at where a name's value was made.
 
 #### Sets and dictionaries
 
@@ -3731,6 +3785,41 @@ from, and there it only runs; giving it the value of that way through is what ma
 something when the loop is an expression.  **Kotlin** and **Scala** make most things expressions but leave loops out, so a search
 over two dimensions goes back to a variable set before the loop.  **Common Lisp**'s `loop ... finally (return v)` and its
 `return-from` do all of it and more, in a sublanguage of its own.
+
+#### defer
+
+`defer STATEMENT` puts a statement off until **the block it is written in is left**, whichever way that happens: off its end, by a
+`return`, by a `break` or `continue` leaving it for a loop around it, and by a `?` handing a failure on.
+
+```
+let scratch: mut arena = ⎕arena
+defer ⎕empty(scratch)
+let both: str = first ⧺ second in scratch
+if both = "":
+    return 1u6                  ※ scratch is given back here
+…                               ※ and here, at the end
+```
+
+**The last put off runs first**, and only what was reached runs: a `defer` the block never got to has put nothing off.  What a block
+comes to -- the value of its last statement, or what a `return` answers -- is worked out **before** what was put off runs, so a
+deferred `⎕empty` cannot take away the value it was meant to protect, and a deferred assignment does not change what was answered.
+
+**What may be put off is something to do**: an expression, or an assignment.  Not a way out of anything -- a deferred statement runs
+while the block is already being left, so a `return`, a `break`, a `continue` or a `?` in one would leave twice -- and not a `let`,
+whose name would be gone as soon as it was made, nor another `defer` (4612).  A deferred statement means what it would have meant
+where it was written: a name a block inside has taken over since does not change it.
+
+It is lowered at every way out, so the code is repeated rather than jumped to.  A mistake in it is still one mistake and is
+reported once.
+
+Compare: **Go**'s `defer`, whose name this is, runs when the *function* returns and takes a call; deferring in a loop piles calls up
+until the function ends, which is rarely what was meant.  **Zig**'s `defer` is this one -- the end of the scope, any statement, last
+first -- and its `errdefer` runs only on the way out with an error, which this does not have (yet).  **Swift**'s `defer` and **D**'s
+`scope(exit)` are the same as Zig's, D adding `scope(failure)` and `scope(success)`.  **Odin**'s `defer` is Zig's.  **C++** and
+**Rust** say this with a destructor, which runs at the end of the scope for every object that has one, and which a program writes
+once per type rather than once per use; **Python**'s `with` and **Java**'s `try`-with-resources are that with a protocol.  **C**
+has `goto cleanup`, and GNU C `__attribute__((cleanup))`.  A destructor would need a type of its own for every resource; here the
+one resource that wants it, an arena, is given back by one line beside the line that makes it.
 
 ### Names the compiler provides
 
@@ -4925,8 +5014,12 @@ macro swap:
     ⌝
 ```
 
-**A macro that writes statements is invoked on a line of its own** (7014), and what it writes replaces that line.  The statements go
-into the run around them rather than into a block of their own, which would be a scope the macro did not ask for.  **A template may
+**A macro that writes statements is invoked on a line of its own**, and what it writes replaces that line.  The statements go
+into the run around them rather than into a block of their own, which would be a scope the macro did not ask for.  **Where a value
+stands instead, the statements are a scope of their own** and what they come to is what the last of them does -- so the last has to
+be an expression (7014).  What they bound is gone, and what a `defer` among them put off has run, by the time the value is used,
+which is how `std.println` makes a pool, gives it back and still answers how many bytes went.  GNU C's statement expressions,
+`({ … })`, are this without the macro.  **A template may
 assign to a hole**, and which kind of place that is, is settled once the hole is filled; one filled with something nothing can be
 assigned to is refused (7018), pointing at the argument rather than at the template.
 
@@ -5020,7 +5113,9 @@ nothing runs while the compiler does are refused too (7020).
 
 **A body may write statements** by answering a quote whose contents are indented, exactly as a template may, and what it writes
 replaces the line the macro was invoked on.  Hygiene is the same in both forms: a name the macro binds is renamed once per time the
-macro runs.
+macro runs.  **The renaming is the run's, not the quote's**: every quote the macro writes takes the same new names, readings and
+bindings alike, so one quote may name what another binds -- `std.println` hands `formatted` the quote `⌜pool⌝` to say where the text
+goes, and the quote holding `let pool` is another one.  A quote written by a function the macro calls is renamed by itself.
 
 ```
 macro bump(a: syntax) → syntax:

@@ -8,8 +8,10 @@
 ※ generates.  So a program that prints a formatted line declares **nothing**: the device
 ※ carries permission to write and the pool carries permission to allocate.
 ※
-※ `std.printing` is that pool, and it is emptied at the end of every print -- so nothing may
-※ be kept in it.  Text that is to last comes from `std.format`, which takes room from `⎕heap`.
+※ The pool is the expansion's own: every `print` makes one, puts off giving it back with
+※ `defer`, and has given it back by the time it answers -- so nothing can be kept in it, and
+※ nothing else can be holding text in it when it goes.  Text that is to last comes from
+※ `std.format`, which takes room from `⎕heap`.
 
 let std := ⎕import("std")
 

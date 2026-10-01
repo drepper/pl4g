@@ -8616,6 +8616,85 @@ nothing checks -- the accounting says *whose* room it is and not that it was ret
 `⍕` of a number carrying a unit still does not work, the generic digit loop having no way to
 build ten with a unit on it.
 
+## 2026-10-01T16:30+02:00 — language
+
+**What an arena holds dies with it, and `defer` gives it back**
+
+    fn f(first: str) → str:
+        let scratch: mut arena = ⎕arena
+        let both: str = first ⧺ "<-" in scratch
+        ⎕empty(scratch)
+        both                ※ 4615, and 4613: both is gone, and would be gone anyway
+
+The program above compiled and printed garbage.  The previous entry left exactly this open:
+the accounting said *whose* room a value took and not that it was still there.  Now the
+compiler keeps, for every name, the arenas what it holds was made in, and refuses every way to
+read what an arena has given back:
+
+- read after `⎕empty` (4615), including in a later turn of a loop that empties the arena;
+- answered by the function that made the arena (4613), since it gives that arena back on the
+  way out;
+- put in a name bound further out than the arena, or answered by a block the arena was made
+  in (4614).
+
+**Where a value was made is read off what is written.**  `in NAME` and an arena handed to a
+call name it; a name carries what it was given; a call is taken to answer something made in
+any arena it was handed.  That last is cautious -- a call handed an arena may answer
+something that lasts -- and never wrong.  A type that points nowhere was made in nothing.
+
+**Only what made an arena gives it back** (4616).  This is what makes the rest sound: a
+function emptying an arena it was handed would kill names in its caller that the caller
+cannot see die, and `⎕heap` or a top-level arena may be held from anywhere.  It also took
+`std.printing` with it -- a module pool emptied by every print is unsound the moment an
+argument prints, or anything else empties it while a line is being built.
+
+**A pure function gives back every arena it made, on every way out** (4617): room taken
+from the system and kept is a change that outlives the call.
+
+**`defer STATEMENT`** says it once, beside the line that makes the arena.  It runs when the
+block is left by any way -- the end, `return`, `break`, `continue`, `?` -- last first, after
+what the block comes to was worked out.  What may be put off is an expression or an
+assignment, never a way out or a `let` (4612).
+
+**`print` and `println` now make a pool of their own** per invocation:
+
+    let pool: mut arena = ⎕arena
+    defer ⎕empty(pool)
+    Io.println(to, ⎕bytes(…in pool…))
+
+which needed two things of macros.  **Statements a macro writes may stand where a value
+does**, as a scope of their own whose value is the last statement's (7014 now refuses only a
+run that ends in no expression); so `print` still answers the byte count, which is what
+the previous entry gave up the per-call pool for.  And **hygiene renames per run, not per
+quote**: `formatted(template, args, ⌜pool⌝)` and the quote holding `let pool` are two quotes
+naming one variable.
+
+Two compiler bugs came out on the way: an `if` arm that wrote memory and then returned left
+its memory token to the code after the `if` (an internal error on any `p⌖ ← v; return`),
+and the way out of a `?` did the same with what it ran.  Both fixed, with a test.
+
+Compare, for `defer`: **Go**'s, which runs at the end of the *function*, so one in a loop
+piles up; **Zig**'s, **Swift**'s, **Odin**'s and **D**'s `scope(exit)`, which are this --
+end of scope, last first; **C++** and **Rust**, which say it with a destructor, once per
+type; **Python**'s `with` and **Java**'s try-with-resources, a protocol for the same.  For
+the checking: **Rust**'s lifetimes are the full form of it, and `bumpalo` ties what it hands
+out to the arena's lifetime; **Zig**, **Odin** and **C++**'s `pmr` arenas have none of it;
+**Go** and **D** collect garbage and do not need it.  For a statement block standing as a
+value: **GNU C**'s `({ … })`, and **Rust**'s and **Scheme**'s macros, whose hygiene is per
+expansion as this now is.
+
+Decided here rather than asked about, each cheap to overrule: the expansion as a scope of its
+own (and not spliced into the enclosing block, which would leave the pool bound after the
+expression); per-run hygiene (a quote asked for twice in one run now binds one name, not
+two); the cautious rule for calls; and `defer` running before a function's post-conditions
+are checked, so that a condition speaks about the state the caller will see.
+
+Turned down: **Go's function-scoped `defer`**, for the loop; **`errdefer`** for now, there
+being nothing yet that wants it; **a destructor on `arena`**, which would make every arena
+go back at the end of its scope whether or not the program had handed something made in it
+outward -- the checking above is what makes that question answerable at all, and a
+destructor can come later on top of it.
+
 Open questions
 --------------
 

@@ -232,14 +232,21 @@ To Do List for the PL4g language
     [x] **a pool allocator for the formatting.**  Done: `EXPR in NAME` says which arena
         an expression takes room from, `⎕empty(NAME)` gives the whole of one back, `⎕arena`
         works inside a function, `std.text` takes a reference to the arena, `⍕v in a` is the
-        operator form, and `print`/`println` build in `std.printing` and empty it once the
-        write has finished.  So a program that prints a formatted line declares nothing.
+        operator form, and `print`/`println` build in a pool of the expansion's own and give
+        it back with `defer` once the write has finished.  So a program that prints a
+        formatted line declares nothing.
     [x] **memory as a capability.**  Done with the pool above and by the same rule:
         `⎕heap` is the global arena and every other one is somebody's, so taking room from
         an arena a program named is accounted for by whoever owns it and `@[impure]` is left
         meaning the arena nobody named.
-        Left over: nothing checks that room taken is ever given back -- the accounting says
-        whose room it is and not that it was returned.
+        And what an arena holds dies with it: read after `⎕empty`, answered by the function
+        that made the arena, or put where it outlives it, is refused (4613-4615); only the
+        maker empties an arena (4616); a pure function gives back all it made (4617).
+    [ ] **a call that answers something lasting while handed an arena** is taken to answer
+        something made in it, which refuses correct programs.  A signature saying which
+        arenas the answer can come from (Rust's lifetime parameters, in short) would settle it.
+    [ ] **`errdefer`**, Zig's defer that runs only on the way out with a failure, once
+        something wants it.
     Left over and named in the proposal: float text, which is the large piece; whether an
     enumeration's names reach run time; the dyadic `⍕`, which is APL's
     format-by-specification and which nothing yet needs; and a chain of joins folded into

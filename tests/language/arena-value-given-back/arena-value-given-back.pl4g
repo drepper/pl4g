@@ -1,0 +1,13 @@
+※ pl4g-test: compile=error
+※ pl4g-test: expect-diag 4615 LANG_ARENA_VALUE_GIVEN_BACK
+
+※ `⎕empty` gives everything in an arena back at once, and every name holding something made
+※ there is dead from that point: reading it would read memory the arena may already have
+※ handed out again.  A name given something new is alive again.
+
+@[startup]
+fn main() → u6:
+    let scratch: mut arena = ⎕arena
+    let both: str = "a" ⧺ "b" in scratch
+    ⎕empty(scratch)
+    if both = "ab": 0u6 else: 1u6

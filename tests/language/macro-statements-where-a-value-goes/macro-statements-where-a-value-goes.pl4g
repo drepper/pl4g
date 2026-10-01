@@ -1,9 +1,9 @@
 ※ pl4g-test: compile=error
 ※ pl4g-test: expect-diag 7014 LANG_MACRO_WRITES_STATEMENTS
 
-※ A template whose contents are indented holds statements, and what it writes
-※ replaces a line.  Written where a value stands there is no line to replace and
-※ nothing for the expression to come to.
+※ A template whose contents are indented holds statements.  Written where a value
+※ stands, what they come to is what the last one does -- and a `let` comes to nothing
+※ the expression around it could use.
 
 macro keep:
     ⌜$x⌝ → ⌜

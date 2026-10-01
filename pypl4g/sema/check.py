@@ -57,7 +57,7 @@ from ..ir.function import (DEFAULT_CCONV, SYSTEM_CCONV, BasicBlock, FuncAttrs,
                            InlineHint,
                            Linkage, SpecialKind)
 from ..ir.module import GlobalVar, Module
-from ..ir.types import (ARENA, ARENA_NAME, ArrayType, BOOL, BoolType, BUILTIN_TYPES,
+from ..ir.types import (ARENA, ARENA_NAME, StrType, ArrayType, BOOL, BoolType, BUILTIN_TYPES,
                         SYNTAX, SyntaxType, I64,
                         CursorType,
                         DictType,
@@ -170,6 +170,14 @@ class _Local:
     #: only to a place at least as deep as this: what a reference names has to
     #: be there for as long as the name that holds it.
     depth: int = 0
+    #: The arenas what it holds was made in, by the identity of the names they are
+    #: bound to.  A string, a list or a collection made `in` an arena points into
+    #: it, so it is only worth having while the arena still holds what it made.
+    arenas: frozenset[int] = frozenset()
+    #: Where the arena it was made in was given back, once one has been: from there
+    #: on what it holds points at nothing, and reading it is refused.
+    gone_at: Span | None = None
+    gone_with: str = ""
 
 
 @dataclass(slots=True)
@@ -996,6 +1004,53 @@ def _reached_from(value: Value, sources: Sequence[Value],
         return False
 
 
+def _points_somewhere(ty: Type, seen: frozenset[int] = frozenset()) -> bool:
+    """Whether a value of *ty* may point into room something else holds.
+
+    A string, a list, a collection, an array whose type does not say its length, a
+    cursor, and a reference all are where their contents are rather than being them,
+    so one made in an arena points into it.  Anything holding one of those does too;
+    a number, a truth value and a character are what they are, wherever they came
+    from.
+    """
+    if id(ty) in seen:
+        return False
+    deeper = seen | {id(ty)}
+    match ty:
+        case StrType() | ListType() | SetType() | DictType() | PtrType() \
+                | CursorType():
+            return True
+        case ArrayType():
+            return not ty.fixed or _points_somewhere(ty.element, deeper)
+        case TupleType():
+            return any(_points_somewhere(m, deeper) for m in ty.members)
+        case ResultType():
+            return _points_somewhere(ty.ok, deeper) or (
+                ty.err is not None and _points_somewhere(ty.err, deeper))
+        case ProductType():
+            return any(_points_somewhere(one, deeper) for _, one in ty.fields)
+        case SumType():
+            return any(_points_somewhere(one, deeper) for _, one in ty.variants)
+    return False
+
+
+def _empties_named(node: object, into: set[str]) -> None:
+    """Every arena name given back with `⎕empty` below *node*, `defer` or not."""
+    if isinstance(node, ast.Call) and isinstance(node.callee, ast.NameRef) \
+            and node.callee.name == EMPTY_NAME and node.args \
+            and isinstance(node.args[0], ast.NameRef):
+        into.add(node.args[0].name)
+    if isinstance(node, ast.Node):
+        for one in fields_of(node):
+            held = getattr(node, one.name)
+            if isinstance(held, ast.Node):
+                _empties_named(held, into)
+            elif isinstance(held, tuple):
+                for each in held:
+                    if isinstance(each, ast.Node):
+                        _empties_named(each, into)
+
+
 def _holds_a_reference(ty: Type, seen: frozenset[int] = frozenset()) -> bool:
     """Whether a value of *ty* holds a reference anywhere inside it."""
     if isinstance(ty, PtrType):
@@ -1251,6 +1306,21 @@ def _about_the_shape(expr: ast.Expr) -> str:
         case ast.Unary():
             return "".join(("'", expr.op.value, "'"))
     return "this"
+
+
+def _leaves(node: object) -> bool:
+    """Whether a `?` is anywhere inside *node*, which would hand a failure back."""
+    if isinstance(node, ast.Try):
+        return True
+    if isinstance(node, ast.Node):
+        for one in fields_of(node):
+            held = getattr(node, one.name)
+            if isinstance(held, ast.Node) and _leaves(held):
+                return True
+            if isinstance(held, tuple) and any(
+                    isinstance(each, ast.Node) and _leaves(each) for each in held):
+                return True
+    return False
 
 
 def _is_build_object(ty: Type) -> bool:
@@ -1585,6 +1655,20 @@ class _Ready(ast.Expr):
 
 
 @dataclass(slots=True)
+class _Deferred:
+    """A statement put off until its block is left, and where it was written.
+
+    `depth` is how many scopes were open where it was written, which is what its
+    names are looked up in when it runs: a block inside may call something else by
+    the same name, and what a deferred statement names is what was meant where it was
+    written.
+    """
+
+    node: ast.Defer
+    depth: int
+
+
+@dataclass(slots=True)
 class _Loop:
     """A loop being lowered that has a name, and the two places a jump goes.
 
@@ -1616,6 +1700,10 @@ class _Loop:
     #: loop before anything was lowered, or what the first `break` turned out
     #: to hand over.  Every later one has to agree with it.
     handing: Type | None = None
+    #: How many blocks' deferred statements were open where the loop began: a jump
+    #: out of the body or back to its head leaves every block opened since, and
+    #: runs what they put off.
+    frame: int = 0
     #: Where the first `break` that handed something over was written, for
     #: pointing at it beside one that did not.
     handed_at: Span | None = None
@@ -1845,6 +1933,25 @@ class Checker:
         self._name_spans: dict[str, Span] = {}
         #: The names bound inside the function being checked, innermost last.
         self._scopes: list[dict[str, _Local]] = []
+        #: What each block being lowered has put off until it is left, innermost
+        #: last.  One list per block and not per scope, a block being what `defer`
+        #: is about.
+        self._deferred: list[list[_Deferred]] = []
+        #: Which deferred statements have been lowered with their diagnostics
+        #: told.  One is lowered at every way out of its block, and a mistake in it
+        #: is one mistake however many ways out there are.
+        self._defer_told: set[int] = set()
+        #: The arenas given back in each block being lowered, by the identity of
+        #: their names, innermost last -- kept beside the deferred statements and
+        #: for the same reason: a block is what a way out leaves, and what was given
+        #: back on this way is what an open block says was.
+        self._emptied: list[set[int]] = []
+        #: Every arena a name is bound to, by that name's identity, so that what a
+        #: value records about where it was made can be asked about again.
+        self._arena_by_id: dict[int, _Local] = {}
+        #: The arenas already reported as never given back: there is one arena and
+        #: one mistake, however many ways out there are.
+        self._told_kept: set[int] = set()
         #: The name a reference is being taken of, while one is: working the
         #: place out reads the name, and that read is the reference itself.
         self._taking_a_reference: str | None = None
@@ -5005,6 +5112,268 @@ class Checker:
             return UndefConst(ERROR)
         return found
 
+    # -- what an arena holds ---------------------------------------------------
+
+    def _is_arena(self, local: _Local) -> bool:
+        """Whether a name is bound to an arena or to a reference to one."""
+        held = self._held_by(local)
+        found = held is ARENA or (isinstance(held, PtrType)
+                                  and held.pointee is ARENA)
+        if found:
+            self._arena_by_id[id(local)] = local
+        return found
+
+    def _arenas_in(self, node: object) -> frozenset[int]:
+        """The arenas what an expression comes to may point into.
+
+        Read off what is written rather than off what it was lowered to: an arena is
+        named where room is taken from it -- after `in`, or handed to a call -- and a
+        name carries the arenas what it holds was made in.  A call is taken to answer
+        something made in any arena it was handed, which is the only thing a caller
+        can know without seeing into the function; an answer that came from
+        somewhere that lasts is a cautious guess and never a wrong one.
+        """
+        found: set[int] = set()
+        self._collect_arenas(node, found)
+        return frozenset(found)
+
+    def _collect_arenas(self, node: object, into: set[int]) -> None:
+        """The walk `_arenas_in` makes."""
+        match node:
+            case ast.Allocated():
+                self._collect_arenas(node.value, into)
+                self._collect_arenas(node.arena, into)
+                return
+            case ast.NameRef():
+                local = self._find_local(node.name)
+                if local is None:
+                    return
+                if self._is_arena(local):
+                    into.add(id(local))
+                else:
+                    into.update(local.arenas)
+                return
+            case ast.Lambda():
+                # What a lambda's body takes room from is its business when it
+                # runs; what it brings in is what the name says.
+                return
+        if isinstance(node, ast.Node):
+            for one in fields_of(node):
+                held = getattr(node, one.name)
+                if isinstance(held, ast.Node):
+                    self._collect_arenas(held, into)
+                elif isinstance(held, tuple):
+                    for each in held:
+                        if isinstance(each, ast.Node):
+                            self._collect_arenas(each, into)
+
+    def _made_in(self, name: str, value: ast.Expr | None, span: Span,
+                 assigning: bool = False) -> None:
+        """Write down where what a name now holds was made, and check it fits.
+
+        A name bound further out than an arena outlives it, so a value made in the
+        arena may not be put there (4614) -- the rule a reference follows, asked of
+        what an arena holds.  A name given something new is alive again whatever its
+        old value pointed at.
+        """
+        local = self._find_local(name)
+        if local is None or value is None:
+            return
+        if not _points_somewhere(self._held_by(local)):
+            local.arenas = frozenset()
+            return
+        made = self._arenas_in(value)
+        local.arenas = made
+        local.gone_at = None
+        if not assigning:
+            return
+        for one in made:
+            arena = self._arena_by_id.get(one)
+            if arena is not None and arena.depth > local.depth:
+                self._diags.emit(D.LANG_ARENA_VALUE_OUTLIVES, span,
+                                 name=name, arena=arena.name)
+                # Said once: what the name holds is not also reported as gone
+                # every time it is read after the arena is.
+                local.arenas = frozenset()
+                return
+
+    def _leaves_no_arena_behind(self, value: ast.Expr, opened_at: int,
+                                func: Function | None, span: Span,
+                                ty: Type | None = None) -> None:
+        """Check that what leaves a block or a call was not made in an arena it ends.
+
+        Leaving a call: an arena the call made is given back before it ends (4613),
+        while one its caller handed it is the caller's and lasts as the caller says.
+        Leaving a block: an arena made in the block is given back on the way out.
+        """
+        if func is not None:
+            ty = func.ty.ret
+        if ty is not None and not _points_somewhere(ty):
+            return
+        for one in self._arenas_in(value):
+            arena = self._arena_by_id.get(one)
+            if arena is None or arena.is_parameter:
+                continue
+            if func is not None:
+                self._diags.emit(D.LANG_ARENA_VALUE_ANSWERED, span,
+                                 name=func.name, arena=arena.name)
+                return
+            if arena.depth >= opened_at:
+                self._diags.emit(D.LANG_ARENA_VALUE_OUTLIVES, span,
+                                 name="what the block comes to", arena=arena.name)
+                return
+
+    def _given_back(self, arena: _Local, span: Span) -> None:
+        """Everything made in an arena goes with it, from here on.
+
+        Every name holding something made there is dead from this point, and stays
+        dead after the block this was written in ends: on some way here it was given
+        back, and a name read later cannot tell which way it came.  A name given
+        something new is alive again.
+        """
+        if self._emptied:
+            self._emptied[-1].add(id(arena))
+        for scope in self._scopes:
+            for local in scope.values():
+                if id(arena) in local.arenas and local.gone_at is None:
+                    local.gone_at = span
+                    local.gone_with = arena.name
+
+    def _before_a_turn(self, body: ast.Block) -> None:
+        """Kill what an arena given back inside a loop held from before the loop.
+
+        A turn that gives an arena back leaves the next turn reading what was made in
+        it before the loop began, which is behind it in the text and ahead of it in
+        time -- so it is dead for the whole of the loop.  What a turn makes for itself
+        is made again each turn and is not touched.
+        """
+        named: set[str] = set()
+        _empties_named(body, named)
+        for name in named:
+            arena = self._find_local(name)
+            if arena is not None and self._is_arena(arena):
+                for scope in self._scopes:
+                    for local in scope.values():
+                        if id(arena) in local.arenas and local.gone_at is None:
+                            local.gone_at = body.span
+                            local.gone_with = arena.name
+
+    def _all_given_back(self, opened_at: int, span: Span) -> None:
+        """Check that a pure function gives back every arena it made before leaving.
+
+        Room an arena took from the system stays taken until it is given back, so
+        leaving with one still holding room changes something that outlives the call
+        (4617).  What counts is an `⎕empty` on this way out -- written straight, or put
+        off with `defer`, which has run by the time this is asked.
+        """
+        if self._impure:
+            return
+        node, func = self._demanding
+        name = func.name if func is not None else ""
+        given = set().union(*self._emptied) if self._emptied else set()
+        for scope in self._scopes[opened_at:]:
+            for local in scope.values():
+                if local.is_parameter or not self._is_arena(local):
+                    continue
+                if self._held_by(local) is not ARENA:
+                    continue
+                if id(local) not in given and id(local) not in self._told_kept:
+                    self._diags.emit(D.LANG_ARENA_NEVER_GIVEN_BACK, local.span,
+                                     arena=local.name, name=name)
+                    self._told_kept.add(id(local))
+
+    def _lower_defer(self, stmt: ast.Defer) -> None:
+        """Put a statement off until the block it is written in is left.
+
+        Nothing is lowered here: it is lowered at every way out of the block, which
+        is where it runs.  What may be deferred is something to *do* -- an
+        expression or an assignment -- and not a way out of anything: a deferred
+        statement runs while the block is already being left, so a `return` or a
+        `break` in one would be leaving twice, and a `?` is a `return` (4612).
+        """
+        later = stmt.stmt
+        why: str | None = None
+        match later:
+            case ast.ReturnStmt() | ast.Break() | ast.Continue():
+                why = "it would leave a block that is already being left"
+            case ast.Defer():
+                why = "it would put off something already being put off"
+            case ast.VarDef():
+                why = "what it would name is gone as soon as it is named"
+            case ast.ExprStmt() | ast.AssignStmt() | ast.MemberAssign() \
+                    | ast.ElementAssign() | ast.DerefAssign():
+                if _leaves(later):
+                    why = "a '?' in it would leave a block already being left"
+            case _:
+                why = "it is not something to do"
+        if why is not None:
+            self._diags.emit(D.LANG_DEFER_NOT_A_THING_TO_DO, later.span, why=why)
+            return
+        self._deferred[-1].append(_Deferred(node=stmt, depth=len(self._scopes)))
+
+    def _run_deferred(self, builder: IRBuilder, func: Function | None,
+                      down_to: int) -> None:
+        """Lower what every block from the innermost down to *down_to* put off.
+
+        Innermost block first and, within a block, the last written first: what
+        was set up last is taken down first.  The frames stay where they are --
+        another way out of the same block will want them again.
+        """
+        if func is None:
+            return
+        for frame in range(len(self._deferred) - 1, down_to - 1, -1):
+            for entry in reversed(self._deferred[frame]):
+                if builder.is_terminated:
+                    return
+                self._lower_deferred(builder, func, entry)
+
+    def _lower_deferred(self, builder: IRBuilder, func: Function,
+                        entry: _Deferred) -> None:
+        """Lower one deferred statement, as it was meant where it was written.
+
+        The scopes are cut back to the ones open where it was written, so that a
+        name a block inside has taken over means what it meant there.  And it is
+        told about once: it is lowered at every way out, and a mistake in it is
+        still one mistake.
+        """
+        told = id(entry.node) in self._defer_told
+        self._defer_told.add(id(entry.node))
+        kept = (self._scopes, self._unit_scopes, self._diags)
+        self._scopes = kept[0][:entry.depth]
+        self._unit_scopes = kept[1][:entry.depth]
+        if told:
+            self._diags = DiagEngine(lambda _: None, kept[2].control,
+                                     kept[2].catalog)
+        try:
+            self._lower_stmt(builder, entry.node.stmt, func, False)
+            # A statement of its own, so what it lent out for itself is given back
+            # before the next one runs -- as at the end of any statement.
+            self._statement_ended()
+        finally:
+            self._scopes, self._unit_scopes, self._diags = kept
+
+    def _unrun_deferred(self, func: Function, frame: int) -> None:
+        """Check, once, what a block put off and no way out of it ever ran.
+
+        A block may never be left in the ordinary way -- a loop with no end, a call
+        that stops the program -- and what it put off is then never lowered at a way
+        out.  It is still written down and may still be wrong, so it is checked once
+        here, where nothing will run it.
+        """
+        pending = [entry for entry in self._deferred[frame]
+                   if id(entry.node) not in self._defer_told]
+        if not pending:
+            return
+        nowhere = func.add_block("deferred.unreached")
+        builder = IRBuilder(self._module, func)
+        builder.position_at(nowhere)
+        for entry in pending:
+            if builder.is_terminated:
+                break
+            self._lower_deferred(builder, func, entry)
+        if not builder.is_terminated:
+            builder.unreachable()
+
     def _returning(self, builder: IRBuilder, value: Value | None,
                    span: Span) -> None:
         """Check what a `post` clause demands, and then return.
@@ -5015,6 +5384,13 @@ class Checker:
         value.
         """
         node, func = self._demanding
+        if func is not None:
+            # What every open block put off, innermost first, after the answer was
+            # worked out and before anything is said about it.
+            self._run_deferred(builder, func, 0)
+            if builder.is_terminated:
+                return
+            self._all_given_back(0, span)
         if node is not None and func is not None:
             for clause in node.clauses:
                 if clause.kind is not ast.ClauseKind.POST \
@@ -5244,22 +5620,44 @@ class Checker:
         of an arm of a `match`.  `produces` says the block is an arm a value is
         wanted of, in which case its last statement has to have one.
         """
-        count = len(block.stmts)
-        answer: Value | None = None
-        for index, stmt in enumerate(block.stmts):
-            is_last = index == count - 1
-            if builder.is_terminated:
-                self._diags.emit(D.LANG_STMT_UNREACHABLE, stmt.span)
-                return None
-            if is_last and produces:
-                answer = self._lower_yielding(builder, stmt, func, wanted)
-            else:
-                self._lower_attributed_stmt(builder, stmt, func,
-                                            as_result and is_last)
-            self._statement_ended()
-        if produces and answer is None and not builder.is_terminated:
-            self._diags.emit(D.LANG_MATCH_ARM_HAS_NO_VALUE, block.span)
-        return answer
+        self._deferred.append([])
+        self._emptied.append(set())
+        frame = len(self._deferred) - 1
+        opened_at = len(self._scopes)
+        try:
+            count = len(block.stmts)
+            answer: Value | None = None
+            for index, stmt in enumerate(block.stmts):
+                is_last = index == count - 1
+                if builder.is_terminated:
+                    self._diags.emit(D.LANG_STMT_UNREACHABLE, stmt.span)
+                    return None
+                if is_last and produces:
+                    answer = self._lower_yielding(builder, stmt, func, wanted)
+                else:
+                    self._lower_attributed_stmt(builder, stmt, func,
+                                                as_result and is_last)
+                self._statement_ended()
+            if produces and answer is None and not builder.is_terminated:
+                self._diags.emit(D.LANG_MATCH_ARM_HAS_NO_VALUE, block.span)
+            if produces and answer is not None and block.stmts:
+                # What the block comes to leaves it, and an arena made inside it
+                # does not: it is given back on the way out.
+                last = block.stmts[-1]
+                if isinstance(last, ast.ExprStmt):
+                    self._leaves_no_arena_behind(last.value, opened_at, None,
+                                                 last.span,
+                                                 self._value_type_of(answer))
+            # Run off the end: what this block put off is done now, after what
+            # it comes to was worked out and before anything after it runs.
+            if not builder.is_terminated:
+                self._run_deferred(builder, func, frame)
+                self._all_given_back(opened_at, block.span)
+            return answer
+        finally:
+            self._unrun_deferred(func, frame)
+            self._deferred.pop()
+            self._emptied.pop()
 
     def _lower_yielding(self, builder: IRBuilder, stmt: ast.Stmt, func: Function,
                         wanted: Type | None) -> Value | None:
@@ -5338,14 +5736,22 @@ class Checker:
                 agrees = (stmt.value is None) == (func.ty.ret is VOID)
                 if stmt.explicit and is_last and agrees:
                     self._diags.emit(D.LANG_FUNCDEF_RETURN_REDUNDANT, stmt.span)
+                if stmt.value is not None:
+                    self._leaves_no_arena_behind(stmt.value, 0, func, stmt.span)
                 self._lower_return(builder, stmt, func)
             case ast.VarDef():
                 self._lower_local(builder, stmt)
+                self._made_in(stmt.name, stmt.value, stmt.span)
             case ast.AssignStmt():
                 # An assignment stands for the variable it changed, so it can be
                 # a function's result the way any other last statement can.
                 wants_value = is_last and func.ty.ret is not VOID
+                if wants_value:
+                    self._leaves_no_arena_behind(stmt.value, 0, func, stmt.span)
                 result = self._lower_assignment(builder, stmt, wants_value)
+                if not stmt.more:
+                    self._made_in(stmt.name, stmt.value, stmt.span,
+                                  assigning=True)
                 if wants_value and result is not None:
                     # The mismatch here is between what the statement produced
                     # and what the function returns, which is what a return
@@ -5366,6 +5772,8 @@ class Checker:
                 self._lower_member_assign(builder, stmt)
             case ast.DerefAssign():
                 self._lower_deref_assign(builder, stmt)
+            case ast.Defer():
+                self._lower_defer(stmt)
             case ast.Break():
                 self._lower_break(builder, stmt)
             case ast.Continue():
@@ -5378,6 +5786,7 @@ class Checker:
                 # The value of the last statement is the function's result, which
                 # is why the canonical form of the language omits the keyword.
                 if is_last and func.ty.ret is not VOID:
+                    self._leaves_no_arena_behind(stmt.value, 0, func, stmt.span)
                     value = self._lower_into(builder, stmt.value, func.ty.ret,
                                              stmt.span)
                     self._returning(builder, value, stmt.span)
@@ -6570,8 +6979,12 @@ class Checker:
         inner = IRBuilder(self._module, func)
         outer = (self._scopes, self._addressed, self._answering, self._impure,
                  self._carried, self._loops, self._outside, self._initializing,
-                 self._assigning, self._operand_of, self._handing_over)
+                 self._assigning, self._operand_of, self._handing_over,
+                 self._deferred, self._emptied)
         self._scopes, self._addressed = [], set()
+        # What the body this call stands in put off is that body's: a `return` in
+        # here leaves this function and runs only what this one put off.
+        self._deferred, self._emptied = [], []
         self._answering, self._impure = func.ty.ret, func.attrs.impure
         self._carried, self._loops, self._outside = set(), [], []
         self._initializing = self._assigning = self._operand_of = None
@@ -6598,7 +7011,8 @@ class Checker:
         finally:
             (self._scopes, self._addressed, self._answering, self._impure,
              self._carried, self._loops, self._outside, self._initializing,
-             self._assigning, self._operand_of, self._handing_over) = outer
+             self._assigning, self._operand_of, self._handing_over,
+             self._deferred, self._emptied) = outer
 
     def _lower_generic(self, builder: IRBuilder, expr: ast.Call,
                        written: _Generic, expected: Type | None) -> Value:
@@ -7180,7 +7594,9 @@ class Checker:
         arriving = [block.add_param(one, "")
                     for one in (_ENVIRONMENT, *params)]
         outer = (self._scopes, self._addressed, self._answering, self._impure,
-                 self._carried, self._loops, self._outside)
+                 self._carried, self._loops, self._outside, self._deferred,
+                 self._emptied)
+        self._deferred, self._emptied = [], []
         # A lambda's body binds its own names, so a reference out in the body
         # around it says nothing about a name of the same spelling in here.
         outer_borrows, self._borrows = self._borrows, []
@@ -7228,7 +7644,8 @@ class Checker:
             self._pop_scope()
         finally:
             (self._scopes, self._addressed, self._answering, self._impure,
-             self._carried, self._loops, self._outside) = outer
+             self._carried, self._loops, self._outside, self._deferred,
+             self._emptied) = outer
             self._borrows = outer_borrows
         return func
 
@@ -8662,6 +9079,22 @@ class Checker:
                 break
         return tuple(found)
 
+    def _lower_scoped(self, builder: IRBuilder, expr: ast.Scoped,
+                      wanted: Type | None) -> Value:
+        """Lower statements a macro wrote where a value stands.
+
+        A scope of their own and a block whose last statement is the value: what
+        they bound is gone and what they put off has run when the value is used.
+        """
+        self._push_scope()
+        try:
+            found = self._lower_block(builder, expr.body, builder.function,
+                                      as_result=False, wanted=wanted,
+                                      produces=True)
+        finally:
+            self._pop_scope()
+        return found if found is not None else UndefConst(ERROR)
+
     def _lower_if(self, builder: IRBuilder, stmt: ast.If, func: Function,
                   wanted: Type | None, produces: bool) -> Value:
         """Check and lower an `if`, its `elif`s and its `else`.
@@ -8832,6 +9265,7 @@ class Checker:
         one = self._begin_loop(label, header, after, carried, (), None,
                                produces, produces and stmt.alternative is None,
                                handing)
+        self._before_a_turn(stmt.body)
         self._lower_block(builder, stmt.body, func, as_result=False)
         self._end_loop(label)
         self._pop_scope()
@@ -8934,6 +9368,7 @@ class Checker:
         one = self._begin_loop(label, header, after, carried, state, found.step,
                                produces, produces and stmt.alternative is None,
                                handing)
+        self._before_a_turn(stmt.body)
         self._lower_block(builder, stmt.body, func, as_result=False)
         self._end_loop(label)
         self._pop_scope()
@@ -8983,7 +9418,8 @@ class Checker:
             return None
         one = _Loop(label=label.name, span=label.span, header=header,
                     after=after, carried=carried, state=state, step=step,
-                    answers=answers, wraps=wraps, handing=handing)
+                    answers=answers, wraps=wraps, handing=handing,
+                    frame=len(self._deferred))
         self._loops.append(one)
         return one
 
@@ -9038,6 +9474,11 @@ class Checker:
         if found is None or builder.block is None:
             return
         handed = self._handed_over(builder, stmt, found)
+        # Leaving every block opened since the loop began, so what they put off is
+        # done now -- after what is handed over was worked out, as a return's is.
+        self._run_deferred(builder, self._demanding[1], found.frame)
+        if builder.is_terminated:
+            return
         carried = tuple(local.value for local in found.carried)
         builder.br(found.after,
                    (*carried, builder.memory()) if handed is None
@@ -9101,6 +9542,10 @@ class Checker:
         """
         found = self._find_loop(stmt.label)
         if found is None or builder.block is None:
+            return
+        # The next turn begins with the body left, which runs what it put off.
+        self._run_deferred(builder, self._demanding[1], found.frame)
+        if builder.is_terminated:
             return
         moved = found.step(builder, found.state) if found.step is not None \
             else found.state
@@ -10106,8 +10551,10 @@ class Checker:
             # where a report about nothing reading it should point.
             local.value_span = stmt.span
             local.read = False
-        if memory is not None:
-            builder.set_memory(memory)
+        # Where no way through wrote anything, the token is the one every way that
+        # arrives carries -- and not whatever an arm that left the function wrote
+        # last, which nothing after the join can see.
+        builder.set_memory(memory if memory is not None else outcomes[-1][2])
         return produced if produced is not None else UndefConst(VOID)
 
     def _check_value_is_used(self, expr: ast.Expr) -> None:
@@ -10605,6 +11052,8 @@ class Checker:
             case ast.If():
                 return self._lower_if(builder, expr, builder.function, expected,
                                       True)
+            case ast.Scoped():
+                return self._lower_scoped(builder, expr, expected)
             case ast.While():
                 return self._lower_while(builder, expr, builder.function,
                                          expected, True)
@@ -10962,6 +11411,11 @@ class Checker:
         builder.condbr(builder.failed(value, expr.span), leaving, answered,
                        span=expr.span)
         builder.position_at(leaving)
+        # What the way out runs -- what was put off -- may write memory and give
+        # names new values, and none of it happened on the way that goes on.
+        token = builder.memory()
+        held = [(local, local.value, local.value_span)
+                for scope in self._scopes for local in scope.values()]
         # What is handed back is an answer nothing may read beside the truth
         # value that forbids reading it -- and, where the error carries
         # something, that something, taken from the failure being propagated.
@@ -10971,6 +11425,9 @@ class Checker:
             expr.span,
             None if answering.err is None
             else builder.error(value, answering.err, expr.span)), expr.span)
+        builder.set_memory(token)
+        for local, was, where in held:
+            local.value, local.value_span = was, where
         builder.position_at(answered)
         return builder.unwrap(value, ty.ok, expr.span)
 
@@ -14082,18 +14539,54 @@ class Checker:
                              name=EMPTY_NAME, expected=1, found=len(expr.args))
             return UndefConst(ERROR)
         written = expr.args[0]
+        owner = self._arena_owned(written)
+        if owner is None:
+            return UndefConst(ERROR)
         place = self._arena_place(builder, written)
         if place is None:
             return UndefConst(ERROR)
         if expected is not None:
             self._report_mismatch(expr.span, VOID, expected)
             return UndefConst(ERROR)
-        if not self._arena_in_hand:
-            self._an_effect(D.LANG_PURE_CHANGES_A_VARIABLE, expr.span,
-                            name=HEAP_NAME)
+        self._given_back(owner, expr.span)
         builder.call(tables.release_function(self._module), (place,), VOID,
                      expr.span)
         return UndefConst(VOID)
+
+    def _arena_owned(self, written: ast.Expr) -> _Local | None:
+        """The arena an `⎕empty` names, where it is this body's to give back.
+
+        Only what made an arena gives it back (4616).  One handed over by reference
+        is its maker's, who may be holding things made in it; `⎕heap` and one at the
+        top level last as long as the program, and anything may be holding things
+        made in those.
+        """
+        if isinstance(written, ast.Deref) \
+                and isinstance(written.operand, ast.NameRef):
+            # The arena a reference names, which is whoever's the reference is.
+            written = written.operand
+        name = written.name if isinstance(written, ast.NameRef) else \
+            _about_the_shape(written)
+        if isinstance(written, ast.NameRef):
+            local = self._find_local(written.name)
+            if local is not None and self._is_arena(local):
+                if self._held_by(local) is ARENA:
+                    return local
+                self._diags.emit(D.LANG_ARENA_NOT_YOURS_TO_EMPTY, written.span,
+                                 arena=name, whose="one this was handed")
+                return None
+            if local is None and isinstance(self._provided(written.name),
+                                            GlobalVar):
+                self._diags.emit(D.LANG_ARENA_NOT_YOURS_TO_EMPTY, written.span,
+                                 arena=name,
+                                 whose="there for as long as the program is")
+                return None
+        if isinstance(written, ast.Member):
+            self._diags.emit(D.LANG_ARENA_NOT_YOURS_TO_EMPTY, written.span,
+                             arena=name, whose="there for as long as the program is")
+            return None
+        self._diags.emit(D.LANG_EMPTY_NOT_AN_ARENA, written.span, found=name)
+        return None
 
     def _arena_place(self, builder: IRBuilder, written: ast.Expr) -> Value | None:
         """Where the arena an expression names keeps its state, or nothing."""
@@ -15252,6 +15745,12 @@ class Checker:
             return self._function_as_a_value(
                 builder, self._provided(ref.name), ref, expected)
         if local is not None and self._would_copy(local, ref):
+            return UndefConst(ERROR)
+        if local is not None and local.gone_at is not None:
+            # Read all the same, so that what is said about it is the one thing.
+            local.read = True
+            self._diags.emit(D.LANG_ARENA_VALUE_GIVEN_BACK, ref.span,
+                             name=ref.name, arena=local.gone_with)
             return UndefConst(ERROR)
         if local is not None and local.placed:
             # The name stands for storage of its own, because somewhere in this

@@ -1,0 +1,12 @@
+※ pl4g-test: compile=error
+※ pl4g-test: expect-diag 4612 LANG_DEFER_NOT_A_THING_TO_DO
+
+※ What `defer` puts off runs while the block is already being left, so a way out of
+※ something cannot be put off: a `return` there would leave twice.  The same goes for
+※ `break`, `continue`, a `?` that hands a failure on, another `defer`, and a `let`, whose
+※ name would be gone as soon as it was made.
+
+@[startup]
+fn main() → u6:
+    defer return 1u6
+    0u6

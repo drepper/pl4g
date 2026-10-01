@@ -2874,6 +2874,10 @@
         },
         {
           "type": "SYMBOL",
+          "name": "defer_statement"
+        },
+        {
+          "type": "SYMBOL",
           "name": "while_statement"
         },
         {
@@ -2932,6 +2936,23 @@
           "content": {
             "type": "SYMBOL",
             "name": "label"
+          }
+        }
+      ]
+    },
+    "defer_statement": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "STRING",
+          "value": "defer"
+        },
+        {
+          "type": "FIELD",
+          "name": "statement",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_bare_statement"
           }
         }
       ]
