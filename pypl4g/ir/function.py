@@ -173,6 +173,11 @@ class ReturnStyle(Enum):
     """
 
     TWO_IN_REGISTERS = "two-in-registers"
+    #: The language's own convention answers three: a string and a list are
+    #: three words -- where, how many, and the allocator -- and what a great many
+    #: small functions answer.  The system's conventions answer two, which is
+    #: what anything a C compiler made expects.
+    THREE_IN_REGISTERS = "three-in-registers"
 
     def in_registers(self, ty: Type) -> bool:
         """Whether an answer of *ty* travels in registers rather than storage.
@@ -186,6 +191,8 @@ class ReturnStyle(Enum):
         match self:
             case ReturnStyle.TWO_IN_REGISTERS:
                 return len(parts_of(ty)) <= 2
+            case ReturnStyle.THREE_IN_REGISTERS:
+                return len(parts_of(ty)) <= 3
         raise AssertionError(self)
 
 
@@ -248,7 +255,16 @@ class Function:
     #: property of the function that answers, as the convention it is called by
     #: is, and for the same reason: what a caller has to do to receive the
     #: answer is settled by the callee and by nothing else.
-    answering: ReturnStyle = ReturnStyle.TWO_IN_REGISTERS
+    answering: ReturnStyle | None = None
+
+    @property
+    def answer_style(self) -> ReturnStyle:
+        """The style this function answers in: what it says, or what its
+        convention answers in where it says nothing."""
+        if self.answering is not None:
+            return self.answering
+        return (ReturnStyle.THREE_IN_REGISTERS if self.cconv == DEFAULT_CCONV
+                else ReturnStyle.TWO_IN_REGISTERS)
 
     @property
     def is_declaration(self) -> bool:

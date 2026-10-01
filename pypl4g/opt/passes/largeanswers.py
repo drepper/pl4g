@@ -57,7 +57,7 @@ def through_storage(func: Function) -> bool:
     room and the answer is written into it, which is the one way such a value
     can outlive the call that made it.
     """
-    if func.ty.ret is VOID or func.answering.in_registers(func.ty.ret):
+    if func.ty.ret is VOID or func.answer_style.in_registers(func.ty.ret):
         return False
     if held_in_memory(func.ty.ret):
         return True

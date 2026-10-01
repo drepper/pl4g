@@ -568,7 +568,7 @@ def test_the_memory_chain_starts_in_the_entry_block(compile_source,  # noqa: ANN
     assert "mem.start" in entry, text
 
 
-def test_an_answer_of_three_parts_goes_through_the_callers_storage(  # noqa: ANN001
+def test_an_answer_of_four_parts_goes_through_the_callers_storage(  # noqa: ANN001
         compile_source, tmp_path) -> None:  # noqa: ANN001
     """The pass gives the function a place to write into and the caller makes it.
 
@@ -577,15 +577,15 @@ def test_an_answer_of_three_parts_goes_through_the_callers_storage(  # noqa: ANN
     and the call hands over a place it made for the purpose.
     """
     proc, output = compile_source(
-        "fn three() \N{RIGHTWARDS ARROW} \N{LEFT ANGLE BRACKET}u8, u8, u8\N{RIGHT ANGLE BRACKET}:\n"
-        "    \N{LEFT ANGLE BRACKET}1u8, 2u8, 3u8\N{RIGHT ANGLE BRACKET}\n\n"
+        "fn three() \N{RIGHTWARDS ARROW} \N{LEFT ANGLE BRACKET}u8, u8, u8, u8\N{RIGHT ANGLE BRACKET}:\n"
+        "    \N{LEFT ANGLE BRACKET}1u8, 2u8, 3u8, 4u8\N{RIGHT ANGLE BRACKET}\n\n"
         "@[startup, impure]\nfn main() \N{RIGHTWARDS ARROW} u6:\n"
-        "    let t: \N{LEFT ANGLE BRACKET}u8, u8, u8\N{RIGHT ANGLE BRACKET} = three()\n"
+        "    let t: \N{LEFT ANGLE BRACKET}u8, u8, u8, u8\N{RIGHT ANGLE BRACKET} = three()\n"
         "    if t\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}0\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET} = 1u8:\n        0u6\n    else:\n        1u6\n",
         "--emit=ir", "-O0")
     assert proc.returncode == 0, describe(proc)
     text = output.read_text(encoding="utf-8")
-    assert "fn @three(ptr<mut \N{LEFT ANGLE BRACKET}u8, u8, u8\N{RIGHT ANGLE BRACKET}>) \N{RIGHTWARDS ARROW} void" in text, text
+    assert "fn @three(ptr<mut \N{LEFT ANGLE BRACKET}u8, u8, u8, u8\N{RIGHT ANGLE BRACKET}>) \N{RIGHTWARDS ARROW} void" in text, text
     # It writes through the pointer now, which the textual form says: a call to
     # it changes memory that outlives it, so a form that left it out would read
     # back as a module where the call may be moved and repeated.  What it does
@@ -595,13 +595,13 @@ def test_an_answer_of_three_parts_goes_through_the_callers_storage(  # noqa: ANN
     assert "\N{RIGHTWARDS ARROW} void internal cconv(pl4g) answer-in-storage" \
         in text, text
     assert " impure" not in text.split("fn @main")[0], text
-    assert "frame.ptr<mut \N{LEFT ANGLE BRACKET}u8, u8, u8\N{RIGHT ANGLE BRACKET}>" in text, text
+    assert "frame.ptr<mut \N{LEFT ANGLE BRACKET}u8, u8, u8, u8\N{RIGHT ANGLE BRACKET}>" in text, text
     assert "ret.\N{LEFT ANGLE BRACKET}" not in text, text
 
 
 def test_an_answer_of_two_parts_stays_in_registers(compile_source,  # noqa: ANN001
                                                    tmp_path) -> None:  # noqa: ANN001
-    """Two is what the style answers in registers, so nothing is rewritten."""
+    """Two is what every style answers in registers, so nothing is rewritten."""
     proc, output = compile_source(
         "fn two() \N{RIGHTWARDS ARROW} \N{LEFT ANGLE BRACKET}u8, u8\N{RIGHT ANGLE BRACKET}:\n"
         "    \N{LEFT ANGLE BRACKET}1u8, 2u8\N{RIGHT ANGLE BRACKET}\n\n"
@@ -615,17 +615,35 @@ def test_an_answer_of_two_parts_stays_in_registers(compile_source,  # noqa: ANN0
     assert "frame.ptr" not in text, text
 
 
+def test_a_string_answer_stays_in_registers(compile_source,  # noqa: ANN001
+                                           tmp_path) -> None:  # noqa: ANN001
+    """A string is three words, and the language's own convention answers three.
+
+    Where, how many, and the allocator: what a great many small functions answer,
+    so it travels as it is made and not through the caller's storage.
+    """
+    proc, output = compile_source(
+        "fn named() \N{RIGHTWARDS ARROW} str:\n    \"x\"\n\n"
+        "@[startup]\nfn main() \N{RIGHTWARDS ARROW} u6:\n"
+        "    if named() = \"x\": 0u6 else: 1u6\n",
+        "--emit=ir", "-O0")
+    assert proc.returncode == 0, describe(proc)
+    text = output.read_text(encoding="utf-8")
+    assert "fn @named() \N{RIGHTWARDS ARROW} str" in text, text
+    assert "answer-in-storage" not in text, text
+
+
 #: A call whose answer goes through the caller's storage and whose answer the
 #: folder then makes nobody's.  `three` is held away from the inliner, so what
 #: is left is a call; `pick` is not, so the condition it branches on is settled
 #: once it stands in `main` and the arm that reads the answer goes with it.
 UNREAD = """\
 @[inline(never)]
-fn three() \N{RIGHTWARDS ARROW} \N{LEFT ANGLE BRACKET}u8, u8, u8\N{RIGHT ANGLE BRACKET}:
-    \N{LEFT ANGLE BRACKET}1u8, 2u8, 3u8\N{RIGHT ANGLE BRACKET}
+fn three() \N{RIGHTWARDS ARROW} \N{LEFT ANGLE BRACKET}u8, u8, u8, u8\N{RIGHT ANGLE BRACKET}:
+    \N{LEFT ANGLE BRACKET}1u8, 2u8, 3u8, 4u8\N{RIGHT ANGLE BRACKET}
 
 fn pick(c: bool) \N{RIGHTWARDS ARROW} u8:
-    let t: \N{LEFT ANGLE BRACKET}u8, u8, u8\N{RIGHT ANGLE BRACKET} = three()
+    let t: \N{LEFT ANGLE BRACKET}u8, u8, u8, u8\N{RIGHT ANGLE BRACKET} = three()
     if c:
         t\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}0\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}
     else:
