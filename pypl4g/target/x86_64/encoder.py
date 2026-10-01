@@ -261,7 +261,7 @@ def encode(inst: MCInst) -> tuple[bytes, list[MCFixup]]:
     desc = inst.desc
     assert isinstance(desc, X86InstDesc)
     operands = inst.operands
-    span = inst.span if inst.span.is_valid else None
+    span = inst.span if inst.span is not None and inst.span.is_valid else None
     out = bytearray()
     fixups: list[MCFixup] = []
 

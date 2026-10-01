@@ -40,7 +40,6 @@ from . import strings, tables
 
 #: What the two are called.
 OWN_SYMBOL: Final[str] = "__pl4g_own"
-FREE_SYMBOL: Final[str] = "__pl4g_free"
 
 _LAYOUT: Final[DataLayout] = DataLayout(pointer_size=8)
 
@@ -69,14 +68,6 @@ def points(ty: Type) -> bool:
             return False
     from .check import _points_somewhere  # pylint: disable=import-outside-toplevel
     return _points_somewhere(ty)
-
-
-def free_function(module: Module) -> Function:
-    """The one that gives one object back to its allocator, declared on first ask."""
-    return tables._declared(  # pylint: disable=protected-access
-        module, FREE_SYMBOL,
-        (module.types.ptr_type(ARENA, mutable=True),
-         module.types.ptr_type(U8, mutable=True), U64), VOID)
 
 
 def own_function(module: Module, ty: Type) -> Function:
@@ -171,9 +162,8 @@ def _build_own(module: Module, func: Function, ty: Type) -> None:
 
 def free_storage(builder: IRBuilder, arena: Value, value: Value,
                  ty: Type) -> None:
-    """Give a string's bytes or a list's run back to the allocator they came from."""
-    module = builder.module
-    start, count = _parts(builder, value, ty)
-    builder.call(free_function(module),
-                 (arena, builder.cast(CastKind.BITCAST, start, _bytes(module)),
-                  _size(builder, ty, count)), VOID)
+    """Give a string's bytes or a list's run back to the allocator they came from.
+
+    Nothing yet: until every value carries its allocator, one given back to the
+    heap could still be named somewhere else.
+    """

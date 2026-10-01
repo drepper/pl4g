@@ -1,4 +1,4 @@
-/* The I/O runtime.
+/* The runtime: I/O, and the heap `⎕heap` names.
  *
  * Written in C and compiled for every architecture the compiler generates for,
  * ahead of time; what is packaged with the compiler is the code and its
@@ -24,6 +24,7 @@ typedef int i32;
 # define NR_WRITE 1
 # define NR_WRITEV 20
 # define NR_MMAP 9
+# define NR_MUNMAP 11
 # define NR_IO_URING_SETUP 425
 # define NR_IO_URING_ENTER 426
 
@@ -45,6 +46,7 @@ static inline i64 sys(i64 n, i64 a, i64 b, i64 c, i64 d, i64 e, i64 f)
 # define NR_WRITE 64
 # define NR_WRITEV 66
 # define NR_MMAP 222
+# define NR_MUNMAP 215
 # define NR_IO_URING_SETUP 425
 # define NR_IO_URING_ENTER 426
 
@@ -69,6 +71,7 @@ static inline i64 sys(i64 n, i64 a, i64 b, i64 c, i64 d, i64 e, i64 f)
 # define NR_WRITE 64
 # define NR_WRITEV 66
 # define NR_MMAP 222
+# define NR_MUNMAP 215
 # define NR_IO_URING_SETUP 425
 # define NR_IO_URING_ENTER 426
 
@@ -546,4 +549,109 @@ void pl4g_io_drain(struct pl4g_ring *r)
   }
   for (int at = 0; at < ENTRIES; ++at)
     r->held[at] = FREE;
+}
+
+/* -- the heap ---------------------------------------------------------------- */
+
+/* What `⎕heap` is: an allocator that gives back one object at a time.
+ *
+ * **The caller says how big what it gives back is**, as it said how big what it
+ * asked for was: the compiler knows the size of every object it frees, so there is
+ * no header in front of an object to say it, and an object of sixteen bytes takes
+ * sixteen.  C23's `free_sized`, C++'s sized `delete` and Rust's `dealloc`, which
+ * takes the layout, are the same interface.
+ *
+ * Sizes are rounded to a *class*: sixteen bytes apart up to 256, and then powers of
+ * two up to 64 KiB.  Each class keeps a list of what was given back to it, linked
+ * through the objects themselves, and what is asked of a class with nothing on its
+ * list is cut from a slab taken from the system.  Anything larger than the largest
+ * class is mapped on its own and unmapped when it is given back, its size being
+ * known exactly.
+ *
+ * One thread: nothing here is shared with another, the language having none. */
+
+#define HEAP_GRAIN 16UL
+#define HEAP_SMALL 256UL
+#define HEAP_LARGEST 65536UL
+#define HEAP_SLAB (1UL << 20)
+#define HEAP_PAGE 4096UL
+/* sixteen classes sixteen apart, and eight powers of two from 512 to 64 KiB */
+#define HEAP_CLASSES 24
+
+struct heap_free {
+  struct heap_free *next;
+};
+
+static struct heap_free *heap_lists[HEAP_CLASSES];
+static unsigned char *heap_bump;
+static unsigned char *heap_end;
+
+/* Which class a size falls in, and how big the objects of that class are. */
+static u64 heap_class(u64 size, u64 *rounded)
+{
+  if (size <= HEAP_SMALL) {
+    u64 n = size == 0 ? 1 : (size + HEAP_GRAIN - 1) / HEAP_GRAIN;
+    *rounded = n * HEAP_GRAIN;
+    return n - 1;
+  }
+  u64 room = 2 * HEAP_SMALL;
+  u64 at = HEAP_SMALL / HEAP_GRAIN;
+  while (room < size) {
+    room *= 2;
+    at += 1;
+  }
+  *rounded = room;
+  return at;
+}
+
+static u64 heap_pages(u64 size)
+{
+  return (size + HEAP_PAGE - 1) & ~(HEAP_PAGE - 1);
+}
+
+/* Room for `size` bytes, aligned to sixteen; nothing where the system has none. */
+void *pl4g_heap_alloc(u64 size)
+{
+  if (size > HEAP_LARGEST) {
+    i64 room = sys(NR_MMAP, 0, heap_pages(size), PROT_READ_WRITE,
+                   MAP_PRIVATE_ANONYMOUS, -1, 0);
+    return room < 0 ? 0 : (void *) room;
+  }
+  u64 rounded;
+  u64 c = heap_class(size, &rounded);
+  struct heap_free *found = heap_lists[c];
+  if (found != 0) {
+    heap_lists[c] = found->next;
+    return found;
+  }
+  if (heap_bump == 0 || (u64) (heap_end - heap_bump) < rounded) {
+    /* What is left of the old slab is not worth a list of its own: it is less
+       than one object of this class, and the classes below will not ask for it
+       often enough to matter. */
+    i64 room = sys(NR_MMAP, 0, HEAP_SLAB, PROT_READ_WRITE,
+                   MAP_PRIVATE_ANONYMOUS, -1, 0);
+    if (room < 0)
+      return 0;
+    heap_bump = (unsigned char *) room;
+    heap_end = heap_bump + HEAP_SLAB;
+  }
+  void *made = heap_bump;
+  heap_bump += rounded;
+  return made;
+}
+
+/* Give back what `pl4g_heap_alloc(size)` answered. */
+void pl4g_heap_free(void *at, u64 size)
+{
+  if (at == 0)
+    return;
+  if (size > HEAP_LARGEST) {
+    sys(NR_MUNMAP, (i64) at, heap_pages(size), 0, 0, 0, 0);
+    return;
+  }
+  u64 rounded;
+  u64 c = heap_class(size, &rounded);
+  struct heap_free *one = (struct heap_free *) at;
+  one->next = heap_lists[c];
+  heap_lists[c] = one;
 }

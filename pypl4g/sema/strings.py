@@ -37,7 +37,6 @@ from ..ir.inst import BinOp, CastKind, CmpPred
 from ..ir.module import Module
 from ..ir.types import ARENA, CHAR, I64, MEM, PtrType, Type, U8, U32, U64
 from ..ir.value import Value
-from .tables import ALLOC_SYMBOL
 
 #: What each of the two is called.  The names carry the compiler's own prefix
 #: for the same reason every generated symbol does: nothing a program can write
@@ -111,16 +110,34 @@ def next_function(module: Module) -> Function:
     return func
 
 
-def join_function(module: Module) -> Function:
-    """The one that puts two strings' bytes end to end, built on first ask."""
+def join_function(module: Module, heap: bool = False) -> Function:
+    """The one that puts two strings' bytes end to end, built on first ask.
+
+    Two of them: one taking the allocator to take room from, and one for `⎕heap`,
+    which is the allocator a join names where nothing says another and which is
+    then called straight away rather than through the dispatch.
+    """
     arena = module.types.ptr_type(ARENA, mutable=True)
+    pieces = (bytes_type(module), U64, bytes_type(module), U64)
     func, fresh = _generated(
-        module, JOIN_SYMBOL,
-        (arena, bytes_type(module), U64, bytes_type(module), U64),
-        bytes_type(module), impure=True)
+        module, ".".join((JOIN_SYMBOL, "heap")) if heap else JOIN_SYMBOL,
+        pieces if heap else (arena, *pieces), bytes_type(module), impure=True)
     if fresh:
-        _build_join(module, func)
+        _build_join(module, func, heap)
     return func
+
+
+def joined(builder: IRBuilder, arena: Value, pieces: tuple[Value, ...],
+           answer: Type, span=None) -> Value:
+    """Call the join: the one for `⎕heap` where *arena* is known to be the heap."""
+    from .tables import is_heap  # noqa: PLC0415 -- one place
+    from ..source.location import INVALID_SPAN  # noqa: PLC0415
+    where = INVALID_SPAN if span is None else span
+    if is_heap(arena):
+        return builder.call(join_function(builder.module, heap=True), pieces,
+                            answer, where)
+    return builder.call(join_function(builder.module), (arena, *pieces), answer,
+                        where)
 
 
 def char_function(module: Module) -> Function:
@@ -476,7 +493,7 @@ def _fold(builder: IRBuilder, bytes_: Value, at: Value, leading: Value,
     builder.br(answered, (found, builder.int_const(U64, count)))  # type: ignore[arg-type]
 
 
-def _build_join(module: Module, func: Function) -> None:
+def _build_join(module: Module, func: Function, heap: bool = False) -> None:
     """Build the one that puts two strings' bytes end to end.
 
     Two loops and no cleverness: this is where a copy of a length nobody knows
@@ -487,26 +504,28 @@ def _build_join(module: Module, func: Function) -> None:
     entry = func.add_block()
     builder = IRBuilder(module, func)
     builder.position_at(entry)
-    arena = entry.add_param(module.types.ptr_type(ARENA, mutable=True), "arena")
+    arena = None if heap else entry.add_param(
+        module.types.ptr_type(ARENA, mutable=True), "arena")
     first = entry.add_param(bytes_type(module), "first")
     first_len = entry.add_param(U64, "first.length")
     second = entry.add_param(bytes_type(module), "second")
     second_len = entry.add_param(U64, "second.length")
-    alloc = _allocator(module)
     room = builder.binary(BinOp.WRAP_ADD, first_len, second_len)
-    into = builder.call(alloc, (arena, room), bytes_type(module))
+    if arena is None:
+        from .tables import heap_new_function  # noqa: PLC0415 -- one place
+        into = builder.call(heap_new_function(module), (room,), bytes_type(module))
+    else:
+        into = builder.call(_allocator(module), (arena, room), bytes_type(module))
     _copy(builder, into, builder.int_const(U64, 0), first, first_len)
     _copy(builder, into, first_len, second, second_len)
     builder.ret(into)
 
 
 def _allocator(module: Module) -> Function:
-    """The allocator, declared the way the table runtime declares it."""
-    from .tables import _declared  # noqa: PLC0415 -- one declaration, one place
+    """The allocator: whichever the arena handed over names."""
+    from .tables import allocator_function  # noqa: PLC0415 -- one place
 
-    return _declared(module, ALLOC_SYMBOL,
-                     (module.types.ptr_type(ARENA, mutable=True), U64),
-                     bytes_type(module))
+    return allocator_function(module)
 
 
 def _copy(builder: IRBuilder, into: Value, offset: Value, source: Value,

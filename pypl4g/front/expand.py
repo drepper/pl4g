@@ -47,7 +47,8 @@ from ..ir.module import Module
 from ..ir.function import Function
 from ..source.location import INVALID_SPAN, Span
 from . import ast
-from ..target.allocator import ALLOC_SYMBOL, FREE_SYMBOL, GROW_SYMBOL
+from ..target.allocator import ALLOC_SYMBOL, GROW_SYMBOL
+from ..sema.tables import HEAP_ALLOC_SYMBOL, HEAP_FREE_SYMBOL
 from .interpret import Machine, Refused, Stopped
 
 
@@ -500,8 +501,10 @@ class _Expander:
             # ordinary code in the module, which the machine does run.
             ALLOC_SYMBOL: self._machine_allocates,
             GROW_SYMBOL: self._machine_allocates,
-            # Giving one object back, which an arena does not do.
-            FREE_SYMBOL: lambda arena, where, size: None,
+            # And the heap, which is the machine's memory as well; nothing is
+            # given back, a macro running for one expansion.
+            HEAP_ALLOC_SYMBOL: lambda size: self._machine_allocates(None, size),
+            HEAP_FREE_SYMBOL: lambda where, size: None,
         }
 
     def _refuses(self, text: object) -> object:

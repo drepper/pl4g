@@ -47,6 +47,9 @@ from dataclasses import dataclass
 
 from ..ir.builder import IRBuilder
 from ..ir.function import SYSTEM_CCONV, FuncAttrs, Function, Linkage
+from ..ir.inst import AddressInst
+from ..ir.module import GlobalVar
+from ..target import statuses
 from ..ir.inst import BinOp, CastKind, CmpPred
 from ..ir.layout import DataLayout, size_of
 from ..ir.module import Module
@@ -60,6 +63,22 @@ from ..ir.value import Value
 #: that a module declares it.
 ALLOC_SYMBOL: Final[str] = "__pl4g_alloc"
 RELEASE_SYMBOL: Final[str] = "__pl4g_release"
+
+#: What `⎕heap` is: an allocator that gives back one object at a time, in the
+#: packaged runtime.  Its two take and give back by size, which the compiler always
+#: knows.
+HEAP_ALLOC_SYMBOL: Final[str] = "pl4g_heap_alloc"
+HEAP_FREE_SYMBOL: Final[str] = "pl4g_heap_free"
+#: The compiler's own around them: room from the heap or the end of the program,
+#: and room from whichever allocator a value names.
+HEAP_NEW_SYMBOL: Final[str] = "__pl4g_heap_new"
+ALLOCATE_SYMBOL: Final[str] = "__pl4g_allocate"
+DISPOSE_SYMBOL: Final[str] = "__pl4g_dispose"
+
+#: The variable `⎕heap` is.  Its address is what names the heap wherever an
+#: allocator is named; nothing is kept in it, the heap's state being the runtime's.
+HEAP_SYMBOL: Final[str] = "__pl4g_heap"
+HEAP_KEY: Final[str] = "\N{APL FUNCTIONAL SYMBOL QUAD}heap"
 
 #: How wide a word is.  Every field of a table, every key and every value is
 #: one, which is what lets one table serve every instantiation.
@@ -226,6 +245,135 @@ def _store_value(builder: IRBuilder, shape: Shape, place: Value,
                       shape.value), value)
 
 
+def heap_global(module: Module) -> GlobalVar:
+    """The variable whose address names `⎕heap`, made once per module.
+
+    Three words, an arena's size, so that every allocator is reached the same way;
+    nothing reads them.  A program that allocates nowhere carries none of it.
+    """
+    found = module.globals.get(HEAP_KEY)
+    if isinstance(found, GlobalVar):
+        return found
+    return module.add_global(GlobalVar(
+        name=HEAP_SYMBOL, value_type=ARENA,
+        ptr_type=module.types.ptr_type(ARENA, mutable=True),
+        initializer=None, linkage=Linkage.INTERNAL), key=HEAP_KEY)
+
+
+def is_heap(value: Value) -> bool:
+    """Whether *value* is, while compiling, the address `⎕heap` is named by."""
+    return isinstance(value, AddressInst) and isinstance(value.operands[0], GlobalVar) \
+        and value.operands[0].name == HEAP_SYMBOL
+
+
+def heap_new_function(module: Module) -> Function:
+    """``__pl4g_heap_new(size)``: room from the heap, or the program stopped.
+
+    The runtime answers nothing where the system has no more to give, and this is
+    where that becomes the stop every other allocation makes.
+    """
+    bytes_ = module.types.ptr_type(U8, mutable=True)
+    func, fresh = generated(module, HEAP_NEW_SYMBOL, (U64,), bytes_)
+    if not fresh:
+        return func
+    alloc = _declared(module, HEAP_ALLOC_SYMBOL, (U64,), bytes_)
+    entry = func.add_block()
+    builder = IRBuilder(module, func)
+    builder.position_at(entry)
+    size = entry.add_param(U64, "size")
+    made = builder.call(alloc, (size,), bytes_)
+    builder.check(builder.compare(CmpPred.NE, builder.cast(CastKind.BITCAST, made,
+                                                           U64),
+                                  builder.int_const(U64, 0)),
+                  "out of memory", statuses.OUT_OF_MEMORY)
+    builder.ret(made)
+    return func
+
+
+def heap_free_function(module: Module) -> Function:
+    """The runtime's ``pl4g_heap_free(where, size)``."""
+    return _declared(module, HEAP_FREE_SYMBOL,
+                     (module.types.ptr_type(U8, mutable=True), U64), VOID)
+
+
+def allocator_function(module: Module) -> Function:
+    """``__pl4g_allocate(allocator, size)``: room from whichever allocator is named.
+
+    The heap where the address is `⎕heap`'s, and an arena's bump otherwise -- the two
+    kinds there are.  Where the compiler knows which, `allocate` calls that one
+    straight away and this is not reached.
+    """
+    arena_ptr = module.types.ptr_type(ARENA, mutable=True)
+    bytes_ = module.types.ptr_type(U8, mutable=True)
+    func, fresh = generated(module, ALLOCATE_SYMBOL, (arena_ptr, U64), bytes_)
+    if not fresh:
+        return func
+    bump = _declared(module, ALLOC_SYMBOL, (arena_ptr, U64), bytes_)
+    entry = func.add_block()
+    heap = func.add_block("heap")
+    pool = func.add_block("pool")
+    builder = IRBuilder(module, func)
+    builder.position_at(entry)
+    arena = entry.add_param(arena_ptr, "allocator")
+    size = entry.add_param(U64, "size")
+    builder.condbr(_same_address(builder, arena,
+                                 builder.address(heap_global(module))), heap, pool)
+    builder.position_at(heap)
+    builder.ret(builder.call(heap_new_function(module), (size,), bytes_))
+    builder.position_at(pool)
+    builder.ret(builder.call(bump, (arena, size), bytes_))
+    return func
+
+
+def dispose_function(module: Module) -> Function:
+    """``__pl4g_dispose(allocator, where, size)``: one object given back.
+
+    To the heap where the allocator is `⎕heap`; nothing otherwise, an arena giving
+    back only all at once and text in the image never.  Where the compiler knows the
+    allocator, `dispose` gives back to the heap straight away or does nothing at all.
+    """
+    arena_ptr = module.types.ptr_type(ARENA, mutable=True)
+    bytes_ = module.types.ptr_type(U8, mutable=True)
+    func, fresh = generated(module, DISPOSE_SYMBOL, (arena_ptr, bytes_, U64), VOID)
+    if not fresh:
+        return func
+    entry = func.add_block()
+    heap = func.add_block("heap")
+    done = func.add_block("done")
+    builder = IRBuilder(module, func)
+    builder.position_at(entry)
+    arena = entry.add_param(arena_ptr, "allocator")
+    where = entry.add_param(bytes_, "where")
+    size = entry.add_param(U64, "size")
+    builder.condbr(_same_address(builder, arena,
+                                 builder.address(heap_global(module))), heap, done,
+                   true_args=(builder.memory(),), false_args=(builder.memory(),))
+    builder.position_at(heap)
+    builder.set_memory(heap.add_param(MEM, "mem"))
+    builder.call(heap_free_function(module), (where, size), VOID)
+    builder.ret()
+    builder.position_at(done)
+    builder.set_memory(done.add_param(MEM, "mem"))
+    builder.ret()
+    return func
+
+
+def _same_address(builder: IRBuilder, one: Value, other: Value) -> Value:
+    """Whether two addresses are the same, asked of the numbers they are."""
+    return builder.compare(CmpPred.EQ, builder.cast(CastKind.BITCAST, one, U64),
+                           builder.cast(CastKind.BITCAST, other, U64))
+
+
+def allocate(builder: IRBuilder, arena: Value, size: Value) -> Value:
+    """Room for *size* bytes from *arena*: the heap called straight away where the
+    compiler knows it is the heap, and the dispatch where it does not."""
+    module = builder.module
+    bytes_ = module.types.ptr_type(U8, mutable=True)
+    if is_heap(arena):
+        return builder.call(heap_new_function(module), (size,), bytes_)
+    return builder.call(allocator_function(module), (arena, size), bytes_)
+
+
 def release_function(module: Module) -> Function:
     """The one that gives a whole arena back, declared on first ask."""
     return _declared(module, RELEASE_SYMBOL,
@@ -294,10 +442,8 @@ def table_type(module: Module) -> PtrType:
 
 
 def ensure_allocator(module: Module) -> None:
-    """Declare the allocator, for something that wants room and not a table."""
-    _declared(module, ALLOC_SYMBOL,
-              (module.types.ptr_type(ARENA, mutable=True), U64),
-              module.types.ptr_type(U8, mutable=True))
+    """Make the allocator, for something that wants room and not a table."""
+    allocator_function(module)
 
 
 def ensure_operators(module: Module, shape: Shape) -> Function:
@@ -465,8 +611,7 @@ def _build_new(module: Module) -> Function:
     func, fresh = generated(module, NEW_SYMBOL, (arena_ptr, U64), table_ptr)
     if not fresh:
         return func
-    alloc = _declared(module, ALLOC_SYMBOL, (arena_ptr, U64),
-                      module.types.ptr_type(U8, mutable=True))
+    alloc = allocator_function(module)
     entry = func.add_block()
     builder = IRBuilder(module, func)
     builder.position_at(entry)
@@ -609,8 +754,7 @@ def _build_put(module: Module, shape: Shape) -> Function:
         return func
     slot_of = _build_slot(module, shape)
     arena_ptr = module.types.ptr_type(ARENA, mutable=True)
-    alloc = _declared(module, ALLOC_SYMBOL, (arena_ptr, U64),
-                      module.types.ptr_type(U8, mutable=True))
+    alloc = allocator_function(module)
     entry = func.add_block()
     grow = func.add_block("grow")
     bigger = func.add_block("bigger")

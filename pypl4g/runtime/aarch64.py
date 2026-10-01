@@ -81,7 +81,21 @@ BLOB = Blob(
                   "20fbff542fb944a9ef0140b90400001408050011bf01086b40faff54"
                   "10010f0ad151308b300240f91f1e00f128ffff54310a80b94c7930f8"
                   "717930f8f5ffff1700e4006f2081853c2081863c2081873c2081883c"
-                  "c0035fd6")),
+                  "c0035fd61f4040f1a901005408fc3f91e0031faa6200805201cd7492"
+                  "c81b80524304805204008092e5031faa010000d41f0000f1e043809a"
+                  "c0035fd61f0404f102010054083c00911f0000f108fd44d308159f9a"
+                  "09ed7cd3080500d10c0000141f0408f1030100540940805208028052"
+                  "29f97fd3080500913f0100eba3ffff54030000140802805209408052"
+                  "0a0000904a010091407968f8800000b4090040f9497928f8c0035fd6"
+                  "0a0000900b000090400140f9a00000b4680140f9080100cb1f0109eb"
+                  "82010054e0031faac81b80520102a052620080524304805204008092"
+                  "e5031faa010000d4c000f8b708004491680100f90800098b480100f9"
+                  "c0035fd6e0031faac0035fd6600400b43f4040f14901005428fc3f91"
+                  "e2031faae3031faa01cd7492e81a8052e4031faae5031faa010000d4"
+                  "c0035fd63f0404f1e2000054283c00913f0000f108fd44d3080500d1"
+                  "e803889a0b0000143f0408f103010054094080520802805229f97fd3"
+                  "080500913f0101eba3ffff5402000014080280520900009029010091"
+                  "2a7968f80a0000f9207928f8c0035fd6")),
         Piece(name=".rodata", alignment=8,
               writable=False, executable=False,
               contents=bytes.fromhex(
@@ -94,10 +108,23 @@ BLOB = Blob(
                   "08000000000000005000000000000000080000000000000058000000"
                   "00000000400000000000000098000000000000004000000000000000"
                   "16003f001700400002004200")),
+        Piece(name=".bss", alignment=8,
+              writable=True, executable=False,
+              contents=bytes.fromhex(
+                  "00000000000000000000000000000000000000000000000000000000"
+                  "00000000000000000000000000000000000000000000000000000000"
+                  "00000000000000000000000000000000000000000000000000000000"
+                  "00000000000000000000000000000000000000000000000000000000"
+                  "00000000000000000000000000000000000000000000000000000000"
+                  "00000000000000000000000000000000000000000000000000000000"
+                  "00000000000000000000000000000000000000000000000000000000"
+                  "000000000000000000000000")),
     ),
     symbols={
         "pl4g_args": (0, 0),
         "pl4g_env": (0, 132),
+        "pl4g_heap_alloc": (0, 1852),
+        "pl4g_heap_free": (0, 2112),
         "pl4g_io_drain": (0, 1568),
         "pl4g_io_shape": (1, 0),
         "pl4g_io_submit": (0, 408),
@@ -112,5 +139,25 @@ BLOB = Blob(
               target=1, addend=224),
         Patch(piece=0, offset=1216, kind="aarch64_add_lo12",
               target=1, addend=224),
+        Patch(piece=0, offset=1988, kind="aarch64_adr_page21",
+              target=2, addend=0),
+        Patch(piece=0, offset=1992, kind="aarch64_add_lo12",
+              target=2, addend=0),
+        Patch(piece=0, offset=2016, kind="aarch64_adr_page21",
+              target=2, addend=192),
+        Patch(piece=0, offset=2020, kind="aarch64_adr_page21",
+              target=2, addend=200),
+        Patch(piece=0, offset=2024, kind="aarch64_ldst64_lo12",
+              target=2, addend=192),
+        Patch(piece=0, offset=2032, kind="aarch64_ldst64_lo12",
+              target=2, addend=200),
+        Patch(piece=0, offset=2088, kind="aarch64_ldst64_lo12",
+              target=2, addend=200),
+        Patch(piece=0, offset=2096, kind="aarch64_ldst64_lo12",
+              target=2, addend=192),
+        Patch(piece=0, offset=2232, kind="aarch64_adr_page21",
+              target=2, addend=0),
+        Patch(piece=0, offset=2236, kind="aarch64_add_lo12",
+              target=2, addend=0),
     ),
 )

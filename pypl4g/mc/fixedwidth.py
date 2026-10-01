@@ -173,7 +173,7 @@ def encode(inst: MCInst, size: int) -> tuple[bytes, list[MCFixup]]:
     if not isinstance(desc, FixedWidthInstDesc):
         raise EncodingError("".join((
             "'", desc.mnemonic, "' is not described for this architecture")))
-    span = inst.span if inst.span.is_valid else None
+    span = inst.span if inst.span is not None and inst.span.is_valid else None
     word = desc.template
     fixups: list[MCFixup] = []
 

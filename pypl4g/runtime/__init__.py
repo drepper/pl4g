@@ -137,8 +137,10 @@ def names() -> Sequence[str]:
     return _NAMES
 
 
-#: What `runtime/io.c` defines and the `std` module reaches.  Written down here
-#: as well as in the C so that a program naming one the runtime does not have
-#: is refused where it is written rather than when an image is laid out.
-_NAMES: tuple[str, ...] = ("pl4g_args", "pl4g_env", "pl4g_io_drain",
-                          "pl4g_io_submit", "pl4g_io_wait")
+#: What `runtime/io.c` defines and the `std` module and the compiler reach.
+#: Written down here as well as in the C so that a program naming one the runtime
+#: does not have is refused where it is written rather than when an image is laid
+#: out.
+_NAMES: tuple[str, ...] = ("pl4g_args", "pl4g_env", "pl4g_heap_alloc",
+                          "pl4g_heap_free", "pl4g_io_drain", "pl4g_io_submit",
+                          "pl4g_io_wait")

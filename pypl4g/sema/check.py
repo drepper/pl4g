@@ -1684,13 +1684,7 @@ def _heap(module: Module) -> GlobalVar:
     for nothing yet: the first allocation out of it is what asks.  A program
     that allocates nowhere carries neither it nor the allocator.
     """
-    found = module.globals.get(HEAP_NAME)
-    if isinstance(found, GlobalVar):
-        return found
-    return module.add_global(GlobalVar(
-        name=HEAP_SYMBOL, value_type=ARENA,
-        ptr_type=module.types.ptr_type(ARENA, mutable=True),
-        initializer=None, linkage=Linkage.INTERNAL), key=HEAP_NAME)
+    return tables.heap_global(module)
 
 
 @dataclass(frozen=True, slots=True)
@@ -12993,10 +12987,9 @@ class Checker:
         bytes_ = self._module.types.ptr_type(U8, mutable=True)
         counts = [builder.extract(side, 1, U64, expr.span)
                   for side in (left, right)]
-        made = builder.call(
-            strings.join_function(self._module),
-            (self._out_of(builder, expr.span),
-             builder.cast(CastKind.BITCAST,
+        made = strings.joined(
+            builder, self._out_of(builder, expr.span),
+            (builder.cast(CastKind.BITCAST,
                           builder.extract(left, 0, pointer, expr.span),
                           bytes_, expr.span),
              builder.binary(BinOp.WRAP_MUL, counts[0], stride, expr.span),
@@ -13045,11 +13038,9 @@ class Checker:
         first_len = builder.extract(left, 1, U64, expr.span)
         second = builder.extract(right, 0, pointer, expr.span)
         second_len = builder.extract(right, 1, U64, expr.span)
-        bytes_ = builder.call(
-            strings.join_function(self._module),
-            (self._out_of(builder, expr.span), first, first_len, second,
-             second_len),
-            pointer, expr.span)
+        bytes_ = strings.joined(
+            builder, self._out_of(builder, expr.span),
+            (first, first_len, second, second_len), pointer, expr.span)
         found = builder.make_tuple(
             (bytes_, builder.binary(BinOp.WRAP_ADD, first_len, second_len,
                                     expr.span)),
@@ -14257,12 +14248,9 @@ class Checker:
         room = (builder.int_const(U64, count * stride) if isinstance(count, int)
                 else builder.binary(BinOp.WRAP_MUL, count,
                                     builder.int_const(U64, stride), span))
-        tables.ensure_allocator(self._module)
         return builder.cast(
             CastKind.BITCAST,
-            builder.call(self._module.functions[tables.ALLOC_SYMBOL],
-                         (self._out_of(builder, span), room),
-                         self._module.types.ptr_type(U8, mutable=True), span),
+            tables.allocate(builder, self._out_of(builder, span), room),
             self._module.types.ptr_type(element, mutable=True), span)
 
     def _written_text(self, builder: IRBuilder, text: str, span: Span) -> Value:
