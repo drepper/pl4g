@@ -4737,7 +4737,7 @@
       "number": 4618,
       "name": "LANG_MADE_IN_NOT_AN_ARENA",
       "severity": "error",
-      "message": "'{name}' is not a parameter holding an arena, and only one can say where something was made",
+      "message": "'{name}' is not a parameter holding an arena, and only one -- or ⎕heap, for an answer -- can say where something was made",
       "args": [
         {
           "name": "name",
@@ -4745,7 +4745,7 @@
           "description": "the name after 'in'"
         }
       ],
-      "cause": "`→ T in a` and `s: T in a` name the arena parameter a value was made in, so what follows `in` is a parameter of type `&mut arena` or `&arena`.  A local arena is given back before the call ends and cannot be named, and `⎕heap` is what saying nothing already allows.",
+      "cause": "`→ T in a` and `s: T in a` name the arena parameter a value was made in, so what follows `in` is a parameter of type `&mut arena` or `&arena`; an answer may name `⎕heap` as well, which fixes it in the heap.  A local arena is given back before the call ends and cannot be named.",
       "spec": {
         "document": "spec/spec.md",
         "section": "The Language / Types / Arenas / Where an answer was made",

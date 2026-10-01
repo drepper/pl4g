@@ -1,0 +1,45 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ `→ str in ⎕heap` fixes where every answer is made: in the heap, text in the image included,
+※ which is copied there.  Saying nothing means `⎕heap` as well, but lets an answer be text in the
+※ image as it is; naming it says it never is.  `→ str in a` fixes it to what `a` is given.
+※
+※ **An answer whose allocator is fixed travels without it.**  A string is three words -- where,
+※ how many, and the allocator -- and a caller that knows the allocator is told nothing by the
+※ third: the function answers two, and every call puts the third back.  Where the signature says
+※ nothing, the compiler looks at the body, callees before their callers: a function whose every
+※ way out answers something the heap just made is fixed in the heap all the same.  The report log
+※ says which (`answer-thin`).
+※
+※ Compare: **C++**, whose `std::pmr::string` carries a pointer to its resource and whose
+※ `std::string` with `std::allocator` carries nothing, the allocator being in the type; **Rust**'s
+※ `String` and `Vec<T, A>`, where a zero-sized allocator type costs nothing at run time; **Zig**'s
+※ unmanaged containers, which carry no allocator and are handed one at every call.
+
+let std := ⎕import("std")
+
+fn named(c: bool) → str in ⎕heap:
+    if c:
+        return "literal"
+    "jo" ⧺ "ined"
+
+fn shown(n: u16) → str:
+    ⍕n ⧺ "!"
+
+fn kept(a: &mut arena, s: str) → str in a:
+    s ⧺ "?" in a
+
+@[startup]
+fn main() → u6:
+    let a: mut arena = ⎕arena
+    defer ⎕empty(a)
+    ※ a heap container: replacing gives each back to the heap, which they all are
+    let v: mut str⟦3⟧ = ⟦named(true), named(false), shown(7u16)⟧
+    if v⟦0⟧ ≠ "literal" ∨ v⟦1⟧ ≠ "joined" ∨ v⟦2⟧ ≠ "7!":
+        return 1u6
+    v⟦0⟧ ← named(false)
+    v⟦1⟧ ← shown(8u16)
+    v⟦2⟧ ← kept(&mut a, "q")
+    if v⟦0⟧ ≠ "joined" ∨ v⟦1⟧ ≠ "8!" ∨ v⟦2⟧ ≠ "q?":
+        return 2u6
+    0u6

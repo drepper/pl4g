@@ -250,6 +250,11 @@ class Function:
     #: For each parameter, the arena parameter what it is handed was made in, where
     #: `s: str in a` said so.
     param_made_in: tuple[int | None, ...] = ()
+    #: Where every answer is made, where that is one allocator the caller can
+    #: name: ``("heap", -1)``, or ``("param", i)`` for what the *i*-th parameter
+    #: is given.  Written by the signature or by checking the body, and what lets
+    #: a string or a list travel back without its allocator, the caller adding it.
+    answer_from: tuple[str, int] | None = None
 
     #: How this function hands back an answer that is more than one value.  A
     #: property of the function that answers, as the convention it is called by

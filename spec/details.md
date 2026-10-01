@@ -1860,6 +1860,15 @@ back what it replaces through `__pl4g_disown.T`, which asks each element for its
 two kinds of key besides allocators: one naming a heap container, and one naming "read out of that container", which is what an
 element replacement kills.
 
+**An answer whose allocator is fixed travels as two words** (`opt/passes/thinanswers.py`, before `largeanswers` at every level).
+The checker writes `Function.answer_from` -- `("heap", -1)` or `("param", i)` -- from `→ T in ⎕heap` or `→ T in a`, or from the body
+where every answer was a fresh heap object; it checks bodies callees first (`_callees_first`, a depth-first walk over the names a
+body calls) so a caller sees what its callees showed.  The pass changes the answer type to `〈ptr, u64〉`, drops the third part at
+every `ret`, and rebuilds the string after every call with the heap's address or the argument for parameter `i`.  A function named
+other than as a direct callee, or not internal, is left alone.  "Fresh" is a join, a list written out, `in ⎕heap`, or a call to a
+function whose answer is fixed: never what an unannotated call answers, which may be text in the image -- so the compiler gives
+back directly to the heap only what it knows is fresh, and asks the value otherwise.
+
 **What a container owns is copied by a generated function**, `__pl4g_own.T(arena, v)`, one per element type and built on
 first ask in `sema/owned.py` the way the table functions are: text is a join of its bytes with nothing, a list is a join of its
 run with nothing followed by a loop copying every element that points somewhere, and a list of lists calls the function for its

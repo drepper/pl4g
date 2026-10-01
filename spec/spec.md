@@ -3371,6 +3371,15 @@ caller's alone, so only a temporary of the heap's is answered as it is, and a na
 is refused** (4624): a record or a tuple holding text, a result, and anything holding a value marked `@[unique]`, which is what
 `@[unique]` is for.
 
+**An answer whose allocator is fixed travels without it.**  `→ str in ⎕heap` says every answer is made in the heap -- text in the
+image is copied there -- and `→ str in a` says every one is made in what `a` is given.  A caller that knows the allocator learns
+nothing from the third word, so such a function answers a string or a list as two words, and every call puts the third back:
+`⎕heap`'s address, or the arena it handed to `a`.  Where the signature says nothing, the compiler looks at the body: one whose
+every way out answers something the heap just made is fixed in the heap all the same, and its callers -- checked after it, the
+call tree being walked callees first -- rely on it.  Saying nothing still lets an answer be text in the image as it is, which keeps
+the third word; naming `⎕heap` is what says it never is.  Which functions answer thin is in the report log (`answer-thin`).
+A function called through a function value, or seen from outside the image, keeps the word.
+
 **Allocators are not handed out of the scope they are made in.**  A value made in a local arena reaches past it only as a copy;
 passing the arena out along with the value wants a syntax of its own, which is proposed in [scoped-arenas.md](scoped-arenas.md)
 and not yet part of the language.
@@ -3448,8 +3457,8 @@ several parameters has.
 **`s: T in a` says a parameter was made in what `a` names**, which is what lets a body answer it under `→ T in a`.  A caller is held
 to it (4620): what it hands `s` was made in the arena it hands `a`, or in something lasting longer.
 
-**What follows `in` is a parameter holding an arena**, `&mut arena` or `&arena` (4618).  A local arena is given back before the call
-ends and cannot be named, and `⎕heap` is what saying nothing already allows.  Said of a type that points nowhere it says nothing
+**What follows `in` is a parameter holding an arena**, `&mut arena` or `&arena` (4618), or -- on the answer -- `⎕heap`, which fixes
+the answer in the heap (above).  A local arena is given back before the call ends and cannot be named.  Said of a type that points nowhere it says nothing
 (4621, a warning).  It is said of the whole answer; `(str, str) in a` says it of both.
 
 **It is a lifetime, spelled as the arena.**  An arena-made value is a reference in all but spelling -- `str` is a pointer and a

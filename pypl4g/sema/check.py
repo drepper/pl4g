@@ -966,6 +966,70 @@ def _is_temporary(written: ast.Expr) -> bool:
                                     ast.If, ast.Match, ast.Scoped, ast.Named))
 
 
+#: Where `→ T in ⎕heap` puts the heap among the places an answer may be made in,
+#: which are otherwise parameters.
+HEAP_AT: Final[int] = -1
+
+
+def _thin_able(ty: Type) -> bool:
+    """Whether an answer of *ty* can travel without its allocator.
+
+    A string or a list itself: what is left is where and how many, and the caller
+    puts the allocator back.  Something holding one -- a record, a result -- keeps
+    it, the parts it travels in being its own.
+    """
+    return isinstance(ty, (StrType, ListType))
+
+
+def _callees_first(collected: Sequence[_Collected]) -> list[_Collected]:
+    """The functions in the order the call tree puts them: each after what it calls.
+
+    A walk of the bodies for the names they call -- by a bare name, as a member, or
+    as an operator -- and a depth-first order from every function in the order it
+    was written, so that a program with no calls between its functions keeps that
+    order.  A cycle is entered where the walk first meets it; what is found there is
+    a guess the body does not rely on, there being nothing written about it yet.
+    """
+    by_name: dict[str, list[_Collected]] = {}
+    for one in collected:
+        by_name.setdefault(one.node.name, []).append(one)
+    order: list[_Collected] = []
+    seen: set[int] = set()
+
+    def called(node: object, into: list[str]) -> None:
+        match node:
+            case ast.Call():
+                if isinstance(node.callee, ast.NameRef):
+                    into.append(node.callee.name)
+                elif isinstance(node.callee, ast.Member):
+                    into.append(node.callee.name)
+            case ast.Fresh():
+                into.append(node.glyph)
+            case ast.Lambda():
+                pass
+        if isinstance(node, ast.Node):
+            for one in fields_of(node):
+                called(getattr(node, one.name), into)
+        elif isinstance(node, tuple):
+            for one in node:
+                called(one, into)
+
+    def visit(entry: _Collected) -> None:
+        if id(entry) in seen:
+            return
+        seen.add(id(entry))
+        names: list[str] = []
+        called(entry.node.body, names)
+        for name in names:
+            for callee in by_name.get(name, ()):
+                visit(callee)
+        order.append(entry)
+
+    for entry in collected:
+        visit(entry)
+    return order
+
+
 def _one_of(names: Sequence[str]) -> str:
     """Several names, written as the alternatives they are: `'a' or 'b'`."""
     quoted = ["".join(("\'", one, "\'")) for one in names]
@@ -2047,6 +2111,13 @@ class Checker:
         self._element_made: set[int] = set()
         #: The allocator a call's answer keeps its elements in, by the call.
         self._holds_from: dict[int, int] = {}
+        #: Calls whose answer is certainly an object of the heap's, and not text in
+        #: the image the heap would be told to give back.
+        self._fresh_heap: set[int] = set()
+        #: What each answer of the body being checked turned out to be, and the
+        #: allocator the signature fixed for all of them, where it fixed one.
+        self._answer_kinds: list[str] = []
+        self._thin_to: int | None = None
         #: The definitions whose `in` has been checked, so a generic one says what
         #: is wrong with it once and not once per instantiation.
         self._made_in_told: set[int] = set()
@@ -2179,7 +2250,10 @@ class Checker:
                         pass
                     case _:
                         self._diags.internal("unknown kind of top-level definition")
-        for entry in collected:
+        # Callees before their callers, as far as the call tree goes: what a
+        # body shows of where its answer is made is written on the function, and
+        # a caller checked after it relies on it.
+        for entry in _callees_first(collected):
             self._lower_function(entry)
         self._build_the_tables()
         if whole_program:
@@ -3514,7 +3588,11 @@ class Checker:
         made: tuple[int, ...] | None = None
         if node.made_in:
             pointless(ret, node.made_in[0][1])
-            found = (arena(name, span) for name, span in node.made_in)
+            # `⎕heap` may be named too, which says what nothing would and fixes
+            # it: the answer is the heap's, every one of them, and travels without
+            # the allocator.  It is `HEAP_AT` among the places.
+            found = (HEAP_AT if name == HEAP_NAME else arena(name, span)
+                     for name, span in node.made_in)
             made = tuple(sorted({at for at in found if at is not None}))
         given: list[int | None] = []
         for param, ty in zip(node.params, params):
@@ -3559,17 +3637,27 @@ class Checker:
             else:
                 local.arenas = frozenset({id(local)})
                 self._unknown_by_id[id(local)] = local
+        self._answer_kinds = []
+        self._thin_to = None
         if func.made_in is None:
             self._answer_made_in = (frozenset({_HEAP}), HEAP_NAME)
             return
         allowed: set[int] = set()
         for at in func.made_in:
+            if at == HEAP_AT:
+                allowed.add(_HEAP)
+                continue
             arena = local_of(at)
             if arena is not None and self._is_arena(arena):
                 allowed.add(id(arena))
         self._answer_made_in = (
             frozenset(allowed),
-            _one_of([node.params[at].name for at in func.made_in]))
+            _one_of([HEAP_NAME if at == HEAP_AT else node.params[at].name
+                     for at in func.made_in]))
+        if len(allowed) == 1 and _thin_able(func.ty.ret):
+            # One allocator, said: every answer is put in it, text in the image
+            # included, so that the caller can add it to what comes back.
+            self._thin_to = next(iter(allowed))
 
     def _written_for(self, expr: ast.Call, func: Function) -> dict[int, ast.Expr]:
         """What a call wrote for each parameter, by the parameter's place."""
@@ -3631,13 +3719,19 @@ class Checker:
         else:
             made: set[int] = set()
             for at in func.made_in:
-                if at in written:
+                if at == HEAP_AT:
+                    made.add(_HEAP)
+                elif at in written:
                     made.update(self._arenas_in(written[at]))
             self._last_made_in = frozenset(made)
             found = self._owner_of(self._last_made_in)
             if found is not None:
                 self._holds_from[id(expr)] = found
         self._made_from[id(expr)] = (expr, self._last_made_in)
+        # An answer whose allocator the callee fixed is in it, never text in the
+        # image: where that is the heap, it is fresh, and what holds it owns it.
+        if func.answer_from is not None and self._last_made_in == {_HEAP}:
+            self._fresh_heap.add(id(expr))
 
     def _container_handed(self, expr: ast.Call, func: Function,
                           written: dict[int, ast.Expr], at: int,
@@ -5939,12 +6033,16 @@ class Checker:
                   func: Function, span: Span) -> Value:
         """What a function answers, kept in the allocator its signature names.
 
-        `→ T in a` names `a`, and saying nothing names `⎕heap`.  An answer made
-        anywhere else is copied there before the function leaves -- before what it
-        put off runs, so an arena given back on the way out has been copied out of
-        first -- and one that cannot be copied is refused (4624).  Text in the image
-        is answered as it is, nothing ever giving it back.  An answer of the heap's
-        is the caller's alone, so only a temporary is answered as it is.
+        `→ T in a` names `a`, `→ T in ⎕heap` the heap, and saying nothing names
+        `⎕heap` as well.  An answer made anywhere else is copied there before the
+        function leaves -- before what it put off runs, so an arena given back on
+        the way out has been copied out of first -- and one that cannot be copied is
+        refused (4624).  An answer of the heap's is the caller's alone, so only a
+        temporary is answered as it is.
+
+        Text in the image is answered as it is where the signature says nothing.
+        Where it names one allocator it is copied in too: the answer then travels
+        without its allocator, which the caller adds, and has to be in it.
         """
         ty = func.ty.ret
         said = self._answer_made_in
@@ -5952,18 +6050,27 @@ class Checker:
             return value
         made = self._arenas_in(written)
         allowed, named = said
-        if not made:
+        thin = self._thin_to
+        if not made and thin is None:
+            self._answer_kinds.append("static")
             return value
-        if allowed == {_HEAP}:
-            if made == {_HEAP} and _is_temporary(written):
+        if made and allowed == {_HEAP}:
+            if self._freshly_heap(written):
+                self._answer_kinds.append("heap")
                 return value
-        elif made <= allowed:
+            if thin is None and made == {_HEAP} and _is_temporary(written):
+                # Of the heap's, or perhaps text in the image an answer came
+                # back as: as it is, the value saying which.
+                self._answer_kinds.append("maybe")
+                return value
+        elif made and made <= allowed:
+            self._answer_kinds.append("param")
             return value
-        target = next(iter(sorted(allowed)))
+        target = thin if thin is not None else next(iter(sorted(allowed)))
         if not owned.can_own(ty):
-            found = (["what another name still holds"] if made <= allowed else
-                     sorted(self._owner_written(one) for one in made
-                            if one == _HEAP or one in self._arena_by_id)
+            found = (["what another name still holds"] if made and made <= allowed
+                     else sorted(self._owner_written(one) for one in made
+                                 if one == _HEAP or one in self._arena_by_id)
                      or ["somewhere it cannot say"])
             self._diags.emit(D.LANG_ANSWER_CANNOT_BE_COPIED, span, name=func.name,
                              found=", ".join(found), said=named,
@@ -5972,13 +6079,69 @@ class Checker:
         copied = builder.call(owned.own_function(self._module, ty),
                               (self._owner_place(builder, target, span), value),
                               ty, span)
+        self._answer_kinds.append("heap" if target == _HEAP else "param")
         self._module.reports.record(
             ReportKind.COPY_INTO_ALLOCATOR, func.name,
             "".join(("what '", func.name, "' answers is copied into ", named,
                      ", where its signature says it is made")), span)
         if made == {_HEAP} and _is_temporary(written):
-            owned.give_back(builder, value, ty, "heap")
+            # The original goes back to where it came from, which a value only
+            # perhaps of the heap's is asked.
+            owned.give_back(builder, value, ty,
+                            "heap" if self._freshly_heap(written) else None)
         return copied
+
+    def _freshly_heap(self, written: ast.Expr) -> bool:
+        """Whether *written* comes to an object the heap just made.
+
+        A join, a list written out, `in ⎕heap`, and a call whose answer the callee
+        fixed in the heap: nothing else names it, and it is the heap's for certain --
+        not text in the image an answer may also be, which the heap must never be
+        told to give back.
+        """
+        while isinstance(written, ast.Named):
+            written = written.value
+        if isinstance(written, ast.Allocated):
+            return self._arenas_in(written.arena) == {_HEAP} \
+                and isinstance(written.value, (ast.Binary, ast.ListLit))
+        if isinstance(written, ast.Call):
+            return id(written) in self._fresh_heap
+        if isinstance(written, ast.ListLit) or (
+                isinstance(written, ast.Binary)
+                and written.op is ast.BinaryOp.CONCAT):
+            return self._arenas_in(written) == {_HEAP}
+        return False
+
+    def _settle_answer(self, func: Function, node: ast.FuncDef) -> None:
+        """Write on the function where its answer is made, where that is one place.
+
+        What the signature fixed, or what the body showed: an answer the heap made
+        on every way out, which a caller compiled after it can then rely on -- the
+        call tree is walked callees first so that one is.  The answer then travels
+        without its allocator (the `thinanswers` pass), the caller adding it.
+        """
+        func.answer_from = None
+        if not _thin_able(func.ty.ret):
+            return
+        if func.made_in is not None:
+            if len(func.made_in) != 1:
+                return
+            (at,) = func.made_in
+            func.answer_from = ("heap", -1) if at == HEAP_AT else ("param", at)
+        elif self._answer_kinds and all(one == "heap"
+                                        for one in self._answer_kinds):
+            func.answer_from = ("heap", -1)
+        else:
+            return
+        where = HEAP_NAME if func.answer_from[0] == "heap" else "".join((
+            "what '", node.params[func.answer_from[1]].name, "' is given"))
+        self._module.reports.record(
+            ReportKind.ALLOCATOR, func.name,
+            "".join(("what '", func.name, "' answers is made in ", where,
+                     " on every way out", "" if func.made_in is not None
+                     else ", which its body shows",
+                     ": it travels without its allocator, which the caller adds")),
+            func.name_span if func.name_span.is_valid else func.span)
 
     def _before_a_turn(self, body: ast.Block) -> None:
         """Kill what an arena given back inside a loop held from before the loop.
@@ -6317,6 +6480,7 @@ class Checker:
         assert node.body is not None
         outer_made_in = self._answer_made_in
         outer_made_from, self._made_from = self._made_from, {}
+        outer_kinds = (self._answer_kinds, self._thin_to)
         self._params_made_in(node, func)
         # A function with no type parameters has requirements that are settled
         # where it is written, so they are checked once and here rather than at
@@ -6356,10 +6520,12 @@ class Checker:
                 self._diags.emit(D.LANG_FUNCDEF_RETURN_MISSING, node.name_span,
                                  name=func.name, type=func.ty.ret.written())
                 builder.unreachable()
+        self._settle_answer(func, node)
         self._demanding = outer_demanding
         self._at_entry = outer_entry
         self._answer_made_in = outer_made_in
         self._made_from = outer_made_from
+        self._answer_kinds, self._thin_to = outer_kinds
 
     def _lower_block(self, builder: IRBuilder, block: ast.Block, func: Function,
                      as_result: bool = True, wanted: Type | None = None,
@@ -6760,7 +6926,9 @@ class Checker:
                         return False
                     self._element_made |= made
                     if spare is not None:
-                        owned.give_back(builder, spare, ty.element, "heap")
+                        owned.give_back(builder, spare, ty.element,
+                                        "heap" if self._freshly_heap(written)
+                                        else None)
                 builder.store(
                     self._element_place(builder, place, ty.element,
                                         builder.int_const(U64, at + index),
@@ -7499,7 +7667,8 @@ class Checker:
         if self._value_type_of(value) is ERROR:
             return
         if spare is not None:
-            owned.give_back(builder, spare, ty.element, "heap")
+            owned.give_back(builder, spare, ty.element,
+                            "heap" if self._freshly_heap(stmt.value) else None)
         container.arenas = container.arenas | made
         if owner != _HEAP:
             # A pool gives back only all at once: what is replaced stays where it
@@ -7794,7 +7963,8 @@ class Checker:
                  self._carried, self._loops, self._outside, self._initializing,
                  self._assigning, self._operand_of, self._handing_over,
                  self._deferred, self._emptied, self._answer_made_in,
-                 self._out_of_arena, self._out_of_arenas, self._made_from)
+                 self._out_of_arena, self._out_of_arenas, self._made_from,
+                 self._answer_kinds, self._thin_to)
         self._scopes, self._addressed = [], set()
         # What was worked out about where an expression was made belongs to the
         # body it was lowered in: this one lowers the same nodes for other types.
@@ -7828,13 +7998,15 @@ class Checker:
                                      node.name_span, name=func.name,
                                      type=func.ty.ret.written())
                     inner.unreachable(node.span)
+            self._settle_answer(func, node)
             self._pop_scope()
         finally:
             (self._scopes, self._addressed, self._answering, self._impure,
              self._carried, self._loops, self._outside, self._initializing,
              self._assigning, self._operand_of, self._handing_over,
              self._deferred, self._emptied, self._answer_made_in,
-             self._out_of_arena, self._out_of_arenas, self._made_from) = outer
+             self._out_of_arena, self._out_of_arenas, self._made_from,
+             self._answer_kinds, self._thin_to) = outer
 
     def _lower_generic(self, builder: IRBuilder, expr: ast.Call,
                        written: _Generic, expected: Type | None) -> Value:
@@ -8419,8 +8591,10 @@ class Checker:
         outer = (self._scopes, self._addressed, self._answering, self._impure,
                  self._carried, self._loops, self._outside, self._deferred,
                  self._emptied, self._out_of_arena, self._out_of_arenas,
-                 self._answer_made_in, self._made_from)
+                 self._answer_made_in, self._made_from, self._answer_kinds,
+                 self._thin_to)
         self._deferred, self._emptied, self._made_from = [], [], {}
+        self._answer_kinds, self._thin_to = [], None
         self._out_of_arena, self._out_of_arenas = None, frozenset({_HEAP})
         # A lambda answers in `⎕heap`, saying nothing else, as a function does.
         self._answer_made_in = (frozenset({_HEAP}), HEAP_NAME)
@@ -8481,7 +8655,8 @@ class Checker:
             (self._scopes, self._addressed, self._answering, self._impure,
              self._carried, self._loops, self._outside, self._deferred,
              self._emptied, self._out_of_arena, self._out_of_arenas,
-             self._answer_made_in, self._made_from) = outer
+             self._answer_made_in, self._made_from, self._answer_kinds,
+             self._thin_to) = outer
             self._borrows = outer_borrows
         return func
 
@@ -13340,8 +13515,7 @@ class Checker:
                     spare.append(one)
                     if moved is not None:
                         spare.append(moved)
-                elif owner == _HEAP and _is_temporary(written) \
-                        and self._arenas_in(written) == {_HEAP}:
+                elif owner == _HEAP and self._freshly_heap(written):
                     spare.append(one)
             left, right = sides
         self._made_from[id(expr)] = (expr, self._out_of_arenas | made)
@@ -14600,7 +14774,8 @@ class Checker:
                     return UndefConst(ERROR)
                 made |= added
                 if spare is not None:
-                    owned.give_back(builder, spare, holds, "heap")
+                    owned.give_back(builder, spare, holds,
+                                    "heap" if self._freshly_heap(written) else None)
                 stored.append(kept)
             values = stored
         elements = self._room_for(builder, holds, len(values), expr.span)

@@ -8910,6 +8910,42 @@ Left: sets and dictionaries are not held to the element rules; nothing is given 
 name goes out of scope -- a value of the heap's that no container owns lives until the program
 ends; a lambda's answer and a call through a function value say nothing of `in`.
 
+## 2026-10-02T09:00+02:00 — language
+
+**An answer whose allocator is fixed travels without it**
+
+    fn named(c: bool) → str in ⎕heap:     ※ answers two words; the caller adds ⎕heap
+    fn kept(a: &mut arena, s: str) → str in a:   ※ two words; the caller adds its a
+
+Asked for by the user: the compilation of a function, by whole-program analysis and
+sorting functions along the call tree, can add to its declaration which allocator its
+answer is made in; a user can say it with `str in ⎕heap`; where the allocator is
+`⎕heap` or a parameter's, the answer needs no third part.
+
+- **`in ⎕heap` on an answer** is allowed and fixes it: text in the image is copied into
+  the heap, so the answer is the heap's on every way out.  `in a` fixes it to `a` the same
+  way.  Saying nothing still means `⎕heap` but lets text in the image go as it is, which
+  keeps the third word -- the default stays safe.
+- **The body can fix it too**: where every way out answers what the heap just made, the
+  function is marked so.  Bodies are checked callees first, a depth-first walk over the
+  names each calls, so a caller sees what its callees showed.
+- **The ABI follows** (`thinanswers`): such a function answers two words, and each call
+  rebuilds the string with `⎕heap`'s address or the argument it passed.  A function used as
+  a value, or visible outside the image, keeps three.
+
+Found while checking it: the compiler gave back directly to the heap a temporary it only
+*assumed* was the heap's -- the answer of a call whose signature says nothing, which may be
+text in the image.  It now does that only for what it knows is fresh, and asks the value
+otherwise.  And the first version of the pass rewrote no call at all; the run tests could
+not see it, a wrong allocator word making the give-back do nothing, so a compiler test now
+checks the code itself.
+
+Compare: **C++**'s `std::string` with `std::allocator`, which carries nothing because the
+allocator is in the type, against `std::pmr::string`, which carries a pointer to its
+resource; **Rust**, where a zero-sized allocator type costs nothing at run time; **Zig**'s
+unmanaged containers, handed the allocator at every call; **MLton** and other whole-program
+compilers, which specialise representations from what the whole program shows.
+
 Open questions
 --------------
 

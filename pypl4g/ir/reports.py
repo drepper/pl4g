@@ -49,6 +49,9 @@ class ReportKind(StrEnum):
     #: A value copied into another allocator, because the one it was made in is
     #: not provably the one wanted, or not provably long enough lived.
     COPY_INTO_ALLOCATOR = "copy-into-allocator"
+    #: A string or a list answered without its allocator, because every answer
+    #: is made in one the caller names and adds back.
+    ANSWER_THIN = "answer-thin"
     DROP_FUNCTION = "drop-function"
     DROP_VARIABLE = "drop-variable"
     DROP_LOCAL = "drop-local"
