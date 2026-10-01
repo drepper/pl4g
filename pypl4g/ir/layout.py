@@ -117,10 +117,11 @@ def size_of(ty: Type, layout: DataLayout) -> int:
             # Where the elements are and one count per dimension, which is what
             # an array whose type does not say its shape has to carry with it.
             return (1 + ty.rank) * layout.pointer_size
-        case ListType() | StrType() | CursorType():
-            # Where the elements are and how many there are, which is the same
-            # shape and for the same reason.  A cursor is two words as well:
-            # where the list lives, and how far along it the walk is.
+        case ListType() | StrType():
+            # Where the elements are, how many there are, and the allocator.
+            return 3 * layout.pointer_size
+        case CursorType():
+            # Where the list lives, and how far along it the walk is.
             return 2 * layout.pointer_size
         case SetType() | DictType():
             # A handle, which is where the table is and nothing else: how many

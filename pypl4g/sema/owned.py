@@ -157,7 +157,7 @@ def _build_own(module: Module, func: Function, ty: Type) -> None:
                                               element))
 
         _each(builder, func, count, "own", turn)
-    builder.ret(builder.make_tuple((copied, count), ty))
+    builder.ret(builder.make_tuple((copied, count, arena), ty))
 
 
 def free_storage(builder: IRBuilder, arena: Value, value: Value,

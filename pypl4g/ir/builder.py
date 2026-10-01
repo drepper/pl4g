@@ -23,7 +23,7 @@ from .inst import (SyscallInst,
                    TupleInst, UnaryInst, UnOp,
                    UnreachableInst, UnwrapInst, WrapInst)
 from .module import Module
-from .types import (FloatType, BOOL, IntType, PtrType, ResultType, Type,
+from .types import (FloatType, BOOL, IntType, ListType, PtrType, ResultType, StrType, Type,
                     U8, VecType, parts_of)
 from .value import Value
 
@@ -104,6 +104,8 @@ class IRBuilder:
     def make_tuple(self, values: Sequence[Value], ty: Type,
                    span: Span = INVALID_SPAN) -> Value:
         """Append the making of a tuple out of several values."""
+        assert not isinstance(ty, (StrType, ListType)) or len(values) == 3, \
+            "a string or a list is made with its allocator"
         return self._append(TupleInst(values, ty, span))
 
     def extract(self, value: Value, index: int, ty: Type,

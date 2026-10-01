@@ -519,7 +519,7 @@ class _Expander:
 
     def _read_text(self, held: object) -> str:
         """The text a machine value of type `str` stands for."""
-        if not (isinstance(held, tuple) and len(held) == 2):
+        if not (isinstance(held, tuple) and len(held) == 3):
             raise Refused("text wanted")
         return self._machine.read_text(held)
 
@@ -672,7 +672,7 @@ class _Expander:
         return self._put_into(tree, at, ast.StringLit(
             span=INVALID_SPAN, value=self._read_text(text)))
 
-    def _spelling(self, handle: object) -> tuple[int, int]:
+    def _spelling(self, handle: object) -> tuple[int, int, int]:
         """What a piece is written as, as text.
 
         A string literal answers what is between its quotation marks and a name

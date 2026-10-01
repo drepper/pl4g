@@ -1668,8 +1668,11 @@ def lower_function(asm: Assembler, func: Function, cconv: CallConvDesc,
                 case CastInst() if inst.kind is CastKind.BITCAST:
                     # Nothing to emit: the bits asked for are the bits already
                     # in the register, and this says to go on reading them as
-                    # something else.
-                    held[id(inst)] = operands.register_of(inst.operands[0], span)
+                    # something else.  A constant is put in one first -- a
+                    # number read as an address, which is how nothing is said.
+                    found = operands.in_register(inst.operands[0], inst.span)
+                    assert isinstance(found, MCReg)
+                    held[id(inst)] = found.reg
                 case CastInst() if inst.kind in (CastKind.ZEXT, CastKind.SEXT):
                     # A value of a narrow type is already in a register the
                     # whole width of a word, extended the way its own type says;

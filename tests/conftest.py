@@ -114,6 +114,9 @@ class Expectations:
     #: one test whose subject is the environment.  A test that says nothing
     #: runs with what the suite was run with.
     environment: dict[str, str] = field(default_factory=dict)
+    #: What the binary is run with after its own name, for a test whose subject
+    #: is the words a program was started with.
+    run_args: list[str] = field(default_factory=list)
     xfail: str | None = None
     #: Whether the file is a module another test imports rather than a test of
     #: its own.  One has no startup function, so compiling it alone would fail
@@ -131,6 +134,9 @@ def parse_directives(text: str) -> Expectations:
         body = stripped[len(DIRECTIVE):].strip()
         if body == "module":
             result.is_module = True
+            continue
+        if body.startswith("run-args "):
+            result.run_args.extend(body[len("run-args "):].split())
             continue
         if body.startswith("args "):
             result.extra_args.extend(body[len("args "):].split())
@@ -306,7 +312,8 @@ class PL4GItem(pytest.Item):
 
     def _check_run(self, command: Sequence[str], how: str) -> None:
         """Run the generated binary and check the status it exits with."""
-        proc = subprocess.run(list(command), capture_output=True, timeout=60,
+        proc = subprocess.run([*command, *self.expectations.run_args],
+                              capture_output=True, timeout=60,
                               env={**os.environ, **self.expectations.environment}
                               if self.expectations.environment else None)
         assert proc.returncode == self.expectations.exit_status, "".join((

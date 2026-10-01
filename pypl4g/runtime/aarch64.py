@@ -15,20 +15,20 @@ BLOB = Blob(
         Piece(name=".text", alignment=4,
               writable=False, executable=True,
               contents=bytes.fromhex(
-                  "3f7c00a9e00300b4ea0300aa4b8540f88b0300b4e90301aae0031faa"
-                  "61ed7cd3c81b8052620080524304805204008092e5031faa010000d4"
-                  "4002f8b7e8031faa05000014080500918d0500f91f010beb60010054"
-                  "4d7968f80c10088b8d0100f92dffffb4ee031faaaf696e38ce050091"
-                  "cfffff35cd0500d1f3ffff17202d00a9c0035fd6600800b4080040f9"
-                  "e10380920a008092080c088b0941009128008092eb0309aa6c8540f8"
-                  "08090091218000914a0500918cffffb56a0600b4eb0308aae0031faa"
-                  "c81b8052620080524304805204008092e5031faa010000d44005f8b7"
-                  "e8031faae1030baa0b0000140f000d8beb031faaec3900a98c010e8b"
-                  "ec0900f9080500910c000d8b5f0108eb8b0d00f9200400542c7968f8"
-                  "0e0080922d008092eb030eaa8e010e8bef030daad00540396e050091"
-                  "ad05009150ffff350de97bd36efdffb4f0031faa916970383ff60071"
-                  "e0000054ef0500d1100600916b0500d1ff0900b121ffff54e1ffff17"
-                  "0e000d8b8f01108bcc4100a9ec050091cc0900f9e0ffff17e1031faa"
+                  "3f7c00a9200400b4ea0300aa4b8540f8cb0300b468050b8be90301aa"
+                  "e0031faa62008052430480520400809201f17dd3c81b8052e5031faa"
+                  "010000d46002f8b7e8031faa0c0380520500001408050091aefd00a9"
+                  "1f010beb600100540d010c9b4e7968f8ae0100f92effffb4ef031faa"
+                  "d0696f38ef050091d0ffff35ee0500d1f3ffff17202d00a9c0035fd6"
+                  "200800b4080040f9e10580920a008092080c088b0941009128008092"
+                  "eb0309aa6c8540f80809009121c000914a0500918cffffb52a0600b4"
+                  "ec0308aae0031faac81b8052620080524304805204008092e5031faa"
+                  "010000d40005f8b7e8031faa0b068052e1030caa0a0000140f010b9b"
+                  "ec031faaed3900a9ad010e8b08050091ff3501a95f0108ebec7d02a9"
+                  "e00300542d7968f80e00809230008092ec030eaaae010e8bef0310aa"
+                  "d10540398e0500911006009151ffff35aefdffb4f0031faab1697038"
+                  "3ff60071e0000054ef0500d1100600918c0500d1ff0900b121ffff54"
+                  "e3ffff170f010b9bed4100a9ad01108bad050091e2ffff17e1031faa"
                   "e0031faac0035fd6e1031faac0035fd63f08007169000054a0028092"
                   "c0035fd6ff4302d1080040f9ea0304aaeb0303aae903022aed03012a"
                   "ec0300aaf34300f9480a00b41f0500f1f1079f1a8f61019190610291"
@@ -122,7 +122,7 @@ BLOB = Blob(
     ),
     symbols={
         "pl4g_args": (0, 0),
-        "pl4g_env": (0, 132),
+        "pl4g_env": (0, 140),
         "pl4g_heap_alloc": (0, 1852),
         "pl4g_heap_free": (0, 2112),
         "pl4g_io_drain": (0, 1568),

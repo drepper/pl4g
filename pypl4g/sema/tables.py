@@ -364,6 +364,13 @@ def _same_address(builder: IRBuilder, one: Value, other: Value) -> Value:
                            builder.cast(CastKind.BITCAST, other, U64))
 
 
+def no_allocator(builder: IRBuilder) -> Value:
+    """The allocator of something in the image, which nothing gives back."""
+    module = builder.module
+    return builder.cast(CastKind.BITCAST, builder.int_const(U64, 0),
+                        module.types.ptr_type(ARENA, mutable=True))
+
+
 def allocate(builder: IRBuilder, arena: Value, size: Value) -> Value:
     """Room for *size* bytes from *arena*: the heap called straight away where the
     compiler knows it is the heap, and the dispatch where it does not."""

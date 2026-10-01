@@ -7425,7 +7425,10 @@ class Checker:
             self._module.add_function(
                 func, key=self._key("".join((node.name, "\N{TOP LEFT CORNER}",
                                              ",".join(one.mangled() for one in key),
-                                             "\N{TOP RIGHT CORNER}"))))
+                                             "\N{TOP RIGHT CORNER}",
+                                             # an operator may be defined for one
+                                             # operand and for two, over one type
+                                             "/", str(len(node.params))))))
             self._owned.append(func)
             written.made[key] = func
             self._module.reports.record(
@@ -9174,9 +9177,11 @@ class Checker:
                                    span),
                       builder.int_const(U64, stride), count, at),
                      VOID, span)
+        held = builder.load(place, span)
         builder.store(place, builder.make_tuple(
             (elements, builder.binary(BinOp.WRAP_SUB, count,
-                                      builder.int_const(U64, 1), span)),
+                                      builder.int_const(U64, 1), span),
+             builder.extract(held, 2, parts_of(ty)[2], span)),
             ty, span), span)
 
     def _element_of(self, builder: IRBuilder, elements: Value, ty: ListType,
@@ -13004,7 +13009,8 @@ class Checker:
                                                           expr.span), one, answer)
         return builder.make_tuple(
             (builder.cast(CastKind.BITCAST, made, pointer, expr.span),
-             builder.binary(BinOp.WRAP_ADD, counts[0], counts[1], expr.span)),
+             builder.binary(BinOp.WRAP_ADD, counts[0], counts[1], expr.span),
+             self._out_of(builder, expr.span)),
             answer, expr.span)
 
     def _joined_text(self, builder: IRBuilder, expr: ast.Binary, left: Value,
@@ -13038,12 +13044,13 @@ class Checker:
         first_len = builder.extract(left, 1, U64, expr.span)
         second = builder.extract(right, 0, pointer, expr.span)
         second_len = builder.extract(right, 1, U64, expr.span)
+        arena = self._out_of(builder, expr.span)
         bytes_ = strings.joined(
-            builder, self._out_of(builder, expr.span),
-            (first, first_len, second, second_len), pointer, expr.span)
+            builder, arena, (first, first_len, second, second_len), pointer,
+            expr.span)
         found = builder.make_tuple(
             (bytes_, builder.binary(BinOp.WRAP_ADD, first_len, second_len,
-                                    expr.span)),
+                                    expr.span), arena),
             STR, expr.span)
         if not self._accepts(expected, STR):
             self._report_mismatch(expr.span, STR, expected)
@@ -14239,7 +14246,8 @@ class Checker:
                 one, expr.span)
         self._made_from[id(expr)] = (expr, self._out_of_arenas)
         return builder.make_tuple(
-            (elements, builder.int_const(U64, len(values))), answer, expr.span)
+            (elements, builder.int_const(U64, len(values)),
+             self._out_of(builder, expr.span)), answer, expr.span)
 
     def _room_for(self, builder: IRBuilder, element: Type, count: Value | int,
                   span: Span) -> Value:
@@ -14282,7 +14290,8 @@ class Checker:
             CastKind.BITCAST, builder.address(found, span),
             self._module.types.ptr_type(U8, mutable=True), span)
         return builder.make_tuple(
-            (bytes_, builder.int_const(U64, len(text.encode("utf-8")))), STR, span)
+            (bytes_, builder.int_const(U64, len(text.encode("utf-8"))),
+             tables.no_allocator(builder)), STR, span)
 
     def _code_point(self, builder: IRBuilder, value: int, span: Span) -> Value:
         """The code point *value*, or a report where there is no such code point.
@@ -14992,7 +15001,9 @@ class Checker:
                              found=found.written())
             return UndefConst(ERROR)
         answer = self._module.types.array_type(U8, (None,))
-        parts = parts_of(STR)
+        # Where the bytes are and how many: the allocator is the string's, and an
+        # array of bytes is a view of them that gives nothing back.
+        parts = parts_of(STR)[:2]
         made = builder.make_tuple(
             tuple(builder.extract(given, at, one, expr.span)
                   for at, one in enumerate(parts)), answer, expr.span)
@@ -15121,7 +15132,7 @@ class Checker:
                               expr.span)
         count = builder.call(strings.length_in_bytes(self._module), (given,),
                              U64, expr.span)
-        return builder.make_tuple((bytes_, count), STR, expr.span)
+        return builder.make_tuple((bytes_, count, where), STR, expr.span)
 
     def _lower_empty(self, builder: IRBuilder, expr: ast.Call,
                      expected: Type | None) -> Value:

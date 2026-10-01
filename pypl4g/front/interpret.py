@@ -435,8 +435,8 @@ class Machine:
             case _:
                 self._write(at, held.ty, self._operand(held, {}))
 
-    def text(self, held: str) -> tuple[int, int]:
-        """Text as a value of `str`: where the bytes are, and how many there are.
+    def text(self, held: str) -> tuple[int, int, int]:
+        """Text as a value of `str`: where the bytes are, how many, and no allocator.
 
         The bytes go into the machine's memory, which is where everything a macro
         builds lives.  What comes back is the pair a `str` is, so the ordinary code
@@ -446,9 +446,9 @@ class Machine:
         raw = held.encode("utf-8")
         at = self.allocate(None, max(1, len(raw)))
         self._memory[at:at + len(raw)] = raw
-        return (at, len(raw))
+        return (at, len(raw), 0)
 
-    def read_text(self, held: tuple[int, int]) -> str:
+    def read_text(self, held: tuple[int, ...]) -> str:
         """And the way back: what a value of `str` says."""
         at, length = int(held[0]), int(held[1])
         return bytes(self._memory[at:at + length]).decode("utf-8", "replace")

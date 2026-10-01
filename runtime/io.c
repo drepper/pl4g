@@ -362,13 +362,15 @@ static void submit(struct pl4g_ring *r, long slot, unsigned char op, i32 fd,
 
 /* -- the arguments the program was started with ---------------------------- */
 
-/* A string as the language holds one: where the bytes are and how many there
- * are.  Not the nul-terminated thing the kernel hands over -- the length is
- * counted here, once, so that nothing downstream has to walk the bytes to find
- * out how many there are. */
+/* A string as the language holds one: where the bytes are, how many there are,
+ * and the allocator they came from.  Not the nul-terminated thing the kernel
+ * hands over -- the length is counted here, once, so that nothing downstream has
+ * to walk the bytes to find out how many there are.  The bytes are the kernel's,
+ * which nothing gives back, so the allocator is none. */
 struct counted {
   const unsigned char *at;
   u64 len;
+  void *allocator;
 };
 
 /* And the pair that is a run of them: where they are and how many. */
@@ -419,6 +421,7 @@ void pl4g_args(const u64 *stack, struct run *out)
   for (u64 at = 0; at < count; ++at) {
     made[at].at = argv[at];
     made[at].len = argv[at] == 0 ? 0 : how_long(argv[at]);
+    made[at].allocator = 0;
   }
   out->at = made;
   out->len = count;
@@ -468,8 +471,10 @@ struct run pl4g_env(const u64 *stack)
       split += 1;
     made[2 * at].at = one;
     made[2 * at].len = split;
+    made[2 * at].allocator = 0;
     made[2 * at + 1].at = one + (split < len ? split + 1 : len);
     made[2 * at + 1].len = split < len ? len - split - 1 : 0;
+    made[2 * at + 1].allocator = 0;
   }
   out.at = made;
   out.len = 2 * count;

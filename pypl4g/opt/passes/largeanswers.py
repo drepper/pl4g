@@ -204,7 +204,9 @@ def _offsets(answer: Type) -> tuple[int, ...]:
         assert answer.err is not None
         return (0, tag_offset_of(answer, LAYOUT),
                 error_offset_of(answer, LAYOUT))
-    assert isinstance(answer, TupleType | ProductType), answer
+    if not isinstance(answer, TupleType | ProductType):
+        # A string, a list, an array of no stated length: one word a part.
+        return tuple(8 * at for at in range(len(parts_of(answer))))
     return part_offsets_of(answer, LAYOUT)
 
 

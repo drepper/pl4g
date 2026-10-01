@@ -37,8 +37,9 @@ from ..target.started import ENVIRON_MAKE as MAKE_SYMBOL, ENVIRON_SYMBOL as SYMB
 from . import tables
 
 #: How far into a variable's two strings what its name stands for begins: a
-#: string is two words, and the name is the first of them.
-VALUE_AT: Final[int] = 2 * tables.WORD
+#: string is three words -- where, how many, and its allocator -- and the name is
+#: the first of the two.
+VALUE_AT: Final[int] = 3 * tables.WORD
 
 
 def shape() -> tables.Shape:
@@ -119,7 +120,7 @@ def make_function(module: Module, heap: GlobalVar) -> Function:
     where = builder.binary(
         BinOp.ADD, at,
         builder.binary(BinOp.WRAP_MUL, which,
-                       builder.int_const(U64, tables.WORD * 2)))
+                       builder.int_const(U64, VALUE_AT)))
     name = builder.load(builder.cast(CastKind.BITCAST, where, text))
     value = builder.load(builder.cast(
         CastKind.BITCAST,

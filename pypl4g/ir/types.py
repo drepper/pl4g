@@ -1272,10 +1272,10 @@ def parts_of(ty: Type) -> tuple[Type, ...]:
     if isinstance(ty, ArrayType) and not ty.fixed:
         return (_pointer_to(ty.element), *(U64 for _ in ty.shape))
     if isinstance(ty, ListType):
-        # Where the elements are and how many there are, which is the shape a
-        # string and an array of unstated length both have and for the same
-        # reason: how many is not in the type.
-        return (_pointer_to(ty.element), U64)
+        # Where the elements are, how many there are, and the allocator they came
+        # from: a list carries what gives it back, so that nothing that holds one
+        # has to be told.
+        return (_pointer_to(ty.element), U64, _pointer_to(ARENA))
     if isinstance(ty, CursorType):
         # Where the list is -- the place, not the elements -- and how far along
         # the walk is.
@@ -1288,8 +1288,10 @@ def parts_of(ty: Type) -> tuple[Type, ...]:
         # a function stands.
         return (_pointer_to(U8), _pointer_to(U8))
     if isinstance(ty, StrType):
-        # Where the bytes are and how many there are, which is what an array
-        # whose type does not say its length is as well -- the difference
-        # between the two is what may be done with them, not what they are.
-        return (_pointer_to(U8), U64)
+        # Where the bytes are, how many there are, and the allocator they came
+        # from -- nothing for text in the image, which is never given back.  The
+        # first two are what an array whose type does not say its length is as
+        # well; the third is what makes a string something that can be given back
+        # by whoever holds it.
+        return (_pointer_to(U8), U64, _pointer_to(ARENA))
     return (ty,)
