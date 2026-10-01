@@ -18,7 +18,7 @@ repository = "https://github.com/drepper/pl4g"
 # a test refuses a revision whose grammar is not the one this tree has.
 [grammars.pl4g]
 repository = "git@github.com:drepper/pl4g.git"
-rev = "f9594fb5b3429e5500517783654cbd49cbcc97bb"
+rev = "95c54316211c8bad360a1bb812a9c3da3ab25af1"
 path = "tree-sitter-pl4g"
 
 # The server, whose command the extension works out: `bin/pypl4g` of the project
