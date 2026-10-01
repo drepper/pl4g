@@ -434,6 +434,21 @@ class Quote(Node):
 
 
 @dataclass(frozen=True, slots=True)
+class Allocated(Expr):
+    """`EXPR in NAME`: which arena what the expression takes room from comes out of.
+
+    The same `in` a collection literal is written with, said of an expression that
+    allocates: a join of two strings, or an operator whose definition takes an arena.
+    What follows it is a name and not an expression, for the reason a collection's is
+    -- it is a place the allocator keeps its state in, and a place is named rather
+    than computed.
+    """
+
+    value: Expr
+    arena: Expr
+
+
+@dataclass(frozen=True, slots=True)
 class Invoke(Expr):
     """`f\N{TOP LEFT CORNER}a, b\N{TOP RIGHT CORNER}`: a macro invoked, which is not a call.
 
@@ -602,7 +617,7 @@ class SetLit(Expr):
     """
 
     elements: tuple[Expr, ...]
-    arena: NameRef | None = None
+    arena: Expr | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -614,7 +629,7 @@ class DictLit(Expr):
     """
 
     entries: tuple[tuple[Expr, Expr], ...]
-    arena: NameRef | None = None
+    arena: Expr | None = None
 
 
 @dataclass(frozen=True, slots=True)

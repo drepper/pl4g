@@ -4587,6 +4587,50 @@
       "option": null
     },
     {
+      "number": 4568,
+      "name": "LANG_ALLOCATED_NOT_A_PLACE",
+      "severity": "error",
+      "message": "'in' says which arena something comes out of, and {found} takes no room",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "what it was written after"
+        }
+      ],
+      "cause": "`in` names the arena an expression takes room from, so it may follow only something that takes room: a collection written out, a join of two strings or two lists, and an operator whose definition asks for an arena.  Everything else is worked out in registers and has no room to come from.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / An arena",
+        "requirement": "'in' follows an expression that takes room from an arena."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4611,
+      "name": "LANG_EMPTY_NOT_AN_ARENA",
+      "severity": "error",
+      "message": "'⎕empty' gives a whole arena back, and this is '{found}'",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "what it was given"
+        }
+      ],
+      "cause": "What it takes is the arena itself, named rather than computed: an arena is a place the allocator keeps its state in, so what is given back is that place's contents.  A reference to one is accepted as well, that being how an arena is handed to a function.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / An arena",
+        "requirement": "'⎕empty' takes an arena and gives back everything in it."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 4511,
       "name": "LANG_PURE_FUNCTION_HERE",
       "severity": "note",

@@ -1955,6 +1955,17 @@ class Parser:
                 continue
             operator = _BINARY_OPERATORS.get(self._current.kind)
             if operator is None or operator.precedence < minimum:
+                if minimum == 0 and self._check(TokKind.KW_IN):
+                    # `EXPR in NAME`: which arena what the expression takes room
+                    # from comes out of.  Written at the loosest level only, so that
+                    # `a ⧺ b in scratch` is the whole join in that arena rather than
+                    # `b` in it -- there being nothing an arena could mean about one
+                    # side of a join.
+                    where = self._parse_arena()
+                    assert where is not None
+                    left = ast.Allocated(span=left.span.to(where.span),
+                                         value=left, arena=where)
+                    continue
                 return left
             self._advance()
             # A left-associative operator will not take another of its own level
@@ -2242,15 +2253,21 @@ class Parser:
         return ast.DictLit(span=start.to(where.span if where is not None else end),
                            entries=tuple(entries), arena=where)
 
-    def _parse_arena(self) -> ast.NameRef | None:
+    def _parse_arena(self) -> ast.Expr | None:
         """Parse ``'in' NAME`` where one was written: which allocator to use.
 
         A name and not an expression.  What goes here is a place the allocator
         keeps its state in, and a place is named rather than computed -- the
         same reason the left of an assignment is a name.
+
+        A hole stands where the name does inside a macro, which is how a macro
+        writes a line whose arena the caller chose: what fills it has to be a name,
+        and by the time anything reads the tree it is one.
         """
         if self._accept(TokKind.KW_IN) is None:
             return None
+        if self._quoting and self._check(TokKind.DOLLAR):
+            return self._parse_atom()
         written = self._expect(TokKind.IDENT)
         return ast.NameRef(span=written.span, name=written.text)
 

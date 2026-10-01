@@ -229,19 +229,17 @@ To Do List for the PL4g language
         exception to hygiene the language admits.
     [ ] **a width, a base and a precision**, which are calls in the hole and want the
         `std.text` siblings with default arguments written.
-    [ ] **a pool allocator for the formatting**, which the instruction asks for: what a
-        join allocates from is `⎕heap`, so a line formatted and written leaves its bytes
-        there for ever.  A scratch arena given back after each line wants two things the
-        language does not have -- a join that says which arena it comes out of, `in`
-        reaching an expression the way it reaches a collection literal, and an operation
-        that gives a whole arena back at once, which the specification describes as a
-        property and which nothing performs.
-    [ ] **memory as a capability**, which is the other half of what I/O became on
-        2026-10-01: a device carries permission to write it, and nothing carries permission
-        to allocate, so formatting a *number* still asks for `@[impure]` although printing
-        plain text no longer does.  An arena is already a value, so the shape is the one
-        `@[device]` has: a function handed one may allocate.  It wants deciding together
-        with the pool above, since both are about which arena a join comes out of.
+    [x] **a pool allocator for the formatting.**  Done: `EXPR in NAME` says which arena
+        an expression takes room from, `⎕empty(NAME)` gives the whole of one back, `⎕arena`
+        works inside a function, `std.text` takes a reference to the arena, `⍕v in a` is the
+        operator form, and `print`/`println` build in `std.printing` and empty it once the
+        write has finished.  So a program that prints a formatted line declares nothing.
+    [x] **memory as a capability.**  Done with the pool above and by the same rule:
+        `⎕heap` is the global arena and every other one is somebody's, so taking room from
+        an arena a program named is accounted for by whoever owns it and `@[impure]` is left
+        meaning the arena nobody named.
+        Left over: nothing checks that room taken is ever given back -- the accounting says
+        whose room it is and not that it was returned.
     Left over and named in the proposal: float text, which is the large piece; whether an
     enumeration's names reach run time; the dyadic `⍕`, which is APL's
     format-by-specification and which nothing yet needs; and a chain of joins folded into

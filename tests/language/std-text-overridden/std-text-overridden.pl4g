@@ -19,7 +19,7 @@ fn `⍕`(v: T') → str:
     comptime if ⎕typeof(⌜v⌝) = ⌜Secret⌝:
         "hidden"
     else:
-        std.text(v)
+        std.text(v, &mut ⎕heap)
 
 @[startup, impure]
 fn main() → u6:

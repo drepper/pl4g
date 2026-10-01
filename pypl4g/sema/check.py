@@ -24,7 +24,7 @@ from ..front.token import (ACQUIRE_NAME, ANSWER_NAME, ENTRY_NAME,
                            AT_NAME, SPAN_NAME,
                            ADDRESS_NAME, BYTES_NAME,
                            IS_RECORD_NAME, FIELDS_NAME, TYPENAME_NAME,
-                           STR_OF_NAME,
+                           STR_OF_NAME, EMPTY_NAME,
                            WIDEN_NAME,
                            BOTTOM_GLYPH, BUILTIN_GLYPH, CHR_NAME, DEREF_GLYPH,
                            LIFETIME_GLYPH, LIFT_OPEN_GLYPH,
@@ -57,7 +57,7 @@ from ..ir.function import (DEFAULT_CCONV, SYSTEM_CCONV, BasicBlock, FuncAttrs,
                            InlineHint,
                            Linkage, SpecialKind)
 from ..ir.module import GlobalVar, Module
-from ..ir.types import (ARENA, ArrayType, BOOL, BoolType, BUILTIN_TYPES,
+from ..ir.types import (ARENA, ARENA_NAME, ArrayType, BOOL, BoolType, BUILTIN_TYPES,
                         SYNTAX, SyntaxType, I64,
                         CursorType,
                         DictType,
@@ -1206,6 +1206,53 @@ def _reaches_a_device(ty: Type, seen: frozenset[int] = frozenset()) -> bool:
     return False
 
 
+def _glyph_of(expr: ast.Expr) -> str:
+    """The glyph an operator application is written with."""
+    match expr:
+        case ast.Unary():
+            return expr.op.value
+        case ast.Binary():
+            return expr.op.value
+        case ast.Fresh():
+            return expr.glyph
+    return ""
+
+
+def _operands_of(expr: ast.Expr) -> tuple[ast.Expr, ...]:
+    """What an operator application is applied to."""
+    match expr:
+        case ast.Unary():
+            return (expr.operand,)
+        case ast.Binary():
+            return (expr.left, expr.right)
+        case ast.Fresh():
+            return tuple(expr.operands)
+    return ()
+
+
+def _takes_room(expr: ast.Expr) -> bool:
+    """Whether what the expression does takes room from an arena.
+
+    A join of two, and a collection written out.  Everything else is worked out in
+    registers, so saying which arena it comes from would be saying nothing.
+    """
+    if isinstance(expr, (ast.SetLit, ast.DictLit, ast.ListLit)):
+        return True
+    return isinstance(expr, ast.Binary) and expr.op is ast.BinaryOp.CONCAT
+
+
+def _about_the_shape(expr: ast.Expr) -> str:
+    """What an expression is, for a message about where it cannot take room."""
+    match expr:
+        case ast.NameRef():
+            return "".join(("'", expr.name, "'"))
+        case ast.Binary():
+            return "".join(("'", expr.op.value, "'"))
+        case ast.Unary():
+            return "".join(("'", expr.op.value, "'"))
+    return "this"
+
+
 def _is_build_object(ty: Type) -> bool:
     """Whether *ty* is a mutable reference to the record a build is described in.
 
@@ -1772,6 +1819,16 @@ class Checker:
         #: Whether what is being checked has actually done it, which is what makes
         #: the function one a caller may not drop.
         self._did_io: bool = False
+        #: Where what is being lowered takes its room from, where `in` said: a
+        #: lexical thing, put in force around the expression it was written on.
+        self._out_of_arena: Value | None = None
+        #: Whether that arena is this call's own -- one it was handed or one it
+        #: made -- in which case the room is accounted for by whoever holds it and
+        #: is not a change to anything global.
+        self._room_is_accounted: bool = False
+        #: What the last arena looked up turned out to be, which is how the two
+        #: above are set from one lookup.
+        self._arena_in_hand: bool = False
         #: Whether what is being lowered is what a loop comes to, which is
         #: what a `break` hands over and what an `else` arm gives.  A mismatch
         #: there is about the loop rather than about whatever the loop stands
@@ -7763,29 +7820,68 @@ class Checker:
         # call: the next call gets what this one left of it.
         self._an_effect(D.LANG_PURE_WRITES_ELSEWHERE, expr.span)
         return self._build_collection(builder, expr, ty,
-                                      self._arena_named(expr.arena), ready)
+                                      self._arena_named(builder, expr.arena),
+                                      ready)
 
-    def _arena_named(self, written: ast.NameRef | None) -> GlobalVar | None:
-        """Which allocator a collection was told to come out of.
+    def _arena_named(self, builder: IRBuilder,
+                     written: ast.Expr | None) -> Value | None:
+        """Where the allocator something was told to come out of keeps its state.
 
-        Nothing where none was named, which is what says to use the one the
-        compiler provides.  A name that is not an arena is reported here rather
-        than where the table is made, because what is wrong with it is what it
-        is and not what it is being used for.
+        Nothing where none was named, which is what says to use the one the compiler
+        provides.  A name that is not an arena is reported here rather than where the
+        thing is made, because what is wrong with it is what it is and not what it is
+        being used for.
+
+        **Three things are an arena to name**: a variable at the top level, a name
+        inside a function given storage of its own, and a parameter holding a
+        reference to one.  All three are a *place*, which is what an arena is: the
+        allocator keeps its state there, and what this answers is where.
         """
         if written is None:
+            return None
+        if isinstance(written, ast.Member):
+            # An arena another module exports, reached by the path every other name
+            # of a module is reached by: a variable at the top level is a place, and
+            # so is one named through the module that wrote it.
+            shared = self._exported_variable(written)
+            if shared is not None and shared.value_type is ARENA:
+                self._arena_in_hand = True
+                return builder.address(shared, written.span)
+        if not isinstance(written, ast.NameRef):
+            self._diags.emit(D.LANG_NOT_AN_ARENA, written.span,
+                             name=_about_the_shape(written))
+            return None
+        local = self._find_local(written.name)
+        if local is not None:
+            held = self._held_by(local)
+            if local.placed and held is ARENA:
+                local.read = True
+                local.written = True
+                self._arena_in_hand = True
+                return local.value
+            if isinstance(held, PtrType) and held.pointee is ARENA:
+                local.read = True
+                self._arena_in_hand = True
+                return local.value
+            self._diags.emit(D.LANG_NOT_AN_ARENA, written.span,
+                             name=written.name)
             return None
         found = self._provided(written.name)
         if not (isinstance(found, GlobalVar) and found.value_type is ARENA):
             self._diags.emit(D.LANG_NOT_AN_ARENA, written.span,
                              name=written.name)
             return None
-        return found
+        # **`⎕heap` is the global one and every other arena is somebody's.**  Taking
+        # room from one a program named is accounted for by whoever owns it -- that
+        # is what naming it in the line is -- and `@[impure]` is left meaning the
+        # arena nobody named.
+        self._arena_in_hand = written.name != HEAP_NAME
+        return builder.address(found, written.span)
 
     def _build_collection(self, builder: IRBuilder,
                           expr: ast.SetLit | ast.DictLit,
                           ty: SetType | DictType,
-                          arena: GlobalVar | None,
+                          arena: Value | None,
                           ready: _Entries) -> Value:
         """Make the table a collection is, and put what was written down in it.
 
@@ -7820,7 +7916,7 @@ class Checker:
         return tables.Shape(key=ty.key, value=ty.value)
 
     def _new_table(self, builder: IRBuilder, ty: SetType | DictType,
-                   span: Span, arena: GlobalVar | None = None,
+                   span: Span, arena: Value | None = None,
                    comes_from: Value | None = None) -> Value:
         """Make an empty table of the shape *ty* calls for.
 
@@ -7834,9 +7930,12 @@ class Checker:
         if comes_from is not None:
             place = tables.arena_of(builder, comes_from)
         else:
-            found = arena if arena is not None else self._provided(HEAP_NAME)
-            assert isinstance(found, GlobalVar)
-            place = builder.address(found, span)
+            if arena is not None:
+                place = arena
+            else:
+                found = self._provided(HEAP_NAME)
+                assert isinstance(found, GlobalVar)
+                place = builder.address(found, span)
         made = builder.call(self._module.functions[tables.NEW_SYMBOL],
                             (place, builder.int_const(U64, shape.stride)),
                             tables.table_type(self._module), span)
@@ -10477,6 +10576,8 @@ class Checker:
                 return builder.bool_const(expr.value)
             case ast.Call():
                 return self._lower_call(builder, expr, expected)
+            case ast.Allocated():
+                return self._lower_allocated(builder, expr, expected)
             case ast.NameRef():
                 return self._lower_name(builder, expr, expected)
             case ast.TupleLit():
@@ -10538,6 +10639,18 @@ class Checker:
                 return UndefConst(ERROR)
             case ast.Fresh():
                 return self._lower_fresh(builder, expr, expected)
+            case ast.Lifted() if expected is SYNTAX \
+                    and isinstance(expr.written, ast.TypeRef) \
+                    and expr.written.module is None:
+                # A piece of the program is wanted, and what stands between the marks
+                # is a bare name -- which the parser reads as a type because it could
+                # be one.  Which it is, is a question about the program and not about
+                # its syntax, and this is where that question is answered: a name
+                # where a piece is wanted is the name as a piece.
+                return self._lower_quote(builder, ast.Quote(
+                    span=expr.span,
+                    pieces=(ast.NameRef(span=expr.span,
+                                        name=expr.written.name),)), expected)
             case ast.Lifted():
                 # Every place one may stand looks at it before it gets here:
                 # `\N{APL FUNCTIONAL SYMBOL QUAD}typeof`, a comparison the compiler settles, and the two
@@ -11820,11 +11933,9 @@ class Checker:
         bytes_ = self._module.types.ptr_type(U8, mutable=True)
         counts = [builder.extract(side, 1, U64, expr.span)
                   for side in (left, right)]
-        heap = self._provided(HEAP_NAME)
-        assert isinstance(heap, GlobalVar)
         made = builder.call(
             strings.join_function(self._module),
-            (builder.address(heap, expr.span),
+            (self._out_of(builder, expr.span),
              builder.cast(CastKind.BITCAST,
                           builder.extract(left, 0, pointer, expr.span),
                           bytes_, expr.span),
@@ -11869,11 +11980,9 @@ class Checker:
         first_len = builder.extract(left, 1, U64, expr.span)
         second = builder.extract(right, 0, pointer, expr.span)
         second_len = builder.extract(right, 1, U64, expr.span)
-        heap = self._provided(HEAP_NAME)
-        assert isinstance(heap, GlobalVar)
         bytes_ = builder.call(
             strings.join_function(self._module),
-            (builder.address(heap, expr.span), first, first_len, second,
+            (self._out_of(builder, expr.span), first, first_len, second,
              second_len),
             pointer, expr.span)
         found = builder.make_tuple(
@@ -13203,6 +13312,8 @@ class Checker:
                 return self._lower_bytes(builder, expr, expected)
             if given == STR_OF_NAME:
                 return self._lower_str_of(builder, expr, expected)
+            if given == EMPTY_NAME:
+                return self._lower_empty(builder, expr, expected)
             if given == FIELDS_NAME:
                 return self._lower_fields(builder, expr, expected)
             if given == TYPENAME_NAME:
@@ -13917,10 +14028,18 @@ class Checker:
         is looked at, so a function using it says `impure` -- as one joining two
         strings does, and for the same reason.
         """
-        if len(expr.args) != 1:
+        if not 1 <= len(expr.args) <= 2:
             self._diags.emit(D.LANG_CALL_WRONG_ARGUMENT_COUNT, expr.span,
                              name=STR_OF_NAME, expected=1, found=len(expr.args))
             return UndefConst(ERROR)
+        # Where the bytes go, where a second argument said: a character takes room
+        # like everything else that becomes a string, and a function that was told
+        # which arena is one whose caller accounted for it.
+        where = None
+        if len(expr.args) == 2:
+            where = self._arena_place(builder, expr.args[1])
+            if where is None:
+                return UndefConst(ERROR)
         given = self._lower_expr(builder, expr.args[0], CHAR)
         found = self._value_type_of(given)
         if found is ERROR:
@@ -13932,18 +14051,135 @@ class Checker:
         if not self._accepts(expected, STR):
             self._report_mismatch(expr.span, STR, expected)
             return UndefConst(ERROR)
-        heap = self._provided(HEAP_NAME)
-        assert isinstance(heap, GlobalVar)
-        self._an_effect(D.LANG_PURE_WRITES_ELSEWHERE, expr.span)
+        if where is None:
+            where = self._out_of(builder, expr.span)
+            self._an_effect(D.LANG_PURE_TAKES_ROOM, expr.span,
+                            what="a string of one character")
         # The character itself goes over, not its number: the two helpers read it as
         # a number inside themselves, where what they are reading is a parameter.
         bytes_ = builder.call(strings.char_function(self._module),
-                              (builder.address(heap, expr.span), given),
+                              (where, given),
                               self._module.types.ptr_type(U8, mutable=True),
                               expr.span)
         count = builder.call(strings.length_in_bytes(self._module), (given,),
                              U64, expr.span)
         return builder.make_tuple((bytes_, count), STR, expr.span)
+
+    def _lower_empty(self, builder: IRBuilder, expr: ast.Call,
+                     expected: Type | None) -> Value:
+        """Lower `⎕empty(ARENA)`: everything it holds, given back at once.
+
+        The one granularity the allocator has.  Nothing is given back on its own, so
+        this is what makes an arena a *pool*: room is taken from it for as long as it
+        is wanted and the whole of it goes in one call.  What is left is an arena with
+        nothing in it, so taking room from it again asks the system for a first chunk.
+
+        It takes the arena named rather than computed, an arena being a place -- and a
+        reference to one, that being how an arena is handed to a function.
+        """
+        if len(expr.args) != 1:
+            self._diags.emit(D.LANG_CALL_WRONG_ARGUMENT_COUNT, expr.span,
+                             name=EMPTY_NAME, expected=1, found=len(expr.args))
+            return UndefConst(ERROR)
+        written = expr.args[0]
+        place = self._arena_place(builder, written)
+        if place is None:
+            return UndefConst(ERROR)
+        if expected is not None:
+            self._report_mismatch(expr.span, VOID, expected)
+            return UndefConst(ERROR)
+        if not self._arena_in_hand:
+            self._an_effect(D.LANG_PURE_CHANGES_A_VARIABLE, expr.span,
+                            name=HEAP_NAME)
+        builder.call(tables.release_function(self._module), (place,), VOID,
+                     expr.span)
+        return UndefConst(VOID)
+
+    def _arena_place(self, builder: IRBuilder, written: ast.Expr) -> Value | None:
+        """Where the arena an expression names keeps its state, or nothing."""
+        if isinstance(written, ast.NameRef):
+            found = self._arena_named(builder, written)
+            if found is not None:
+                return found
+            return None
+        value = self._lower_expr(builder, written, None)
+        held = self._value_type_of(value)
+        if isinstance(held, PtrType) and held.pointee is ARENA:
+            return value
+        if held is not ERROR:
+            self._diags.emit(D.LANG_EMPTY_NOT_AN_ARENA, written.span,
+                             found=held.written())
+        return None
+
+    def _operator_takes_an_arena(self, expr: ast.Expr) -> bool:
+        """Whether a program defined this operator with an arena as its last operand.
+
+        What `in` means then is that operand, which is how a definition asks to be
+        told where to put what it builds -- `⍕v in scratch` being the case it was
+        wanted for.
+        """
+        found = self._operator_written(_glyph_of(expr),
+                                      len(_operands_of(expr)) + 1)
+        node = found.node if isinstance(found, _Generic) else None
+        if node is not None:
+            written = node.params[-1].type if node.params else None
+            return isinstance(written, ast.RefTypeRef) \
+                and isinstance(written.pointee, ast.TypeRef) \
+                and written.pointee.name == ARENA_NAME
+        if not isinstance(found, Function) or not found.ty.params:
+            return False
+        last = found.ty.params[-1]
+        return isinstance(last, PtrType) and last.pointee is ARENA
+
+    def _out_of(self, builder: IRBuilder, span: Span) -> Value:
+        """Where what is being lowered takes its room from.
+
+        The arena `in` named, where one was written around this expression, and the
+        one the compiler provides otherwise.  It is a lexical thing and not an
+        argument: `a ⧺ b in scratch` says where the join's room comes from, and what
+        reads it is the lowering of the join.
+        """
+        if self._out_of_arena is not None:
+            return self._out_of_arena
+        heap = self._provided(HEAP_NAME)
+        assert isinstance(heap, GlobalVar)
+        return builder.address(heap, span)
+
+    def _lower_allocated(self, builder: IRBuilder, expr: ast.Allocated,
+                         expected: Type | None) -> Value:
+        """Lower `EXPR in NAME`: which arena the expression takes its room from.
+
+        What may follow it is something that takes room: a join, a collection written
+        out, or an operator whose definition asks for an arena -- which is what lets a
+        program's own `⍕` be told where the text it builds should go.  Everything else
+        is worked out in registers and has nowhere to come from (4568).
+        """
+        place = self._arena_named(builder, expr.arena)
+        if place is None:
+            return UndefConst(ERROR)
+        inside = expr.value
+        if isinstance(inside, (ast.Unary, ast.Binary, ast.Fresh)) \
+                and self._operators and self._operator_takes_an_arena(inside):
+            # A program's own operator, handed the arena as its last operand: the
+            # definition asked for one, and `in` is how a caller writes it.
+            # The place and not the name: the definition asked for a reference to
+            # an arena, which is how an arena is handed over at all.
+            handed = ast.AddressOf(span=expr.arena.span, operand=expr.arena,
+                                   mutable=True)
+            return self._operator_call(
+                builder, _glyph_of(inside), (*_operands_of(inside), handed),
+                expr.span, expected)
+        if not _takes_room(inside):
+            self._diags.emit(D.LANG_ALLOCATED_NOT_A_PLACE, expr.span,
+                             found=_about_the_shape(inside))
+            return UndefConst(ERROR)
+        outer = (self._out_of_arena, self._room_is_accounted)
+        self._out_of_arena = place
+        self._room_is_accounted = self._arena_in_hand
+        try:
+            return self._lower_expr(builder, inside, expected)
+        finally:
+            self._out_of_arena, self._room_is_accounted = outer
 
     def _lower_address_of(self, builder: IRBuilder, expr: ast.Call,
                           expected: Type | None) -> Value:
@@ -14993,6 +15229,15 @@ class Checker:
             return UndefConst(ERROR)
         if ref.name.startswith(SYSCALL_NUMBER_PREFIX):
             return self._syscall_number(ref)
+        if ref.name == EMPTY_ARENA_NAME:
+            # An arena that has asked the system for nothing yet, which is three
+            # words of nought.  There is exactly one thing to write where an arena
+            # is wanted, and this is it: a name inside a function is then an
+            # ordinary record local, given storage of its own and emptied with
+            # `⎕empty` -- which is what makes a pool of one's own writable.
+            return builder.make_tuple(
+                tuple(builder.int_const(U64, 0) for _ in ARENA.fields),
+                ARENA, ref.span)
         local = self._find_local(ref.name)
         if local is None and isinstance(self._top.get(ref.name), _Generic):
             # Written once and compiled once per set of types, and which sets
@@ -15253,6 +15498,11 @@ class Checker:
         what has to change is one attribute on the *caller's* line.
         """
         if self._impure:
+            return
+        if which == D.LANG_PURE_TAKES_ROOM and self._room_is_accounted:
+            # Room from an arena this call holds -- one it was handed or one it made
+            # -- is accounted for by whoever holds it: giving it back is theirs to
+            # do, and `@[impure]` is left meaning a change to something global.
             return
         held = self._demanding[0] if self._demanding is not None else None
         name = getattr(held, "name", "")

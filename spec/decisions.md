@@ -8555,6 +8555,67 @@ formatting a number does.  The pool allocator the formatting instruction asks fo
 that gets decided, and the shape is already visible: an arena is a value, so a function
 handed one could allocate the way a function handed a device can write.
 
+---
+
+## 2026-10-01T09:40+02:00 — language
+
+**Memory is a capability too: `EXPR in NAME`, `⎕empty`, and a pool the printing gives back**
+
+    let scratch: mut arena = ⎕arena
+    let both: str = first ⧺ second in scratch
+    let said: str = ⍕v in scratch
+    ⎕empty(scratch)
+
+The other half of what I/O became earlier the same day.  A device carries permission to
+write it; an arena now carries permission to take room from it, and the attribute is left
+meaning what neither accounts for.
+
+**`in` says which arena, and that saying it *is* the accounting.**  `⎕heap` is the global
+arena and every other one is somebody's: a function that joins into an arena it was handed,
+or into one it made, says nothing, because whoever owns the arena owns what is in it.  A
+join with no `in` takes room from `⎕heap`, which nobody named, and asks for `@[impure]`.
+
+**What may carry `in` is what takes room**: a join, a collection written out, and an
+operator whose definition asks for an arena -- which is the formatting glyph, `⍕v in a`
+being the two-operand reading with the arena as the second operand.  `⍕v` with no arena is
+a second definition of the glyph that names `⎕heap` for the caller, told apart by arity the
+way every operator with two readings is.  Everything else is worked out in registers and is
+refused with a message of its own (4568).
+
+**`⎕empty(a)` gives the whole of an arena back**, which is the only granularity there is
+and exactly what makes one a pool.  The runtime had the call already and nothing reached it.
+`⎕arena` now works inside a function as well as at the top level -- three words of nought in
+the frame -- so a pool of one call's own is one line and giving it back is one more.
+
+**`std.text` takes a reference to the arena** and every join inside it goes there;
+`formatted` writes `in` into the code it generates; `format` names `⎕heap` so that what it
+answers lasts, and **`print` and `println` name `std.printing`**, a pool `Io.said` empties
+once the write has finished.  So a program that prints a formatted line declares *nothing*,
+which was the point of the exercise.
+
+The cost is the cost of a shared pool and is written on it: `std.printing` is emptied at the
+end of every print, so nothing may be kept in it.  A per-call pool would need the expansion
+to write a `let`, which would make `print` a statement and take away the byte count it
+answers; the pool is a module variable instead, and said to be one.
+
+Compare: **Zig**, where every allocator is a parameter and `std.fmt.allocPrint` takes one --
+this is that, with `in` as the notation and with the compiler checking that an unnamed
+allocation is declared; **Odin**, whose `context.allocator` is ambient, which is what naming
+it in the line is against; **Rust**, where the allocator is a type parameter of the
+collection; **C++**, whose `std::format` has no allocator in sight and whose
+`std::pmr::monotonic_buffer_resource` is this pool written out; **Haskell** and **Clean**,
+where memory is not in the effect system at all.  What is unusual here is that memory and
+I/O are the *same* mechanism: a value you hold accounts for what it lets you do.
+
+Turned down: **letting any allocation at all be accounted for**, which would have made
+`@[impure]` mean nothing about memory; and **a per-call pool for printing**, for the reason
+above.
+
+Left over: a program may still take room from an arena and never give it back, which
+nothing checks -- the accounting says *whose* room it is and not that it was returned.  And
+`⍕` of a number carrying a unit still does not work, the generic digit loop having no way to
+build ten with a unit on it.
+
 Open questions
 --------------
 

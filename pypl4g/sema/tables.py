@@ -59,6 +59,7 @@ from ..ir.value import Value
 #: reached for: the backend supplies the body, and what says it is wanted is
 #: that a module declares it.
 ALLOC_SYMBOL: Final[str] = "__pl4g_alloc"
+RELEASE_SYMBOL: Final[str] = "__pl4g_release"
 
 #: How wide a word is.  Every field of a table, every key and every value is
 #: one, which is what lets one table serve every instantiation.
@@ -223,6 +224,12 @@ def _store_value(builder: IRBuilder, shape: Shape, place: Value,
     assert shape.value is not None
     builder.store(_as(builder, _field(builder, place, shape.value_at),
                       shape.value), value)
+
+
+def release_function(module: Module) -> Function:
+    """The one that gives a whole arena back, declared on first ask."""
+    return _declared(module, RELEASE_SYMBOL,
+                     (module.types.ptr_type(ARENA, mutable=True),), VOID)
 
 
 def _declared(module: Module, name: str, params: tuple[Type, ...],

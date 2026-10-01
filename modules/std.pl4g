@@ -315,24 +315,25 @@ fn Io.println(to: &mut Writer, what: u8⟦⟧) → u64 ¤size ? i32:
 ※※
 ※※ \param v what to write
 ※※ \return what a program would have written to mean it
-@[export, impure]
-fn text(v: T') → str:
+@[export]
+fn text(v: T', a: &mut arena) → str:
     comptime if ⎕typeof(⌜v⌝) = ⌜str⌝:
         v
     comptime elif ⎕typeof(⌜v⌝) = ⌜bool⌝:
         if v: "true" else: "false"
     comptime elif ⎕typeof(⌜v⌝) = ⌜char⌝:
-        ⎕str(v)
+        ⎕str(v, a)
     comptime elif ⎕isrecord(⌜T'⌝):
         ※ The notation the language itself uses for a record, which is also what
         ※ reads back as the same value.
-        let opened: str = ⎕typename(⌜T'⌝) ⧺ "("
+        let opened: str = ⎕typename(⌜T'⌝) ⧺ "(" in a
         let out: mut str = opened
         comptime foreach f := ⎕fields(v):
             if out ≠ opened:
-                out ← out ⧺ ", "
-            out ← out ⧺ "." ⧺ f⟦0⟧ ⧺ " ← " ⧺ text(f⟦1⟧)
-        out ⧺ ")"
+                out ← out ⧺ ", " in a
+            let said: str = text(f⟦1⟧, a)
+            out ← out ⧺ "." ⧺ f⟦0⟧ ⧺ " ← " ⧺ said in a
+        out ⧺ ")" in a
     else:
         ※ A number, one place at a time and least significant first, so nothing
         ※ has to know how many places there are.
@@ -352,13 +353,13 @@ fn text(v: T') → str:
             let d: T' = rest % ten ?? zero
             let away: T' = if below: zero - d else: d
             let place: u64 = ⎕narrow(away, ⌜u64⌝) ?? 0u64
-            out ← digits⟦⎕unit(place, ⌜idx⌝)⟧ ⧺ out
+            out ← digits⟦⎕unit(place, ⌜idx⌝)⟧ ⧺ out in a
             rest ← rest ÷ ten ?? zero
             if rest = zero:
                 break §places
         ※ The raised minus the language writes a negative literal with, so that what
         ※ comes out reads back as what went in.
-        if below: "⁻" ⧺ out else: out
+        if below: "⁻" ⧺ out in a else: out
 
 ※※ The same, written where a reader expects an operator.
 ※※
@@ -369,9 +370,22 @@ fn text(v: T') → str:
 ※※
 ※※ \param v what to write
 ※※ \return what a program would have written to mean it
+@[export]
+fn `⍕`(v: T', a: &mut arena) → str:
+    text(v, a)
+
+※※ The same with no arena named, which is the one the compiler provides.
+※※
+※※ \details Two definitions of one glyph, told apart by how many operands they take,
+※※ which is how every other operator with two readings is told apart.  This one takes
+※※ room from `⎕heap` and so asks its caller for `@[impure]`: the arena nobody named is
+※※ the global one, and `⍕v in a` is how a caller says otherwise.
+※※
+※※ \param v what to write
+※※ \return what a program would have written to mean it
 @[export, impure]
 fn `⍕`(v: T') → str:
-    text(v)
+    text(v, &mut ⎕heap)
 
 ※ -- formatting ---------------------------------------------------------------
 
@@ -382,17 +396,17 @@ fn `⍕`(v: T') → str:
 ※ the call, so a `print` of plain text would otherwise ask its caller for permission to
 ※ allocate in order to write something it already had.
 @[impure]
-comptime fn after(answer: syntax, started: bool, run: str,
-                  piece: syntax) → syntax:
+comptime fn after(answer: syntax, started: bool, run: str, piece: syntax,
+                  where: syntax) → syntax:
     if ¬started:
         if #run = 0:
             piece
         else:
-            ⌜$(run) ⧺ $piece⌝
+            ⌜$(run) ⧺ $piece in $where⌝
     elif #run = 0:
-        ⌜$answer ⧺ $piece⌝
+        ⌜$answer ⧺ $piece in $where⌝
     else:
-        ⌜$answer ⧺ $(run) ⧺ $piece⌝
+        ⌜$answer ⧺ $(run) ⧺ $piece in $where⌝
 
 ※※ The piece of the program a template and its arguments come to.
 ※※
@@ -405,7 +419,8 @@ comptime fn after(answer: syntax, started: bool, run: str,
 ※※ \param args the arguments, as the one piece several of them are
 ※※ \return the piece the two come to
 @[impure]
-comptime fn formatted(template: syntax, args: syntax) → syntax:
+comptime fn formatted(template: syntax, args: syntax,
+                      where: syntax) → syntax:
     let said: str = ⎕name(template)
     let holes: u64 = ⎕parts(args)
     let answer: mut syntax = ⌜""⌝
@@ -424,7 +439,8 @@ comptime fn formatted(template: syntax, args: syntax) → syntax:
                 if taken ≥ holes:
                     return ⎕refuse("the template has more holes than there are arguments")
                 let next: syntax = ⎕part(args, taken)
-                answer ← after(answer, started, run, ⌜⍕$next⌝)
+                answer ← after(answer, started, run,
+                               ⌜⍕$next in $where⌝, where)
                 started ← true
                 run ← ""
                 taken ← taken + 1u64
@@ -453,7 +469,7 @@ comptime fn formatted(template: syntax, args: syntax) → syntax:
     elif #run = 0:
         answer
     else:
-        ⌜$answer ⧺ $(run)⌝
+        ⌜$answer ⧺ $(run) in $where⌝
 
 ※※ The text a template and its arguments come to.
 ※※
@@ -472,7 +488,41 @@ comptime fn formatted(template: syntax, args: syntax) → syntax:
 ※※ \return the text they come to
 @[export, impure]
 macro format(template: syntax, ⁂args: syntax) → syntax:
-    formatted(template, args)
+    formatted(template, args, ⌜⎕heap⌝)
+
+※※ The arena the print functions build their text in, and empty when they are done.
+※※
+※※ \details A **pool**: room is taken from it for as long as a line is being built and
+※※ the whole of it goes back in one call, which is the only granularity an arena has
+※※ and exactly what formatting wants -- the text of a line is wanted until it has been
+※※ written and never after.
+※※
+※※ \note It is emptied at the end of every `print` and `println`, so **nothing may be
+※※ kept in it**.  A program that wants text to last asks `format` for it, which takes
+※※ room from the arena the caller names and from `⎕heap` where it names none.
+@[export]
+let printing: mut arena = ⎕arena
+
+※※ Write text to a device and give the printing pool back, answering how many bytes went.
+※※
+※※ \details What `print` and `println` expand into.  The write waits, so by the time
+※※ this answers there is nothing left that the text was needed for -- which is the
+※※ moment to empty the pool, and the reason emptying it is in here rather than left to
+※※ whoever wrote the line.
+※※
+※※ \param to the device to write to
+※※ \param what the text, which was built in the pool
+※※ \param line whether a newline goes with it, in the same request
+※※ \return how many bytes went
+※※ \raises the number the kernel gave
+@[export]
+fn Io.said(to: &mut Writer, what: str, line: bool) → u64 ¤size ? i32:
+    let went: u64 ¤size = if line:
+        Io.println(to, ⎕bytes(what))?
+    else:
+        Io.print(to, ⎕bytes(what))?
+    ⎕empty(printing)
+    went
 
 ※※ Write a template and its arguments to a device, and answer how many bytes went.
 ※※
@@ -487,8 +537,8 @@ macro format(template: syntax, ⁂args: syntax) → syntax:
 ※※ \return how many bytes went
 @[export, impure]
 macro print(to: syntax, template: syntax, ⁂args: syntax) → syntax:
-    let said: syntax = formatted(template, args)
-    ⌜Io.print($to, ⎕bytes($said))⌝
+    let said: syntax = formatted(template, args, ⌜printing⌝)
+    ⌜Io.said($to, $said, false)⌝
 
 ※※ The same, with a newline after it, written as one request.
 ※※
@@ -502,8 +552,8 @@ macro print(to: syntax, template: syntax, ⁂args: syntax) → syntax:
 ※※ \return how many bytes went, which is one more than the text
 @[export, impure]
 macro println(to: syntax, template: syntax, ⁂args: syntax) → syntax:
-    let said: syntax = formatted(template, args)
-    ⌜Io.println($to, ⎕bytes($said))⌝
+    let said: syntax = formatted(template, args, ⌜printing⌝)
+    ⌜Io.said($to, $said, true)⌝
 
 ※ -- describing a build --------------------------------------------------------
 

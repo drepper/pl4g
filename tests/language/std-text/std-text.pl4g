@@ -42,7 +42,10 @@ fn main() → u6:
     let want: str = "Line(.from ← Point(.x ← 1, .y ← ⁻234), .to ← Point(.x ← 56, .y ← 7))"
     if ⍕l ≠ want:
         return 7u6
-    ※ And the same thing under its name, which is what a program delegates to.
-    if std.text(42u16) ≠ "42":
+    ※ And the same thing under its name, which is what a program delegates to: it
+    ※ takes the arena, `⍕` with no arena being the one that names `⎕heap` for you.
+    let scratch: mut arena = ⎕arena
+    if std.text(42u16, &mut scratch) ≠ "42":
         return 8u6
+    ⎕empty(scratch)
     0u6

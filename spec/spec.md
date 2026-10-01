@@ -352,8 +352,16 @@ argument, and `{{` and `}}` are braces that stand for themselves.
 
 What a template comes to is **a join of the pieces between the holes and `⍕` of each argument**, so nothing happens while the
 program runs that would not have happened had the join been written out -- and since it is `⍕`, a type a program defined formats by
-the definition that program wrote.  `print` and `println` hand that join to `Io.print` and `Io.println`, so a line is formatted
-while compiling and written in one request with nothing buffered.
+the definition that program wrote.
+
+**The room comes from an arena the formatting is told about.**  `std.text` takes a reference to one and every join inside it goes
+there; `⍕v in a` is the operator form of the same thing, and it is what `format` writes into the code it generates.  `format` itself
+names `⎕heap`, so what it answers lasts.  **`print` and `println` name `std.printing`**, a pool they empty when the write has
+finished -- so a formatted line takes room for as long as it takes to write it and not a moment longer, and **nothing may be kept in
+that pool**.
+
+Putting those two together: a program that prints a formatted line declares *nothing*.  The device carries permission to write and
+the pool carries permission to allocate, and `@[impure]` is left for what neither accounts for.
 
 There is no mini-language inside the template: a width or a base is asked for by a call in the hole, where a reader and the checker
 can both see it.
@@ -3225,6 +3233,31 @@ chunk has no room, the arena asks the system for another and links it on.  Nothi
 given back at once -- which is the whole of what makes an arena safe for storage with a known lifetime, and the whole of what makes
 it wrong for a program that runs for a long time.  A second allocator will implement the same three operations, and the language
 will name it the same way.
+
+**`EXPR in NAME` says which arena an expression takes its room from**, and `⎕empty(NAME)` gives the whole of one back:
+
+```
+let scratch: mut arena = ⎕arena
+let both: str = first ⧺ second in scratch
+let said: str = ⍕v in scratch
+⎕empty(scratch)
+```
+
+What may carry `in` is what takes room: a join of two strings or two lists, a collection written out, and an operator whose
+definition asks for an arena -- which is what `⍕v in scratch` is, the second operand being where to put what it builds.  Anything
+else is worked out in registers and has nowhere to come from (4568).
+
+**`⎕heap` is the global arena and every other one is somebody's.**  Taking room from an arena a program named is accounted for by
+whoever owns it -- naming it in the line *is* the accounting -- so a function that joins into an arena it was handed, or into one it
+made, says nothing.  **`@[impure]` is left meaning the arena nobody named.**
+
+**`⎕empty` is the only granularity there is**, which is what makes an arena a *pool*: room is taken from it for as long as it is
+wanted and the whole of it goes in one call.  What is left is an arena with nothing in it, so taking room from it again asks the
+system for a first chunk.  Emptying `⎕heap` is a change to something global and asks for `@[impure]`; emptying any other arena is
+accounted for where it was named.
+
+**`⎕arena` works inside a function as well as at the top level**, where it is three words of nought in the frame -- so a pool of one
+call's own is one line, and giving it back is one more.
 
 **An allocation that cannot be met stops the program.**  Answering with a result would put a `?` on every value a program builds
 rather than computes, and there is nothing a program could usefully do at that point that the system will not do better by

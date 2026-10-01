@@ -63,6 +63,11 @@ module.exports = grammar({
     // generalized parse carries both readings until one of them ends at the
     // closing bracket.
     [$._non_range, $._plain_type],
+    // Which expression `in` attaches to.  The compiler reads it at the loosest level
+    // only -- `⧺` and the operators bind tighter, so `∣ a ⧺ b in scratch` is the whole
+    // of it in that arena -- and the generalized parse carries both readings until one
+    // of them ends.
+    [$._non_range, $.allocated_expression],
     // A statement may carry attributes and so may a lambda, so `@[...] \u03bb ...`
     // written as a whole statement has two readings.  The compiler takes the
     // statement's, the statement parser reading the list before it looks at
@@ -758,6 +763,7 @@ module.exports = grammar({
       $.parenthesized_expression,
       $.lifted_expression,
       $.invoke_expression,
+      $.allocated_expression,
       $.quote,
       $.hole,
       $.float_literal,
@@ -978,20 +984,48 @@ module.exports = grammar({
     )),
 
     set_literal: $ => seq('\u2e28', sepBy(',', $._expression), '\u2e29',
-                          optional($._in_arena)),
+                          ),
 
     dictionary_literal: $ => seq(
       '\u2e28',
       sepBy1(',', seq(field('key', $._expression), ':',
                       field('value', $._expression))),
       '\u2e29',
-      optional($._in_arena),
     ),
 
     // Which allocator a collection comes out of.  A name and not an
     // expression: what goes here is a place the allocator keeps its state in,
     // and a place is named rather than computed.
-    _in_arena: $ => seq('in', field('arena', $.identifier)),
+    // A name, or a hole where a macro writes one: what fills it has to be a name,
+    // and by the time anything reads the tree it is one.
+    //
+    // One rule and not one per thing that allocates: a collection written with `in`
+    // after it is the general form applied to a collection, so the grammar reads it
+    // once.  Which expressions may carry it is a question about what takes room,
+    // which the compiler answers and a grammar cannot.
+    _in_arena: $ => seq('in', field('arena',
+                                    choice($.arena_path, $.identifier,
+                                           $.hole))),
+
+    // A name or a path to one, with a rule of its own so that the preference for the
+    // longer reading after `in` is said here and disturbs nothing else: a `.` after
+    // the name is part of the path, there being no expression for it to continue.
+    arena_path: $ => prec(2, seq(field('held', $.identifier), '.',
+                                 field('name', $.identifier))),
+
+    // `EXPR in NAME`: which arena what the expression takes room from comes out of.
+    // At the loosest level, so that `a ⧺ b in scratch` is the whole join in that
+    // arena rather than `b` in it -- there being nothing an arena could mean about
+    // one side of a join.
+    // What may carry it is what takes room: a join, a collection written out, or an
+    // operator whose definition asks for an arena.  Naming them rather than taking any
+    // expression keeps `in` out of the way of everything that cannot carry it -- and
+    // the compiler refuses the rest with a message of its own (4568).
+    allocated_expression: $ => seq(
+      field('value', choice($.binary_expression, $.unary_expression,
+                            $.set_literal, $.dictionary_literal,
+                            $.list_literal)),
+      $._in_arena),
 
     // Whether a set holds a key, or what a dictionary has for one.  It binds
     // as tightly as a call does, and to whatever stands immediately before it.

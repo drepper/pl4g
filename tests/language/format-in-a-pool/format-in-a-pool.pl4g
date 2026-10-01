@@ -1,0 +1,50 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ **Formatting takes room from an arena it is told about**, and the print functions tell it
+※ about a pool they empty when they are done.
+※
+※ `std.text` takes a reference to the arena and every join inside it goes there; `⍕v in a` is
+※ the operator form of the same thing, which is what `std.format` writes into the code it
+※ generates.  So a program that prints a formatted line declares **nothing**: the device
+※ carries permission to write and the pool carries permission to allocate.
+※
+※ `std.printing` is that pool, and it is emptied at the end of every print -- so nothing may
+※ be kept in it.  Text that is to last comes from `std.format`, which takes room from `⎕heap`.
+
+let std := ⎕import("std")
+
+type Point = x: u8 ; y: i16
+
+※ A pipe, which is the one thing here that needs `@[impure]`: a raw system call may do
+※ anything, so nothing about it is accounted for.
+@[impure]
+fn piped() → std.Writer:
+    let ends: mut i32⟦2⟧ = ⟦0i32, 0i32⟧
+    if ⎕syscall(⎕sc@pipe2, &mut ends⟦0⟧, 0i64) < 0i64:
+        std.Writer(.fd ← ⁻1i32)
+    else:
+        std.Writer(.fd ← ends⟦1⟧)
+
+※ And the printing, which declares nothing at all: the device carries permission to
+※ write and the pool carries permission to allocate.
+fn said(out: &mut std.Writer) → u6:
+    ※ A template with no holes: no join at all, so no room is taken anywhere.
+    if ⎕drop(std.println⌜out, "plain"⌝ ?? 0) ≠ 6u64:
+        return 2u6
+    ※ And one with holes, whose text is built in the pool and given back after the write.
+    ※ The answer is bytes and not characters: `←` and `⁻` take three and two.
+    let shaped: Point = Point(.x ← 1u8, .y ← ⁻2i16)
+    if ⎕drop(std.println⌜out, "{} {}", 42u16, shaped⌝ ?? 0) ≠ 32u64:
+        return 3u6
+    0u6
+
+@[startup, impure]
+fn main() → u6:
+    let out: mut std.Writer = piped()
+    if out.fd < 0i32:
+        return 1u6
+    let how: u6 = said(&mut out)
+    if how ≠ 0u6:
+        return how
+
+    0u6

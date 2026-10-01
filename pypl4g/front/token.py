@@ -303,6 +303,13 @@ TYPENAME_NAME: Final[str] = "".join((BUILTIN_GLYPH, "typename"))
 #: have to be checked.
 STR_OF_NAME: Final[str] = "".join((BUILTIN_GLYPH, "str"))
 
+#: Everything an arena holds, given back at once.  The one granularity the
+#: allocator has: nothing is given back on its own, so this is what makes an arena
+#: a pool -- room is taken from it for as long as it is wanted and the whole of it
+#: goes in one call.  The arena is left as an arena with nothing in it, so taking
+#: room from it again simply asks the system for a first chunk.
+EMPTY_NAME: Final[str] = "".join((BUILTIN_GLYPH, "empty"))
+
 #: And the way back: a place as the number it is.  The inverse of `⎕at`, and
 #: the compiler's name for the same reason -- what a program does with a number
 #: that was a place is nothing the compiler can check.  It is what a program has

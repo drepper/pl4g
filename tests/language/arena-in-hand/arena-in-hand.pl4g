@@ -1,0 +1,36 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ `EXPR in NAME` says which arena what the expression takes room from comes out of, and
+※ `⎕empty(NAME)` gives the whole of one back.
+※
+※ **`⎕heap` is the global one and every other arena is somebody's.**  Taking room from an
+※ arena a program named is accounted for by whoever owns it -- naming it in the line *is* the
+※ accounting -- so a function that joins into an arena it was handed, or into one it made, says
+※ nothing.  `@[impure]` is left meaning the arena nobody named.
+※
+※ An arena a function makes is a pool: room is taken from it for as long as it is wanted and
+※ the whole of it goes back in one call, which is the only granularity an arena has.  `⎕arena`
+※ is what one starts out holding, inside a function as well as at the top level.
+
+※ Handed one, and so saying nothing: the caller gave the arena and owns what is in it.
+fn joined(a: &mut arena, first: str, second: str) → str:
+    first ⧺ second in a
+
+※ And an operator whose definition asks where to put what it builds, which is what
+※ `⍕v in scratch` is.
+fn `⍕`(v: bool, a: &mut arena) → str:
+    if v: "yes" ⧺ "!" in a else: "no" ⧺ "!" in a
+
+@[startup]
+fn main() → u6:
+    let scratch: mut arena = ⎕arena
+    if joined(&mut scratch, "ab", "cd") ≠ "abcd":
+        return 1u6
+    if ⍕true in scratch ≠ "yes!":
+        return 2u6
+    ※ Everything in it at once, and the arena is an arena again afterwards.
+    ⎕empty(scratch)
+    if joined(&mut scratch, "ef", "gh") ≠ "efgh":
+        return 3u6
+    ⎕empty(scratch)
+    0u6

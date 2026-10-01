@@ -27,8 +27,9 @@ fn main() → u6:
         5u6
     elif #⎕bytes(⎕str('😀')) ≠ 4:
         6u6
-    ※ And `⍕` of a character, which this is what made possible.
-    elif std.text('q') ≠ "q":
+    ※ And `⍕` of a character, which this is what made possible.  The form with no arena
+    ※ named takes room from the one the compiler provides, so this function says so.
+    elif ⍕'q' ≠ "q":
         7u6
     else:
         0u6
