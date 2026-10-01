@@ -4479,33 +4479,6 @@
       "option": null
     },
     {
-      "number": 4456,
-      "name": "LANG_PURE_TAKES_ROOM",
-      "severity": "error",
-      "message": "{what} takes room that outlives this call, and '{caller}' is pure",
-      "args": [
-        {
-          "name": "what",
-          "type": "string",
-          "description": "the operation that allocates"
-        },
-        {
-          "name": "caller",
-          "type": "string",
-          "description": "the function whose purity it breaks"
-        }
-      ],
-      "cause": "Room for a value whose size is not known while compiling comes from an arena, and an arena is a place that outlives the call: what was taken from it stays taken.  So an operation that allocates is a change the caller makes, and the caller says so with `@[impure]`.  The message names the operation rather than the function the compiler generated for it, there being no such function in the program a reader wrote.",
-      "spec": {
-        "document": "spec/spec.md",
-        "section": "The Language / File Structure / Function Definition",
-        "requirement": "A function that allocates is marked '@[impure]'."
-      },
-      "since": "0.1",
-      "default_enabled": true,
-      "option": null
-    },
-    {
       "number": 4400,
       "name": "LANG_UNIQUE_COPIED",
       "severity": "error",

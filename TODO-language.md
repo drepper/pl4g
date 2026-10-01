@@ -236,15 +236,16 @@ To Do List for the PL4g language
         it back with `defer` once the write has finished.  So a program that prints a
         formatted line declares nothing.
     [x] **memory as a capability.**  Done with the pool above and by the same rule:
-        taking room from an arena a program named -- `⎕heap` included, as `in ⎕heap` -- is
-        accounted for by naming it, and `@[impure]` is left meaning the room nobody named.
-        Collections written out follow the same rule.
+        taking room from any arena, `⎕heap` included and named or not, is no effect at all:
+        what is made is new.  `@[impure]` is left for changing what somebody else holds.
         And what an arena holds dies with it: read after `⎕empty`, answered by the function
         that made the arena, or put where it outlives it, is refused (4613-4615); only the
         maker empties an arena (4616); a pure function gives back all it made (4617).
     [ ] **a call that answers something lasting while handed an arena** is taken to answer
         something made in it, which refuses correct programs.  A signature saying which
         arenas the answer can come from (Rust's lifetime parameters, in short) would settle it.
+    [ ] **a type `T⟦3,⟧` that states some dimensions and not others** is accepted, though
+        the spec says every dimension says how many or none does; nothing refuses it yet.
     [ ] **`errdefer`**, Zig's defer that runs only on the way out with a failure, once
         something wants it.
     Left over and named in the proposal: float text, which is the large piece; whether an

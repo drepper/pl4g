@@ -8730,6 +8730,40 @@ only mutation is in `IO`/`ST`.  This sits with Zig: the global heap is a value y
 Turned down: keeping the exception, which made the one arena that lasts the one a pure
 function could not hand anything back in.
 
+## 2026-10-01T17:50+02:00 — language
+
+**Allocating is not an effect, from `⎕heap` or anywhere**
+
+    fn f(first: str) → str:
+        first ⧺ "<-"                 ※ pure; the answer comes from ⎕heap and lasts
+
+Supersedes the entry before this one, which made *naming* `⎕heap` the accounting and left an
+unnamed allocation impure.  The objects allocated there are fully independent: what a join,
+a list, a collection or `⍕` makes is new, nothing that existed before the call can reach it,
+and nothing anybody else holds changes.  So taking room from any arena, named with `in` or
+not, is no effect, and 4456 ("takes room that outlives this call") is retired.
+
+What stays impure is what can disturb somebody else: writing a variable at the top level,
+writing memory somebody else made (a collection one was handed), and giving an arena back --
+which only its maker may do (4616), and `⎕heap`, made by nobody, never.  One-operand `⍕` in
+`std` loses its `@[impure]`.  In the IR the allocator stays marked impure, so two
+allocations are never merged or dropped; that is a fact about the runtime symbols, which
+the call rule never sees.
+
+The change exposed a bug from the per-call print pool: a `&mut` handed to a call lived until
+the end of the statement, so `println` with three formatted arguments lent its pool to the
+third `⍕` while the second still held it (4563).  **A reference handed to a call now ends
+with the call where the answer cannot hold a reference** -- Rust's rule for such an
+argument, and sound for the same reason: nothing is left that could reach the place.
+
+Compare: **Haskell**, where allocation is pure and only mutation is in `IO`/`ST` -- this is
+that; **Koka** and **Eff**, whose effect rows have no allocation effect for the same reason;
+**Zig**, where allocation is explicit but not an effect the type system knows; **Rust**,
+where allocating is no effect and borrows of an argument end with the call.
+
+Turned down: keeping allocation as an effect with `in` as the accounting, which made a pure
+function unable to hand back text without its caller lending an arena.
+
 Open questions
 --------------
 

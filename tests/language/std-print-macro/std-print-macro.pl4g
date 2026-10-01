@@ -36,4 +36,7 @@ fn main() → u6:
         return 5u6
     if seen⟦3⟧ ≠ 10u8 ∨ seen⟦4⟧ ≠ 111u8 ∨ seen⟦5⟧ ≠ 107u8:
         return 6u6
+    ※ Three values formatted into the one pool, each lending it to `⍕` in turn.
+    if ⎕drop(std.println⌜&mut out, "{} {} {}", 1u8, 22u16, 333u32⌝ ?? 0) ≠ 9u64:
+        return 7u6
     0u6

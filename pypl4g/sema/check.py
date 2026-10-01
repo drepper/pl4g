@@ -640,7 +640,7 @@ class _Bundle:
 #: purity belongs to and no other.  Everything that makes a change outliving the
 #: call goes through one place, so this is that place's list and not a guess.
 _PURITY: Final[frozenset[int]] = frozenset({
-    D.LANG_PURE_CALLS_IMPURE, D.LANG_PURE_CHANGES_A_VARIABLE, D.LANG_PURE_TAKES_ROOM,
+    D.LANG_PURE_CALLS_IMPURE, D.LANG_PURE_CHANGES_A_VARIABLE,
     D.LANG_IO_WITHOUT_A_DEVICE,
     D.LANG_PURE_READS_THE_ROUNDING_MODE, D.LANG_PURE_WRITES_ELSEWHERE})
 
@@ -1049,6 +1049,11 @@ def _empties_named(node: object, into: set[str]) -> None:
                 for each in held:
                     if isinstance(each, ast.Node):
                         _empties_named(each, into)
+
+
+#: The expressions that call something, which is what a reference handed over in
+#: one of them lives no longer than, where the answer cannot hold it.
+_CALLING: Final = (ast.Call, ast.Fresh, ast.Allocated, ast.Binary, ast.Unary)
 
 
 def _holds_a_reference(ty: Type, seen: frozenset[int] = frozenset()) -> bool:
@@ -1910,13 +1915,6 @@ class Checker:
         #: Where what is being lowered takes its room from, where `in` said: a
         #: lexical thing, put in force around the expression it was written on.
         self._out_of_arena: Value | None = None
-        #: Whether that arena is this call's own -- one it was handed or one it
-        #: made -- in which case the room is accounted for by whoever holds it and
-        #: is not a change to anything global.
-        self._room_is_accounted: bool = False
-        #: What the last arena looked up turned out to be, which is how the two
-        #: above are set from one lookup.
-        self._arena_in_hand: bool = False
         #: Whether what is being lowered is what a loop comes to, which is
         #: what a `break` hands over and what an `else` arm gives.  A mismatch
         #: there is about the loop rather than about whatever the loop stands
@@ -8236,20 +8234,10 @@ class Checker:
             self._diags.emit(D.LANG_COLLECTION_VALUE_TOO_LARGE, expr.span,
                              found=ty.value.written())
             return UndefConst(ERROR)
-        # Making one takes room out of an arena, which is accounted for where the
-        # arena is named -- after the literal, or by an `in` around it -- and is a
-        # change to something global where nobody named one.  Filling the table
-        # writes only the room just taken, which is this call's own.
-        arena = self._arena_named(builder, expr.arena)
-        outer, self._room_is_accounted = (
-            self._room_is_accounted,
-            self._room_is_accounted or (arena is not None and self._arena_in_hand))
-        try:
-            self._an_effect(D.LANG_PURE_TAKES_ROOM, expr.span, what="a collection")
-        finally:
-            self._room_is_accounted = outer
+        # Making one takes room out of an arena, which changes nothing anybody else
+        # can see: what is made there is new, and filling the table writes only it.
         return self._build_collection(builder, expr, ty,
-                                      arena,
+                                      self._arena_named(builder, expr.arena),
                                       ready)
 
     def _arena_named(self, builder: IRBuilder,
@@ -8274,7 +8262,6 @@ class Checker:
             # so is one named through the module that wrote it.
             shared = self._exported_variable(written)
             if shared is not None and shared.value_type is ARENA:
-                self._arena_in_hand = True
                 return builder.address(shared, written.span)
         if not isinstance(written, ast.NameRef):
             self._diags.emit(D.LANG_NOT_AN_ARENA, written.span,
@@ -8286,11 +8273,9 @@ class Checker:
             if local.placed and held is ARENA:
                 local.read = True
                 local.written = True
-                self._arena_in_hand = True
                 return local.value
             if isinstance(held, PtrType) and held.pointee is ARENA:
                 local.read = True
-                self._arena_in_hand = True
                 return local.value
             self._diags.emit(D.LANG_NOT_AN_ARENA, written.span,
                              name=written.name)
@@ -8300,11 +8285,6 @@ class Checker:
             self._diags.emit(D.LANG_NOT_AN_ARENA, written.span,
                              name=written.name)
             return None
-        # Taking room from an arena a program named is accounted for -- naming it in
-        # the line is the accounting, and that holds for `⎕heap` as for any other:
-        # `first ⧺ second in ⎕heap` says where the room comes from as plainly as
-        # `in scratch` does.  `@[impure]` is left meaning the room nobody named.
-        self._arena_in_hand = True
         return builder.address(found, written.span)
 
     def _build_collection(self, builder: IRBuilder,
@@ -10998,7 +10978,28 @@ class Checker:
 
     def _lower_expr(self, builder: IRBuilder, expr: ast.Expr,
                     expected: Type | None) -> Value:
-        """Lower an expression, checking it against the expected type."""
+        """Lower an expression, checking it against the expected type.
+
+        **A reference handed to a call is gone when the call is**, where what the
+        call answers cannot hold one: nothing is left that could reach the place
+        through it.  So `(⍕a in pool) ⧺ (⍕b in pool)` lends `pool` twice in turn and
+        not twice at once.  An answer that may hold a reference keeps what it was
+        handed until the statement ends, or until the name it is bound to goes.
+        """
+        if not isinstance(expr, _CALLING):
+            return self._lower_written(builder, expr, expected)
+        before = len(self._borrows)
+        found = self._lower_written(builder, expr, expected)
+        if len(self._borrows) > before \
+                and not _holds_a_reference(self._value_type_of(found)):
+            self._borrows[before:] = [
+                one for one in self._borrows[before:]
+                if one.depth != _UNTIL_THE_STATEMENT_ENDS]
+        return found
+
+    def _lower_written(self, builder: IRBuilder, expr: ast.Expr,
+                       expected: Type | None) -> Value:
+        """Lower an expression as it is written: the dispatch `_lower_expr` makes."""
         match expr:
             case ast.IntLit() if self._aiming_at(expected) is CHAR \
                     and expr.type_name is None:
@@ -12396,7 +12397,6 @@ class Checker:
         if not self._accepts(expected, answer):
             self._report_mismatch(expr.span, answer, expected)
             return UndefConst(ERROR)
-        self._an_effect(D.LANG_PURE_TAKES_ROOM, expr.span, what="joining two lists")
         stride = builder.int_const(U64, stride_of(holds, _LAYOUT))
         pointer = parts_of(answer)[0]
         bytes_ = self._module.types.ptr_type(U8, mutable=True)
@@ -12442,8 +12442,6 @@ class Checker:
         if self._value_type_of(left) is ERROR \
                 or self._value_type_of(right) is ERROR:
             return UndefConst(ERROR)
-        self._an_effect(D.LANG_PURE_TAKES_ROOM, expr.span,
-                        what="joining two strings")
         pointer = parts_of(STR)[0]
         first = builder.extract(left, 0, pointer, expr.span)
         first_len = builder.extract(left, 1, U64, expr.span)
@@ -13635,8 +13633,6 @@ class Checker:
         if not self._accepts(expected, answer):
             self._report_mismatch(expr.span, answer, expected)
             return UndefConst(ERROR)
-        self._an_effect(D.LANG_PURE_TAKES_ROOM, expr.span,
-                        what="a collection")
         elements = self._room_for(builder, holds, len(values), expr.span)
         for at, one in enumerate(values):
             builder.store(
@@ -14522,8 +14518,6 @@ class Checker:
             return UndefConst(ERROR)
         if where is None:
             where = self._out_of(builder, expr.span)
-            self._an_effect(D.LANG_PURE_TAKES_ROOM, expr.span,
-                            what="a string of one character")
         # The character itself goes over, not its number: the two helpers read it as
         # a number inside themselves, where what they are reading is a parameter.
         bytes_ = builder.call(strings.char_function(self._module),
@@ -14678,13 +14672,11 @@ class Checker:
             self._diags.emit(D.LANG_ALLOCATED_NOT_A_PLACE, expr.span,
                              found=_about_the_shape(inside))
             return UndefConst(ERROR)
-        outer = (self._out_of_arena, self._room_is_accounted)
-        self._out_of_arena = place
-        self._room_is_accounted = self._arena_in_hand
+        outer, self._out_of_arena = self._out_of_arena, place
         try:
             return self._lower_expr(builder, inside, expected)
         finally:
-            self._out_of_arena, self._room_is_accounted = outer
+            self._out_of_arena = outer
 
     def _lower_address_of(self, builder: IRBuilder, expr: ast.Call,
                           expected: Type | None) -> Value:
@@ -16010,16 +16002,10 @@ class Checker:
         """
         if self._impure:
             return
-        if which == D.LANG_PURE_TAKES_ROOM and self._room_is_accounted:
-            # Room from an arena this call holds -- one it was handed or one it made
-            # -- is accounted for by whoever holds it: giving it back is theirs to
-            # do, and `@[impure]` is left meaning a change to something global.
-            return
         held = self._demanding[0] if self._demanding is not None else None
         name = getattr(held, "name", "")
         told = self._diags.emit(which, span, caller=name, **args) \
             if name and which in (D.LANG_PURE_CALLS_IMPURE,
-                                  D.LANG_PURE_TAKES_ROOM,
                                   D.LANG_IO_WITHOUT_A_DEVICE) \
             else self._diags.emit(which, span, **args)
         if held is not None and name:

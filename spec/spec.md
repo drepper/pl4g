@@ -369,8 +369,8 @@ standing where the invocation does -- so a formatted line takes room for as long
 pool the module kept for every print would not do: an argument that itself prints, or any other function emptying it, would give
 back text a line was still being built from, and that is why only what made an arena may give it back (below).
 
-Putting those two together: a program that prints a formatted line declares *nothing*.  The device carries permission to write and
-the pool carries permission to allocate, and `@[impure]` is left for what neither accounts for.
+Putting those two together: a program that prints a formatted line declares *nothing*.  The device carries permission to write,
+allocating is no effect at all, and `@[impure]` is left for a change to something the program did not pass in.
 
 There is no mini-language inside the template: a width or a base is asked for by a call in the hole, where a reader and the checker
 can both see it.
@@ -2022,8 +2022,8 @@ not by inspection**.  There is deliberately no way in from bytes, which would ha
 `⎕bytes` is a one-way door.  It takes a character (4610) and not a number: not every number is a code point, and `⎕chr` is what
 says so.
 
-It allocates, how many bytes a code point takes not being known until it is looked at, so a function using it says `@[impure]` --
-as one joining two strings does and for the same reason.
+It allocates, how many bytes a code point takes not being known until it is looked at -- which, like every allocation, is no
+effect: what it makes is new, and a pure function may do it.
 
 **All six comparisons are defined on strings**, and the order is the order the code points are in -- the first character that
 differs deciding, and a string that is a prefix of another coming first.
@@ -2047,8 +2047,8 @@ let both: str = greeting ⧺ " there"
 ```
 
 What is different is where the answer goes.  How long a join is, is not known while compiling, so room for it is taken from the
-arena the compiler provides -- which is a change that outlives the call, so **a function that joins strings says `@[impure]`**,
-the same as one that puts something in a collection.  Joining a string to an array, or an array to a string, is refused (4489):
+arena the compiler provides, `⎕heap`, unless `in` names another.  **Allocating is not an effect**: what a join makes is new and
+nothing else can reach it, so a pure function may join strings and answer the result.  Joining a string to an array, or an array to a string, is refused (4489):
 a string is not an array of bytes that happens to be spelled differently.
 
 Compare: **Rust**, whose `&str` is this -- bytes, guaranteed UTF-8, no index by character, iterated with `.chars()` -- and whose
@@ -2623,14 +2623,17 @@ exactly the change whoever holds it was promised would not happen.  A `&` lends 
 lent that way stays readable.
 
 **A reference lives until the name that kept it does, and no longer.**  One nothing bound -- handed straight to a call -- is gone
-when the statement is, so the same place may be lent again on the next line:
+when the call is, if what the call answers cannot hold a reference; otherwise when the statement is.  So the same place may be lent
+again on the next line, and again in the same expression:
 
 ```
-bump(&mut p)                   ※ lent for this statement
-bump(&mut p)                   ※ and again, which is one at a time
+bump(&mut p)                   ※ lent for this call
+bump(&mut p) + bump(&mut p)    ※ and twice more, one after the other
+(⍕a in pool) ⧺ (⍕b in pool)    ※ an arena lent to two calls in turn
 ```
 
-That is the lexical rule, and it is Rust's before non-lexical lifetimes.  Rust now ends a borrow at its last use, which reads more
+That is the lexical rule, and it is Rust's before non-lexical lifetimes, with the one refinement that an argument's borrow ends
+with the call where the answer has nowhere to keep it.  Rust now ends a borrow at its last use, which reads more
 programs at the price of a liveness analysis to say where a reference stops existing; here a generator that wants the place back
 opens a scope or writes the statement, and the rule can be read off the source with nothing computed.  **An element is part of its
 array**, so lending one lends the array: two elements are two places, but telling one index from another is arithmetic, and a
@@ -2918,7 +2921,7 @@ many elements there are is part of the type, so it is something the compiler rea
 or part of one.  For an array of more than one dimension it carries one count per dimension, so `T⟦,⟧` is a table of no stated
 shape and takes three words.
 
-**Every dimension says how many, or none does** (4456).  Half of each would be a value whose parts depend on which half is which,
+**Every dimension says how many, or none does.**  Half of each would be a value whose parts depend on which half is which,
 which is a second kind of array for a case nothing has asked for.
 
 **A `T⟦N⟧` stands where a `T⟦⟧` is wanted**, which is how an array is passed to something that takes any length.  That goes one
@@ -3143,8 +3146,8 @@ let plain: [u16] = [1, 2, 3, 4]      ※ the elements take the list's type
 
 **A list is not an array.**  An array carries its shape in its type and takes no room of its own; a list carries how many there
 are beside where the elements are, and the elements live in an arena.  So an array is what a program reaches for when it knows
-how many, and a list when it does not -- and **making a list is a change that outlives the call**, so a function that makes one
-says `@[impure]`, the same as one that makes a collection.
+how many, and a list when it does not.  Making one allocates, and allocating is no effect: a pure function may make a list and
+answer it.
 
 **Its elements must all be of one type, for now.**  A list is the sequence whose elements need not be: what makes that work is
 *boxing* -- a value held with enough beside it to say what it is -- which this compiler does not do yet, so until it does, they
@@ -3256,18 +3259,16 @@ What may carry `in` is what takes room: a join of two strings or two lists, a co
 definition asks for an arena -- which is what `⍕v in scratch` is, the second operand being where to put what it builds.  Anything
 else is worked out in registers and has nowhere to come from (4568).
 
-**Naming an arena is accounting for the room taken from it.**  Taking room from an arena a program named is accounted for by whoever
-owns it -- naming it in the line *is* the accounting -- so a function that joins into an arena it was handed, or into one it made,
-says nothing.  **That holds for `⎕heap` too**: `first ⧺ second in ⎕heap` says where the room comes from as plainly as `in scratch`
-does, so a pure function may write it, and since `⎕heap` lasts as long as the program, what it makes may be answered.  That is how a
-function hands a caller text when the caller gave it no arena.  **`@[impure]` is left meaning the room nobody named**: a join with
-no `in`, a collection with none, `⍕v` with one operand -- each takes from `⎕heap` without the line saying so.  A collection written
-out is accounted for the same way: filling the table writes only the room just taken for it.
+**Taking room from an arena is not an effect**, from `⎕heap` or from any other.  What is made is new: nothing that was there
+before the call can reach it, so nothing anybody else holds changes, and a pure function may allocate wherever it likes -- named
+with `in`, or not named and so from `⎕heap`.  What `⎕heap` holds lasts as long as the program, so a function may answer it; that is
+how a function hands a caller text when the caller gave it no arena.  Filling what was just made -- the entries of a collection,
+the elements of a list -- writes only that new room.
 
 **`⎕empty` is the only granularity there is**, which is what makes an arena a *pool*: room is taken from it for as long as it is
 wanted and the whole of it goes in one call.  What is left is an arena with nothing in it, so taking room from it again asks the
-system for a first chunk.  Emptying `⎕heap` is a change to something global and asks for `@[impure]`; emptying any other arena is
-accounted for where it was named.
+system for a first chunk.  Emptying is what can disturb somebody else, which is why only the function that made an arena may
+do it (below), and `⎕heap`, which nobody made, is never emptied.
 
 **`⎕arena` works inside a function as well as at the top level**, where it is three words of nought in the frame -- so a pool of one
 call's own is one line, and giving it back is one more.  With `defer` they are the same line's neighbours, and the giving back
@@ -4804,7 +4805,6 @@ the call or is there after it:
 | writing a variable at the top level | 4478 |
 | writing memory it did not make -- an array it was handed, a set or a dictionary it was handed | 4479 |
 | calling a function marked `@[impure]` | 4480 |
-| taking room nobody named -- joining two strings or two lists, or making a collection, with no `in` | 4456 |
 
 **Reading or writing a device is not on that list.**  `@[impure]` means the function changes something *global*, and a write to a
 device somebody handed over is not that: it is the one effect the program's own structure accounts for.  **Permission to do it
@@ -4839,10 +4839,9 @@ design; **Rust**, where `&mut Stdout` is a capability in effect and nothing in t
 **Zig** and **Go**, where any function may write to any descriptor it can name.  What is left for `@[impure]` here is what those
 languages have no word for at all: a change to something the program did not pass in.
 
-**Making a set or a dictionary is a change**, since it takes room out of an arena and the next call gets what this one left of
-it.  So a function that builds one is `@[impure]`, whatever it does with it afterwards.  The last row is named as the *operation*
-and not as the function the compiler generated for it: there is no `__pl4g_str_join` in the program anybody wrote, so saying that
-one may change something would be a message about the compiler.
+**Allocating is not on the list either.**  Taking room from an arena makes something new that nothing else can reach, so a
+pure function may join strings, make a list or a collection, and answer what it made.  Writing into a collection it was *handed*
+is on the list -- that is memory somebody else made -- and so is giving an arena back, which only the arena's maker may do.
 
 **Every one of them names the function that is pure, and points at it** (4511).  That is not always the function the message is
 about or even in the same file: a call a macro wrote is reported where the macro wrote it, which is wherever that macro lives, and

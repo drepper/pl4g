@@ -1,0 +1,34 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ **A reference handed to a call is gone when the call is**, where what the call answers cannot
+※ hold one: nothing is left that could reach the place through it.  So one expression may lend
+※ the same place to several calls in turn -- `⍕` of three values into one pool, joined -- and
+※ that is three references one after another, not three at once.
+※
+※ An answer that may hold a reference keeps what it was handed: until the statement ends, or
+※ for as long as the name it is bound to lives.
+※
+※ Compare: **Rust**, whose borrows end where they are last used, which for an argument of a
+※ call whose result has no lifetime tied to it is the end of the call.
+
+let std := ⎕import("std")
+
+@[impure]
+fn bump(n: &mut u8) → u8:
+    n⌖ ← n⌖ + 1u8
+    n⌖
+
+fn three(a: u16, b: u16, c: u16) → bool:
+    let pool: mut arena = ⎕arena
+    defer ⎕empty(pool)
+    let t: str = ((⍕a in pool) ⧺ (⍕b in pool) in pool) ⧺ (⍕c in pool) in pool
+    t = "123"
+
+@[startup, impure]
+fn main() → u6:
+    let n: mut u8 = 0u8
+    if bump(&mut n) + bump(&mut n) ≠ 3u8:
+        return 1u6
+    if ¬three(1u16, 2u16, 3u16):
+        return 2u6
+    0u6

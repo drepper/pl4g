@@ -1852,8 +1852,10 @@ drops an instruction that nothing uses and that has no effects, so a pure call w
 knowing what purity is.
 
 **The runtime is impure**, both the hand-written symbols and the generated table functions: they allocate and they write tables,
-all of which outlives the call.  They are reached from `_put_key` and its neighbours rather than from `_lower_call`, so what
-reports a program using a collection is the collection rule and not the call rule.
+and two calls to the allocator are two allocations that must not be merged or dropped.  That is a fact about the IR and not about
+the program: they are reached from `_put_key`, the join lowering and their neighbours rather than from `_lower_call`, so the call
+rule never sees them, and **allocating is not an effect of the function that does it** -- what it makes is new, and nothing anybody
+else holds changes.  A pure function that allocates is still pure, and a call to it whose answer nothing reads may still go.
 
 An answer that has to be taken
 -----------------------------

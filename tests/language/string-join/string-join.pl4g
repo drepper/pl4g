@@ -3,13 +3,12 @@
 ※ `⧺` joins two strings as it joins two arrays: one after the other.  What is
 ※ different is where the answer goes -- how long it is, is not known while
 ※ compiling, so room for it is taken from the arena the compiler provides.
-※ That is a change that outlives the call, so a function that joins strings
-※ says `@[impure]`, the same as one that puts something in a collection.
+※ That is no effect -- what is made is new -- so a pure function may join.
 ※
 ※ Joining well-formed bytes to well-formed bytes gives well-formed bytes, which
 ※ is why the walk below needs no more care than the walk over a literal does.
 
-@[startup, impure]
+@[startup]
 fn main() → u6:
     let a: str = "ab"
     let b: str = "cω"
