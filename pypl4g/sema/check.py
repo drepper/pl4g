@@ -72,7 +72,7 @@ from ..ir.types import (ARENA, ARENA_NAME, StrType, ArrayType, BOOL, BoolType, B
                         without_units,
                         CHAR, MAX_CODE_POINT, U8, made_of_parts, parts_of,
                         held_in_memory as _held_in_memory)
-from . import environ, lists, strings, tables
+from . import environ, lists, owned, strings, tables
 from .modules import (SUFFIX, ImportCycle, LoadedModule, ModuleNotFound,
                       ModuleRegistry, base_name, system_modules)
 from ..ir.value import (BlockParam, BoolConst, CharConst, Const, EnumConst,
@@ -919,8 +919,8 @@ def _and_then(names: Sequence[str]) -> str:
     return " and ".join((", ".join(quoted[:-1]), quoted[-1]))
 
 
-def _written_in(node: object, into: set[str]) -> None:
-    """Every name a body gives something new: assigned, or a part of it written."""
+def _written_in(node: object, into: set[str], parts: set[str]) -> None:
+    """Every name a body assigns, and every name a part of which it writes."""
     match node:
         case ast.AssignStmt():
             into.add(node.name)
@@ -930,15 +930,33 @@ def _written_in(node: object, into: set[str]) -> None:
             while isinstance(root, (ast.Member, ast.Element, ast.Index)):
                 root = root.base
             if isinstance(root, ast.NameRef):
-                into.add(root.name)
+                parts.add(root.name)
         case ast.Lambda():
             return
     if isinstance(node, ast.Node):
         for one in fields_of(node):
-            _written_in(getattr(node, one.name), into)
+            _written_in(getattr(node, one.name), into, parts)
     elif isinstance(node, tuple):
         for one in node:
-            _written_in(one, into)
+            _written_in(one, into, parts)
+
+
+def _is_owning(ty: Type) -> bool:
+    """Whether a container of *ty* copies what is put in it into its allocator."""
+    return isinstance(ty, ArrayType) and owned.points(ty.element)
+
+
+def _is_temporary(written: ast.Expr) -> bool:
+    """Whether what an expression comes to is something nothing else names.
+
+    A join, a call, a list written out: made by the expression and held by nothing
+    but the value.  A name, a field, an element and a literal are held elsewhere --
+    the last by the image, which nothing gives back.
+    """
+    while isinstance(written, ast.Allocated):
+        written = written.value
+    return not isinstance(written, (ast.NameRef, ast.Member, ast.Element,
+                                    ast.Index, ast.StringLit, ast.Deref))
 
 
 def _one_of(names: Sequence[str]) -> str:
@@ -1326,7 +1344,7 @@ def _takes_room(expr: ast.Expr) -> bool:
     A join of two, and a collection written out.  Everything else is worked out in
     registers, so saying which arena it comes from would be saying nothing.
     """
-    if isinstance(expr, (ast.SetLit, ast.DictLit, ast.ListLit)):
+    if isinstance(expr, (ast.SetLit, ast.DictLit, ast.ListLit, ast.ArrayLit)):
         return True
     return isinstance(expr, ast.Binary) and expr.op is ast.BinaryOp.CONCAT
 
@@ -1703,6 +1721,13 @@ class _Deferred:
     depth: int
 
 
+#: What a value made in `⎕heap` is made in.  Not the identity of any name: `⎕heap`
+#: is no name of the body's, is never given back, and is an allocator a container
+#: may be made with all the same -- so what it made has to be told from what was
+#: made in nothing, a literal or a number, which is the empty set.
+_HEAP: Final[int] = -1
+
+
 #: Every name's provenance at one point of a body: the name, the arenas what it holds
 #: was made in, and where and by which arena it was killed, if it was.
 _Provenance = dict[int, tuple["_Local", frozenset[int], "Span | None", str]]
@@ -2006,8 +2031,8 @@ class Checker:
         #: An `if` some of whose arms were settled while compiling, and the `if` of
         #: the rest that was lowered in its place.
         self._made_alias: dict[int, tuple[ast.Expr, ast.Expr]] = {}
-        #: The arenas `in` named around what is being lowered: none for `⎕heap`.
-        self._out_of_arenas: frozenset[int] = frozenset()
+        #: The arenas `in` named around what is being lowered: `⎕heap` where none.
+        self._out_of_arenas: frozenset[int] = frozenset({_HEAP})
         #: What the body being checked said its answer was made in: the arena
         #: parameters' markers and how the signature named them.
         self._answer_made_in: tuple[frozenset[int], str] | None = None
@@ -5347,6 +5372,8 @@ class Checker:
             case ast.NameRef():
                 local = self._find_local(node.name)
                 if local is None:
+                    if node.name == HEAP_NAME:
+                        into.add(_HEAP)
                     return
                 if self._is_arena(local):
                     into.add(id(local))
@@ -5533,14 +5560,20 @@ class Checker:
         dead for the whole of the loop (`_before_a_turn`).
         """
         assigned: set[str] = set()
-        _written_in(body, assigned)
-        if assigned:
+        parts: set[str] = set()
+        _written_in(body, assigned, parts)
+        if assigned or parts:
             anything = self._arenas_in(body)
-            for name in assigned:
+            for name in assigned | parts:
                 local = self._find_local(name)
-                if local is not None and not self._is_arena(local) \
-                        and _points_somewhere(self._held_by(local)):
-                    local.arenas = local.arenas | anything
+                if local is None or self._is_arena(local) \
+                        or not _points_somewhere(self._held_by(local)):
+                    continue
+                if name not in assigned and _is_owning(self._held_by(local)):
+                    # Only elements written, each copied into the array's own
+                    # allocator: what the array was made in stays what it was.
+                    continue
+                local.arenas = local.arenas | anything
         self._before_a_turn(body)
         return self._provenance()
 
@@ -5575,6 +5608,10 @@ class Checker:
         if local is None or self._is_arena(local) \
                 or not _points_somewhere(self._held_by(local)):
             return
+        if _is_owning(self._held_by(local)):
+            # An element of an array was copied into the array's allocator on
+            # the way in, so what the array was made in is what it was.
+            return
         made = self._arenas_in(value)
         for one in made:
             arena = self._arena_by_id.get(one)
@@ -5583,6 +5620,62 @@ class Checker:
                                  name=root.name, arena=arena.name)
                 return
         local.arenas = local.arenas | made
+
+    def _owner_of(self, made: frozenset[int]) -> int | None:
+        """The one allocator a container was made with, where that is known.
+
+        What a container is made in is the allocator its elements point into, so a
+        container whose provenance is one arena of this body's, or `⎕heap`, has an
+        owner and anything else -- several, a parameter that says nothing, nothing
+        at all -- has none the compiler can name.
+        """
+        if len(made) != 1:
+            return None
+        (one,) = made
+        if one == _HEAP:
+            return one
+        arena = self._arena_by_id.get(one)
+        if arena is None or self._find_local(arena.name) is not arena:
+            return None
+        return one
+
+    def _owner_place(self, builder: IRBuilder, owner: int, span: Span) -> Value:
+        """Where the allocator *owner* names keeps its state."""
+        if owner == _HEAP:
+            heap = self._provided(HEAP_NAME)
+            assert isinstance(heap, GlobalVar)
+            return builder.address(heap, span)
+        arena = self._arena_by_id[owner]
+        return arena.value
+
+    def _owned_value(self, builder: IRBuilder, written: ast.Expr, value: Value,
+                     ty: Type, owner: int, span: Span
+                     ) -> tuple[Value, bool]:
+        """*value* as an element of a container made with *owner*.
+
+        Put in as it is where it was provably made in *owner*; copied into *owner*
+        otherwise, which is the defensive answer to not knowing -- a literal, text
+        from another arena, an answer whose signature says nothing.  A temporary
+        copied in is given back: nothing else names it.  Answers the value to put in
+        and whether it is a copy.
+        """
+        if not owned.points(ty):
+            return value, False
+        made = self._arenas_in(written)
+        if made == {owner}:
+            return value, False
+        if not owned.can_own(ty):
+            self._diags.emit(D.LANG_CONTAINER_CANNOT_COPY, written.span,
+                             type=ty.written())
+            return UndefConst(ERROR), False
+        place = self._owner_place(builder, owner, span)
+        copied = builder.call(owned.own_function(self._module, ty), (place, value),
+                              ty, span)
+        source = self._owner_of(made)
+        if source is not None and _is_temporary(written):
+            owned.free_storage(builder, self._owner_place(builder, source, span),
+                               value, ty)
+        return copied, True
 
     def _before_a_turn(self, body: ast.Block) -> None:
         """Kill what an arena given back inside a loop held from before the loop.
@@ -6257,6 +6350,9 @@ class Checker:
         place = builder.frame(ty, expr.span)
         if not self._fill(builder, expr, ty, place, 0, ty.shape, ready):
             return UndefConst(ERROR)
+        if owned.points(ty.element):
+            # Its elements point into the one allocator they were copied into.
+            self._made_from[id(expr)] = (expr, self._out_of_arenas)
         return builder.cast(CastKind.BITCAST, place, ty, expr.span)
 
     def _array_written(self, builder: IRBuilder, expr: ast.ArrayLit,
@@ -6346,6 +6442,14 @@ class Checker:
                                           written.span)
                 if self._value_type_of(value) is ERROR:
                     return False
+                owner = self._owner_of(self._out_of_arenas)
+                if owner is not None and owned.points(ty.element):
+                    # What an element points into is the allocator `in` named,
+                    # or `⎕heap`: copied there unless it was made there.
+                    value, _ = self._owned_value(builder, written, value,
+                                                 ty.element, owner, written.span)
+                    if self._value_type_of(value) is ERROR:
+                        return False
                 builder.store(
                     self._element_place(builder, place, ty.element,
                                         builder.int_const(U64, at + index),
@@ -7063,9 +7167,29 @@ class Checker:
         value = self._lower_into(builder, stmt.value, ty.element, stmt.span)
         if self._value_type_of(value) is ERROR:
             return
-        builder.store(
-            self._element_place(builder, start, ty.element, offset, stmt.span),
-            value, stmt.span)
+        place = self._element_place(builder, start, ty.element, offset, stmt.span)
+        if not owned.points(ty.element):
+            builder.store(place, value, stmt.span)
+            return
+        # An element that points somewhere points into the array's allocator,
+        # so what goes in is copied there unless it was provably made there, and
+        # what it replaces is given back.  An array whose allocator nothing says
+        # has nowhere to copy into, and is not written (4622).
+        owner = self._owner_of(self._arenas_in(stmt.base))
+        if owner is None:
+            self._diags.emit(D.LANG_CONTAINER_OWNER_UNKNOWN, stmt.base.span,
+                             type=ty.written())
+            return
+        value, _ = self._owned_value(builder, stmt.value, value, ty.element, owner,
+                                     stmt.span)
+        if self._value_type_of(value) is ERROR:
+            return
+        replaced = builder.load(place, stmt.span)
+        builder.store(place, value, stmt.span)
+        if owned.can_own(ty.element):
+            owned.free_storage(builder,
+                               self._owner_place(builder, owner, stmt.span),
+                               replaced, ty.element)
 
     def _lower_member_assign(self, builder: IRBuilder,
                              stmt: ast.MemberAssign) -> None:
@@ -7350,7 +7474,7 @@ class Checker:
         self._made_from = {}
         # Where `in` said room comes from is the expression's around the call, and
         # this body is a function of its own.
-        self._out_of_arena, self._out_of_arenas = None, frozenset()
+        self._out_of_arena, self._out_of_arenas = None, frozenset({_HEAP})
         # What the body this call stands in put off is that body's: a `return` in
         # here leaves this function and runs only what this one put off.
         self._deferred, self._emptied = [], []
@@ -7970,7 +8094,7 @@ class Checker:
                  self._emptied, self._out_of_arena, self._out_of_arenas,
                  self._answer_made_in, self._made_from)
         self._deferred, self._emptied, self._made_from = [], [], {}
-        self._out_of_arena, self._out_of_arenas = None, frozenset()
+        self._out_of_arena, self._out_of_arenas = None, frozenset({_HEAP})
         self._answer_made_in = None
         # A lambda's body binds its own names, so a reference out in the body
         # around it says nothing about a name of the same spelling in here.
@@ -12847,6 +12971,23 @@ class Checker:
         if not self._accepts(expected, answer):
             self._report_mismatch(expr.span, answer, expected)
             return UndefConst(ERROR)
+        # What the elements of either side point into goes where the answer
+        # is made: a side not provably made there is copied in first, and the
+        # copy, which only the join reads, is given back after it.
+        owner = self._owner_of(self._out_of_arenas)
+        spare: list[Value] = []
+        if owner is not None and owned.points(holds):
+            sides: list[Value] = []
+            for written, value in ((expr.left, left), (expr.right, right)):
+                one, copied = self._owned_value(builder, written, value, answer,
+                                                owner, written.span)
+                if self._value_type_of(one) is ERROR:
+                    return UndefConst(ERROR)
+                sides.append(one)
+                if copied:
+                    spare.append(one)
+            left, right = sides
+        self._made_from[id(expr)] = (expr, self._out_of_arenas)
         stride = builder.int_const(U64, stride_of(holds, _LAYOUT))
         pointer = parts_of(answer)[0]
         bytes_ = self._module.types.ptr_type(U8, mutable=True)
@@ -12864,6 +13005,10 @@ class Checker:
                           bytes_, expr.span),
              builder.binary(BinOp.WRAP_MUL, counts[1], stride, expr.span)),
             bytes_, expr.span)
+        for one in spare:
+            assert owner is not None
+            owned.free_storage(builder, self._owner_place(builder, owner,
+                                                          expr.span), one, answer)
         return builder.make_tuple(
             (builder.cast(CastKind.BITCAST, made, pointer, expr.span),
              builder.binary(BinOp.WRAP_ADD, counts[0], counts[1], expr.span)),
@@ -14086,12 +14231,22 @@ class Checker:
         if not self._accepts(expected, answer):
             self._report_mismatch(expr.span, answer, expected)
             return UndefConst(ERROR)
+        # The list is made in the arena `in` named, or `⎕heap`, and what its
+        # elements point into is there too.
+        owner = self._owner_of(self._out_of_arenas)
+        if owner is not None and owned.points(holds):
+            values = [self._owned_value(builder, written, one, holds, owner,
+                                        written.span)[0]
+                      for written, one in zip(expr.elements, values)]
+            if any(self._value_type_of(one) is ERROR for one in values):
+                return UndefConst(ERROR)
         elements = self._room_for(builder, holds, len(values), expr.span)
         for at, one in enumerate(values):
             builder.store(
                 self._element_place(builder, elements, holds,
                                     builder.int_const(U64, at), expr.span),
                 one, expr.span)
+        self._made_from[id(expr)] = (expr, self._out_of_arenas)
         return builder.make_tuple(
             (elements, builder.int_const(U64, len(values))), answer, expr.span)
 
@@ -14102,13 +14257,11 @@ class Checker:
         room = (builder.int_const(U64, count * stride) if isinstance(count, int)
                 else builder.binary(BinOp.WRAP_MUL, count,
                                     builder.int_const(U64, stride), span))
-        heap = self._provided(HEAP_NAME)
-        assert isinstance(heap, GlobalVar)
         tables.ensure_allocator(self._module)
         return builder.cast(
             CastKind.BITCAST,
             builder.call(self._module.functions[tables.ALLOC_SYMBOL],
-                         (builder.address(heap, span), room),
+                         (self._out_of(builder, span), room),
                          self._module.types.ptr_type(U8, mutable=True), span),
             self._module.types.ptr_type(element, mutable=True), span)
 
@@ -15150,9 +15303,18 @@ class Checker:
         self._out_of_arena = place
         self._out_of_arenas = self._arenas_in(expr.arena)
         try:
-            return self._lower_expr(builder, inside, expected)
+            found = self._lower_expr(builder, inside, expected)
         finally:
             self._out_of_arena, self._out_of_arenas = outer
+        held = self._value_type_of(found)
+        if isinstance(inside, ast.ArrayLit) and isinstance(held, ArrayType) \
+                and not owned.points(held.element):
+            # An array is room in the frame, so `in` says which allocator what
+            # its elements point into comes from -- and these point nowhere.
+            self._diags.emit(D.LANG_ALLOCATED_NOT_A_PLACE, expr.span,
+                             found="an array of values that point nowhere")
+            return UndefConst(ERROR)
+        return found
 
     def _lower_address_of(self, builder: IRBuilder, expr: ast.Call,
                           expected: Type | None) -> Value:

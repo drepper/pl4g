@@ -4874,6 +4874,50 @@
       "option": null
     },
     {
+      "number": 4622,
+      "name": "LANG_CONTAINER_OWNER_UNKNOWN",
+      "severity": "error",
+      "message": "nothing says which allocator this '{type}' was made with, so nothing can be put in it",
+      "args": [
+        {
+          "name": "type",
+          "type": "string",
+          "description": "the container's type"
+        }
+      ],
+      "cause": "An element that points somewhere -- text, a list -- points into the allocator its container was made with, so what is put in is copied there unless it was provably made there.  Where the container came from somewhere that does not say -- a parameter with no `in`, something made in more than one arena -- there is no allocator to copy into.  `v: str⟦⟧ in a` on a parameter says it.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Arenas / What a container holds",
+        "requirement": "An element that points somewhere points into its container's allocator."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4623,
+      "name": "LANG_CONTAINER_CANNOT_COPY",
+      "severity": "error",
+      "message": "a value of type '{type}' cannot yet be copied into another allocator, which putting it in this container needs",
+      "args": [
+        {
+          "name": "type",
+          "type": "string",
+          "description": "the element's type"
+        }
+      ],
+      "cause": "An element not provably made in its container's allocator is copied into it.  Text and lists of text or of plain values can be copied; a record, a tuple, an array held inside a container and a set or a dictionary cannot yet.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Arenas / What a container holds",
+        "requirement": "An element that points somewhere points into its container's allocator."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 4511,
       "name": "LANG_PURE_FUNCTION_HERE",
       "severity": "note",

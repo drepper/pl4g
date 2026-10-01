@@ -91,6 +91,7 @@ ERROR_WINDOW: Final[int] = 4096
 ALLOC_SYMBOL: Final[str] = "__pl4g_alloc"
 GROW_SYMBOL: Final[str] = "__pl4g_grow"
 RELEASE_SYMBOL: Final[str] = "__pl4g_release"
+FREE_SYMBOL: Final[str] = "__pl4g_free"
 
 #: What is said where the system will give no more memory.  It is built here
 #: rather than where a fault's message is built because it belongs to no
@@ -102,7 +103,8 @@ OUT_OF_MEMORY: Final[str] = "pl4g: out of memory\n"
 #: calls one of them declares it, and the backend supplies the body; nothing
 #: else says the allocator is wanted, so a program that never allocates carries
 #: none of it.
-RUNTIME_SYMBOLS: Final[frozenset[str]] = frozenset((ALLOC_SYMBOL, RELEASE_SYMBOL))
+RUNTIME_SYMBOLS: Final[frozenset[str]] = frozenset((ALLOC_SYMBOL, RELEASE_SYMBOL,
+                                                    FREE_SYMBOL))
 
 
 def wanted_by(module: Module) -> bool:
@@ -153,10 +155,24 @@ class AllocatorRegs:
 
 def emit_allocator(asm: Assembler, abi: SyscallABI, regs: AllocatorRegs,
                    abort_symbol: str, message_symbol: str) -> None:
-    """Emit the three the runtime provides, in the order they call each other."""
+    """Emit the four the runtime provides, in the order they call each other."""
     _emit_alloc(asm, regs)
     _emit_grow(asm, abi, regs, abort_symbol, message_symbol)
     _emit_release(asm, abi, regs)
+    _emit_free(asm)
+
+
+def _emit_free(asm: Assembler) -> None:
+    """Emit the giving back of one object: nothing, for an arena.
+
+    `__pl4g_free(arena, where, size)` is what a container calls for an element it
+    replaces and for a temporary it copied.  An arena gives back only all at once,
+    so it returns at once; an allocator that can give back one object at a time
+    supplies a body here and nothing that calls it changes.
+    """
+    asm.begin_function(FREE_SYMBOL, exported=False)
+    asm.ret()
+    asm.end_function()
 
 
 def _round_up(asm: Assembler, value: Reg, grain: int, scratch: Reg) -> None:

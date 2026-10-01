@@ -5037,6 +5037,10 @@
               {
                 "type": "SYMBOL",
                 "name": "list_literal"
+              },
+              {
+                "type": "SYMBOL",
+                "name": "array_literal"
               }
             ]
           }

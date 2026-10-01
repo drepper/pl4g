@@ -243,6 +243,12 @@ To Do List for the PL4g language
         maker empties an arena (4616); a pure function gives back all it made (4617).
     [x] **a signature saying which arena its answer was made in.**  Done: `→ T in a, b`
         and `s: T in a` (4618-4621); `std.text` and two-operand `⍕` say it.
+    [ ] **sets and dictionaries holding text** are not yet held to "an element points into its
+        container's allocator": their keys and values go in as they are.
+    [ ] **copying records, tuples and nested arrays into an allocator** (4623), which a container
+        of them needs.
+    [ ] **a top-level array of text** is refused (9902), which is what a table of literal text
+        such as `std.text`'s digits would want.
     [ ] **`in` per component** -- `(str in a, str in b)`, or a record field holding text made
         in an arena -- which wants `⧖` names on types that are not references.
     [ ] **a type `T⟦3,⟧` that states some dimensions and not others** is accepted, though

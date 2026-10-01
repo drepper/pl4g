@@ -1,0 +1,14 @@
+※ pl4g-test: compile=error
+※ pl4g-test: expect-diag 4623 LANG_CONTAINER_CANNOT_COPY
+
+※ An element not provably made in its container's allocator is copied into it, and a record
+※ holding text cannot be copied yet: what its fields point into would want a walk of its own.
+
+type R = f: str
+
+@[startup]
+fn main() → u6:
+    let a: mut arena = ⎕arena
+    defer ⎕empty(a)
+    let l: [R] = [R(.f ← "x")] in a
+    if #l = 1: 0u6 else: 1u6

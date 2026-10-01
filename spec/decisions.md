@@ -8826,6 +8826,41 @@ be exact and is a much larger change; what is above is what that walk can do sou
 name assigned in a loop is taken to be made in everything the body names, which may refuse
 a correct program that assigns from one arena and empties another in the same loop.
 
+## 2026-10-01T22:00+02:00 — language
+
+**An element that points somewhere points into its container's allocator**
+
+    let v: mut str⟦3⟧ = ⟦"x", t, u⟧ in a    ※ each copied into a unless made there
+    v⟦0⟧ ← s ⧺ "!" in b                     ※ copied into a; the old one and the temporary given back
+
+Decided with the user, who asked for a container to have an allocator when it is made -- unless
+its elements need none -- and for nothing to be stored into one without a copy where the same
+allocator cannot be proven: the defensive answer is to allocate anew and give the old back.
+The choices taken:
+
+- **the allocator is `in NAME`, or `⎕heap` where nothing says**, on lists as before and now on
+  arrays, whose own room stays the frame;
+- **"provably the same" is exact**: a literal, a value from `⎕heap` going into an arena
+  container, and an answer whose signature says nothing are all copied -- the container then
+  never holds anything another allocator, or the image, owns;
+- **what is given back is both** the element replaced and a temporary copied in, each as its
+  own storage only, since same-allocator values go in as they are and may be shared below;
+- **`__pl4g_free(arena, where, size)`** joins the allocator's runtime, a return for an arena.
+
+The rule holds at array and list literals, at `v⟦i⟧ ← x`, and at joins of lists; a
+container whose allocator is unknown is not written (4622), and an element type that cannot
+be copied yet is refused (4623).  A value made in `⎕heap` now has a provenance of its own,
+told apart from one made in nothing.  `std.text` builds its digits from a `char⟦10⟧`: ten
+literal strings would have been ten copies into `⎕heap` per call.  Also fixed: a list
+literal took its room from `⎕heap` whatever `in` said.
+
+Compare: **C++** copy-assignment into a container and `pmr`'s copy into the container's
+resource, decided at run time; **Rust**'s refusal of a store that does not live long enough;
+**Zig**'s `ArrayList`, which holds what it is handed.
+
+Left: sets and dictionaries, which go in as they are; copying records, tuples and nested
+arrays (4623); and the cost of a literal copied into every container it is written into.
+
 Open questions
 --------------
 

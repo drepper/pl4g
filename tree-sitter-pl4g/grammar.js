@@ -1035,7 +1035,7 @@ module.exports = grammar({
     allocated_expression: $ => seq(
       field('value', choice($.binary_expression, $.unary_expression,
                             $.set_literal, $.dictionary_literal,
-                            $.list_literal)),
+                            $.list_literal, $.array_literal)),
       $._in_arena),
 
     // Whether a set holds a key, or what a dictionary has for one.  It binds

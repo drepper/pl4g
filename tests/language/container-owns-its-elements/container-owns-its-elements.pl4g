@@ -1,0 +1,49 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ **An element that points somewhere points into its container's allocator.**  A container of
+※ text or of lists is made with an allocator -- the one `in` names, or `⎕heap` where nothing
+※ does -- and what is put in is copied there unless it was provably made there.  So a container
+※ never holds something another allocator may give back first: emptying `b` below takes nothing
+※ from `v`, `l` or `all`, though every one of them was given text made in `b`.
+※
+※ What is replaced is given back to the container's allocator, and so is a temporary that was
+※ copied in, nobody else naming it.  An arena gives back only all at once, so for an arena that
+※ costs a call that does nothing; an allocator that can give back one object will not.
+※
+※ A container of values that point nowhere needs no allocator at all.
+※
+※ Compare: **C++**, whose containers copy what is assigned into them and destroy what they
+※ replace, with a `pmr` container copying into its own resource; **Rust**, where the borrow
+※ checker refuses the store instead and `clone_in` is the copy; **Zig**, where an
+※ `ArrayList` holds what it is given and which allocator made it is the program's to know.
+
+@[startup]
+fn main() → u6:
+    let a: mut arena = ⎕arena
+    defer ⎕empty(a)
+    let b: mut arena = ⎕arena
+    ※ made with `a`: the literal and the text from `b` are copied, the text from `a` is not
+    let v: mut str⟦3⟧ = ⟦"x", "y" ⧺ "z" in b, "w" ⧺ "v" in a⟧ in a
+    ※ replaced: the new text copied in, the old given back, the temporary given back
+    v⟦0⟧ ← "p" ⧺ "q" in b
+    ※ a list of lists, joined across arenas: copied all the way down
+    let inner: [[str]] = [["x" ⧺ "y" in b, "z"] in b, ["w"] in b] in b
+    let all: [[str]] = inner ⧺ [["v"]] in a
+    let l: [str] = ["k", v⟦1⟧] in a
+    ⎕empty(b)
+    if v⟦0⟧ ≠ "pq" ∨ v⟦1⟧ ≠ "yz" ∨ v⟦2⟧ ≠ "wv":
+        return 1u6
+    let n: mut u64 = 0u64
+    foreach one: [str] = all:
+        foreach t: str = one:
+            n ← n + ⎕drop(#t)
+    if #all ≠ 3 ∨ n ≠ 5u64:
+        return 2u6
+    if #l ≠ 2:
+        return 3u6
+    ※ numbers need no allocator
+    let plain: mut u8⟦2⟧ = ⟦1u8, 2u8⟧
+    plain⟦0⟧ ← 3u8
+    if plain⟦0⟧ ≠ 3u8:
+        return 4u6
+    0u6

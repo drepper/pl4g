@@ -1,8 +1,9 @@
-※ pl4g-test: compile=error
-※ pl4g-test: expect-diag 4615 LANG_ARENA_VALUE_GIVEN_BACK
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
 
-※ An element is part of its array, so an element given something made in an arena makes the
-※ array hold it, as a field does its record.
+※ An element that points somewhere points into its container's allocator.  The array here is
+※ made with `⎕heap` (nothing says otherwise), and the text written into it was made in `s`: not
+※ the same allocator, so the text is copied into `⎕heap` on the way in and the temporary in `s`
+※ is given back.  Emptying `s` afterwards takes nothing from the array.
 
 @[startup]
 fn main() → u6:

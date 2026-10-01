@@ -1,0 +1,16 @@
+※ pl4g-test: compile=error
+※ pl4g-test: expect-diag 4622 LANG_CONTAINER_OWNER_UNKNOWN
+
+※ Text put into an array is copied into the array's allocator unless it was provably made there,
+※ so an array whose allocator nothing says has nowhere to copy into: a parameter with no `in`.
+※ `v: mut str⟦⟧ in a` says it.
+
+@[impure]
+fn put(v: mut str⟦⟧, s: str):
+    v⟦0⟧ ← s
+
+@[startup, impure]
+fn main() → u6:
+    let w: mut str⟦2⟧ = ⟦"a", "b"⟧
+    put(w, "c")
+    0u6

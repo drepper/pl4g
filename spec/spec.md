@@ -3346,6 +3346,46 @@ arenas and none of the checking: freeing one and reading what was in it is the p
 arise and neither does the control.  This sits with Rust in what it refuses and with Zig in what it costs: nothing at run time,
 and a rule a reader can apply by looking at where a name's value was made.
 
+##### What a container holds
+
+**An element that points somewhere points into its container's allocator.**  A container whose elements are text, lists, or
+anything else that points into room -- `str⟦4⟧`, `[str]`, `[[u8]]` -- is made with an allocator: the one `in` names, or `⎕heap`
+where nothing does.  An array is room in the frame like any other, and `in` after one says where what its elements point into
+comes from:
+
+```
+let v: mut str⟦3⟧ = ⟦"x", t, u⟧ in a     ※ the text of all three is in a
+let l: [str] = ["k", t] in a              ※ the list and its text are in a
+let n: u8⟦2⟧ = ⟦1u8, 2u8⟧                 ※ numbers point nowhere: no allocator
+```
+
+**What is put in is copied there unless it was provably made there.**  That holds wherever an element goes in: written in a
+literal, written over one with `v⟦i⟧ ← x`, and brought along by a join of two lists.  "Provably" is what the compiler knows of
+where a value was made: made in that arena, or in `⎕heap` for a container made with `⎕heap`, and nothing else -- a literal, text
+from another arena and the answer of a call whose signature says nothing are all copied.  The copy goes all the way down: a list
+of lists of text is copied list by list and text by text.
+
+**What is replaced is given back to the container's allocator, and so is a temporary that was copied in**, nothing else naming
+it.  What is given back is an element's own storage -- the bytes of a string, the run of a list -- and not what that points at
+in turn: something made in the container's own allocator goes in as it is, so two elements, or an element and a name, may share
+what lies below.  **Giving back one object is `__pl4g_free`**, which every allocator has; an arena gives back only all at once,
+so for an arena it does nothing, and an allocator that can give back one object at a time takes its place with nothing else
+changing.
+
+**A container whose allocator nothing says is not written** (4622): there is nowhere to copy into.  A parameter says it with
+`in` -- `v: mut str⟦⟧ in a` is an array whose text is in what `a` names -- and a container made in more than one arena, or
+handed over by something that does not say, has none the compiler can name.  **Some elements cannot be copied yet** (4623): a
+record or a tuple holding text, an array held inside a container, a set or a dictionary.  `in` after an array of values that
+point nowhere says nothing (4568).
+
+Sets and dictionaries are not held to this yet: their keys and values go in as they are.
+
+Compare: **C++**, whose containers copy what is assigned into them and destroy what they replace, a `pmr` container copying
+into its own memory resource -- which is this, with the copy decided at run time by the resource's identity rather than proven
+while compiling.  **Rust** refuses a store whose lifetime is too short instead of copying, and an arena crate's `clone_in` is
+the copy written out.  **Zig**'s `ArrayList` holds what it is handed, and which allocator made an element is the program's to
+know.  **Go** and **Java** collect garbage and share.
+
 ##### Where an answer was made
 
 **`→ T in a` says the answer was made in the arena parameter `a` names**, or in something that lasts at least as long -- `⎕heap`, a

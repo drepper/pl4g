@@ -188,6 +188,10 @@
         "required": true,
         "types": [
           {
+            "type": "array_literal",
+            "named": true
+          },
+          {
             "type": "binary_expression",
             "named": true
           },

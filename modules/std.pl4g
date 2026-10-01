@@ -345,7 +345,9 @@ fn text(v: T', a: &mut arena) → str in a:
         ※ And nothing is ever negated -- the remainder of a negative number is
         ※ negative and its digit is what that is away from nought, which is the one
         ※ way to write the smallest value a type has, there being no positive of it.
-        let digits: str⟦10⟧ = ⟦"0", "1", "2", "3", "4", "5", "6", "7", "8", "9"⟧
+        ※ Characters and not text: an array of text is made with an allocator its
+        ※ text is copied into, and characters point nowhere and need none.
+        let digits: char⟦10⟧ = ⟦'0', '1', '2', '3', '4', '5', '6', '7', '8', '9'⟧
         let zero: T' = ⎕narrow(0u8, ⌜T'⌝) ?? v
         let ten: T' = ⎕narrow(10u8, ⌜T'⌝) ?? v
         let below: bool = v < zero
@@ -355,7 +357,7 @@ fn text(v: T', a: &mut arena) → str in a:
             let d: T' = rest % ten ?? zero
             let away: T' = if below: zero - d else: d
             let place: u64 = ⎕narrow(away, ⌜u64⌝) ?? 0u64
-            out ← digits⟦⎕unit(place, ⌜idx⌝)⟧ ⧺ out in a
+            out ← ⎕str(digits⟦⎕unit(place, ⌜idx⌝)⟧, a) ⧺ out in a
             rest ← rest ÷ ten ?? zero
             if rest = zero:
                 break §places

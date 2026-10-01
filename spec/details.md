@@ -1851,6 +1851,13 @@ says nothing and what it does not say is assumed.  That one line is the whole of
 drops an instruction that nothing uses and that has no effects, so a pure call whose answer nothing reads goes with no pass
 knowing what purity is.
 
+**What a container owns is copied by a generated function**, `__pl4g_own.T(arena, v)`, one per element type and built on
+first ask in `sema/owned.py` the way the table functions are: text is a join of its bytes with nothing, a list is a join of its
+run with nothing followed by a loop copying every element that points somewhere, and a list of lists calls the function for its
+element type.  Giving back one object is `__pl4g_free(arena, where, size)`, the fourth of the allocator's hand-written symbols;
+for an arena its body is a return.  The checker decides where a copy is needed from what it knows of where a value was made,
+and a value made in `⎕heap` carries a mark of its own for that, so that "made in `⎕heap`" is told apart from "made in nothing".
+
 **The runtime is impure**, both the hand-written symbols and the generated table functions: they allocate and they write tables,
 and two calls to the allocator are two allocations that must not be merged or dropped.  That is a fact about the IR and not about
 the program: they are reached from `_put_key`, the join lowering and their neighbours rather than from `_lower_call`, so the call

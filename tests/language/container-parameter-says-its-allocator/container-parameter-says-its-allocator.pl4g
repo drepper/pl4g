@@ -1,0 +1,19 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ A function written into an array it was handed copies into the array's allocator, which the
+※ parameter says with `in`: `v: mut str⟦⟧ in a` is an array whose text is in what `a` names.
+※ The caller is held to it, as for any parameter that says where it was made (4620).
+
+@[impure]
+fn put(a: &mut arena, v: mut str⟦⟧ in a, s: str):
+    v⟦0⟧ ← s
+
+@[startup, impure]
+fn main() → u6:
+    let a: mut arena = ⎕arena
+    defer ⎕empty(a)
+    let b: mut arena = ⎕arena
+    let w: mut str⟦2⟧ = ⟦"a", "b"⟧ in a
+    put(&mut a, w, "c" ⧺ "d" in b)
+    ⎕empty(b)
+    if w⟦0⟧ = "cd": 0u6 else: 1u6

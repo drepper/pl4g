@@ -1,0 +1,12 @@
+※ pl4g-test: compile=error
+※ pl4g-test: expect-diag 4568 LANG_ALLOCATED_NOT_A_PLACE
+
+※ An array is room in the frame, so `in` after one says which allocator what its elements point
+※ into comes from.  Numbers point nowhere, so there is nothing for it to say.
+
+@[startup]
+fn main() → u6:
+    let a: mut arena = ⎕arena
+    defer ⎕empty(a)
+    let v: u8⟦2⟧ = ⟦1u8, 2u8⟧ in a
+    if v⟦0⟧ = 1u8: 0u6 else: 1u6
