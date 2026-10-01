@@ -1,0 +1,17 @@
+※ pl4g-test: compile=error
+※ pl4g-test: expect-diag 4615 LANG_ARENA_VALUE_GIVEN_BACK
+
+※ A name read after its arena was given back is one mistake, said once.  Answering it from
+※ the function that made the arena would be refused too (4613), but that is the same value
+※ going somewhere after it was already gone, and saying so again would be two messages for
+※ one line that is wrong for one reason.
+
+fn f(first: str) → str:
+    let scratch: mut arena = ⎕arena
+    let both: str = first ⧺ "<-" in scratch
+    ⎕empty(scratch)
+    both
+
+@[startup]
+fn main() → u6:
+    if f("a") = "a<-": 0u6 else: 1u6

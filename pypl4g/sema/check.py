@@ -5150,7 +5150,10 @@ class Checker:
                     return
                 if self._is_arena(local):
                     into.add(id(local))
-                else:
+                elif local.gone_at is None:
+                    # A name already dead is refused where it is read (4615), and
+                    # that is the one thing to say about it: where it goes after
+                    # is the same mistake again.
                     into.update(local.arenas)
                 return
             case ast.Lambda():
