@@ -8695,6 +8695,41 @@ go back at the end of its scope whether or not the program had handed something 
 outward -- the checking above is what makes that question answerable at all, and a
 destructor can come later on top of it.
 
+## 2026-10-01T17:10+02:00 — language
+
+**Naming `⎕heap` is accounting for it**
+
+    fn f(first: str) → str:
+        let second := "<-"
+        first ⧺ second in ⎕heap      ※ pure, and the answer lasts
+
+`⎕heap` was already the compiler's name for the global arena, and `in ⎕heap` already
+parsed, but it was the one arena whose naming did not count: a pure function writing it was
+refused (4456).  Now it counts as any other does.  The rule the earlier entry stated --
+*naming the arena in the line is the accounting* -- holds without an exception, and
+`@[impure]` is left meaning the room **nobody named**: a join or a collection with no `in`,
+and one-operand `⍕`, which take from `⎕heap` without the line saying so.  `⎕empty(⎕heap)`
+stays refused (4616).
+
+What is made in `⎕heap` lasts as long as the program, so a function may answer it -- which
+is how a function hands back text when its caller gave it no arena, and what `h.pl4g`
+wanted.  `std.format` names `⎕heap` in what it expands to and is therefore usable from a
+pure function too.
+
+The same change brings collections written out into line: they reported "writes memory it
+did not make" (4479) whatever arena they named, an older rule that the memory-capability
+change missed.  A collection in a named arena is now accounted for like a join, and one in
+no named arena reports 4456 like a join.  Filling the new table writes only the room just
+taken for it.
+
+Compare: **Zig**, where `std.heap.page_allocator` is a value like any other allocator and
+passing it is all a function needs; **Rust**, where `Global` is the default allocator
+parameter and allocation is not an effect at all; **Haskell**, where allocation is pure and
+only mutation is in `IO`/`ST`.  This sits with Zig: the global heap is a value you name.
+
+Turned down: keeping the exception, which made the one arena that lasts the one a pure
+function could not hand anything back in.
+
 Open questions
 --------------
 

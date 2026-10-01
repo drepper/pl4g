@@ -1,0 +1,19 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ A collection written out in an arena a function was handed, or in one it made, is accounted
+※ for by the arena as a join is: a pure function may write one.  Filling the table writes
+※ only the room just taken for it, which is nothing anybody else can see.
+
+fn kept(where: &mut arena) → bool:
+    let s: ⸨u8⸩ = ⸨1u8, 2u8⸩ in where
+    s⸨2u8⸩
+fn local() → bool:
+    let scratch: mut arena = ⎕arena
+    defer ⎕empty(scratch)
+    let s: ⸨u8⸩ = ⸨1u8, 2u8⸩ in scratch
+    s⸨2u8⸩
+@[startup]
+fn main() → u6:
+    let a: mut arena = ⎕arena
+    defer ⎕empty(a)
+    if kept(&mut a) ∧ local(): 0u6 else: 1u6

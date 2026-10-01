@@ -3256,9 +3256,13 @@ What may carry `in` is what takes room: a join of two strings or two lists, a co
 definition asks for an arena -- which is what `⍕v in scratch` is, the second operand being where to put what it builds.  Anything
 else is worked out in registers and has nowhere to come from (4568).
 
-**`⎕heap` is the global arena and every other one is somebody's.**  Taking room from an arena a program named is accounted for by
-whoever owns it -- naming it in the line *is* the accounting -- so a function that joins into an arena it was handed, or into one it
-made, says nothing.  **`@[impure]` is left meaning the arena nobody named.**
+**Naming an arena is accounting for the room taken from it.**  Taking room from an arena a program named is accounted for by whoever
+owns it -- naming it in the line *is* the accounting -- so a function that joins into an arena it was handed, or into one it made,
+says nothing.  **That holds for `⎕heap` too**: `first ⧺ second in ⎕heap` says where the room comes from as plainly as `in scratch`
+does, so a pure function may write it, and since `⎕heap` lasts as long as the program, what it makes may be answered.  That is how a
+function hands a caller text when the caller gave it no arena.  **`@[impure]` is left meaning the room nobody named**: a join with
+no `in`, a collection with none, `⍕v` with one operand -- each takes from `⎕heap` without the line saying so.  A collection written
+out is accounted for the same way: filling the table writes only the room just taken for it.
 
 **`⎕empty` is the only granularity there is**, which is what makes an arena a *pool*: room is taken from it for as long as it is
 wanted and the whole of it goes in one call.  What is left is an arena with nothing in it, so taking room from it again asks the
@@ -4798,9 +4802,9 @@ the call or is there after it:
 | | |
 |---|---|
 | writing a variable at the top level | 4478 |
-| writing memory it did not make -- an array it was handed, a set or a dictionary | 4479 |
+| writing memory it did not make -- an array it was handed, a set or a dictionary it was handed | 4479 |
 | calling a function marked `@[impure]` | 4480 |
-| taking room that outlives the call -- joining two strings or two lists, making a collection | 4456 |
+| taking room nobody named -- joining two strings or two lists, or making a collection, with no `in` | 4456 |
 
 **Reading or writing a device is not on that list.**  `@[impure]` means the function changes something *global*, and a write to a
 device somebody handed over is not that: it is the one effect the program's own structure accounts for.  **Permission to do it

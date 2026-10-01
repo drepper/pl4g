@@ -8236,11 +8236,20 @@ class Checker:
             self._diags.emit(D.LANG_COLLECTION_VALUE_TOO_LARGE, expr.span,
                              found=ty.value.written())
             return UndefConst(ERROR)
-        # Making one takes room out of an arena, and an arena outlives the
-        # call: the next call gets what this one left of it.
-        self._an_effect(D.LANG_PURE_WRITES_ELSEWHERE, expr.span)
+        # Making one takes room out of an arena, which is accounted for where the
+        # arena is named -- after the literal, or by an `in` around it -- and is a
+        # change to something global where nobody named one.  Filling the table
+        # writes only the room just taken, which is this call's own.
+        arena = self._arena_named(builder, expr.arena)
+        outer, self._room_is_accounted = (
+            self._room_is_accounted,
+            self._room_is_accounted or (arena is not None and self._arena_in_hand))
+        try:
+            self._an_effect(D.LANG_PURE_TAKES_ROOM, expr.span, what="a collection")
+        finally:
+            self._room_is_accounted = outer
         return self._build_collection(builder, expr, ty,
-                                      self._arena_named(builder, expr.arena),
+                                      arena,
                                       ready)
 
     def _arena_named(self, builder: IRBuilder,
@@ -8291,11 +8300,11 @@ class Checker:
             self._diags.emit(D.LANG_NOT_AN_ARENA, written.span,
                              name=written.name)
             return None
-        # **`⎕heap` is the global one and every other arena is somebody's.**  Taking
-        # room from one a program named is accounted for by whoever owns it -- that
-        # is what naming it in the line is -- and `@[impure]` is left meaning the
-        # arena nobody named.
-        self._arena_in_hand = written.name != HEAP_NAME
+        # Taking room from an arena a program named is accounted for -- naming it in
+        # the line is the accounting, and that holds for `⎕heap` as for any other:
+        # `first ⧺ second in ⎕heap` says where the room comes from as plainly as
+        # `in scratch` does.  `@[impure]` is left meaning the room nobody named.
+        self._arena_in_hand = True
         return builder.address(found, written.span)
 
     def _build_collection(self, builder: IRBuilder,

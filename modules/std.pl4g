@@ -378,8 +378,9 @@ fn `⍕`(v: T', a: &mut arena) → str:
 ※※
 ※※ \details Two definitions of one glyph, told apart by how many operands they take,
 ※※ which is how every other operator with two readings is told apart.  This one takes
-※※ room from `⎕heap` and so asks its caller for `@[impure]`: the arena nobody named is
-※※ the global one, and `⍕v in a` is how a caller says otherwise.
+※※ room from `⎕heap` without the caller naming it, and so asks its caller for
+※※ `@[impure]`; `⍕v in ⎕heap` names it and asks for nothing, and `⍕v in a` names
+※※ another.
 ※※
 ※※ \param v what to write
 ※※ \return what a program would have written to mean it
@@ -482,6 +483,9 @@ comptime fn formatted(template: syntax, args: syntax,
 ※※ What it answers is a join of the pieces between the holes and `⍕` of each argument,
 ※※ so nothing happens while the program runs that would not have happened had the join
 ※※ been written out -- and `⍕` is what a program may say its own type's text with.
+※※
+※※ The joins it writes take room `in ⎕heap`, named in the expansion, so what it answers
+※※ lasts as long as the program and a pure function may answer it.
 ※※
 ※※ \param template the text, with `{}` where an argument goes
 ※※ \param args what the holes stand for

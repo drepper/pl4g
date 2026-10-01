@@ -236,9 +236,9 @@ To Do List for the PL4g language
         it back with `defer` once the write has finished.  So a program that prints a
         formatted line declares nothing.
     [x] **memory as a capability.**  Done with the pool above and by the same rule:
-        `⎕heap` is the global arena and every other one is somebody's, so taking room from
-        an arena a program named is accounted for by whoever owns it and `@[impure]` is left
-        meaning the arena nobody named.
+        taking room from an arena a program named -- `⎕heap` included, as `in ⎕heap` -- is
+        accounted for by naming it, and `@[impure]` is left meaning the room nobody named.
+        Collections written out follow the same rule.
         And what an arena holds dies with it: read after `⎕empty`, answered by the function
         that made the arena, or put where it outlives it, is refused (4613-4615); only the
         maker empties an arena (4616); a pure function gives back all it made (4617).

@@ -1,0 +1,31 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ `⎕heap` is the arena the compiler provides, and **naming it is accounting for it** as naming
+※ any other arena is: `first ⧺ second in ⎕heap` says where the room comes from, so a pure
+※ function may write it.  What it makes lasts as long as the program, so it may be answered
+※ -- which is what a function does that wants to hand text to a caller that gave it no arena.
+※
+※ `@[impure]` is left meaning the room nobody named: a join with no `in`, or `⍕v` with one
+※ operand, takes from `⎕heap` without the line saying so.
+
+let std := ⎕import("std")
+
+fn arrow(first: str) → str:
+    let second := "<-"
+    first ⧺ second in ⎕heap
+
+fn shown(v: u16) → str:
+    ⍕v in ⎕heap
+
+fn kept() → ⸨u8⸩:
+    ⸨1u8, 2u8⸩ in ⎕heap
+
+@[startup]
+fn main() → u6:
+    if arrow("a") ≠ "a<-":
+        return 1u6
+    if shown(42u16) ≠ "42":
+        return 2u6
+    if ¬kept()⸨2u8⸩:
+        return 3u6
+    0u6
