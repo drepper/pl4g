@@ -3186,6 +3186,8 @@ m⟦⟦false, true, false⟧⟧ ← 9u8    ※ the middle row, both of it
 **Where a loop takes its turns from, picking is an iterator** and not an array: the loop walks everything the mask could pick,
 asks the mask at each place, and steps past a place it does not pick without running the body.  Nothing is copied and no room is
 taken.
+A mask written as what an operator or `¨` does to an array is not even built there: it is asked a place at a time, as the
+next section says.
 
 ```
 foreach x := v⟦v > 25u8⟧:        ※ two turns, 30 and 40, read where they are
@@ -3214,6 +3216,70 @@ wherever an array is asked for; APL's compress `/`, which is the same operation 
 which threads over an axis chosen by the operator rather than by the mask's rank; MATLAB's logical indexing, likewise; and
 Fortran's `PACK` and `WHERE`, which separate the two halves into a function and a statement where this has one spelling doing
 both, on the grounds that what is written on the left of `←` and what is read on the right should not need different names.
+
+##### Each element: `¨`
+
+**`¨` written after a value says that what follows is done to each of its elements** rather than to the array.  It is APL's each,
+written after its operand for the reason `⌖` is: what is done to each element is written after the mark and reads on to the right.
+
+```
+type Pos = { x : u8 ; y : u8 }
+type Person = { age : u8 ; height : u8 ; pos : Pos }
+
+ps¨.age                          ※ u8⟦3⟧ for a Person⟦3⟧: each one's age
+ps¨.pos.x                        ※ each one's .pos.x, in one walk
+add(ps¨.age, 1u8)                ※ a call for each: u8⟦3⟧
+add(w¨, ps¨.height)              ※ two arrays walked in step
+add(total(w), w¨)                ※ w handed whole to total, and walked for add
+add(m¨¨, 10u8)                   ※ u8⟦2,3⟧ for a u8⟦2,3⟧: two dimensions
+total(m¨)                        ※ u8⟦2⟧: each row, for fn total(v: u8⟦3⟧)
+```
+
+**The mark reaches along the whole chain after it**: a field, an element, an entry, a reference followed, a power written raised,
+a result taken apart.  `ps¨.pos.x` is each element's `.pos.x`, with nothing built in between, which is a comprehension
+`[p.pos.x for p in ps]` written as a chain.  **The call a marked value is handed to is made for each element**, and only what is
+marked is walked: an argument written without the mark goes to every call as it is, array or not -- which is what `@[listable]`,
+deciding by the parameter's type alone, cannot say.  Several marked arguments walk in step and agree along what is walked (4660).
+**Each mark walks one dimension**, the outermost first, and an array is marked at most as often as it has dimensions (4658); what
+is marked is an array (4657).
+
+**What a walk answers with is an array of the answers**, of the shape walked, in room of this call's own -- as much as that shape
+says, which is why the dimensions walked are ones the type states (4659).  An operator already walks what it is given, so
+`ps¨.age ≥ 18u8` is a `bool⟦3⟧`, which is a mask.
+
+**An array has no fields of its own**, so `ps.age` is refused, with a message that says `ps¨.age` is what reads the field of each
+element (4662).  That keeps `.` after an array free for whatever an array may one day have of its own.
+
+**`¨` is written to as it is read**: the same write is made to each element.
+
+```
+ps¨.age ← 21u8                   ※ every one
+ps¨.pos.y ← w¨                   ※ in step: the first of w to the first
+ps⟦⟦true, false, true⟧⟧¨.height ← 100u8   ※ what the mask picks
+```
+
+A value written without the mark goes to each element as it is; one written with it is walked in step, and is as long as what it
+is written into (4660, or before the loop where the types do not both say).  The array is written through a name that may be
+written (4004), as any element is.  **A write is a loop and takes no room**, so the array need not state its length: a
+`mut Person⟦⟧` parameter is written through `¨` as well as a `Person⟦3⟧`.  What is written to is named once each turn, so it is a
+place written with names and indices (4661).
+
+**Where a loop picks with a mask written this way, the mask is asked a place at a time.**  In
+`foreach p := ps⟦ps¨.age ≥ 18u8⟧`, and in `foreach x := v⟦v > 25u8⟧` -- an operator walking what it is given is the same thing --
+nothing is gathered: the loop asks of each place, as it reaches it, whether the mask picks it.  So no room is taken and the array
+need not state its length, which is what lets a function handed a `u8⟦⟧` loop over `v⟦v > 25u8⟧`.  Everything in the mask that is
+not walked is worked out once, before the loop; a call with a marked argument, `ps⟦adult(ps¨)⟧`, is asked a place at a time too.
+An array walked in the mask is as long as the one picked from, compared while compiling where both say it and before the loop
+otherwise.
+
+Compare: **APL**'s `¨`, which this is in meaning and glyph, written before the function there and after the value here, and whose
+scalar functions walk without it as this language's operators do; **Julia**'s `f.(v)`, where the dot is on the call and every
+array argument is walked, and whose fused dots are the chain here; **NumPy**'s structured arrays, `ps['age']` and
+`ps['age'] = 21`, a copy for each read; **Fortran**'s `ps%age`, which reads and writes the component across an array as one
+section; **Odin**'s `#soa` arrays, where `ps.age` is the field of every element but only because the array was laid out by field;
+**Python**'s comprehensions and **Rust**'s `.iter().map(|p| p.age)`, the loop written out.  What none has is the mark on the
+argument: APL's each and Julia's dot walk everything they are given, so an array handed to the function whole needs a second
+spelling there (APL encloses it, Julia wraps it in `Ref`).
 
 ##### Reading, writing and slicing
 
@@ -5051,6 +5117,9 @@ has the same notion of a block opened without a newline; **Go**, which requires 
 **`@[listable]` says what it means to hand the function an array where one of its elements is wanted**: the function is called for
 each, and what the call comes to is an array of the same shape holding the answers.
 
+`@[listable]` is the walk the definition asks for, for every call.  A call can ask for it itself, of any function and of the
+arguments it names, with `¨` on the argument: `f(v¨)`.  That is the section on each element, under arrays.
+
 ```
 @[listable]
 fn doubled(n: u8) → u8:
@@ -5798,10 +5867,10 @@ raised letter.  **And a glyph the language has given a meaning that is not an op
 it: the arrow of a signature, the arrow that binds a name, the failure value, the quad that begins a name the compiler provides, a
 lifetime, the two lifting marks, and the raised minus of a negative literal.
 
-**`∧`, `∨`, `?` and `⌖` may not be named either.**  The first two decide *whether* to work something out, and a function takes
+**`∧`, `∨`, `?`, `⌖` and `¨` may not be named either.**  The first two decide *whether* to work something out, and a function takes
 its arguments already worked out -- so one written for them would change when things happen and not what they mean, which is the
-trap C++ left open on `&&`.  `?` and its pair are about a result rather than about what a result holds, and `⌖` is about a
-reference.
+trap C++ left open on `&&`.  `?` and its pair are about a result rather than about what a result holds, `⌖` is about a
+reference, and `¨` is about how many times what follows it is done.
 
 **An operator is one glyph** (3051), or a **pair of brackets**, which is the next section.  Two glyphs beside each other that are
 not a pair are two operators, which is what makes an expression readable without a table of which pairs mean something.

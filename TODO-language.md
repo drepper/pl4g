@@ -1058,3 +1058,19 @@ Runtime
 [ ] consider warning where an attribute cannot have an effect where it stands.  `@[export]` in the file named on the command line
     is the case that prompted it: nothing imports that file, so the attribute says nothing.  It is not an error -- the file is a
     module like any other and may be imported later -- but it is the sort of thing a reader would want told.
+
+[ ] let a walk through `¨` answer an array of arrays.  `ps¨.coords`, where `coords` is a `u8⟦2⟧`, would be a `u8⟦3,2⟧`; today
+    an answer that is itself an array is refused, as is a walk over an array with nothing in it, where there is no element to
+    say what the answer holds.
+
+[ ] let `¨` write through more than one dimension, `m¨¨.x ← 0u8`, and through a mask of more than one.  A write is a loop over
+    the outermost dimension today.
+
+[ ] let a mask a loop picks with be asked a place at a time along more than one dimension.  Along one it is; a mask over a
+    table's elements is built, and so is one whose arrays walked have more than one dimension.
+
+[ ] let a read through `¨` walk an array whose length its type does not state.  The answer needs room for all of it, which is
+    an allocation -- `in a` on the walk would be the way to say whose.  A write and a loop's mask take no room and already do.
+
+[ ] let `¨` write through a slice, `v⟦1…3⟧¨.x ← 0u8`.  What is written to is named again each turn, so it has to be a place
+    named by names and indices (4661), and a slice is not one; giving it a name first is the workaround.

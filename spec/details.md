@@ -1604,6 +1604,26 @@ counted.  Telling a pick in a loop from one anywhere else needs the expression's
 index's type: `_iteration_of` names the expression it is lowering in `_pick_in`, and `_lower_element` leaves the array and the mask
 in `_pick_walked` rather than building the array when the expression it is lowering is that one.
 
+**A mask asked a place at a time** is what `_pick_per_place` makes of a mask written as operators over arrays, values marked with
+`¨`, and calls handed one (`_walks_per_place`).  It walks the mask's syntax once, before the loop: every array an operator is
+given and every value marked is lowered and kept under a name `¨` makes up (`_each_name`, a name no program can write, since
+`¨` is no letter), everything else is lowered and kept the same way, and two expressions come out -- the mask for one place,
+where those names stand for what is at the place, and the mask for the whole, where they stand for the arrays.  Where everything
+walked is one dimension, `_pick_walked` holds a function that binds the names to what is at a place and lowers the first
+expression; `_Iteration.wanted` calls it.  Otherwise the second expression is lowered once, as a `_Ready` index, and the loop
+goes on as before -- which is also what happens where nothing is walked at all and the "mask" was an index all along.  A record at
+a place is bound as the place (`_bind_element`), so that a field of it is read from where it is rather than the record copied
+into the frame to have one field read out of it.
+
+`¨` everywhere else is three lowerings over one idea: what is done to each element is written out as syntax, with a made-up name
+standing for the element, and lowered once per element by the code that lowers it anywhere.  `_marked` takes a value apart into
+what is walked, how deep, and a function writing the chain after the mark around any expression.  A read (`_lower_each`) and a
+call (`_lower_each_call`) both end in `_each_built`, which unrolls the walk over the stated shape as `@[listable]` does, lowering
+the first element alone so that a mistake is reported once, and storing each answer into frame room taken once the first says
+what the answers are.  A write (`_assign_each`) is a `foreach` over a range of `u64 ¤idx`, built as syntax and lowered by the
+loop's own code: the place written is named again each turn, `B⟦i⟧`, with an `if` around it where a mask picks, which is why
+the place has to be something naming does nothing to.
+
 Everything that does not change from turn to turn -- where an array's elements are, how many there are, where a table's entries
 are -- is worked out once before the loop and read from where it was left.  That is what keeps a turn of an array to a comparison,
 an addition and a read.

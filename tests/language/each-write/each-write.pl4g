@@ -1,0 +1,33 @@
+※ pl4g-test: compile=ok run=native,qemu exit=0 diag=none
+
+※ A field written through `¨` is written in every element.  A value written
+※ without the mark goes to each as it is; one written with it is walked in
+※ step, so `ps¨.pos.y ← w¨` writes the first of `w` into the first person.
+※ Through a mask only what the mask picks is written.  It is a loop, not one
+※ write per element, so it works on an array whose type does not say how long
+※ it is -- a `mut` parameter, here.
+
+type Pos = { x : u8 ; y : u8 }
+type Person = { age : u8 ; height : u8 ; pos : Pos }
+
+@[impure]
+fn birthday(ps: mut Person⟦⟧, by: u8):
+    ps¨.age ← by
+
+@[startup, impure]
+fn main() → u6:
+    let ps: mut Person⟦3⟧ = ⟦Person(.age ← 12u8, .height ← 150u8, .pos ← Pos(.x ← 1u8, .y ← 2u8)),
+                             Person(.age ← 30u8, .height ← 180u8, .pos ← Pos(.x ← 3u8, .y ← 4u8)),
+                             Person(.age ← 40u8, .height ← 170u8, .pos ← Pos(.x ← 5u8, .y ← 6u8))⟧
+    let w: u8⟦3⟧ = ⟦7u8, 8u8, 9u8⟧ in ⎕static
+    ps¨.pos.y ← w¨
+    ps⟦⟦true, false, true⟧⟧¨.height ← 100u8
+    birthday(ps, 21u8)
+    if ps⟦0⟧.pos.y ≠ 7u8 ∨ ps⟦2⟧.pos.y ≠ 9u8 ∨ ps⟦1⟧.pos.x ≠ 3u8:
+        1u6
+    elif ps⟦0⟧.height ≠ 100u8 ∨ ps⟦1⟧.height ≠ 180u8 ∨ ps⟦2⟧.height ≠ 100u8:
+        2u6
+    elif ps⟦0⟧.age ≠ 21u8 ∨ ps⟦2⟧.age ≠ 21u8:
+        3u6
+    else:
+        0u6

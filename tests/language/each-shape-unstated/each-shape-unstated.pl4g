@@ -1,0 +1,17 @@
+※ pl4g-test: compile=error diag=4659
+
+※ What a walk read through '¨' answers with is an array in room enough for
+※ all of it, and how much room that is, is what the dimensions walked say.
+
+type Person = { age : u8 ; height : u8 }
+
+fn add(a: u8, b: u8) → u8:
+    a + b
+
+@[startup, impure]
+fn main() → u6:
+    0u6
+
+fn ages(ps: Person⟦⟧) → u8:
+    let a: u8⟦⟧ = ps¨.age
+    a⟦0⟧

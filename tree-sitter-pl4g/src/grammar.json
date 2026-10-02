@@ -3806,6 +3806,10 @@
         },
         {
           "type": "SYMBOL",
+          "name": "each_expression"
+        },
+        {
+          "type": "SYMBOL",
           "name": "call_expression"
         },
         {
@@ -4858,6 +4862,27 @@
           {
             "type": "STRING",
             "value": "⌖"
+          }
+        ]
+      }
+    },
+    "each_expression": {
+      "type": "PREC",
+      "value": 14,
+      "content": {
+        "type": "SEQ",
+        "members": [
+          {
+            "type": "FIELD",
+            "name": "value",
+            "content": {
+              "type": "SYMBOL",
+              "name": "_non_comparison"
+            }
+          },
+          {
+            "type": "STRING",
+            "value": "¨"
           }
         ]
       }

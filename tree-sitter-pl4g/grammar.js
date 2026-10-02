@@ -794,6 +794,7 @@ module.exports = grammar({
       $.lambda_expression,
       $.address_expression,
       $.deref_expression,
+      $.each_expression,
       $.call_expression,
       $.member_expression,
       $.parenthesized_expression,
@@ -963,6 +964,12 @@ module.exports = grammar({
     // reaching further into what it answers reads left to right.
     deref_expression: $ => prec(14, seq(
       field('reference', $._non_comparison), '\u2316',
+    )),
+
+    // Each element of an array rather than the array: what is written after it
+    // on the same value is done to each, and so is the call it is handed to.
+    each_expression: $ => prec(14, seq(
+      field('value', $._non_comparison), '\u00a8',
     )),
 
     // A call and a member both bind tighter than any operator, and to whatever

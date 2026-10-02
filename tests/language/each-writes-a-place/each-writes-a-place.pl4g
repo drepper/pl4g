@@ -1,0 +1,16 @@
+※ pl4g-test: compile=error diag=4661
+
+※ A write through '¨' names what it writes to once for each element, so that
+※ has to be something that does nothing when it is named.
+
+type Person = { age : u8 ; height : u8 }
+
+fn add(a: u8, b: u8) → u8:
+    a + b
+
+@[startup, impure]
+fn main() → u6:
+    let ps: mut Person⟦1⟧ = ⟦Person(.age ← 1u8, .height ← 2u8)⟧
+    let qs: mut Person⟦1⟧ = ⟦Person(.age ← 3u8, .height ← 4u8)⟧
+    (if ps⟦0⟧.age > 0u8: ps else: qs)¨.age ← 3u8
+    if ps⟦0⟧.age = qs⟦0⟧.age: 0u6 else: 1u6

@@ -27,7 +27,7 @@ from ..front.token import (ACQUIRE_NAME, ANSWER_NAME, ENTRY_NAME,
                            IS_RECORD_NAME, FIELDS_NAME, TYPENAME_NAME,
                            STR_OF_NAME, EMPTY_NAME,
                            WIDEN_NAME,
-                           BOTTOM_GLYPH, BUILTIN_GLYPH, CHR_NAME, DEREF_GLYPH,
+                           BOTTOM_GLYPH, BUILTIN_GLYPH, CHR_NAME, DEREF_GLYPH, EACH_GLYPH,
                            LIFETIME_GLYPH, LIFT_OPEN_GLYPH,
                            ARRAY_OPEN_GLYPH, ARRAY_CLOSE_GLYPH,
                            SET_OPEN_GLYPH, SET_CLOSE_GLYPH,
@@ -1009,6 +1009,113 @@ def _names_a_place(expr: ast.Expr) -> bool:
     report about references.
     """
     return isinstance(expr, (ast.NameRef, ast.Element, ast.Member, ast.Deref))
+
+
+#: What may be written after a value marked with `¨` and still be done to each
+#: element: a field, an element, an entry, the place a reference names, a
+#: power written raised, and a result taken apart.  A call is not among them --
+#: the call a marked value is an argument of walks it, which is the other way
+#: round.
+_EACH_STEPS = (ast.Member, ast.Element, ast.Index, ast.Deref, ast.Raised,
+               ast.Try)
+
+
+def _step_inner(node: ast.Expr) -> ast.Expr | None:
+    """What one step of a chain is applied to, or nothing where it is no step."""
+    match node:
+        case ast.Member() | ast.Element() | ast.Index() | ast.Raised():
+            return node.base
+        case ast.Deref() | ast.Try():
+            return node.operand
+        case _:
+            return None
+
+
+def _step_onto(node: ast.Expr, inner: ast.Expr) -> ast.Expr:
+    """The same step, applied to something else."""
+    if isinstance(node, (ast.Deref, ast.Try)):
+        return replace(node, operand=inner)
+    return replace(node, base=inner)
+
+
+def _marked(expr: ast.Expr
+            ) -> tuple[ast.Expr, int, Callable[[ast.Expr], ast.Expr]] | None:
+    """Take a value written with `¨` apart, or nothing where it is not one.
+
+    What comes back is what is walked, how many dimensions deep, and what is
+    done to each element -- as a way of writing it out for any one of them.  The
+    mark nearest the end is the one taken: `ps¨.pos¨.x` walks what `ps¨.pos`
+    comes to, and that is walked in its turn when it is lowered.
+    """
+    steps: list[ast.Expr] = []
+    node = expr
+    while not isinstance(node, ast.Each):
+        inner = _step_inner(node)
+        if inner is None:
+            return None
+        steps.append(node)
+        node = inner
+    levels = 0
+    while isinstance(node, ast.Each):
+        levels += 1
+        node = node.operand
+
+    def each(one: ast.Expr) -> ast.Expr:
+        for step in reversed(steps):
+            one = _step_onto(step, one)
+        return one
+
+    return node, levels, each
+
+
+def _walks_per_place(expr: ast.Expr) -> bool:
+    """Whether a mask written as *expr* may be worked out a place at a time.
+
+    An operator walks an array it is given, a value written with `¨` walks
+    what it marks, and so does a call one is handed to: what any of these
+    comes to at one place is what it does to what is at that place.
+    """
+    match expr:
+        case ast.Binary() | ast.Unary():
+            return True
+        case ast.Call():
+            return any(_marked(one.value if isinstance(one, ast.Named) else one)
+                       is not None for one in expr.args)
+        case _:
+            return _marked(expr) is not None
+
+
+def _stands_alone(expr: ast.Expr) -> bool:
+    """Whether *expr* can be written out again for each element as it is.
+
+    A literal takes its type from where it stands, so it is left where it
+    stands rather than worked out once without a type; a name costs nothing to
+    read again.  Everything else is worked out once, before the walk, so that
+    it is worked out once and in the order it was written.
+    """
+    return isinstance(expr, (ast.IntLit, ast.FloatLit, ast.BoolLit, ast.CharLit,
+                             ast.StringLit, ast.NameRef))
+
+
+def _a_place_again(expr: ast.Expr) -> bool:
+    """Whether writing *expr* again names the same place, at no cost.
+
+    Names, fields, and elements at a place written as a name or a number: what
+    a write through `¨` writes is named once per element, so it may not be
+    something that does anything when it is named.
+    """
+    match expr:
+        case ast.NameRef():
+            return True
+        case ast.Member():
+            return _a_place_again(expr.base)
+        case ast.Element():
+            return all(isinstance(one, (ast.NameRef, ast.IntLit))
+                       for one in expr.indices) and _a_place_again(expr.base)
+        case ast.Deref():
+            return isinstance(expr.operand, ast.NameRef)
+        case _:
+            return False
 
 
 def _is_a_table(ty: Type) -> bool:
@@ -2541,8 +2648,12 @@ class Checker:
         #: The expression a loop takes its turns from while it is being lowered,
         #: and what picking there left behind: picking is walked where a loop
         #: takes its turns from rather than copied into an array.
+        #: How many names `¨` has made up, so that each one is new.
+        self._each_count = 0
         self._pick_in: ast.Expr | None = None
-        self._pick_walked: tuple[Value, ArrayType, Value] | None = None
+        self._pick_walked: tuple[
+            Value, ArrayType,
+            Value | Callable[[IRBuilder, Value], Value]] | None = None
         #: What the function now being lowered answers with, which is what `?`
         #: has to agree with: it leaves the function carrying an error, so the
         #: function must be one that can carry it.
@@ -3164,10 +3275,12 @@ class Checker:
         local = self._find_local(name)
         if local is not None:
             held = self._held_by(local)
-            return isinstance(held, ProductType) or held is ERROR
+            # An array is a value too, and what a field of one is, is said
+            # where a field is read: it is each element's, written with `¨`.
+            return isinstance(held, (ProductType, ArrayType)) or held is ERROR
         found = self._provided(name)
         return isinstance(found, GlobalVar) \
-            and isinstance(found.value_type, ProductType)
+            and isinstance(found.value_type, (ProductType, ArrayType))
 
     def _field_of(self, builder: IRBuilder, expr: ast.Member,
                   expected: Type | None) -> Value:
@@ -3189,6 +3302,10 @@ class Checker:
         value = self._lower_expr(builder, expr.base, None)
         ty = self._value_type_of(value)
         if ty is ERROR:
+            return UndefConst(ERROR)
+        if isinstance(ty, ArrayType):
+            self._diags.emit(D.LANG_FIELD_OF_AN_ARRAY, expr.name_span,
+                             found=ty.written(), name=expr.name)
             return UndefConst(ERROR)
         if not isinstance(ty, ProductType):
             self._diags.emit(D.LANG_IMPORT_NOT_A_MODULE, expr.base.span,
@@ -7970,6 +8087,9 @@ class Checker:
                 # nothing the program runs.  What it does is exist from here to
                 # the end of the body.
                 self._define_unit(stmt)
+            case ast.ElementAssign() | ast.MemberAssign() \
+                    if _marked(stmt.base) is not None:
+                self._assign_each(builder, stmt, func)
             case ast.ElementAssign():
                 self._lower_element_assign(builder, stmt)
                 self._made_in_part(stmt.base, stmt.value, stmt.span)
@@ -8576,6 +8696,36 @@ class Checker:
             return UndefConst(ERROR)
         if any(isinstance(one, ast.Range) for one in expr.indices):
             return self._lower_slice(builder, expr, base, ty, expected)
+        if self._pick_in is expr and len(expr.indices) == 1 \
+                and _walks_per_place(expr.indices[0]):
+            if self._pick_per_place(builder, expr, base, ty):
+                return UndefConst(VOID)
+            if self._pick_walked is None:
+                return UndefConst(ERROR)
+            # Nothing in it is walked, so it is what it would have been
+            # anywhere: worked out once, and the index or the mask it came to.
+            _, _, mask = self._pick_walked
+            self._pick_walked = None
+            assert isinstance(mask, Value)
+            if self._value_type_of(mask) is ERROR:
+                return UndefConst(ERROR)
+            expr = replace(expr, indices=(_Ready(span=expr.indices[0].span,
+                                                 value=mask),))
+            self._pick_in = expr
+        elif len(expr.indices) == 1 and not isinstance(
+                expr.indices[0], (ast.Range, ast.IntLit, _Ready)):
+            # Lowered once here, so that what it is -- a mask or an index -- is
+            # asked of one value and a mistake in it is reported once.  A
+            # literal is left as it is: an index written down is checked
+            # against the length while compiling.
+            index = self._on_its_own(builder, expr.indices[0])
+            if self._value_type_of(index) is ERROR:
+                return UndefConst(ERROR)
+            walking = self._pick_in is expr
+            expr = replace(expr, indices=(_Ready(span=expr.indices[0].span,
+                                                 value=index),))
+            if walking:
+                self._pick_in = expr
         mask = self._mask_written(builder, expr)
         if mask is not None:
             if self._pick_in is expr:
@@ -13029,7 +13179,8 @@ class Checker:
 
     def _over_a_pick(self, builder: IRBuilder, written: ast.Element,
                      base: Value, ty: ArrayType,
-                     mask: Value) -> _Iteration | None:
+                     mask: Value | Callable[[IRBuilder, Value], Value]
+                     ) -> _Iteration | None:
         """Walk what a mask picks out of an array, where it stands.
 
         Picking where a loop takes its turns from is an iterator and not an
@@ -13044,6 +13195,25 @@ class Checker:
         before the loop, and a mask of another shape stops the program.
         """
         span = written.span
+        if callable(mask):
+            start, lengths = self._shape_of(builder, base, ty, span)
+            element = ty.element if ty.rank == 1 else self._row_type(ty, 1)
+            asked = mask
+
+            def taken(b: IRBuilder, s: tuple[Value, ...]) -> Value:
+                offset = self._by_row(b, s[0], lengths[1:], span)
+                if ty.rank == 1:
+                    return b.load(self._element_place(b, start, ty.element,
+                                                      offset, span), span)
+                return self._row_at(b, start, ty, lengths, offset, 1, span)
+
+            return _Iteration(
+                element=element, start=(builder.int_const(U64, 0),),
+                more=lambda b, s: b.compare(CmpPred.ULT, s[0], lengths[0], span),
+                take=taken,
+                step=lambda b, s: (b.binary(BinOp.WRAP_ADD, s[0],
+                                            b.int_const(U64, 1), span),),
+                wanted=lambda b, s: asked(b, s[0]))
         held = self._value_type_of(mask)
         assert isinstance(held, ArrayType)
         depth = held.rank
@@ -13080,6 +13250,168 @@ class Checker:
                                         b.int_const(U64, 1), span),),
             wanted=lambda b, s: b.load(
                 self._element_place(b, marks, BOOL, s[0], span), span))
+
+    def _pick_per_place(self, builder: IRBuilder, expr: ast.Element,
+                        base: Value, ty: ArrayType) -> bool:
+        """Work a loop's mask out a place at a time where it is written so.
+
+        `foreach p := ps⟦ps¨.age ≥ 18u8⟧` asks of each person whether they are
+        picked as the walk reaches them: no mask is built, so no room is taken,
+        and the array need not state its length (4659 is about the room).  What
+        is walked -- an array an operator is given, a value marked with `¨` --
+        is worked out once, before the loop, and so is everything else in the
+        mask; only what is done at each place is done at each place.
+
+        Answers whether that was done.  Where nothing in the mask is walked it
+        is an index or a mask like any other, and what it came to is left for
+        the caller in `_pick_walked`; where the walk is not along one dimension,
+        the same, with the mask built.
+        """
+        span = expr.span
+        walked: list[tuple[str, Value, ArrayType, int]] = []
+        fixed: list[tuple[str, Value]] = []
+
+        def hoist(value: Value, at: Span) -> ast.Expr:
+            name = self._each_name()
+            fixed.append((name, value))
+            return ast.NameRef(span=at, name=name)
+
+        def walk(node: ast.Expr, spreads: bool
+                 ) -> tuple[ast.Expr, ast.Expr] | None:
+            """The node written for one place, and for the whole, with
+            everything but the walking worked out.
+
+            *spreads* says whether an array here is walked, which it is where
+            an operator is given one and is not where a call is: an argument
+            not marked is handed over whole, and so is worked out whole.
+            """
+            if not spreads and _marked(node) is None:
+                if isinstance(node, (ast.IntLit, ast.FloatLit, ast.BoolLit,
+                                     ast.CharLit, ast.StringLit)):
+                    return node, node
+                value = self._lower_expr(builder, node, None)
+                if self._value_type_of(value) is ERROR:
+                    return None
+                named = hoist(value, node.span)
+                return named, named
+            match node:
+                case ast.Binary():
+                    left = walk(node.left, True)
+                    right = walk(node.right, True) if left is not None else None
+                    if left is None or right is None:
+                        return None
+                    return (replace(node, left=left[0], right=right[0]),
+                            replace(node, left=left[1], right=right[1]))
+                case ast.Unary():
+                    inner = walk(node.operand, True)
+                    if inner is None:
+                        return None
+                    return (replace(node, operand=inner[0]),
+                            replace(node, operand=inner[1]))
+                case ast.Call() if _walks_per_place(node):
+                    one: list[ast.Expr] = []
+                    whole: list[ast.Expr] = []
+                    for arg in node.args:
+                        if isinstance(arg, ast.Spread):
+                            return None
+                        inner = arg.value if isinstance(arg, ast.Named) else arg
+                        got = walk(inner, False)
+                        if got is None:
+                            return None
+                        one.append(replace(arg, value=got[0])
+                                   if isinstance(arg, ast.Named) else got[0])
+                        whole.append(replace(arg, value=got[1])
+                                     if isinstance(arg, ast.Named) else got[1])
+                    return (replace(node, args=tuple(one)),
+                            replace(node, args=tuple(whole)))
+            found = _marked(node)
+            if found is not None:
+                written, levels, each = found
+                value = self._lower_expr(builder, written, None)
+                held = self._walkable(value, levels, written.span)
+                if held is None:
+                    return None
+                name = self._each_name()
+                walked.append((name, value, held, levels))
+                at = ast.NameRef(span=written.span, name=name)
+                marks: ast.Expr = at
+                for _ in range(levels):
+                    marks = ast.Each(span=written.span, operand=marks)
+                return each(at), each(marks)
+            if isinstance(node, (ast.IntLit, ast.FloatLit, ast.BoolLit,
+                                 ast.CharLit, ast.StringLit)):
+                return node, node
+            value = self._lower_expr(builder, node, None)
+            held = self._value_type_of(value)
+            if held is ERROR:
+                return None
+            if spreads and isinstance(held, ArrayType):
+                name = self._each_name()
+                walked.append((name, value, held, 0))
+                at = ast.NameRef(span=node.span, name=name)
+                return at, at
+            named = hoist(value, node.span)
+            return named, named
+
+        got = walk(expr.indices[0], True)
+        if got is None:
+            self._pick_walked = None
+            return False
+        one, whole = got
+        # A mask a place at a time is one along the outermost dimension, which
+        # is every element of an array of one and the rows of one of more.
+        along = all(held.rank == 1 and levels in (0, 1)
+                    for _, _, held, levels in walked)
+        if not walked or not along:
+            self._push_scope()
+            try:
+                for name, value in fixed:
+                    self._bind_hidden(builder, name, value, span)
+                for name, value, _, _ in walked:
+                    self._bind_hidden(builder, name, value, span)
+                mask = self._on_its_own(builder, whole)
+            finally:
+                self._pop_scope()
+            self._pick_walked = (base, ty, mask)
+            return False
+        _, lengths = self._shape_of(builder, base, ty, span)
+        reads: list[tuple[str, Value, ArrayType]] = []
+        for name, value, held, _ in walked:
+            if held.shape[0] is not None and ty.shape[0] is not None:
+                if held.shape[0] != ty.shape[0]:
+                    self._diags.emit(D.LANG_MASK_WRONG_SHAPE, expr.indices[0].span,
+                                     found=held.written(), wanted=ty.written())
+                    self._pick_walked = None
+                    return False
+            else:
+                _, told = self._shape_of(builder, value, held, span)
+                builder.check(
+                    builder.compare(CmpPred.EQ, told[0], lengths[0], span),
+                    "a mask whose shape is not the array's",
+                    statuses.OUT_OF_RANGE, span)
+            start, _ = self._shape_of(builder, value, held, span)
+            reads.append((name, start, held))
+        written = expr.indices[0]
+
+        def at_place(b: IRBuilder, place: Value) -> Value:
+            """Whether the mask picks what is at *place*."""
+            self._push_scope()
+            try:
+                for name, value in fixed:
+                    self._bind_hidden(b, name, value, span)
+                for name, start, held in reads:
+                    self._bind_element(b, name, start, held.element, place, span)
+                picked = self._lower_expr(b, one, BOOL)
+            finally:
+                self._pop_scope()
+            if self._value_type_of(picked) not in (BOOL, ERROR):
+                self._diags.emit(D.LANG_MASK_WRONG_SHAPE, written.span,
+                                 found=self._value_type_of(picked).written(),
+                                 wanted=ty.written())
+            return picked
+
+        self._pick_walked = (base, ty, at_place)
+        return True
 
     def _over_a_list(self, builder: IRBuilder, value: Value, ty: ListType,
                      span: Span) -> _Iteration:
@@ -14218,6 +14550,12 @@ class Checker:
     def _lower_written(self, builder: IRBuilder, expr: ast.Expr,
                        expected: Type | None) -> Value:
         """Lower an expression as it is written: the dispatch `_lower_expr` makes."""
+        if isinstance(expr, (ast.Each, *_EACH_STEPS)) and _marked(expr) is not None:
+            return self._lower_each(builder, expr, expected)
+        if isinstance(expr, ast.Call) and any(
+                _marked(one.value if isinstance(one, ast.Named) else one)
+                is not None for one in expr.args):
+            return self._lower_each_call(builder, expr, expected)
         match expr:
             case ast.IntLit() if self._aiming_at(expected) is CHAR \
                     and expr.type_name is None:
@@ -18945,6 +19283,353 @@ class Checker:
                 self._element_place(builder, start, ty.element, offset, span),
                 span)
         return self._row_at(builder, start, ty, lengths, offset, 1, span)
+
+    # -- each: `¨` ---------------------------------------------------------------
+
+    def _each_name(self) -> str:
+        """A name for what a walk is at, which no program can write: `¨` is no
+        letter."""
+        self._each_count += 1
+        return "".join((EACH_GLYPH, str(self._each_count)))
+
+    def _bind_hidden(self, builder: IRBuilder, name: str, value: Value,
+                     span: Span, placed_as: Type | None = None) -> None:
+        """Bind a name the compiler made up, which nothing reports as unread.
+
+        With *placed_as* the value is where something of that type is, and the
+        name stands for the place: a field of it is read from where it is.
+        """
+        self._bind_local(name, value, span, builder=builder, placed_as=placed_as)
+        local = self._scopes[-1].get(name)
+        if local is not None:
+            local.read = True
+
+    def _walkable(self, value: Value, levels: int,
+                  span: Span) -> ArrayType | None:
+        """The array `¨` walks, or nothing where it cannot walk *value*."""
+        ty = self._value_type_of(value)
+        if ty is ERROR:
+            return None
+        if not isinstance(ty, ArrayType):
+            self._diags.emit(D.LANG_EACH_NOT_AN_ARRAY, span, found=ty.written())
+            return None
+        if levels > ty.rank:
+            self._diags.emit(D.LANG_EACH_TOO_DEEP, span, found=ty.written(),
+                             levels=levels)
+            return None
+        return ty
+
+    def _bind_element(self, builder: IRBuilder, name: str, start: Value,
+                      element: Type, at: Value, span: Span) -> None:
+        """Bind *name* to the element *at* places into the run at *start*.
+
+        A record is bound as the place it is in, so that what is done to it --
+        a field read, mostly -- reads what it asks for and nothing more.
+        """
+        place = self._element_place(builder, start, element, at, span)
+        if isinstance(element, ProductType):
+            self._bind_hidden(builder, name, place, span, placed_as=element)
+        else:
+            self._bind_hidden(builder, name, builder.load(place, span), span)
+
+    def _walk_at(self, builder: IRBuilder, ty: ArrayType, levels: int,
+                    at: Value, start: Value, lengths: Sequence[Value],
+                    span: Span) -> Value:
+        """What a walk *levels* deep is at, *at* places in: an element, or a row."""
+        offset = self._by_row(builder, at, lengths[levels:], span)
+        if levels == ty.rank:
+            return builder.load(
+                self._element_place(builder, start, ty.element, offset, span),
+                span)
+        return self._row_at(builder, start, ty, lengths, offset, levels, span)
+
+    def _lower_each(self, builder: IRBuilder, expr: ast.Expr,
+                    expected: Type | None) -> Value:
+        """Lower a value written with `¨`: what is done to each element, as an
+        array.
+
+        `ps¨.pos.x` is each element's `.pos.x`, read in one walk with nothing
+        built in between: everything written after the mark on the same value
+        is done to each element.  What is walked is worked out once.
+        """
+        found = _marked(expr)
+        assert found is not None
+        written, levels, each = found
+        base = self._lower_expr(builder, written, None)
+        ty = self._walkable(base, levels, written.span)
+        if ty is None:
+            return UndefConst(ERROR)
+        name = self._each_name()
+        return self._each_built(
+            builder, expr, [(name, base, ty, levels, written.span)], [],
+            each(ast.NameRef(span=written.span, name=name)), expected)
+
+    def _lower_each_call(self, builder: IRBuilder, expr: ast.Call,
+                         expected: Type | None) -> Value:
+        """Lower a call with an argument written with `¨`: one call for each.
+
+        Only what is marked is walked; an argument that is not goes to every
+        call as it is, array or not -- which is what the mark is for.  Several
+        marked arguments are walked in step.  Every argument is worked out
+        once, left to right, before the first call is made, except a literal,
+        which takes its type from the parameter it is handed to, and a name.
+        """
+        sources: list[tuple[str, Value, ArrayType, int, Span]] = []
+        fixed: list[tuple[str, Value]] = []
+        args: list[ast.Expr] = []
+        for arg in expr.args:
+            if isinstance(arg, ast.Spread):
+                self._diags.emit(
+                    D.IMPL_UNIMPLEMENTED_FEATURE, arg.span,
+                    feature="a tuple spread into a call that '\N{DIAERESIS}' walks")
+                return UndefConst(ERROR)
+            inner = arg.value if isinstance(arg, ast.Named) else arg
+            found = _marked(inner)
+            if found is not None:
+                written, levels, each = found
+                value = self._lower_expr(builder, written, None)
+                ty = self._walkable(value, levels, written.span)
+                if ty is None:
+                    return UndefConst(ERROR)
+                name = self._each_name()
+                sources.append((name, value, ty, levels, written.span))
+                inner = each(ast.NameRef(span=written.span, name=name))
+            elif not _stands_alone(inner):
+                value = self._lower_expr(builder, inner, None)
+                if self._value_type_of(value) is ERROR:
+                    return UndefConst(ERROR)
+                name = self._each_name()
+                fixed.append((name, value))
+                inner = ast.NameRef(span=inner.span, name=name)
+            args.append(replace(arg, value=inner) if isinstance(arg, ast.Named)
+                        else inner)
+        return self._each_built(builder, expr, sources, fixed,
+                                replace(expr, args=tuple(args)), expected)
+
+    def _each_built(self, builder: IRBuilder, expr: ast.Expr,
+                    sources: Sequence[tuple[str, Value, ArrayType, int, Span]],
+                    fixed: Sequence[tuple[str, Value]], template: ast.Expr,
+                    expected: Type | None) -> Value:
+        """Write *template* out once for each element and gather the answers.
+
+        Each source is walked as deep as it was marked, and all of them in step;
+        the names in *template* stand for what each is at, and those in *fixed*
+        for what was worked out before the walk.  What the walk answers with is
+        an array of the shape walked, in room of this call's own -- as much as
+        the shape says, which is why the shape walked has to be stated (4659).
+        The first element is written out alone, so that a mistake in what is
+        done to each is reported once and not once an element.
+        """
+        _, _, first, depth, _ = sources[0]
+        walked = first.shape[:depth]
+        for _, _, ty, levels, span in sources:
+            shape = ty.shape[:levels]
+            if any(along is None for along in shape):
+                self._diags.emit(D.LANG_EACH_SHAPE_UNSTATED, span,
+                                 found=ty.written())
+                return UndefConst(ERROR)
+            if shape != walked:
+                self._diags.emit(D.LANG_EACH_SHAPES_DIFFER, span,
+                                 found=ty.written(), wanted=first.written())
+                return UndefConst(ERROR)
+        count = 1
+        for along in walked:
+            assert along is not None
+            count *= along
+        if count == 0:
+            self._diags.emit(
+                D.IMPL_UNIMPLEMENTED_FEATURE, expr.span,
+                feature="walking with '\N{DIAERESIS}' an array with nothing in it, "
+                "which leaves nothing to say what the answer holds")
+            return UndefConst(ERROR)
+        shapes = [self._shape_of(builder, value, ty, span)
+                  for _, value, ty, _, span in sources]
+        wanted = expected.element if isinstance(expected, ArrayType) \
+            and expected.rank == len(walked) else None
+        answer: ArrayType | None = None
+        place: Value | None = None
+        for at in range(count):
+            errors = self._diags.error_count
+            self._push_scope()
+            try:
+                for name, value in fixed:
+                    self._bind_hidden(builder, name, value, expr.span)
+                for (name, _, ty, levels, span), (start, lengths) in \
+                        zip(sources, shapes):
+                    if levels == ty.rank:
+                        self._bind_element(builder, name, start, ty.element,
+                                           builder.int_const(U64, at), span)
+                    else:
+                        self._bind_hidden(
+                            builder, name,
+                            self._walk_at(builder, ty, levels,
+                                          builder.int_const(U64, at), start,
+                                          lengths, span), span)
+                one = self._lower_expr(builder, template, wanted)
+            finally:
+                self._pop_scope()
+            got = self._value_type_of(one)
+            if got is ERROR or self._diags.error_count > errors:
+                return UndefConst(ERROR)
+            if answer is None:
+                if isinstance(got, ArrayType):
+                    self._diags.emit(
+                        D.IMPL_UNIMPLEMENTED_FEATURE, expr.span,
+                        feature="".join((
+                            "an array of what each element of a walk comes to, "
+                            "where that is itself the array '", got.written(),
+                            "'")))
+                    return UndefConst(ERROR)
+                answer = self._module.types.array_type(got, walked)
+                place = builder.frame(answer, expr.span)
+            assert place is not None
+            builder.store(self._element_place(builder, place, got,
+                                              builder.int_const(U64, at),
+                                              expr.span), one, expr.span)
+        assert answer is not None and place is not None
+        if not self._accepts(expected, answer):
+            self._report_mismatch(expr.span, answer, expected)
+            return UndefConst(ERROR)
+        return builder.cast(CastKind.BITCAST, place, answer, expr.span)
+
+    def _assign_each(self, builder: IRBuilder,
+                     stmt: ast.MemberAssign | ast.ElementAssign,
+                     func: Function) -> None:
+        """Lower `ps¨.age ← v`: the same write to each element, in a loop.
+
+        A value written with `¨` is walked in step with what is written to,
+        `ps¨.age ← ages¨`; one written without it goes to every element as it
+        is.  Through a mask, `ps⟦m⟧¨.age ← v`, only what the mask picked is
+        written.  It is a loop and not one write per element, so the array need
+        not state its length.  What is written to is named again for each
+        element, so it has to be a place a name and indices name (4661).
+        """
+        found = _marked(stmt.base)
+        assert found is not None
+        written, levels, each = found
+        span = stmt.span
+        if levels != 1:
+            self._diags.emit(
+                D.IMPL_UNIMPLEMENTED_FEATURE, span,
+                feature="writing with '\N{DIAERESIS}' through more than one dimension")
+            return
+        self._push_scope()
+        try:
+            mask: str | None = None
+            target = written
+            if isinstance(written, ast.Element) and len(written.indices) == 1 \
+                    and not isinstance(written.indices[0], ast.Range):
+                index = self._on_its_own(builder, written.indices[0])
+                held = self._value_type_of(index)
+                if held is ERROR:
+                    return
+                name = self._each_name()
+                self._bind_hidden(builder, name, index, span)
+                if isinstance(held, ArrayType) and held.element is BOOL:
+                    if held.rank != 1:
+                        self._diags.emit(
+                            D.IMPL_UNIMPLEMENTED_FEATURE, span,
+                            feature="writing with '\N{DIAERESIS}' through a mask "
+                            "of more than one dimension")
+                        return
+                    mask = name
+                    target = written.base
+                else:
+                    target = replace(written, indices=(
+                        ast.NameRef(span=written.indices[0].span, name=name),))
+            if not _a_place_again(target):
+                self._diags.emit(D.LANG_EACH_WRITES_A_PLACE, target.span)
+                return
+            array = self._lower_expr(builder, target, None)
+            ty = self._walkable(array, 1, target.span)
+            if ty is None:
+                return
+            _, lengths = self._shape_of(builder, array, ty, span)
+            # What the loop counts is places, so it counts in the unit an
+            # index is: the loop's name indexes and the user never sees it.
+            places = IntType(64, False, IDX_UNIT)
+            count, first = self._each_name(), self._each_name()
+            self._bind_hidden(builder, count,
+                              builder.cast(CastKind.BITCAST, lengths[0], places,
+                                           span), span)
+            self._bind_hidden(builder, first, builder.int_const(places, 0), span)
+            if mask is not None:
+                self._each_agree(builder, ast.NameRef(span=span, name=mask),
+                                 lengths[0], ty, span)
+            value = stmt.value
+            given = _marked(value)
+            if given is not None:
+                source, depth, each_value = given
+                walked = self._lower_expr(builder, source, None)
+                held = self._walkable(walked, depth, source.span)
+                if held is None:
+                    return
+                if depth != 1:
+                    self._diags.emit(D.LANG_EACH_SHAPES_DIFFER, source.span,
+                                     found=held.written(), wanted=ty.written())
+                    return
+                name = self._each_name()
+                self._bind_hidden(builder, name, walked, span)
+                self._each_agree(builder, ast.NameRef(span=span, name=name),
+                                 lengths[0], ty, span)
+                index = self._each_name()
+                value = each_value(ast.Element(
+                    span=source.span, base=ast.NameRef(span=source.span, name=name),
+                    indices=(ast.NameRef(span=source.span, name=index),)))
+            else:
+                index = self._each_name()
+                if not _stands_alone(value):
+                    worked = self._lower_expr(builder, value, None)
+                    if self._value_type_of(worked) is ERROR:
+                        return
+                    name = self._each_name()
+                    self._bind_hidden(builder, name, worked, span)
+                    value = ast.NameRef(span=value.span, name=name)
+            at = ast.NameRef(span=span, name=index)
+            one: ast.Stmt = replace(
+                stmt, base=each(ast.Element(span=target.span, base=target,
+                                            indices=(at,))),
+                value=value)
+            if mask is not None:
+                one = ast.ExprStmt(span=span, value=ast.If(span=span, arms=(
+                    ast.IfArm(span=span, condition=ast.Element(
+                        span=span, base=ast.NameRef(span=span, name=mask),
+                        indices=(at,)),
+                        body=ast.Block(span=span, style=ast.BlockStyle.LAYOUT,
+                                       stmts=(one,))),)))
+            loop = ast.ForEach(
+                span=span, name=index, name_span=span, type=None,
+                iterable=ast.Range(span=span,
+                                   start=ast.NameRef(span=span, name=first),
+                                   stop=ast.NameRef(span=span, name=count)),
+                body=ast.Block(span=span, style=ast.BlockStyle.LAYOUT,
+                               stmts=(one,)))
+            self._lower_stmt(builder, ast.ExprStmt(span=span, value=loop),
+                             func, False)
+        finally:
+            self._pop_scope()
+
+    def _each_agree(self, builder: IRBuilder, other: ast.Expr, length: Value,
+                    ty: ArrayType, span: Span) -> None:
+        """See to it that what is walked beside an array is as long as it is.
+
+        Where both lengths are written down the answer is known while compiling;
+        where either is not, it is one comparison before the walk, and a length
+        that differs stops the program.
+        """
+        value = self._lower_expr(builder, other, None)
+        held = self._value_type_of(value)
+        if not isinstance(held, ArrayType):
+            return
+        if held.shape[0] is not None and ty.shape[0] is not None:
+            if held.shape[0] != ty.shape[0]:
+                self._diags.emit(D.LANG_EACH_SHAPES_DIFFER, span,
+                                 found=held.written(), wanted=ty.written())
+            return
+        _, lengths = self._shape_of(builder, value, held, span)
+        builder.check(builder.compare(CmpPred.EQ, lengths[0], length, span),
+                      "arrays walked together whose lengths differ",
+                      statuses.OUT_OF_RANGE, span)
 
     def _one_by_one(self, builder: IRBuilder, written: Sequence[ast.Expr],
                     wanted: Sequence[Type] | None,

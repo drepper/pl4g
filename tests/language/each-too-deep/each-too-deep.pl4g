@@ -1,0 +1,15 @@
+※ pl4g-test: compile=error diag=4658
+
+※ Each '¨' walks one dimension, so an array of one dimension is marked
+※ once at most.
+
+type Person = { age : u8 ; height : u8 }
+
+fn add(a: u8, b: u8) → u8:
+    a + b
+
+@[startup, impure]
+fn main() → u6:
+    let w: u8⟦2⟧ = ⟦1u8, 2u8⟧ in ⎕static
+    let b: u8⟦2⟧ = w¨¨
+    0u6

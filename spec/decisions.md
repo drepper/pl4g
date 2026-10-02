@@ -9333,6 +9333,26 @@ the loop otherwise, stopping the program on a mismatch.  `⎕enumerate` over a p
 things picked, not the places stepped past.  Found on the way and fixed: `_` as one of several
 names in a `foreach` was bound, and reported as unread.
 
+## 2026-10-03T16:00+02:00 — language
+
+**`¨`, each element**
+
+Asked for while answering how a mask is made from one field of an array of records.  `ps.age` across an array was put first,
+plain (Odin's `#soa`) or marked; the user asked what APL's each would give beyond this, and the answer was: a call walking a
+function its definition did not mark `@[listable]`, a walk whose depth is written at the call rather than read from a parameter
+-- which a generic parameter cannot say -- room for an array to have members of its own, and the cost of a walk seen where it is
+paid.  The user asked for `¨`, and four questions were put and answered.  *Where it is written*: on the argument, `f(v¨, w)`,
+so only what is marked walks and an array handed whole needs nothing -- chosen over APL's and Julia's mark on the function, where
+every array argument walks and one handed whole has to be enclosed (`⊂`) or wrapped (`Ref`).  *How far it reaches*: along the
+whole chain written after it, `ps¨.pos.x` in one walk, like Julia's fused dots and a comprehension -- chosen over one step per
+mark, NumPy's `ps['pos']['x']`.  *What a walk answers*: an array in this call's room, of the shape walked, which is stated
+(4659) -- and where a loop picks with a mask written so, the mask is asked a place at a time, gathering nothing and needing no
+stated length, which goes for an operator walking an array too, so `v⟦v > 25u8⟧` loops over a `u8⟦⟧`; chosen over building
+the mask always.  *Writes*: `ps¨.age ← 21u8` to each, `ps¨.pos.y ← w¨` in step, `ps⟦m⟧¨.height ← 100u8` through a mask, as a
+loop, so the array need not state its length.  `ps.age` on an array is refused with a message naming `ps¨.age` (4662).
+
+Found on the way and fixed: an index was lowered twice when it turned out not to be a mask, so a mistake in it was reported twice.
+
 
 Open questions
 --------------

@@ -2259,6 +2259,13 @@ class Parser:
                                   glyph="".join((opener.text, closer.text)),
                                   operands=(found, *inside))
                 continue
+            if self._check(TokKind.EACH):
+                # Each element rather than the array.  It stands after its
+                # operand for the reason the mark of a reference does: what is
+                # done to each element is written after it and reads on.
+                end = self._advance().span
+                found = ast.Each(span=found.span.to(end), operand=found)
+                continue
             if self._check(TokKind.DEREF):
                 # What is at the place a reference names.  It stands after its
                 # operand, so reaching further into what it answers -- an

@@ -45,3 +45,22 @@ def test_a_pick_kept_in_a_name_takes_room_for_all_of_it(compile_source) -> None:
     """Picking into a name is an array, in room enough for all four."""
     room = _room(compile_source, KEPT)
     assert "u8\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}4\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}" in room, room
+
+
+PER_PLACE = """\
+type Person = { age : u8 ; height : u8 }
+
+@[startup, impure]
+fn main() \N{RIGHTWARDS ARROW} u6:
+    let ps: Person\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}2\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET} = \N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}Person(.age \N{LEFTWARDS ARROW} 12u8, .height \N{LEFTWARDS ARROW} 150u8), Person(.age \N{LEFTWARDS ARROW} 30u8, .height \N{LEFTWARDS ARROW} 180u8)\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET} in \N{APL FUNCTIONAL SYMBOL QUAD}static
+    let n: mut u8 = 0u8
+    foreach _ := ps\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}ps\N{DIAERESIS}.age \N{GREATER-THAN OR EQUAL TO} 18u8\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}:
+        n \N{LEFTWARDS ARROW} n + 1u8
+    if n = 1u8: 0u6 else: 1u6
+"""
+
+
+def test_a_mask_a_loop_picks_with_is_asked_a_place_at_a_time(compile_source) -> None:  # noqa: ANN001
+    """Neither the ages nor the truth values are gathered: nothing is in the frame."""
+    room = _room(compile_source, PER_PLACE)
+    assert room == [], room

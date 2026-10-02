@@ -1,0 +1,15 @@
+※ pl4g-test: compile=error diag=4657
+
+※ '¨' walks an array, and a number is not one: it has no elements for what
+※ follows to be done to.
+
+type Person = { age : u8 ; height : u8 }
+
+fn add(a: u8, b: u8) → u8:
+    a + b
+
+@[startup, impure]
+fn main() → u6:
+    let x: u8 = 3u8
+    let b: u8⟦1⟧ = x¨
+    0u6

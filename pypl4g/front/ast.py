@@ -751,6 +751,19 @@ class AddressOf(Expr):
 
 
 @dataclass(frozen=True, slots=True)
+class Each(Expr):
+    """`v¨`: each element of an array rather than the array.
+
+    What is written after it on the same value -- a field, an element, a
+    reference followed -- is done to each element, and so is the call it is an
+    argument of; what that comes to is an array of the answers.  Written twice
+    it walks two dimensions, which is an `Each` around an `Each`.
+    """
+
+    operand: Expr
+
+
+@dataclass(frozen=True, slots=True)
 class Deref(Expr):
     """`r⌖`: what is at the place a reference names.
 

@@ -5660,6 +5660,147 @@
       "option": null
     },
     {
+      "number": 4657,
+      "name": "LANG_EACH_NOT_AN_ARRAY",
+      "severity": "error",
+      "message": "'¨' walks an array, and '{found}' is not one",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type of what was marked"
+        }
+      ],
+      "cause": "'¨' says that what follows is done to each element of an array rather than to the array; something that is not an array has no elements for it to be done to.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Arrays",
+        "requirement": "What '¨' marks is an array."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4658,
+      "name": "LANG_EACH_TOO_DEEP",
+      "severity": "error",
+      "message": "'¨' written {levels} times walks more dimensions than '{found}' has",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type of what was marked"
+        },
+        {
+          "name": "levels",
+          "type": "number",
+          "description": "how many times the mark was written"
+        }
+      ],
+      "cause": "Each '¨' walks one dimension, the outermost first, so an array is marked at most as many times as it has dimensions.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Arrays",
+        "requirement": "'¨' is written at most once per dimension of what it marks."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4659,
+      "name": "LANG_EACH_SHAPE_UNSTATED",
+      "severity": "error",
+      "message": "walking '{found}' with '¨' into an array needs the dimensions walked to be stated",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type of what was walked"
+        }
+      ],
+      "cause": "What a walk read with '¨' answers with is an array of the answers, in room enough for all of them -- and how much room that is, is what the dimensions walked say.  Where the type does not say them the room would have to be taken while the program runs.  A write through '¨' and a loop picking with a mask take no room and are not asked this.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Arrays",
+        "requirement": "An array a read through '¨' walks states the dimensions walked."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4660,
+      "name": "LANG_EACH_SHAPES_DIFFER",
+      "severity": "error",
+      "message": "'{found}' is walked with '¨' beside '{wanted}', and the two differ along what is walked",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type of one of the arrays walked"
+        },
+        {
+          "name": "wanted",
+          "type": "string",
+          "description": "the type of the first array walked"
+        }
+      ],
+      "cause": "Arrays walked together are walked in step: the first element of one goes with the first of the other, and there is no first of one to go with a second the other does not have.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Arrays",
+        "requirement": "Arrays walked together with '¨' agree along every dimension walked."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4661,
+      "name": "LANG_EACH_WRITES_A_PLACE",
+      "severity": "error",
+      "message": "what '¨' writes to is named again for each element, so it has to be a place written with names and indices",
+      "args": [],
+      "cause": "A write through '¨' is a loop over the elements, and what is written to is named once each turn.  So it is a name, or a field or an element of one at an index written as a name or a number -- something that does nothing when it is named.  Anything else is given a name first.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Arrays",
+        "requirement": "What a write through '¨' writes to is a place named by names and indices."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4662,
+      "name": "LANG_FIELD_OF_AN_ARRAY",
+      "severity": "error",
+      "message": "'{found}' is an array and has no field '{name}'; '¨.{name}' is the field of each element",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "the type of the array"
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the field asked for"
+        }
+      ],
+      "cause": "An array has no fields of its own.  What each element has is reached by marking the array with '¨', which says that what follows is done to each element: 'ps¨.age'.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Arrays",
+        "requirement": "A field of each element of an array is read through '¨'."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 4511,
       "name": "LANG_PURE_FUNCTION_HERE",
       "severity": "note",

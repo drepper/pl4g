@@ -110,7 +110,7 @@
 ["«" "»" "↺" "↻"] @operator
 ["#" "⍴" "⧺" "++" "⌈" "⌊"] @operator
 ["↓" "↑" "↕" "⇕" "ⁿ"] @operator
-["←" "⌖" "…" "?" "??" "†" "⇧" "⇩"] @operator
+["←" "⌖" "¨" "…" "?" "??" "†" "⇧" "⇩"] @operator
 ; Whether one number divides another, which is asked of two and also written in
 ; front of one.
 ["∣" "∤"] @operator

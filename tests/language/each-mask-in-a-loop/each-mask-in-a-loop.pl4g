@@ -1,0 +1,37 @@
+※ pl4g-test: compile=ok run=native,qemu exit=0 diag=none
+
+※ Where a loop picks with a mask written as what an operator, or `¨`, does to
+※ an array, the mask is asked at each place as the walk reaches it: no mask is
+※ built, so no room is taken, and the array need not state its length.  That
+※ is what lets `v⟦v > 25u8⟧` be walked inside a function handed a `u8⟦⟧`.
+※ Everything in the mask that is not walked is worked out once, before the
+※ loop.
+
+type Person = { age : u8 ; height : u8 }
+
+fn big(v: u8⟦⟧, over: u8) → u8:
+    let n: mut u8 = 0u8
+    foreach x := v⟦v > over⟧:
+        n ← n + x
+    n
+
+@[listable]
+fn adult(p: Person) → bool:
+    p.age ≥ 18u8
+
+fn heights(ps: Person⟦⟧) → u8:
+    let n: mut u8 = 0u8
+    foreach p := ps⟦ps¨.age ≥ 18u8 ∧ ps¨.height > 160u8⟧:
+        n ← n + p.height - 160u8
+    foreach _ := ps⟦adult(ps¨)⟧:
+        n ← n + 1u8
+    n
+
+@[startup, impure]
+fn main() → u6:
+    let v: u8⟦4⟧ = ⟦10u8, 20u8, 30u8, 40u8⟧ in ⎕static
+    let ps: Person⟦3⟧ = ⟦Person(.age ← 12u8, .height ← 170u8),
+                         Person(.age ← 30u8, .height ← 180u8),
+                         Person(.age ← 40u8, .height ← 150u8)⟧ in ⎕static
+    ※ 30 + 40, and 20 + 2
+    if big(v, 25u8) = 70u8 ∧ heights(ps) = 22u8: 0u6 else: 1u6

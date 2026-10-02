@@ -1,0 +1,45 @@
+※ pl4g-test: compile=ok run=native,qemu exit=0 diag=none
+
+※ `¨` marks a value as each of its elements rather than the array.  What is
+※ written after it on the same value is done to each element -- `ps¨.pos.x` is
+※ each person's `.pos.x`, read in one walk -- and so is the call it is handed
+※ to: `add(w¨, 1u8)` is a call for each element.  Only what is marked is
+※ walked, so an array handed beside it unmarked goes to every call whole.
+※ Written twice it walks two dimensions.  What a walk answers with is an array
+※ of the answers, of the shape walked.
+
+type Pos = { x : u8 ; y : u8 }
+type Person = { age : u8 ; height : u8 ; pos : Pos }
+
+fn add(a: u8, b: u8) → u8:
+    a + b
+
+fn total(v: u8⟦3⟧) → u8:
+    v⟦0⟧ + v⟦1⟧ + v⟦2⟧
+
+@[startup, impure]
+fn main() → u6:
+    let ps: Person⟦3⟧ = ⟦Person(.age ← 12u8, .height ← 150u8, .pos ← Pos(.x ← 1u8, .y ← 2u8)),
+                         Person(.age ← 30u8, .height ← 180u8, .pos ← Pos(.x ← 3u8, .y ← 4u8)),
+                         Person(.age ← 40u8, .height ← 170u8, .pos ← Pos(.x ← 5u8, .y ← 6u8))⟧ in ⎕static
+    let w: u8⟦3⟧ = ⟦1u8, 2u8, 3u8⟧ in ⎕static
+    let m: u8⟦2,3⟧ = ⟦⟦1u8, 2u8, 3u8⟧, ⟦4u8, 5u8, 6u8⟧⟧ in ⎕static
+    let ages: u8⟦3⟧ = ps¨.age
+    let xs: u8⟦3⟧ = ps¨.pos.x
+    let older: u8⟦3⟧ = add(ps¨.age, 1u8)
+    let both: u8⟦3⟧ = add(w¨, ps¨.height)
+    ※ `w` handed whole to `total`, and walked for `add`
+    let whole: u8⟦3⟧ = add(total(w), w¨)
+    ※ every element of a table, and each of its rows
+    let each: u8⟦2,3⟧ = add(m¨¨, 10u8)
+    let rows: u8⟦2⟧ = total(m¨)
+    ※ an operator walks what it is given, so the answer of a walk is a mask
+    let adults: bool⟦3⟧ = ps¨.age ≥ 18u8
+    if ages⟦1⟧ ≠ 30u8 ∨ xs⟦2⟧ ≠ 5u8 ∨ older⟦0⟧ ≠ 13u8 ∨ both⟦2⟧ ≠ 173u8:
+        1u6
+    elif whole⟦0⟧ ≠ 7u8 ∨ each⟦1,2⟧ ≠ 16u8 ∨ rows⟦1⟧ ≠ 15u8:
+        2u6
+    elif adults⟦0⟧ ∨ ¬adults⟦1⟧:
+        3u6
+    else:
+        0u6
