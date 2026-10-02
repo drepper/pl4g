@@ -40,12 +40,16 @@ from ..ir.inst import (AddressInst, AssertInst, BinaryInst, BinOp, BrInst,
                        LoadInst, MemStartInst, RetInst, StoreInst, SumGetInst,
                        SumMakeInst, SumTagInst, SwitchInst, TupleInst,
                        UnaryInst, UnOp, UnreachableInst, WrapInst)
-from ..ir.layout import DataLayout, align_of, offsets_of, size_of
+from ..ir.layout import (DataLayout, align_of, member_offsets_of, offsets_of,
+                         size_of)
 from ..ir.types import (BOOL, BoolType, CharType, EnumType, FloatType, IntType,
-                        ProductType, PtrType, SyntaxType, Type, VOID)
+                        ProductType, PtrType, SyntaxType, TupleType, Type, U64,
+                        VOID, parts_of)
 from ..ir.module import GlobalVar
-from ..ir.value import (ArrayConst, BlockParam, BoolConst, CharConst, Const,
-                        EnumConst, IntConst, RecordConst, UndefConst, Value)
+from ..ir.value import (AddressConst, ArrayConst, BlockParam, BoolConst,
+                        CharConst, Const,
+                        EnumConst, IntConst, PartsConst, RecordConst,
+                        UndefConst, Value)
 
 #: How many instructions one expansion may run before it is stopped.  A macro that
 #: loops for ever would otherwise hang the compiler, and a limit is the only answer:
@@ -428,6 +432,16 @@ class Machine:
             case RecordConst():
                 for which, one in enumerate(held.fields):
                     self._put(at + offsets_of(held.ty, LAYOUT)[which], one)
+            case AddressConst():
+                # Another variable of the image, placed in turn; nought for none.
+                self._write(at, U64, 0 if held.target is None
+                            else self._at(held.target))
+            case PartsConst():
+                pieces = parts_of(held.ty)
+                for offset, piece, part in zip(
+                        member_offsets_of(TupleType(pieces), LAYOUT), pieces,
+                        held.parts):
+                    self._put(at + offset, part)
             case UndefConst():
                 # Nothing was written, so nought is what is there -- which is
                 # what the image does for a variable with no initializer.

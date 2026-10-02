@@ -34,17 +34,17 @@ fn total(xs: u8⟦3⟧) → u8:
 
 @[startup]
 fn main() → u6:
-    let v: u8⟦3⟧ = ⟦1u8, 2u8, 3u8⟧
+    let v: u8⟦3⟧ = ⟦1u8, 2u8, 3u8⟧ in ⎕static
     ※ one array walked, giving one of the same shape
     let d: u8⟦3⟧ = doubled(v)
     ※ two walked in step, and one walked beside a number that is not
-    let w: u8⟦3⟧ = ⟦10u8, 20u8, 30u8⟧
+    let w: u8⟦3⟧ = ⟦10u8, 20u8, 30u8⟧ in ⎕static
     let s: u8⟦3⟧ = added(v, w)
     let raised: u8⟦3⟧ = added(v, 10u8)
     ※ the answers need not be of the argument's type
     let big: bool⟦3⟧ = over(v)
     ※ a table walked twice, down to the numbers
-    let m: u8⟦2,3⟧ = ⟦⟦1u8, 2u8, 3u8⟧, ⟦4u8, 5u8, 6u8⟧⟧
+    let m: u8⟦2,3⟧ = ⟦⟦1u8, 2u8, 3u8⟧, ⟦4u8, 5u8, 6u8⟧⟧ in ⎕static
     let twice: u8⟦2,3⟧ = doubled(m)
     ※ and walked once, down to the rows a parameter of that shape takes
     let sums: u8⟦2⟧ = total(m)

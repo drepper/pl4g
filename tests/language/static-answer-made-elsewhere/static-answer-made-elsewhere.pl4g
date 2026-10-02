@@ -1,0 +1,12 @@
+※ pl4g-test: compile=error diag=4635
+
+※ `→ str in ⎕static` says the answer is in the image, made while compiling.
+※ Nothing can be copied into the image while the program runs, so an answer
+※ made anywhere else is refused rather than copied.
+
+fn joined(a: str) → str in ⎕static:
+    a ⧺ "!"
+
+@[startup]
+fn main() → u6:
+    0u6

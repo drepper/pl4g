@@ -22,6 +22,7 @@ from pypl4g.ir.types import TypeContext, U8, U16, U32, U64
 ARROW = "\N{RIGHTWARDS ARROW}"
 OPEN = "\N{MATHEMATICAL LEFT WHITE SQUARE BRACKET}"
 CLOSE = "\N{MATHEMATICAL RIGHT WHITE SQUARE BRACKET}"
+STATIC = " in \N{APL FUNCTIONAL SYMBOL QUAD}static"
 
 LAYOUT = DataLayout(pointer_size=8)
 SYSTEM = DataLayout(pointer_size=8, system=True)
@@ -113,10 +114,10 @@ def test_an_index_is_multiplied_by_the_width_of_an_element(
     """Four arrays of four widths, each read at the same index."""
     source = "".join((
         "@[startup, impure]\nfn main() ", ARROW, " u6:\n",
-        "    let a: u6", OPEN, "3", CLOSE, " = ", OPEN, "1u6, 2u6, 4u6", CLOSE, "\n",
-        "    let b: u16", OPEN, "3", CLOSE, " = ", OPEN, "1u16, 2u16, 8u16", CLOSE, "\n",
-        "    let c: u32", OPEN, "3", CLOSE, " = ", OPEN, "1u32, 2u32, 16u32", CLOSE, "\n",
-        "    let d: u64", OPEN, "3", CLOSE, " = ", OPEN, "1u64, 2u64, 32u64", CLOSE, "\n",
+        "    let a: u6", OPEN, "3", CLOSE, " = ", OPEN, "1u6, 2u6, 4u6", CLOSE, STATIC, "\n",
+        "    let b: u16", OPEN, "3", CLOSE, " = ", OPEN, "1u16, 2u16, 8u16", CLOSE, STATIC, "\n",
+        "    let c: u32", OPEN, "3", CLOSE, " = ", OPEN, "1u32, 2u32, 16u32", CLOSE, STATIC, "\n",
+        "    let d: u64", OPEN, "3", CLOSE, " = ", OPEN, "1u64, 2u64, 32u64", CLOSE, STATIC, "\n",
         "    let at: u6 \u00a4idx = 2\n",
         "    a", OPEN, "at", CLOSE, " + 8u6\n"))
     assert run_it(tmp_path, triple, source) == 12
@@ -129,7 +130,7 @@ def test_an_index_outside_the_array_stops_the_program(
     branch that does not come back, which is the shape every fault here has."""
     source = "".join((
         "@[startup, impure]\nfn main() ", ARROW, " u6:\n",
-        "    let a: u6", OPEN, "4", CLOSE, " = ", OPEN, "1u6, 2u6, 4u6, 8u6", CLOSE, "\n",
+        "    let a: u6", OPEN, "4", CLOSE, " = ", OPEN, "1u6, 2u6, 4u6, 8u6", CLOSE, STATIC, "\n",
         "    let at: u6 \u00a4idx = 9\n",
         "    a", OPEN, "at", CLOSE, "\n"))
     assert run_it(tmp_path, triple, source) == statuses.OUT_OF_RANGE, \
@@ -147,7 +148,7 @@ def test_a_table_is_read_in_row_major_order(triple: str, tmp_path) -> None:  # n
     source = "".join((
         "@[startup, impure]\nfn main() ", ARROW, " u6:\n",
         "    let m: u6", OPEN, "2,3", CLOSE, " = ",
-        OPEN, OPEN, "1u6,2u6,4u6", CLOSE, ",", OPEN, "8u6,16u6,32u6", CLOSE, CLOSE, "\n",
+        OPEN, OPEN, "1u6,2u6,4u6", CLOSE, ",", OPEN, "8u6,16u6,32u6", CLOSE, CLOSE, STATIC, "\n",
         "    let r: u6 \u00a4idx = 1\n    let c: u6 \u00a4idx = 2\n",
         "    m", OPEN, "r,c", CLOSE, " + m", OPEN, "0,1", CLOSE, "\n"))
     assert run_it(tmp_path, triple, source) == 34
@@ -165,7 +166,7 @@ def test_every_dimension_is_checked_against_its_own(triple: str,
     source = "".join((
         "@[startup, impure]\nfn main() ", ARROW, " u6:\n",
         "    let m: u6", OPEN, "2,3", CLOSE, " = ",
-        OPEN, OPEN, "1u6,2u6,4u6", CLOSE, ",", OPEN, "8u6,16u6,32u6", CLOSE, CLOSE, "\n",
+        OPEN, OPEN, "1u6,2u6,4u6", CLOSE, ",", OPEN, "8u6,16u6,32u6", CLOSE, CLOSE, STATIC, "\n",
         "    let c: u6 \u00a4idx = 5\n",
         "    m", OPEN, "0,c", CLOSE, "\n"))
     assert run_it(tmp_path, triple, source) == statuses.OUT_OF_RANGE, \

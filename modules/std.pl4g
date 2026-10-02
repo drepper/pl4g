@@ -364,33 +364,16 @@ fn text(v: T', a: &mut arena) → str in a:
 
 ※※ The text of one digit, as the literal that writes it.
 ※※
-※※ \details Not an array of the ten: text put in an array is copied into the
-※※ array's allocator, ten copies a call for a table nothing writes.  One function
-※※ for every integer type, where the table was built in every instantiation.
+※※ \details A table in the image: made while compiling, never copied and never
+※※ given back, so what is answered is the image's text and travels without its
+※※ allocator.  One function for every integer type, where a table built in the
+※※ generic body would be built in every instantiation.
 ※※
 ※※ \param d a number below ten
 ※※ \return its digit
-fn digit(d: u64) → str:
-    if d = 0u64:
-        "0"
-    elif d = 1u64:
-        "1"
-    elif d = 2u64:
-        "2"
-    elif d = 3u64:
-        "3"
-    elif d = 4u64:
-        "4"
-    elif d = 5u64:
-        "5"
-    elif d = 6u64:
-        "6"
-    elif d = 7u64:
-        "7"
-    elif d = 8u64:
-        "8"
-    else:
-        "9"
+fn digit(d: u64) → str in ⎕static:
+    let digits: str⟦10⟧ = ⟦"0", "1", "2", "3", "4", "5", "6", "7", "8", "9"⟧ in ⎕static
+    digits⟦⎕unit(d, ⌜idx⌝)⟧
 
 ※※ The same, written where a reader expects an operator.
 ※※

@@ -79,7 +79,7 @@ fn main() → u6:
     let writable: &mut i8 = &mut w
     let readable: &i8 = writable
     ※ an element of an array, which is a place like any other
-    let v: u8⟦4⟧ = ⟦1u8, 2u8, 3u8, 4u8⟧
+    let v: mut u8⟦4⟧ = ⟦1u8, 2u8, 3u8, 4u8⟧
     let e: &mut u8 = &mut v⟦2⟧
     e⌖ ← 9u8
     ※ a name given a reference to a place of the same scope, and one of an

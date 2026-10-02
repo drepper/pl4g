@@ -166,6 +166,37 @@ class ResultConst(Const):
         self.failed = failed
 
 
+class AddressConst(Const):
+    """Where a variable is, known while compiling: a word the image holds.
+
+    What a string, a list or a collection made while compiling holds to say
+    where its bytes, its run or its table are -- another variable of the image.
+    Nothing where there is no such variable, which is how a value in the image
+    says it has no allocator: the word is nought.  Written into the image as a
+    relocation, the address being the linker's to settle.
+    """
+
+    __slots__ = ("target",)
+
+    def __init__(self, ty: Type, target: object | None) -> None:
+        super().__init__(ty)
+        self.target = target
+
+
+class PartsConst(Const):
+    """A value of several parts every one of which is known while compiling.
+
+    A string, a list: where, how many, and the allocator, laid out as the parts
+    of the type are wherever such a value is in memory.
+    """
+
+    __slots__ = ("parts",)
+
+    def __init__(self, ty: Type, parts: tuple[Const, ...]) -> None:
+        super().__init__(ty)
+        self.parts = parts
+
+
 class UndefConst(Const):
     """A value that is not defined.
 

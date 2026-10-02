@@ -20,20 +20,20 @@
 @[startup, impure]
 fn main() → u6:
     ※ the first element says it
-    let a := ⟦1u8, 2⟧
+    let a := ⟦1u8, 2⟧ in ⎕static
     ※ and so does the second, which is the same array
-    let b := ⟦1, 2u8⟧
+    let b := ⟦1, 2u8⟧ in ⎕static
     ※ a table, where one element of one row says it for the whole
-    let c := ⟦⟦1u8, 2⟧, ⟦2, 3⟧⟧
+    let c := ⟦⟦1u8, 2⟧, ⟦2, 3⟧⟧ in ⎕static
     ※ and where the one that says it is in the row written last
-    let d := ⟦⟦1, 2⟧, ⟦2, 3u8⟧⟧
+    let d := ⟦⟦1, 2⟧, ⟦2, 3u8⟧⟧ in ⎕static
     ※ a list
-    let l := [1, 2u8, 3]
+    let l := [1, 2u8, 3] in ⎕static
     ※ a set, and a dictionary whose keys and values each hold one type
-    let s := ⸨1, 2u8⸩
-    let m := ⸨1: 2, 2u8: 3u16⸩
+    let s := ⸨1, 2u8⸩ in ⎕static
+    let m := ⸨1: 2, 2u8: 3u16⸩ in ⎕static
     ※ floating point is no different
-    let f := ⟦1.0, 2.5f32⟧
+    let f := ⟦1.0, 2.5f32⟧ in ⎕static
     let at: u64 ¤idx = 1
     if a⟦0⟧ ≠ 1u8 ∨ a⟦at⟧ ≠ 2u8:
         1u6

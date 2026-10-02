@@ -21,10 +21,10 @@
 
 @[startup, impure]
 fn main() → u6:
-    let v: u8⟦4⟧ = ⟦10u8, 20u8, 30u8, 40u8⟧
-    let l: [u8] = [1u8, 2u8, 3u8]
+    let v: u8⟦4⟧ = ⟦10u8, 20u8, 30u8, 40u8⟧ in ⎕static
+    let l: [u8] = [1u8, 2u8, 3u8] in ⎕static
     let text: str = "abc"
-    let s: ⸨u8⸩ = ⸨5u8, 9u8⸩
+    let s: ⸨u8⸩ = ⸨5u8, 9u8⸩ in ⎕static
     let places: mut u64 = 0u64
     let summed: mut u8 = 0u8
     ※ an array, counting from zero, which is what it counts from unless told

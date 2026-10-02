@@ -19,10 +19,10 @@ fn ends(top: u6⟦3⟧, bottom: u6⟦3⟧) → u6:
 
 @[startup]
 fn main() → u6:
-    let v: u6⟦3⟧ = ⟦10u6, 19u6, 20u6⟧
+    let v: u6⟦3⟧ = ⟦10u6, 19u6, 20u6⟧ in ⎕static
     ※ every element an argument of its own
     let whole: u6 = three(⁂v)
     ※ a table spreads into its rows, each an array in its own right
-    let m: u6⟦2,3⟧ = ⟦⟦1u6, 2u6, 3u6⟧, ⟦4u6, 5u6, 6u6⟧⟧
+    let m: u6⟦2,3⟧ = ⟦⟦1u6, 2u6, 3u6⟧, ⟦4u6, 5u6, 6u6⟧⟧ in ⎕static
     ※ 49 - (1 + 6) = 42
     whole - ends(⁂m)

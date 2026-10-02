@@ -12,6 +12,6 @@ fn first(xs: u6⟦⟧) → u6:
 
 @[startup]
 fn main() → u6:
-    let m: u6⟦2,3⟧ = ⟦⟦1u6,2u6,3u6⟧,⟦10u6,20u6,30u6⟧⟧
+    let m: u6⟦2,3⟧ = ⟦⟦1u6,2u6,3u6⟧,⟦10u6,20u6,30u6⟧⟧ in ⎕static
     let row: u6⟦3⟧ = m⟦1⟧
     row⟦0⟧ + row⟦2⟧ + first(m⟦0⟧)

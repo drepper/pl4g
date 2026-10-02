@@ -42,7 +42,7 @@ let NO_SUCH_CALL: i64 = 0x4000i64
 @[startup, impure]
 fn main() → u6:
     ※ one source, three architectures: `⎕sc@write` is 1 here and 64 there
-    let message: u8⟦6⟧ = ⟦104u8, 101u8, 108u8, 108u8, 111u8, 10u8⟧
+    let message: u8⟦6⟧ = ⟦104u8, 101u8, 108u8, 108u8, 111u8, 10u8⟧ in ⎕static
     let wrote: i64 = ⎕syscall(⎕sc@write, 1i64, &message⟦0⟧, 6i64)
     ※ the number alone
     let bare: i64 = ⎕syscall(NO_SUCH_CALL)

@@ -4,7 +4,7 @@
 ※ which are bytes in the image like any other variable's value.  Every element
 ※ has to be one the compiler knows, for the same reason.
 
-let table: u6⟦5⟧ = ⟦1u6, 2u6, 4u6, 8u6, 16u6⟧
+let table: u6⟦5⟧ = ⟦1u6, 2u6, 4u6, 8u6, 16u6⟧ in ⎕static
 
 @[startup]
 fn main() → u6:

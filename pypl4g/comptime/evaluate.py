@@ -31,7 +31,7 @@ from dataclasses import dataclass, field
 from typing import Callable, Final, Mapping, Sequence
 
 from ..front import ast
-from ..front.token import ENVIRON_NAME
+from ..front.token import ENVIRON_NAME, STATIC_NAME
 from ..source.location import INVALID_SPAN, Span
 
 #: How many steps one evaluation may take before it is called an endless one.
@@ -428,6 +428,11 @@ class Evaluator:
                 return self._index(expr)
             case ast.ArrayLit() | ast.ListLit():
                 return [self._expr(one) for one in expr.elements]
+            case ast.Allocated() if isinstance(expr.arena, ast.NameRef) \
+                    and expr.arena.name == STATIC_NAME:
+                # What is in the image is what it says, before the program runs
+                # as much as after.
+                return self._expr(expr.value)
             case ast.TupleLit():
                 return [self._expr(one) for one in expr.members]
             case ast.AddressOf():

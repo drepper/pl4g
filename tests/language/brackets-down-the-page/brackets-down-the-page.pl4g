@@ -40,12 +40,12 @@ fn main() → u6:
                        3u8)
     ※ an array, with the elements where they read best
     let v: u8⟦4⟧ = ⟦1u8, 2u8,
-                    3u8, 4u8⟧
+                    3u8, 4u8⟧ in ⎕static
     ※ a set whose closing bracket is on a line of its own, and at a column no
     ※ block would allow
     let s: ⸨u8⸩ = ⸨1u8,
 2u8
-⸩
+⸩ in ⎕static
     ※ and a dictionary written the way one is read
     let d: mut ⸨str: u8⸩ = ⸨
         "a": 1u8,

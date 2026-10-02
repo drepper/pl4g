@@ -4131,3 +4131,35 @@ three targets and through the caller's storage: `〈u8?, u8〉` is four parts, w
 is more than the convention carries in registers, so a function answering one
 goes through the pass that moves a large answer -- and that pass reads
 `parts_of` like everything else, so it needed nothing either.
+
+
+What is in the image
+--------------------
+
+**`⎕static` is no allocator at all.**  An answer said to be in it is `STATIC_AT` among the places a signature names, `_answered`
+refuses anything with provenance (4635), `_settle_answer` marks it `answer_from = ("static", -1)`, and `thinanswers` puts back a
+null allocator.  A body answering only text written down gets the same mark from what `_answer_kinds` shows.
+
+**A container `in ⎕static` is a constant.**  `_lower_allocated` and `_lower_collection` hand it to `_lower_static`, which builds it
+with `_constant_value` -- the function that already made a top-level variable's bytes, taught text (`PartsConst` of an
+`AddressConst` to the text's variable, the length, a null allocator), lists (a run of their own), sets and dictionaries
+(`_table_constant`) -- and then names it: an array or a record by the address of a new read-only variable, a list or a table by
+its parts.  `_static_type` reads a type off what is written where nothing around says it, quietly, and `_known_while_compiling`
+is the syntactic test 4638 asks.
+
+**The image holds addresses.**  `AddressConst` encodes as nought plus an `ABS64` fixup against the target's symbol
+(`target/globals.py`), the way the frame table already relocated its rows; `PartsConst` lays parts out as a tuple of them would be.
+The compile-time interpreter places the target and writes its address.
+
+**A table is laid out by simulating `__pl4g_table_put`** in `_table_laid_out`: start at eight, grow before the probe when one more
+entry would pass three quarters, rebuild by walking the old entries in index order, probe linearly from the folded hash.  The
+entry is a record of the state word, the key as `key_ir_type` holds it, and the value -- checked against `Shape.stride` and
+`value_at`, since a layout that drifted would be a table nobody finds anything in.  The block's arena field is null, and
+`tables.arena_of` answers `⎕heap` for it through `__pl4g_table_arena`, so a table made out of one in the image has somewhere to
+come from.
+
+**Writing an array needs a `mut` name**: `_lower_element_assign` asks `_record_may_change`, `_place_of_an_element` asks the quiet
+`_may_write` and `_read_only` (a non-`mut` variable of the image at the root).  `Function.writes_arrays` lists the `mut` array
+parameters; `_where_made` refuses handing them anything `_may_write` says no to, and only those parameters are asked where their
+elements are kept (4625) -- a body that cannot replace an element cannot give one back.
+

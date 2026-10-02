@@ -37,7 +37,7 @@ fn main() → u6:
     ※ a lambda that walks, called with an array and with a single value
     let double: @[listable] fn(u8) → u8 = @[listable] λ a: u8 → u8:
         a + a
-    let v: u8⟦3⟧ = ⟦1u8, 2u8, 3u8⟧
+    let v: u8⟦3⟧ = ⟦1u8, 2u8, 3u8⟧ in ⎕static
     let doubled: u8⟦3⟧ = double(v)
     let one: u8 = double(7u8)
     ※ two parameters, one walked and one not, which is what makes
@@ -46,7 +46,7 @@ fn main() → u6:
         a × b
     let up: u8⟦3⟧ = scaled(v, 2u8)
     ※ a table, walked twice because the parameter takes a single value
-    let rows: u8⟦2, 3⟧ = ⟦⟦1u8, 2u8, 3u8⟧, ⟦4u8, 5u8, 6u8⟧⟧
+    let rows: u8⟦2, 3⟧ = ⟦⟦1u8, 2u8, 3u8⟧, ⟦4u8, 5u8, 6u8⟧⟧ in ⎕static
     let grown: u8⟦2, 3⟧ = double(rows)
     ※ one that brings something in with it, which changes nothing about the walk
     let by: u8 = 10u8

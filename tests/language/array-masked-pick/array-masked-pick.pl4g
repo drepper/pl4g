@@ -19,17 +19,17 @@
 
 @[startup]
 fn main() → u6:
-    let v: u8⟦4⟧ = ⟦10u8, 20u8, 30u8, 40u8⟧
-    let want: bool⟦4⟧ = ⟦false, true, false, true⟧
+    let v: u8⟦4⟧ = ⟦10u8, 20u8, 30u8, 40u8⟧ in ⎕static
+    let want: bool⟦4⟧ = ⟦false, true, false, true⟧ in ⎕static
     let picked: u8⟦⟧ = v⟦want⟧
     ※ a mask is the natural shape of a comparison walked over an array
     let big: u8⟦⟧ = v⟦v > 25u8⟧
     ※ rows of a table, each still as wide as the table was
-    let m: u8⟦3,2⟧ = ⟦⟦1u8, 2u8⟧, ⟦3u8, 4u8⟧, ⟦5u8, 6u8⟧⟧
-    let ends: bool⟦3⟧ = ⟦true, false, true⟧
+    let m: u8⟦3,2⟧ = ⟦⟦1u8, 2u8⟧, ⟦3u8, 4u8⟧, ⟦5u8, 6u8⟧⟧ in ⎕static
+    let ends: bool⟦3⟧ = ⟦true, false, true⟧ in ⎕static
     let rows: u8⟦,2⟧ = m⟦ends⟧
     ※ and elements of one, which keeps no shape at all
-    let some: bool⟦3,2⟧ = ⟦⟦true, false⟧, ⟦false, true⟧, ⟦true, false⟧⟧
+    let some: bool⟦3,2⟧ = ⟦⟦true, false⟧, ⟦false, true⟧, ⟦true, false⟧⟧ in ⎕static
     let flat: u8⟦⟧ = m⟦some⟧
     let ones: u8 = picked⟦0⟧ + picked⟦1⟧ + big⟦0⟧ + big⟦1⟧
     let twos: u8 = rows⟦0,0⟧ + rows⟦0,1⟧ + rows⟦1,0⟧ + rows⟦1,1⟧

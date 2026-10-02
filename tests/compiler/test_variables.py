@@ -623,13 +623,14 @@ def test_a_string_answer_stays_in_registers(compile_source,  # noqa: ANN001
     so it travels as it is made and not through the caller's storage.
     """
     proc, output = compile_source(
-        "fn named() \N{RIGHTWARDS ARROW} str:\n    \"x\"\n\n"
+        "fn named(c: bool) \N{RIGHTWARDS ARROW} str:\n"
+        "    if c: \"x\" else: \"y\" \N{DOUBLE PLUS} \"z\"\n\n"
         "@[startup]\nfn main() \N{RIGHTWARDS ARROW} u6:\n"
-        "    if named() = \"x\": 0u6 else: 1u6\n",
+        "    if named(true) = \"x\": 0u6 else: 1u6\n",
         "--emit=ir", "-O0")
     assert proc.returncode == 0, describe(proc)
     text = output.read_text(encoding="utf-8")
-    assert "fn @named() \N{RIGHTWARDS ARROW} str" in text, text
+    assert "fn @named(bool) \N{RIGHTWARDS ARROW} str" in text, text
     assert "answer-in-storage" not in text, text
 
 

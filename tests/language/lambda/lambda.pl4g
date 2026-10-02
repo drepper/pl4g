@@ -76,8 +76,8 @@ fn main() → u6:
     let listed: fn([u8]) → u8 = λ v: [u8] [n] → u8 { n }
     let sized: fn([u8]) → u8 = λ v: [u8] [=] → u8 { n }
     let held: fn([u8], [u16]) → u8 = λ v: [u8], w: [u16] [&] → u8 { n }
-    let some: [u8] = [1u8, 2u8]
-    let other: [u16] = [1u16]
+    let some: [u8] = [1u8, 2u8] in ⎕static
+    let other: [u16] = [1u16] in ⎕static
     ※ handed to a function, which calls it without knowing which it is
     if one(5u8) ≠ 6u8 ∨ two(5u8) ≠ 7u8:
         1u6

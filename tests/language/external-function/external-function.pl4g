@@ -56,7 +56,7 @@ let ring: mut Ring = Ring(
 
 @[startup, impure]
 fn main() → u6:
-    let message: u8⟦6⟧ = ⟦104u8, 101u8, 108u8, 108u8, 111u8, 10u8⟧
+    let message: u8⟦6⟧ = ⟦104u8, 101u8, 108u8, 108u8, 111u8, 10u8⟧ in ⎕static
     ※ standard error, so that a run under a test suite says nothing that has
     ※ to be filtered out of what the program answered
     let one: i64 = io_submit(&mut ring, 1i32, 2i32, ⎕address(&message⟦0⟧),

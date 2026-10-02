@@ -5119,6 +5119,180 @@
       "option": null
     },
     {
+      "number": 4634,
+      "name": "LANG_STATIC_SAID_ALONE",
+      "severity": "error",
+      "message": "'⎕static' is said alone after '→ T in'",
+      "args": [],
+      "cause": "`→ T in ⎕static` says every answer is in the image, which is what lets the answer travel without its allocator.  An answer that may also be made in an arena carries one, so naming both would say less than either.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Arenas / What is in the image",
+        "requirement": "An answer said to be in the image is in the image and nowhere else."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4635,
+      "name": "LANG_ANSWER_NOT_STATIC",
+      "severity": "error",
+      "message": "what '{name}' answers may be made in {found}, not in the image as its signature says",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the function"
+        },
+        {
+          "name": "found",
+          "type": "string",
+          "description": "where the answer may have been made"
+        }
+      ],
+      "cause": "`→ T in ⎕static` says the answer is in the image: made while compiling and never given back.  Nothing can be copied into the image while the program runs, so an answer made anywhere else -- a join, a list built at run time, a parameter -- is refused rather than copied.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Arenas / What is in the image",
+        "requirement": "An answer said to be in the image is in the image and nowhere else."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4636,
+      "name": "LANG_STATIC_NOT_KNOWN",
+      "severity": "error",
+      "message": "what is in '⎕static' is made while compiling, and this is worked out while the program runs",
+      "args": [],
+      "cause": "`in ⎕static` puts a value in the image, which is laid out while compiling: a string, a number, a value of an enumeration, a record or a container written down of nothing else.  A name, a call or a join is something the program works out, and there is nowhere in the image for it.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Arenas / What is in the image",
+        "requirement": "What is in the image is made while compiling and never changes."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4637,
+      "name": "LANG_STATIC_CHANGES",
+      "severity": "error",
+      "message": "'{name}' may change, and what is in '⎕static' cannot",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the variable, or the type of the collection"
+        }
+      ],
+      "cause": "What is in the image is in a part of it nothing may write, and nothing gives back or grows: a variable that may be given something else, or a collection something may be put in, is not one.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Arenas / What is in the image",
+        "requirement": "What is in the image is made while compiling and never changes."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4638,
+      "name": "LANG_CONSTANT_NOT_STATIC",
+      "severity": "error",
+      "message": "'{name}' never changes and holds nothing but what the compiler knows, so it is written 'in ⎕static'",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the variable"
+        }
+      ],
+      "cause": "A container that never changes and holds only what is known while compiling is made while compiling, into the image, as C++ makes a `static const` table -- and the definition says so, so that a reader knows the table is not built every time the line runs.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Arenas / What is in the image",
+        "requirement": "What is in the image is made while compiling and never changes."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4639,
+      "name": "LANG_STATIC_WRONG_CONTAINER",
+      "severity": "error",
+      "message": "this is not something '{type}' can hold in the image",
+      "args": [
+        {
+          "name": "type",
+          "type": "string",
+          "description": "the type wanted"
+        }
+      ],
+      "cause": "What is written is a container of what the compiler knows, but not of the type wanted -- or a set or a dictionary that names an arena of its own, which is built while the program runs.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Arenas / What is in the image",
+        "requirement": "What is in the image is made while compiling and never changes."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4640,
+      "name": "LANG_ARRAY_HANDED_NOT_WRITABLE",
+      "severity": "error",
+      "message": "'{param}' of '{func}' writes the array it is handed, and this one may not be written",
+      "args": [
+        {
+          "name": "param",
+          "type": "string",
+          "description": "the parameter"
+        },
+        {
+          "name": "func",
+          "type": "string",
+          "description": "the function"
+        }
+      ],
+      "cause": "A parameter written `mut` is an array whose elements the body may write, which it does in the caller's array.  An array named without `mut`, or one in `⎕static`, may not be written by anyone, so it may not be handed to such a parameter.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Arrays / Writing an element",
+        "requirement": "An array is written only through a name that says it may be."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4641,
+      "name": "LANG_WRITES_ARRAYS_AS_A_VALUE",
+      "severity": "error",
+      "message": "'{name}' writes an array it is handed, and so cannot be called through a value yet",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the function or lambda"
+        }
+      ],
+      "cause": "Called through a function value, nothing at the call says which parameters write the arrays they are handed -- a function type does not say it -- so nothing could check that the array handed over may be written.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Arrays / Writing an element",
+        "requirement": "An array is written only through a name that says it may be."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 4511,
       "name": "LANG_PURE_FUNCTION_HERE",
       "severity": "note",

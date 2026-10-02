@@ -11,5 +11,5 @@
 
 @[startup, impure]
 fn main() → u6:
-    let empty: [u6] = []
+    let empty: [u6] = [] in ⎕static
     ⌈empty

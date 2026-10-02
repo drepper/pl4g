@@ -6,8 +6,8 @@
 ※ a byte on the first and one and a byte on the second -- so between them these
 ※ two cover a whole register, more than one, and a tail of odd length.
 
-let wide: u8⟦32⟧ = ⟦1u8, 2u8, 3u8, 4u8, 5u8, 6u8, 7u8, 1u8, 2u8, 3u8, 4u8, 5u8, 6u8, 7u8, 1u8, 2u8, 3u8, 4u8, 5u8, 6u8, 7u8, 1u8, 2u8, 3u8, 4u8, 5u8, 6u8, 7u8, 1u8, 2u8, 3u8, 4u8⟧
-let odd: u8⟦17⟧ = ⟦1u8, 2u8, 3u8, 4u8, 5u8, 1u8, 2u8, 3u8, 4u8, 5u8, 1u8, 2u8, 3u8, 4u8, 5u8, 1u8, 2u8⟧
+let wide: u8⟦32⟧ = ⟦1u8, 2u8, 3u8, 4u8, 5u8, 6u8, 7u8, 1u8, 2u8, 3u8, 4u8, 5u8, 6u8, 7u8, 1u8, 2u8, 3u8, 4u8, 5u8, 6u8, 7u8, 1u8, 2u8, 3u8, 4u8, 5u8, 6u8, 7u8, 1u8, 2u8, 3u8, 4u8⟧ in ⎕static
+let odd: u8⟦17⟧ = ⟦1u8, 2u8, 3u8, 4u8, 5u8, 1u8, 2u8, 3u8, 4u8, 5u8, 1u8, 2u8, 3u8, 4u8, 5u8, 1u8, 2u8⟧ in ⎕static
 
 @[startup]
 fn main() → u6:

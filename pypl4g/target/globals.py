@@ -22,13 +22,17 @@ from collections.abc import Sequence
 from dataclasses import replace
 
 from ..ir.layout import (DataLayout, align_of, encode_float, encode_scalar,
-                         offsets_of, size_of, stride_of, tag_offset_of)
+                         member_offsets_of, offsets_of, size_of, stride_of,
+                         tag_offset_of)
 from ..ir.function import Linkage
 from ..ir.module import GlobalVar, Module
 from ..ir.types import (ArrayType, CharType, EnumType, ProductType,
-                        ResultType, Type)
-from ..ir.value import (ArrayConst, BoolConst, CharConst, EnumConst, FloatConst,
-                        IntConst, RecordConst, ResultConst)
+                        ResultType, TupleType, Type, parts_of)
+from ..ir.value import (AddressConst, ArrayConst, BoolConst, CharConst,
+                        EnumConst, FloatConst, IntConst, PartsConst, RecordConst,
+                        ResultConst)
+from ..mc.fixup import ABS64, MCFixup
+from ..mc.operand import SymExpr
 from ..mc.asmbuilder import Assembler
 from ..mc.symbol import SymBinding, SymKind, SymVisibility
 
@@ -79,7 +83,12 @@ def _emit_group(asm: Assembler, variables: Sequence[GlobalVar], name: str,
                            kind=SymKind.OBJECT,
                            visibility=(SymVisibility.DEFAULT if visible
                                        else SymVisibility.HIDDEN))
-        asm.bytes(initial_bytes(var, layout_for(var, layout)))
+        addresses: list[tuple[int, GlobalVar]] = []
+        data = initial_bytes(var, layout_for(var, layout), addresses)
+        asm.bytes(data, tuple(
+            MCFixup(offset=offset, kind=ABS64,
+                    target=SymExpr(asm.symbol_named(symbol_of(target))))
+            for offset, target in addresses))
         asm.end_label(symbol)
 
 
@@ -95,19 +104,43 @@ def symbol_of(var: GlobalVar) -> str:
     return var.name
 
 
-def initial_bytes(var: GlobalVar, layout: DataLayout) -> bytes:
+def initial_bytes(var: GlobalVar, layout: DataLayout,
+                  addresses: list[tuple[int, GlobalVar]] | None = None) -> bytes:
     """The bytes a variable starts out holding.
 
     A value too large for the variable's type is refused, never stored with its
     upper bits dropped: a program that began with a value other than the one it
-    named would not be behaving as it reads.
+    named would not be behaving as it reads.  Where a word in it is the address
+    of another variable, the word is nought and *addresses* is told where it is
+    and whose address goes there.
     """
-    return _encoded(var.initializer, var.value_type, layout)
+    return _encoded(var.initializer, var.value_type, layout,
+                    addresses if addresses is not None else [], 0)
 
 
-def _encoded(initializer: object, ty: Type, layout: DataLayout) -> bytes:
-    """The bytes a constant occupies, laid out as its type says."""
+def _encoded(initializer: object, ty: Type, layout: DataLayout,
+             addresses: list[tuple[int, GlobalVar]], at: int) -> bytes:
+    """The bytes a constant occupies, laid out as its type says.
+
+    *at* is where in the variable they go, which is what an address inside them
+    is reported at.
+    """
     match initializer:
+        case AddressConst():
+            if initializer.target is not None:
+                addresses.append((at, initializer.target))
+            return bytes(layout.pointer_size)
+        case PartsConst():
+            # Each part where it is whenever such a value is in memory: laid out
+            # as a tuple of the parts would be.
+            pieces = parts_of(ty)
+            out = bytearray(size_of(ty, layout))
+            for offset, piece, part in zip(
+                    member_offsets_of(TupleType(pieces), layout), pieces,
+                    initializer.parts):
+                bits = _encoded(part, piece, layout, addresses, at + offset)
+                out[offset:offset + len(bits)] = bits
+            return bytes(out)
         case IntConst():
             return encode_scalar(initializer.value, ty, layout)
         case BoolConst():
@@ -129,7 +162,8 @@ def _encoded(initializer: object, ty: Type, layout: DataLayout) -> bytes:
             step = stride_of(ty.element, layout)
             out = bytearray(size_of(ty, layout))
             for index, element in enumerate(initializer.elements):
-                written = _encoded(element, ty.element, layout)
+                written = _encoded(element, ty.element, layout, addresses,
+                                   at + index * step)
                 out[index * step:index * step + len(written)] = written
             return bytes(out)
         case RecordConst() if isinstance(ty, ProductType):
@@ -141,7 +175,7 @@ def _encoded(initializer: object, ty: Type, layout: DataLayout) -> bytes:
             for offset, (written, (_, held)) in zip(
                     offsets_of(ty, layout),
                     zip(initializer.fields, ty.fields)):
-                bits = _encoded(written, held, layout)
+                bits = _encoded(written, held, layout, addresses, at + offset)
                 out[offset:offset + len(bits)] = bits
             return bytes(out)
         case ResultConst() if isinstance(ty, ResultType):
@@ -149,7 +183,7 @@ def _encoded(initializer: object, ty: Type, layout: DataLayout) -> bytes:
             # says, and whatever is between and after them left as zeroes --
             # padding a program cannot read and so cannot tell from anything.
             out = bytearray(size_of(ty, layout))
-            answer = _encoded(initializer.answer, ty.ok, layout)
+            answer = _encoded(initializer.answer, ty.ok, layout, addresses, at)
             out[:len(answer)] = answer
             out[tag_offset_of(ty, layout)] = 1 if initializer.failed else 0
             return bytes(out)

@@ -10,8 +10,8 @@
 
 @[startup, impure]
 fn main() → u6:
-    let a: [u8] = [1u8, 2u8, 3u8]
-    let b: [u8] = [4u8, 5u8]
+    let a: [u8] = [1u8, 2u8, 3u8] in ⎕static
+    let b: [u8] = [4u8, 5u8] in ⎕static
     let both: [u8] = a ⧺ b
     ※ a join of a join, whose left side is already in the arena
     let more: [u8] = both ⧺ [6u8]

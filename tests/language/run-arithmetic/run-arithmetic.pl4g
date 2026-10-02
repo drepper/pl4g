@@ -8,8 +8,8 @@
 ※ element on its own would come to.  Both signs and every lane width are here,
 ※ because the four questions are four different formulas.
 
-let u: u8⟦16⟧ = ⟦1u8, 2u8, 3u8, 4u8, 5u8, 6u8, 7u8, 8u8, 9u8, 10u8, 11u8, 12u8, 13u8, 14u8, 15u8, 16u8⟧
-let i: i8⟦16⟧ = ⟦1i8, 2i8, 3i8, 4i8, 5i8, 6i8, 7i8, 8i8, 9i8, 10i8, 11i8, 12i8, 13i8, 14i8, 15i8, 16i8⟧
+let u: u8⟦16⟧ = ⟦1u8, 2u8, 3u8, 4u8, 5u8, 6u8, 7u8, 8u8, 9u8, 10u8, 11u8, 12u8, 13u8, 14u8, 15u8, 16u8⟧ in ⎕static
+let i: i8⟦16⟧ = ⟦1i8, 2i8, 3i8, 4i8, 5i8, 6i8, 7i8, 8i8, 9i8, 10i8, 11i8, 12i8, 13i8, 14i8, 15i8, 16i8⟧ in ⎕static
 
 @[startup]
 fn main() → u6:
@@ -21,9 +21,9 @@ fn main() → u6:
     let held: u8⟦16⟧ = u ⊞ 250u8
     let floored: u8⟦16⟧ = u ⊟ 20u8
     ※ Wider lanes, which have no saturating instruction and no narrow one.
-    let w: u32⟦4⟧ = ⟦1u32, 2u32, 3u32, 4u32⟧
+    let w: u32⟦4⟧ = ⟦1u32, 2u32, 3u32, 4u32⟧ in ⎕static
     let wide: u32⟦4⟧ = w + 4000000000u32
-    let q: i64⟦2⟧ = ⟦1i64, ⁻2i64⟧
+    let q: i64⟦2⟧ = ⟦1i64, ⁻2i64⟧ in ⎕static
     let quad: i64⟦2⟧ = q - 1i64
     if up⟦0⟧ ≠ 201u8 ∨ up⟦15⟧ ≠ 216u8:
         1u6

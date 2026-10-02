@@ -40,7 +40,7 @@ fn note(a: u8):
 
 @[startup, impure]
 fn main() → u6:
-    let v: u8⟦3⟧ = ⟦1u8, 2u8, 3u8⟧
+    let v: u8⟦3⟧ = ⟦1u8, 2u8, 3u8⟧ in ⎕static
     ※ named where a value is wanted, and its walk comes with it
     let walks: @[listable] fn(u8) → u8 = twice
     let each: u8⟦3⟧ = walks(v)

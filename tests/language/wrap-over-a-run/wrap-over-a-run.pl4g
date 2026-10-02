@@ -9,8 +9,8 @@
 ※ wants the upper half of it, which these machines do not give at every width;
 ※ a product that may wrap wants only the low half, which is what they do give.
 
-let v: u8⟦16⟧ = ⟦240u8, 241u8, 242u8, 243u8, 244u8, 245u8, 246u8, 247u8, 248u8, 249u8, 250u8, 251u8, 252u8, 253u8, 254u8, 255u8⟧
-let h: u16⟦8⟧ = ⟦30000u16, 30001u16, 30002u16, 30003u16, 30004u16, 30005u16, 30006u16, 30007u16⟧
+let v: u8⟦16⟧ = ⟦240u8, 241u8, 242u8, 243u8, 244u8, 245u8, 246u8, 247u8, 248u8, 249u8, 250u8, 251u8, 252u8, 253u8, 254u8, 255u8⟧ in ⎕static
+let h: u16⟦8⟧ = ⟦30000u16, 30001u16, 30002u16, 30003u16, 30004u16, 30005u16, 30006u16, 30007u16⟧ in ⎕static
 
 @[startup]
 fn main() → u6:

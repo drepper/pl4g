@@ -21,7 +21,7 @@ fn forty() → u6:
 @[startup]
 fn main() → u6:
     ※ given to a name whose type does not say the length
-    let named: u6⟦⟧ = ⟦40u6, 2u6⟧
+    let named: u6⟦⟧ = ⟦40u6, 2u6⟧ in ⎕static
     ※ handed to a parameter whose type does not say it
     let handed: u6 = first(⟦1u6, 2u6⟧)
     ※ an element that is a call, which is made once

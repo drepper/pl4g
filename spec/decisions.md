@@ -9082,6 +9082,50 @@ Compare: C++ (the programmer's question, unchecked), Rust (`move`, lifetimes on 
 `Box<dyn Fn>` for the escaping kind), Swift (`@escaping`, heap context), Go (escape analysis
 and a collector), Java (effectively final, by value, collected).
 
+## 2026-10-02T20:00+02:00 — language
+
+**`⎕static`: the image as an allocator, and constant containers in it**
+
+    fn digit(d: u64) → str in ⎕static:
+        let digits: str⟦10⟧ = ⟦"0", …, "9"⟧ in ⎕static
+        digits⟦⎕unit(d, ⌜idx⌝)⟧
+
+Asked for by the user: a pseudo-allocator saying an object is in the image -- infinite
+lifetime, never freed -- for strings, arrays, lists, dictionaries, sets and scalars, used where a
+function answers text from a table, and used in the library.  Decided with the user:
+
+1. **Where it is written**: after `→ T in` (an answer in the image), and after a container
+   written down (`… in ⎕static`, the container and its elements in the image).  Proposed and
+   not taken: on a parameter (`s: str in ⎕static`, Rust's `&'static str` parameter) and beside an
+   arena (`→ str in a, ⎕static`, which would let `std.text` answer `"true"` without copying).
+2. **Every non-`mut` container of constants is in the image, and has to say so** (4638) -- C++'s
+   `static const`, made a rule so that a reader knows.  The user's words: as a strengthening of
+   the language, an error if such a definition is not marked.
+3. **An array is written only through a `mut` name** (4004, 4640, 4641).  Found on the way:
+   an array not marked `mut` could be written -- `a⟦i⟧ ← v`, `&mut a⟦i⟧`, a callee through any
+   array parameter -- which a read-only table cannot survive.  Proposed against: copying an
+   image array into the frame when it is handed over, and refusing to hand one over at all.
+   Compared with Rust's `&[T]`/`&mut [T]`, C++'s `const T*`, D's `const(T)[]`.
+
+Decided here, under those:
+
+- **The allocator word is nought**, which text written down already carried: nothing new at
+  run time.  `→ T in ⎕static` answers thin, the caller adding nought; a body whose every answer
+  is text written down is held to answer in the image without saying so (`answer-thin`).
+- **The image holds addresses now**: a constant may be the address of another variable of
+  the image, written as a 64-bit absolute relocation -- a string's bytes, a list's run, a
+  table's block and entries.  So a variable at the top level may also be a `str` or a list.
+- **A table is laid out while compiling the way the program would build it**: the same
+  hashes (Fibonacci over a word, FNV-1a over text), the same growth, the same probe, so lookup
+  is the generated code it always was and a walk meets the keys in the same order.  A table
+  made from one comes out of `⎕heap`, its own arena being none.
+- **Writing the image is refused**: a `mut` name or collection type `in ⎕static` (4637), an
+  element of a non-`mut` array (4004), a `&mut` of one; and an image array is never handed to a
+  parameter that writes.
+
+Compare: C and C++ (`static const`, by convention), Rust (`'static`, `static`, `phf`), D
+(`immutable`), Zig (comptime-known slices in read-only data), Go (run-time composite literals).
+
 Open questions
 --------------
 

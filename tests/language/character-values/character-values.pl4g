@@ -20,7 +20,7 @@ let named: char = '\u0041'
 ※ a number written where a code point is wanted is that code point
 let last: char = 0x10ffff
 let nul: char = 0
-let letters: char⟦3⟧ = ⟦'A', 'z', 'ω'⟧
+let letters: char⟦3⟧ = ⟦'A', 'z', 'ω'⟧ in ⎕static
 
 @[startup]
 fn main() → u6:

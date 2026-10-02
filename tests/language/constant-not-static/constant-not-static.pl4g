@@ -1,0 +1,11 @@
+※ pl4g-test: compile=error diag=4638
+
+※ A container that never changes and holds only what is known while compiling
+※ is made while compiling, into the image, as C++ makes a `static const` table
+※ -- and the definition says so, so that a reader knows the table is not built
+※ every time the line runs.
+
+@[startup]
+fn main() → u6:
+    let names: [str] = ["one", "two"]
+    if #names = 2: 0u6 else: 1u6

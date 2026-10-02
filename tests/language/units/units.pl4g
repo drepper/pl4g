@@ -55,7 +55,7 @@ fn main() → u6:
     let picked: u16 ¤apples = 7
     let basket: u16 ¤apples = picked + 3
     ※ `#` answers a count, and a count may stand where an index is wanted
-    let v8: u8⟦4⟧ = ⟦10u8, 20u8, 30u8, 40u8⟧
+    let v8: u8⟦4⟧ = ⟦10u8, 20u8, 30u8, 40u8⟧ in ⎕static
     let last: u8 = v8⟦#v8 - 1⟧
     ※ and an index of its own
     let at: u64 ¤idx = 2

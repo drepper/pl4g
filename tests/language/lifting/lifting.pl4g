@@ -25,7 +25,7 @@ enum Colour:
 fn main() → u6:
     let a: u32 = 5u32
     let c: Colour = Colour.green
-    let v: u8⟦3⟧ = ⟦1u8, 2u8, 3u8⟧
+    let v: u8⟦3⟧ = ⟦1u8, 2u8, 3u8⟧ in ⎕static
     let t: 〈u8, u16〉 = 〈1u8, 2u16〉
     ※ the ends of a type, which is what a program otherwise writes out by hand
     let most: u8 = ⌈⌜u8⌝

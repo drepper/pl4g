@@ -22,8 +22,8 @@ fn main() → u6:
     let d: i5 = 3i5
     let wide: u31 = 2000000000u31
     let odd: u17 = 131071u17
-    let v: u3⟦4⟧ = ⟦1u3, 2u3, 3u3, 4u3⟧
-    let w: u3⟦4⟧ = ⟦1u3, 1u3, 1u3, 1u3⟧
+    let v: u3⟦4⟧ = ⟦1u3, 2u3, 3u3, 4u3⟧ in ⎕static
+    let w: u3⟦4⟧ = ⟦1u3, 1u3, 1u3, 1u3⟧ in ⎕static
     let sum: u3⟦4⟧ = v + w
     if a + b ≠ 7u3 ∨ a - b ≠ 3u3 ∨ b × b ≠ 4u3:
         1u6

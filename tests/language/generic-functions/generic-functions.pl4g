@@ -44,8 +44,8 @@ fn applied(g: fn(T') → T', x: T') → T':
 
 @[startup, impure]
 fn main() → u6:
-    let v: u8⟦3⟧ = ⟦7u8, 8u8, 9u8⟧
-    let w: u16⟦2⟧ = ⟦40u16, 50u16⟧
+    let v: u8⟦3⟧ = ⟦7u8, 8u8, 9u8⟧ in ⎕static
+    let w: u16⟦2⟧ = ⟦40u16, 50u16⟧ in ⎕static
     let n: u16 = 4u16
     ※ one function, two sets of types
     if largest(1u8, 2u8) ≠ 2u8:

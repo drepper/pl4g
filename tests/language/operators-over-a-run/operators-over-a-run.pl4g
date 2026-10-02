@@ -17,15 +17,15 @@ fn total(v: u8⟦3⟧) → u8:
 @[startup]
 fn main() → u6:
     ※ Shorter than the smallest piece.
-    let three: u8⟦3⟧ = ⟦1u8, 2u8, 3u8⟧
+    let three: u8⟦3⟧ = ⟦1u8, 2u8, 3u8⟧ in ⎕static
     let raised: u8⟦3⟧ = three + 10u8
     ※ Exactly the smallest piece.
-    let four: u32⟦4⟧ = ⟦1u32, 2u32, 3u32, 4u32⟧
+    let four: u32⟦4⟧ = ⟦1u32, 2u32, 3u32, 4u32⟧ in ⎕static
     let doubled: u32⟦4⟧ = four + four
     ※ A whole register on every machine here, and one more than one.
-    let sixteen: u8⟦16⟧ = ⟦1u8, 1u8, 1u8, 1u8, 1u8, 1u8, 1u8, 1u8, 1u8, 1u8, 1u8, 1u8, 1u8, 1u8, 1u8, 1u8⟧
+    let sixteen: u8⟦16⟧ = ⟦1u8, 1u8, 1u8, 1u8, 1u8, 1u8, 1u8, 1u8, 1u8, 1u8, 1u8, 1u8, 1u8, 1u8, 1u8, 1u8⟧ in ⎕static
     let twice: u8⟦16⟧ = sixteen + sixteen
-    let nineteen: u16⟦19⟧ = ⟦1u16, 2u16, 3u16, 4u16, 5u16, 6u16, 7u16, 8u16, 9u16, 10u16, 11u16, 12u16, 13u16, 14u16, 15u16, 16u16, 17u16, 18u16, 19u16⟧
+    let nineteen: u16⟦19⟧ = ⟦1u16, 2u16, 3u16, 4u16, 5u16, 6u16, 7u16, 8u16, 9u16, 10u16, 11u16, 12u16, 13u16, 14u16, 15u16, 16u16, 17u16, 18u16, 19u16⟧ in ⎕static
     let less: u16⟦19⟧ = nineteen - 1u16
     ※ A comparison answers a truth value for each element.
     let over: bool⟦19⟧ = nineteen > 9u16

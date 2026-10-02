@@ -19,7 +19,7 @@ fn main() → u6:
     ※ a tuple extended, with members written before the spread and after it
     let around: 〈u6, u6, u6, u6〉 = 〈9u6, ⁂pair, 9u6〉
     ※ a fixed array spreads here as well, for the reason it does in a call
-    let v: u6⟦2⟧ = ⟦5u6, 6u6⟧
+    let v: u6⟦2⟧ = ⟦5u6, 6u6⟧ in ⎕static
     let read: 〈u6, u6〉 = 〈⁂v〉
     let from_joined: u6 = joined⟦0⟧ + joined⟦1⟧ + joined⟦2⟧
     let from_around: u6 = around⟦0⟧ + around⟦3⟧

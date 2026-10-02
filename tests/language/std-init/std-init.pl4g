@@ -34,7 +34,7 @@ let std := ⎕import("std")
 
 @[startup, impure]
 fn main(init: mut std.Init) → u6:
-    let message: u8⟦6⟧ = ⟦104u8, 101u8, 108u8, 108u8, 111u8, 10u8⟧
+    let message: u8⟦6⟧ = ⟦104u8, 101u8, 108u8, 108u8, 111u8, 10u8⟧ in ⎕static
     ※ the numbers the kernel knows them by, in the order they arrive
     if init.io.input.fd ≠ 0i32:
         1u6

@@ -115,6 +115,9 @@ RANGE_GLYPH: Final[str] = "\N{HORIZONTAL ELLIPSIS}"
 #: it yet -- what a program writes to make one of its own.
 HEAP_NAME: Final[str] = "\N{APL FUNCTIONAL SYMBOL QUAD}heap"
 EMPTY_ARENA_NAME: Final[str] = "\N{APL FUNCTIONAL SYMBOL QUAD}arena"
+#: The allocator that is no allocator: what is in the image, made while compiling,
+#: lasting as long as the program and never given back.
+STATIC_NAME: Final[str] = "\N{APL FUNCTIONAL SYMBOL QUAD}static"
 
 #: What encloses an operator where the operator stands as a *name*: a definition
 #: of one, and nothing else so far.  The grave accent is the one character of ASCII

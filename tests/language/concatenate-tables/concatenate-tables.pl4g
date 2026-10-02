@@ -7,10 +7,10 @@
 ※ another -- the last dimension is the one whose neighbours are next to each
 ※ other, so a table's rows are already laid out in the order the join wants.
 
-let m: u8⟦2,3⟧ = ⟦⟦1u8, 2u8, 3u8⟧, ⟦4u8, 5u8, 6u8⟧⟧
-let n: u8⟦1,3⟧ = ⟦⟦7u8, 8u8, 9u8⟧⟧
-let cube: u16⟦1,2,2⟧ = ⟦⟦⟦1u16, 2u16⟧, ⟦3u16, 4u16⟧⟧⟧
-let other: u16⟦2,2,2⟧ = ⟦⟦⟦5u16, 6u16⟧, ⟦7u16, 8u16⟧⟧, ⟦⟦9u16, 10u16⟧, ⟦11u16, 12u16⟧⟧⟧
+let m: u8⟦2,3⟧ = ⟦⟦1u8, 2u8, 3u8⟧, ⟦4u8, 5u8, 6u8⟧⟧ in ⎕static
+let n: u8⟦1,3⟧ = ⟦⟦7u8, 8u8, 9u8⟧⟧ in ⎕static
+let cube: u16⟦1,2,2⟧ = ⟦⟦⟦1u16, 2u16⟧, ⟦3u16, 4u16⟧⟧⟧ in ⎕static
+let other: u16⟦2,2,2⟧ = ⟦⟦⟦5u16, 6u16⟧, ⟦7u16, 8u16⟧⟧, ⟦⟦9u16, 10u16⟧, ⟦11u16, 12u16⟧⟧⟧ in ⎕static
 
 @[startup]
 fn main() → u6:

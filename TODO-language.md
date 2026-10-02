@@ -937,6 +937,15 @@ Runtime
 [ ] give a lambda's environment back.  One kept in `⎕heap` stays there, as a string a name held does; the third word says which
     allocator it came from, and a sized free needs the size, which a header word before the environment would carry.
 
+[ ] let `std.text` answer `"true"` and `"false"` from the image.  Under `→ str in a` they are copied into `a`; `→ str in a,
+    ⎕static` would let them through as they are, the answer carrying its allocator -- proposed with `⎕static` and not taken.
+
+[ ] let a parameter say it holds what is in the image, `s: str in ⎕static`, so that a body may keep it anywhere without copying
+    -- proposed with `⎕static` and not taken.
+
+[ ] say in a function type which parameters write the arrays they are handed, so that a function that writes one can be a value
+    (4641).
+
 [ ] answer a lambda in an arena a parameter names.  `→ fn(u8) → u8 in a` reads as the lambda's own handing out of an arena, so
     the signature cannot say it; a type of the answer written in parentheses, or a name for a function type, would.
 

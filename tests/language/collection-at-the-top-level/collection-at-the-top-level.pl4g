@@ -27,7 +27,7 @@
 
 let counts: mut ⸨str: u64⸩ = ⸨"a": 1u64, "b": 2u64⸩
 let also: mut ⸨str: u64⸩ = counts
-let small: ⸨u8⸩ = ⸨1u8, 2u8, 3u8⸩
+let small: ⸨u8⸩ = ⸨1u8, 2u8, 3u8⸩ in ⎕static
 
 ※ What a constructor the program wrote reads is a table that is already there.
 let seen: mut u64 = 0u64

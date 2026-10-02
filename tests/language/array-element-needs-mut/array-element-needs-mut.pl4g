@@ -1,0 +1,13 @@
+※ pl4g-test: compile=error diag=4004
+
+※ An element of an array is written only through a name that says it may be,
+※ as a field of a record is: an array not marked `mut` is read and not
+※ written, whoever holds it -- a parameter included.
+
+@[impure]
+fn clear(a: u8⟦⟧):
+    a⟦0⟧ ← 0u8
+
+@[startup]
+fn main() → u6:
+    0u6

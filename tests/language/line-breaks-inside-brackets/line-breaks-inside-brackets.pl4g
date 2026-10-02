@@ -18,7 +18,7 @@ fn main() → u6:
     let v: u8⟦4⟧ = ⟦10u8,
                     20u8,
                     30u8,
-                    40u8⟧
+                    40u8⟧ in ⎕static
     ※ a tuple, and a grouping
     let pair: 〈u8,
                u16〉 = 〈1u8,

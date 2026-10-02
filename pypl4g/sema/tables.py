@@ -424,13 +424,39 @@ def generated(module: Module, name: str, params: tuple[Type, ...],
     return func, True
 
 
+#: What answers the arena a new table made out of another comes out of.
+ARENA_OF_SYMBOL: Final[str] = "__pl4g_table_arena"
+
+
 def arena_of(builder: IRBuilder, table: Value) -> Value:
     """Which arena a table came out of, which is a field of the table itself.
 
     A collection made out of two others comes out of the same arena the first of
-    them did, and the only place that is written down is the table.
+    them did, and the only place that is written down is the table -- except
+    that one in the image came out of none, and what is made from it comes out
+    of `⎕heap`, as anything saying nothing does.
     """
-    return _read_address(builder, table, ARENA_FIELD, ARENA)
+    module = builder.module
+    arena_ptr = module.types.ptr_type(ARENA, mutable=True)
+    func, fresh = generated(module, ARENA_OF_SYMBOL, (table_type(module),),
+                            arena_ptr)
+    if fresh:
+        entry = func.add_block()
+        none = func.add_block("none")
+        some = func.add_block("some")
+        inner = IRBuilder(module, func)
+        inner.position_at(entry)
+        held = _read_address(inner, entry.add_param(table_type(module), "table"),
+                             ARENA_FIELD, ARENA)
+        inner.condbr(inner.compare(CmpPred.EQ,
+                                   inner.cast(CastKind.BITCAST, held, U64),
+                                   inner.int_const(U64, 0)), none, some)
+        inner.position_at(none)
+        inner.ret(inner.address(heap_global(module)))
+        inner.position_at(some)
+        inner.ret(held)
+    return builder.call(func, (builder.cast(CastKind.BITCAST, table,
+                                            table_type(module)),), arena_ptr)
 
 
 def count_of(builder: IRBuilder, table: Value) -> Value:

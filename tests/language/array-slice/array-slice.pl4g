@@ -22,6 +22,6 @@ fn total(xs: u6⟦⟧, n: u6 ¤idx) → u6:
 
 @[startup]
 fn main() → u6:
-    let a: u6⟦6⟧ = ⟦1u6, 2u6, 4u6, 8u6, 16u6, 32u6⟧
+    let a: u6⟦6⟧ = ⟦1u6, 2u6, 4u6, 8u6, 16u6, 32u6⟧ in ⎕static
     ※ four of them, starting at one
     total(a⟦1…5⟧, 4)

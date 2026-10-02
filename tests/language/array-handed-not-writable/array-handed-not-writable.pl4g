@@ -1,0 +1,15 @@
+※ pl4g-test: compile=error diag=4640
+
+※ A parameter written `mut` is an array whose elements the body may write, in
+※ the caller's array; one named without `mut`, or one in `⎕static`, may not be
+※ written by anyone, and so may not be handed to it.
+
+@[impure]
+fn clear(a: mut u8⟦⟧):
+    a⟦0⟧ ← 0u8
+
+@[startup, impure]
+fn main() → u6:
+    let fixed: u8⟦2⟧ = ⟦1u8, 2u8⟧ in ⎕static
+    clear(fixed)
+    0u6

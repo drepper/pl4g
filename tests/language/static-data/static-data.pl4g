@@ -1,0 +1,59 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ **`in ⎕static` puts something in the image**: made while compiling, in a part
+※ of the image nothing writes, lasting as long as the program and never given
+※ back.  An array, a list, a set and a dictionary of what the compiler knows --
+※ numbers, characters, truth values, values of an enumeration, text -- written
+※ at the top level or inside a body, and a definition that never changes and
+※ holds nothing else has to say it.  A table in the image is laid out the way the
+※ program would have built it, so a walk meets its keys in the same order.
+※
+※ **`→ str in ⎕static`** says every answer is in the image: it travels without
+※ its allocator, the caller adding none.
+
+enum Colour { red ; green ; blue }
+
+let names: ⸨u8: str⸩ = ⸨0u8: "zero", 1u8: "one", 2u8: "two"⸩ in ⎕static
+let words: [str] = ["a", "bb", "ccc"] in ⎕static
+let primes: u8⟦4⟧ = ⟦2u8, 3u8, 5u8, 7u8⟧ in ⎕static
+let shades: ⸨Colour: str⸩ = ⸨Colour.red: "warm", Colour.blue: "cold"⸩ in ⎕static
+let none: ⸨str⸩ = ⸨⸩ in ⎕static
+
+fn day(d: u64) → str in ⎕static:
+    let days: str⟦7⟧ = ⟦"mon", "tue", "wed", "thu", "fri", "sat", "sun"⟧ in ⎕static
+    days⟦⎕unit(d % 7u64 ?? 0u64, ⌜idx⌝)⟧
+
+fn total(of: [str]) → u64:
+    let sum: mut u64 = 0u64
+    foreach one: str = of:
+        sum ← sum + ⎕drop(#one)
+    sum
+
+@[startup, impure]
+fn main() → u6:
+    let seen: ⸨str⸩ = ⸨"x", "y", "zz", "www", "v", "u", "t"⸩ in ⎕static
+    let local: [u8] = [1u8, 2u8] in ⎕static
+    let grid: u8⟦2,2⟧ = ⟦⟦1u8, 2u8⟧, ⟦3u8, 4u8⟧⟧ in ⎕static
+    if day(9u64) ≠ "wed": return 1u6
+    if primes⟦3⟧ ≠ 7u8: return 2u6
+    if #words ≠ 3 ∨ total(words) ≠ 6u64: return 3u6
+    if #local ≠ 2: return 4u6
+    if (names⸨1u8⸩ ?? "") ≠ "one" ∨ (names⸨7u8⸩ ?? "none") ≠ "none": return 5u6
+    if ¬seen⸨"www"⸩ ∨ seen⸨"z"⸩: return 6u6
+    if (shades⸨Colour.blue⸩ ?? "") ≠ "cold" ∨ #shades ≠ 2: return 7u6
+    if grid⟦1, 0⟧ ≠ 3u8: return 8u6
+    if #none ≠ 0 ∨ none⸨""⸩: return 9u6
+    ※ walked in the order a table built while running would be
+    let built: mut ⸨str⸩ = ⸨"x", "y", "zz", "www", "v", "u", "t"⸩
+    let a: mut str = ""
+    foreach one: str = seen:
+        a ← a ⧺ one
+    let b: mut str = ""
+    foreach one: str = built:
+        b ← b ⧺ one
+    if a ≠ b: return 10u6
+    ※ a table made out of one in the image is the heap's
+    let other: ⸨str⸩ = ⸨"s", "x"⸩ in ⎕static
+    let more: ⸨str⸩ = seen | other
+    if #more ≠ 8 ∨ ¬more⸨"s"⸩: return 11u6
+    0u6

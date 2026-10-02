@@ -36,7 +36,7 @@ from ..front.token import (ACQUIRE_NAME, ANSWER_NAME, ENTRY_NAME,
                           EMPTY_ARENA_NAME, ORD_NAME,
                           WRAP_NAME,
                           ENVIRON_NAME, ITER_NAME,
-                          HEAP_NAME, SYSCALL_NAME, SYSCALL_NUMBER_PREFIX,
+                          HEAP_NAME, STATIC_NAME, SYSCALL_NAME, SYSCALL_NUMBER_PREFIX,
                           TOLERANCE_DEFAULT,
                           TOLERANCE_NAME, WILDCARD_NAME)
 from ..ir.builder import IRBuilder
@@ -75,9 +75,10 @@ from ..ir.types import (ARENA, ARENA_NAME, StrType, ArrayType, BOOL, BoolType, B
 from . import environ, lists, owned, strings, tables
 from .modules import (SUFFIX, ImportCycle, LoadedModule, ModuleNotFound,
                       ModuleRegistry, base_name, system_modules)
-from ..ir.value import (BlockParam, BoolConst, CharConst, Const, EnumConst,
+from ..ir.value import (AddressConst, ArrayConst, BlockParam, BoolConst,
+                        CharConst, Const, EnumConst,
                         FloatConst,
-                        IntConst,
+                        IntConst, PartsConst, RecordConst,
                         UndefConst,
                         Value)
 from pathlib import Path
@@ -1037,6 +1038,9 @@ HEAP_AT: Final[int] = -1
 #: And where `→ T in pool` puts an arena of the body's own, handed out with the
 #: answer: the parameter nobody wrote, last, where the caller keeps it.
 HANDS_AT: Final[int] = -2
+#: And where `→ T in ⎕static` puts the image: an answer made while compiling,
+#: never given back.
+STATIC_AT: Final[int] = -3
 
 
 def _hands_out_of(node: ast.FuncDef | ast.Lambda) -> str | None:
@@ -1056,7 +1060,7 @@ def _hands_out_of(node: ast.FuncDef | ast.Lambda) -> str | None:
         return None
     name = made_in[0][0]
     params = {one.name for one in node.params}
-    if name in params or name == HEAP_NAME:
+    if name in params or name in (HEAP_NAME, STATIC_NAME):
         return None
     return name
 
@@ -1809,6 +1813,159 @@ GLOBALS_SYMBOL: Final[str] = "__pl4g_globals"
 #: as they are met.  A program cannot name one: what it wrote is the string, and
 #: where the bytes went is the compiler's business.
 TEXT_SYMBOL: Final[str] = "__pl4g_text."
+#: What the variables are called that hold what a program put `in ⎕static`, and
+#: the runs and tables those point at.
+STATIC_SYMBOL: Final[str] = "__pl4g_static."
+
+
+#: What `_static_type` answers where two parts of what is written disagree.
+_MIXED: Final[object] = object()
+
+
+def _merged(found: Sequence[object]) -> object:
+    """The one type several parts say together: nothing where none says one, and
+    `_MIXED` where two say different ones."""
+    seen: object = None
+    for one in found:
+        if one is _MIXED:
+            return _MIXED
+        if one is None:
+            continue
+        if seen is None:
+            seen = one
+        elif seen is not one:
+            return _MIXED
+    return seen
+
+
+def _shape_written(expr: ast.ArrayLit) -> tuple[int, ...] | None:
+    """The shape an array written down has, nothing where its rows differ."""
+    rows = [one for one in expr.elements if isinstance(one, ast.ArrayLit)]
+    if not rows:
+        return (len(expr.elements),)
+    if len(rows) != len(expr.elements):
+        return None
+    inner = {_shape_written(one) for one in rows}
+    if len(inner) != 1 or None in inner:
+        return None
+    (shape,) = inner
+    assert shape is not None
+    return (len(rows), *shape)
+
+
+def _writes_arrays(node: object, params: Sequence[Type]) -> tuple[int, ...]:
+    """Which parameters of a definition are arrays its body may write: `mut` ones."""
+    return tuple(at for at, (param, ty) in enumerate(zip(node.params, params))
+                 if param.mutable and isinstance(ty, ArrayType))
+
+
+def _in_the_image(expr: ast.Expr) -> bool:
+    """Whether *expr* is written `… in ⎕static`."""
+    where = expr.arena if isinstance(expr, (ast.Allocated, ast.SetLit,
+                                            ast.DictLit)) else None
+    return isinstance(where, ast.NameRef) and where.name == STATIC_NAME
+
+
+def _a_container_written(expr: ast.Expr) -> bool:
+    """Whether *expr* is an array, a list, a set or a dictionary written down,
+    whatever `in` says of it."""
+    while isinstance(expr, ast.Allocated):
+        expr = expr.value
+    return isinstance(expr, (ast.ArrayLit, ast.ListLit, ast.SetLit, ast.DictLit))
+
+
+def _known_while_compiling(expr: ast.Expr,
+                           enum_named: Callable[[ast.Member], bool]) -> bool:
+    """Whether everything *expr* says is known while compiling.
+
+    A literal; a value of an enumeration, which *enum_named* says of `T.NAME`; a
+    container written down of nothing else, in `⎕static` or in nothing; and a
+    record written out of nothing else.  Read off what is written: it is asked
+    to say a definition has to be `in ⎕static`, before anything is lowered.
+    """
+    match expr:
+        case ast.IntLit() | ast.FloatLit() | ast.BoolLit() | ast.CharLit() \
+                | ast.StringLit():
+            return True
+        case ast.Member():
+            return enum_named(expr)
+        case ast.Allocated():
+            return _in_the_image(expr) \
+                and _known_while_compiling(expr.value, enum_named)
+        case ast.ArrayLit() | ast.ListLit():
+            return all(_known_while_compiling(one, enum_named)
+                       for one in expr.elements)
+        case ast.SetLit():
+            return (expr.arena is None or _in_the_image(expr)) and all(
+                _known_while_compiling(one, enum_named) for one in expr.elements)
+        case ast.DictLit():
+            return (expr.arena is None or _in_the_image(expr)) and all(
+                _known_while_compiling(key, enum_named)
+                and _known_while_compiling(value, enum_named)
+                for key, value in expr.entries)
+        case ast.Named():
+            return _known_while_compiling(expr.value, enum_named)
+    return False
+
+
+def _table_laid_out(keys: Sequence[tuple[object, Const, Const | None]],
+                    hashed: Callable[[object, int], int]
+                    ) -> tuple[int, list[tuple[Const, Const | None] | None], int]:
+    """Where each entry of a table goes, worked out the way the program would.
+
+    The table a program builds from the same entries in the same order, grown at
+    the same points: so walking one put in the image meets its keys in the order
+    walking one built while running would.  Answers the capacity, the entries by
+    index -- nothing for an empty one -- and how many keys there are.
+    """
+    capacity = tables.FIRST_CAPACITY
+    slots: list[tuple[object, Const, Const | None] | None] = [None] * capacity
+    count = used = 0
+
+    def slot_of(bits: object) -> int:
+        at = hashed(bits, capacity - 1)
+        while True:
+            held = slots[at]
+            if held is None or held[0] == bits:
+                return at
+            at = (at + 1) & (capacity - 1)
+
+    for bits, key, value in keys:
+        if (used + 1) * tables.LOAD_DENOMINATOR > capacity * tables.LOAD_NUMERATOR:
+            room = capacity * 2 if (count + 1) * tables.LOAD_DENOMINATOR \
+                > capacity * tables.LOAD_NUMERATOR else capacity
+            old, slots = slots, [None] * room
+            capacity, count, used = room, 0, 0
+            for one in old:
+                if one is not None:
+                    slots[slot_of(one[0])] = one
+                    count += 1
+                    used += 1
+        at = slot_of(bits)
+        if slots[at] is None:
+            count += 1
+            used += 1
+        slots[at] = (bits, key, value)
+    return capacity, [None if one is None else (one[1], one[2])
+                      for one in slots], count
+
+
+def _word_hash(bits: object, mask: int) -> int:
+    """Where a probe for a key of one word starts: Fibonacci hashing, folded."""
+    assert isinstance(bits, int)
+    mixed = (bits * tables.GOLDEN) & 0xFFFFFFFFFFFFFFFF
+    return (mixed ^ (mixed >> 32)) & mask
+
+
+def _text_hash(bits: object, mask: int) -> int:
+    """Where a probe for a key of text starts: FNV-1a over its bytes."""
+    assert isinstance(bits, bytes)
+    from .strings import FNV_BASIS, FNV_PRIME
+
+    found = FNV_BASIS
+    for byte in bits:
+        found = ((found ^ byte) * FNV_PRIME) & 0xFFFFFFFFFFFFFFFF
+    return found & mask
 
 
 def _counted(op: UnOp, value: int, ty: IntType) -> int:
@@ -2134,6 +2291,9 @@ class Checker:
         #: How many lambdas have been given a name, so that the next gets one
         #: nothing else has.
         self._lambdas: int = 0
+        #: Whether what is being made into a constant was written `in ⎕static`,
+        #: which is what a value that is not one is then told about.
+        self._for_the_image: bool = False
         #: The scopes around the lambda being checked, which its body may not
         #: reach.  Kept so that a name it names and did not bring in is
         #: reported as one it did not bring in rather than as one nobody has.
@@ -2542,11 +2702,19 @@ class Checker:
                 # there is no value a variable of the other sort could be given.
                 self._diags.emit(D.LANG_REF_AT_TOP_LEVEL, node.span)
                 ty = ERROR
-            # A collection is a table, which is built by running code: there
-            # is no constant to put in the image, and what the variable holds
-            # until the constructor below has run is nought.
-            initializer = (None if ty is None or _is_a_table(ty)
-                           else self._constant_value(node, ty))
+            # A collection is a table, which is built by running code unless it
+            # is `in ⎕static`: what the variable holds until the constructor
+            # below has run is nought.
+            static = _in_the_image(node.value)
+            if ty is not None and not self._image_definition(node, ty):
+                ty = ERROR
+            outer, self._for_the_image = self._for_the_image, static
+            try:
+                initializer = (None if ty is None
+                               or (_is_a_table(ty) and not static)
+                               else self._constant_value(node, ty))
+            finally:
+                self._for_the_image = outer
         finally:
             self._end_expecting(expectation)
         if expectation is not None and expectation.saw_error:
@@ -2568,7 +2736,7 @@ class Checker:
             # be written.  What the *program* may do is the type's business, and
             # a collection without `mut` is refused an assignment there.
             ptr_type=self._module.types.ptr_type(
-                ty, mutable=node.mutable or _is_a_table(ty)),
+                ty, mutable=node.mutable or (_is_a_table(ty) and not static)),
             initializer=initializer, linkage=linkage, span=node.span,
             name_span=node.name_span,
             exported=self._is_export(attrs),
@@ -2583,7 +2751,7 @@ class Checker:
         self._top_level.append(_Global(var=var, span=node.name_span,
                                        expectation=expectation,
                                        expected_pairs=list(pairs)))
-        if _is_a_table(ty):
+        if _is_a_table(ty) and not static:
             self._built_globals.append((var, node))
 
     # -- modules ---------------------------------------------------------------
@@ -3062,6 +3230,39 @@ class Checker:
                 if named is not None and named is not ty:
                     return self._wrong_initializer(node, ty, named.written())
                 return self._module.float_const(ty, node.value.value)
+            case ast.Allocated() if _in_the_image(node.value):
+                # Said outright, which changes nothing about what it comes to.
+                return self._constant_value(replace(node, value=node.value.value),
+                                            ty)
+            case ast.StringLit() if isinstance(ty, StrType):
+                return self._text_constant(node.value.value)
+            case ast.ListLit() if isinstance(ty, ListType):
+                held = []
+                for one in node.value.elements:
+                    found = self._constant_value(replace(node, value=one),
+                                                 ty.element)
+                    if not isinstance(found, Const):
+                        return None
+                    held.append(found)
+                pieces = parts_of(ty)
+                if not held:
+                    run: Const = AddressConst(pieces[0], None)
+                else:
+                    run = AddressConst(pieces[0], self._image_variable(
+                        self._module.types.array_type(ty.element, (len(held),)),
+                        self._module.array_const(
+                            self._module.types.array_type(ty.element,
+                                                          (len(held),)),
+                            held)))
+                return PartsConst(ty, (run, self._module.int_const(U64, len(held)),
+                                       AddressConst(pieces[2], None)))
+            case ast.SetLit() if isinstance(ty, SetType) \
+                    and (node.value.arena is None or _in_the_image(node.value)):
+                return self._table_constant(
+                    node, ty, [(one, None) for one in node.value.elements])
+            case ast.DictLit() if isinstance(ty, DictType) \
+                    and (node.value.arena is None or _in_the_image(node.value)):
+                return self._table_constant(node, ty, list(node.value.entries))
             case ast.ArrayLit() if isinstance(ty, ArrayType):
                 # Every element has to be one the compiler knows, which is what
                 # a variable at the top level is: bytes in the image and not
@@ -3086,11 +3287,234 @@ class Checker:
                 if found.ty is not ty:
                     return self._wrong_initializer(node, ty, found.ty.written())
                 return found
+            case ast.StringLit():
+                return self._wrong_initializer(node, ty, STR.written())
+            case ast.ListLit() | ast.SetLit() | ast.DictLit() | ast.ArrayLit() \
+                    if _a_container_written(node.value) \
+                    and _known_while_compiling(node.value, self._names_an_enum):
+                # A container of what the compiler knows, of another type than
+                # the one wanted -- or a table `in` an arena, which is built while
+                # running.
+                self._diags.emit(D.LANG_STATIC_WRONG_CONTAINER, node.value.span,
+                                 type=ty.written())
+                return None
             case _:
+                if self._for_the_image:
+                    self._diags.emit(D.LANG_STATIC_NOT_KNOWN, node.value.span)
+                    return None
                 self._diags.emit(
                     D.IMPL_UNIMPLEMENTED_FEATURE, node.value.span,
                     feature="a top-level variable whose value is not a literal")
                 return None
+
+    def _image_definition(self, node: ast.VarDef, declared: Type | None) -> bool:
+        """Check what a definition says of the image (4637, 4638).
+
+        A variable that may change cannot hold what is in the image; and one that
+        never changes, defined as a container written down of nothing but what
+        the compiler knows, has to say it is in the image -- which is what it
+        then is, made while compiling -- so a reader knows the table is not built
+        each time the line runs.
+        """
+        if _in_the_image(node.value):
+            if node.mutable:
+                self._diags.emit(D.LANG_STATIC_CHANGES, node.name_span,
+                                 name=node.name)
+                return False
+            return True
+        if node.mutable or not _a_container_written(node.value) \
+                or isinstance(node.value, ast.Allocated) \
+                or isinstance(declared, (SetType, DictType)) and declared.mutable:
+            return True
+        if not _known_while_compiling(node.value, self._names_an_enum):
+            return True
+        derived = self._static_type(node.value)
+        if derived is _MIXED or (declared is None and node.type is None
+                                 and not isinstance(derived, Type)):
+            # Parts that disagree, or nothing that says the type: a mistake
+            # the ordinary path has the words for.
+            return True
+        self._diags.emit(D.LANG_CONSTANT_NOT_STATIC, node.value.span,
+                         name=node.name)
+        return False
+
+    def _static_type(self, expr: ast.Expr) -> object:
+        """The type something known while compiling has, read off what is written.
+
+        A suffix, a string, a truth value, a character, a value of an enumeration
+        -- and a container of those, whose elements say its type together, any
+        one of them saying it for the rest.  Nothing where nothing says it, and
+        `_MIXED` where two parts say different things, which is a mistake the
+        ordinary path reports.  Asked quietly, before anything is lowered.
+        """
+        match expr:
+            case ast.IntLit() | ast.FloatLit():
+                return BUILTIN_TYPES.get(expr.type_name) if expr.type_name else None
+            case ast.BoolLit():
+                return BOOL
+            case ast.CharLit():
+                return CHAR
+            case ast.StringLit():
+                return STR
+            case ast.Member() if self._names_an_enum(expr):
+                assert isinstance(expr.base, ast.NameRef)
+                held = self._top.get(expr.base.name)
+                assert isinstance(held, _NamedType)
+                return self._resolved(held)
+            case ast.Allocated() if _in_the_image(expr):
+                return self._static_type(expr.value)
+            case ast.ArrayLit():
+                # Any element anywhere in it says the type of all of them, a
+                # dimension deep or several; the writing says the shape.
+                element = _merged(self._static_leaves(expr))
+                shape = _shape_written(expr)
+                if not isinstance(element, Type) or shape is None:
+                    return element if element is _MIXED else None
+                return self._module.types.array_type(element, shape)
+            case ast.ListLit() | ast.SetLit():
+                element = _merged([self._static_type(one)
+                                   for one in expr.elements])
+                if not isinstance(element, Type):
+                    return element
+                return (self._module.types.list_type(element)
+                        if isinstance(expr, ast.ListLit)
+                        else self._module.types.set_type(element))
+            case ast.DictLit():
+                key = _merged([self._static_type(one) for one, _ in expr.entries])
+                value = _merged([self._static_type(one)
+                                 for _, one in expr.entries])
+                if key is _MIXED or value is _MIXED:
+                    return _MIXED
+                if not (isinstance(key, Type) and isinstance(value, Type)):
+                    return None
+                return self._module.types.dict_type(key, value)
+        return None
+
+    def _static_leaves(self, expr: ast.ArrayLit) -> list[object]:
+        """What each element of an array written down says its type is, however
+        many dimensions deep."""
+        found: list[object] = []
+        for one in expr.elements:
+            if isinstance(one, ast.ArrayLit):
+                found.extend(self._static_leaves(one))
+            else:
+                found.append(self._static_type(one))
+        return found
+
+    def _names_an_enum(self, expr: ast.Member) -> bool:
+        """Whether `T.NAME` is a value of an enumeration, asked quietly."""
+        base = expr.base
+        held = self._top.get(base.name) if isinstance(base, ast.NameRef) else None
+        return isinstance(held, _NamedType) \
+            and isinstance(self._resolved(held), EnumType)
+
+    def _text_constant(self, text: str) -> PartsConst:
+        """Text written down, as the constant a `str` in the image is."""
+        pieces = parts_of(STR)
+        return PartsConst(STR, (AddressConst(pieces[0], self._text_variable(text)),
+                                self._module.int_const(
+                                    U64, len(text.encode("utf-8"))),
+                                AddressConst(pieces[2], None)))
+
+    def _image_variable(self, ty: Type, value: Const) -> GlobalVar:
+        """A variable of the image nothing names, holding *value*: a run, a table,
+        or what a body put `in ⎕static`."""
+        return self._module.add_global(GlobalVar(
+            name="".join((STATIC_SYMBOL, str(len(self._module.globals)))),
+            value_type=ty, ptr_type=self._module.types.ptr_type(ty),
+            initializer=value, linkage=Linkage.INTERNAL))
+
+    def _table_constant(self, node: ast.VarDef, ty: SetType | DictType,
+                        written: list[tuple[ast.Expr, ast.Expr | None]]
+                        ) -> Const | None:
+        """A set or a dictionary in the image: the table a program would build.
+
+        Laid out entry by entry where the program's own insertions would put them
+        (`_table_laid_out`), so that a lookup -- which is the same generated code
+        whatever made the table -- finds every key, and a walk meets them in the
+        order it would.  Nothing gives the table back and nothing grows it: its
+        type says nothing may be put in it.
+        """
+        shape = tables.Shape(key=ty.element) if isinstance(ty, SetType) \
+            else tables.Shape(key=ty.key, value=ty.value)
+        held = tables.key_ir_type(shape)
+        keys: list[tuple[object, Const, Const | None]] = []
+        for key, value in written:
+            found = self._constant_value(replace(node, value=key), shape.key)
+            if not isinstance(found, Const):
+                return None
+            given: Const | None = None
+            if value is not None and shape.value is not None:
+                given = self._constant_value(replace(node, value=value),
+                                             shape.value)
+                if not isinstance(given, Const):
+                    return None
+            bits = self._key_bits(found)
+            if bits is None:
+                self._diags.emit(D.IMPL_UNIMPLEMENTED_FEATURE, key.span,
+                                 feature="a key of this type in the image")
+                return None
+            stored: Const = (self._module.int_const(U64, bits)
+                             if held is U64 and isinstance(bits, int) else found)
+            keys.append((bits, stored, given))
+        capacity, slots, count = _table_laid_out(
+            keys, _word_hash if held is U64 else _text_hash)
+        entry = ProductType((("state", U64), ("key", held),
+                             *((("value", shape.value),)
+                               if shape.value is not None else ())),
+                            name="entry")
+        if size_of(entry, _LAYOUT) != shape.stride or (
+                shape.value is not None
+                and offsets_of(entry, _LAYOUT)[2] != shape.value_at):
+            self._diags.emit(D.IMPL_UNIMPLEMENTED_FEATURE, node.value.span,
+                             feature="a table of this shape in the image")
+            return None
+        live = self._module.int_const(U64, tables.LIVE)
+        run_ty = self._module.types.array_type(entry, (capacity,))
+        entries = self._image_variable(run_ty, self._module.array_const(
+            run_ty, [UndefConst(entry) if one is None
+                     else self._module.record_const(
+                         entry, (live, one[0], *((one[1],) if one[1] is not None
+                                                 else ())))
+                     for one in slots]))
+        block = ProductType((("arena", self._module.types.ptr_type(ARENA, True)),
+                             ("mask", U64), ("count", U64), ("stride", U64),
+                             ("entries", self._module.types.ptr_type(U8, True)),
+                             ("used", U64)), name="table")
+        made = self._image_variable(block, self._module.record_const(block, (
+            AddressConst(block.fields[0][1], None),
+            self._module.int_const(U64, capacity - 1),
+            self._module.int_const(U64, count),
+            self._module.int_const(U64, shape.stride),
+            AddressConst(block.fields[4][1], entries),
+            self._module.int_const(U64, count))))
+        return AddressConst(ty, made)
+
+    def _key_bits(self, key: Const) -> object | None:
+        """What a key is to the table: the word a program's key is widened to,
+        or the bytes of text."""
+        match key:
+            case IntConst():
+                assert isinstance(key.ty, IntType)
+                return key.value & ((1 << key.ty.bits) - 1)
+            case BoolConst():
+                return int(key.value)
+            case CharConst():
+                return key.value
+            case EnumConst():
+                assert isinstance(key.ty, EnumType)
+                holder = key.ty.holder
+                assert isinstance(holder, IntType)
+                return key.number & ((1 << holder.bits) - 1)
+            case PartsConst() if key.ty is STR:
+                text = key.parts[0]
+                assert isinstance(text, AddressConst)
+                var = text.target
+                assert isinstance(var, GlobalVar) \
+                    and isinstance(var.initializer, ArrayConst)
+                return bytes(one.value for one in var.initializer.elements
+                             if isinstance(one, IntConst))
+        return None
 
     def _constant_record(self, node: ast.VarDef,
                          ty: ProductType) -> Const | None:
@@ -3566,6 +3990,7 @@ class Checker:
                                 params, ret, func_attrs.listable),
                             attrs=func_attrs, linkage=linkage,
                             param_names=tuple(p.name for p in node.params),
+                            writes_arrays=_writes_arrays(node, params),
                             defaults=self._defaults_of(node, params),
                             borrows_from=borrows,
                             made_in=made_in, param_made_in=param_made_in,
@@ -3719,6 +4144,14 @@ class Checker:
             # the allocator.  It is `HEAP_AT` among the places.
             if _hands_out_of(node) is not None:
                 made = (HANDS_AT,)
+            elif any(name == STATIC_NAME for name, _ in node.made_in):
+                # The image is said alone: an answer that may be made in an
+                # arena as well carries its allocator, which is what saying the
+                # image is there to spare it.
+                if len(node.made_in) > 1:
+                    self._diags.emit(D.LANG_STATIC_SAID_ALONE,
+                                     node.made_in[0][1])
+                made = (STATIC_AT,)
             else:
                 found = (HEAP_AT if name == HEAP_NAME else arena(name, span)
                          for name, span in node.made_in)
@@ -3776,6 +4209,10 @@ class Checker:
             # are allowed is said once `let` has made it.
             self._answer_made_in = (frozenset(), "".join(
                 ("'", func.hands_out or "", "'")))
+            return
+        if func.made_in == (STATIC_AT,):
+            # Nothing at all: what is in the image was made in nothing.
+            self._answer_made_in = (frozenset(), STATIC_NAME)
             return
         allowed: set[int] = set()
         for at in func.made_in:
@@ -3890,7 +4327,10 @@ class Checker:
                 continue
             param_ty = func.ty.params[at]
             if _is_owning(param_ty):
-                self._container_handed(expr, func, written, at, arena_at)
+                # Where its elements are kept matters only to a body that may
+                # replace one, which only a `mut` parameter may.
+                if at in func.writes_arrays:
+                    self._container_handed(expr, func, written, at, arena_at)
                 continue
             if arena_at is None or arena_at not in written:
                 continue
@@ -3906,6 +4346,11 @@ class Checker:
                                  func=func.name,
                                  arena=func.param_names[arena_at])
                 break
+        for at in func.writes_arrays:
+            if at in written and not self._may_write(written[at]):
+                self._diags.emit(D.LANG_ARRAY_HANDED_NOT_WRITABLE,
+                                 written[at].span, param=func.param_names[at],
+                                 func=func.name)
         if not (owned.points(func.ty.ret) or _holds_a_lambda(func.ty.ret)):
             return
         if func.attrs.external is not None:
@@ -6288,6 +6733,16 @@ class Checker:
         made = self._arenas_in(written)
         allowed, named = said
         thin = self._thin_to
+        if func.made_in == (STATIC_AT,):
+            # Nothing is copied into the image, which is made while compiling.
+            if made:
+                self._diags.emit(
+                    D.LANG_ANSWER_NOT_STATIC, span, name=func.name,
+                    found=", ".join(sorted({self._reach_written(one)
+                                            for one in made})))
+                return UndefConst(ERROR)
+            self._answer_kinds.append("static")
+            return value
         if not allowed and func.made_in == (HANDS_AT,):
             # Answering before the arena it hands out is made: there is nowhere
             # the answer could be, the arena being the body's own.  Said once.
@@ -6433,6 +6888,8 @@ class Checker:
                 at = len(func.ty.params) - 1
             if at == HEAP_AT:
                 func.answer_from = ("heap", -1)
+            elif at == STATIC_AT:
+                func.answer_from = ("static", -1)
             elif self._answer_kinds and all(one == "param"
                                             for one in self._answer_kinds):
                 func.answer_from = ("param", at)
@@ -6441,10 +6898,15 @@ class Checker:
         elif self._answer_kinds and all(one == "heap"
                                         for one in self._answer_kinds):
             func.answer_from = ("heap", -1)
+        elif self._answer_kinds and all(one == "static"
+                                        for one in self._answer_kinds):
+            func.answer_from = ("static", -1)
         else:
             return
         index = func.answer_from[1]
-        where = HEAP_NAME if func.answer_from[0] == "heap" else "".join((
+        where = HEAP_NAME if func.answer_from[0] == "heap" \
+            else "".join((STATIC_NAME, ", the image,")) \
+            if func.answer_from[0] == "static" else "".join((
             "what '", node.params[index].name, "' is given")) \
             if index < len(node.params) else "".join((
                 "'", func.hands_out or "", "', handed out to the caller"))
@@ -6452,7 +6914,8 @@ class Checker:
             ReportKind.ALLOCATOR, func.name,
             "".join(("what '", func.name, "' answers is made in ", where,
                      " on every way out",
-                     "" if func.answer_from[0] == "heap" and func.made_in
+                     "" if func.answer_from[0] in ("heap", "static")
+                     and func.made_in
                      else ", which its body shows",
                      ": it travels without its allocator, which the caller adds")),
             func.name_span if func.name_span.is_valid else func.span)
@@ -7787,6 +8250,10 @@ class Checker:
                                  ty.element.written(), "'")))
             return
         start, lengths = self._shape_of(builder, base, ty, stmt.span)
+        if self._read_only(start):
+            self._diags.emit(D.LANG_STATIC_CHANGES, stmt.base.span,
+                             name=_written_as(stmt.base))
+            return
         if not self._made_here(start):
             self._an_effect(D.LANG_PURE_WRITES_ELSEWHERE, stmt.span)
         marks, _ = self._shape_of(builder, mask, held, stmt.span)
@@ -7976,6 +8443,10 @@ class Checker:
         if not isinstance(ty, ArrayType):
             self._diags.emit(D.LANG_ARRAY_NOT_AN_ARRAY, stmt.base.span,
                              found=ty.written())
+            return
+        if not self._record_may_change(stmt.base, stmt.span):
+            # An element is written only through a name that says it may be:
+            # `mut`, as a field is.
             return
         mask = self._mask_written(builder, stmt)
         if mask is not None:
@@ -8368,6 +8839,7 @@ class Checker:
                 span=node.span, name_span=node.name_span,
                 source_path=written.path,
                 param_names=tuple(one.name for one in node.params),
+                writes_arrays=_writes_arrays(node, params),
                 defaults=self._defaults_of(node, params),
                 borrows_from=self._borrowed_from(node, answer),
                 made_in=made_in, param_made_in=param_made_in)
@@ -8749,6 +9221,11 @@ class Checker:
         answer = self._return_type(expr.ret_type)
         if answer is ERROR or any(one is ERROR for one in params):
             return UndefConst(ERROR)
+        if _writes_arrays(expr, params):
+            # Called through the value it is, nothing would say the array it is
+            # handed has to be one that may be written.
+            self._diags.emit(D.LANG_WRITES_ARRAYS_AS_A_VALUE, expr.span, name=name)
+            return UndefConst(ERROR)
         walks = self._walks_what_it_is_given(expr.attrs)
         ty = self._module.types.func_type(
             params, answer, walks, hands_out=_hands_out_of(expr) is not None)
@@ -8918,6 +9395,12 @@ class Checker:
         two ways of writing the same value.
         """
         assert isinstance(func, Function)
+        if func.writes_arrays:
+            # Called through a value, nothing would say the array it is handed
+            # has to be one that may be written.
+            self._diags.emit(D.LANG_WRITES_ARRAYS_AS_A_VALUE, ref.span,
+                             name=func.name)
+            return UndefConst(ERROR)
         if func.hands_out is not None:
             # Called through a value, it would hand its arena out where nothing
             # receives it by name.  A lambda may hand one out; its type says so.
@@ -9816,8 +10299,51 @@ class Checker:
             return None
         place = self._element_place(builder, start, ty.element, offset, expr.span)
         # An element lives as long as the array does, and an array written at
-        # the top level is the one that outlives the call.
-        return (place, ty.element, True, "an element", self._lasting(base))
+        # the top level is the one that outlives the call.  One in a part of the
+        # image nothing may write may not be written through a reference either.
+        return (place, ty.element,
+                self._may_write(expr.base) and not self._read_only(base),
+                "an element", self._lasting(base))
+
+    def _may_write(self, expr: ast.Expr) -> bool:
+        """Whether what *expr* names may be written, asked quietly of its root:
+        a name that is `mut`, a reference that is `&mut`."""
+        match expr:
+            case ast.Member() | ast.Element():
+                return self._may_write(expr.base)
+            case ast.Deref():
+                if isinstance(expr.operand, ast.NameRef):
+                    held = self._find_local(expr.operand.name)
+                    ty = self._held_by(held) if held is not None else None
+                    if isinstance(ty, PtrType):
+                        return ty.mutable
+                return True
+            case ast.NameRef():
+                local = self._find_local(expr.name)
+                if local is not None:
+                    return local.mutable
+                found = self._provided(expr.name)
+                return not isinstance(found, GlobalVar) or found.mutable
+            case ast.ArrayLit():
+                return True
+        return not _in_the_image(expr)
+
+    def _read_only(self, value: Value) -> bool:
+        """Whether *value* is, or is worked out from, a variable of the image
+        nothing may write: one that is not `mut`, or what was put `in ⎕static`."""
+        seen = value
+        while True:
+            if isinstance(seen, GlobalVar):
+                return not seen.mutable
+            if isinstance(seen, AddressInst):
+                seen = seen.operands[0]
+                continue
+            if isinstance(seen, (CastInst, ExtractInst, TupleInst)) or (
+                    isinstance(seen, BinaryInst)
+                    and seen.op in (BinOp.ADD, BinOp.SUB)):
+                seen = seen.operands[0]
+                continue
+            return False
 
     def _lower_collection(self, builder: IRBuilder,
                           expr: ast.SetLit | ast.DictLit,
@@ -9830,6 +10356,8 @@ class Checker:
         everything about the types, so that a program that will work when there
         is one is known to be right now.
         """
+        if _in_the_image(expr):
+            return self._lower_static(builder, expr, expr, expected)
         empty = (isinstance(expr, ast.SetLit) and not expr.elements) or \
             (isinstance(expr, ast.DictLit) and not expr.entries)
         # Nothing written is nothing to work out, and a table with nothing in
@@ -12366,6 +12894,10 @@ class Checker:
             # defined anywhere; a definition would make it a variable of that
             # scope instead, which is a second meaning for one spelling.
             self._diags.emit(D.LANG_WILDCARD_IS_NOT_DEFINED, node.span)
+            return
+        if not self._image_definition(node, None):
+            self._bind_local(node.name, UndefConst(ERROR), node.name_span,
+                             node.mutable, value_span=node.span)
             return
         if node.type is None and not _says_its_type(node.value):
             # Nothing written and nothing to read off the value: it is lowered
@@ -15473,6 +16005,17 @@ class Checker:
         invariant that a `str` is well-formed UTF-8 true by construction rather
         than by inspection.
         """
+        found = self._text_variable(text)
+        bytes_ = builder.cast(
+            CastKind.BITCAST, builder.address(found, span),
+            self._module.types.ptr_type(U8, mutable=True), span)
+        return builder.make_tuple(
+            (bytes_, builder.int_const(U64, len(text.encode("utf-8"))),
+             tables.no_allocator(builder)), STR, span)
+
+    def _text_variable(self, text: str) -> GlobalVar:
+        """The variable of the image text written down is the bytes of, made once
+        per distinct text."""
         found = self._module.texts.get(text)
         if found is None:
             data = text.encode("utf-8")
@@ -15485,12 +16028,7 @@ class Checker:
                     held, [self._module.int_const(U8, byte) for byte in data]),
                 linkage=Linkage.INTERNAL))
             self._module.texts[text] = found
-        bytes_ = builder.cast(
-            CastKind.BITCAST, builder.address(found, span),
-            self._module.types.ptr_type(U8, mutable=True), span)
-        return builder.make_tuple(
-            (bytes_, builder.int_const(U64, len(text.encode("utf-8"))),
-             tables.no_allocator(builder)), STR, span)
+        return found
 
     def _code_point(self, builder: IRBuilder, value: int, span: Span) -> Value:
         """The code point *value*, or a report where there is no such code point.
@@ -16503,6 +17041,8 @@ class Checker:
         program's own `⍕` be told where the text it builds should go.  Everything else
         is worked out in registers and has nowhere to come from (4568).
         """
+        if _in_the_image(expr):
+            return self._lower_static(builder, expr, expr.value, expected)
         place = self._arena_named(builder, expr.arena)
         if place is None:
             return UndefConst(ERROR)
@@ -16558,6 +17098,76 @@ class Checker:
                              found="an array of values that point nowhere")
             return UndefConst(ERROR)
         return found
+
+    def _lower_static(self, builder: IRBuilder, whole: ast.Expr,
+                      written: ast.Expr, expected: Type | None) -> Value:
+        """Lower `… in ⎕static`: something made while compiling, in the image.
+
+        Every part of it has to be known while compiling (4636), and it is laid
+        out in a read-only part of the image as a variable at the top level is --
+        a list's run, a table's entries, every string's bytes -- so that nothing
+        is made while the program runs, and nothing is ever given back.  What the
+        expression comes to is where that is.
+        """
+        ty = expected
+        if isinstance(ty, ArrayType) and not ty.fixed:
+            # What is wanted does not say the length, which what is written
+            # does: the array is the length written, and is let go of after.
+            shape = _shape_written(written) \
+                if isinstance(written, ast.ArrayLit) else None
+            ty = (self._module.types.array_type(ty.element, shape)
+                  if shape is not None and len(shape) == len(ty.shape) else None)
+        elif ty is None:
+            # Nothing around says the type: what is written says it.
+            derived = self._static_type(written)
+            ty = derived if isinstance(derived, Type) else None
+        if ty is None or ty is ERROR:
+            if ty is None:
+                self._diags.emit(
+                    D.IMPL_UNIMPLEMENTED_FEATURE, whole.span,
+                    feature="a value in the image whose type nothing around it says")
+            return UndefConst(ERROR)
+        if isinstance(ty, (SetType, DictType)) and ty.mutable:
+            self._diags.emit(D.LANG_STATIC_CHANGES, whole.span,
+                             name=ty.written())
+            return UndefConst(ERROR)
+        outer, self._for_the_image = self._for_the_image, True
+        try:
+            found = self._constant_value(
+                ast.VarDef(span=written.span, name=STATIC_NAME,
+                           name_span=written.span, type=None, value=written), ty)
+        finally:
+            self._for_the_image = outer
+        if not isinstance(found, Const):
+            return UndefConst(ERROR)
+        self._made_from[id(whole)] = (whole, frozenset())
+        span = whole.span
+        match found:
+            case ArrayConst() | RecordConst():
+                # A place, as an array or a record always is: the variable is it.
+                at = builder.address(self._image_variable(ty, found), span)
+                if isinstance(ty, ProductType):
+                    return self._record_from(builder, at, ty, span)
+                return builder.cast(CastKind.BITCAST, at, ty, span)
+            case PartsConst():
+                return builder.make_tuple(
+                    [self._from_the_image(builder, one, piece, span)
+                     for one, piece in zip(found.parts, parts_of(ty))], ty, span)
+            case AddressConst():
+                return self._from_the_image(builder, found, ty, span)
+        return found
+
+    def _from_the_image(self, builder: IRBuilder, part: Const, ty: Type,
+                        span: Span) -> Value:
+        """One word of something in the image, as the value it is."""
+        if isinstance(part, AddressConst):
+            if part.target is None:
+                return builder.cast(CastKind.BITCAST, builder.int_const(U64, 0),
+                                    ty, span)
+            assert isinstance(part.target, GlobalVar)
+            return builder.cast(CastKind.BITCAST,
+                                builder.address(part.target, span), ty, span)
+        return part
 
     def _lower_address_of(self, builder: IRBuilder, expr: ast.Call,
                           expected: Type | None) -> Value:
@@ -17751,7 +18361,7 @@ class Checker:
         """
         value = self._lower_expr(builder, expr,
                                  expected if isinstance(expr, ast.ArrayLit)
-                                 else None)
+                                 or _in_the_image(expr) else None)
         found = self._value_type_of(value)
         if found is expected or found is ERROR:
             return value

@@ -23,6 +23,6 @@ fn tall(m: u6⟦2,⟧) → u6:
 
 @[startup]
 fn main() → u6:
-    let m: u6⟦2,3⟧ = ⟦⟦1u6, 2u6, 3u6⟧, ⟦4u6, 5u6, 6u6⟧⟧
+    let m: u6⟦2,3⟧ = ⟦⟦1u6, 2u6, 3u6⟧, ⟦4u6, 5u6, 6u6⟧⟧ in ⎕static
     ※ 7 + 5 + 4, and the rest written out
     wide(m) + loose(m) + tall(m) + 26u6

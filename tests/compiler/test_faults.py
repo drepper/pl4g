@@ -152,7 +152,7 @@ fn main() → u6:
     statuses.OUT_OF_RANGE: """\
 @[startup]
 fn main() → u6:
-    let row: u6⟦3⟧ = ⟦1u6, 2u6, 3u6⟧
+    let row: u6⟦3⟧ = ⟦1u6, 2u6, 3u6⟧ in ⎕static
     let at: u6 ¤idx = 7
     row⟦at⟧
 """,

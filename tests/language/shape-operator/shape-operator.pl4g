@@ -15,7 +15,7 @@
 
 @[startup]
 fn main() → u6:
-    let v: u8⟦4⟧ = ⟦1u8, 2u8, 3u8, 4u8⟧
+    let v: u8⟦4⟧ = ⟦1u8, 2u8, 3u8, 4u8⟧ in ⎕static
     ※ one value everywhere
     let filled: u8⟦3⟧ = 3 ⍴ 7u8
     ※ fewer values than the shape holds, so they go round again

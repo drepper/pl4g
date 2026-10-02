@@ -16,8 +16,8 @@
 
 @[startup, impure]
 fn main() → u6:
-    let f: [f64] = [1.5f64, ⁻2.5f64, 0.5f64]
-    let g: f32⟦3⟧ = ⟦1.5f32, ⁻2.5f32, 0.5f32⟧
+    let f: [f64] = [1.5f64, ⁻2.5f64, 0.5f64] in ⎕static
+    let g: f32⟦3⟧ = ⟦1.5f32, ⁻2.5f32, 0.5f32⟧ in ⎕static
     let a: f64 = 3.0f64
     let b: f64 = 7.5f64
     ※ `≅` asks whether two are the same within the tolerance, which is how a

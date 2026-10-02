@@ -35,7 +35,7 @@ fn main(init: mut std.Init) → u6:
     else:
         let sink: mut std.Writer = std.Writer(.fd ← ends⟦1⟧)
         let source: mut std.Reader = std.Reader(.fd ← ends⟦0⟧)
-        let sent: u8⟦4⟧ = ⟦1u8, 2u8, 3u8, 4u8⟧
+        let sent: u8⟦4⟧ = ⟦1u8, 2u8, 3u8, 4u8⟧ in ⎕static
         let back: mut u8⟦4⟧ = ⟦0u8, 0u8, 0u8, 0u8⟧
         ※ how many bytes went, or why none did
         let went: u64 ¤size = std.write_sync(&mut sink, sent) ?? 0

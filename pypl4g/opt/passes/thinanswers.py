@@ -23,12 +23,12 @@ through a function value cannot know which allocator the function would have nam
 from __future__ import annotations
 
 from ...ir.function import Function, Linkage
-from ...ir.inst import (AddressInst, CallInst, ExtractInst, Instruction,
-                        RetInst, TupleInst)
+from ...ir.inst import (AddressInst, CallInst, CastInst, CastKind, ExtractInst,
+                        Instruction, RetInst, TupleInst)
 from ...ir.module import Module
 from ...ir.reports import ReportKind
 from ...ir.rewrite import all_stand_for
-from ...ir.types import ListType, StrType, Type, parts_of
+from ...ir.types import ListType, StrType, Type, U64, parts_of
 from ...sema.tables import heap_global
 
 
@@ -65,7 +65,9 @@ class ThinAnswers:
             all_stand_for(func, instead)
         for at, func in wanted.items():
             where = "\N{APL FUNCTIONAL SYMBOL QUAD}heap" \
-                if func.answer_from[0] == "heap" else "".join(
+                if func.answer_from[0] == "heap" \
+                else "none -- the answer is in the image --" \
+                if func.answer_from[0] == "static" else "".join(
                     ("what parameter ", str(func.answer_from[1] + 1), " is given"))
             module.reports.record(
                 ReportKind.ANSWER_THIN, func.name,
@@ -118,6 +120,11 @@ class ThinAnswers:
             made.append(call)
             if kind == "heap":
                 allocator: object = AddressInst(heap_global(module), inst.span)
+                made.append(allocator)
+            elif kind == "static":
+                # The image's, which is no allocator: nothing gives it back.
+                allocator = CastInst(CastKind.BITCAST, module.int_const(U64, 0),
+                                     pieces[2], inst.span)
                 made.append(allocator)
             else:
                 allocator = inst.operands[at]

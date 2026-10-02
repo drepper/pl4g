@@ -3149,6 +3149,17 @@ a count, and every other element is not something a place and a count can say.
 **Only a vector is sliced** (4459), for the same reason.  A row of a table is a run of elements and a column is not: its elements
 are a row apart, which is a stride.  Until a slice can carry a stride there is nothing for a run out of a table to be.
 
+##### Writing an element
+
+**An element is written only through a name that says it may be**: `let a: mut u8⟦4⟧`, a parameter `a: mut u8⟦⟧`, a `&mut`
+reference -- as a field of a record is (4004).  An array named without `mut` is read and not written, whoever holds it, so `mut` on
+an array parameter says the body writes the caller's elements.  A caller hands such a parameter only an array that may be written
+(4640): not one named without `mut`, and not one `in ⎕static`.  A function that writes an array it is handed is not a value yet
+(4641), a function type not saying which parameters write.
+
+Compare Rust's `&[T]` and `&mut [T]`, C++'s `const T*` and `T*`, and D's `const(T)[]`: the same split, said on the parameter.  Before
+this an array not marked `mut` could be written all the same, which a table in a read-only part of the image cannot be.
+
 ##### Where the elements are
 
 A variable at the top level of type `T⟦N⟧` holds them itself, as bytes in the image.  One inside a function holds them in the
@@ -3452,6 +3463,42 @@ is copied into `⎕heap` on the way in.  What cannot be copied is refused (4633)
 last (4632).
 
 A value made in a local arena reaches past the scope either as a copy, as above, or with the arena itself (below).
+
+##### What is in the image
+
+**`⎕static` names the allocator that is no allocator: the image.**  What is in it is made while compiling, lies in a part of the
+image nothing writes, lasts as long as the program and is never given back -- its allocator word is nought, which is what text
+written down has always carried.
+
+**`→ T in ⎕static` says every answer is in the image.**  The answer then travels without its allocator, the caller adding none
+(`answer-thin` in the report log).  Nothing is copied into the image while the program runs, so an answer made anywhere else is
+refused (4635), and `⎕static` is named alone (4634).  A body whose every answer is text written down is held to be answering in the
+image without saying so, as one answering only what the heap just made is held to answer in the heap.
+
+```
+fn digit(d: u64) → str in ⎕static:
+    let digits: str⟦10⟧ = ⟦"0", "1", "2", "3", "4", "5", "6", "7", "8", "9"⟧ in ⎕static
+    digits⟦⎕unit(d, ⌜idx⌝)⟧
+```
+
+**`… in ⎕static` puts a container in the image**: an array, a list, a set or a dictionary written down of what the compiler knows
+-- numbers, characters, truth values, values of an enumeration, text, records and containers of those, a container inside one being
+in the image as well.  At the top level and inside a body alike: inside one, the name stands for where the image keeps it, and
+nothing is built when the line runs.  Anything worked out while the program runs is refused (4636), and so is a variable that may
+change (4637): nothing writes the image, so a `mut` name, a `mut` collection type, an element written and a `&mut` taken of one are
+all refused.  A table in the image is laid out entry by entry where the program's own insertions would have put it, so a walk of it
+meets its keys in the order a walk of the same table built while running would.  A table made out of one -- a union, say -- comes
+out of `⎕heap`, there being no allocator to come out of the same one.
+
+**A definition that never changes and holds only what the compiler knows says `in ⎕static`** (4638).  It is what C++ makes of a
+`static const` table, and saying it is what tells a reader the table is not built every time the line runs -- a stronger rule than
+C++'s, where the reader has to look for the keyword.  A container written with an arena of its own, or a value worked out from
+anything else, is not such a definition.
+
+Compare **C** and **C++**, where `static const` is how a table goes in read-only data and nothing makes a reader write it; **Rust**,
+whose `&'static str` is this lifetime and whose `static` items this placement, with `phf` for a table built while compiling; **D**'s
+`immutable` and **Zig**'s comptime-known slices, both placed in read-only data; and **Go**, whose composite literals are built at
+run time unless the compiler proves otherwise and says nothing either way.
 
 ##### Handing an arena out
 

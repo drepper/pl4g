@@ -1,0 +1,14 @@
+※ pl4g-test: compile=error diag=4641
+
+※ Called through a function value, nothing at the call says which parameters
+※ write the arrays they are handed, so nothing could check that the array is
+※ one that may be written.
+
+@[impure]
+fn clear(a: mut u8⟦⟧):
+    a⟦0⟧ ← 0u8
+
+@[startup, impure]
+fn main() → u6:
+    let f: fn(u8⟦⟧) = clear
+    0u6

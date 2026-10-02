@@ -55,7 +55,7 @@ fn keys_alone() → u6:
     ※ enough of them that the table grows while it is built and every key is
     ※ hashed again into the bigger one
     let s: ⸨str⸩ = ⸨"a", "bb", "ccc", "d", "ee", "fff", "gggg", "hhhhh",
-                    "iiiiii", "jjjjjjj"⸩
+                    "iiiiii", "jjjjjjj"⸩ in ⎕static
     if ¬s⸨"bb"⸩:
         6u6
     elif ¬s⸨"jjjjjjj"⸩:

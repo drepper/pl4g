@@ -16,8 +16,8 @@
 
 @[startup]
 fn main() → u6:
-    let v: u8⟦3⟧ = ⟦1u8, 2u8, 3u8⟧
-    let w: u8⟦3⟧ = ⟦10u8, 20u8, 30u8⟧
+    let v: u8⟦3⟧ = ⟦1u8, 2u8, 3u8⟧ in ⎕static
+    let w: u8⟦3⟧ = ⟦10u8, 20u8, 30u8⟧ in ⎕static
     ※ both sides walked, in step
     let sum: u8⟦3⟧ = v + w
     ※ one side walked and a number used at every turn, either way round
@@ -32,8 +32,8 @@ fn main() → u6:
     let wide: u8⟦3⟧ = v « 2u8
     let held: u8⟦3⟧ = v ⊠ 200u8
     ※ a table walked against a column: each row meets its own number
-    let m: u8⟦2,3⟧ = ⟦⟦1u8, 2u8, 3u8⟧, ⟦4u8, 5u8, 6u8⟧⟧
-    let col: u8⟦2⟧ = ⟦10u8, 20u8⟧
+    let m: u8⟦2,3⟧ = ⟦⟦1u8, 2u8, 3u8⟧, ⟦4u8, 5u8, 6u8⟧⟧ in ⎕static
+    let col: u8⟦2⟧ = ⟦10u8, 20u8⟧ in ⎕static
     let raised: u8⟦2,3⟧ = m + col
     let counted: u8 = sum⟦0⟧ + up⟦0⟧ + down⟦2⟧ + bits⟦2⟧ + wide⟦0⟧
     ※ 11 + 11 + 37 + 12 + 4 = 75, and what this used to say through the exit

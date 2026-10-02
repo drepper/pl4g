@@ -1,0 +1,10 @@
+※ pl4g-test: compile=error diag=4639
+
+※ A container written down of what the compiler knows, of another type than the
+※ one the image is asked to hold.
+
+let wrong: u8⟦2⟧ = [1u8, 2u8] in ⎕static
+
+@[startup]
+fn main() → u6:
+    0u6

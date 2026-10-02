@@ -22,7 +22,7 @@ fn main() → u6:
     let b: u8 = 3u8
     let c: u8 = 5u8
     let s: i16 = ⁻12i16
-    let v: u8⟦4⟧ = ⟦2u8, 3u8, 4u8, 5u8⟧
+    let v: u8⟦4⟧ = ⟦2u8, 3u8, 4u8, 5u8⟧ in ⎕static
     let even: bool⟦4⟧ = ∣v
     let by: bool⟦4⟧ = 2u8 ∣ v
     ※ the divisor is worked out here, so what these answer is a result

@@ -14,14 +14,14 @@
 @[startup]
 fn main() → u6:
     let v: mut u6⟦4⟧ = ⟦10u6, 20u6, 30u6, 40u6⟧
-    let want: bool⟦4⟧ = ⟦false, true, false, true⟧
+    let want: bool⟦4⟧ = ⟦false, true, false, true⟧ in ⎕static
     v⟦want⟧ ← 1u6
     ※ a mask worked out on the spot, over the array being written
     let w: mut u6⟦4⟧ = ⟦10u6, 20u6, 30u6, 40u6⟧
     w⟦w > 25u6⟧ ← 1u6
     ※ whole rows of a table
     let m: mut u6⟦3,2⟧ = ⟦⟦1u6, 2u6⟧, ⟦3u6, 4u6⟧, ⟦5u6, 6u6⟧⟧
-    let middle: bool⟦3⟧ = ⟦false, true, false⟧
+    let middle: bool⟦3⟧ = ⟦false, true, false⟧ in ⎕static
     m⟦middle⟧ ← 9u6
     ※ and an array of truth values, whose elements are one bit wide
     let b: mut bool⟦3⟧ = ⟦false, false, false⟧

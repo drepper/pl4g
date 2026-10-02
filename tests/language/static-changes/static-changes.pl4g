@@ -1,0 +1,12 @@
+※ pl4g-test: compile=error diag=4637
+
+※ What is in the image is in a part of it nothing may write: a variable that
+※ may be given something else, or an element written, is not one.
+
+let table: u8⟦3⟧ = ⟦1u8, 2u8, 3u8⟧ in ⎕static
+
+@[startup, impure]
+fn main() → u6:
+    let kept: mut u8⟦2⟧ = ⟦1u8, 2u8⟧ in ⎕static
+    kept⟦0⟧ ← 4u8
+    0u6

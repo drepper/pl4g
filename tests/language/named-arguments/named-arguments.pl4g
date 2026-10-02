@@ -100,6 +100,6 @@ fn scaled(n: u8, by: u8 ← 3u8) → u8:
     n × by
 
 fn listed() → bool:
-    let v: u8⟦3⟧ = ⟦1u8, 2u8, 3u8⟧
+    let v: u8⟦3⟧ = ⟦1u8, 2u8, 3u8⟧ in ⎕static
     let got: u8⟦3⟧ = scaled(v)
     got⟦0⟧ = 3u8 ∧ got⟦1⟧ = 6u8 ∧ got⟦2⟧ = 9u8

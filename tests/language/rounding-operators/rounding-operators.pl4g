@@ -23,7 +23,7 @@ fn main() → u6:
     ※ the answer is the number itself
     let huge: f64 = 1.0e300f64
     let narrow: f32 = ⁻1.5f32
-    let v: f64⟦4⟧ = ⟦1.2f64, ⁻1.2f64, 2.5f64, 3.5f64⟧
+    let v: f64⟦4⟧ = ⟦1.2f64, ⁻1.2f64, 2.5f64, 3.5f64⟧ in ⎕static
     let walked: f64⟦4⟧ = ↓v
     if ¬(↓half ≅ 2.0f64) ∨ ¬(↑half ≅ 3.0f64) ∨ ¬(↕half ≅ 2.0f64):
         1u6

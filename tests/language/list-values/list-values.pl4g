@@ -13,12 +13,12 @@
 
 @[startup, impure]
 fn main() → u6:
-    let a: [u8] = [1u8, 2u8, 3u8]
-    let wide: [u32] = [100u32, 200u32]
+    let a: [u8] = [1u8, 2u8, 3u8] in ⎕static
+    let wide: [u32] = [100u32, 200u32] in ⎕static
     ※ one written with nothing in it takes the type wanted where it stands
-    let empty: [u8] = []
+    let empty: [u8] = [] in ⎕static
     ※ the elements take their type from the list's where nothing says theirs
-    let plain: [u16] = [1, 2, 3, 4]
+    let plain: [u16] = [1, 2, 3, 4] in ⎕static
     if #a ≠ 3 ∨ #wide ≠ 2 ∨ #empty ≠ 0 ∨ #plain ≠ 4:
         1u6
     elif total(a) ≠ 6u8:

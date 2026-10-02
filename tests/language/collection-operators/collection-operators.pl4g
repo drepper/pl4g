@@ -10,8 +10,8 @@
 
 @[startup, impure]
 fn main() → u6:
-    let a: ⸨u8⸩ = ⸨1u8, 2u8, 3u8⸩
-    let b: ⸨u8⸩ = ⸨3u8, 4u8⸩
+    let a: ⸨u8⸩ = ⸨1u8, 2u8, 3u8⸩ in ⎕static
+    let b: ⸨u8⸩ = ⸨3u8, 4u8⸩ in ⎕static
     let joined: ⸨u8⸩ = a | b
     let both: ⸨u8⸩ = a & b
     let either: ⸨u8⸩ = a ^ b

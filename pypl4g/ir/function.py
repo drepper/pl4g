@@ -231,6 +231,10 @@ class Function:
     #: entry block and a caller in another file has to be able to name them all
     #: the same.
     param_names: tuple[str, ...] = ()
+    #: Which parameters are arrays the body may write the elements of, which
+    #: their `mut` says: a caller may hand those only an array that may be
+    #: written.
+    writes_arrays: tuple[int, ...] = ()
     #: What each parameter is given where a call gives it nothing, and nothing
     #: where it must be given something.  Settled where the function is defined
     #: rather than at the call, so that every call of it -- in this file or any
