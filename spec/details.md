@@ -2417,8 +2417,9 @@ where a `fn(...)` is wanted; the one with nothing to carry carries a null enviro
 **Where the environment is, `_environment` is told.**  `_lambdas_that_stay` walks a body before it is lowered -- the whole of it,
 lambdas inside lambdas included -- and records, by identity, every lambda written as an argument of a call of a function
 (`_calls_a_function`: not a record, a variant or a `⎕` name) and every one bound by `let` to a name that is not `mut` and that the
-rest of the block only calls or hands to such a call (`_only_called`; a macro invocation that mentions the name counts as taking
-it anywhere).  Those keep the environment in a frame slot and carry no allocator; every other one takes room from `⎕heap` through
+body only calls or hands to such a call.  One walk, `_lambdas_handed_on`, collects both and every name mentioned any other way --
+a macro invocation that mentions a name counts as taking it anywhere -- and a name bound twice is judged by every mention of
+either: telling the two apart would be a second walk, and the cautious answer costs an allocation.  Those keep the environment in a frame slot and carry no allocator; every other one takes room from `⎕heap` through
 `tables.allocate` and carries `⎕heap`'s address; `λ … in a` is lowered by `_lower_allocated` handing the arena's place to
 `_lower_lambda`, and the room comes from the arena.  The report log says which (`allocator`).
 

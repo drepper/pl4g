@@ -498,57 +498,66 @@ _BINDS: Final[dict[str, tuple[str, ...]]] = {
 }
 
 
-def _only_called(name: str, node: object,
-                 calls: Callable[[ast.Call], bool]) -> bool:
-    """Whether every mention of *name* below *node* calls it or hands it to a call.
+#: The fields of each kind of node a walk descends into, by the node's class:
+#: asking `dataclasses.fields` of every node of every body is most of a walk.
+_CHILDREN: dict[type, tuple[str, ...]] = {}
 
-    To a call of a function, which *calls* says of a call: what a callee does with
-    a function it is handed is held to the callee's own rules, which do not let it
-    leave that call.  Anything else -- a name bound to it, a field, a list, a
-    capture, a macro that could do anything with it -- may take it further.
+
+def _children(node: ast.Node) -> tuple[str, ...]:
+    """The names of the fields of *node* a walk descends into."""
+    found = _CHILDREN.get(type(node))
+    if found is None:
+        found = tuple(one.name for one in fields_of(node) if one.name != "span")
+        _CHILDREN[type(node)] = found
+    return found
+
+
+def _lambdas_handed_on(node: object, calls: Callable[[ast.Call], bool],
+                       taken: set[str], handed: list[ast.Lambda],
+                       bound: list[tuple[str, ast.Lambda]]) -> None:
+    """Walk *node* for what may take a lambda further than a call.
+
+    Every name mentioned other than as what a call calls or as an argument of a call
+    of a function -- which *calls* says of a call -- goes into *taken*: bound to
+    another name, put in a field or a list, brought into a lambda, mentioned in a
+    macro's invocation, which could do anything with it.  Every lambda written as such
+    an argument goes into *handed*, and every one `let` binds to a name that is not
+    `mut` into *bound*.  What a callee does with a function it is handed is held to
+    its own rules, and those do not let it leave that call.
     """
     match node:
         case ast.NameRef() | ast.Capture():
-            return node.name != name
-        case ast.AssignStmt():
-            if name in (node.name, *(one for one, _ in node.more)):
-                return False
+            taken.add(node.name)
+            return
         case ast.Invoke() | ast.Quote():
             seen: list[str] = []
             _named_in(node, seen)
-            return name not in seen
+            taken.update(seen)
+            return
+        case ast.AssignStmt():
+            taken.add(node.name)
+            taken.update(one for one, _ in node.more)
+        case ast.VarDef() if isinstance(node.value, ast.Lambda) \
+                and not node.mutable and not node.more and node.made_in is None:
+            bound.append((node.name, node.value))
         case ast.Call():
-            handed = calls(node)
-            if not (isinstance(node.callee, ast.NameRef)
-                    or _only_called(name, node.callee, calls)):
-                return False
+            handing = calls(node)
+            if not isinstance(node.callee, ast.NameRef):
+                _lambdas_handed_on(node.callee, calls, taken, handed, bound)
             for one in node.args:
                 value = one.value if isinstance(one, ast.Named) else one
-                if handed and isinstance(value, ast.NameRef):
+                if handing and isinstance(value, ast.NameRef):
                     continue
-                if not _only_called(name, one, calls):
-                    return False
-            return True
+                if handing and isinstance(value, ast.Lambda):
+                    handed.append(value)
+                _lambdas_handed_on(one, calls, taken, handed, bound)
+            return
     if isinstance(node, ast.Node):
-        return all(_only_called(name, getattr(node, one.name), calls)
-                   for one in fields_of(node))
-    if isinstance(node, (list, tuple)):
-        return all(_only_called(name, one, calls) for one in node)
-    return True
-
-
-def _nodes_below(node: object) -> list[ast.Node]:
-    """Every node below *node*, itself included, in no particular order."""
-    found: list[ast.Node] = []
-    waiting: list[object] = [node]
-    while waiting:
-        one = waiting.pop()
-        if isinstance(one, ast.Node):
-            found.append(one)
-            waiting.extend(getattr(one, each.name) for each in fields_of(one))
-        elif isinstance(one, (list, tuple)):
-            waiting.extend(one)
-    return found
+        for one in _children(node):
+            _lambdas_handed_on(getattr(node, one), calls, taken, handed, bound)
+    elif isinstance(node, (list, tuple)):
+        for one in node:
+            _lambdas_handed_on(one, calls, taken, handed, bound)
 
 
 def _named_in(node: object, into: list[str]) -> None:
@@ -2201,6 +2210,9 @@ class Checker:
         #: The lambdas that provably stay in the call that writes them, whose
         #: environment may therefore be in its frame, by identity.
         self._stays: dict[int, ast.Lambda] = {}
+        #: The body being lowered, until its first lambda asks which stay: most
+        #: bodies have none, and walking them for nothing is not free.
+        self._unscanned: ast.Block | None = None
         #: Parameters whose provenance the body cannot know, by the marker they carry
         #: as their arenas: a function saying where its answer was made may not
         #: answer one of these, there being no saying where it was made.
@@ -6753,9 +6765,9 @@ class Checker:
         self._push_scope()
         outer_addressed = self._addressed
         self._addressed = set()
+        outer_unscanned, self._unscanned = self._unscanned, node.body
         if node.body is not None:
             _addressed_in(node.body, self._addressed)
-            self._lambdas_that_stay(node.body)
         # Every parameter gets its register before any of them is given storage:
         # a block's parameters are what it is entered with, and the storage is
         # written by instructions that follow them.
@@ -6836,6 +6848,7 @@ class Checker:
         self._handed_out_made(func, node)
         self._hands_out, self._hands_out_local = outer_hands
         self._demanding = outer_demanding
+        self._unscanned = outer_unscanned
         self._at_entry = outer_entry
         self._answer_made_in = outer_made_in
         self._made_from = outer_made_from
@@ -8403,7 +8416,7 @@ class Checker:
                  self._out_of_arena, self._out_of_arenas, self._made_from,
                  self._answer_kinds, self._thin_to, self._answer_arms,
                  self._yield_answer, self._hands_out, self._hands_out_local,
-                 self._receiving)
+                 self._receiving, self._unscanned)
         self._scopes, self._addressed = [], set()
         self._answer_arms = self._yield_answer = None
         self._hands_out = self._hands_out_local = self._receiving = None
@@ -8424,7 +8437,7 @@ class Checker:
         try:
             assert node.body is not None
             _addressed_in(node.body, self._addressed)
-            self._lambdas_that_stay(node.body)
+            self._unscanned = node.body
             arriving = [block.add_param(one, param.name)
                         for one, param in zip(func.ty.params, node.params)]
             for param, value in zip(node.params, arriving):
@@ -8456,7 +8469,7 @@ class Checker:
              self._out_of_arena, self._out_of_arenas, self._made_from,
              self._answer_kinds, self._thin_to, self._answer_arms,
              self._yield_answer, self._hands_out, self._hands_out_local,
-             self._receiving) = outer
+             self._receiving, self._unscanned) = outer
 
     def _lower_generic(self, builder: IRBuilder, expr: ast.Call,
                        written: _Generic, expected: Type | None) -> Value:
@@ -8747,6 +8760,9 @@ class Checker:
         held = tuple(self._held_by_capture(one, local) for one, local in taken)
         if any(one is ERROR for one in held):
             return UndefConst(ERROR)
+        if self._unscanned is not None:
+            self._lambdas_that_stay(self._unscanned)
+            self._unscanned = None
         stays = arena is None and self._stays.get(id(expr)) is expr
         # What it reaches is worked out before the body is lowered and the
         # environment filled, from the names as they stand where it is written.
@@ -8851,27 +8867,24 @@ class Checker:
         """Find every lambda in *body* that provably stays in the call writing it.
 
         Written as an argument of a call of a function, or bound by `let` to a
-        name that is not `mut` and is from then on only called or handed to a call
-        of a function: what a callee does with a function it is handed is held to
+        name that is not `mut` and is only ever called or handed to a call of a
+        function: what a callee does with a function it is handed is held to
         its own rules, and those do not let it leave that call.  What such a
         lambda brought in may be in this call's frame.  Every other lambda may
         leave, and what it brings in is kept in `\N{APL FUNCTIONAL SYMBOL QUAD}heap` -- or the arena `in` names.
         """
-        for node in _nodes_below(body):
-            if isinstance(node, ast.Call) and self._calls_a_function(node):
-                for one in node.args:
-                    value = one.value if isinstance(one, ast.Named) else one
-                    if isinstance(value, ast.Lambda):
-                        self._stays[id(value)] = value
-            elif isinstance(node, ast.Block):
-                for at, stmt in enumerate(node.stmts):
-                    if isinstance(stmt, ast.VarDef) \
-                            and isinstance(stmt.value, ast.Lambda) \
-                            and not stmt.mutable and not stmt.more \
-                            and stmt.made_in is None \
-                            and _only_called(stmt.name, node.stmts[at + 1:],
-                                             self._calls_a_function):
-                        self._stays[id(stmt.value)] = stmt.value
+        taken: set[str] = set()
+        handed: list[ast.Lambda] = []
+        bound: list[tuple[str, ast.Lambda]] = []
+        _lambdas_handed_on(body, self._calls_a_function, taken, handed, bound)
+        for one in handed:
+            self._stays[id(one)] = one
+        for name, one in bound:
+            # Any other mention of the name anywhere in the body, the same name
+            # bound again included: telling two bindings apart is not worth a
+            # second walk, and the cautious answer is only an allocation.
+            if name not in taken:
+                self._stays[id(one)] = one
 
     def _calls_a_function(self, call: ast.Call) -> bool:
         """Whether *call* calls a function, rather than making a record or a variant
