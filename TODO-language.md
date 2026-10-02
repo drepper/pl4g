@@ -329,9 +329,12 @@ To Do List for the PL4g language
     loop written so that the choice is made once before it starts.  The second is what a real implementation does and is worth
     doing when a program wants it.
 
-[ ] leaving a loop early.  There is no `break` and no `continue`, and no `loop` that answers with what a `break` hands it.  A
-    loop is a statement for that reason: with nothing that leaves it early, every way out is the condition, and a construct whose
-    only way out produces nothing produces nothing.  Rust's `loop` is the shape to compare against if `break` arrives.
+[x] leaving a loop early.  Done on 2026-09-14: `break §name` leaves a loop and `continue §name` begins its next turn, the loop
+    named by `§` after its keyword and the label written on every jump (3033), so that a jump says which loop it means rather than
+    where it stands.  A `break` hands a value over, which makes a loop an expression, with an `else` arm for where it ran out --
+    the entry further down.  There is no separate `loop` keyword.  `while true:` with a `break` serves as a statement, but as a
+    value it answers a result, as every loop without an `else` arm does: the compiler does not treat a condition that is always
+    true as one that never ends the loop, which Rust's `loop` is for.
 
 [x] add support for arrays.  Done: an array has a shape, one entry per dimension -- `T⟦4⟧` a vector, `T⟦2,3⟧` a table -- and
     either every dimension says how many or none does.  A type that says carries nothing but the elements; one that does not is
@@ -1074,3 +1077,11 @@ Runtime
 
 [ ] let `¨` write through a slice, `v⟦1…3⟧¨.x ← 0u8`.  What is written to is named again each turn, so it has to be a place
     named by names and indices (4661), and a slice is not one; giving it a name first is the workaround.
+
+[?] let a loop that can only be left by a `break` answer what the `break` hands over, not a result.  `while §l true:` is
+    left by nothing but `break §l v`, so its value is the type of `v` -- yet today it answers `T?`, as every loop without an
+    `else` arm does, because nothing asks whether the condition can ever be false.
+    Question: how that is said.  Rust has a keyword for it, `loop`, whose value is what its `break`s hand over and which needs
+    no `else`; Zig and Go write `while (true)` and `for {}` and have no loop expression to type.  The choices here are a `loop`
+    keyword of the same kind, or recognising a condition the compiler knows is always true -- `true` itself, or any constant --
+    and typing `while` that way, which needs no new word but makes the loop's type depend on whether its condition folds.
