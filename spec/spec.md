@@ -699,9 +699,10 @@ whose value goes nowhere is reported (5005), and a body that must answer and doe
 parameter names are not in it because a type is not a definition: what a caller has to know is the types, and what the names are
 is the body's business.
 
-**What it comes to is two addresses**: where its code is, and where what it brought in with it is.  That is one type whether it
-brought anything in or nothing, so either stands where a `fn(…)` is wanted -- which is what lets a function take one without
-knowing which it will be given:
+**What it comes to is three words**: where its code is, where what it brought in with it is, and the allocator that room came
+from -- none for a lambda that brought nothing in, or keeps what it brought in in the frame, as a string carries its own.  That is
+one type whether it brought anything in or nothing, so either stands where a `fn(…)` is wanted -- which is what lets a function
+take one without knowing which it will be given:
 
 ```
 fn apply(g: fn(u8) → u8, x: u8) → u8:
@@ -781,10 +782,59 @@ nothing in the language lets a type be followed by `[`, an array being written `
 type.  So what follows a complete parameter list can be nothing but the capture list, the arrow or the body, and the parser
 never has to guess.
 
-**A lambda does not leave the call that made it** -- it may not be what a function answers with (4549), nor what a variable at
-the top level holds (4550) -- because what it brought in belongs to that call.  It is the rule a reference follows, and lifetime
-annotations will lift both at once.  What is left is where a lambda earns its keep: bound to a name, handed to a parameter, and
-called through whatever holds it.
+##### Where a lambda keeps what it brought in
+
+**A lambda may leave the call that made it**: be answered, be put in a record or a list that is, be written through a reference
+into the caller's record.
+
+```
+fn adding(n: u8) → fn(u8) → u8:
+    λ a: u8 [n] → u8 { a + n }
+
+let add5: fn(u8) → u8 = adding(5u8)
+add5(1u8)                                ※ 6
+```
+
+**Where what it brought in is kept is the compiler's choice**, as whether a string carries its allocator is.  A lambda that provably
+stays in the call that writes it keeps it in that call's frame, which costs nothing to make and nothing to give back.  Every other
+keeps it in `⎕heap`.  One stays when it is handed straight to a call of a function, or bound by `let` to a name that is not `mut`
+and is from then on only called or handed to a call of a function -- a function handed one is held to the rules below, which do not
+let it leave that call.  Anything else may take it further: another name, a field, a list, a capture, an answer.  Which of the
+three each lambda got is in the report log (`allocator`).
+
+**`λ … in a` keeps it in the arena `a`**, which then gives it back with everything else it made: the lambda is made in `a` as a
+string written `in a` is, and is dead once `a` is emptied (4615).
+
+**What a lambda reaches is held to the rule a string made in an arena is.**  It reaches the room it keeps what it brought in in,
+what everything it brought in by value was made in, and every variable it brought in by reference -- or reaches through a
+reference it brought in.  So:
+
+- **It may not be given to a name that outlives what it reaches** (4570, 4614): a variable of an inner block brought in by
+  reference, an arena of an inner block, the frame of a lambda that stays.
+- **It may leave the call only reaching what lasts beyond it** (4632): `⎕heap`, the image, an arena the signature names with
+  `→ T in a`.  A variable of the call, an arena the call made, and whatever a parameter was handed do not -- the last because the
+  caller may have kept it in its own frame, which the signature does not say.  A lambda is never copied, as a string is: what it
+  brought in is laid out the way its body reads it, and nothing else knows how.
+- **Called after what it reaches was given back, it is refused** (4615), as reading a string would be.
+
+```
+fn counting(n: u8) → fn(u8) → u8:
+    let seen: u8 = n
+    λ a: u8 [&seen] → u8 { a + seen }    ※ 4632: seen is gone with the call
+
+fn twice(g: fn(u8) → u8) → fn(u8) → u8:
+    λ a: u8 [g] → u8 { g(g(a)) }         ※ 4632: g may be in the caller's frame
+```
+
+**An environment is never given back.**  What a lambda kept in `⎕heap` stays there, as a string a name held does; one kept in an
+arena goes with the arena.  The third word says which allocator it is, so that giving it back can come later without changing what
+a lambda is.
+
+**A variable at the top level may not hold a lambda** (4550).  Its value is in the image, and the image does not yet hold an address
+of code -- nor, for that matter, a string (9902).
+
+What is left is where a lambda earns its keep: bound to a name, handed to a parameter, answered, and called through whatever holds
+it.
 
 **A call through one is a call to whatever it holds**, so nothing about the callee is known: a function that makes one is impure,
 because what it calls may do anything.
@@ -792,8 +842,13 @@ because what it calls may do anything.
 Compare: **C++**'s lambdas, whose capture list this is, down to the `&`, the `[=]` and the `[&]`.  **Rust**'s closures, which
 infer what they capture and sort themselves into three traits by what they do with it; **Go**'s and **JavaScript**'s, which
 capture by reference and keep the variables alive by garbage collection; **Java**'s, which capture by value and require what they
-capture to be effectively final.  The lifetime question every one of those answers somehow is the one answered here by not
-letting a lambda leave the call -- the blunt answer, and the same one references got.
+capture to be effectively final.  The lifetime question every one of those answers somehow is answered here the way it is for a
+string made in an arena: the compiler knows where the environment is and what it reaches, puts it in the heap where it may leave,
+and refuses what would reach something gone.  **C++** leaves the same question to the programmer, a `[&]` lambda returned being a
+dangling reference nothing reports; **Rust** answers it with `move` and lifetimes on `impl Fn`, and boxes the closure (`Box<dyn
+Fn>`) where the caller cannot know its size -- which is where every escaping lambda here is; **Swift** marks the escaping parameter
+(`@escaping`) and heap-allocates the context of every closure that may escape; **Go** decides by escape analysis, as this does,
+with a collector behind it.
 
 #### Narrowing
 
@@ -3390,6 +3445,12 @@ allocator the compiler can name again: `⎕heap`, none, or what a parameter is g
 known only at run time, carry it.  Every such decision is in the report log: `lean-value` where a value stays two words,
 `fat-value` where it carries its allocator and why, `answer-thin` for an answer that travels without it.
 
+**What is written into a place from outside the call lasts as long as the caller can read it.**  A field of a record a
+reference parameter names, or an element of an array the caller handed over, is the caller's, and read after the call has ended --
+so what goes there is held to what an answer is: one made in `⎕heap` or in the image goes in as it is, and one made anywhere else
+is copied into `⎕heap` on the way in.  What cannot be copied is refused (4633), and so is a lambda reaching anything that does not
+last (4632).
+
 A value made in a local arena reaches past the scope either as a copy, as above, or with the arena itself (below).
 
 ##### Handing an arena out
@@ -4904,8 +4965,8 @@ let plain: fn(u8) → u8 = twice   ※ which drops it
 ```
 
 So a function and a lambda are two ways of writing one kind of value, and either stands where the other does.  What such a value
-holds is two addresses, where the code is and where what was brought in is; a function brings nothing in, so the second is the
-address of nothing in particular.  **A generic function is not one** (4569): it is compiled once per set of types and which sets
+holds is three words, where the code is, where what was brought in is and its allocator; a function brings nothing in, so the
+last two are nothing.  **A generic function is not one** (4569): it is compiled once per set of types and which sets
 those are is what the calls ask for, so named where a value is wanted there is no call to ask and no type for the name to have.
 
 **A lambda says it the same way**, written before the thing it describes -- and there the word is part of the *type*:
@@ -4927,7 +4988,7 @@ definition is in view -- which is why `@[listable] fn twice(...)` is written wit
 about a body, and a body is not what a name holds; `listable` is the one thing so far that a caller acts on.
 
 **A listable function stands where a plain one is wanted**, dropping the walk, by the rule every other promise follows: it
-promises what the plain one does and adds to it.  One way only, and the two are the same two addresses in the same two
+promises what the plain one does and adds to it.  One way only, and the two are the same three words in the same three
 registers, so nothing is emitted for it.
 
 Compare: **APL**, **BQN** and **UIUA**, where every primitive walks and there is nothing to write at all; **Julia**, whose

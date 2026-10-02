@@ -5070,6 +5070,55 @@
       "option": null
     },
     {
+      "number": 4632,
+      "name": "LANG_LAMBDA_REACHES_THE_CALL",
+      "severity": "error",
+      "message": "what leaves '{name}' here holds a lambda that reaches {found}, which does not last as long",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the function the lambda leaves"
+        },
+        {
+          "name": "found",
+          "type": "string",
+          "description": "what the lambda reaches that the call gives back"
+        }
+      ],
+      "cause": "A lambda that is answered, or written into a place from outside the call, is kept after the call has ended, so everything it reaches has to be: what it brought in by value has to have been made somewhere that lasts, and it cannot reach a variable of the call by reference.  A lambda is never copied -- what it brought in is laid out the way its body reads it, and nothing else knows how -- so one that reaches something of the call's is refused rather than copied.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Lambdas / Where a lambda keeps what it brought in",
+        "requirement": "A lambda that leaves the call that made it reaches nothing the call gives back."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4633,
+      "name": "LANG_WRITTEN_BEYOND_THE_CALL",
+      "severity": "error",
+      "message": "this is written into a place from outside the call, and may be made in {found}, which does not last as long",
+      "args": [
+        {
+          "name": "found",
+          "type": "string",
+          "description": "where what is written may have been made"
+        }
+      ],
+      "cause": "A place reached through a parameter -- a field of a record a reference names, an element of an array the caller handed over -- is the caller's, and what is put there is read after the call has ended.  So what goes there has to last: made in `⎕heap` or in the image.  Something made in an arena, whether this call's or one a parameter handed over, could be given back while the caller still reads it, and nothing in the signature tells the caller so.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Arenas / Knowing the allocator",
+        "requirement": "What is written through a place from outside a call lasts as long as the caller can read it."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 4511,
       "name": "LANG_PURE_FUNCTION_HERE",
       "severity": "note",
@@ -6674,32 +6723,16 @@
       "option": null
     },
     {
-      "number": 4549,
-      "name": "LANG_LAMBDA_ANSWERED",
-      "severity": "error",
-      "message": "a function may not answer with something that holds a lambda",
-      "args": [],
-      "cause": "A lambda keeps what it brought in, and what it brought in lives in the call that wrote it -- so handing one back would hand back a way of reading storage that is gone.  It is the rule a reference follows, at the same place and for the same reason, and lifetime annotations are what will lift both.",
-      "spec": {
-        "document": "spec/spec.md",
-        "section": "The Language / Expressions / Lambdas",
-        "requirement": "A lambda does not leave the call that made it."
-      },
-      "since": "0.1",
-      "default_enabled": true,
-      "option": null
-    },
-    {
       "number": 4550,
       "name": "LANG_LAMBDA_AT_TOP_LEVEL",
       "severity": "error",
       "message": "a variable at the top level may not hold a lambda",
       "args": [],
-      "cause": "A variable here lasts as long as the program, so what a lambda kept would have to as well -- and what it kept belongs to the call that wrote it.  It is the rule about answering with one, asked at the other place a value can escape to.",
+      "cause": "A variable at the top level has its value in the image, and the image does not yet hold an address of code -- nor a string (9902).  A lambda may leave the call that made it otherwise; this is the one place it may not yet go.",
       "spec": {
         "document": "spec/spec.md",
-        "section": "The Language / Expressions / Lambdas",
-        "requirement": "A lambda does not leave the call that made it."
+        "section": "The Language / Expressions / Lambdas / Where a lambda keeps what it brought in",
+        "requirement": "A variable at the top level may not hold a lambda."
       },
       "since": "0.1",
       "default_enabled": true,

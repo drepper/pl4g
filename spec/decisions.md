@@ -9025,6 +9025,63 @@ type carries it -- `fn(u64) → str in it` -- the name after `in` being the read
 Compare: in the proposal -- Zig, Rust with `ouroboros`/`yoke`, C++ `pmr` with a `unique_ptr`,
 Cyclone's dynamic regions.
 
+## 2026-10-02T19:00+02:00 — language
+
+**A lambda may leave the call that made it**
+
+    fn adding(n: u8) → fn(u8) → u8:
+        λ a: u8 [n] → u8 { a + n }
+
+What a lambda brought in lived in a frame of the call that wrote it, so 4549 refused an answer
+holding one -- at the signature, whatever the body did -- and nothing at all stopped one written
+through a reference into the caller's record (`b⌖.f ← λ x: u8 [n] → u8 { … }` compiled, and
+read a dead frame).  Decided by the user, with the goal that the compiler catch every invalid
+use:
+
+1. **Where the environment is, is the compiler's choice: the frame where the lambda provably
+   stays, `⎕heap` otherwise, or the arena `λ … in a` names.**  Proposed against: always the
+   heap (Java's, Go's without the analysis -- simple, and an allocation for every lambda handed
+   to a call); a mark on the lambda the program writes (Rust's `Box::new(move |…|)`, Swift's
+   `@escaping` on the parameter); inference over the whole program (Go's escape analysis, the
+   ML Kit's regions).  "Provably" is syntactic and cautious: handed straight to a call of a
+   function, or bound by `let` to a name not `mut` that is then only called or handed to one.
+   A wrong guess the other way would be unsound; this one costs an allocation at worst.
+2. **A variable brought in by reference keeps the lambda from going further than the
+   variable**, as a reference does -- so one that leaves the call cannot have brought any in.
+   Proposed against: moving such a variable to the heap (Go, Swift, JavaScript, which have a
+   collector to give it back) and allowing it unchecked (C++'s `[&]`, the classic dangling
+   closure).
+3. **The value is three words, like a string**: the code, the environment and its allocator --
+   none for the frame or for a lambda that brought nothing in.  Proposed against: two words and
+   an allocator kept in the environment's first word (smaller, but a lambda with nothing to
+   carry would still need somewhere to say "nothing"); a header with a size (what a sized free
+   wants, and nothing gives an environment back yet).
+
+Decided here, under those:
+
+- **What a lambda reaches is provenance in the arena machinery's keys**: the room it keeps
+  what it brought in in, what each value it brought in was made in, a stand-in for each
+  variable it reaches.  So every rule a string made in an arena is held to holds a lambda,
+  through names, joins, loops, records and lists, with no second mechanism; the reference
+  machinery's `_places` no longer follows lambdas.
+- **A lambda leaving the call reaches only what lasts** (4632, replacing 4549): `⎕heap`, the
+  image, an arena `→ T in a` names.  Never copied -- its environment is laid out the way its body
+  reads it -- so refused where a string would be copied.  A parameter's lambda may have been
+  kept in the caller's frame, so it does not leave either, nor does a lambda bringing it in:
+  `compose(f, g)` answering a lambda is not yet writable (to do).
+- **Writing through a place from outside the call is a way of leaving it**, and was not
+  checked for anything: a string made in an arena given back on the way out could be written
+  into the caller's record.  Now it is held to what an answer is -- copied into `⎕heap` where
+  it can be, refused where it cannot (4633) -- and a lambda to 4632.  Written through a
+  reference to a variable of the call's own, the variable's scope applies (4570, 4614).
+- **Calling a lambda whose arena was given back is refused** (4615), as reading a string is.
+- **An environment is never given back**, as a string a name held is not.  4550 stays: the
+  image cannot hold an address of code yet.
+
+Compare: C++ (the programmer's question, unchecked), Rust (`move`, lifetimes on `impl Fn`,
+`Box<dyn Fn>` for the escaping kind), Swift (`@escaping`, heap context), Go (escape analysis
+and a collector), Java (effectively final, by value, collected).
+
 Open questions
 --------------
 

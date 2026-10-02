@@ -33,7 +33,7 @@ from ..ir.function import Function
 from ..ir.inst import BinOp, CastKind, CmpPred
 from ..ir.layout import DataLayout, parts_of, stride_of
 from ..ir.module import Module
-from ..ir.types import (ARENA, MEM, DictType, ListType, PtrType, SetType,
+from ..ir.types import (ARENA, MEM, DictType, FuncType, ListType, PtrType, SetType,
                         StrType, Type, U8, U64, VOID)
 from ..ir.value import Value
 from . import strings, tables
@@ -64,12 +64,14 @@ def points(ty: Type) -> bool:
     match ty:
         case StrType() | ListType():
             return True
-        case PtrType() | SetType() | DictType():
+        case PtrType() | SetType() | DictType() | FuncType():
             # A reference has lifetimes of its own, and a table is not yet held
-            # to any of this: its keys and values go in as they are.
+            # to any of this: its keys and values go in as they are.  A lambda's
+            # environment is never copied and never given back, so where it is
+            # is asked of a lambda where it goes and nowhere here.
             return False
     from .check import _points_somewhere  # pylint: disable=import-outside-toplevel
-    return _points_somewhere(ty)
+    return _points_somewhere(ty, lambdas=False)
 
 
 def own_function(module: Module, ty: Type) -> Function:

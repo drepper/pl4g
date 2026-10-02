@@ -1,13 +1,80 @@
-※ pl4g-test: compile=error diag=4549
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
 
-※ A lambda keeps what it brought in, and what it brought in lives in the call
-※ that wrote it -- so handing one back would hand back a way of reading storage
-※ that is gone.  It is the rule a reference follows, at the same place and for
-※ the same reason, and lifetime annotations are what will lift both.
+※ **A lambda may leave the call that made it** -- answered, put in a record or a
+※ list that is answered, or written through a reference into the caller's
+※ record -- because where what it brought in is kept is the compiler's choice.
+※ A lambda that provably stays in the call keeps it in the call's frame; every
+※ other keeps it in `⎕heap`, or in the arena `in` names.  The value is three
+※ words, as a string is: the code, where what it brought in is, and the
+※ allocator that came from.
+※
+※ What it reaches is held to the rule a string made in an arena is: an answer
+※ reaches nothing the call gives back.  A lambda reaching a variable of the
+※ call by reference, or what a parameter was handed, may not leave (4632).
+※ `λ … in a` keeps what the lambda brought in in the arena `a`, which then
+※ gives it back with everything else it made.
 
-@[startup]
+type Box = f: fn(u8) → u8
+
+fn plain() → fn(u8) → u8:
+    λ a: u8 → u8 { a + 1u8 }
+
+fn adding(n: u8) → fn(u8) → u8:
+    λ a: u8 [n] → u8 { a + n }
+
+fn either(n: u8, twice: bool) → fn(u8) → u8:
+    if twice:
+        λ a: u8 [n] → u8 { a + n + n }
+    else:
+        λ a: u8 [n] → u8 { a + n }
+
+fn curried(n: u8) → fn(u8) → fn(u8) → u8:
+    λ a: u8 [n] → fn(u8) → u8 { λ b: u8 [n, a] → u8 { n + a + b } }
+
+fn boxed(n: u8) → Box:
+    Box(.f ← λ a: u8 [n] → u8 { a × n })
+
+fn several(n: u8) → [fn(u8) → u8]:
+    [λ a: u8 [n] → u8 { a + n }, λ a: u8 [n] → u8 { a - n }]
+
+fn named(n: u8) → fn(u8) → u8:
+    let g: fn(u8) → u8 = λ a: u8 [n] → u8 { a + n + 1u8 }
+    g
+
+@[impure]
+fn keep(b: &mut Box, n: u8):
+    b⌖.f ← λ x: u8 [n] → u8 { x + n + 3u8 }
+
+@[startup, impure]
 fn main() → u6:
+    let p: fn(u8) → u8 = plain()
+    let q: fn(u8) → u8 = adding(5u8)
+    let r: fn(u8) → u8 = either(5u8, true)
+    let s: fn(u8) → u8 = either(5u8, false)
+    let c: fn(u8) → fn(u8) → u8 = curried(1u8)
+    let d: fn(u8) → u8 = c(2u8)
+    let b: Box = boxed(3u8)
+    let m: fn(u8) → u8 = b.f
+    let l: [fn(u8) → u8] = several(4u8)
+    let total: mut u8 = 0u8
+    foreach one: fn(u8) → u8 = l:
+        total ← total + one(10u8)
+    let n: fn(u8) → u8 = named(1u8)
+    let pool: mut arena = ⎕arena
+    let k: fn(u8) → u8 = λ x: u8 [n] → u8 { n(x) + 2u8 } in pool
+    let got: u8 = k(1u8)
+    ⎕empty(pool)
+    let into: mut Box = Box(.f ← λ x: u8 → u8 { x })
+    keep(&mut into, 1u8)
+    let w: fn(u8) → u8 = into.f
+    if p(1u8) ≠ 2u8: return 1u6
+    if q(1u8) ≠ 6u8: return 2u6
+    if r(1u8) ≠ 11u8: return 3u6
+    if s(1u8) ≠ 6u8: return 4u6
+    if d(3u8) ≠ 6u8: return 5u6
+    if m(2u8) ≠ 6u8: return 6u6
+    if total ≠ 20u8: return 7u6
+    if n(1u8) ≠ 3u8: return 9u6
+    if got ≠ 5u8: return 10u6
+    if w(1u8) ≠ 5u8: return 11u6
     0u6
-
-fn made() → fn(u8) → u8:
-    λ a: u8 → u8 { a }

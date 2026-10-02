@@ -1,0 +1,15 @@
+※ pl4g-test: compile=error diag=4632
+
+※ A lambda that brought a variable in by reference reaches the variable where it
+※ is, and a variable of the call is gone when the call is.  So it may be called,
+※ handed to a call, and bound to a name that does not outlive the variable --
+※ and not answered, which would hand back a way of reaching storage that is
+※ gone.  It is the rule a reference follows, asked of what a lambda carries.
+
+fn counting(n: u8) → fn(u8) → u8:
+    let seen: u8 = n
+    λ a: u8 [&seen] → u8 { a + seen }
+
+@[startup]
+fn main() → u6:
+    0u6

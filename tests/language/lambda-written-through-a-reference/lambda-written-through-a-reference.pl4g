@@ -1,0 +1,17 @@
+※ pl4g-test: compile=error diag=4570
+
+※ Written through a reference to a variable of the call's own, a lambda is held
+※ to that variable's scope, as it would be written there by name: one reaching
+※ a variable of an inner block may not be put in a record that outlives it.
+
+type Box = f: fn(u8) → u8
+
+@[startup, impure]
+fn main() → u6:
+    let b: mut Box = Box(.f ← λ x: u8 → u8 { x })
+    let first: fn(u8) → u8 = b.f
+    if first(0u8) = 0u8:
+        let n: u8 = 1u8
+        let r: &mut Box = &mut b
+        r⌖.f ← λ x: u8 [&n] → u8 { x + n }
+    0u6

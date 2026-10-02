@@ -498,6 +498,59 @@ _BINDS: Final[dict[str, tuple[str, ...]]] = {
 }
 
 
+def _only_called(name: str, node: object,
+                 calls: Callable[[ast.Call], bool]) -> bool:
+    """Whether every mention of *name* below *node* calls it or hands it to a call.
+
+    To a call of a function, which *calls* says of a call: what a callee does with
+    a function it is handed is held to the callee's own rules, which do not let it
+    leave that call.  Anything else -- a name bound to it, a field, a list, a
+    capture, a macro that could do anything with it -- may take it further.
+    """
+    match node:
+        case ast.NameRef() | ast.Capture():
+            return node.name != name
+        case ast.AssignStmt():
+            if name in (node.name, *(one for one, _ in node.more)):
+                return False
+        case ast.Invoke() | ast.Quote():
+            seen: list[str] = []
+            _named_in(node, seen)
+            return name not in seen
+        case ast.Call():
+            handed = calls(node)
+            if not (isinstance(node.callee, ast.NameRef)
+                    or _only_called(name, node.callee, calls)):
+                return False
+            for one in node.args:
+                value = one.value if isinstance(one, ast.Named) else one
+                if handed and isinstance(value, ast.NameRef):
+                    continue
+                if not _only_called(name, one, calls):
+                    return False
+            return True
+    if isinstance(node, ast.Node):
+        return all(_only_called(name, getattr(node, one.name), calls)
+                   for one in fields_of(node))
+    if isinstance(node, (list, tuple)):
+        return all(_only_called(name, one, calls) for one in node)
+    return True
+
+
+def _nodes_below(node: object) -> list[ast.Node]:
+    """Every node below *node*, itself included, in no particular order."""
+    found: list[ast.Node] = []
+    waiting: list[object] = [node]
+    while waiting:
+        one = waiting.pop()
+        if isinstance(one, ast.Node):
+            found.append(one)
+            waiting.extend(getattr(one, each.name) for each in fields_of(one))
+        elif isinstance(one, (list, tuple)):
+            waiting.extend(one)
+    return found
+
+
 def _named_in(node: object, into: list[str]) -> None:
     """Every name written below *node*, in the order they are written.
 
@@ -1151,14 +1204,17 @@ def _reached_from(value: Value, sources: Sequence[Value],
         return False
 
 
-def _points_somewhere(ty: Type, seen: frozenset[int] = frozenset()) -> bool:
+def _points_somewhere(ty: Type, seen: frozenset[int] = frozenset(),
+                      lambdas: bool = True) -> bool:
     """Whether a value of *ty* may point into room something else holds.
 
     A string, a list, a collection, an array whose type does not say its length, a
     cursor, and a reference all are where their contents are rather than being them,
-    so one made in an arena points into it.  Anything holding one of those does too;
-    a number, a truth value and a character are what they are, wherever they came
-    from.
+    so one made in an arena points into it.  So does a lambda, which carries where
+    what it brought in is -- unless *lambdas* says to leave those out, which is what
+    asking about what can be copied and given back does: an environment is neither.
+    Anything holding one of those does too; a number, a truth value and a character
+    are what they are, wherever they came from.
     """
     if id(ty) in seen:
         return False
@@ -1167,17 +1223,21 @@ def _points_somewhere(ty: Type, seen: frozenset[int] = frozenset()) -> bool:
         case StrType() | ListType() | SetType() | DictType() | PtrType() \
                 | CursorType():
             return True
+        case FuncType():
+            return lambdas
         case ArrayType():
-            return not ty.fixed or _points_somewhere(ty.element, deeper)
+            return not ty.fixed or _points_somewhere(ty.element, deeper, lambdas)
         case TupleType():
-            return any(_points_somewhere(m, deeper) for m in ty.members)
+            return any(_points_somewhere(m, deeper, lambdas) for m in ty.members)
         case ResultType():
-            return _points_somewhere(ty.ok, deeper) or (
-                ty.err is not None and _points_somewhere(ty.err, deeper))
+            return _points_somewhere(ty.ok, deeper, lambdas) or (
+                ty.err is not None and _points_somewhere(ty.err, deeper, lambdas))
         case ProductType():
-            return any(_points_somewhere(one, deeper) for _, one in ty.fields)
+            return any(_points_somewhere(one, deeper, lambdas)
+                       for _, one in ty.fields)
         case SumType():
-            return any(_points_somewhere(one, deeper) for _, one in ty.variants)
+            return any(_points_somewhere(one, deeper, lambdas)
+                       for _, one in ty.variants)
     return False
 
 
@@ -1440,10 +1500,12 @@ def _operands_of(expr: ast.Expr) -> tuple[ast.Expr, ...]:
 def _takes_room(expr: ast.Expr) -> bool:
     """Whether what the expression does takes room from an arena.
 
-    A join of two, and a collection written out.  Everything else is worked out in
-    registers, so saying which arena it comes from would be saying nothing.
+    A join of two, a collection written out, and a lambda, which keeps what it
+    brings in somewhere.  Everything else is worked out in registers, so saying
+    which arena it comes from would be saying nothing.
     """
-    if isinstance(expr, (ast.SetLit, ast.DictLit, ast.ListLit, ast.ArrayLit)):
+    if isinstance(expr, (ast.SetLit, ast.DictLit, ast.ListLit, ast.ArrayLit,
+                         ast.Lambda)):
         return True
     return isinstance(expr, ast.Binary) and expr.op is ast.BinaryOp.CONCAT
 
@@ -2128,6 +2190,17 @@ class Checker:
         #: Every arena a name is bound to, by that name's identity, so that what a
         #: value records about where it was made can be asked about again.
         self._arena_by_id: dict[int, _Local] = {}
+        #: Where a lambda reaches into this call -- the frame its environment is in,
+        #: a variable it brought in by reference -- as something standing where an
+        #: arena would, at the depth of the scope it goes with: a value reaching one
+        #: is held to the rule a value made in an arena is.  By key, as arenas are.
+        self._stand_ins: dict[int, _Local] = {}
+        #: The stand-in for each variable a lambda brought in by reference, by the
+        #: variable's identity, so that two lambdas reaching one variable say so.
+        self._storage: dict[int, tuple[_Local, _Local]] = {}
+        #: The lambdas that provably stay in the call that writes them, whose
+        #: environment may therefore be in its frame, by identity.
+        self._stays: dict[int, ast.Lambda] = {}
         #: Parameters whose provenance the body cannot know, by the marker they carry
         #: as their arenas: a function saying where its answer was made may not
         #: answer one of these, there being no saying where it was made.
@@ -3470,14 +3543,6 @@ class Checker:
             params = tuple(self._resolve_type(p.type) for p in node.params)
             params = self._as_the_entry_hands_over(node, attrs, params)
             ret = self._return_type(node.ret_type)
-            if _holds_a_lambda(ret):
-                # What a lambda kept belongs to the call that wrote it, so
-                # handing one back would hand back a way of reading storage
-                # that is gone.  It is the rule a reference follows, at the
-                # same place and for the same reason.
-                self._diags.emit(D.LANG_LAMBDA_ANSWERED,
-                                 node.ret_type.span if node.ret_type is not None
-                                 else node.name_span)
             borrows = self._borrowed_from(node, ret)
             made_in, param_made_in = self._made_in_of(node, params, ret)
             hands_out = _hands_out_of(node)
@@ -3829,7 +3894,7 @@ class Checker:
                                  func=func.name,
                                  arena=func.param_names[arena_at])
                 break
-        if not owned.points(func.ty.ret):
+        if not (owned.points(func.ty.ret) or _holds_a_lambda(func.ty.ret)):
             return
         if func.attrs.external is not None:
             # What the outside answers is the outside's, which nothing here gives
@@ -5732,8 +5797,19 @@ class Checker:
                     into.update(local.arenas)
                 return
             case ast.Lambda():
-                # What a lambda's body takes room from is its business when it
-                # runs; what it brings in is what the name says.
+                # Lowered, it said what it reaches (`_lower_lambda`).  Read ahead
+                # of that, it is taken to keep what it brings in in `⎕heap` and
+                # to reach what the names it brings in were made in; what its
+                # body takes room from is its business when it runs.
+                into.add(_HEAP)
+                names = [one.name for one in node.captures]
+                if node.brings_in is not None:
+                    _named_in(node.body, names)
+                for one in names:
+                    local = self._find_local(one)
+                    if local is not None and not self._is_arena(local) \
+                            and local.gone_at is None:
+                        into.update(local.arenas)
                 return
         if isinstance(node, ast.Node):
             for one in fields_of(node):
@@ -5779,12 +5855,27 @@ class Checker:
         for one in made:
             arena = self._arena_by_id.get(one)
             if arena is not None and arena.depth > local.depth:
-                self._diags.emit(D.LANG_ARENA_VALUE_OUTLIVES, span,
-                                 name=name, arena=arena.name)
+                self._outlives_arena(name, arena, span)
                 # Said once: what the name holds is not also reported as gone
                 # every time it is read after the arena is.
                 local.arenas = frozenset()
                 return
+
+    def _outlives_arena(self, name: str, arena: _Local, span: Span) -> None:
+        """Report something given to *name* that was made in *arena*, or reaches
+        what stands for one, while *name* outlives it (4614, 4570).
+
+        A lambda reaching this call's frame, or a variable it brought in by
+        reference, reaches a place: that is the reference's rule and is said in
+        its words.
+        """
+        if id(arena) in self._stand_ins:
+            self._diags.emit(D.LANG_REF_OUTLIVES_PLACE, span, name=name,
+                             place=arena.name) \
+                .note(D.LANG_VARDEF_DEFINED_HERE, arena.span, name=arena.name)
+            return
+        self._diags.emit(D.LANG_ARENA_VALUE_OUTLIVES, span, name=name,
+                         arena=arena.name)
 
     def _holder_of(self, value: ast.Expr) -> int | None:
         """The allocator the elements of the container *value* comes to are kept in.
@@ -5840,7 +5931,8 @@ class Checker:
                 local.span if local.span.is_valid else span)
             return
         allocators = sorted({one for one in made
-                             if one == _HEAP or one in self._arena_by_id})
+                             if one == _HEAP or (one in self._arena_by_id
+                                                 and one not in self._stand_ins)})
         unknown = any(one in self._unknown_by_id or _is_element_key(one)
                       for one in made)
         if not made:
@@ -5879,8 +5971,7 @@ class Checker:
             if arena is None or arena.is_parameter:
                 continue
             if arena.depth >= opened_at:
-                self._diags.emit(D.LANG_ARENA_VALUE_OUTLIVES, span,
-                                 name="what the block comes to", arena=arena.name)
+                self._outlives_arena("what the block comes to", arena, span)
                 return
 
     def _given_back(self, arena: _Local, span: Span) -> None:
@@ -6027,8 +6118,7 @@ class Checker:
         for one in made:
             arena = self._arena_by_id.get(one)
             if arena is not None and arena.depth > local.depth:
-                self._diags.emit(D.LANG_ARENA_VALUE_OUTLIVES, span,
-                                 name=root.name, arena=arena.name)
+                self._outlives_arena(root.name, arena, span)
                 return
         local.arenas = local.arenas | made
 
@@ -6175,7 +6265,13 @@ class Checker:
         """
         ty = func.ty.ret
         said = self._answer_made_in
-        if said is None or not owned.points(ty) or self._value_type_of(value) is ERROR:
+        if said is None or self._value_type_of(value) is ERROR:
+            return value
+        if _holds_a_lambda(ty) \
+                and not self._lambda_may_leave(written, said[0] | {_HEAP},
+                                               func.name, span):
+            return UndefConst(ERROR)
+        if not owned.points(ty):
             return value
         made = self._arenas_in(written)
         allowed, named = said
@@ -6233,6 +6329,42 @@ class Checker:
             owned.give_back(builder, value, ty,
                             "heap" if self._freshly_heap(written) else None)
         return copied
+
+    def _lambda_may_leave(self, written: ast.Expr, lasting: frozenset[int],
+                          name: str, span: Span) -> bool:
+        """Check that a lambda leaving the call reaches nothing that stays (4632).
+
+        What leaves -- an answer, something written through a place from outside
+        -- is kept beyond this call, so what it reaches has to be kept that long:
+        what the program has from the start, `⎕heap`, which nothing gives back a
+        lambda's environment from, and what *lasting* adds.  A lambda is never
+        copied: what it brought in is laid out as its body reads it, and nothing
+        but its body knows how.  So one reaching anything else -- this call's
+        frame, a variable of this call's, an arena of its own, whatever a
+        parameter was handed -- is refused rather than copied.
+        """
+        made = self._arenas_in(written)
+        stays = sorted(one for one in made if one not in lasting)
+        if not stays:
+            return True
+        self._diags.emit(D.LANG_LAMBDA_REACHES_THE_CALL, span, name=name,
+                         found=", ".join(sorted({self._reach_written(one)
+                                                 for one in stays})))
+        return False
+
+    def _reach_written(self, key: int) -> str:
+        """What a report calls something a value reaches, by its key."""
+        reaching = self._stand_ins.get(key)
+        if reaching is not None:
+            return "".join(("'", reaching.name, "'"))
+        if key == _HEAP or key in self._arena_by_id:
+            return self._owner_written(key)
+        unknown = self._unknown_by_id.get(key)
+        if unknown is not None:
+            return "".join(("what '", unknown.name, "' was handed"))
+        if _is_element_key(key):
+            return "a container it was read out of"
+        return "something of this call's"
 
     def _freshly_heap(self, written: ast.Expr) -> bool:
         """Whether *written* comes to an object the heap just made.
@@ -6623,6 +6755,7 @@ class Checker:
         self._addressed = set()
         if node.body is not None:
             _addressed_in(node.body, self._addressed)
+            self._lambdas_that_stay(node.body)
         # Every parameter gets its register before any of them is given storage:
         # a block's parameters are what it is entered with, and the storage is
         # written by instructions that follow them.
@@ -7281,9 +7414,13 @@ class Checker:
                 at_part = self._record_into(builder, place, value, held, span,
                                             at_part)
                 continue
-            builder.store(place, builder.extract(value, at_part, held, span),
-                          span)
-            at_part += 1
+            # A field of several parts -- text, a lambda -- is that many leaves,
+            # put back together into the one value the store writes.
+            pieces = parts_of(held)
+            builder.store(place, builder.whole(
+                [builder.extract(value, at_part + which, piece, span)
+                 for which, piece in enumerate(pieces)], held, span), span)
+            at_part += len(pieces)
         return at_part
 
     def _record_from(self, builder: IRBuilder, where: Value, ty: ProductType,
@@ -7313,7 +7450,7 @@ class Checker:
             if isinstance(held, ProductType):
                 found.extend(self._leaves_from(builder, place, held, span))
                 continue
-            found.append(builder.load(place, span))
+            found.extend(builder.leaves(builder.load(place, span), held, span))
         return found
 
     def _element_place(self, builder: IRBuilder, base: Value, element: Type,
@@ -7850,6 +7987,11 @@ class Checker:
             return
         place = self._element_place(builder, start, ty.element, offset, stmt.span)
         if not owned.points(ty.element):
+            if _holds_a_lambda(ty.element):
+                kept = self._into_a_place(builder, start, stmt.base, stmt.value,
+                                          value, ty.element, stmt.span)
+                if kept is None:
+                    return
             builder.store(place, value, stmt.span)
             return
         # An element that points somewhere is kept as the array's allocator
@@ -7921,6 +8063,7 @@ class Checker:
         held = ty.fields[at][1]
         place = self._field_place(builder, where, ty, at, stmt.span)
         if isinstance(held, ProductType) and not _holds_a_reference(held) \
+                and not self._kept_by_the_place(where, stmt.base, held) \
                 and self._is_record_literal(stmt.value, held):
             # A record written out goes straight into the place that will hold
             # it, for the reason a definition's does: there is no register a
@@ -7932,6 +8075,11 @@ class Checker:
         if self._value_type_of(value) is ERROR:
             return
         self._owning_field(stmt.value, ty, stmt.name, held)
+        kept = self._into_a_place(builder, where, stmt.base, stmt.value, value,
+                                  held, stmt.span)
+        if kept is None:
+            return
+        value = kept
         if _holds_a_reference(held) \
                 and not self._long_enough_for(where, value, stmt):
             return
@@ -7939,6 +8087,77 @@ class Checker:
             self._record_into(builder, place, value, held, stmt.span)
             return
         builder.store(place, value, stmt.span)
+
+    def _kept_by_the_place(self, where: Value, base: ast.Expr, ty: Type) -> bool:
+        """Whether what goes into a place is asked how long it lasts
+        (`_into_a_place`), which a record built where it goes would not be."""
+        if not (owned.points(ty) or _holds_a_lambda(ty)):
+            return False
+        root = base
+        while isinstance(root, (ast.Member, ast.Element, ast.Index)):
+            root = root.base
+        return isinstance(root, ast.Deref) or not self._made_here(where)
+
+    def _into_a_place(self, builder: IRBuilder, where: Value, base: ast.Expr,
+                      written: ast.Expr, value: Value, ty: Type, span: Span,
+                      through: bool = False) -> Value | None:
+        """What goes into a place reached through a reference or handed over, kept
+        as long as the place is.
+
+        A place from outside the call -- a parameter's, or one read out of memory --
+        is the caller's, and what is written there is read after the call has
+        ended: it has to last that long (4633), which `⎕heap` and the image do.  A
+        string or a list made anywhere else is copied into `⎕heap`, as an answer
+        is; a lambda is never copied (4632).  A place of this call's own reached
+        through a reference is the variable the reference names, and what goes in
+        is held to that variable's scope, as it would be written there by name.
+
+        Answers what to write, or nothing where it may not be written.
+        """
+        if not (owned.points(ty) or _holds_a_lambda(ty)):
+            return value
+        func = self._demanding[1]
+        if not self._made_here(where):
+            if _holds_a_lambda(ty):
+                return value if self._lambda_may_leave(
+                    written, frozenset({_HEAP}),
+                    func.name if func is not None else "", span) else None
+            made = self._arenas_in(written)
+            stays = sorted(one for one in made if one != _HEAP)
+            if not stays:
+                return value
+            if not owned.can_own(ty):
+                self._diags.emit(D.LANG_WRITTEN_BEYOND_THE_CALL, span,
+                                 found=", ".join(sorted({self._reach_written(one)
+                                                         for one in stays})))
+                return None
+            if func is not None:
+                self._module.reports.record(
+                    ReportKind.COPY_INTO_ALLOCATOR, func.name,
+                    "".join(("what is written into a place from outside the call "
+                             "is copied into ", HEAP_NAME, ", which lasts as long "
+                             "as the caller can read it")), span)
+            return builder.call(owned.own_function(self._module, ty),
+                                (self._owner_place(builder, _HEAP, span), value),
+                                ty, span)
+        root = base
+        while isinstance(root, (ast.Member, ast.Element, ast.Index)):
+            root = root.base
+        if not (through or isinstance(root, ast.Deref)):
+            # Written by name, which `_made_in_part` holds to the name's scope.
+            return value
+        named = self._named_place_of(where)
+        if named is None:
+            return value
+        made = self._arenas_in(written)
+        for one in made:
+            arena = self._arena_by_id.get(one)
+            if arena is not None and not arena.is_parameter \
+                    and arena.depth > named.depth:
+                self._outlives_arena(named.name, arena, span)
+                return None
+        named.arenas = named.arenas | made
+        return value
 
     def _long_enough_for(self, where: Value, value: Value,
                          stmt: ast.MemberAssign) -> bool:
@@ -8043,6 +8262,11 @@ class Checker:
         is taken to do everything: a pure function may not make one.
         """
         local.read = True
+        if local.gone_at is not None:
+            # What it brought in went with an arena, or with a container that
+            # replaced what it was read out of: calling it would read that.
+            self._told_gone(local, local.name, expr.callee.span)
+            return UndefConst(ERROR)
         ty = self._held_by(local)
         assert isinstance(ty, FuncType)
         held = self._read_capture(builder, local, expr.span)
@@ -8200,6 +8424,7 @@ class Checker:
         try:
             assert node.body is not None
             _addressed_in(node.body, self._addressed)
+            self._lambdas_that_stay(node.body)
             arriving = [block.add_param(one, param.name)
                         for one, param in zip(func.ty.params, node.params)]
             for param, value in zip(node.params, arriving):
@@ -8473,12 +8698,14 @@ class Checker:
                    for one in self._bind_attributes(attrs, AttrTarget.CALLABLE))
 
     def _lower_lambda(self, builder: IRBuilder, expr: ast.Lambda,
-                      expected: Type | None) -> Value:
+                      expected: Type | None,
+                      arena: tuple[Value, frozenset[int]] | None = None) -> Value:
         """Lower `\N{GREEK SMALL LETTER LAMDA} \N{HORIZONTAL ELLIPSIS}`: a function written where a value is wanted.
 
-        What it comes to is two addresses -- where its code is and where what it
-        brought in with it is -- which is one type whether it brought anything
-        in or nothing, so either stands where a `fn(\N{HORIZONTAL ELLIPSIS})` is wanted.
+        What it comes to is three words -- where its code is, where what it
+        brought in with it is, and the allocator that room came from -- which is
+        one type whether it brought anything in or nothing, so either stands
+        where a `fn(\N{HORIZONTAL ELLIPSIS})` is wanted.
 
         The body becomes a function of the module like any other, with the
         things it brought in reached through a first parameter nobody wrote.
@@ -8486,6 +8713,12 @@ class Checker:
         whole program has: the scope it is checked in holds those and nothing
         else, which is what makes the capture list the list of what it depends
         on rather than something a reader works out by reading the body.
+
+        Where what it brought in is kept is the compiler's choice: this call's
+        frame for a lambda that provably stays in it, `\N{APL FUNCTIONAL SYMBOL QUAD}heap` for every other,
+        and the arena *arena* names where the program wrote `in`.  What the
+        lambda then reaches is written down as where it was made, so that every
+        place it may go asks the question a string made in an arena is asked.
         """
         # The name comes first so that everything recorded about this lambda
         # can say which one it was: a lambda is written with none, so the log
@@ -8514,7 +8747,12 @@ class Checker:
         held = tuple(self._held_by_capture(one, local) for one, local in taken)
         if any(one is ERROR for one in held):
             return UndefConst(ERROR)
-        place, offsets = self._environment(builder, taken, held, expr.span)
+        stays = arena is None and self._stays.get(id(expr)) is expr
+        # What it reaches is worked out before the body is lowered and the
+        # environment filled, from the names as they stand where it is written.
+        reaches = self._reached_by(builder, taken)
+        place, offsets, allocator, kept = self._environment(
+            builder, taken, held, expr.span, stays, arena)
         func = self._function_of_a_lambda(expr, params, answer, held, offsets,
                                           taken, name)
         if func is None:
@@ -8526,26 +8764,138 @@ class Checker:
                    else builder.cast(CastKind.BITCAST, place, _ENVIRONMENT,
                                      expr.span))
         made = builder.make_tuple(
-            (builder.code_address(func, expr.span), carried), ty, expr.span)
-        # What it brought in by reference is what it reaches, so it lasts no
-        # longer than the shortest-lived of those: handing it to a name that
-        # outlives them would be the same escape a reference is refused for,
-        # and `_named_place_of` is where that is asked.
-        reaches = self._shortest_brought_in(taken)
-        if reaches is not None:
-            self._places[id(made)] = reaches
+            (builder.code_address(func, expr.span), carried, allocator), ty,
+            expr.span)
+        if stays and taken:
+            # The frame it is in goes with the scope it was written in, as far
+            # as anything holding the lambda is concerned: a turn of a loop
+            # writes the same room again.
+            frame = _Local(name="".join(("what ", name, " brought in")),
+                           value=place, span=expr.span,
+                           depth=len(self._scopes))
+            self._stand_ins[id(frame)] = frame
+            self._arena_by_id[id(frame)] = frame
+            kept = frozenset({id(frame)})
+        self._made_from[id(expr)] = (expr, kept | reaches)
+        self._report_environment(name, taken, stays, arena, expr.span)
         if not self._accepts(expected, ty):
             self._report_mismatch(expr.span, ty, expected)
             return UndefConst(ERROR)
         return made
 
+    def _reached_by(self, builder: IRBuilder,
+                    taken: Sequence[tuple[ast.Capture, _Local]]
+                    ) -> frozenset[int]:
+        """Everything a lambda reaches through what it brought in, as keys.
+
+        A variable brought in by reference is reached where it is, which goes
+        with the scope it was bound in; a value brought in reaches whatever it
+        was made in -- a string in an arena, a lambda whose environment is in
+        the frame -- and a reference brought in by value reaches the variable it
+        names, where that is one of this call's.
+        """
+        found: set[int] = set()
+        for one, local in taken:
+            if one.by_reference:
+                found.add(self._storage_key(local))
+                continue
+            what = self._held_by(local)
+            if not _points_somewhere(what) or local.gone_at is not None:
+                continue
+            found.update(local.arenas)
+            if _holds_a_reference(what) and not local.placed:
+                named = self._named_place_of(local.value)
+                if named is not None:
+                    found.add(self._storage_key(named))
+        return frozenset(found)
+
+    def _storage_key(self, local: _Local) -> int:
+        """What stands for the place a variable is, where a lambda reaches it.
+
+        One per variable, at its depth: it is the variable's storage that is
+        reached, and that goes when the variable's scope does.
+        """
+        found = self._storage.get(id(local))
+        if found is not None and found[0] is local:
+            return id(found[1])
+        stand_in = _Local(name=local.name, value=local.value, span=local.span,
+                          depth=local.depth)
+        self._storage[id(local)] = (local, stand_in)
+        self._stand_ins[id(stand_in)] = stand_in
+        self._arena_by_id[id(stand_in)] = stand_in
+        return id(stand_in)
+
+    def _report_environment(self, name: str,
+                            taken: Sequence[tuple[ast.Capture, _Local]],
+                            stays: bool,
+                            arena: tuple[Value, frozenset[int]] | None,
+                            span: Span) -> None:
+        """Say in the report log where what a lambda brought in is kept."""
+        func = self._demanding[1]
+        if not taken:
+            said = "brings nothing in, so it carries no environment and lasts " \
+                "as long as the program"
+        elif arena is not None:
+            said = "keeps what it brought in in the arena 'in' named"
+        elif stays:
+            said = "keeps what it brought in in this call's frame: it is only " \
+                "called, or handed to a call, and so provably stays in the call"
+        else:
+            said = "".join(("keeps what it brought in in ", HEAP_NAME,
+                            ": it may leave the call that wrote it"))
+        self._module.reports.record(
+            ReportKind.ALLOCATOR, func.name if func is not None else name,
+            "".join(("'", name, "' ", said)), span)
+
+    def _lambdas_that_stay(self, body: ast.Node) -> None:
+        """Find every lambda in *body* that provably stays in the call writing it.
+
+        Written as an argument of a call of a function, or bound by `let` to a
+        name that is not `mut` and is from then on only called or handed to a call
+        of a function: what a callee does with a function it is handed is held to
+        its own rules, and those do not let it leave that call.  What such a
+        lambda brought in may be in this call's frame.  Every other lambda may
+        leave, and what it brings in is kept in `\N{APL FUNCTIONAL SYMBOL QUAD}heap` -- or the arena `in` names.
+        """
+        for node in _nodes_below(body):
+            if isinstance(node, ast.Call) and self._calls_a_function(node):
+                for one in node.args:
+                    value = one.value if isinstance(one, ast.Named) else one
+                    if isinstance(value, ast.Lambda):
+                        self._stays[id(value)] = value
+            elif isinstance(node, ast.Block):
+                for at, stmt in enumerate(node.stmts):
+                    if isinstance(stmt, ast.VarDef) \
+                            and isinstance(stmt.value, ast.Lambda) \
+                            and not stmt.mutable and not stmt.more \
+                            and stmt.made_in is None \
+                            and _only_called(stmt.name, node.stmts[at + 1:],
+                                             self._calls_a_function):
+                        self._stays[id(stmt.value)] = stmt.value
+
+    def _calls_a_function(self, call: ast.Call) -> bool:
+        """Whether *call* calls a function, rather than making a record or a variant
+        or asking the compiler something -- which keep what they are handed."""
+        callee = call.callee
+        if isinstance(callee, ast.NameRef):
+            if callee.name.startswith(BUILTIN_GLYPH):
+                return False
+            # A function, or a name bound inside a body -- which, called, holds
+            # a lambda.
+            named = self._top.get(callee.name)
+            return named is None or isinstance(named, (Function, _Generic))
+        if isinstance(callee, ast.Member) and isinstance(callee.base, ast.NameRef):
+            return isinstance(self._top.get(callee.base.name), LoadedModule) \
+                and self._type_exported(callee) is None
+        return False
+
     def _function_as_a_value(self, builder: IRBuilder, func: object,
                              ref: ast.NameRef, expected: Type | None) -> Value:
         """A named function where a value is wanted, shaped the way a lambda is.
 
-        What a name of function type holds is two addresses, where the code is
-        and where what was brought in is.  A function brings nothing in, so the
-        second is the address of nothing in particular -- but the first cannot
+        What a name of function type holds is where the code is, where what was
+        brought in is, and its allocator.  A function brings nothing in, so the
+        last two are nothing -- but the first cannot
         be the function itself: everything called through such a name is called
         with the environment first, and a definition has no such parameter.
 
@@ -8563,10 +8913,13 @@ class Checker:
         shim = self._shim_for(func, ref.span)
         if shim is None:
             return UndefConst(ERROR)
+        # It brought nothing in, so it carries no environment and no allocator,
+        # and lasts as long as the program.
         made = builder.make_tuple(
             (builder.code_address(shim, ref.span),
-             builder.cast(CastKind.BITCAST, builder.frame(U8, ref.span),
-                          _ENVIRONMENT, ref.span)),
+             builder.cast(CastKind.BITCAST, builder.int_const(U64, 0),
+                          _ENVIRONMENT, ref.span),
+             tables.no_allocator(builder)),
             func.ty, ref.span)
         if not self._accepts(expected, func.ty):
             self._report_mismatch(ref.span, func.ty, expected)
@@ -8612,22 +8965,6 @@ class Checker:
                      "', which the program named where a value was wanted")),
             span)
         return shim
-
-    def _shortest_brought_in(self,
-                             taken: Sequence[tuple[ast.Capture, _Local]]
-                             ) -> _Local | None:
-        """The shortest-lived name a lambda reaches, of those it brought in.
-
-        Only the ones brought in by reference: what is brought in by value is a
-        copy, and a name standing for a place hands over what is *at* the place,
-        so nothing brought in that way ties the lambda to anything.
-        """
-        deepest: _Local | None = None
-        for one, local in taken:
-            if one.by_reference and (deepest is None
-                                     or local.depth > deepest.depth):
-                deepest = local
-        return deepest
 
     def _captures_of(self, expr: ast.Lambda, name: str
                      ) -> list[tuple[ast.Capture, _Local]] | None:
@@ -8708,20 +9045,24 @@ class Checker:
 
     def _environment(self, builder: IRBuilder,
                      taken: Sequence[tuple[ast.Capture, _Local]],
-                     held: Sequence[Type], span: Span
-                     ) -> tuple[Value, tuple[int, ...]]:
+                     held: Sequence[Type], span: Span, stays: bool,
+                     arena: tuple[Value, frozenset[int]] | None
+                     ) -> tuple[Value, tuple[int, ...], Value, frozenset[int]]:
         """Room for what the lambda brings in, filled where it is written.
 
-        A frame of this call and not room from the arena, because a lambda does
-        not leave the call that made it -- which is the rule a reference
-        follows, and is what makes the two safe by one argument.
+        In this call's frame where the lambda provably stays in the call, in the
+        arena `in` named where the program said, and in `\N{APL FUNCTIONAL SYMBOL QUAD}heap` otherwise.
+        Answers the room, where in it each capture is, the allocator it came
+        from -- nothing for the frame -- and where the room was made, as keys.
         """
         if not taken:
-            # Room for nothing, which is still somewhere: one type covers the
-            # lambda that brought something in and the one that brought
-            # nothing, so both carry an address and this is the address of
-            # nothing in particular.  A byte, and nothing reads it.
-            return (builder.frame(U8, span), ())
+            # Room for nothing, which is nowhere: one type covers the lambda
+            # that brought something in and the one that brought nothing, and
+            # this one carries no address and no allocator, nothing being there
+            # to read or give back.
+            return (builder.cast(CastKind.BITCAST, builder.int_const(U64, 0),
+                                 _ENVIRONMENT, span),
+                    (), tables.no_allocator(builder), frozenset())
         slots = tuple(self._slot_for(one) for one in held)
         if len(slots) == 1:
             inside: Type = slots[0]
@@ -8729,7 +9070,19 @@ class Checker:
         else:
             inside = self._module.types.tuple_type(slots)
             offsets = member_offsets_of(inside, _LAYOUT)
-        place = builder.frame(inside, span)
+        if stays:
+            place = builder.frame(inside, span)
+            allocator = tables.no_allocator(builder)
+            kept: frozenset[int] = frozenset()
+        else:
+            if arena is not None:
+                allocator, kept = arena
+            else:
+                allocator = self._owner_place(builder, _HEAP, span)
+                kept = frozenset({_HEAP})
+            place = tables.allocate(
+                builder, allocator,
+                builder.int_const(U64, max(size_of(inside, _LAYOUT), 1)))
         for at, ((one, local), what) in enumerate(zip(taken, held)):
             value = self._read_capture(builder, local, span)
             if one.by_reference:
@@ -8740,7 +9093,7 @@ class Checker:
                          else builder.cast(CastKind.BITCAST, local.value, what,
                                            span))
             self._put_away(builder, place, offsets[at], what, value, span)
-        return (place, offsets)
+        return (place, offsets, allocator, kept)
 
     def _slot_for(self, what: Type) -> Type:
         """What the environment holds one capture in.
@@ -8886,8 +9239,10 @@ class Checker:
             # anywhere: it carries its allocator, and lasts as long as the call.
             for scope in self._scopes:
                 for local in scope.values():
+                    held_there = self._held_by(local)
                     if not self._is_arena(local) \
-                            and owned.points(self._held_by(local)):
+                            and (owned.points(held_there)
+                                 or _holds_a_lambda(held_there)):
                         local.arenas = frozenset({id(local)})
                         self._unknown_by_id[id(local)] = local
             self._lower_block(inner, expr.body, func)
@@ -8968,6 +9323,11 @@ class Checker:
         value = self._lower_into(builder, stmt.value, ty.pointee, stmt.span)
         if self._value_type_of(value) is ERROR:
             return
+        kept = self._into_a_place(builder, target, stmt.target, stmt.value, value,
+                                  ty.pointee, stmt.span, through=True)
+        if kept is None:
+            return
+        value = kept
         if _holds_a_reference(ty.pointee):
             # The place written holds a reference, so the same question is asked
             # of it as of a name: what goes into it has to last as long as it
@@ -16160,6 +16520,11 @@ class Checker:
             self._diags.emit(D.LANG_HANDED_OUT_IN_AFTER_CALL, expr.span,
                              name=handing)
             return UndefConst(ERROR)
+        if isinstance(inside, ast.Lambda):
+            # What the lambda brings in is kept in the arena, and lasts as long
+            # as the arena does rather than as long as this call.
+            return self._lower_lambda(builder, inside, expected,
+                                      (place, self._arenas_in(expr.arena)))
         if not _takes_room(inside):
             self._diags.emit(D.LANG_ALLOCATED_NOT_A_PLACE, expr.span,
                              found=_about_the_shape(inside))
@@ -17350,13 +17715,13 @@ class Checker:
         if not _promises_as_much(expected, found):
             return value
         if isinstance(expected, FuncType):
-            # A function is two addresses and not one, so there is nothing for
-            # one instruction to read differently: the two are taken out and put
-            # back under the type that promises less, which is the same pair of
+            # A function is three words and not one, so there is nothing for
+            # one instruction to read differently: the three are taken out and
+            # put back under the type that promises less, which is the same
             # registers and no work at all.
             return builder.make_tuple(
-                (builder.extract(value, 0, _ENVIRONMENT, span),
-                 builder.extract(value, 1, _ENVIRONMENT, span)),
+                [builder.extract(value, at, part, span)
+                 for at, part in enumerate(parts_of(expected))],
                 expected, span)
         return builder.cast(CastKind.BITCAST, value, expected, span)
 

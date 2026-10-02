@@ -1,9 +1,8 @@
 ※ pl4g-test: compile=error diag=4550
 
-※ A variable here lasts as long as the program, so what a lambda kept would
-※ have to as well -- and what it kept belongs to the call that wrote it.  It is
-※ the rule about answering with one, asked at the other place a value can
-※ escape to.
+※ A variable here has its value in the image, and the image does not yet hold
+※ an address of code -- nor a string.  A lambda may leave the call that made it
+※ otherwise; this is the one place it may not yet go.
 
 let kept: fn(u8) → u8 = ⊥
 

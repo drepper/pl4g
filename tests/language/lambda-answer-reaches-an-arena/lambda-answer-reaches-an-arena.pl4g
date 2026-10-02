@@ -1,0 +1,17 @@
+※ pl4g-test: compile=error diag=4632
+
+※ What a lambda brought in by value reaches what that value was made in.  Text
+※ made in an arena of the call's own is given back with the arena on the way
+※ out, so a lambda carrying it may not be answered.  A string would be copied
+※ into `⎕heap` here; a lambda is never copied, what it brought in being laid out
+※ the way its body reads it and nothing else knowing how.
+
+fn greeting(name: str) → fn() → str:
+    let pool: mut arena = ⎕arena
+    defer ⎕empty(pool)
+    let said: str = "hello " ⧺ name in pool
+    λ [said] → str { said }
+
+@[startup]
+fn main() → u6:
+    0u6

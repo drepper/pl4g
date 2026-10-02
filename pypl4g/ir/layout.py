@@ -90,8 +90,9 @@ def size_of(ty: Type, layout: DataLayout) -> int:
             # program as the handle it is.
             return size_of(ty.holder, layout)
         case FuncType():
-            # Where the code is and where what it brought in is: two addresses.
-            return 2 * layout.pointer_size
+            # Where the code is, where what it brought in is, and the allocator
+            # that came from: three words.
+            return 3 * layout.pointer_size
         case TupleType():
             # Laid out as a product of the same members would be.
             total = 0

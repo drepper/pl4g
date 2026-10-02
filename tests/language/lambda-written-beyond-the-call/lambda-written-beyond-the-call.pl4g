@@ -1,0 +1,17 @@
+※ pl4g-test: compile=error diag=4632
+
+※ A place reached through a reference parameter is the caller's, and what is
+※ written there is read after the call has ended.  A lambda the call was handed
+※ lasts only as long as the call, as far as the call can tell, so it may not be
+※ put there; one the call writes itself may, its environment then being kept
+※ in `⎕heap`.
+
+type Box = f: fn(u8) → u8
+
+@[impure]
+fn keep(b: &mut Box, g: fn(u8) → u8):
+    b⌖.f ← g
+
+@[startup]
+fn main() → u6:
+    0u6

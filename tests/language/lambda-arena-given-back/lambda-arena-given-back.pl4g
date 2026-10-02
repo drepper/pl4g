@@ -1,0 +1,13 @@
+※ pl4g-test: compile=error diag=4615
+
+※ `λ … in pool` keeps what the lambda brought in in the arena, so the lambda is
+※ made in it as a string written `in pool` is -- and once the arena is given
+※ back, calling the lambda would read what went with it.
+
+@[startup, impure]
+fn main() → u6:
+    let n: u8 = 1u8
+    let pool: mut arena = ⎕arena
+    let k: fn(u8) → u8 = λ x: u8 [n] → u8 { x + n } in pool
+    ⎕empty(pool)
+    if k(1u8) = 2u8: 0u6 else: 1u6

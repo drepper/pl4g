@@ -1,0 +1,14 @@
+※ pl4g-test: compile=error diag=4570
+
+※ A reference brought in by value reaches the variable it names, as one brought
+※ in by reference does: the lambda may not be given to a name that outlives it.
+
+@[startup, impure]
+fn main() → u6:
+    let g: mut fn() → u8 = λ → u8 { 0u8 }
+    if g() = 0u8:
+        let n: u8 = 1u8
+        let r: &u8 = &n
+        g ← λ [r] → u8 { r }
+    g()
+    0u6

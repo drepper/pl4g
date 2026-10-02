@@ -1,0 +1,14 @@
+※ pl4g-test: compile=error diag=4632
+
+※ A lambda handed to a function lasts as long as the call it was handed to,
+※ and nothing in the signature says longer: where what it brought in is kept
+※ is the caller's business, perhaps the caller's own frame.  So it is called,
+※ and handed on to another call, and not answered -- nor brought into a lambda
+※ that is.
+
+fn twice(g: fn(u8) → u8) → fn(u8) → u8:
+    λ a: u8 [g] → u8 { g(g(a)) }
+
+@[startup]
+fn main() → u6:
+    0u6

@@ -1289,12 +1289,13 @@ def parts_of(ty: Type) -> tuple[Type, ...]:
         # the walk is.
         return (_pointer_to(ListType(ty.element)), U64)
     if isinstance(ty, FuncType):
-        # A function written where a value is wanted is two addresses: where
-        # its code is, and where what it brought in with it is.  One type
-        # covers both the lambda that brought something in and the one that
-        # brought nothing, which is what lets either stand where the type says
-        # a function stands.
-        return (_pointer_to(U8), _pointer_to(U8))
+        # A function written where a value is wanted is three words: where its
+        # code is, where what it brought in with it is, and the allocator that
+        # room came from -- none where it is in a frame or there is none, as a
+        # string carries its own.  One type covers both the lambda that brought
+        # something in and the one that brought nothing, which is what lets
+        # either stand where the type says a function stands.
+        return (_pointer_to(U8), _pointer_to(U8), _pointer_to(ARENA))
     if isinstance(ty, StrType):
         # Where the bytes are, how many there are, and the allocator they came
         # from -- nothing for text in the image, which is never given back.  The

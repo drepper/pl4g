@@ -2408,11 +2408,36 @@ a result whose answer is a length, and there is nothing about a result for a uni
 A function written where a value is wanted
 ------------------------------------------
 
-**A lambda's value is two addresses**: where its code is and where what it brought in is.  `parts_of(FuncType)` answers those two
-pointers, which is what makes a function value travel the way every other value of several parts already travels -- two registers
-as an argument, two words in memory, and the large-answer pass needs no telling.  One type covers the lambda that brought
-something in and the one that brought nothing, which is what lets either stand where a `fn(...)` is wanted; the one with nothing
-to carry carries the address of a byte nobody reads.
+**A lambda's value is three words**: where its code is, where what it brought in is, and the allocator that room came from.
+`parts_of(FuncType)` answers those three pointers, which is what makes a function value travel the way every other value of
+several parts already travels -- three registers as an argument, three words in memory, and the large-answer pass needs no
+telling.  One type covers the lambda that brought something in and the one that brought nothing, which is what lets either stand
+where a `fn(...)` is wanted; the one with nothing to carry carries a null environment and no allocator.
+
+**Where the environment is, `_environment` is told.**  `_lambdas_that_stay` walks a body before it is lowered -- the whole of it,
+lambdas inside lambdas included -- and records, by identity, every lambda written as an argument of a call of a function
+(`_calls_a_function`: not a record, a variant or a `⎕` name) and every one bound by `let` to a name that is not `mut` and that the
+rest of the block only calls or hands to such a call (`_only_called`; a macro invocation that mentions the name counts as taking
+it anywhere).  Those keep the environment in a frame slot and carry no allocator; every other one takes room from `⎕heap` through
+`tables.allocate` and carries `⎕heap`'s address; `λ … in a` is lowered by `_lower_allocated` handing the arena's place to
+`_lower_lambda`, and the room comes from the arena.  The report log says which (`allocator`).
+
+**What a lambda reaches is provenance, in the keys an arena's are.**  `_lower_lambda` writes into `_made_from` the room's key
+(`_HEAP`, the arena's, or a stand-in for the frame) and what `_reached_by` finds: every captured value's own provenance, a
+stand-in for every variable brought in by reference, and one for the variable a captured reference names.  A stand-in is a
+`_Local` registered in `_arena_by_id` at the depth of the scope it goes with -- so every depth check an arena already gets
+(`_made_in`, `_made_in_part`, `_leaves_no_arena_behind`, `_into_a_place`) holds a lambda to it, and `_outlives_arena` reports one in
+a reference's words (4570) -- and in `_stand_ins`, which keeps it out of the allocator report.  `_points_somewhere` counts a
+`FuncType`, so a parameter of one gets an unknown marker; `owned.points` does not, an environment being neither copied nor given
+back.  This replaced `_places` for lambdas: one mechanism, which already followed values through names, joins, loops, records and
+lists.
+
+**Where a lambda leaves, `_lambda_may_leave` asks** whether every key is `⎕heap` or one the signature names, and reports 4632
+otherwise -- from `_answered`, for anything holding a lambda, and from `_into_a_place`, for a place `_made_here` says is not the
+call's own.  `_into_a_place` asks the same of strings and lists written there, copying one into `⎕heap` (`owned.own_function`)
+where it can and reporting 4633 where it cannot; through a reference to a place of the call's own it applies the depth check
+against the variable `_named_place_of` finds.  A record written out where it goes takes the slow path whenever the place is
+asked, `_build_record` not passing through it.
 
 **The body becomes a function of the module**, `⎕lambdaN`, taking the environment as a first parameter nobody wrote.  It is
 checked in a scope stack of its own, holding the captures and the parameters and nothing else, with the scopes around it kept in
@@ -2457,8 +2482,8 @@ made: a walk makes one call per element and they all go to the same code with th
 **A named function becomes a value through a shim.**  Everything called through a name of function type is called with the
 environment first, and a definition has no such parameter -- so `_function_as_a_value` points the pair at `⎕through<name>`, which
 takes the environment, drops it, and hands the rest on.  One per function and not one per mention, kept in `_shims` by identity,
-and recorded in the report log beside the lambdas: it is code the program did not write.  The other half is the address of a
-frame byte, which is what `_environment` already hands a lambda that brought nothing in.
+and recorded in the report log beside the lambdas: it is code the program did not write.  The other two words are nothing, which
+is what `_environment` already hands a lambda that brought nothing in.
 
 The cost is one call.  Rust avoids it by telling the two apart in the type system, `fn` for the bare address and `Fn` for the
 pair; C avoids it by having nothing to carry, which is why a C callback needs a `void *` written out beside it; C++'s
@@ -2470,8 +2495,8 @@ so `func.ty.listable` is the one place it is written down and a named function h
 move: `mangle` writes the parameters and the result one by one rather than the whole type, so the word appears in a symbol only
 where a *parameter* has such a type.
 
-**A bitcast cannot carry a function from one type to the other**, a function being two addresses and not one.  `_shorter_life`
-takes the two out and puts them back under the type that promises less, which is the same pair of registers and no work; the
+**A bitcast cannot carry a function from one type to the other**, a function being three words and not one.  `_shorter_life`
+takes the three out and puts them back under the type that promises less, which is the same registers and no work; the
 verifier's `_held_as` gained the arm that says two function types differing only in the walk are the same bits.
 
 **`@[listable]` before a lambda is an attribute list where an expression is wanted.**  Nothing else begins an expression with

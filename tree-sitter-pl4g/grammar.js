@@ -1046,6 +1046,8 @@ module.exports = grammar({
       field('value', choice($.binary_expression, $.unary_expression,
                             $.set_literal, $.dictionary_literal,
                             $.list_literal, $.array_literal,
+                            // what it brings in is kept in the arena
+                            $.lambda_expression,
                             // which the compiler reads and refuses where the
                             // call hands out an arena of its own
                             $.call_expression)),

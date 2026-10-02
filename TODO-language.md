@@ -921,9 +921,24 @@ Runtime
     substitutes, the brace notation, an omitted type and a named argument all differ in meaning or in what they are for, so none
     of them is a second spelling of one thing.
 
-[ ] let a lambda leave the call that made it (4549, 4550).  What it brought in lives in a frame of that call, so a lambda that
-    escaped would read storage that is gone.  The same lifetime annotations that lift the rule for references lift it here, and
-    a lambda that brought nothing in could be let out sooner: it carries an address nobody reads.
+[x] let a lambda leave the call that made it.  Where what it brought in is kept is the compiler's choice -- the frame where the
+    lambda provably stays, `⎕heap` otherwise, the arena `λ … in a` names -- and the value is three words.  What it reaches is
+    provenance in the arena machinery's keys, so one leaving the call reaches only what lasts (4632); writing through a place
+    from outside the call is checked the same way for everything (4633).  4549 is retired.
+
+[ ] let a lambda a function was handed leave it.  A parameter's lambda may keep what it brought in in the caller's frame, so it
+    is not answered and not brought into a lambda that is: `compose(f, g)` cannot be written.  What would lift it is the type
+    saying where the environment is -- `fn(u8) → u8 in ⎕heap`, as `str in ⎕heap` says of an answer -- with a caller handing a
+    frame lambda there refused or moved to the heap.
+
+[ ] let a variable at the top level hold a lambda (4550).  It needs the image to hold an address of code, which is what a string
+    at the top level needs as well (9902).
+
+[ ] give a lambda's environment back.  One kept in `⎕heap` stays there, as a string a name held does; the third word says which
+    allocator it came from, and a sized free needs the size, which a header word before the environment would carry.
+
+[ ] answer a lambda in an arena a parameter names.  `→ fn(u8) → u8 in a` reads as the lambda's own handing out of an arena, so
+    the signature cannot say it; a type of the answer written in parentheses, or a name for a function type, would.
 
 [ ] decide whether a type parameter may say what it must support.  The body of a generic function is checked for each set of
     types, so a mistake in one is found by whoever calls it and a generic function nobody calls is never checked at all.  What

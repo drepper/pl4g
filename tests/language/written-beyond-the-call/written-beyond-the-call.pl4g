@@ -1,0 +1,20 @@
+※ pl4g-test: compile=error diag=4633
+
+※ A place reached through a reference parameter is the caller's, and what is
+※ written there is read after the call has ended, so it has to last that long:
+※ made in `⎕heap` or in the image.  A string made anywhere else is copied into
+※ `⎕heap` on the way in, as an answer is; a record holding one cannot be copied
+※ yet, and one made in an arena given back on the way out is refused.
+
+type Inner = s: str
+type Box = inner: Inner
+
+@[impure]
+fn keep(b: &mut Box):
+    let pool: mut arena = ⎕arena
+    defer ⎕empty(pool)
+    b⌖.inner ← Inner(.s ← "a" ⧺ "b" in pool)
+
+@[startup]
+fn main() → u6:
+    0u6
