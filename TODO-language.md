@@ -368,18 +368,18 @@ To Do List for the PL4g language
     holds.  Nothing in the language copies one aggregate into another yet, and the first thing that does should settle it for
     products and arrays together rather than for arrays alone.
 
-[ ] give a collection or an array a length a program can read.  A loop can walk one and nothing can ask how many there are, which
-    a program will want the moment it wants anything but a walk.  For an array whose type says its shape the answer is in the type
-    and wants only a spelling; for one that does not, and for a table, it is a word already being carried and wants only a way to
-    name it.
+[x] give a collection or an array a length a program can read.  Done on 2026-09-15: `#` answers how many, as a `u64`, of an
+    array (its outermost dimension), a list, a string (its characters), a tuple, a set and a dictionary -- from the type where the
+    type says it and from the word carried beside the elements where it does not.  `⍴` answers an array's whole shape.
 
 [ ] slice a table.  Refused (4459).  A row is a run and a column is not: its elements are a row apart.  A slice that could say so
     would carry a stride beside the place and the count, which is what NumPy does and what turns a slice into a view of any shape.
-    Worth doing with the entry above and with the one about arrays that grow, since all three change what a `T⟦⟧` carries.
+    Worth doing with the entry about arrays that grow, since both change what a `T⟦⟧` carries.
 
-[ ] let a dimension be told and another not.  Refused (4456): an array either carries its whole shape in the type or none of it.
-    A `T⟦,4⟧` -- a run-time number of rows of four -- is the useful case, and it wants a value carrying only the counts the
-    type left out, which is a third shape of value for the sake of one case.  Worth it when something asks.
+[x] let a dimension be told and another not.  Done on 2026-09-15, with picking by a mask, which was what asked: rows picked out
+    of a table are however many, each as wide as the table, and that is a `T⟦,4⟧`.  `u6⟦2,⟧` works the same way.  A value of
+    such a type carries a count for every dimension, the stated ones included, so it is one shape of value however much of the
+    shape the type says; 4456, which refused it, is gone.
 
 [ ] an array that can grow.  A `T⟦⟧` is a place and a count and owns nothing, so there is nothing to grow: appending
     wants a third thing beside them -- how much room there is -- and an arena to ask for more from, which is what Go's slice header
