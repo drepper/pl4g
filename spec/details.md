@@ -4221,3 +4221,20 @@ answers (`UndefConst` of what it says) or 4645 is reported.  A generic operator 
 callee's signature says without making an instance -- 4646 where a requirement does not follow.  `comptime if` and `comptime
 foreach` are not lowered at all, and counted for the report log.
 
+
+Constants worked out over the syntax
+------------------------------------
+
+`Checker._constant` is what a number that must be known while compiling is worked out by, and it works over the syntax, not the
+code: what it settles is often a type, and a type is settled before anything is lowered.  It answers a `_Folded` -- the number,
+its type, or none for a number of no width, and whether it is a division with no answer -- or nothing where the expression is not
+a constant, or `_REFUSED` where it is one that has been reported.  The operators are the program's, worked out in Python with the
+type's limits applied: `_fits` refuses what does not fit, `_within` reads low bits as the type does for the bitwise operators and
+the shifts.  A call runs `comptime.evaluate.Evaluator` over `self._units`, the program as written, kept by `run` for this; the
+definition is found in `self._definitions` by name, and its purity and type parameters are read from the syntax as well, so a
+call works in a signature written before the function it calls.
+
+Where a constant is only welcome -- an array's index -- `_welcome_constant` asks quietly: `_refuse` answers nothing rather than
+reporting, and the expression is lowered as written and says what is wrong where the program would.  An index that comes to a
+number of no width is replaced by the literal it comes to (`_index_written_down`), so everything that already treats a literal
+specially -- the check against the length while compiling, the exemption from `¤idx` -- treats it the same way.

@@ -9353,6 +9353,24 @@ loop, so the array need not state its length.  `ps.age` on an array is refused w
 
 Found on the way and fixed: an index was lowered twice when it turned out not to be a mask, so a mistake in it was reported twice.
 
+## 2026-10-03T17:00+02:00 — language
+
+**Constant expressions worked out in the front end**
+
+The to-do entry, asked for by the user, with three questions answered.  *What a constant may contain*: the operators over
+constants, and also calls to pure functions, run by the compile-time evaluator -- chosen over operators alone (C's integer
+constant expressions, Go's untyped constants) and in line with D's compile-time function evaluation, C++'s `constexpr` and Zig's
+`comptime`.  The evaluator works over the syntax, which every function has from the start, so a call can stand in a type in a
+signature; purity is read from the definition's attributes for the same reason.  *Where*: everywhere a number must be known --
+a tuple's index (4460), an array's length (4447), the shape before `⍴`, a constant at the top level -- and an array's index,
+which is then checked while compiling; there a constant is only welcome, so nothing about one that is not is reported.  A name in
+an array's length stays refused, which is the next entry's question about order.  *Widths*: as the program would -- suffixes
+keep their types, an answer that does not fit is 4214, a shift too far is 4664, a division answers a result that `?` (4663) or
+`??` takes apart -- chosen over exact numbers ignoring types, which would have made `200u8 + 100u8` a constant here and a fault in
+running code.  Inside a function the evaluator runs, numbers have no width, as before; what it answers has to fit.
+
+Found on the way and fixed: the evaluator divided toward minus infinity, as Python does, where the language truncates.
+
 
 Open questions
 --------------

@@ -1,0 +1,11 @@
+※ pl4g-test: compile=error diag=4663
+
+※ A division answers with a result, and by zero it answers one that holds
+※ nothing.  Where the number has to be known while compiling there is nothing
+※ to take out of it, so `?` over it is refused; `??` says what to have instead.
+
+@[startup, impure]
+fn main() → u6:
+    let t: 〈u8, u16〉 = 〈1u8, 2u16〉
+    let a: u8 = t⟦(1 ÷ 0)?⟧
+    0u6

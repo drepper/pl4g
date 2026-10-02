@@ -11,12 +11,14 @@ import math
 from dataclasses import dataclass, field, fields as fields_of, replace
 from fractions import Fraction
 from contextlib import contextmanager
-from typing import Callable, Final, Iterator, Sequence
+from typing import Callable, Final, Iterator, Literal, Sequence
 
 from ..diag import ids as D
+from ..diag.ids import DiagID
 from ..target import statuses
 from ..diag.engine import DiagEngine, Expectation
 from ..front import ast
+from ..comptime.evaluate import CannotEvaluate, Evaluator
 from ..front.expand import only_for_macros
 from ..front.doccomment import Part as DocPart, parse as parse_doc
 from ..front.lexer import is_operator_glyph, is_operator_name
@@ -1083,6 +1085,14 @@ def _walks_per_place(expr: ast.Expr) -> bool:
                        is not None for one in expr.args)
         case _:
             return _marked(expr) is not None
+
+
+def _within(value: int, ty: IntType) -> int:
+    """*value*'s low bits, read as a number of *ty*: two's complement."""
+    bits = value & ((1 << ty.bits) - 1)
+    if ty.signed and bits >> (ty.bits - 1):
+        bits -= 1 << ty.bits
+    return bits
 
 
 def _stands_alone(expr: ast.Expr) -> bool:
@@ -2439,6 +2449,27 @@ class _Entries:
 
 
 @dataclass(frozen=True, slots=True)
+class _Folded:
+    """A whole number an expression comes to while compiling.
+
+    *ty* is the type it has, or nothing for a literal written without a suffix
+    and anything worked out from such literals alone: a number of no particular
+    width, which takes its type from where it stands, as the literal would.
+    *failed* is a division that has no answer -- a result holding nothing, which
+    is a value as much as a number is, and which only `?` and `??` take apart.
+    """
+
+    value: int
+    ty: IntType | None
+    failed: bool = False
+
+
+#: What folding answers where the expression is a constant and something about
+#: it is wrong: it has been reported, and the caller says nothing more.
+_REFUSED: Final = _Folded(0, None, failed=True)
+
+
+@dataclass(frozen=True, slots=True)
 class _Iteration:
     """What a loop needs of the thing it takes its values from.
 
@@ -2648,6 +2679,13 @@ class Checker:
         #: The expression a loop takes its turns from while it is being lowered,
         #: and what picking there left behind: picking is walked where a loop
         #: takes its turns from rather than copied into an array.
+        #: The program's files and its functions as written, which is what a
+        #: call in a constant is run over.
+        self._units: Sequence[ast.SourceUnit] = ()
+        #: Whether a constant is only welcome, and what is wrong with one is
+        #: left to be said where the program would say it.
+        self._constant_quiet = False
+        self._definitions: dict[str, ast.FuncDef] = {}
         #: How many names `¨` has made up, so that each one is new.
         self._each_count = 0
         self._pick_in: ast.Expr | None = None
@@ -2811,6 +2849,10 @@ class Checker:
             units = [replace(unit, items=tuple(
                 one for one in unit.items if not only_for_macros(one)))
                 for unit in units]
+        self._units = units
+        self._definitions = {item.name: item for unit in units
+                             for item in unit.items
+                             if isinstance(item, ast.FuncDef)}
         # Three passes over the definitions, because each needs what the one
         # before it settled.  The imports come first, since a type may be one
         # another module defines; then every type name, so that a definition may
@@ -3517,6 +3559,21 @@ class Checker:
             if answer is None or not isinstance(answer, Const):
                 return None
             return self._module.result_const(ty, answer)
+        if isinstance(ty, IntType) and not isinstance(node.value, ast.IntLit):
+            # Worked out while compiling, as anything that has to be known then
+            # is: arithmetic over constants, and calls to pure functions.
+            folded = self._constant(node.value)
+            if folded is _REFUSED:
+                return None
+            if folded is not None and not folded.failed:
+                if folded.ty is not None and folded.ty != ty:
+                    return self._wrong_initializer(node, ty, folded.ty.written())
+                if not ty.holds(folded.value):
+                    self._diags.emit(D.LANG_TYPE_ANSWER_DOES_NOT_FIT,
+                                     node.value.span, value=str(folded.value),
+                                     type=ty.written())
+                    return None
+                return self._module.int_const(ty, folded.value)
         match node.value:
             case ast.IntLit() if ty is CHAR and node.value.type_name is None:
                 # A number written where a code point is wanted is that code
@@ -5843,10 +5900,13 @@ class Checker:
             if written is None:
                 shape.append(None)
                 continue
-            if not isinstance(written, ast.IntLit) or written.value < 0:
+            along = self._constant_number(written)
+            if along is False:
+                return ERROR
+            if along is None or along < 0:
                 self._diags.emit(D.LANG_ARRAY_LENGTH_NOT_A_NUMBER, written.span)
                 return ERROR
-            shape.append(written.value)
+            shape.append(along)
         # A dimension the type states and one it does not may stand side by
         # side.  What makes that worth having is what selecting rows of a table
         # produces: however many rows were picked, each still as wide as the
@@ -8575,6 +8635,10 @@ class Checker:
         Where either is not, the check is one comparison and a branch that does
         not come back, which is the same shape an addition that does not fit has.
         """
+        if not isinstance(written, (ast.IntLit, _Ready)):
+            # Worked out while compiling where it can be, so that it is checked
+            # against the length there, as a number written down is.
+            written = self._index_written_down(written) or written
         index = self._on_its_own(builder, written)
         found = self._value_type_of(index)
         if found is ERROR:
@@ -8712,6 +8776,16 @@ class Checker:
             expr = replace(expr, indices=(_Ready(span=expr.indices[0].span,
                                                  value=mask),))
             self._pick_in = expr
+        elif len(expr.indices) == 1 and not isinstance(
+                expr.indices[0], (ast.Range, ast.IntLit, _Ready)) \
+                and (written := self._index_written_down(expr.indices[0])) \
+                is not None:
+            # Known while compiling, so it is the number it comes to and is
+            # checked against the length as a number written down is.
+            walking = self._pick_in is expr
+            expr = replace(expr, indices=(written,))
+            if walking:
+                self._pick_in = expr
         elif len(expr.indices) == 1 and not isinstance(
                 expr.indices[0], (ast.Range, ast.IntLit, _Ready)):
             # Lowered once here, so that what it is -- a mask or an index -- is
@@ -8965,6 +9039,8 @@ class Checker:
                              given=len(expr.indices))
             return UndefConst(ERROR)
         at = self._constant_number(expr.indices[0])
+        if at is False:
+            return UndefConst(ERROR)
         if at is None:
             self._diags.emit(D.LANG_TUPLE_INDEX_NOT_CONSTANT,
                              expr.indices[0].span)
@@ -8986,7 +9062,243 @@ class Checker:
                              expr.span) for which in range(count)],
             member, expr.span)
 
-    def _constant_number(self, expr: ast.Expr) -> int | None:
+    def _constant(self, expr: ast.Expr) -> _Folded | None:
+        """What *expr* comes to while compiling, where it is a constant.
+
+        The arithmetic is the program's: an operand with a suffix keeps its type
+        and an operation that would stop the running program stops this one,
+        with the message the program's would carry, so a constant means what
+        the same expression would mean at run time.  Literals without a suffix
+        are numbers of no width until something gives them one.  A call to a
+        pure function of this program whose arguments are constants is run by
+        the compile-time evaluator.  Nothing else is a constant: a name bound in
+        a function, a read of memory, a call that is not pure.
+
+        Answers nothing where the expression is not a constant, and `_REFUSED`
+        where it is one that has been reported.
+        """
+        match expr:
+            case ast.IntLit():
+                if expr.type_name is None:
+                    return _Folded(expr.value, None)
+                ty = BUILTIN_TYPES.get(expr.type_name)
+                if not isinstance(ty, IntType) or not ty.holds(expr.value):
+                    return None
+                return _Folded(expr.value, ty)
+            case ast.NameRef():
+                if self._find_local(expr.name) is not None:
+                    return None
+                found = self._top.get(expr.name)
+                if not isinstance(found, GlobalVar) or found.mutable \
+                        or not isinstance(found.initializer, IntConst):
+                    return None
+                held = found.initializer.ty
+                return _Folded(found.initializer.value,
+                               held if isinstance(held, IntType) else None)
+            case ast.Unary(op=ast.UnaryOp.LENGTH):
+                return self._folded_length(expr)
+            case ast.Unary(op=ast.UnaryOp.BIT_NOT):
+                inner = self._constant(expr.operand)
+                if inner is None or inner is _REFUSED or inner.ty is None \
+                        or inner.failed:
+                    return inner if inner is _REFUSED else None
+                return _Folded(_within(~inner.value, inner.ty), inner.ty)
+            case ast.Raised():
+                inner = self._constant(expr.base)
+                if inner is None or inner is _REFUSED or inner.failed:
+                    return inner if inner is _REFUSED else None
+                return self._fits(expr, inner.value ** expr.exponent, inner.ty)
+            case ast.Try():
+                inner = self._constant(expr.operand)
+                if inner is not None and inner is not _REFUSED and inner.failed:
+                    return self._refuse(D.LANG_CONSTANT_HAS_NO_ANSWER, expr.span)
+                return inner
+            case ast.Binary():
+                return self._folded_binary(expr)
+            case ast.Call():
+                return self._folded_call(expr)
+            case _:
+                return None
+
+    def _refuse(self, ident: DiagID, span: Span, **args: object) -> _Folded | None:
+        """Report what is wrong with a constant, where one was needed.
+
+        Where one was only welcome -- an index, which is checked while compiling
+        if it is a constant and while running if not -- nothing is reported and
+        the expression is no constant: lowered as written, it says what is
+        wrong with it itself, where the program would.
+        """
+        if self._constant_quiet:
+            return None
+        self._diags.emit(ident, span, **args)
+        return _REFUSED
+
+    def _fits(self, expr: ast.Expr, value: int,
+              ty: IntType | None) -> _Folded | None:
+        """*value* as a constant of *ty*, or refused where it does not fit."""
+        if ty is not None and not ty.holds(value):
+            return self._refuse(D.LANG_TYPE_ANSWER_DOES_NOT_FIT, expr.span,
+                                value=str(value), type=ty.written())
+        return _Folded(value, ty)
+
+    def _folded_length(self, expr: ast.Unary) -> _Folded | None:
+        """`#x` where what `x` is says how many: an array of a stated length, a
+        tuple, a string written down."""
+        if isinstance(expr.operand, ast.StringLit):
+            return _Folded(len(expr.operand.value), U64)
+        found = self._hint_of(expr.operand)
+        if isinstance(found, ArrayType) and found.shape[0] is not None:
+            return _Folded(found.shape[0], U64)
+        if isinstance(found, TupleType):
+            return _Folded(len(found.members), U64)
+        return None
+
+    def _folded_binary(self, expr: ast.Binary) -> _Folded | None:
+        """An operator over two constants, worked out as the program would."""
+        op = expr.op
+        left = self._constant(expr.left)
+        if left is _REFUSED:
+            return _REFUSED
+        if op is ast.BinaryOp.OR_ELSE:
+            if left is None:
+                return None
+            return self._constant(expr.right) if left.failed else left
+        right = self._constant(expr.right)
+        if right is _REFUSED:
+            return _REFUSED
+        if left is None or right is None or left.failed or right.failed:
+            return None
+        if left.ty is not None and right.ty is not None and left.ty != right.ty:
+            # Two types meet, which is the program's mistake to report where it
+            # reports every other: not a constant, so lowered as written.
+            return None
+        ty = left.ty if left.ty is not None else right.ty
+        a, b = left.value, right.value
+        match op:
+            case ast.BinaryOp.ADD:
+                return self._fits(expr, a + b, ty)
+            case ast.BinaryOp.SUBTRACT:
+                return self._fits(expr, a - b, ty)
+            case ast.BinaryOp.MULTIPLY:
+                return self._fits(expr, a * b, ty)
+            case ast.BinaryOp.SAT_ADD | ast.BinaryOp.SAT_SUB | ast.BinaryOp.SAT_MUL:
+                if ty is None:
+                    return None
+                answer = (a + b if op is ast.BinaryOp.SAT_ADD
+                          else a - b if op is ast.BinaryOp.SAT_SUB else a * b)
+                return _Folded(max(ty.low, min(ty.high, answer)), ty)
+            case ast.BinaryOp.DIVIDE | ast.BinaryOp.REMAINDER:
+                if b == 0 or (ty is not None and ty.signed and a == ty.low
+                              and b == -1):
+                    return _Folded(0, ty, failed=True)
+                quotient = abs(a) // abs(b) * (1 if (a < 0) == (b < 0) else -1)
+                return _Folded(quotient if op is ast.BinaryOp.DIVIDE
+                               else a - quotient * b, ty)
+            case ast.BinaryOp.MAX:
+                return _Folded(max(a, b), ty)
+            case ast.BinaryOp.MIN:
+                return _Folded(min(a, b), ty)
+            case ast.BinaryOp.POWER:
+                if b < 0:
+                    return None
+                return self._fits(expr, a ** b, ty)
+            case ast.BinaryOp.BIT_AND | ast.BinaryOp.BIT_OR | ast.BinaryOp.BIT_XOR:
+                answer = (a & b if op is ast.BinaryOp.BIT_AND
+                          else a | b if op is ast.BinaryOp.BIT_OR else a ^ b)
+                return _Folded(answer if ty is None else _within(answer, ty), ty)
+            case ast.BinaryOp.SHIFT_LEFT | ast.BinaryOp.SHIFT_RIGHT \
+                    | ast.BinaryOp.ROTATE_LEFT | ast.BinaryOp.ROTATE_RIGHT:
+                return self._folded_shift(expr, a, b, ty)
+            case _:
+                return None
+
+    def _folded_shift(self, expr: ast.Binary, a: int, b: int,
+                      ty: IntType | None) -> _Folded | None:
+        """A shift or a rotation of a constant, by a constant distance."""
+        if ty is None:
+            # The bits of a number of no width are not a thing there is an
+            # answer about: how far a shift is too far is the width.
+            return None
+        if not 0 <= b < ty.bits:
+            return self._refuse(D.LANG_CONSTANT_SHIFT_TOO_FAR, expr.span,
+                                type=ty.written(), distance=str(b))
+        bits = a & ((1 << ty.bits) - 1)
+        match expr.op:
+            case ast.BinaryOp.SHIFT_LEFT:
+                answer = bits << b
+            case ast.BinaryOp.SHIFT_RIGHT:
+                answer = a >> b
+            case _:
+                if ty.signed:
+                    return None
+                turn = b if expr.op is ast.BinaryOp.ROTATE_LEFT else ty.bits - b
+                answer = (bits << turn) | (bits >> (ty.bits - turn))
+        return _Folded(_within(answer, ty), ty)
+
+    def _folded_call(self, expr: ast.Call) -> _Folded | None:
+        """A call to a pure function of this program, run while compiling.
+
+        The arguments are constants, worked out here; the function is run by
+        the compile-time evaluator over its syntax, which every function has
+        from the start -- so a call may stand in a type in a signature as well
+        as anywhere else.  What it answers is checked against what the function
+        says it answers.
+        """
+        if not isinstance(expr.callee, ast.NameRef) \
+                or self._find_local(expr.callee.name) is not None:
+            return None
+        func = self._definitions.get(expr.callee.name)
+        if func is None or func.body is None or func.ret_type is None:
+            return None
+        generic: list[str] = []
+        for param in func.params:
+            _parameters_in(param.type, generic)
+        if generic or len(func.params) != len(expr.args):
+            return None
+        if any(attr.name in ("impure", "io") for attr in func.attrs):
+            return self._refuse(D.LANG_CONSTANT_CALL_IMPURE, expr.callee.span,
+                                name=func.name)
+        arguments: list[int] = []
+        for one in expr.args:
+            found = self._constant(one)
+            if found is _REFUSED:
+                return _REFUSED
+            if found is None or found.failed:
+                return None
+            arguments.append(found.value)
+        ret = self._resolve_type(func.ret_type)
+        if not isinstance(ret, IntType):
+            return None
+        try:
+            answer = Evaluator(self._units).call(func, arguments)
+        except CannotEvaluate as exc:
+            if exc.ran_out:
+                return self._refuse(D.LANG_COMPTIME_ENDLESS, exc.span,
+                                    detail=exc.detail)
+            return self._refuse(D.LANG_COMPTIME_CANNOT, exc.span,
+                                construct=exc.detail)
+        if not isinstance(answer, int) or isinstance(answer, bool):
+            return None
+        return self._fits(expr, answer, ret)
+
+    def _index_written_down(self, expr: ast.Expr) -> ast.IntLit | None:
+        """An index as the number written down it comes to, where it is a
+        number of no particular type known while compiling."""
+        folded = self._welcome_constant(expr)
+        if folded is None or folded.ty is not None or folded.failed:
+            return None
+        return ast.IntLit(span=expr.span, value=folded.value)
+
+    def _welcome_constant(self, expr: ast.Expr) -> _Folded | None:
+        """What *expr* comes to while compiling, where it is a constant and is
+        not wrong; nothing, and nothing said, otherwise."""
+        outer, self._constant_quiet = self._constant_quiet, True
+        try:
+            return self._constant(expr)
+        finally:
+            self._constant_quiet = outer
+
+    def _constant_number(self, expr: ast.Expr) -> int | Literal[False] | None:
         """The whole number an expression stands for while compiling, or nothing.
 
         A literal is one, with or without a suffix.  A name is one where it was
@@ -9000,22 +9312,18 @@ class Checker:
         that expression could have been worked out while compiling is a question
         about the expression rather than about the name.
 
-        Nothing computed is one yet.  `1 + 1` is a constant to a reader and not
-        to this compiler: folding happens after the front end, by which time
-        every type has been settled -- and settling a type is what this is for.
-        The to-do list says what asking earlier would need.
+        Anything worked out from those is one too -- `1 + 1`, `#t - 1`, a call
+        to a pure function with constant arguments -- by `_constant`, over the
+        syntax, since what this settles is a type and a type is settled before
+        anything is lowered.  *False* is a constant that was wrong and has been
+        reported, so the caller says nothing more.
         """
-        if isinstance(expr, ast.IntLit):
-            return expr.value
-        if not isinstance(expr, ast.NameRef):
+        found = self._constant(expr)
+        if found is _REFUSED:
+            return False
+        if found is None or found.failed:
             return None
-        if self._find_local(expr.name) is not None:
-            return None
-        found = self._top.get(expr.name)
-        if not isinstance(found, GlobalVar) or found.mutable:
-            return None
-        return (found.initializer.value
-                if isinstance(found.initializer, IntConst) else None)
+        return found.value
 
     def _lower_slice(self, builder: IRBuilder, expr: ast.Element, base: Value,
                      ty: ArrayType, expected: Type | None) -> Value:
@@ -15308,6 +15616,8 @@ class Checker:
         found: list[int] = []
         for one in written:
             along = self._constant_number(one)
+            if along is False:
+                return None
             if along is None:
                 self._diags.emit(D.LANG_SHAPE_NOT_WRITTEN_DOWN, one.span)
                 return None

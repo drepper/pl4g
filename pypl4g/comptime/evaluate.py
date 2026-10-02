@@ -703,9 +703,21 @@ def _apply(op: ast.BinaryOp, left: object, right: object) -> object:
         case ast.BinaryOp.MULTIPLY | ast.BinaryOp.SAT_MUL:
             return left * right
         case ast.BinaryOp.DIVIDE:
-            return left // right if isinstance(left, int) and isinstance(right, int) \
-                else left / right
+            if isinstance(left, int) and isinstance(right, int):
+                # Toward zero, as the program divides; Python floors.
+                if right == 0:
+                    raise ZeroDivisionError
+                quotient = abs(left) // abs(right)
+                return quotient if (left < 0) == (right < 0) else -quotient
+            return left / right
         case ast.BinaryOp.REMAINDER:
+            if isinstance(left, int) and isinstance(right, int):
+                # What is left over carries the sign of what was divided.
+                if right == 0:
+                    raise ZeroDivisionError
+                quotient = abs(left) // abs(right)
+                return left - (quotient if (left < 0) == (right < 0)
+                               else -quotient) * right
             return left % right
         case ast.BinaryOp.BIT_AND:
             return left & right

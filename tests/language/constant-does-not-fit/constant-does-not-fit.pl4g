@@ -1,0 +1,10 @@
+※ pl4g-test: compile=error diag=4214
+
+※ A constant is worked out as the program would work it out: a literal with a
+※ suffix keeps its type, and an answer that does not fit it is an error.
+
+@[startup, impure]
+fn main() → u6:
+    let t: 〈u8, u16〉 = 〈1u8, 2u16〉
+    let a: u8 = t⟦200u8 + 100u8⟧
+    0u6

@@ -348,10 +348,12 @@ To Do List for the PL4g language
     `T⟦3⟧` and costs one multiplication and no copy.  Writing still wants an index per dimension: what an assignment
     writes is one element, and copying a whole row is not what it means anywhere else.
 
-[ ] work out a constant expression in the front end.  `t⟦1 + 1⟧` is refused (4460) although a reader can see what it
-    comes to: the compiler folds after the front end, by which time every type has been settled -- and settling a type is what the
-    index is needed for.  What it wants is the folding the optimizer already does, done over the syntax instead, which is a small
-    evaluator over literals and the arithmetic operators.
+[x] work out a constant expression in the front end.  Done on 2026-10-03: wherever a number has to be known while compiling --
+    a tuple's index, an array's length, the shape before `⍴`, a constant at the top level -- it may be an operator over constants
+    or a call to a pure function of the program with constant arguments, which the compile-time evaluator runs.  The arithmetic is
+    the program's, suffixes and all: what would stop the program is an error (4214, 4664), and a division answers a result that
+    `?` or `??` takes apart (4663).  An array's index is worked out the same way where it can be and is then checked against the
+    length while compiling.  The evaluator divided as Python does, toward minus infinity, and now truncates as the program does.
 
 [ ] let an array's length be a name.  `u8⟦SIZE⟧` is refused (4447) where `t⟦FIRST⟧` is accepted, and the difference is
     only when the question is asked: a tuple's index is settled while a body is being lowered, by which time every definition has
@@ -1085,3 +1087,7 @@ Runtime
     no `else`; Zig and Go write `while (true)` and `for {}` and have no loop expression to type.  The choices here are a `loop`
     keyword of the same kind, or recognising a condition the compiler knows is always true -- `true` itself, or any constant --
     and typing `while` that way, which needs no new word but makes the loop's type depend on whether its condition folds.
+
+[ ] let the compile-time evaluator work out a power written raised, `n²`.  A constant expression can (it folds over the syntax
+    itself), but a function it runs cannot: the evaluator refuses it (7000), and a call to such a function in a constant is
+    refused with it.

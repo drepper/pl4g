@@ -1,0 +1,13 @@
+※ pl4g-test: compile=error diag=7000
+
+※ A call in a constant is run while compiling, and what the compiler cannot
+※ run there is reported, naming what it could not do.
+
+@[startup, impure]
+fn main() → u6:
+    let t: 〈u8, u16〉 = 〈1u8, 2u16〉
+    let a: u8 = t⟦picked(0)⟧
+    0u6
+
+fn picked(n: u64) → u64:
+    n²

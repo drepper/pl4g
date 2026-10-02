@@ -5801,6 +5801,71 @@
       "option": null
     },
     {
+      "number": 4663,
+      "name": "LANG_CONSTANT_HAS_NO_ANSWER",
+      "severity": "error",
+      "message": "this divides with no answer, so there is nothing here to take out of the result",
+      "args": [],
+      "cause": "A division answers with a result, and one by zero -- or of the most negative number by minus one -- answers with one that holds nothing.  Where the expression has to be worked out while compiling, there is no function to leave with the error and no value to go on with, so '?' over such a division is refused; '??' says what to have instead.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Constant Expressions",
+        "requirement": "A constant expression that takes apart a division with no answer is refused."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4664,
+      "name": "LANG_CONSTANT_SHIFT_TOO_FAR",
+      "severity": "error",
+      "message": "shifting a '{type}' by {distance} stops the program, so it is no constant",
+      "args": [
+        {
+          "name": "type",
+          "type": "string",
+          "description": "the type shifted"
+        },
+        {
+          "name": "distance",
+          "type": "string",
+          "description": "how far it was shifted"
+        }
+      ],
+      "cause": "A shift by the width of the type or more, or by a negative distance, stops the running program, since the architectures disagree about what it would answer.  Worked out while compiling, the same shift is an error rather than a program that stops every time.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Constant Expressions",
+        "requirement": "A constant expression that shifts by too far is refused."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4665,
+      "name": "LANG_CONSTANT_CALL_IMPURE",
+      "severity": "error",
+      "message": "'{name}' is not pure, so a call to it is not worked out while compiling",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the function called"
+        }
+      ],
+      "cause": "What a constant expression comes to has to be the same every time, and a call to a function that is not pure may answer differently, or do something, each time it is made.  Only a pure function is run while compiling.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Expressions / Constant Expressions",
+        "requirement": "A call in a constant expression is to a pure function."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 4511,
       "name": "LANG_PURE_FUNCTION_HERE",
       "severity": "note",

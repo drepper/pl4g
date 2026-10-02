@@ -1,0 +1,9 @@
+※ pl4g-test: compile=error diag=4664
+
+※ A shift by the width of the type stops the running program, so worked out
+※ while compiling it is an error.
+
+@[startup, impure]
+fn main() → u6:
+    let v: u8⟦1u8 « 8u8⟧ = ⟦1u8⟧ in ⎕static
+    0u6

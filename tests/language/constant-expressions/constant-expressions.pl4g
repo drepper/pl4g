@@ -1,0 +1,46 @@
+※ pl4g-test: compile=ok run=native,qemu exit=0 diag=none
+
+※ Wherever a number has to be known while compiling -- which member of a tuple,
+※ how long an array is, the shape on the left of `⍴`, the value of a constant at
+※ the top level -- it may be worked out from constants rather than written
+※ down: the operators over literals and over constants, and calls to pure
+※ functions with constant arguments, which the compiler runs.
+※
+※ The arithmetic is the program's.  A literal with a suffix keeps its type, and
+※ a division answers with a result, so `?` or `??` takes the number out of it,
+※ as it would at run time -- and it truncates toward zero.  An index worked out
+※ this way is checked against the length while compiling, as a number written
+※ down is.
+
+fn square(n: u64) → u64:
+    n × n
+
+fn fib(n: u64) → u64:
+    if n < 2: n else: fib(n - 1) + fib(n - 2)
+
+fn halved(n: i8) → i8:
+    n ÷ 2i8 ?? 0i8
+
+let SIDE: u64 = 1 + 2
+let AREA: u64 = square(SIDE)
+let MASK: u8 = 1u8 « 3u8 | 1u8
+let HALF: i8 = halved(⁻7i8)
+
+@[startup, impure]
+fn main() → u6:
+    let t: 〈u8, u16, u6〉 = 〈1u8, 2u16, 3u6〉
+    let v: u8⟦square(2)⟧ = ⟦1u8, 2u8, 3u8, 4u8⟧ in ⎕static
+    let w: u8⟦fib(6) - 5⟧ = ⟦5u8, 6u8, 7u8⟧ in ⎕static
+    let filled: u8⟦2 × 3⟧ = (2 × 3) ⍴ 7u8
+    let three: u6 = t⟦1 + 1⟧
+    let last: u6 = t⟦#t - 1⟧
+    let one: u16 = t⟦square(1)⟧
+    let picked: u8 = v⟦1 + 2⟧ + v⟦(7 ÷ 2)?⟧ + w⟦(1 ÷ 0) ?? 2⟧ + filled⟦5⟧
+    if three ≠ 3u6 ∨ last ≠ 3u6 ∨ one ≠ 2u16:
+        1u6
+    elif picked ≠ 4u8 + 4u8 + 7u8 + 7u8:
+        2u6
+    elif AREA ≠ 9u64 ∨ MASK ≠ 9u8 ∨ HALF ≠ ⁻3i8:
+        3u6
+    else:
+        0u6

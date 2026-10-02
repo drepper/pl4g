@@ -460,6 +460,50 @@ The relative binding of the three is the one C settled on and Rust, Go and Zig k
 these the same way.  C's choice of making them bind *looser* than comparison is a famous defect, which this language does not
 inherit: the comparisons bind looser than the bitwise operators, so `a & b = c` reads as `(a & b) = c`.
 
+#### Constant Expressions
+
+**Wherever a number has to be known while compiling, it may be worked out from constants** rather than written down: which member
+of a tuple, how long an array is, the shape on the left of `⍴`, the value of a constant at the top level.  An index into an array
+is worked out the same way where it can be, and is then checked against the length while compiling, as a number written down is.
+
+```
+fn square(n: u64) → u64:
+    n × n
+
+let SIDE: u64 = 1 + 2
+let AREA: u64 = square(SIDE)       ※ 9, run while compiling
+
+t⟦#t - 1⟧                          ※ the last member of a tuple
+let v: u8⟦square(2)⟧ = …           ※ four elements
+v⟦1 + 2⟧                           ※ checked while compiling: 3 is inside four
+```
+
+**What is a constant**: a literal; a name bound at the top level to a whole number that cannot change; `#` of something whose type
+says how many; and an operator over constants -- the arithmetic, the saturating arithmetic, the bitwise operators, the shifts and
+the rotations, `⌈` and `⌊`, a power -- and **a call to a pure function of this program** whose arguments are constants.  The
+compiler runs the call: the function is worked out over what was written, by the same evaluator that runs a build function, which
+is why a call can stand in a type in a signature as well as anywhere else.  A function that is not pure is not run (4665) -- its
+answer could differ from call to call, or the call could do something -- nor one taking a type parameter.  What the evaluator
+cannot work out it names (7000), and one that does not finish is given up on (7001).
+
+**The arithmetic is the program's.**  A literal with a suffix keeps its type, and both sides of an operator have the same type as
+anywhere; a literal without a suffix is a number of no width until something gives it one.  An answer that does not fit its type
+is an error (4214), which is what it would be in the program where both sides were written down, and so is a shift by the width
+of the type or more (4664), which stops the running program.  A division answers with a result, so `?` or `??` takes the number
+out of it, as it would at run time -- `(7 ÷ 2)?` is 3, and `(1 ÷ 0) ?? 2` is 2 -- and `?` over one with no answer is refused (4663),
+there being no function to leave.  Division truncates toward zero, as the program's does.  Inside a function the evaluator runs,
+the arithmetic is worked out without widths; what the call answers has to fit the type the function says it answers.
+
+**An index is a constant only where it is welcome.**  Where a number must be known, a constant that is wrong is an error; where
+one only may be -- an index into an array -- anything about it that is not a constant is left for the program, and what is wrong
+with it is said where the program would say it.
+
+Compare: **C**'s integer constant expressions, which are this without the calls, and C++'s `constexpr` functions, which add them --
+written as such, where here every pure function is one; **D**'s compile-time function evaluation, which is this exactly, any
+function run where a constant is needed and refused where it cannot be; **Zig**'s `comptime`, which a caller writes; **Rust**'s
+`const fn`, which a definition writes and which refuses at compile time an overflow a run would panic on, as this does; and **Go**'s
+untyped constants, exact numbers of no width, which is what an unsuffixed literal is here until something types it.
+
 #### Calls
 
 A function is called by writing its arguments after its name, in parentheses:
@@ -2941,12 +2985,12 @@ What counts as known:
 | `t⟦0⟧`, `t⟦0u8⟧` | a literal, with or without a suffix |
 | `t⟦FIRST⟧` | a name bound at the top level to something that cannot change and holds a whole number |
 | `t⟦at⟧` for a local `at` | no -- what it stands for is the value an expression produced |
-| `t⟦1 + 1⟧` | no -- a constant to a reader, and not yet to this compiler |
+| `t⟦1 + 1⟧`, `t⟦#t - 1⟧`, `t⟦square(1)⟧` | yes -- a constant expression, below |
 
 A name bound at the top level to a number that cannot change *is* that number, and a program that troubled to give it one should not
 have to write the number again.  A name bound inside a function is not one even where nothing assigns to it: what it stands for is
 the value an expression produced, and whether that expression could have been worked out while compiling is a question about the
-expression rather than about the name.  Nothing worked out is one yet, and the to-do list says what asking earlier would need.
+expression rather than about the name.  What is worked out from constants is one: the section on constant expressions says what.
 
 There is **one index** (4463), for the same reason an array of one dimension takes one: a tuple is a run of members and not a
 shape.  Whether the index names a member is known while compiling too (4461), since how many members a tuple has is part of its
@@ -3039,8 +3083,10 @@ every index (4457): what it writes is one element, and copying a whole row is no
 ##### Fixed and dynamic
 
 **`T⟦N⟧` says how many elements there are**, and carries everything about the array but the elements themselves.  A value of one
-needs no room beyond theirs, and what a value of one *is*, is where the elements are.  `N` is a number written down (4447): how
-many elements there are is part of the type, so it is something the compiler reads rather than something the program works out.
+needs no room beyond theirs, and what a value of one *is*, is where the elements are.  `N` is a constant (4447) -- a number
+written down, or a constant expression, `u8⟦2 × 3⟧` or `u8⟦square(2)⟧`: how many elements there are is part of the type, so it is
+something the compiler works out rather than something the program does.  A name in it is not yet one, for a reason the to-do list
+gives: a type is settled before every constant at the top level is.
 
 **`T⟦⟧` does not**, and is where the elements are together with how many there are.  It owns nothing: the elements are an array's,
 or part of one.  For an array of more than one dimension it carries one count per dimension, so `T⟦,⟧` is a table of no stated
