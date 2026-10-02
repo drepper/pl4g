@@ -65,8 +65,17 @@ class PureCalls:
             if not func.blocks:
                 continue
             changed |= self._fold(module, func)
-            changed |= self._reuse(module, func)
-            changed |= self._hoist(module, func)
+            calls = sum(1 for block in func.blocks for inst in block.insts
+                        if self._candidate(inst) is not None)
+            if not calls:
+                # Nothing for the other two to do, and finding that out costs
+                # the dominators.
+                continue
+            dominators = _dominators(func)
+            if calls > 1:
+                changed |= self._reuse(module, func, dominators)
+                dominators = _dominators(func)
+            changed |= self._hoist(module, func, dominators)
         return changed
 
     # -- what may be done to a call ------------------------------------------
@@ -170,10 +179,10 @@ class PureCalls:
 
     # -- worked out once -------------------------------------------------------
 
-    def _reuse(self, module: Module, func: Function) -> bool:
+    def _reuse(self, module: Module, func: Function,
+               dominators: dict[int, set[int]]) -> bool:
         """Let a call stand for a dominating one to the same callee with the same
         arguments."""
-        dominators = _dominators(func)
         order = _preorder(func, dominators)
         made: list[tuple[BasicBlock, tuple[object, ...], CallInst]] = []
         instead: dict[int, Value] = {}
@@ -208,10 +217,10 @@ class PureCalls:
 
     # -- moved out of a loop ---------------------------------------------------
 
-    def _hoist(self, module: Module, func: Function) -> bool:
+    def _hoist(self, module: Module, func: Function,
+               dominators: dict[int, set[int]]) -> bool:
         """Move a call from a loop's head, where nothing it is handed changes
         round the loop, to the block that enters the loop."""
-        dominators = _dominators(func)
         changed = False
         for head, body in _loops(func, dominators):
             entering = _entering(func, head, body)
@@ -241,7 +250,7 @@ class PureCalls:
 
 
 #: How many instructions working out one call while compiling may take.
-_STEPS: Final[int] = 20_000
+_STEPS: Final[int] = 5_000
 
 #: Arithmetic that cannot stop the program: it wraps or answers in range.
 _PLAIN: Final = frozenset({BinOp.WRAP_ADD, BinOp.WRAP_SUB, BinOp.WRAP_MUL,
