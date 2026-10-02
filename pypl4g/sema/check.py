@@ -181,6 +181,9 @@ class _Local:
     #: For a container whose elements point somewhere, the allocator they are
     #: kept in: an arena's identity, or `⎕heap`'s.  Nothing for anything else.
     holds_in: int | None = None
+    #: Whether this is the arena the body hands out with its answer, which it
+    #: makes and does not give back.
+    handed_out: bool = False
 
 
 @dataclass(slots=True)
@@ -969,6 +972,31 @@ def _is_temporary(written: ast.Expr) -> bool:
 #: Where `→ T in ⎕heap` puts the heap among the places an answer may be made in,
 #: which are otherwise parameters.
 HEAP_AT: Final[int] = -1
+#: And where `→ T in pool` puts an arena of the body's own, handed out with the
+#: answer: the parameter nobody wrote, last, where the caller keeps it.
+HANDS_AT: Final[int] = -2
+
+
+def _hands_out_of(node: ast.FuncDef | ast.Lambda) -> str | None:
+    """The arena of the body's own a definition hands out with its answer.
+
+    `→ T in pool` where `pool` is neither a parameter nor `⎕heap`: then it can only
+    be an arena the body makes, which is what alternative 1 of the proposal says.
+    One name alone: an answer made in either of two arenas, one of them handed out,
+    would leave the caller not knowing which it holds.
+    """
+    made_in = node.made_in
+    if not made_in:
+        return None
+    if isinstance(made_in, tuple) and made_in and isinstance(made_in[0], str):
+        made_in = (made_in,)
+    if len(made_in) != 1:
+        return None
+    name = made_in[0][0]
+    params = {one.name for one in node.params}
+    if name in params or name == HEAP_NAME:
+        return None
+    return name
 
 
 def _thin_able(ty: Type) -> bool:
@@ -2126,6 +2154,16 @@ class Checker:
         #: statement of an arm, for an `if` that ends one.
         self._answer_arms: Function | None = None
         self._yield_answer: Function | None = None
+        #: The arena of its own the body being checked hands out with its answer:
+        #: its name, where the caller keeps it, and how deep the body's own scope is
+        #: -- and the local, once `let` has made it.
+        self._hands_out: tuple[str, Value, int] | None = None
+        self._hands_out_local: _Local | None = None
+        #: The arena a definition `let v: T in kept = f(…)` receives into, until a
+        #: call hands it over; and the one the last such call was handed.
+        self._hands_out_told: set[int] = set()
+        self._receiving: tuple[_Local, ast.Expr] | None = None
+        self._received: _Local | None = None
         #: The definitions whose `in` has been checked, so a generic one says what
         #: is wrong with it once and not once per instantiation.
         self._made_in_told: set[int] = set()
@@ -3442,8 +3480,11 @@ class Checker:
                                  else node.name_span)
             borrows = self._borrowed_from(node, ret)
             made_in, param_made_in = self._made_in_of(node, params, ret)
+            hands_out = _hands_out_of(node)
+            if hands_out is not None:
+                params = (*params, self._module.types.ptr_type(ARENA, mutable=True))
             func_attrs, linkage = self._function_attrs(attrs)
-            func = Function(name=whole,
+            func = Function(name=whole, hands_out=hands_out,
                             ty=self._module.types.func_type(
                                 params, ret, func_attrs.listable),
                             attrs=func_attrs, linkage=linkage,
@@ -3463,9 +3504,9 @@ class Checker:
             # Wherever it stands and whoever wrote it: a record laid out for
             # something else to read travels as a reference or not at all, so
             # that one type is not passed two ways.
-            for at, one in enumerate(params):
-                self._not_by_value(one, node.params[at].type.span)
-                self._not_a_piece(one, node.params[at].type.span, node.name)
+            for one, param in zip(params, node.params):
+                self._not_by_value(one, param.type.span)
+                self._not_a_piece(one, param.type.span, node.name)
             self._not_a_piece(ret, node.ret_type.span if node.ret_type is not None
                               else node.name_span, node.name)
             if node.ret_type is not None:
@@ -3599,9 +3640,12 @@ class Checker:
             # `⎕heap` may be named too, which says what nothing would and fixes
             # it: the answer is the heap's, every one of them, and travels without
             # the allocator.  It is `HEAP_AT` among the places.
-            found = (HEAP_AT if name == HEAP_NAME else arena(name, span)
-                     for name, span in node.made_in)
-            made = tuple(sorted({at for at in found if at is not None}))
+            if _hands_out_of(node) is not None:
+                made = (HANDS_AT,)
+            else:
+                found = (HEAP_AT if name == HEAP_NAME else arena(name, span)
+                         for name, span in node.made_in)
+                made = tuple(sorted({at for at in found if at is not None}))
         given: list[int | None] = []
         for param, ty in zip(node.params, params):
             if param.made_in is None:
@@ -3650,6 +3694,12 @@ class Checker:
         if func.made_in is None:
             self._answer_made_in = (frozenset({_HEAP}), HEAP_NAME)
             return
+        if func.made_in == (HANDS_AT,):
+            # The arena is the body's own and does not exist yet: what answers
+            # are allowed is said once `let` has made it.
+            self._answer_made_in = (frozenset(), "".join(
+                ("'", func.hands_out or "", "'")))
+            return
         allowed: set[int] = set()
         for at in func.made_in:
             if at == HEAP_AT:
@@ -3668,6 +3718,69 @@ class Checker:
             # to what comes back.  An arena named lets text in the image through
             # as it is, and travels thin only where the body shows none.
             self._thin_to = _HEAP
+
+    def _handing_callee(self, expr: ast.Expr) -> str | None:
+        """The name of what *expr* calls, where that hands out an arena."""
+        if not isinstance(expr, ast.Call) or not isinstance(expr.callee, ast.NameRef):
+            return None
+        local = self._find_local(expr.callee.name)
+        if local is not None:
+            held = self._held_by(local)
+            return expr.callee.name if isinstance(held, FuncType) \
+                and held.hands_out else None
+        found = self._top.get(expr.callee.name)
+        if isinstance(found, Function) and found.hands_out is not None:
+            return expr.callee.name
+        if isinstance(found, _Generic) and _hands_out_of(found.node) is not None:
+            return expr.callee.name
+        return None
+
+    def _lower_receiving(self, builder: IRBuilder, stmt: ast.VarDef) -> None:
+        """Lower `let v: T in kept = f(…)`: an arena received with an answer.
+
+        The definition makes the arena -- `kept`, in this body's frame, as
+        `let kept: mut arena = ⎕arena` would -- and the call is handed where it is,
+        so what the call makes in its own arena is made here.  The arena is then
+        this body's like any it made: given back with `⎕empty`, and before a pure
+        function leaves.  What is bound with `in` has to be a call that hands one
+        out (4631).
+        """
+        name, where = stmt.made_in
+        self._lower_local(builder, ast.VarDef(
+            span=stmt.span, name=name, name_span=where,
+            type=ast.TypeRef(span=where, name=ARENA_NAME),
+            value=ast.NameRef(span=where, name=EMPTY_ARENA_NAME), mutable=True))
+        arena = self._find_local(name)
+        if arena is None:
+            return
+        # Read, so that one only received and given back is not "never read".
+        arena.read = True
+        outer = (self._receiving, self._received)
+        self._receiving, self._received = (arena, stmt.value), None
+        try:
+            self._lower_local(builder, replace(stmt, made_in=None))
+            self._made_in(stmt.name, stmt.value, stmt.span)
+            got = self._received
+        finally:
+            self._receiving, self._received = outer
+        if got is None:
+            self._diags.emit(D.LANG_BOUND_IN_NOT_HANDED_OUT, where, name=name)
+
+    def _arena_for(self, expr: ast.Call, name: str) -> Value | None:
+        """Where the arena a call hands out with its answer is to be kept.
+
+        Only a call that is the whole of what `let v: T in kept = …` is given may
+        hand one out (4629): written anywhere else, what it hands out would have no
+        name to be given back by.  The definition made the arena already; the call
+        is handed where it is, and its own `let` starts it there.
+        """
+        receiving = self._receiving
+        if receiving is None or receiving[1] is not expr:
+            self._diags.emit(D.LANG_HANDED_OUT_UNBOUND, expr.span, name=name)
+            return None
+        self._receiving = None
+        self._received = receiving[0]
+        return receiving[0].value
 
     def _written_for(self, expr: ast.Call, func: Function) -> dict[int, ast.Expr]:
         """What a call wrote for each parameter, by the parameter's place."""
@@ -3731,6 +3844,9 @@ class Checker:
             for at in func.made_in:
                 if at == HEAP_AT:
                     made.add(_HEAP)
+                elif at == HANDS_AT:
+                    if self._received is not None:
+                        made.add(id(self._received))
                 elif at in written:
                     made.update(self._arenas_in(written[at]))
             self._last_made_in = frozenset(made)
@@ -4494,7 +4610,8 @@ class Checker:
             if ret is ERROR or any(one is ERROR for one in params):
                 return ERROR
             return self._module.types.func_type(
-                params, ret, self._walks_what_it_is_given(ref.attrs))
+                params, ret, self._walks_what_it_is_given(ref.attrs),
+                hands_out=ref.made_in is not None)
         return self._named_type(ref)
 
     # -- units -----------------------------------------------------------------
@@ -6063,6 +6180,14 @@ class Checker:
         made = self._arenas_in(written)
         allowed, named = said
         thin = self._thin_to
+        if not allowed and func.made_in == (HANDS_AT,):
+            # Answering before the arena it hands out is made: there is nowhere
+            # the answer could be, the arena being the body's own.  Said once.
+            if id(func) not in self._hands_out_told:
+                self._hands_out_told.add(id(func))
+                self._diags.emit(D.LANG_HANDED_OUT_NOT_MADE, span,
+                                 name=func.hands_out or "")
+            return value
         if isinstance(written, ast.Call) and self._callee_of.get(id(written)) is func \
                 and (made <= allowed or allowed == {_HEAP}):
             # The function answering what it answers itself: by the same rule, one
@@ -6130,6 +6255,19 @@ class Checker:
             return self._arenas_in(written) == {_HEAP}
         return False
 
+    def _handed_out_made(self, func: Function, node: object) -> None:
+        """Check that a body handing out an arena of its own made it (4627).
+
+        `let NAME: mut arena = ⎕arena` in the body's own scope -- not in a block
+        inside it, which a way out could leave without making it.
+        """
+        if func.hands_out is None or self._hands_out_local is not None \
+                or id(func) in self._hands_out_told:
+            return
+        self._hands_out_told.add(id(func))
+        span = getattr(node, "name_span", None) or getattr(node, "span")
+        self._diags.emit(D.LANG_HANDED_OUT_NOT_MADE, span, name=func.hands_out)
+
     def _settle_answer(self, func: Function, node: ast.FuncDef) -> None:
         """Write on the function where its answer is made, where that is one place.
 
@@ -6145,6 +6283,10 @@ class Checker:
             if len(func.made_in) != 1:
                 return
             (at,) = func.made_in
+            if at == HANDS_AT:
+                # The arena handed out is where the caller keeps it: the last
+                # parameter, which is what the caller puts back.
+                at = len(func.ty.params) - 1
             if at == HEAP_AT:
                 func.answer_from = ("heap", -1)
             elif self._answer_kinds and all(one == "param"
@@ -6157,8 +6299,11 @@ class Checker:
             func.answer_from = ("heap", -1)
         else:
             return
+        index = func.answer_from[1]
         where = HEAP_NAME if func.answer_from[0] == "heap" else "".join((
-            "what '", node.params[func.answer_from[1]].name, "' is given"))
+            "what '", node.params[index].name, "' is given")) \
+            if index < len(node.params) else "".join((
+                "'", func.hands_out or "", "', handed out to the caller"))
         self._module.reports.record(
             ReportKind.ALLOCATOR, func.name,
             "".join(("what '", func.name, "' answers is made in ", where,
@@ -6202,7 +6347,8 @@ class Checker:
         given = set().union(*self._emptied) if self._emptied else set()
         for scope in self._scopes[opened_at:]:
             for local in scope.values():
-                if local.is_parameter or not self._is_arena(local):
+                if local.is_parameter or local.handed_out \
+                        or not self._is_arena(local):
                     continue
                 if self._held_by(local) is not ARENA:
                     continue
@@ -6482,6 +6628,14 @@ class Checker:
         # written by instructions that follow them.
         arriving = [block.add_param(func.ty.params[index], param.name)
                     for index, param in enumerate(node.params)]
+        outer_hands = (self._hands_out, self._hands_out_local)
+        self._hands_out = self._hands_out_local = None
+        if func.hands_out is not None:
+            # Where the caller keeps the arena this body hands out, last.
+            self._hands_out = (func.hands_out,
+                               block.add_param(func.ty.params[-1],
+                                               "".join((func.hands_out, ".out"))),
+                               len(self._scopes))
         outer_entry, self._at_entry = self._at_entry, {}
         for index, (param, value) in enumerate(zip(node.params, arriving)):
             # What arrived, before anything is done about storage: a parameter a
@@ -6546,6 +6700,8 @@ class Checker:
                                  name=func.name, type=func.ty.ret.written())
                 builder.unreachable()
         self._settle_answer(func, node)
+        self._handed_out_made(func, node)
+        self._hands_out, self._hands_out_local = outer_hands
         self._demanding = outer_demanding
         self._at_entry = outer_entry
         self._answer_made_in = outer_made_in
@@ -6687,6 +6843,8 @@ class Checker:
                 if stmt.explicit and is_last and agrees:
                     self._diags.emit(D.LANG_FUNCDEF_RETURN_REDUNDANT, stmt.span)
                 self._lower_return(builder, stmt, func)
+            case ast.VarDef() if stmt.made_in is not None:
+                self._lower_receiving(builder, stmt)
             case ast.VarDef():
                 self._lower_local(builder, stmt)
                 self._made_in(stmt.name, stmt.value, stmt.span)
@@ -7909,8 +8067,16 @@ class Checker:
         code = builder.extract(held, 0, _ENVIRONMENT, expr.span)
         environment = builder.extract(held, 1, _ENVIRONMENT, expr.span)
 
+        handing: list[Value] = []
+        if ty.hands_out:
+            place = self._arena_for(expr, local.name)
+            if place is None:
+                return UndefConst(ERROR)
+            handing.append(place)
+
         def make(given: Sequence[Value], span: Span) -> Value:
-            return builder.call(code, (environment, *given), ty.ret, span)
+            return builder.call(code, (environment, *given, *handing), ty.ret,
+                                span)
 
         if ty.listable \
                 and any(one.ty is not wanted
@@ -7953,8 +8119,11 @@ class Checker:
                 return None
             attrs, linkage = self._function_attrs(written.attrs)
             made_in, param_made_in = self._made_in_of(node, params, answer)
+            hands_out = _hands_out_of(node)
+            if hands_out is not None:
+                params = (*params, self._module.types.ptr_type(ARENA, mutable=True))
             func = Function(
-                name=node.name,
+                name=node.name, hands_out=hands_out,
                 ty=self._module.types.func_type(params, answer,
                                                 attrs.listable),
                 attrs=attrs, linkage=linkage, exported=False,
@@ -8009,9 +8178,11 @@ class Checker:
                  self._deferred, self._emptied, self._answer_made_in,
                  self._out_of_arena, self._out_of_arenas, self._made_from,
                  self._answer_kinds, self._thin_to, self._answer_arms,
-                 self._yield_answer)
+                 self._yield_answer, self._hands_out, self._hands_out_local,
+                 self._receiving)
         self._scopes, self._addressed = [], set()
         self._answer_arms = self._yield_answer = None
+        self._hands_out = self._hands_out_local = self._receiving = None
         # What was worked out about where an expression was made belongs to the
         # body it was lowered in: this one lowers the same nodes for other types.
         self._made_from = {}
@@ -8034,6 +8205,11 @@ class Checker:
             for param, value in zip(node.params, arriving):
                 self._bind_local(param.name, value, param.span, param.mutable,
                                  is_parameter=True, builder=inner)
+            if func.hands_out is not None:
+                self._hands_out = (func.hands_out,
+                                   block.add_param(func.ty.params[-1], "".join(
+                                       (func.hands_out, ".out"))),
+                                   len(self._scopes))
             self._params_made_in(node, func)
             self._lower_block(inner, node.body, func)
             if not inner.is_terminated:
@@ -8045,6 +8221,7 @@ class Checker:
                                      type=func.ty.ret.written())
                     inner.unreachable(node.span)
             self._settle_answer(func, node)
+            self._handed_out_made(func, node)
             self._pop_scope()
         finally:
             (self._scopes, self._addressed, self._answering, self._impure,
@@ -8053,7 +8230,8 @@ class Checker:
              self._deferred, self._emptied, self._answer_made_in,
              self._out_of_arena, self._out_of_arenas, self._made_from,
              self._answer_kinds, self._thin_to, self._answer_arms,
-             self._yield_answer) = outer
+             self._yield_answer, self._hands_out, self._hands_out_local,
+             self._receiving) = outer
 
     def _lower_generic(self, builder: IRBuilder, expr: ast.Call,
                        written: _Generic, expected: Type | None) -> Value:
@@ -8263,6 +8441,11 @@ class Checker:
             if self._value_type_of(given) is ERROR:
                 return UndefConst(ERROR)
             made.append(given)
+        if func.hands_out is not None:
+            place = self._arena_for(expr, func.name)
+            if place is None:
+                return UndefConst(ERROR)
+            made.append(place)
         args = made
         self._what_it_changes(func, expr.span)
         answer = builder.call(func, list(args), func.ty.ret, expr.span)
@@ -8321,7 +8504,8 @@ class Checker:
         if answer is ERROR or any(one is ERROR for one in params):
             return UndefConst(ERROR)
         walks = self._walks_what_it_is_given(expr.attrs)
-        ty = self._module.types.func_type(params, answer, walks)
+        ty = self._module.types.func_type(
+            params, answer, walks, hands_out=_hands_out_of(expr) is not None)
         if walks and not params:
             # Named the way the report log names it, that being the one name
             # this function has and the one a reader can look up.
@@ -8371,6 +8555,11 @@ class Checker:
         two ways of writing the same value.
         """
         assert isinstance(func, Function)
+        if func.hands_out is not None:
+            # Called through a value, it would hand its arena out where nothing
+            # receives it by name.  A lambda may hand one out; its type says so.
+            self._diags.emit(D.LANG_HANDED_OUT_UNBOUND, ref.span, name=func.name)
+            return UndefConst(ERROR)
         shim = self._shim_for(func, ref.span)
         if shim is None:
             return UndefConst(ERROR)
@@ -8619,12 +8808,18 @@ class Checker:
         scope holding those and nothing else, so a name from around the lambda
         that was not brought in is not a name here at all.
         """
+        hands_out = _hands_out_of(expr)
+        hidden = (self._module.types.ptr_type(ARENA, mutable=True),) \
+            if hands_out is not None else ()
         func = Function(
             name=name,
-            ty=self._module.types.func_type((_ENVIRONMENT, *params), answer),
+            ty=self._module.types.func_type((_ENVIRONMENT, *params, *hidden),
+                                            answer),
             attrs=FuncAttrs(impure=True), linkage=Linkage.INTERNAL,
             span=expr.span, name_span=expr.span, source_path=self._path.as_posix(),
-            param_names=("", *(one.name for one in expr.params)))
+            param_names=("", *(one.name for one in expr.params)),
+            hands_out=hands_out,
+            made_in=(HANDS_AT,) if hands_out is not None else None)
         self._module.add_function(func, key=self._key(name))
         # Owned by the file it is written in, as every other definition is: the
         # module's name goes in front of it when the routes to that module are
@@ -8639,13 +8834,18 @@ class Checker:
                  self._carried, self._loops, self._outside, self._deferred,
                  self._emptied, self._out_of_arena, self._out_of_arenas,
                  self._answer_made_in, self._made_from, self._answer_kinds,
-                 self._thin_to, self._answer_arms, self._yield_answer)
+                 self._thin_to, self._answer_arms, self._yield_answer,
+                 self._hands_out, self._hands_out_local, self._receiving)
         self._deferred, self._emptied, self._made_from = [], [], {}
         self._answer_kinds, self._thin_to = [], None
         self._answer_arms = self._yield_answer = None
+        self._hands_out = self._hands_out_local = self._receiving = None
         self._out_of_arena, self._out_of_arenas = None, frozenset({_HEAP})
-        # A lambda answers in `⎕heap`, saying nothing else, as a function does.
+        # A lambda answers in `⎕heap`, saying nothing else, as a function does --
+        # or in an arena of its own it hands out, where it says so.
         self._answer_made_in = (frozenset({_HEAP}), HEAP_NAME)
+        if hands_out is not None:
+            self._answer_made_in = (frozenset(), "".join(("'", hands_out, "'")))
         # A lambda's body binds its own names, so a reference out in the body
         # around it says nothing about a name of the same spelling in here.
         outer_borrows, self._borrows = self._borrows, []
@@ -8654,6 +8854,11 @@ class Checker:
         self._answering, self._impure = answer, True
         self._carried, self._loops = set(), []
         self._push_scope()
+        if hands_out is not None:
+            self._hands_out = (hands_out,
+                               block.add_param(hidden[0], "".join(
+                                   (hands_out, ".out"))),
+                               len(self._scopes))
         try:
             _addressed_in(expr.body, self._addressed)
             brought: list[tuple[ast.Capture, _Local]] = []
@@ -8698,13 +8903,15 @@ class Checker:
                     # function with no terminator is one the verifier would
                     # complain about instead, which would say nothing useful.
                     inner.unreachable(expr.span)
+            self._handed_out_made(func, expr)
             self._pop_scope()
         finally:
             (self._scopes, self._addressed, self._answering, self._impure,
              self._carried, self._loops, self._outside, self._deferred,
              self._emptied, self._out_of_arena, self._out_of_arenas,
              self._answer_made_in, self._made_from, self._answer_kinds,
-             self._thin_to, self._answer_arms, self._yield_answer) = outer
+             self._thin_to, self._answer_arms, self._yield_answer,
+             self._hands_out, self._hands_out_local, self._receiving) = outer
             self._borrows = outer_borrows
         return func
 
@@ -11806,7 +12013,12 @@ class Checker:
             # Built where it will live rather than made and then copied.  A
             # record holding a record has no register to be made in, so writing
             # it straight into its place is not an economy but the only way.
-            place = builder.frame(declared, node.span)
+            handed = self._hands_out
+            out = (handed is not None and declared is ARENA
+                   and node.name == handed[0] and len(self._scopes) == handed[2])
+            # The arena this body hands out lives where the caller keeps it, so
+            # what is made in it is already there when the call returns.
+            place = handed[1] if out else builder.frame(declared, node.span)
             self._initializing = node.name
             try:
                 self._build_record(builder, place, node.value, declared,
@@ -11816,6 +12028,13 @@ class Checker:
             self._bind_local(node.name, place, node.name_span, node.mutable,
                              value_span=node.span, builder=builder,
                              placed_as=declared)
+            if out:
+                local = self._find_local(node.name)
+                assert local is not None
+                local.handed_out = True
+                self._hands_out_local = local
+                self._answer_made_in = (frozenset({id(local)}), "".join(
+                    ("'", node.name, "'")))
             return
         self._initializing = node.name
         try:
@@ -15102,7 +15321,8 @@ class Checker:
         for the reason the places exist: once a name has been written the places
         no longer count from anywhere.
         """
-        wanted = func.ty.params
+        wanted = func.ty.params[:-1] if func.hands_out is not None \
+            else func.ty.params
         placed: list[ast.Expr] = []
         named: list[ast.Named] = []
         failed = False
@@ -15166,7 +15386,13 @@ class Checker:
             held[at] = given
         if failed or any(value is None for value in held):
             return None
-        return [value for value in held if value is not None]
+        given = [value for value in held if value is not None]
+        if func.hands_out is not None:
+            place = self._arena_for(expr, func.name)
+            if place is None:
+                return None
+            given.append(place)
+        return given
 
     def _lower_unit_call(self, builder: IRBuilder, expr: ast.Call,
                          expected: Type | None) -> Value:
@@ -15789,6 +16015,11 @@ class Checker:
             _about_the_shape(written)
         if isinstance(written, ast.NameRef):
             local = self._find_local(written.name)
+            if local is not None and local.handed_out:
+                # It leaves with the answer, which the caller gives back.
+                self._diags.emit(D.LANG_HANDED_OUT_GIVEN_BACK, written.span,
+                                 name=written.name)
+                return None
             if local is not None and self._is_arena(local):
                 if self._held_by(local) is ARENA:
                     return local
@@ -15924,6 +16155,11 @@ class Checker:
                 # which is the one `in` names and nothing its operands were made in.
                 self._made_from[id(expr)] = (expr, self._last_made_in)
             return found
+        handing = self._handing_callee(inside)
+        if handing is not None:
+            self._diags.emit(D.LANG_HANDED_OUT_IN_AFTER_CALL, expr.span,
+                             name=handing)
+            return UndefConst(ERROR)
         if not _takes_room(inside):
             self._diags.emit(D.LANG_ALLOCATED_NOT_A_PLACE, expr.span,
                              found=_about_the_shape(inside))

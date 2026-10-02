@@ -9001,6 +9001,30 @@ Compare: Scheme (required, every tail call), Lua, ML and Haskell implementations
 Go, Rust (an optimization, Rust reserving `become`); Clang `musttail`, Zig `always_tail`
 (asked per call, refused where impossible); Python and Java (never).
 
+## 2026-10-02T18:00+02:00 — language
+
+**A function hands an arena of its own out with its answer: `→ T in pool`**
+
+    fn words(text: str) → [str] in pool:
+        let pool: mut arena = ⎕arena
+        …
+    let found: [str] in kept = words(line)
+
+Alternative 1 of [scoped-arenas.md](scoped-arenas.md), decided by the user with its open
+questions: only `let v: T in kept = f(…)` receives such an answer -- an unbound call is
+refused (4629) and so is `f(…) in kept` (4630) -- and a lambda may answer this way.
+
+Decided here: **nothing moves**.  The caller keeps the arena in its own frame and the call is
+handed where, as a last parameter no program writes; the body's `let pool` starts the arena
+there.  So every allocator word a value made in it carries already names the caller's arena,
+and the answer is an ordinary `→ T in a` answer, thin where the body shows it.  The arena is
+made in the body's own scope (4627) and never given back there (4628); a definition with `in`
+needs such a call (4631).  A named function that hands out is refused as a value; a lambda's
+type carries it -- `fn(u64) → str in it` -- the name after `in` being the reader's.
+
+Compare: in the proposal -- Zig, Rust with `ouroboros`/`yoke`, C++ `pmr` with a `unique_ptr`,
+Cyclone's dynamic regions.
+
 Open questions
 --------------
 

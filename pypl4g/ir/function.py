@@ -255,6 +255,12 @@ class Function:
     #: is given.  Written by the signature or by checking the body, and what lets
     #: a string or a list travel back without its allocator, the caller adding it.
     answer_from: tuple[str, int] | None = None
+    #: The name of the arena of the function's own its answer is made in and
+    #: handed out with (`→ T in pool`), where it says so.  The function takes one
+    #: parameter more than its definition writes, last: where the caller keeps
+    #: that arena, which the body's `let pool` starts there instead of in its own
+    #: frame -- so nothing is moved when the call returns.
+    hands_out: str | None = None
 
     #: How this function hands back an answer that is more than one value.  A
     #: property of the function that answers, as the convention it is called by

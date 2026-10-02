@@ -285,7 +285,10 @@ module.exports = grammar({
       repeat(seq(',', field('name', $.identifier))),
       ':',
       optional($.mutable),
-      optional(field('type', $.type)),
+      optional(seq(field('type', $.type),
+                   // `in kept`: the arena a call hands out with its answer,
+                   // received under that name.
+                   optional(seq('in', field('made_in', $.identifier))))),
       '=',
       field('value', $._expression),
     ),
@@ -351,7 +354,10 @@ module.exports = grammar({
       prec.right(seq(optional($.attribute_list),
                      'fn', '(', sepBy(',', field('parameter', $.type)), ')',
                      optional(seq($._return_arrow,
-                                  field('return_type', $.type))))),
+                                  field('return_type', $.type),
+                                  // a function handing its own arena out
+                                  optional(seq('in',
+                                               field('made_in', $.identifier))))))),
     ),
 
     // What a number counts, written after the type it belongs to and before
@@ -674,7 +680,9 @@ module.exports = grammar({
       repeat(seq(',', field('name', $.identifier))),
       ':',
       optional($.mutable),
-      optional(field('type', $.type)),
+      optional(seq(field('type', $.type),
+                   // `in kept`: the arena a call hands out with its answer.
+                   optional(seq('in', field('made_in', $.identifier))))),
       '=',
       field('value', $._expression),
     ),
@@ -879,7 +887,9 @@ module.exports = grammar({
       '\u03bb',
       sepBy(',', field('parameter', $.lambda_parameter)),
       optional(field('captures', $.capture_list)),
-      optional(seq($._return_arrow, field('return_type', $.type))),
+      optional(seq($._return_arrow, field('return_type', $.type),
+                   // `in pool`: an arena of the body's own, handed out
+                   optional(seq('in', field('made_in', $.identifier))))),
       field('body', $._block),
     ))),
 
@@ -1035,7 +1045,10 @@ module.exports = grammar({
     allocated_expression: $ => seq(
       field('value', choice($.binary_expression, $.unary_expression,
                             $.set_literal, $.dictionary_literal,
-                            $.list_literal, $.array_literal)),
+                            $.list_literal, $.array_literal,
+                            // which the compiler reads and refuses where the
+                            // call hands out an arena of its own
+                            $.call_expression)),
       $._in_arena),
 
     // Whether a set holds a key, or what a dictionary has for one.  It binds

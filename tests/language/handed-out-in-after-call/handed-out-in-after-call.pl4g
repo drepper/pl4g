@@ -1,0 +1,16 @@
+※ pl4g-test: compile=error
+※ pl4g-test: expect-diag 4630 LANG_HANDED_OUT_IN_AFTER_CALL
+
+※ `EXPR in NAME` says an expression takes its room from an arena that already exists; a call that
+※ hands out an arena of its own makes it, and a definition receives it.
+
+fn named(n: u64) → str in pool:
+    let pool: mut arena = ⎕arena
+    "a" ⧺ "b" in pool
+
+@[startup]
+fn main() → u6:
+    let k: mut arena = ⎕arena
+    defer ⎕empty(k)
+    let s: str = named(1u64) in k
+    if s = "ab": 0u6 else: 1u6

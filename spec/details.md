@@ -1860,6 +1860,14 @@ back what it replaces through `__pl4g_disown.T`, which asks each element for its
 two kinds of key besides allocators: one naming a heap container, and one naming "read out of that container", which is what an
 element replacement kills.
 
+**An arena handed out lives in the caller's frame.**  A function with `→ T in pool` for no parameter (`Function.hands_out`,
+`FuncType.hands_out` for a value) takes one parameter more, last: a `ptr<mut arena>`.  `let pool: mut arena = ⎕arena` in the body's
+own scope is lowered with that pointer as its place instead of a `frame` slot, and the local is marked `handed_out`, which `⎕empty`
+refuses and the "given back on every way out" check skips.  `let v: T in kept = f(…)` lowers `let kept: mut arena = ⎕arena` first,
+then the call with `kept`'s place waiting in `_receiving`; only the call that is the definition's whole value takes it
+(`_arena_for`), and the answer's provenance is `kept`.  `made_in` is `(HANDS_AT,)`, so the answer may be thin with the caller's
+place as its allocator.
+
 **A call of a function to itself in tail position is a jump** (`opt/passes/tailcalls.py`, the first pass after `dropignored` at
 every level, before `largeanswers` could put the answer in the caller's storage).  Tail position is read off the IR the checker
 writes: the call and then the `ret` of its answer, or the call and then a branch to blocks that do nothing but hand on and return

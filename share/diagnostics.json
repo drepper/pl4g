@@ -4960,6 +4960,116 @@
       "option": null
     },
     {
+      "number": 4627,
+      "name": "LANG_HANDED_OUT_NOT_MADE",
+      "severity": "error",
+      "message": "'{name}' is where the answer is said to be made, and the body has not made it here",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the arena"
+        }
+      ],
+      "cause": "`→ T in pool`, where `pool` is no parameter, says the body makes an arena of its own and hands it out with its answer: `let pool: mut arena = ⎕arena` in the body's own scope -- not in a block inside it -- before any way out that answers.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Arenas / Handing an arena out",
+        "requirement": "An arena a function hands out with its answer is made in its body and received by name."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4628,
+      "name": "LANG_HANDED_OUT_GIVEN_BACK",
+      "severity": "error",
+      "message": "'{name}' leaves with the answer, and only the caller that receives it gives it back",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the arena"
+        }
+      ],
+      "cause": "An arena handed out with the answer is the caller's from the moment the function returns: everything the answer points into is in it.  Giving it back in the body, straight away or with `defer`, would hand the caller an answer made in nothing.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Arenas / Handing an arena out",
+        "requirement": "An arena a function hands out with its answer is made in its body and received by name."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4629,
+      "name": "LANG_HANDED_OUT_UNBOUND",
+      "severity": "error",
+      "message": "'{name}' hands an arena out with its answer, and a call of it is received with `let NAME: TYPE in ARENA = …`",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the function"
+        }
+      ],
+      "cause": "What a function hands out has to be given back by whoever receives it, so it is received under a name: the whole of a definition's value, `let v: T in kept = f(…)`.  A call anywhere else -- an argument, part of an expression, a definition without `in`, a function named as a value -- would hand out an arena nothing could give back.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Arenas / Handing an arena out",
+        "requirement": "An arena a function hands out with its answer is made in its body and received by name."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4630,
+      "name": "LANG_HANDED_OUT_IN_AFTER_CALL",
+      "severity": "error",
+      "message": "what '{name}' hands out is received with `let NAME: TYPE in ARENA = …`, not with `in` after the call",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the function"
+        }
+      ],
+      "cause": "`EXPR in NAME` says an expression takes its room from an arena that already exists.  A call that hands out an arena of its own makes that arena; what receives it is a definition, which names it.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Arenas / Handing an arena out",
+        "requirement": "An arena a function hands out with its answer is made in its body and received by name."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
+      "number": 4631,
+      "name": "LANG_BOUND_IN_NOT_HANDED_OUT",
+      "severity": "error",
+      "message": "'{name}' receives what a call hands out, and the definition's value is no such call",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "the arena named after `in`"
+        }
+      ],
+      "cause": "`let v: T in kept = …` receives an arena a call hands out with its answer, so its value is a call of a function whose signature says `→ T in pool` for an arena of its own -- the whole of the value, not a call inside it.",
+      "spec": {
+        "document": "spec/spec.md",
+        "section": "The Language / Types / Arenas / Handing an arena out",
+        "requirement": "An arena a function hands out with its answer is made in its body and received by name."
+      },
+      "since": "0.1",
+      "default_enabled": true,
+      "option": null
+    },
+    {
       "number": 4511,
       "name": "LANG_PURE_FUNCTION_HERE",
       "severity": "note",

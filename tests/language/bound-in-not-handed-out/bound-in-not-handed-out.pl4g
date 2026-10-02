@@ -1,0 +1,11 @@
+※ pl4g-test: compile=error
+※ pl4g-test: expect-diag 4631 LANG_BOUND_IN_NOT_HANDED_OUT
+
+※ `let v: T in kept = …` receives an arena a call hands out with its answer, so its value is such a
+※ call: a join makes no arena to receive.
+
+@[startup]
+fn main() → u6:
+    let s: str in k = "a" ⧺ "b"
+    defer ⎕empty(k)
+    if s = "ab": 0u6 else: 1u6

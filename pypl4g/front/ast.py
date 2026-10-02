@@ -821,6 +821,9 @@ class VarDef(Stmt):
     #: comment apart -- a `\param` that names nothing, say -- can point at the
     #: line it is on.  Written with the text, by the one place that collects it.
     doc_lines: tuple[Span, ...] = ()
+    #: `let v: T in kept = f(…)`: the arena a call hands out with its answer,
+    #: which the definition makes and names.  Nothing where it says nothing.
+    made_in: tuple[str, Span] | None = None
     #: The names after the first, where the definition takes a tuple apart.
     more: tuple[tuple[str, Span], ...] = ()
 
@@ -1232,6 +1235,9 @@ class Lambda(Expr):
     #: type can be said here, since that is all a value handed from one name to
     #: another still carries.
     attrs: tuple[Attribute, ...] = ()
+    #: `→ T in pool`: the arena of the body's own the answer is made in, handed
+    #: out to the caller with it.
+    made_in: tuple[str, Span] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -1248,6 +1254,9 @@ class FuncTypeRef(Node):
     #: What was written before the `fn`, which is the same thing written before
     #: the `λ` of a lambda this type can hold.
     attrs: tuple[Attribute, ...] = ()
+    #: `→ T in NAME`: a function that hands its own arena out with its answer.
+    #: The name is the reader's; what the type says is that it does.
+    made_in: tuple[str, Span] | None = None
 
 
 class ClauseKind(StrEnum):

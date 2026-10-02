@@ -1165,12 +1165,42 @@
           "type": "CHOICE",
           "members": [
             {
-              "type": "FIELD",
-              "name": "type",
-              "content": {
-                "type": "SYMBOL",
-                "name": "type"
-              }
+              "type": "SEQ",
+              "members": [
+                {
+                  "type": "FIELD",
+                  "name": "type",
+                  "content": {
+                    "type": "SYMBOL",
+                    "name": "type"
+                  }
+                },
+                {
+                  "type": "CHOICE",
+                  "members": [
+                    {
+                      "type": "SEQ",
+                      "members": [
+                        {
+                          "type": "STRING",
+                          "value": "in"
+                        },
+                        {
+                          "type": "FIELD",
+                          "name": "made_in",
+                          "content": {
+                            "type": "SYMBOL",
+                            "name": "identifier"
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "type": "BLANK"
+                    }
+                  ]
+                }
+              ]
             },
             {
               "type": "BLANK"
@@ -1430,6 +1460,31 @@
                           "type": "SYMBOL",
                           "name": "type"
                         }
+                      },
+                      {
+                        "type": "CHOICE",
+                        "members": [
+                          {
+                            "type": "SEQ",
+                            "members": [
+                              {
+                                "type": "STRING",
+                                "value": "in"
+                              },
+                              {
+                                "type": "FIELD",
+                                "name": "made_in",
+                                "content": {
+                                  "type": "SYMBOL",
+                                  "name": "identifier"
+                                }
+                              }
+                            ]
+                          },
+                          {
+                            "type": "BLANK"
+                          }
+                        ]
                       }
                     ]
                   },
@@ -3244,12 +3299,42 @@
           "type": "CHOICE",
           "members": [
             {
-              "type": "FIELD",
-              "name": "type",
-              "content": {
-                "type": "SYMBOL",
-                "name": "type"
-              }
+              "type": "SEQ",
+              "members": [
+                {
+                  "type": "FIELD",
+                  "name": "type",
+                  "content": {
+                    "type": "SYMBOL",
+                    "name": "type"
+                  }
+                },
+                {
+                  "type": "CHOICE",
+                  "members": [
+                    {
+                      "type": "SEQ",
+                      "members": [
+                        {
+                          "type": "STRING",
+                          "value": "in"
+                        },
+                        {
+                          "type": "FIELD",
+                          "name": "made_in",
+                          "content": {
+                            "type": "SYMBOL",
+                            "name": "identifier"
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "type": "BLANK"
+                    }
+                  ]
+                }
+              ]
             },
             {
               "type": "BLANK"
@@ -4238,6 +4323,31 @@
                         "type": "SYMBOL",
                         "name": "type"
                       }
+                    },
+                    {
+                      "type": "CHOICE",
+                      "members": [
+                        {
+                          "type": "SEQ",
+                          "members": [
+                            {
+                              "type": "STRING",
+                              "value": "in"
+                            },
+                            {
+                              "type": "FIELD",
+                              "name": "made_in",
+                              "content": {
+                                "type": "SYMBOL",
+                                "name": "identifier"
+                              }
+                            }
+                          ]
+                        },
+                        {
+                          "type": "BLANK"
+                        }
+                      ]
                     }
                   ]
                 },
@@ -5041,6 +5151,10 @@
               {
                 "type": "SYMBOL",
                 "name": "array_literal"
+              },
+              {
+                "type": "SYMBOL",
+                "name": "call_expression"
               }
             ]
           }

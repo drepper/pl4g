@@ -403,18 +403,25 @@ class FuncType(Type):
     #: value that travels has to carry the promise with it -- the same reason
     #: a reference carries whether its place may be written.
     listable: bool = False
+    #: Whether a function of this type hands out an arena of its own with its
+    #: answer, which a call receives by binding it: `→ T in pool`.  Its code
+    #: takes one parameter more than the type says, last: where the caller keeps
+    #: that arena.
+    hands_out: bool = False
 
     def render(self) -> str:
         """The name of this type in the textual form of the IR."""
         inner = ", ".join(p.render() for p in self.params)
         return "".join(("listable " if self.listable else "",
-                        "fn(", inner, ") \N{RIGHTWARDS ARROW} ", self.ret.render()))
+                        "fn(", inner, ") \N{RIGHTWARDS ARROW} ", self.ret.render(),
+                        " in arena" if self.hands_out else ""))
 
     def written(self) -> str:
         """The name of this type as a program writes it."""
         inner = ", ".join(p.written() for p in self.params)
         return "".join(("@[listable] " if self.listable else "",
-                        "fn(", inner, ") \N{RIGHTWARDS ARROW} ", self.ret.written()))
+                        "fn(", inner, ") \N{RIGHTWARDS ARROW} ", self.ret.written(),
+                        " in its own arena" if self.hands_out else ""))
 
     def mangled(self) -> str:
         """The normalized name of this type, for use inside a symbol name.
@@ -424,7 +431,8 @@ class FuncType(Type):
         """
         inner = ",".join(p.mangled() for p in self.params)
         return "".join(("listable " if self.listable else "",
-                        "fn(", inner, ")", self.ret.mangled()))
+                        "fn(", inner, ")", self.ret.mangled(),
+                        " in" if self.hands_out else ""))
 
 
 @dataclass(frozen=True, slots=True)
@@ -1138,12 +1146,12 @@ class TypeContext:
         return found
 
     def func_type(self, params: tuple[Type, ...], ret: Type,
-                  listable: bool = False) -> FuncType:
+                  listable: bool = False, hands_out: bool = False) -> FuncType:
         """Return the function type with the given signature."""
-        key = (params, ret, listable)
+        key = (params, ret, listable, hands_out)
         found = self._functions.get(key)
         if found is None:
-            found = FuncType(params, ret, listable)
+            found = FuncType(params, ret, listable, hands_out)
             self._functions[key] = found
         return found
 

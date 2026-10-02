@@ -3387,9 +3387,45 @@ allocator the compiler can name again: `⎕heap`, none, or what a parameter is g
 known only at run time, carry it.  Every such decision is in the report log: `lean-value` where a value stays two words,
 `fat-value` where it carries its allocator and why, `answer-thin` for an answer that travels without it.
 
-**Allocators are not handed out of the scope they are made in.**  A value made in a local arena reaches past it only as a copy;
-passing the arena out along with the value wants a syntax of its own, which is proposed in [scoped-arenas.md](scoped-arenas.md)
-and not yet part of the language.
+A value made in a local arena reaches past the scope either as a copy, as above, or with the arena itself (below).
+
+##### Handing an arena out
+
+**A function may hand an arena of its own out with its answer**: `→ T in pool`, where `pool` is no parameter and not `⎕heap`, says
+the body makes `pool` -- `let pool: mut arena = ⎕arena`, in the body's own scope (4627) -- and that the answer is made in it.  The
+caller receives both, the arena under a name of its own:
+
+```
+fn words(text: str) → [str] in pool:
+    let pool: mut arena = ⎕arena
+    …build the list in pool…
+
+let found: [str] in kept = words(line)
+defer ⎕empty(kept)
+```
+
+**`kept` is then the caller's arena like any it made**: `found` is made in it, `⎕empty(kept)` gives both back, and a pure function
+gives it back before it leaves (4617).  The body may not give `pool` back (4628) -- it is the caller's from the moment the call
+returns -- and what it answers is kept in `pool` by the rules of any answer: made elsewhere, it is copied in.
+
+**Nothing moves.**  Where the caller keeps `kept` is handed to the call, as a parameter no program writes, and the body's `let pool`
+starts the arena there instead of in its own frame: what is made in `pool` is already where the caller will hold it, and every
+allocator a value of it carries names the caller's arena.  The answer is then a `→ T in a` answer for that parameter, so it travels as
+two words where every way out makes it in `pool`.
+
+**Only a definition receives one** (4629): the call is the whole of what `let v: T in kept = …` is given.  Written anywhere else -- an
+argument, part of an expression, a definition with no `in`, or the function named as a value -- what it hands out would have no name
+to be given back by.  `f(…) in kept` is refused too (4630): `in` after an expression says it takes room from an arena that exists,
+and this arena does not yet.  And a definition with `in` whose value is no such call is refused (4631).
+
+**A lambda may hand one out**, `λ n: u64 → str in mine: …`, and its type says so: `fn(u64) → str in it`, the name after `in` being the
+reader's.  A call through a value of such a type is received the same way.
+
+Compare: **Zig**, where a function that makes an `ArenaAllocator` and returns it with what it built returns a struct holding both,
+which nothing checks; **Rust**, where returning a `Bump` with a `Vec<'bump, _>` is the self-referential struct the borrow checker
+cannot express, which `ouroboros` and `yoke` exist for; **C++**, a `pmr` container returned beside a `unique_ptr` to its resource;
+**Cyclone**'s dynamic regions, unique handles a function returns and a caller opens.  The alternatives are in
+[scoped-arenas.md](scoped-arenas.md).
 
 ##### What a container holds
 

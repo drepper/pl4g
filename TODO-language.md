@@ -247,8 +247,8 @@ To Do List for the PL4g language
         allocator, `⎕heap` frees one object by size, answers are copied into the allocator
         their signature names (default `⎕heap`), pool containers never free elements, heap
         containers own what they hold (4622-4626).
-    [ ] **handing an arena out with what it made**: proposed in `spec/scoped-arenas.md`,
-        waiting for a decision.
+    [x] **handing an arena out with what it made.**  Done: `→ T in pool`, received with
+        `let v: T in kept = f(…)` (4627-4631), for functions and lambdas.
     [ ] **giving back what a name held when the name goes**: a value of the heap's no
         container owns lives until the program ends.  Wants ownership of locals -- a move
         out of a name, and a drop where the last one goes.

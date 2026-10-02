@@ -1,0 +1,50 @@
+※ pl4g-test: compile=ok opt=0,1 run=native,qemu exit=0 diag=none
+
+※ **A function may hand an arena of its own out with its answer.**  `→ T in pool`, where `pool` is
+※ no parameter, says the body makes `pool` and the answer is made in it; the caller receives both,
+※ the arena under a name of its own: `let found: [str] in kept = words(3u64)`.  `kept` is then the
+※ caller's arena like any it made -- `⎕empty(kept)` gives back the answer with it.  Nothing is
+※ copied: where the caller keeps `kept` is handed to the call, and the body's `let pool` starts the
+※ arena there.
+※
+※ A lambda may do the same, and its type says so: `fn(u64) → str in it`.
+※
+※ Compare: **Zig**, where a function that makes an arena and returns it with what it built returns
+※ a struct of both and nothing checks which owns which; **Rust**, where returning a `Bump` with a
+※ `Vec<'bump>` is the self-referential struct the borrow checker cannot express; **Cyclone**'s
+※ dynamic regions, unique handles a function may return and a caller opens.
+
+let std := ⎕import("std")
+
+fn words(n: u64) → [str] in pool:
+    let pool: mut arena = ⎕arena
+    let l: mut [str] = [] in pool
+    let i: mut u64 = 0u64
+    while i < n:
+        l ← l ⧺ [("w" ⧺ "!" in pool)] in pool
+        i ← i + 1u64
+    l
+
+@[startup, impure]
+fn main() → u6:
+    let found: [str] in kept = words(3u64)
+    defer ⎕empty(kept)
+    let count: mut u64 = 0u64
+    foreach one: str = found:
+        if one = "w!":
+            count ← count + 1u64
+    if count ≠ 3u64:
+        return 1u6
+    let make := λ n: u64 → str in mine:
+        let mine: mut arena = ⎕arena
+        (⍕n in mine) ⧺ "?" in mine
+    let got: str in other = make(42u64)
+    defer ⎕empty(other)
+    if got ≠ "42?":
+        return 2u6
+    let shape: fn(u64) → str in it = make
+    let again: str in third = shape(7u64)
+    defer ⎕empty(third)
+    if again ≠ "7?":
+        return 3u6
+    0u6

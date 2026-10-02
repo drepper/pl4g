@@ -196,6 +196,10 @@
             "named": true
           },
           {
+            "type": "call_expression",
+            "named": true
+          },
+          {
             "type": "dictionary_literal",
             "named": true
           },
@@ -4851,6 +4855,16 @@
         "types": [
           {
             "type": "capture_list",
+            "named": true
+          }
+        ]
+      },
+      "made_in": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "identifier",
             "named": true
           }
         ]
@@ -9705,6 +9719,16 @@
           }
         ]
       },
+      "made_in": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      },
       "member": {
         "multiple": true,
         "required": false,
@@ -10202,6 +10226,16 @@
     "type": "variable_definition",
     "named": true,
     "fields": {
+      "made_in": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      },
       "name": {
         "multiple": true,
         "required": true,
@@ -10400,6 +10434,16 @@
     "type": "variable_statement",
     "named": true,
     "fields": {
+      "made_in": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      },
       "name": {
         "multiple": true,
         "required": true,

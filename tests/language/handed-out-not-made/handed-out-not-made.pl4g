@@ -1,0 +1,17 @@
+※ pl4g-test: compile=error
+※ pl4g-test: expect-diag 4627 LANG_HANDED_OUT_NOT_MADE
+
+※ `→ T in pool`, with `pool` no parameter, says the body makes `pool` -- in its own scope, before any
+※ way out that answers.  Made inside the arm of an `if`, there is a way out that never makes it.
+
+fn named(n: u64) → str in pool:
+    if n = 0u64:
+        let pool: mut arena = ⎕arena
+        return "a" ⧺ "b" in pool
+    "c"
+
+@[startup]
+fn main() → u6:
+    let s: str in k = named(1u64)
+    defer ⎕empty(k)
+    if s = "c": 0u6 else: 1u6

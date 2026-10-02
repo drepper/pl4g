@@ -1,0 +1,17 @@
+※ pl4g-test: compile=error
+※ pl4g-test: expect-diag 4628 LANG_HANDED_OUT_GIVEN_BACK
+
+※ An arena handed out with the answer is the caller's from the moment the function returns, so the
+※ body may not give it back -- straight away or with `defer`: the caller would receive an answer
+※ made in nothing.
+
+fn named(n: u64) → str in pool:
+    let pool: mut arena = ⎕arena
+    defer ⎕empty(pool)
+    "a" ⧺ "b" in pool
+
+@[startup]
+fn main() → u6:
+    let s: str in k = named(1u64)
+    defer ⎕empty(k)
+    if s = "ab": 0u6 else: 1u6

@@ -1,9 +1,13 @@
 Handing an Arena Out with What It Made
 =====================================
 
-**A proposal, not decided.**  How a function makes an arena, builds something in it, and hands
-the arena out to its caller together with what it built, so that the value outlives the call
-without being copied.
+**Decided**, on 2026-10-02; see [decisions.md](decisions.md) and [spec.md](spec.md),
+"Handing an arena out".  Alternative 1 was taken.  Of the open questions: a call bound without
+`in NAME` is refused, as is `f(…) in NAME`; a lambda may answer this way, its type saying so.
+What follows is the proposal as it was written.
+
+How a function makes an arena, builds something in it, and hands the arena out to its caller
+together with what it built, so that the value outlives the call without being copied.
 
 
 Where the language stands

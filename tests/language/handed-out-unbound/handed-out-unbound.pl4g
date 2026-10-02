@@ -1,0 +1,14 @@
+※ pl4g-test: compile=error
+※ pl4g-test: expect-diag 4629 LANG_HANDED_OUT_UNBOUND
+
+※ What a function hands out has to be given back by whoever receives it, so a call of it is the
+※ whole of a definition's value, `let v: T in kept = f(…)`, naming the arena.  Anywhere else -- an
+※ argument, part of an expression -- the arena would have no name to be given back by.
+
+fn named(n: u64) → str in pool:
+    let pool: mut arena = ⎕arena
+    "a" ⧺ "b" in pool
+
+@[startup]
+fn main() → u6:
+    if named(1u64) = "ab": 0u6 else: 1u6

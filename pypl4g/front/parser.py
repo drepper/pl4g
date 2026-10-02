@@ -386,6 +386,12 @@ class Parser:
         declared: ast.TypeExpr | None = None
         if self._begins_a_type():
             declared = _writable(self._parse_type_ref(), mutable)
+        # `in kept` after the type receives the arena a call hands out with its
+        # answer: the definition makes the arena, under that name.
+        received: tuple[str, Span] | None = None
+        if declared is not None and self._accept(TokKind.KW_IN) is not None:
+            arena = self._expect(TokKind.IDENT)
+            received = (arena.text, arena.span)
         if self._accept(TokKind.EQUALS) is None:
             self._diags.emit(D.LANG_VARDEF_MISSING_INITIALIZER, name_token.span,
                              name=name_token.text)
@@ -401,7 +407,7 @@ class Parser:
         return ast.VarDef(span=start.to(value.span), name=name_token.text,
                           name_span=name_token.span, type=declared, value=value,
                           mutable=mutable, doc=doc, attrs=attrs,
-                          more=tuple(more))
+                          more=tuple(more), made_in=received)
 
     def _parse_import(self, start: Span, name_token: Token, mutable: bool,
                       declared: ast.TypeExpr | None,
@@ -1057,11 +1063,16 @@ class Parser:
                 params.append(self._parse_type_ref())
         end = self._expect(TokKind.RPAREN).span
         ret: ast.TypeExpr | None = None
+        made_in: tuple[str, Span] | None = None
         if self._accept(TokKind.ARROW) is not None:
             ret = self._parse_type_ref()
             end = ret.span
+            if self._accept(TokKind.KW_IN) is not None:
+                arena = self._expect(TokKind.IDENT)
+                made_in = (arena.text, arena.span)
+                end = arena.span
         return ast.FuncTypeRef(span=start.to(end), params=tuple(params),
-                               ret=ret, attrs=attrs)
+                               ret=ret, attrs=attrs, made_in=made_in)
 
     def _parse_lambda(self, attrs: tuple[ast.Attribute, ...] = ()
                       ) -> ast.Lambda:
@@ -1083,12 +1094,18 @@ class Parser:
         if self._check(TokKind.LBRACKET):
             captures, brings_in = self._parse_captures()
         ret: ast.TypeExpr | None = None
+        made_in: tuple[str, Span] | None = None
         if self._accept(TokKind.ARROW) is not None:
             ret = self._parse_type_ref()
+            # `in pool`: an arena of the body's own the answer is made in and
+            # handed out with it.
+            if self._accept(TokKind.KW_IN) is not None:
+                arena = self._expect(TokKind.IDENT)
+                made_in = (arena.text, arena.span)
         body = self._parse_body()
         return ast.Lambda(span=start.to(body.span), params=tuple(params),
                           body=body, captures=captures, ret_type=ret,
-                          brings_in=brings_in, attrs=attrs)
+                          brings_in=brings_in, attrs=attrs, made_in=made_in)
 
     def _parse_lambda_param(self) -> ast.Param:
         """Parse one parameter of a lambda, which is one of a function without
