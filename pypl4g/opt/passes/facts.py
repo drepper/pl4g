@@ -115,6 +115,12 @@ class Facts:
         if not any(isinstance(block.insts[-1], CondBrInst)
                    for block in func.blocks if block.insts):
             return False
+        if not any(isinstance(inst, AssertInst) or (
+                isinstance(inst, BinaryInst)
+                and inst.op in (BinOp.SAT_ADD, BinOp.SAT_SUB))
+                for block in func.blocks for inst in block.insts):
+            # Nothing a fact could settle, so nothing to learn them for.
+            return False
         tree = dominators(func)
         preds = predecessors(func)
         known: dict[int, frozenset[_Fact]] = {}

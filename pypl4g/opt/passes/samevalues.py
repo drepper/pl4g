@@ -43,6 +43,24 @@ _COMMON = frozenset(("operands", "parent", "span", "ty", "name_hint",
                      "name_span", "__weakref__"))
 
 
+_ATTRIBUTES: dict[type, tuple[tuple[str, bool], ...]] = {}
+
+
+def _attributes(cls: type) -> tuple[tuple[str, bool], ...]:
+    """The slots of an instruction class that say what it computes, and whether
+    each is told by its value or by its identity."""
+    found = _ATTRIBUTES.get(cls)
+    if found is None:
+        names = [name for one in cls.__mro__
+                 for name in getattr(one, "__slots__", ()) if name not in _COMMON]
+        # What a slot holds is told by its value where it is a number, a name or
+        # one of the enumerations an operation is chosen by; anything else -- a
+        # function a `code` names -- by which one it is.
+        found = tuple((name, name not in ("callee",)) for name in names)
+        _ATTRIBUTES[cls] = found
+    return found
+
+
 def _shareable(inst: Instruction) -> bool:
     """Whether *inst* computes a value another instruction like it could stand
     for."""
@@ -135,27 +153,17 @@ class SameValues:
 
     def _key(self, inst: Instruction, standing) -> Hashable | None:  # noqa: ANN001
         """What *inst* computes, as something two of them share where they
-        compute the same."""
-        extras: list[Hashable] = []
-        for cls in type(inst).__mro__:
-            for name in getattr(cls, "__slots__", ()):
-                if name in _COMMON:
-                    continue
-                value = getattr(inst, name, None)
-                try:
-                    hash(value)
-                except TypeError:
-                    value = id(value)
-                if isinstance(inst, CodeInst) and name == "callee":
-                    value = id(value)
-                extras.append((name, value))
-        try:
-            ty: Hashable = inst.ty
-            hash(ty)
-        except TypeError:
-            ty = id(inst.ty)
-        return (type(inst), inst.opcode, ty,
-                tuple(id(standing(one)) for one in inst.operands), tuple(extras))
+        compute the same.
+
+        A type is told by its identity: the module's type table makes each type
+        once, so two of one type are one object -- and hashing one by what it
+        holds walks everything it holds, which was most of what this pass cost.
+        """
+        return (type(inst), inst.opcode, id(inst.ty),
+                tuple([id(standing(one)) for one in inst.operands]),
+                tuple([getattr(inst, name, None) if hashed else
+                       id(getattr(inst, name, None))
+                       for name, hashed in _attributes(type(inst))]))
 
     def _written_between(self, func: Function, first: tuple[BasicBlock, int],
                          second: tuple[BasicBlock, int]) -> bool:
