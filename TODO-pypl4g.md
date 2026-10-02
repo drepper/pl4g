@@ -581,3 +581,26 @@ Optimizations
     for one thing does not read the rest, which is the answer that needs no compiler work and the one that gives the least.
 
     It is worth doing before `std` is much bigger: every feature that lands in `std` from here is paid for by every program.
+
+[ ] fold a multiplication by one.  Every element's address of a `u8` array is worked out as `index × 1` -- `mov rdx, 1; imul rax,
+    rdx` in every turn of a loop over bytes -- because the element size is multiplied in whatever it is.  Constant folding knows
+    `x × 1` is `x` nowhere.  Found measuring the iterator over a pick (spec/coroutines.md, *A worked case*).
+
+[ ] fold a comparison of a value with itself.  A loop picking with `v⟦v > k⟧` checks `v`'s length against the length of the
+    array it picks from, which is `v`, and emits `cmp r9, r9; sete; test; jne` and a call to the fault it can never reach.
+
+[ ] remove a bounds check the loop already made.  `foreach i … 0…#v: v⟦i⟧` checks `i` against `#v` twice in every turn, once as
+    the loop's test and once as the index's.  An index dominated by a comparison of the same two values needs no check.  This is
+    most of what a coroutine written into a loop costs over the compiler's own iterator.
+
+[ ] do not saturate a range's step that cannot overflow.  A range's step saturates so that the last turn of `0u8…255u8` ends rather
+    than faulting, which costs four instructions a turn (`mov`, `cmp`, `cmovb`, and a constant).  Where the end is below the
+    type's largest value -- every range whose end is a length -- the plain add is enough.
+
+[ ] read an element once where a loop reads it twice.  `foreach x := v⟦v > k⟧` reads `v⟦i⟧` for the mask and again for the turn:
+    two loads of one place in one block's dominator chain, which value numbering over memory would merge where nothing writes in
+    between.
+
+[ ] test a comparison where it is branched on.  A bounds check is `cmp; setb; movzx; test; jne` where `cmp; jb` says the same:
+    the truth value is made into a register and tested again.  A comparison whose only use is a branch should be the branch.
+

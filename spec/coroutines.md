@@ -411,6 +411,72 @@ it is not, and B for a coroutine handed in as a value; report which.**  A progra
 for one that the compiler cannot see through, and nowhere else.
 
 
+### A worked case: walking what a mask picks
+
+The comparison above is in general terms.  Picking with a mask is the case where the two can be set side by side instruction by
+instruction, because the compiler's own iterator for it exists and the coroutine is three lines:
+
+```
+fn picked(v: u8⟦⟧, m: bool⟦⟧) ⇉ u8:                  ※ the coroutine
+    foreach i: u64 ¤idx = 0…⎕unit(⎕drop(#v), ⌜idx⌝):
+        if m⟦i⟧:
+            yield v⟦i⟧
+
+foreach x := v⟦m⟧:                                     ※ the compiler's iterator (A)
+foreach x := picked(v, m):                             ※ the coroutine, walked
+```
+
+**What A compiles to today** -- x86-64, `-O1`, a loop adding with `⊞`, measured from `--emit=asm`.  Before the loop: the two
+lengths compared once, and the program stopped if they differ.  Per element: the test (`cmp`, `jb`), the mask byte read and tested
+(eight instructions), and where it picks, the element read and added (sixteen).  **14 instructions for a place not picked, 26 for one
+picked.**
+
+**What D compiles to** -- the coroutine written into the loop, which is what the loop above is when written out by hand, so the code
+can be measured today.  Per element: the test; `m⟦i⟧` checked against the mask's length and read; where it picks, `v⟦i⟧` checked
+against the array's length and read; the add; and the range's step, which saturates.  **25 for a place not picked, 41 for one
+picked.**  The difference from A is not the coroutine at all.  It is two bounds checks per element that A does not need -- A
+compares the lengths once, before the loop, where the coroutine indexes each array on its own -- and a range step that saturates
+where A's counter cannot overflow.
+
+**What B would cost** -- the coroutine handed in as a value and resumed once per element.  A place not picked costs what it costs in
+D: the coroutine's own loop steps past it without returning, which is the one way a coroutine is *cheaper* per element than an
+iterator that answers every place.  A place picked adds the resume: a call and a return, the state loaded and dispatched, the five
+words the loop needs (`i`, and each array's place and length) reloaded from the frame, `i` and the state stored back, and the
+element answered as a result and tested -- about twenty instructions.  **25 for a place not picked, about 60 for one picked**, an
+estimate until there is a pass to measure.
+
+**What E would cost** -- stackful: B's work without the reloads, plus two switches each saving and restoring seven registers on
+x86-64.  **About 25 and 75.**
+
+| Per element, x86-64 | not picked | picked | measured |
+|---|---|---|---|
+| A, the compiler's iterator | 14 | 26 | yes |
+| D, the coroutine written into the loop | 25 | 41 | yes, as the equivalent loop |
+| B, the coroutine resumed through a value | 25 | ~60 | estimated |
+| E, a stackful coroutine | 25 | ~75 | estimated |
+
+**Where they differ in what they do, not only in what they cost:**
+
+- **A wrong shape stops the program at a different moment.**  A compares the lengths before the first turn, so a mask of the wrong
+  length runs no turn at all.  The coroutine finds it at the first `m⟦i⟧` past the mask's end -- after the turns before it have
+  run and done whatever they do.  A `pre(#m = #v)` on the generator would restore A's behaviour, checked when the coroutine is
+  made; the per-element checks stay unless the compiler learns that the `pre` implies them.
+- **A mask worked out a place at a time has no coroutine counterpart.**  `foreach p := ps⟦ps¨.age ≥ 18u8⟧` and
+  `foreach x := v⟦v > k⟧` build no mask: A asks each place as it reaches it.  A coroutine takes its mask as an argument, so the mask
+  has to be built first -- room in the frame for one truth value per element, and the array's length stated, which is the
+  restriction A lifted.  Handing the coroutine a predicate instead, `fn kept(v: u8⟦⟧, keep: fn(u8) → bool) ⇉ u8`, costs a call
+  through a function value at every place, picked or not, unless D puts both the coroutine and the lambda in place.
+- **A is the only one that reads the shape.**  A mask over a table's rows gives rows by arithmetic on the place; a coroutine can
+  yield a row as well, but has to be written for each rank, where A is one rule for all of them.
+
+**What this says about the recommendation:** keeping A for picking was right, and the gap between A and D is not the price of
+coroutines.  It is three optimizations this compiler does not do yet: removing a bounds check the loop's own test already
+implies, not saturating a step that cannot overflow, and reading a value once where it is read twice.  With them, D comes to within
+a few instructions of A, which is what *D written into the loop* promises.  The same measurements found missed work in A itself --
+a multiplication by one for every element address, a length compared with itself, and the element of `v⟦v > k⟧` read twice
+(once for the mask, once for the turn) -- all now in `TODO-pypl4g.md`.
+
+
 The order to build it in
 ------------------------
 
