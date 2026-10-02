@@ -1091,3 +1091,8 @@ Runtime
 [ ] let the compile-time evaluator work out a power written raised, `n²`.  A constant expression can (it folds over the syntax
     itself), but a function it runs cannot: the evaluator refuses it (7000), and a call to such a function in a constant is
     refused with it.
+
+[?] coroutines.  A design is in [spec/coroutines.md](spec/coroutines.md): stackless generators -- `fn evens(n: u64) ⇉ u64:` with
+    `yield`, a coroutine value `⇉T` placed by the rule a lambda's environment follows, `⎕next`, and `foreach` over one -- with a
+    comparison of building iterators as coroutines against the compiler-known iterators there are now.
+    Question: the seven listed at the end of that document, beginning with stackless against stackful.
