@@ -1,0 +1,42 @@
+※ pl4g-test: compile=ok run=native,qemu exit=0 diag=none
+
+※ Picking where a loop takes its turns from is an iterator and not an array:
+※ the loop walks everything the mask could pick, asks the mask at each place,
+※ and steps past a place it does not pick without running the body.  Nothing
+※ is copied and no room is taken -- so the array need not state its shape,
+※ which a `u8⟦⟧` parameter does not.
+※
+※ Counting the turns counts what was picked, not the places stepped past, and
+※ `continue` goes on to the next thing picked.  Anywhere else, picking still
+※ answers an array.
+
+fn total(a: u8⟦⟧, m: bool⟦⟧) → u8:
+    let s: mut u8 = 0u8
+    foreach x := a⟦m⟧:
+        s ← s + x
+    s
+
+@[startup, impure]
+fn main() → u6:
+    let v: u8⟦4⟧ = ⟦10u8, 20u8, 30u8, 40u8⟧ in ⎕static
+    let s: mut u8 = 0u8
+    foreach §big x := v⟦v > 15u8⟧:
+        if x = 30u8: continue §big
+        s ← s + x
+    ※ two picked, counted 0 and 1
+    let n: mut u64 = 0u64
+    foreach i, _ := ⎕enumerate(v⟦v > 25u8⟧):
+        n ← n + i
+    ※ a mask over the rows of a table gives rows
+    let m: u8⟦3,2⟧ = ⟦⟦1u8, 2u8⟧, ⟦3u8, 4u8⟧, ⟦5u8, 6u8⟧⟧ in ⎕static
+    let r: mut u8 = 0u8
+    foreach row := m⟦⟦true, false, true⟧⟧:
+        r ← r + row⟦1⟧
+    ※ and over nothing picked, no turn at all
+    foreach _ := v⟦v > 99u8⟧:
+        r ← 0u8
+    let picked: u8⟦⟧ = v⟦v > 25u8⟧
+    if s = 60u8 ∧ n = 1u64 ∧ r = 8u8 ∧ picked⟦1⟧ = 40u8 ∧ total(v, v < 25u8) = 30u8:
+        0u6
+    else:
+        1u6

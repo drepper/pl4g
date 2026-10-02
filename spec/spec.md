@@ -3183,17 +3183,34 @@ v⟦v > 25u8⟧ ← 1u8                ※ 10, 20, 1, 1
 m⟦⟦false, true, false⟧⟧ ← 9u8    ※ the middle row, both of it
 ```
 
-**The array picked from states its shape** (4485).  What picking answers with is held in room enough for everything that could
-have been picked, and room enough for that is what the shape says; where the type does not say it, the room would have to be
-taken while the program runs, which is an allocation and a change to something that outlives the call.
+**Where a loop takes its turns from, picking is an iterator** and not an array: the loop walks everything the mask could pick,
+asks the mask at each place, and steps past a place it does not pick without running the body.  Nothing is copied and no room is
+taken.
 
-**Nothing branches, either way.**  Picking writes each thing where the count has got to and then advances the count by the mask,
+```
+foreach x := v⟦v > 25u8⟧:        ※ two turns, 30 and 40, read where they are
+foreach i, x := ⎕enumerate(v⟦v > 25u8⟧):   ※ counted 0 and 1: what is counted is what was picked
+```
+
+Anywhere else -- a name, an argument, an operand -- an array is what is asked for, and what picking answers with is one.
+
+**An array picked from into an array states its shape** (4485).  What picking answers with is held in room enough for everything
+that could have been picked, and room enough for that is what the shape says; where the type does not say it, the room would have
+to be taken while the program runs, which is an allocation and a change to something that outlives the call.  A loop takes no
+room, so a loop can walk what a mask picks out of an array of any shape -- a `u8⟦⟧` parameter included.  Where the types do not
+both say a dimension the mask is to cover, the two are compared before the loop starts, and a mask of another shape stops the
+program.
+
+**Nothing branches where an array is built or written.**  Picking writes each thing where the count has got to and then advances the count by the mask,
 so a thing that was not picked is written where the next one writes over it -- which is sound because the room is this call's own.
 Assigning writes every element either the old value or the new one, chosen with the mask spread across the width of the element,
-so that no instruction depends on what the mask holds.
+so that no instruction depends on what the mask holds.  A loop does branch, once a place, on whether the mask picked it: that is
+what lets it take no room and copy nothing.
 
 Compare: NumPy's boolean indexing, which this is -- `v[v > 25]` reads and `v[v > 25] = 1` writes, with the same rule that the
-mask's shape is the array's leading dimensions; APL's compress `/`, which is the same operation with a much older spelling and
+mask's shape is the array's leading dimensions, though NumPy always copies and has no lazy form; Rust's `filter` and C++20's
+`views::filter`, which are the loop's form and which a program has to `collect` or copy itself where this builds the array
+wherever an array is asked for; APL's compress `/`, which is the same operation with a much older spelling and
 which threads over an axis chosen by the operator rather than by the mask's rank; MATLAB's logical indexing, likewise; and
 Fortran's `PACK` and `WHERE`, which separate the two halves into a function and a statement where this has one spelling doing
 both, on the grounds that what is written on the left of `←` and what is read on the right should not need different names.
@@ -4468,13 +4485,14 @@ could say and having been asked first.  A range already worked this way, and now
 or a failure; the failure is what ends the loop.  The result type is how that is said, and it does not surface: the names are
 bound to what there was, and a loop over something with nothing in it runs no turns.
 
-**Four things are iterators**, and none of them is called: each one's `next` is lowered where it is asked.
+**These things are iterators**, and none of them is called: each one's `next` is lowered where it is asked.
 
 | Written | A turn gives |
 |---|---|
 | a range | each whole number it stands for |
 | an array of one dimension | each element |
 | an array of more | each row of the outermost dimension |
+| an array picked from with a mask | each element, or row, the mask picks |
 | a set | each key it holds |
 | a dictionary | a key and what it stands for, as a tuple |
 

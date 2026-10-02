@@ -9312,6 +9312,27 @@ Compare GCC's `__attribute__((const))` -- what "reads no memory" is here, inferr
 promised -- with its CSE, LICM and constant folding of such calls; LLVM's `readnone` inference and
 the same passes; and C++'s `constexpr`, which works out at compile time only what the program
 asked to.
+## 2026-10-03T15:00+02:00 — language
+
+**Picking with a mask is an iterator where a loop takes its turns from**
+
+Asked for by the user: indexing with a mask should make an iterator rather than an array.  Three
+questions were put and answered.  *Outside a loop*: an iterator in a loop, an array where an array
+is asked for -- chosen over an iterator only, refused anywhere else (Rust's `filter` with no
+`collect`, Python 3's `filter`), and over a first-class iterator type that could be bound, passed
+and answered (Rust's `impl Iterator`, D's ranges, C++'s views), which is a much larger change.
+*How the loop walks*: test and skip -- the walk over everything the mask could pick, the mask
+asked at each place, and a place not picked going back to the test without a turn; one branch
+per element and no room -- chosen over packing branch-free into the frame first and walking
+that, which keeps "nothing branches" and copies everything anyway.  This is what Rust's `filter`
+and C++20's `views::filter` do.  *The stated shape* (4485): lifted in a loop, where no room is
+taken, so a `T⟦⟧` parameter can be picked from there; kept where an array is built.
+
+The mask's shape (4484) is compared while compiling where both types say a dimension, and before
+the loop otherwise, stopping the program on a mismatch.  `⎕enumerate` over a pick counts the
+things picked, not the places stepped past.  Found on the way and fixed: `_` as one of several
+names in a `foreach` was bound, and reported as unread.
+
 
 Open questions
 --------------

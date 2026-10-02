@@ -1,0 +1,17 @@
+※ pl4g-test: compile=ok run=native,qemu exit=82 diag=none
+
+※ A mask's shape is the leading dimensions of the array it picks from.  Where
+※ the types do not say both, the two are compared before the loop starts, and a
+※ mask of another shape stops the program rather than reading past its end.
+
+fn total(a: u8⟦⟧, m: bool⟦⟧) → u8:
+    let s: mut u8 = 0u8
+    foreach x := a⟦m⟧:
+        s ← s + x
+    s
+
+@[startup, impure]
+fn main() → u6:
+    let v: u8⟦4⟧ = ⟦10u8, 20u8, 30u8, 40u8⟧ in ⎕static
+    let w: bool⟦3⟧ = ⟦true, true, true⟧ in ⎕static
+    if total(v, w) = 0u8: 0u6 else: 1u6

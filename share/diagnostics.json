@@ -5818,11 +5818,11 @@
           "description": "the type of the array being picked from"
         }
       ],
-      "cause": "What picking answers with is however many were picked, held in room enough for all of them -- and room enough for all of them is what the shape says.  Where the type does not say it, the room would have to be taken while the program runs, which is an allocation and a change to something that outlives the call.",
+      "cause": "What picking answers with is however many were picked, held in room enough for all of them -- and room enough for all of them is what the shape says.  Where the type does not say it, the room would have to be taken while the program runs, which is an allocation and a change to something that outlives the call.  A loop over what a mask picks takes no room, and is not asked this.",
       "spec": {
         "document": "spec/spec.md",
         "section": "The Language / Expressions / Arrays",
-        "requirement": "An array picked from states its shape."
+        "requirement": "An array picked from into an array states its shape."
       },
       "since": "0.1",
       "default_enabled": true,

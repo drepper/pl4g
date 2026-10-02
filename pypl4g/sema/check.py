@@ -2351,6 +2351,15 @@ class _Iteration:
     more: Callable[[IRBuilder, tuple[Value, ...]], Value]
     take: Callable[[IRBuilder, tuple[Value, ...]], Value]
     step: Callable[[IRBuilder, tuple[Value, ...]], tuple[Value, ...]]
+    #: Whether the place the walk is at is one to give a turn for, asked once
+    #: there is another; nothing where every place is.  A walk that picks is
+    #: the walk over everything with this asked of each, so that a place that
+    #: is not picked is stepped past without the body being run.
+    wanted: Callable[[IRBuilder, tuple[Value, ...]], Value] | None = None
+    #: What the next turn starts from when this place was stepped past rather
+    #: than given; the step where nothing says otherwise.  Counting the turns
+    #: is what makes the two differ: a place stepped past is not a turn.
+    passed: Callable[[IRBuilder, tuple[Value, ...]], tuple[Value, ...]] | None = None
 
 
 class Checker:
@@ -2529,6 +2538,11 @@ class Checker:
         #: The labelled loops this statement is inside, innermost last, which
         #: is what `break` and `continue` look their label up in.
         self._loops: list[_Loop] = []
+        #: The expression a loop takes its turns from while it is being lowered,
+        #: and what picking there left behind: picking is walked where a loop
+        #: takes its turns from rather than copied into an array.
+        self._pick_in: ast.Expr | None = None
+        self._pick_walked: tuple[Value, ArrayType, Value] | None = None
         #: What the function now being lowered answers with, which is what `?`
         #: has to agree with: it leaves the function carrying an error, so the
         #: function must be one that can carry it.
@@ -8564,6 +8578,11 @@ class Checker:
             return self._lower_slice(builder, expr, base, ty, expected)
         mask = self._mask_written(builder, expr)
         if mask is not None:
+            if self._pick_in is expr:
+                # What a loop takes its turns from: walked where it stands, so
+                # nothing is copied and no room is taken.
+                self._pick_walked = (base, ty, mask)
+                return UndefConst(VOID)
             return self._lower_picked(builder, expr, base, ty, mask, expected)
         start, lengths = self._shape_of(builder, base, ty, expr.span)
         offset = self._offset_of(builder, expr.indices, ty, lengths, expr.span)
@@ -12284,11 +12303,14 @@ class Checker:
         that is said, and it does not surface: the names are bound to what
         there was, and a loop over something with nothing in it runs no turns.
 
-        Five things are iterators -- a range, an array, a list, a string and a
-        table -- and none of them is called: each one's `next` is lowered where
-        it is asked, which for a range is a comparison and an addition, for an
-        array a comparison and a read, and for a table a walk that steps past
-        the places holding nothing.  What they have in common is
+        Six things are iterators -- a range, an array, what a mask picks out of
+        one, a list, a string and a table -- and none of them is called: each
+        one's `next` is lowered where it is asked, which for a range is a
+        comparison and an addition, for an array a comparison and a read, and
+        for a table a walk that steps past the places holding nothing.  A pick
+        asks one more question, whether this place is picked, between the test
+        and the body; a place that is not goes back to the test.  What they have
+        in common is
         the shape below, so the loop is one loop:
 
             before:  br loop(s₁ … sₖ, v₁ … vₙ, mem)
@@ -12351,9 +12373,22 @@ class Checker:
             local.value_span = stmt.span
             local.read = False
         builder.set_memory(token)
-        builder.condbr(found.more(builder, state), body,
+        asks = builder.new_block("pick") if found.wanted is not None else body
+        builder.condbr(found.more(builder, state), asks,
                        leave if leave is not None else after, span=stmt.span)
         ran_out = builder.memory()
+        if found.wanted is not None:
+            # A place that is not picked goes straight back to the test with
+            # everything as it was but where the walk is: no turn was taken, so
+            # nothing the body would have changed has changed.
+            skip = builder.new_block("skip")
+            builder.position_at(asks)
+            builder.condbr(found.wanted(builder, state), body, skip,
+                           span=stmt.span)
+            builder.position_at(skip)
+            builder.br(header,
+                       (*(found.passed or found.step)(builder, state),
+                        *params, builder.memory()), stmt.span)
         outer_carried = self._carried
         self._carried = outer_carried | {id(local) for local in carried}
         builder.position_at(body)
@@ -12848,12 +12883,16 @@ class Checker:
         if declared is not None and declared is not element:
             self._report_mismatch(stmt.iterable.span, element, declared)
             return None
+        wanted = inner.wanted
+        passed = inner.passed or inner.step
         return _Iteration(
             element=element, start=(*inner.start, first),
             more=lambda b, s: inner.more(b, s[:-1]),
             take=take,
             step=lambda b, s: (*inner.step(b, s[:-1]),
-                               b.binary(BinOp.ADD, s[-1], one, span)))
+                               b.binary(BinOp.ADD, s[-1], one, span)),
+            wanted=None if wanted is None else lambda b, s: wanted(b, s[:-1]),
+            passed=lambda b, s: (*passed(b, s[:-1]), s[-1]))
 
     def _iteration_of(self, builder: IRBuilder,
                       stmt: ast.ForEach) -> _Iteration | None:
@@ -12866,13 +12905,23 @@ class Checker:
         if isinstance(stmt.iterable, ast.Range):
             return self._over_a_range(builder, stmt)
         declared = self._resolve_type(stmt.type) if stmt.type is not None else None
-        value = self._lower_expr(builder, stmt.iterable,
-                                 self._holding(declared, stmt.iterable))
+        outer = self._pick_in, self._pick_walked
+        self._pick_in, self._pick_walked = stmt.iterable, None
+        try:
+            value = self._lower_expr(builder, stmt.iterable,
+                                     self._holding(declared, stmt.iterable))
+            picked = self._pick_walked
+        finally:
+            self._pick_in, self._pick_walked = outer
         ty = self._value_type_of(value)
         if ty is ERROR:
             return None
         found: _Iteration | None
-        if isinstance(ty, ArrayType):
+        if picked is not None:
+            found = self._over_a_pick(builder, stmt.iterable, *picked)
+            if found is None:
+                return None
+        elif isinstance(ty, ArrayType):
             found = self._over_an_array(builder, value, ty, stmt.span)
         elif isinstance(ty, ListType):
             found = self._over_a_list(builder, value, ty, stmt.span)
@@ -12977,6 +13026,60 @@ class Checker:
             take=take,
             step=lambda b, s: (b.binary(BinOp.WRAP_ADD, s[0],
                                         b.int_const(U64, 1), span),))
+
+    def _over_a_pick(self, builder: IRBuilder, written: ast.Element,
+                     base: Value, ty: ArrayType,
+                     mask: Value) -> _Iteration | None:
+        """Walk what a mask picks out of an array, where it stands.
+
+        Picking where a loop takes its turns from is an iterator and not an
+        array: the walk is the walk over everything the mask could pick, with
+        the mask asked at each place, and a place it does not pick is stepped
+        past without a turn.  Nothing is copied and no room is taken, which is
+        why the array need not state its shape here (4485 is about the room).
+
+        The mask's shape is the array's leading dimensions, as it is for
+        picking anywhere (4484).  Where both say a dimension the two are
+        compared while compiling; where either does not, they are compared
+        before the loop, and a mask of another shape stops the program.
+        """
+        span = written.span
+        held = self._value_type_of(mask)
+        assert isinstance(held, ArrayType)
+        depth = held.rank
+        if depth > ty.rank or any(
+                one is not None and other is not None and one != other
+                for one, other in zip(held.shape, ty.shape)):
+            self._diags.emit(D.LANG_MASK_WRONG_SHAPE, written.indices[0].span,
+                             found=held.written(), wanted=ty.written())
+            return None
+        start, lengths = self._shape_of(builder, base, ty, span)
+        marks, told = self._shape_of(builder, mask, held, span)
+        for at in range(depth):
+            if held.shape[at] is None or ty.shape[at] is None:
+                builder.check(
+                    builder.compare(CmpPred.EQ, told[at], lengths[at], span),
+                    "a mask whose shape is not the array's",
+                    statuses.OUT_OF_RANGE, span)
+        places = self._by_row(builder, builder.int_const(U64, 1),
+                              lengths[:depth], span)
+        element = ty.element if depth == ty.rank else self._row_type(ty, depth)
+
+        def take(b: IRBuilder, s: tuple[Value, ...]) -> Value:
+            offset = self._by_row(b, s[0], lengths[depth:], span)
+            if depth == ty.rank:
+                return b.load(
+                    self._element_place(b, start, ty.element, offset, span), span)
+            return self._row_at(b, start, ty, lengths, offset, depth, span)
+
+        return _Iteration(
+            element=element, start=(builder.int_const(U64, 0),),
+            more=lambda b, s: b.compare(CmpPred.ULT, s[0], places, span),
+            take=take,
+            step=lambda b, s: (b.binary(BinOp.WRAP_ADD, s[0],
+                                        b.int_const(U64, 1), span),),
+            wanted=lambda b, s: b.load(
+                self._element_place(b, marks, BOOL, s[0], span), span))
 
     def _over_a_list(self, builder: IRBuilder, value: Value, ty: ListType,
                      span: Span) -> _Iteration:
@@ -13804,6 +13907,10 @@ class Checker:
             if members is None:
                 self._bind_local(name, UndefConst(ERROR), where, mutable,
                                  value_span=node.span)
+                continue
+            if name == WILDCARD_NAME and isinstance(node, ast.ForEach):
+                # A part of a turn that is not wanted, as `_` on its own is a
+                # turn that is not: nothing is bound, so nothing is unread.
                 continue
             part = builder.extract(value, index, members[index], node.span)
             self._name_value(part, name, where)

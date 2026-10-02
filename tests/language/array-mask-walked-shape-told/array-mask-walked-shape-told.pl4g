@@ -1,0 +1,13 @@
+※ pl4g-test: compile=error diag=4484
+
+※ Where both types say the dimension, a loop over what a mask picks is refused
+※ while compiling: a mask of three cannot pick out of four.
+
+@[startup, impure]
+fn main() → u6:
+    let v: u8⟦4⟧ = ⟦10u8, 20u8, 30u8, 40u8⟧ in ⎕static
+    let w: bool⟦3⟧ = ⟦true, true, true⟧ in ⎕static
+    let s: mut u8 = 0u8
+    foreach x := v⟦w⟧:
+        s ← s + x
+    if s = 0u8: 0u6 else: 1u6

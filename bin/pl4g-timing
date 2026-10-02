@@ -220,6 +220,7 @@ GROUPS: tuple[Group, ...] = (
            "comptime-tuple-loop": "a tuple walked while compiling, and chosen by type",
            "lifting": "types lifted out of the program, and the ends of six of them",
            "enumerate": "five kinds of thing walked with their turns counted",
+           "array-mask-walked": "picks walked in five loops, one of them counted, and one kept",
            "divides": "dividing without a remainder, both forms and over an array",
            "failure-written-out": "failures written out, carrying a value and not",
            "named-arguments": "defaults, arguments named at the call, and one across a module",

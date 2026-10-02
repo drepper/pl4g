@@ -1594,6 +1594,15 @@ either kind wants.
 | a range | the number | it has not passed the end | the number | one step on, saturating |
 | an array | a place in it | it is short of the length | the element, or the row | one place on |
 | a table | a place in its entries | it is short of the capacity | the key, or the key and the value | the next place holding a key |
+| a pick, `a⟦m⟧` | a place in the array | it is short of the places the mask covers | the element, or the row | one place on |
+
+**A pick asks a fourth question**: whether the place the walk is at is one to give a turn for.  It is asked once there is another,
+in a block of its own between the test and the body, and a place not picked branches straight back to the test with every carried
+local as the test left it and the walk one place on.  `_Iteration.wanted` is that question and `passed` what the walk moves to
+when a place is stepped past -- the step, except under `⎕enumerate`, where a place stepped past is not a turn and so is not
+counted.  Telling a pick in a loop from one anywhere else needs the expression's own lowering, since what says it is a mask is the
+index's type: `_iteration_of` names the expression it is lowering in `_pick_in`, and `_lower_element` leaves the array and the mask
+in `_pick_walked` rather than building the array when the expression it is lowering is that one.
 
 Everything that does not change from turn to turn -- where an array's elements are, how many there are, where a table's entries
 are -- is worked out once before the loop and read from where it was left.  That is what keeps a turn of an array to a comparison,
